@@ -1642,7 +1642,7 @@ namespace das {
                                         if (classHasUserNamedFunction(program, mid, mid->name)) {
                                             error("call to super." + eField->name + " in " + func->name
                                                     + " cannot skip " + mid->name
-                                                    + " which has its own constructor — call super." + mid->name + "(...) instead",
+                                                    + " which has its own constructor - call super." + mid->name + "(...) instead",
                                                   "", "", expr->at, CompilationError::invalid_super_call);
                                             return Visitor::visit(expr);
                                         }
@@ -1681,7 +1681,7 @@ namespace das {
                                 if (classHasUserNamedFunction(program, baseClass, eField->name)) {
                                     error("call to super." + eField->name + " in " + func->name
                                             + " cannot skip " + baseClass->name + " which defines its own "
-                                            + eField->name + " — adjust args to match " + baseClass->name + "'s overload",
+                                            + eField->name + " - adjust args to match " + baseClass->name + "'s overload",
                                           "", "", expr->at, CompilationError::invalid_super_call);
                                     return Visitor::visit(expr);
                                 }
@@ -3872,7 +3872,7 @@ namespace das {
                    valT->isRange() ? (rdim > 2) : !TypeDecl::hasVectorType(valT->getVectorBaseType(), rdim)) {
             // e.g. .s01230123 on a float4 — 8 lanes, but the float family has no 8-wide vector
             error("swizzle ." + expr->mask + " yields " + to_string(rdim)
-                    + " lane(s) — no such vector of '" + das_to_string(valT->getVectorBaseType()) + "'", "", "",
+                    + " lane(s) - no such vector of '" + das_to_string(valT->getVectorBaseType()) + "'", "", "",
                   expr->at, CompilationError::invalid_swizzle_mask);
         } else {
             auto bt = valT->getVectorBaseType();
@@ -6059,7 +6059,7 @@ namespace das {
                     // have ANY user-defined ctor? If yes, we'd silently skip its invariants — reject.
                     if (classHasUserNamedFunction(program, baseClass, baseClass->name)) {
                         error("call to super in " + func->name + " cannot skip " + baseClass->name
-                                + " which has its own constructor — adjust super(...) args to match " + baseClass->name,
+                                + " which has its own constructor - adjust super(...) args to match " + baseClass->name,
                               "", "", expr->at, CompilationError::invalid_super_call);
                         return Visitor::visit(expr);
                     }

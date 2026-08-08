@@ -1365,7 +1365,7 @@ namespace das {
         if ( anyNotFound ) {
             auto pendingNote = describe_pending_dynamic_modules();
             if ( !pendingNote.empty() ) {
-                err << "note: these dynamic modules failed to load — a missing module may live in one of them:\n" << pendingNote;
+                err << "note: these dynamic modules failed to load - a missing module may live in one of them:\n" << pendingNote;
             }
         }
         for ( auto & mis : circular ) {

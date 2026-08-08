@@ -135,6 +135,14 @@ def private ensure_cache_loaded() : void {
     }
 }
 
+//! True when the repo ``.lint_config`` carries an explicit ``CODE = true`` directive. Rules with
+//! a path-scoped default (STYLE039) read this as the "everywhere" arm of their tri-state:
+//! ``= false`` disables via the disabled_codes rail, absent means the rule's own path default.
+def public lint_config_forces_on(code : string) : bool {
+    ensure_cache_loaded()
+    return key_exists(_cache_on, code)
+}
+
 //! Macro-side helper: builds the ``disabled_codes`` table the three ``[lint_macro]`` apply() methods need. Honors the module-local ``options _enable_default_off_rules = true`` opt-in (skips the ``seed_default_disabled`` step so default-off rules fire for that module), then layers cached ``.lint_config`` on top so the repo policy can still override either direction. Single source so a future default-off PERF/LINT rule applies uniformly.
 def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     let force_default_off = prog._options |> find_arg("_enable_default_off_rules") ?as tBool ?? false
@@ -152,6 +160,33 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     // last, so a one-run DAS_LINT_DISABLE beats a `CODE = true` in the repo config
     load_env_disabled(disabled)
     return <- disabled
+}
+
+// ---------------------------------------------------------------------------
+// Path-based rule defaults - the ONE place lint rules key off source location
+// ---------------------------------------------------------------------------
+
+def private module_source_path(prog : ProgramPtr) : string {
+    let mod = prog.getThisModule
+    if (mod == null) return ""
+    return string(mod.fileName) |> replace("\\", "/")
+}
+
+def private path_has_segment(file : string; seg : string) : bool {
+    return starts_with(file, seg + "/") || find(file, "/" + seg + "/") >= 0
+}
+
+//! True when the compiling module's source lives under ``daslib/``.
+//! Default gate for rules that hold the standard library to a stricter bar (STYLE014/STYLE015).
+def public is_daslib_source(prog : ProgramPtr) : bool {
+    return path_has_segment(module_source_path(prog), "daslib")
+}
+
+//! True when the compiling module's source lives under ``daslib/`` or ``modules/`` -
+//! shipped library code whose emitted strings flow into every consumer's logs (STYLE039).
+def public is_shipped_library_source(prog : ProgramPtr) : bool {
+    let file = module_source_path(prog)
+    return path_has_segment(file, "daslib") || path_has_segment(file, "modules")
 }
 
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).

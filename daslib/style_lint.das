@@ -45,6 +45,7 @@ module style_lint shared private
 //!   STYLE036 — type contract ('-const', '-&', '-[]', '-#', '==const', '==&') on an already-resolved cast/reinterpret/upcast/addr target does nothing — drop it
 //!   STYLE037 — function or closure cyclomatic complexity exceeds the limit (override per module with 'options _cyclomatic_complexity = N'; 0 disables) — split it into smaller functions
 //!   STYLE038 — function exceeds the line-count limit (physical lines; override per module with 'options _function_length = N'; 0 disables) — split it into smaller functions
+//!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
 
 require daslib/ast_boost
 require daslib/is_local
@@ -76,6 +77,8 @@ struct UnsafeFrame {
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
+    // STYLE039 — non-ASCII bytes in string literals (path-defaulted: daslib/ and modules/)
+    ascii_strings : bool = false
     // counter
     warning_count : int = 0
     // collection mode
@@ -395,7 +398,7 @@ class StyleLintVisitor : AstVisitor {
         }
         // Use the call's result type — it's the scalar (or non-scalar) the user would write on the RHS of `??`. Robust under both pre- and post-instantiation argument shapes.
         if (!is_supported_jv_scalar(expr._type)) return
-        style_warning("STYLE020: from_JV(v, type<T>, defV) on a supported scalar — use 'v ?? defV' (operator ?? from json_boost)", expr.at)
+        style_warning("STYLE020: from_JV(v, type<T>, defV) on a supported scalar - use 'v ?? defV' (operator ?? from json_boost)", expr.at)
     }
 
     // --- STYLE019: nested min/max → clamp ---
@@ -418,11 +421,11 @@ class StyleLintVisitor : AstVisitor {
         let inner_name = outer_name == "min" ? "max" : "min"
         // min(max(x, lo), hi) — inner is arg[0] max(min(x, hi), lo) — inner is arg[0] (mirror)
         if (is_math_call(expr.arguments[0], inner_name)) {
-            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) — use 'clamp(x, lo, hi)' from math module", expr.at)
+            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at)
             return
         }
         if (is_math_call(expr.arguments[1], inner_name)) {
-            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) — use 'clamp(x, lo, hi)' from math module", expr.at)
+            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at)
         }
     }
 
@@ -634,6 +637,20 @@ class StyleLintVisitor : AstVisitor {
         style_warning("STYLE035: non-int numeric variable '{v.name}' is compared with a cast character literal; make '{v.name}' int and compare directly with the character literal", v.at)
     }
 
+    def override preVisitExprConstString(expr : ExprConstString?) : void {
+        if (!ascii_strings || expr.genFlags.generated) return
+        let s = string(expr.value)
+        peek_data(s) $(arr) {
+            for (i in range(length(arr))) {
+                let b = int(arr[i])
+                if (b >= 128) {
+                    style_warning("STYLE039: non-ASCII byte {b} at offset {i} in string literal; emitted strings must be ASCII - spell it out (e.g. '-' for an em-dash), or '// nolint:STYLE039' when the character is intended", expr.at)
+                    break
+                }
+            }
+        }
+    }
+
     def override preVisitExprOp2(expr : ExprOp2?) : void {
         st029_record_func(expr.func)
         if (!expr.genFlags.generated
@@ -657,7 +674,7 @@ class StyleLintVisitor : AstVisitor {
                 let cval = (const_side as ExprConstBool).value
                 let positive = (expr.op == "==" && cval) || (expr.op == "!=" && !cval)
                 let suggestion = positive ? "b" : "!b"
-                style_warning("STYLE018: redundant boolean comparison — use '{suggestion}' directly (drop the '{expr.op} {cval}')", expr.at)
+                style_warning("STYLE018: redundant boolean comparison - use '{suggestion}' directly (drop the '{expr.op} {cval}')", expr.at)
             }
         }
         // STYLE022: foo |= BfT.m  /  foo &= ~BfT.m  on a bitfield variable.
@@ -752,7 +769,7 @@ class StyleLintVisitor : AstVisitor {
         if (empty(bit_name)) return
         let positive = expr.op == "!="    // !=0 means "the bit is set"
         let suggestion = positive ? "bf.{bit_name}" : "!bf.{bit_name}"
-        style_warning("STYLE023: bitfield test via int-cast can be written directly — use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at)
+        style_warning("STYLE023: bitfield test via int-cast can be written directly - use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at)
     }
 
     def check_style022_bitfield_set_clear(expr : ExprOp2?) : void {
@@ -895,7 +912,7 @@ class StyleLintVisitor : AstVisitor {
                 var b2 = false
                 if (is_const_bool_return(outer_term, b1) && is_const_bool_return(else_term, b2) && b1 != b2) {
                     let suggestion = b1 ? "return cond" : "return !cond"
-                    style_warning("STYLE017: 'if (cond) return {b1}; else return {b2}' — use '{suggestion}' directly", ifte.at)
+                    style_warning("STYLE017: 'if (cond) return {b1}; else return {b2}' - use '{suggestion}' directly", ifte.at)
                 }
             }
         }
@@ -960,7 +977,7 @@ class StyleLintVisitor : AstVisitor {
             var b2 = false
             if (is_const_bool_return(outer_term, b1) && is_const_bool_return(nxt, b2) && b1 != b2) {
                 let suggestion = b1 ? "return cond" : "return !cond"
-                style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' — use '{suggestion}' directly", outer_if.at)
+                style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' - use '{suggestion}' directly", outer_if.at)
             }
         }
     }
@@ -1568,9 +1585,9 @@ class StyleLintVisitor : AstVisitor {
                 count++
             }
             if (count == 1) {
-                style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source — use `var {v.name} := SRC` (clone-assign)", v.at)
+                style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source - use `var {v.name} := SRC` (clone-assign)", v.at)
             } elif (count >= 2 && count <= MAX_CONCAT_ARITY) {
-                style_warning("STYLE033: array<T> '{v.name}' default-initialized then filled by a run of {count} `push_from`/`push_clone_from` from arrays — that is a concatenation; use `var {v.name} <- concat(s1, s2, ...)` (needs `require daslib/linq`)", v.at)
+                style_warning("STYLE033: array<T> '{v.name}' default-initialized then filled by a run of {count} `push_from`/`push_clone_from` from arrays - that is a concatenation; use `var {v.name} <- concat(s1, s2, ...)` (needs `require daslib/linq`)", v.at)
             }
         }
     }
@@ -1651,7 +1668,7 @@ class StyleLintVisitor : AstVisitor {
                 && target._type != null && target._type.firstType != null
                 && target._type.firstType.canCloneFromConst
                 && !run_preceded_by_empty_array_decl(blk, i, target)) {
-                style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' — collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' - collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at)
             }
             i += count
         }
@@ -1698,7 +1715,7 @@ class StyleLintVisitor : AstVisitor {
                     && recv._type != null && recv._type.firstType != null
                     && recv._type.firstType.canCloneFromConst) {
                 let cd = chain_describe(recv)
-                style_warning("STYLE033: run of {count} `{fname}` calls into '{cd}' — collapse to one variadic call `{cd} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{cd}' - collapse to one variadic call `{cd} |> {fname}(s1, s2, ...)`", blk.list[i].at)
             }
             i += count
         }
@@ -2048,7 +2065,7 @@ class StyleLintVisitor : AstVisitor {
             }
             return if (used_count > 0)
             // Nothing direct, nothing transitive, no macro/[init] — genuinely unused.
-            style_warning("STYLE030: require {req_name} is unused — no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
+            style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
         }
     }
 
@@ -2267,7 +2284,7 @@ class StyleLintVisitor : AstVisitor {
         at.last_column = 1u
         var msg = ""
         if (private_ctx) {
-            msg = "STYLE015: {line_count}-line comment inside 'def private' exceeds 1-line cap; private symbols don't get public docs — keep at most one WHY line, or suppress on the first line with '// nolint:STYLE015'"
+            msg = "STYLE015: {line_count}-line comment inside 'def private' exceeds 1-line cap; private symbols don't get public docs - keep at most one WHY line, or suppress on the first line with '// nolint:STYLE015'"
         } else {
             msg = "STYLE014: comment block of {line_count} lines exceeds 3-line cap; trim multi-paragraph prose to a 1-line WHY (move design notes to .md), or suppress on the first line with '//!@nolint' (//! blocks) or '// nolint:STYLE014' (// blocks)"
         }
@@ -2345,7 +2362,7 @@ class StyleLintVisitor : AstVisitor {
             && (current_function == null || current_function.fromGeneric == null)
             && !(skip_userSaidItsSafe |> has_value(expr))
             && frame.count == 0) {
-            style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe — drop the wrap", expr.at)
+            style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe - drop the wrap", expr.at)
         }
         return expr
     }
@@ -2536,7 +2553,7 @@ class StyleLintVisitor : AstVisitor {
         if (expr != null && !expr.genFlags.generated
             && (current_function == null || current_function.fromGeneric == null)
             && n > 0 && unsafe_block_stack[n - 1] > 0) {
-            style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope — drop the inner wrap", expr.at)
+            style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope - drop the inner wrap", expr.at)
         }
         if (n > 0) {
             unsafe_block_stack[n - 1]++
@@ -2555,7 +2572,7 @@ class StyleLintVisitor : AstVisitor {
         let blk = expr.body as ExprBlock
         let frame = unsafe_frame_for(blk)
         if (frame.count == 0) {
-            style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe — drop the wrap", expr.at)
+            style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe - drop the wrap", expr.at)
         } elif (frame.count == 1 &&
                 !(blk.list[0] is ExprYield ||
                   blk.list[0] is ExprDelete ||
@@ -2580,7 +2597,7 @@ class StyleLintVisitor : AstVisitor {
                 }
             }
             if (narrowable) {
-                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe - narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
             }
         }
         return expr
@@ -2606,11 +2623,15 @@ def private comment_hygiene_for(prog : ProgramPtr; requested : bool) : bool {
     if (requested) return true
     let configured = prog._options |> find_arg("_comment_hygiene")
     if (configured is tBool) return configured as tBool
-    let mod = prog.getThisModule
-    if (mod == null) return false
-    let module_file = string(mod.fileName)
-    let file = module_file |> replace("\\", "/")
-    return starts_with(file, "daslib/") || find(file, "/daslib/") >= 0
+    return is_daslib_source(prog)
+}
+
+def private ascii_strings_for(prog : ProgramPtr) : bool {
+    // tri-state: module option wins; '.lint_config' STYLE039=true means everywhere; else path default
+    let configured = prog._options |> find_arg("_ascii_strings")
+    if (configured is tBool) return configured as tBool
+    if (lint_config_forces_on("STYLE039")) return true
+    return is_shipped_library_source(prog)
 }
 
 def private max_complexity_for(prog : ProgramPtr) : int {
@@ -2642,6 +2663,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     astVisitor.disabled_codes := disabled_codes
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
+    astVisitor.ascii_strings = ascii_strings_for(prog)
     astVisitor.this_module = prog.getThisModule
     let empty_enabled : table<string>
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
@@ -2680,6 +2702,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     astVisitor.enabled_codes := enabled_codes
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
+    astVisitor.ascii_strings = ascii_strings_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
@@ -2710,6 +2733,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     astVisitor.enabled_codes := enabled_codes
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
+    astVisitor.ascii_strings = ascii_strings_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
