@@ -195,7 +195,8 @@ pre-cloning with `clone_expression` is wasted work even when one source feeds se
 
 `daslib/ast_match` is reification in reverse: the same tags, extracting instead of substituting.
 Prefer it over hand-rolled `is X` / `as X` ladders. Bind variables are declared **before** the call
-and filled on success; the result is
+and filled only when the whole match succeeds — a failed match leaves every binding untouched, so
+a qmatch ladder can reuse capture variables freely. The result is
 `QMatchResult { matched : bool; error : QMatchError; expr : Expression const? }`, whose `expr`
 points at the mismatched node.
 

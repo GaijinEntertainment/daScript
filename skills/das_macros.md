@@ -261,7 +261,7 @@ Pattern tags inside `qmatch(expr, <pattern>)`:
 
 Result is `QMatchResult` with `.matched : bool`, `.error : QMatchError`, and `.expr : Expression const?` — the node where matching failed (null on success), the fastest way to see WHICH sub-shape rejected. Captured bindings live in the pre-declared outer variables, NOT on the result struct.
 
-**On failure, `$e` and `$i` captures may already have been written.** They are assigned as the walk reaches them, with no guard and no rollback, so a partial match leaves stale bindings; `$v` and `$t` go through a `qm_guard` on the extract result and stay untouched. Which captures survive a failure is an accident of where the failure was detected — always gate on `.matched` before reading ANY binding, and never keep a binding across a failed match.
+**Captures are transactional: a failed match leaves every binding untouched.** All capture kinds (`$e $v $i $t $c $f $b $a`) stage into generated temporaries during matching and commit to your variables only after the whole match succeeds — so a qmatch ladder can safely reuse capture variables, and bindings from an earlier successful match survive a later failed one.
 
 Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests (repo-only) in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
 
