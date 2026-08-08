@@ -34,14 +34,12 @@ require dasllama/dasllama_metal_lens   // census policing — no [metal_dispatch
 // MetalQ8MulMm with the A stage swapped to native BF16 rows (no dequant: widen = exact bit
 // shift, then RNE to the f16 tile). Serves the E-series per_layer_model_proj GEMM straight off
 // the kept-bf16 blob — no resident f32 copy. Same %64 shape gates, kdim % 32.
-class MetalBf16MulMm {
+class MetalBf16MulMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" wbh : array<ushort4> // bf16 W rows, ushort4 view (row r elem k at (r*kdim+k)/4)
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // raw f32 activations, float4 view
     @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_bf16_mulmm_msl")]
     def metal_bf16_mulmm {
@@ -85,21 +83,7 @@ class MetalBf16MulMm {
             tg_store_half4(tb, ibB, b0)
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             wcur = unsafe(wcur + 8)
             xcur = unsafe(xcur + 8)
             kb++
@@ -768,15 +752,13 @@ class MetalMoeMulMmQ8T {
 // The MoE mul_mm family: one 32x64 simdgroup tile loop over an expert's rows, identical for every
 // weight format — a format differs in its k-block decode, the expert-plane origin it addresses
 // from, and (q8) the carried-pointer state stage_init binds. Mx4 stays out: followup_general.md #8.
-class MetalMoeMulMmBase {
+class MetalMoeMulMmBase : MetalMmTileBase {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 7 @role = "read" cnt : array<uint>
     @ssbo @binding = 8 @role = "read" basep : array<uint>
     @ssbo @binding = 9 @role = "read" bkt : array<uint>
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
 
     // a format owns bindings 0..2 — its weight views; its plane stride rides ka.eplane
     def abstract wbase(e, nBase, lr0 : uint) : uint    // expert plane origin, in the format's block unit
@@ -828,21 +810,7 @@ class MetalMoeMulMmBase {
             tg_store_half4(tb, ibB, b0)
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             xcur = unsafe(xcur + 8)
             kb++
         }
@@ -1509,13 +1477,12 @@ class MetalAttnQKMmT {
     }
 }
 
-class MetalAttnQKMm {
+class MetalAttnQKMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" q : array<float4>    // [mp x qd/4], roped
     @ssbo @binding = 1 @role = "read" k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" att : array<float>   // [n_heads x qrows x np32] raw scores out
     @uniform @binding = 3 ka : AttnArgs
-    @workgroup ta : float16[2048]           // K: k-tiles x 8 key-tiles of 8x8, tile (k row, key col)
-    @workgroup tb : float16[1024]           // Q: k-tiles x 4 query-tiles of 8x8 (query row, k col)
+    // inherited ta = K tiles (k row, key col), tb = Q tiles (query row, k col)
 
     [metal_kernel(name="metal_attn_qk_mm_msl")]
     def metal_attn_qk_mm {   // nolint:STYLE038 — MSL kernel body; the QK tiles are simdgroup-barrier coupled
@@ -1584,21 +1551,7 @@ class MetalAttnQKMm {
             barrier()
             // math ROLLED over matrix arrays + das-pointer tile bumps — the hand-unrolled
             // spelling costs an occupancy tier (this kernel measured max_threads 704)
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             kb++
         }
         let base = h * ka.qrows * ka.np32
@@ -1657,13 +1610,12 @@ class MetalAttnAVMmT {
     }
 }
 
-class MetalAttnAVMm {
+class MetalAttnAVMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] normalized P
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
-    @workgroup ta : float16[2048]           // V: pos-tiles x 8 col-tiles of 8x8, tile (pos row, col col)
-    @workgroup tb : float16[1024]           // P: pos-tiles x 4 token-tiles of 8x8 (token row, pos col)
+    // inherited ta = V tiles (pos row, col col), tb = P tiles (token row, pos col)
 
     [metal_kernel(name="metal_attn_av_mm_msl")]
     def metal_attn_av_mm {
@@ -1712,21 +1664,7 @@ class MetalAttnAVMm {
             barrier()
             // math ROLLED over matrix arrays + das-pointer tile bumps — the hand-unrolled
             // spelling costs an occupancy tier (this kernel measured max_threads 704)
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             kb++
         }
         let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens

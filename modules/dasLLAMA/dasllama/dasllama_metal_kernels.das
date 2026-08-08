@@ -5011,18 +5011,43 @@ class MetalRmsNorm {
     }
 }
 
+// The shared 32x64 GEMM tile stage: every mul_mm-family kernel (dense, MoE, attention, KV-quant)
+// stages A into ta (4 k-tiles x 8 row-tiles of 8x8) and B into tb (4 k-tiles x 4 token-tiles),
+// then walks 4 k-steps of 4 A-loads / 2 B-loads / 8 MACs. The method splices flat at emission.
+class MetalMmTileBase {
+    @workgroup ta : float16[2048]
+    @workgroup tb : float16[1024]
+
+    def acc_quad(aB, bB : uint; var ma : simdgroup_half8x8[4]; var mb : simdgroup_half8x8[2]; var mc : simdgroup_float8x8[8]) {
+        var acur = unsafe(addr(ta[aB]))
+        var bcur = unsafe(addr(tb[bB]))
+        for [unroll_full] (_ik in range(4)) {
+            for [unroll_full] (i in range(4)) {
+                simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(2)) {
+                simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(8)) {
+                simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+            }
+            acur = unsafe(acur + 512)
+            bcur = unsafe(bcur + 256)
+        }
+    }
+}
+
 // The production GEMM: 64-output x 32-token C tiles (4 simdgroups, 8 accumulators), W as
 // interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
 // arrays. Requires out-dim % 64, M padded to 64. Beats llama.cpp's equivalent 2-3% on M1 Max.
-class MetalQ8MulMm {
+class MetalQ8MulMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
     @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // raw f32 activations, float4 view
     @ssbo @binding = 3 @role = "write" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @workgroup ta : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, each tile (k row, wrow col)
-    @workgroup tb : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, each tile (token row, k col)
+    // inherited ta = W tiles (k row, wrow col), tb = X tiles (token row, k col)
 
     [metal_kernel(name="metal_q8_mulmm_msl")]
     def metal_q8_mulmm {
@@ -5074,21 +5099,7 @@ class MetalQ8MulMm {
             // math ROLLED: the pragma'd loops reach the backend intact — 4 k-slabs x
             // (6 tile loads + 8 macs); tile POINTERS bump at the slab tail (index form
             // measured max_threads 896 and -10% — the backend precomputes every address)
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             scur = unsafe(scur + 17)
             qp = unsafe(qp + 34)
             xcur = unsafe(xcur + 8)
@@ -5106,7 +5117,7 @@ class MetalQ8MulMm {
 // overlay, so QH branch-duplicates only the dequant k-loop (both stamps byte-identical;
 // nsh repeated per arm to keep line order). K6 (own scale layout) and Q8 (blob walk) stay.
 [ |> template_struct_instance]
-class template MetalKqMulMmK45T {
+class template MetalKqMulMmK45T : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
@@ -5114,8 +5125,6 @@ class template MetalKqMulMmK45T {
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
     @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints
     @template_constant QH : bool = false // q5_K: the 5th-bit overlay plane rides after the nibbles
 
@@ -5194,21 +5203,7 @@ class template MetalKqMulMmK45T {
             tg_store_half4(tb, ibB, b0)
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             xcur = unsafe(xcur + 8)
             kb++
         }
@@ -5230,7 +5225,7 @@ class MetalKqMulMmK5 : MetalKqMulMmK45T {
     override QH = true
 }
 
-class MetalKqMulMmK6 {
+class MetalKqMulMmK6 : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" ksc : array<uint4>   // 16B sub-scale blocks (16 int8 at blk), same buffer at 0
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
@@ -5238,8 +5233,6 @@ class MetalKqMulMmK6 {
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_kq_mulmm_k6_msl")]
     def metal_kq_mulmm_k6 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
@@ -5314,21 +5307,7 @@ class MetalKqMulMmK6 {
             tg_store_half4(tb, ibB, b0)
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
+            acc_quad(aB, bB, ma, mb, mc)
             xcur = unsafe(xcur + 8)
             kb++
         }
