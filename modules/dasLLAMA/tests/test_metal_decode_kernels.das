@@ -133,7 +133,7 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
 // kernel rescales across chunks. `window` > 0 also exercises the chunk mask + the chlo skip.
 def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
     var err : string
-    var pso_p = pipeline_from_source(dev, metal_sq_attn_part16_msl, metal_sq_attn_part16_msl_entry, metal_sq_attn_part16_msl_fastmath, err)
+    var pso_p = pipeline_from_source(dev, MetalSqAttnPartF16_metal_sq_attn_part_msl, MetalSqAttnPartF16_metal_sq_attn_part_msl_entry, MetalSqAttnPartF16_metal_sq_attn_part_msl_fastmath, err)
     t |> success(pso_p != null, "{tag}: part16 pipeline: {err}")
     var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_msl, metal_sq_attn_comb_msl_entry, metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
@@ -161,7 +161,7 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
         chlo = uint(chlo), hass = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
-        metal_set_threadgroup_memory_length(enc, metal_sq_attn_part16_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem, 0)
         metal_set_buffer(enc, bk, 0ul, 0)
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)

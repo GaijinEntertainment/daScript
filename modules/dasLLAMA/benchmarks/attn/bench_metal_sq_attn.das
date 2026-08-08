@@ -1064,7 +1064,7 @@ def private run_attn_b2_sidebyside(b) {
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_part = pipeline_from_source(dev, metal_sq_attn_part_b16_msl, metal_sq_attn_part_b16_msl_entry, true, err)
+    var pso_part = pipeline_from_source(dev, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_entry, true, err)
     b |> success(pso_part != null, "production part kernel compiles")
     var pso_comb = pipeline_from_source(dev, metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, true, err)
     b |> success(pso_comb != null, "production comb kernel compiles")
@@ -1158,7 +1158,7 @@ def private run_attn_b2_sidebyside(b) {
         for (arm in range(4)) {
             var ms0 = 0.0lf
             if (arm == 0) {
-                ms0 = time_pair(queue, pso_part, bufs_part, groups_part, 128u, metal_sq_attn_part_b16_msl_tgmem,
+                ms0 = time_pair(queue, pso_part, bufs_part, groups_part, 128u, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem,
                     pso_comb, bufs_comb, groups_comb, 128u, 0ul, 1)
             } elif (arm == 1) {
                 ms0 = time_pair(queue, pso_partd, bufs_partd, groups_partd, 128u, lab_sq_attn_part_d_msl_tgmem,
@@ -1191,7 +1191,7 @@ def private run_attn_b2_sidebyside(b) {
                 let reps = clamp(int(5.0lf / max(est[arm], 0.005lf)) + 1, 1, 256)
                 var ms = 0.0lf
                 if (arm == 0) {
-                    ms = time_pair(queue, pso_part, bufs_part, groups_part, 128u, metal_sq_attn_part_b16_msl_tgmem,
+                    ms = time_pair(queue, pso_part, bufs_part, groups_part, 128u, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem,
                         pso_comb, bufs_comb, groups_comb, 128u, 0ul, reps)
                 } elif (arm == 1) {
                     ms = time_pair(queue, pso_partd, bufs_partd, groups_partd, 128u, lab_sq_attn_part_d_msl_tgmem,
