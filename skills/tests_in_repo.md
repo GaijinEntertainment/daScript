@@ -12,8 +12,9 @@ The full `test_aot` binary runs EVERY test under `tests/` with AOT enabled (`fai
 It builds+runs on the NIGHTLY CI cron and in `preflight --full` — per-PR CI only builds the
 `tests/language` subset (`test_aot_subset`) as a compile gate, so a missing registration
 passes PR CI and fails the nightly. Creating a new test directory ⇒ register it in
-`tests/aot/CMakeLists.txt` (5-step pattern in `skills/aot_testing.md` § "Registering a New
-Test Directory"), or the nightly/preflight fails with `error[50101]: AOT link failed`.
+`tests/aot/CMakeLists.txt` — for a plain suite that is one entry in `set(DAS_AOT_SUITES …)`;
+see `skills/aot_testing.md` § "Registering a New Test Directory" for the irregular cases —
+or the nightly/preflight fails with `error[50101]: AOT link failed`.
 
 If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put
 `options no_aot` IN THE FILE **and** exclude it from the directory's AOT glob, with a
@@ -40,7 +41,8 @@ false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests
 per subfolder during file collection (only for the `.das_test` at the `--test <root>`
 argument; directly naming a child folder bypasses it). It gates folders on module
 availability (`dasHV`, `dasSQLITE`, …) and on sweep mode by scanning argv — `--use-aot`
-skips `ast`, `ast_match`, `no_aot`; `-jit` skips only `gc` (heap_collect can't see heap
+skips `ast`, `ast_match`, `no_aot`, `jit_tests`, `.jitted_scripts` and `strudel_device`;
+`-jit` skips only `gc` (heap_collect can't see heap
 pointers whose only reference is a local in a jitted frame — native-stack locals are
 invisible to the collector, so GC-semantics tests are interp-only; the other former `-jit`
 skips were lifted once `jit_enabled` started triggering daslib/quote lowering). Two traps:

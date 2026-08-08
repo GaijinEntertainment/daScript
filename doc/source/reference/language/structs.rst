@@ -128,7 +128,7 @@ For ease of Objected Oriented Programming, non-virtual member functions can be e
 .. code-block:: das
 
     struct Foo {
-        x, y: int = 0
+        x, y: int
     }
 
     def setXY(var self: Foo; X, Y: int) {
@@ -141,6 +141,19 @@ For ease of Objected Oriented Programming, non-virtual member functions can be e
     var foo: Foo
     foo |> setXY(10, 11)   // this is syntactic sugar for setXY(foo, 10, 11)
     setXY(foo, 10, 11)     // exactly same thing as the line above
+
+A bare declaration such as ``var foo: Foo`` is legal only when **no** field of the structure
+carries an initializer. ``x, y: int = 0`` is a field initializer on both ``x`` and ``y``, so
+with that declaration the bare form reports
+``error[31016]: Uninitialized variable foo is unsafe`` — construct it explicitly instead:
+
+.. code-block:: das
+
+    struct Foo {
+        x, y: int = 0
+    }
+
+    var foo = Foo()        // fields carry initializers; construct explicitly
 
 
 Since function pointers are first-class values, you can emulate virtual functions by storing function pointers as members:

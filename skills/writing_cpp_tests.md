@@ -44,7 +44,7 @@ Rebuild — `cmake --build build`. The new test appears in `ctest -N` automatica
 
 ## Adding a big test
 
-A "big" test is anything that needs a custom `int main()`, custom link deps, or multiple link variants (static + dynamic). The canonical example is `tests-cpp/big/concurrent_init/` — it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
+A "big" test is anything the single doctest exe can't host: a custom `int main()` (C++ or C), custom link deps, multiple link variants (static + dynamic), or no compiled source at all — `big/style_lint/` is just a `CMakeLists.txt` that registers ctest entries running a daslang script with a `PASS_REGULAR_EXPRESSION`. What makes it "big" is owning its own CMakeLists and carrying `LABELS "big"`. The canonical C++ example is `tests-cpp/big/concurrent_init/` — it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
 
 To add one:
 
@@ -62,7 +62,7 @@ set_tests_properties(my_stress_test PROPERTIES LABELS "big")
 add_dependencies(test-big my_stress_test)
 ```
 
-Big tests **don't include doctest** — they keep their own `int main()` returning 0/1 to ctest. They handle `Module::Initialize()` / `Module::Shutdown()` themselves.
+Big tests that are C++ executables **don't include doctest** — they keep their own `int main()` returning 0/1 to ctest. They handle `Module::Initialize()` / `Module::Shutdown()` themselves.
 
 Big tests are **not in CI yet** (V1) — local-only via `ninja test-big`.
 
@@ -109,7 +109,7 @@ See `tests-cpp/small/test_run_with_catch_clear.cpp` for a 5-subcase example.
 
 The framework auto-checks three counters at the suite-end of every test process:
 
-1. **gc_node count** — AST nodes (TypeDecl, Expression, Function, etc.) tracked by gc_node.
+1. **gc_node count** — AST nodes (TypeDecl, Expression, Function, etc.) tracked by gc_node. Thread-local: only the suite-runner thread's root is sampled, so gc_nodes leaked on a worker thread that isn't joined-and-collected before the test ends are invisible to this check.
 2. **JobQue / Channel / LockBox / Stream / Feature count** — anything in the `JobStatus` tracking list.
 3. **Module-registered handle count** — sum of every `HandleRegistry<T>::live_count()` across every module that registered via `addHandleAnnotation<T>` (HV resources, dasSQLITE statements, etc.). Picked up automatically — no per-module wiring.
 
@@ -126,8 +126,9 @@ If a leak shows up that you believe is a false positive: suspect lazy initializa
 
 | Command | What it does |
 |---|---|
-| `ninja test` (or `ctest` from build dir) | All small tests (CI runs this). |
-| `ninja test-small` / `ninja test-big` | Subset by label. |
+| `ninja test` (or bare `ctest` from build dir) | **Everything** — small *and* big. |
+| `ninja test-small` (or `ctest -L small`) | Small tests only — this is what CI runs. |
+| `ninja test-big` (or `ctest -L big`) | Big tests only. |
 | `ctest -R "my feature"` | Single test by name regex. |
 | `ctest -V` | Verbose; shows full output and per-test leak attribution. |
 | `bin/tests-cpp-small --test-case="*my feature*"` | Direct binary, doctest filter syntax (also `--list-test-cases`). |
@@ -136,11 +137,11 @@ VSCode integration: install `matepek.vscode-catch2-test-adapter`, point at `buil
 
 ## Sanitizers
 
-Build with `-DDAS_USE_SANITIZER=address` (or `ubsan`, `tsan`) in the `cmake` step. CI runs ASAN + UBSAN (and TSAN as future tests touch threading) on Linux Debug for every PR. If your test fails under a sanitizer, fix the sanitizer error — don't disable.
+Build with `-DDAS_USE_SANITIZER=address` (or `undefined`/`ubsan`, `thread`/`tsan`) in the `cmake` step. CI runs three Linux **Release** x86-64 sanitizer lanes — ASAN, TSAN and UBSAN — on every PR, each running the full suite (dastest + test_aot + ctest). Release keeps walltime in budget; Debug + ASAN was prohibitive. If your test fails under a sanitizer, fix the sanitizer error — don't disable.
 
 ## Common gotchas
 
-- `getDasRoot()` returns the project root path baked at configure time. All `.das` fixture loads should use `getDasRoot() + "/tests-cpp/..."`.
+- `getDasRoot()` derives the root at runtime from the test executable's own path (it walks up past `bin/` / `bin/<config>/`), falling back to `"."` if the exe is not under a `bin` dir. It is not a configure-time constant — moving the binary moves the root. All `.das` fixture loads should use `getDasRoot() + "/tests-cpp/..."`, and tests must therefore run with the repo layout intact, which is why every `add_test` sets `WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}`.
 - Don't put `NEED_*` macros at file scope. They go in `doctest_main.cpp::main()`.
 - The doctest header is large (~7000 lines). Don't include it in non-test code.
 - For SUBCASE-heavy tests, remember the body re-runs from the top — each subcase gets a fresh setup. This is the desired behavior; just be aware of the cost (5 subcases = 5 `compileDaScript` calls).

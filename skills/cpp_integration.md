@@ -163,7 +163,7 @@ addHandleAnnotation<MyType>(this, lib, "MyType",
     "destroy_my_type",                // optional daslang destructor
     "das::Handle<MyType>");           // C++ name AOT emits into stubs
 ```
-Registers the annotation **plus** `==`, `!=`, `is_alive`, and (if `destroyFnName` is non-empty) the release helper. Also installs a per-T leak-dump hook via `handleRegistry_registerDump` — `Module::Shutdown(bool dumpHandleLeaks = true)` calls `handleRegistry_dumpAll()` directly; pass `false` to suppress leak output (CI use).
+Registers the annotation **plus** `==`, `!=`, `is_alive`, and (if `destroyFnName` is non-empty) the release helper. Also installs per-`T` hooks via `handleRegistry_registerDump` (leak dump) and `handleRegistry_registerCount` (live count) — `Module::Shutdown(bool dumpHandleLeaks = true)` calls `handleRegistry_dumpAll()` directly; pass `false` to suppress leak output (CI use).
 
 **Factory (acquire) and method (lookup) patterns:**
 ```cpp
@@ -214,7 +214,7 @@ addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
 // Unary: addExtern<...>(*this, lib, "-", ...)->args({"a"});
 ```
 
-Available operator names: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `<`, `>`, `<=`, `>=`, `&`, `|`, `^`.
+Operators bind by name — `+ - * / % << >> < > <= >= & | ^ ~ ! && ||`, the compound-assign family (`+= -= *= /= %= <<= >>= &= |= ^=`), `++` / `--`, and `[]`. The special names `clone` and `finalize` bind the same way. There is **no whitelist** — `isValidBuiltinName(name, canPunkt = true)` (`src/ast/ast_module.cpp`, repo-only) only validates the characters, so any punctuation name the parser can produce is bindable.
 
 **Equality**: `addEquNeq<T>(*this, lib)` binds both `==` and `!=` (requires `operator==` and `operator!=` on T).
 
@@ -226,7 +226,7 @@ Available operator names: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `<`, `>`, `<=`, `
 addProperty<DAS_BIND_MANAGED_PROP(length)>("length", "length");
 ```
 
-`DAS_BIND_MANAGED_PROP` only works with member functions (methods) of the managed type.
+`DAS_BIND_MANAGED_PROP` only works with member functions (methods) of the managed type. For a property that needs distinct const and non-const accessors, use `addPropertyExtConst<...>` instead — see `tutorials/integration/cpp/09_operators_and_properties.cpp`.
 
 *Free function property* — via `addExtern` with `.\`` name prefix (in the module constructor):
 

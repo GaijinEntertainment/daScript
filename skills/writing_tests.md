@@ -24,15 +24,19 @@ def test_something(t : T?) {
 }
 ```
 
+`[test]` also accepts a no-argument form (`[test] def test_x()`) when the body needs no assertions object.
+
 ## Key test functions
 
-- `t |> equal(actual, expected)` — value equality assertion (reports "values differ" with expected/got)
+- `t |> equal(actual, expected)` — value equality assertion (reports "values differ"). **Label caveat:** on failure it prints `expected:` for argument 1 and `got:` for argument 2 — the reverse of XUnit. Keep writing `equal(actualExpr, wantValue)` (house idiom); just read `expected:` as *the live result*
 - `t |> success(condition)` — boolean assertion (reports "expected success, got failure")
 - `t |> success(condition, "message")` — boolean assertion with custom message
 - `t |> failure("message")` — unconditional failure with message
 - `t |> run("name") @(t : T?) { ... }` — named subtest
-- `t |> strictEqual(actual, expected)` — strict equality assertion (fatal on fail)
-- `t |> numericEqual(actual, expected)` — numeric equality handling NaN
+- `t |> strictEqual(actual, expected)` — strict equality assertion (**fatal on fail**: it aborts the enclosing `run` arm; later arms still run)
+- `t |> numericEqual(actual, expected)` — numeric equality that treats NaN == NaN as equal (**fatal on fail**, like `strictEqual`)
+- `t |> skip("reason")` — mark the arm skipped (not passed) and print the reason. Does NOT unwind; use `if (gate) { t |> skip("..."); return }`
+- Every assertion above takes an optional trailing message: `t |> equal(a, b, "msg")`
 
 ## Use `feint` instead of `print` in tests
 
@@ -85,6 +89,10 @@ Use `ii`, `idx`, `val`, `sptr` etc. instead.
 - Shared test helpers go in `_common.das` module files, kept in the same directory as the
   tests that require them. A require path cannot contain a hyphen, so a test living in a
   hyphenated directory must require its siblings by bare name.
+- The leading `_` is load-bearing: dastest's walker (`dastest/fs.das`) skips every file **and
+  directory** whose name starts with `_`, which is why a helper module is never picked up as a
+  test. The same rule is how you disable a test — rename `test_foo.das` to `_test_foo.das`, or
+  prefix the whole directory.
 
 ## Running tests
 
@@ -102,28 +110,62 @@ bin/daslang dastest/dastest.das -- --test dastest/tests
 ```
 
 Useful flags: `--failures-only` to quieten passing output, `--color`, `--timeout <seconds>`,
-and `--isolated-mode` to run each file in its own process (slower, but survives a crash in
-one file).
+`--compile-only` to compile the test files without executing them, and `--isolated-mode` to
+run each file in its own process (slower, but survives a crash in one file).
+
+## Benchmarks
+
+The same framework runs benchmarks. Write `[benchmark] def bench_x(b : B?)`, one or more
+`b |> run("name") { ... }` arms (a **block**, not a lambda), and `b |> accept(value)` on the
+result so the optimizer cannot delete the work:
+
+```das
+[benchmark]
+def bench_sum(b : B?) {
+    b |> run("sum 1..100") {
+        var acc = 0
+        for (i in range(1, 101)) {
+            acc += i
+        }
+        b |> accept(acc)
+    }
+}
+```
+
+Run with `--bench`: `bin/daslang dastest/dastest.das -- --bench --test path/to/bench.das`.
+Filter with `--bench-names`, repeat with `--count N`, and change the output shape with
+`--bench-format native|go|json`.
 
 ## Measuring heap use — `options persistent_heap` is required
 
-`heap_bytes_allocated()` does **not** decrease when memory is freed on the
-default linear (bump) heap — the bump pointer never retreats, so a test that
-frees a buffer and expects the counter to drop sees no change and reads as a
-leak. Put `options persistent_heap` in the test file to get an allocator that
-tracks individual frees; the counter is then exact.
+The default heap is a chain of linear (bump) chunks, and freeing retreats a
+chunk's bump pointer **only when the freed block is the last allocation in that
+chunk** — any other free is simply not reclaimed. So whether
+`heap_bytes_allocated()` drops depends on allocation order and where the chunk
+boundaries happen to fall, not on whether you actually freed anything. The same
+assertion can pass by hand and fail inside a test, or vice versa, with no change
+to the code under test.
+
+Put `options persistent_heap` in the test file to get an allocator that records
+every individual free; the counter is then exact regardless of order. Any test
+that asserts on `heap_bytes_allocated()` needs it.
 
 ```das
-options persistent_heap   // heap_bytes_allocated only tracks frees on the persistent heap
+options persistent_heap        // exact free accounting
+options force_inscope_pod      // required for clear()/erase() to collect element-owned heap
 
+var outer : array<array<int>>  // elements own heap; a flat array<int> has nothing to collect
+// ... fill outer ...
 let before = heap_bytes_allocated()
-container |> clear()
-t |> success(heap_bytes_allocated() < before, "buffers came back")
+outer |> clear()               // collects the inner buffers; `outer`'s own buffer survives
+t |> success(heap_bytes_allocated() < before, "inner buffers came back")
 ```
 
-The trap is that the same code measured through the `daslang` CLI often *does*
-show the drop, so a probe run by hand disagrees with the test — the CLI is not
-using the linear heap.
+Two things to keep straight about `clear()`. It releases only what the ELEMENTS
+own — the container's own buffer is capacity, and comes back on `delete`, not
+`clear`. And that element collection rides the `force_inscope_pod` policy, which
+is OFF by default: without it the counter does not move at all, even under
+`persistent_heap`.
 
 ## Testing non-copyable types
 

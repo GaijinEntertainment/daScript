@@ -268,7 +268,7 @@ and is replaced with each expression from the input array in sequential order:
 
     var qqblk : array<ExpressionPtr>
     for ( i in range(3) ) {
-        qqblk |> emplace_new <| qmacro(print("{$v(i)}\n"))
+        qqblk |> push <| qmacro(print("{$v(i)}\n"))
     }
     var blk <- qmacro_block() {
         $b(qqblk)

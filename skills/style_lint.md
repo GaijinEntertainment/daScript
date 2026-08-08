@@ -7,7 +7,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 ## Architecture
 
 - **Module:** `daslib/style_lint.das` — `module style_lint shared private`
-- **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true)`; comment hygiene defaults on for sources under `daslib/`, while `options _comment_hygiene` can override that default
+- **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true, build_lint_macro_disabled(prog), [comment_hygiene = <options _comment_hygiene>])`; the policy table comes from `daslib/lint_config` (default-off seeds + `.lint_config` + `$DAS_LINT_DISABLE`). Comment hygiene defaults on for sources under `daslib/` (`comment_hygiene_for`), and `options _comment_hygiene` overrides that default
 - **Visitor:** `class StyleLintVisitor : AstVisitor` — walks the AST with source-line inspection
 - **Error reporting:** `macro_style_warning(compiling_program(), at, message)` — reports as error code 31209
 - **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
@@ -20,7 +20,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE001 | `foo() <| $(a) { ... }` | Remove `<|` pipe; use `foo() $(a) { ... }` |
 | STYLE002 | `foo() <| $() { ... }` | Remove pipe and `$()`; use `foo() { ... }` |
 | STYLE003 | `foo() $() { ... }` | Remove redundant `$()`; use `foo() { ... }` |
-| STYLE005 | `if (cond) { return val }` (and `{ break }` / `{ continue }`) | Use braceless `if (cond) return val` or postfix `return val if (cond)`. Always-on (no opt-in flag). Discriminator: `blk.at != inner.at` ⇔ user-written braces (synthetic blocks share LineInfo with the inner stmt). |
+| STYLE005 | `if (cond) { return val }` (and `{ break }` / `{ continue }`) | Use braceless `if (cond) return val` or postfix `return val if (cond)`. **Default-OFF** — the one rule seeded into `disabled_codes` by `seed_default_disabled` (`daslib/lint_config.das`); re-enable with `--enable STYLE005`, a `.lint_config` `STYLE005 = true`, or module-local `options _enable_default_off_rules = true`. Discriminator: `blk.at != inner.at` ⇔ user-written braces (synthetic blocks share LineInfo with the inner stmt). |
 | STYLE006 | `string(x.__rtti) == "ExprFoo"` | Use `x is ExprFoo` |
 | STYLE010 | `if (true) { ... }` | Use a bare block `{ ... }` |
 | STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
@@ -36,11 +36,11 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE021 | `var v : table<string; JsonValue?>` followed by ≥ 2 contiguous `v \|> insert(<const string>, ...)` | Use the named-tuple JV form: `var v = JV((k1=val1, k2=val2, ...))` (`daslib/json_boost.das:638`). Computed keys disqualify the chain — those runs fall through to STYLE031 (a table literal accepts computed keys, `JV((...))` does not). `JsonValue` is matched as the das **struct** from module `json` (`tPointer`→`tStructure`, name + module) — the original `tHandle`+annotation check could never match a das struct, so the rule was dead code from landing until 2026-06-12. |
 | STYLE022 | `foo \|= BfT.m` / `foo &= ~BfT.m` where `foo._type.baseType == tBitfield` and the RHS resolves to exactly one named bit | Use `foo.m = true` / `foo.m = false` (bitfield-as-field assignment). RHS is matched in two shapes: `ExprField(value=ExprVar(BfT), name="m")` under lint policies, and `ExprConstBitfield(<single-bit mask>)` under normal compile policies (single-bit mask mapped back to bit name via `TypeDecl.argNames`). The `&=` form requires explicit `~`; bare `foo &= BfT.m` stays silent (different semantics). Multi-bit RHS (`Mode.read \| Mode.write`) and dynamic RHS skipped. **Note**: only safe when the AOT C++ side has `__bit_set` overloads matching the underlying integer type — `include/daScript/simulate/aot.h` provides `Bitfield&`, `Bitfield8/16/64&`, and raw `uint8/16/32/64_t&` overloads (the raw-integer set covers handle-bound bitfield fields like `Function::flags`, which is `uint32_t` on the C++ side). |
 | STYLE023 | `int_cast(bf & BfT.m) !=/== 0` where `bf._type.baseType == tBitfield`, the cast is one of `int`/`uint`/`int64`/`uint64`, and the RHS of `&` resolves to one named bit | Use `bf.m` (for `!= 0`) or `!bf.m` (for `== 0`). Matches both operand orders (`cast != 0` and `0 != cast`). Single-bit detection mirrors STYLE022 (both `ExprField` and `ExprConstBitfield` shapes); multi-bit masks and dynamic RHS skipped. Triggers on any of the four `ExprConst{Int,UInt,Int64,UInt64}` zero literals so signed/unsigned and 32/64-bit cast forms all fire. |
-| STYLE024 | Redundant `unsafe` wrap — `unsafe(expr)` (parser flag `userSaidItsSafe` on the inner expression) **or** `unsafe { ... }` block whose body contains no statement matching a known inherently-unsafe AST shape | Drop the wrap. The "inherently-unsafe" recognizer (`expr_needs_unsafe`) is a recursive walk that flags `ExprCast` with `upcastCast`/`reinterpretCast`, `ExprDelete`, `ExprAddr` (`@@<fn>`), `ExprRef2Ptr` (`addr(x)`), `ExprAsVariant`, `ExprSafeAsVariant` (`?as` — marked unconditionally like `as`, since `?as` on a non-pointer variant requires unsafe and operand pointer-ness is erased by `autoDereference` at lint time), `ExprAt` on a `table<>` value or raw pointer (unknown subexpr type also marks — bias to keeping the wrap), `ExprSafeAt` (`?[]`) on a table/array value or on a pointer with any pointee EXCEPT vector/fixed-array (mirrors `unsafe_pointer_safe_index` — a scalar-pointee `p?[i]` requires unsafe; the vector/fixed-array pointee forms don't), `ExprField` whose value is variant-typed, `ExprReturn` returning a reference/temporary, and `ExprCallFunc` whose `func.flags.unsafeOperation` (or `moreFlags.unsafeOutsideOfFor` outside a for-loop source) is set. Subtrees with `genFlags.generated == true` are skipped entirely — macro-synthesized AST is excluded from the rule. Note: the parser-flag form (`unsafe(expr)`) only survives folding under `no_optimizations + no_infer_time_folding`, so const-foldable inner expressions (e.g. `unsafe(1 + 2)`) only fire under the lint runner (`utils/lint/main.das`). Block-form fires under regular compile too. |
-| STYLE025 | `unsafe { stmt1; stmt2; ...; stmtN }` block where exactly **one** statement matches `expr_needs_unsafe`; the rest are mundane | Narrow to `unsafe(<sub-expr>)` on the one statement that needs it. Silent when ≥ 2 statements need unsafe (block scope is justified). 0-needing-statements falls through to STYLE024 (drop the block). |
+| STYLE024 | Redundant `unsafe` wrap — `unsafe(expr)` (parser flag `userSaidItsSafe` on the inner expression) **or** `unsafe { ... }` block whose body contains no statement matching a known inherently-unsafe AST shape | Drop the wrap. Unsafe-ness is accumulated, not re-walked: `preVisitExpression` pushes an `UnsafeFrame` per node and `visitExpression` pops it, folding the child count into the parent (cached in `unsafeExprs`). Node-kind overrides call `mark_unsafe_in_stack()` for `ExprCast` with `upcastCast`/`reinterpretCast`, `ExprDelete`, `ExprAddr` (`@@<fn>`), `ExprRef2Ptr` (`addr(x)`), `ExprAsVariant`, `ExprSafeAsVariant` (`?as` — marked unconditionally like `as`, since `?as` on a non-pointer variant requires unsafe and operand pointer-ness is erased by `autoDereference` at lint time), `ExprAt` on a `table<>` value or raw pointer (unknown subexpr type also marks — bias to keeping the wrap), `ExprSafeAt` (`?[]`) on a table/array value or on a pointer with any pointee EXCEPT vector/fixed-array (mirrors `unsafe_pointer_safe_index` — a scalar-pointee `p?[i]` requires unsafe; the vector/fixed-array pointee forms don't), `ExprField` whose value is variant-typed, `ExprReturn` returning a reference/temporary, `ExprNew` whose ctor is null or `unsafeOperation`, and `ExprCall`/`ExprOp1`/`ExprOp2`/`ExprOp3` whose func passes `call_func_needs_unsafe` (`func.flags.unsafeOperation`, or `moreFlags.unsafeOutsideOfFor` outside a for-loop source). Subtrees with `genFlags.generated == true` are skipped entirely — macro-synthesized AST is excluded from the rule. Note: the parser-flag form (`unsafe(expr)`) only survives folding under `no_optimizations + no_infer_time_folding`, so const-foldable inner expressions (e.g. `unsafe(1 + 2)`) only fire under the lint runner (`utils/lint/main.das`). Block-form fires under regular compile too. |
+| STYLE025 | `unsafe { stmt1; stmt2; ...; stmtN }` block where exactly **one** statement's `UnsafeFrame` count is non-zero; the rest are mundane | Narrow to `unsafe(<sub-expr>)` on the one statement that needs it. Silent when ≥ 2 statements need unsafe (block scope is justified). 0-needing-statements falls through to STYLE024 (drop the block). |
 | STYLE026 | Nested `unsafe { ... }` — an `unsafe` block appears inside another open `unsafe` block, with no closure/lambda/generator boundary between them | Drop the inner wrap. Tracked by `unsafe_block_stack` — one slot per closure level, pushed on function entry and `blockFlags.isClosure` entry, popped on exit. `preVisitExprUnsafe` flags any entry where `stack[top] > 0`. Closure bodies push a fresh 0-slot because they execute in a separate context where the outer caller's `unsafe { }` does not propagate. |
 | STYLE027 | `var a : array<T>` / `var a : table<K;V>` with empty default-init, immediately followed by an `ExprFor` whose body — recursively, with at most one additional nested `ExprFor` (depth ≤ 2) — consists ONLY of `push`/`push_clone` (array) or `insert(k,v)` / `a[k] = v` (table) calls into `a`, optionally wrapped in `if (cond) { ... }` filters at any depth | Use a comprehension. Array: `a <- [for (x in SRC); EXPR; where COND]`. Table: `a <- {for (x in SRC); KEY => VAL; where COND}`. Drop the `where COND` when there is no filter. `emplace` is intentionally excluded (move-source-zeroing semantics differs from comprehension element-construction); generator/iterator comprehension (`[$f for x in src; ...]`) is also out of scope. |
-| STYLE028 | `self->method(args)` inside a class method (`current_function.flags.isClassMethod`). Detected on `ExprInvoke` with `isInvokeMethod=true` plus source-line inspection at `expr.at.column`: arrow-form column points at `-` of `->`, dot-form at `.`, bare call at the identifier's first char. After type inference `self->m`, `self.m`, and compiler-promoted bare `m` all share the same AST shape (`arguments[0]=ExprField(value=ExprTypeDecl, name=method)` per ast_infer_type.cpp:5612 + ast_generate.cpp:270), so AST alone can't discriminate — column-byte check (`-` then `>`) plus `strip_right(slice(line, 0, col))` ending in `self` (with a non-identifier char before, so `myself`/`_self` don't qualify) confirms the user wrote `self->`. | Drop `self->`; call `method(args)` directly. The compiler auto-promotes bare `method(args)` inside a class method to the same invoke. `self.method(args)` is also accepted when an explicit receiver reads better. Free-function `obj->method(args)` is out of scope — only `self` receivers fire. Generic instantiations skipped via `current_function.fromGeneric != null`. |
+| STYLE028 | `self->method(args)` inside a class method (`current_function.flags.isClassMethod`). Detected on `ExprInvoke` with `isInvokeMethod=true` plus source-line inspection at `expr.at.column`: arrow-form column points at `-` of `->`, dot-form at `.`, bare call at the identifier's first char. After type inference `self->m`, `self.m`, and compiler-promoted bare `m` all share the same AST shape (`arguments[0]=ExprField(value=ExprTypeDecl, name=method)` per `ast_infer_type.cpp`'s `makeInvokeMethod` promotion sites, ~:5883/:5914/:6190, + ast_generate.cpp:270), so AST alone can't discriminate — column-byte check (`-` then `>`) plus `strip_right(slice(line, 0, col))` ending in `self` (with a non-identifier char before, so `myself`/`_self` don't qualify) confirms the user wrote `self->`. | Drop `self->`; call `method(args)` directly. The compiler auto-promotes bare `method(args)` inside a class method to the same invoke. `self.method(args)` is also accepted when an explicit receiver reads better. Free-function `obj->method(args)` is out of scope — only `self` receivers fire. Generic instantiations skipped via `current_function.fromGeneric != null`. |
 | STYLE029 | Non-public `require X` whose only use is ONE module that X re-exports | Require that module directly and drop X. Skipped when ≥ 2 of X's re-exports are used (aggregation facade is legitimate), or when X provides any macro or an `[init]`. Require analysis runs only when STYLE029/STYLE030 are enabled by lint policy. |
 | STYLE030 | Non-public `require X` that is entirely unused — no symbol from X (or anything it re-exports) is referenced | Drop the require. Skipped when X provides any macro or an `[init]`, when it only re-exports builtins used through it, or when X (or its public re-export closure) exports a function matching an unresolved call inside an uninstanced generic body. Suppress a deliberate keep with `// nolint:STYLE030`. |
 | STYLE031 | `var t : table<K;V>` (or `table<K>` set) with empty default-init, followed by ≥ 2 contiguous statements that are `t \|> insert(k, v)` (exact 3-arg map / 2-arg set form) or `t[k] = v` at-assigns (map only; `=`/`:=`/`<-` all count, mixing with inserts is fine) | Use a table literal move-assign `var t <- { k1 => v1, k2 => v2 }` (set: `var s <- { k1, k2 }`). Runs containing a **duplicate constant key** stay silent — sequential inserts overwrite (last wins) but a literal rejects duplicates at compile time (error 30706). Computed keys are allowed (a runtime-duplicate in a literal is last-wins, identical to inserts). `table<string; JsonValue?>` runs that STYLE021 fires on are skipped — `JV((k1=...))` is the stronger suggestion; computed-key JV runs still get STYLE031. |
@@ -150,18 +150,33 @@ Override the appropriate visitor method(s):
 ### 3. Report the warning
 
 ```das
-self->style_warning("STYLExxx: description; suggested fix", expr.at)
+style_warning("STYLExxx: description; suggested fix", expr.at)
 ```
+
+Call it bare — the compiler promotes a bare method call inside a class method, and `self->style_warning(...)` trips STYLE028, this file's own rule.
 
 ### 4. Write the test file
 
-Create `utils/lint/tests/styleXXX_rule_name.das` with a bad example and a good example. Test through the standalone runner:
+Create `utils/lint/tests/styleXXX_rule_name.das` with a bad example and a good example. Open it with the house header — nearly every fixture in that directory carries it, because inline splices rewrite the source shapes a fixture asserts:
+
+```das
+options gen2
+options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
+```
+
+Test through the standalone runner:
 
 ```bash
 bin/daslang utils/lint/main.das -- utils/lint/tests/styleXXX_rule_name.das --style-only
 ```
 
-### 5. Suppression
+A rule that should ship silent is registered in `seed_default_disabled` (`daslib/lint_config.das`) — that is the only place a default-off rule is declared. Its fixture then needs `--enable <CODE>` (or `options _enable_default_off_rules = true` in the fixture) to fire at all.
+
+### 5. Update documentation
+
+Add the rule to `doc/source/reference/language/lint.rst` — one file covers LINT, PERF and STYLE — with a brief example (repo-only).
+
+### 6. Suppression
 
 Individual warnings can be suppressed with `// nolint:STYLExxx` on the same line.
 
@@ -170,22 +185,33 @@ Individual warnings can be suppressed with `// nolint:STYLExxx` on the same line
 ```das
 // Compile-time mode: reports warnings during compilation
 def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int
+def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_codes : table<string>; comment_hygiene : bool = false) : int
 
 // Collection mode: appends warnings to array
 def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; comment_hygiene : bool = false) : int
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; disabled_codes, enabled_codes : table<string>; comment_hygiene : bool = false) : int
+
+// Structured mode: LintIssue records (rule code + position) instead of display strings
+def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintIssue>; disabled_codes, enabled_codes : table<string>; comment_hygiene : bool = false) : int
 ```
 
-The `postfix_conditionals` parameter was removed when STYLE005 became
-always-on; check sites no longer need to pass it.
+The unfiltered pairs are thin wrappers; every real caller (the MCP subtool, `utils/lint/main.das`,
+the LSP) uses a filtered overload, and the LSP needs `style_lint_collect_issues` because `LintIssue`
+(defined in `daslib/lint_config.das`) carries the position a diagnostic has to be placed at.
+
+There is no `postfix_conditionals` parameter — check sites do not pass one. STYLE005 is gated by the
+shared lint policy (`seed_default_disabled` in `daslib/lint_config.das`), not by a function argument.
 
 ## MCP Integration
 
-The MCP `lint` tool (`utils/mcp/tools/lint_tool.das`) calls `style_lint_collect()` alongside `paranoid_collect()` and `perf_lint_collect()`. Style warnings appear in lint results automatically.
+The MCP `lint` tool is split: `utils/mcp/tools/lint_tool.das` is a `run_mcp_subtool` popen wrapper, so compile-time macro state doesn't leak across MCP calls; `utils/mcp/subtools/lint_tool.das` does the work, calling `paranoid_collect` / `perf_lint_collect` / `style_lint_collect` with the shared `disabled_codes` / `enabled_codes` tables and the `_comment_hygiene` option. Style warnings appear in lint results automatically.
 
 ## Standalone Usage
 
 ```bash
-bin/daslang utils/lint/main.das -- file1.das [file2.das ...] [--quiet] [--style-only] [--postfix-conditionals]
+bin/daslang utils/lint/main.das -- file1.das [dir ...] \
+  [--quiet] [--silent] [--style-only|--perf-only|--paranoid-only] \
+  [--comment-hygiene] [--disable CODE,...] [--enable CODE,...] [--workers N]
 ```
 
 ## Known Limitations

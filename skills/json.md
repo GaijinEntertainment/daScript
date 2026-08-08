@@ -11,6 +11,7 @@ Reach for the simplest tool that fits the data. The order of preference is fixed
 | You have a daslang struct/array/value and want a JSON string, or you have a JSON string and a struct to fill | **`sprint_json(v, pretty)` / `sscan_json(json, var v)`** | Zero ceremony, no `JsonValue?` allocation, respects all field annotations (`@rename`, `@optional`, `@embed`, `@unescape`, `@enum_as_int`). Handles structs, classes, arrays, tables, tuples, variants, enums, bitfields, vector types, pointers, all basic types |
 | You're navigating arbitrary JSON whose shape isn't known at compile time, or you need a `JsonValue?` tree to mutate | **`JV(x)` / `from_JV(js, type<T>)` from `daslib/json_boost`** | Generic reflection on structs/tables/arrays/tuples/variants/vectors/enums; safe-access ops `?.`, `?[]`, `??`; `is`/`as` on the underlying variant |
 | Building a one-off JSON object inline (no struct typedef on hand) | **`JV((key1 = val1, key2 = val2, ...))`** — named-tuple JV | Same auto-walker as `JV(struct)`; one expression, no per-key `insert`. See "Inline named-tuple JV" below |
+| You have a parsed JSON **array of uniform objects** and want typed rows, a filter, or an aggregate | **`from_json(jv, type<Row>)`** — the LINQ source | Lazy, by-name materialize per element; comprehensions / `linq_boost` / `_fold` run straight over the document. See "LINQ source" below |
 | The generic `JV` / `from_JV` doesn't know your custom type | **Add a `def JV(x : MyType)` / `def from_JV(...)` overload** | Function-overload dispatch picks it up automatically — no macro, no annotation |
 | Building a JSON object by hand from a `table<string; JsonValue?>` | **Last resort** — only when neither sprint nor JV nor named-tuple applies | Verbose; loses field-annotation support; the structure is invisible to types |
 
@@ -81,11 +82,10 @@ Pattern (see [daslib/dap.das](daslib/dap.das) `JV(data : Variable)` and [daslib/
 
 ```das
 def JV(data : MyType) : JsonValue? {
-    var inscope tab <- {
+    return JV({
         "field1" => JV(data.field1),
         "field2" => JV(data.field2)
-    }
-    return JV(tab)
+    })
 }
 
 def from_JV(v : JsonValue const explicit?; ent : MyType; defV : MyType = MyType()) : MyType {
@@ -161,6 +161,33 @@ if (js == null) { /* error string is set */ }
 - `write_json(js)` — serialize a `JsonValue?`. Null pointer writes as `"null"`.
 - `try_fixing_broken_json(text)` — repair LLM output: fixes string concatenation (`"a" + "b"` → `"ab"`), trailing commas, double-quoted nesting. Run before `read_json` when consuming model-generated JSON.
 
+## LINQ source — `from_json`
+
+`from_json(jv, type<Row>)` is a typed, lazy iterator over the elements of a JSON **array**: each element is materialized into a `Row` by reading same-named top-level keys, so comprehensions, `daslib/linq_boost`, and `%linq!` run straight over a parsed document. It is the JSON counterpart of `from_xml_node` (see `skills/xml.md`).
+
+```das
+struct Car {
+    id : int
+    make : string
+    price : float
+    year : int = 2000        // default kept when the key is absent
+}
+
+for (car in from_json(doc, type<Car>)) { ... }
+let makes <- [for (car in from_json(doc, type<Car>)); car.make; where car.price < 30000.0]
+let cars <- unsafe(from_json(doc, type<Car>)) |> to_array()      // outside a for → unsafe
+
+let cheap <- %linq! from car : Car in doc                        // reader form: the JsonValue?
+                    where car.price < 30000.0                    // itself is the source
+                    select car.make %%
+```
+
+- **Field mapping:** by name, one JSON key per struct field — scalars, strings, enums, and nested structs (which read *their* fields by name too). A field whose key is absent, or whose JSON type doesn't fit, keeps its default. Note a `string` field aliases the document's string rather than cloning it, so don't outlive the parsed `JsonValue?` tree with one.
+- **Defaults:** a missing key leaves the field at its declared default — unlike the `sscan_json` array-element gotcha above.
+- **`unsafe` outside a `for`:** `from_json` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping into `to_array` / `linq_boost` needs `unsafe(...)` **around the source call only** — expression-form `unsafe` does not reach into nested call arguments.
+- **Fused `_fold` lane:** `_fold(unsafe(from_json(doc, type<Row>))._where(...).count())` emits an inlined walk with no generator and no intermediate array, reading only the fields the chain references. It lives in `daslib/linq_fold_json`, which `daslib/linq_fold` requires publicly — no extra require.
+- **Single object / single key:** `from_json_row(jv, type<Row>)` materializes one object; `read_json_field(jv, key, defv)` reads one key with a fallback.
+
 ## Writer settings
 
 Each setter returns the previous value — save/restore for scoped changes.
@@ -197,11 +224,13 @@ If you find yourself wanting to skip empty/zero fields, declare a small struct w
 When the JSON shape really is dynamic — mixed-type maps, keys decided at runtime, conditional inserts that don't fit `@optional` — build the tree directly:
 
 ```das
-var inscope tab : table<string; JsonValue?>
+var tab : table<string; JsonValue?>
 tab |> insert("name", JV("Alice"))
 tab |> insert("age",  JV(30))
 var obj = JV(tab)
 ```
+
+Plain `var`, never `var inscope`: `inscope` asks for scope-exit finalize, and deleting a container of raw pointers frees the pointees — `error[31009] delete of table<string;json::JsonValue?>& requires unsafe`.
 
 Don't reach for this until you've ruled out modeling the data as a struct/variant or an inline named-tuple. Field annotations (`@rename`, `@optional`, etc.) don't apply here — every key is hand-written.
 
@@ -221,4 +250,4 @@ Don't reach for this until you've ruled out modeling the data as a struct/varian
 - daslib sources: [daslib/json.das](daslib/json.das), [daslib/json_boost.das](daslib/json_boost.das)
 - Tests with usage patterns (repo-only): `tests/json/test_sprint_json.das`, `tests/json/test_sscan_json.das`
 - Real custom `JV` overloads: [daslib/dap.das](daslib/dap.das), [daslib/refactor.das](daslib/refactor.das)
-- Real `sprint_json` users: [utils/daspkg/lockfile.das](utils/daspkg/lockfile.das), [daslib/debug.das](daslib/debug.das), [utils/mcp/protocol_core.das](utils/mcp/protocol_core.das)
+- Real `sprint_json` users: [utils/daspkg/lockfile.das](utils/daspkg/lockfile.das), [daslib/debug.das](daslib/debug.das), [utils/mcp/mcp_core.das](utils/mcp/mcp_core.das)
