@@ -691,7 +691,7 @@ class UkKern {
     }
 }
 
-// ===== Phase 0: class methods + inheritance (the ONE FLAT struct emission) =====
+// ===== Phase 0: class methods + inheritance (FLATTENED — bodies splice at call sites) =====
 
 class UfxBase {
     @ssbo @binding = 0 xs : array<float>
@@ -706,6 +706,8 @@ class UfxBase {
 class UfxKid : UfxBase {
     @ssbo @binding = 3 zs : array<float>
     @workgroup tmp : float[16]
+    cur : float const?      // plain member = STATE: carried-pointer rider (the Q8 walk shape)
+    boost : float = 0.25    // scalar state with a constant initializer
 
     def override pick(i : uint) : float => xs[i] + zs[i]   // what combo must actually call
 
@@ -713,13 +715,26 @@ class UfxKid : UfxBase {
         ys[i] = v
     }
 
+    def seed(i : uint) {    // the stage_init shape: bind the carried pointer once
+        cur = unsafe(addr(xs[i]))
+    }
+
+    def advance {           // per-iteration advance — state lives ACROSS splices
+        cur = unsafe(cur + 1)
+        boost += 0.5
+    }
+
+    def peek : float => unsafe(cur[0]) * boost
+
     [metal_kernel(name="ufxcls_msl"), marker(no_coverage)]
     def ufxcls {
         let i = gl_GlobalInvocationID.x
         let lid = gl_LocalInvocationID.x
         tmp[lid] = combo(i)
         barrier()
-        store(i, tmp[lid] + ufx_sky(xs[i]))
+        seed(i)
+        advance()
+        store(i, (tmp[lid] + ufx_sky(xs[i])) + peek())
     }
 }
 
@@ -997,12 +1012,13 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "ufn.param.ref",
         "ufn.param.value",
         "ufn.param.hidden_builtin",
-        // Phase 0: class methods + inheritance (the flat-struct emission)
-        "decl.class_struct",
-        "decl.method",
-        "call.method",
-        "stmt.call_method",
-        "entry.self_fill"
+        // Phase 0: class methods + inheritance (flattened — bodies splice at call sites,
+        // plain members are kernel-entry thread-locals)
+        "splice.method",
+        "splice.method.value",
+        "splice.param.hoist",
+        "decl.state",
+        "decl.state.ptr"
     }
 }
 

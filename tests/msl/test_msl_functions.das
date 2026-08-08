@@ -75,27 +75,32 @@ def test_msl_functions(t : T?) {
         t |> success(base >= 0, "float instance emitted")
         t |> success(twin >= 0, "half instance emitted under a suffixed name")
     }
-    t |> run("class methods + inheritance — the one flat struct, statically devirtualized") <| @(t : T?) {
-        // the class emits as one flat struct: inherited members and methods live in the
-        // concrete class; @uniform members become by-value fields; the entry fills self
-        hasc(t, "struct UfxKid \{")
-        hasc(t, "device const float* xs;")
-        hasc(t, "device float* ys;")           // written only through the store METHOD body
-        hasc(t, "float gain;")
-        hasc(t, "threadgroup float * tmp;")
-        hasc(t, "uint3 gl_GlobalInvocationID;")
-        // methods as member functions; the base skeleton calls the KID's override
-        hasc(t, "float combo(uint i) \{")
-        hasc(t, "return stage(pick(i));")
-        hasc(t, "return (xs[i] + zs[i]);")     // Kid's pick — the devirtualized body
-        t |> success(find(ufxcls_msl, "return xs[i];") < 0, "Base's un-overridden pick never emits")
-        // the kernel body itself is a member function; the entry fills self and calls it
-        hasc(t, "void ufxcls() \{")
-        hasc(t, "UfxKid self_;")
-        hasc(t, "self_.xs = xs;")
-        hasc(t, "self_.gain = gain;")
-        hasc(t, "self_.gl_GlobalInvocationID = gl_GlobalInvocationID;")
-        hasc(t, "self_.ufxcls();")
+    t |> run("class methods flatten — bodies splice inline, statically devirtualized") <| @(t : T?) {
+        // no struct, no self fill: members stay kernel parameters, the write-set flows
+        // through the SPLICED method bodies (ys is written only inside store's body)
+        t |> success(find(ufxcls_msl, "struct UfxKid") < 0, "no MSL struct emits")
+        t |> success(find(ufxcls_msl, "self_") < 0, "no self fill emits")
+        hasc(t, "device const float* xs [[buffer(0)]]")
+        hasc(t, "device float* ys [[buffer(1)]]")
+        hasc(t, "constant float& gain [[buffer(2)]]")
+        // value-position splices: combo -> stage(pick(i)) collapses to one inline expression,
+        // with the KID's override devirtualized into place
+        hasc(t, "tmp[lid] = ((((((xs[i] + zs[i]))) * gain)));")
+        t |> success(find(ufxcls_msl, "combo(") < 0, "no member-function call remains")
+        t |> success(find(ufxcls_msl, "xs[i];") < 0, "Base's un-overridden pick never emits")
+        // plain members = STATE: kernel-entry thread-locals (name-sorted, after the tg pointers)
+        hasc(t, "float boost = 0.25f;")
+        hasc(t, "device const float * cur = nullptr;")
+        // the seed/advance statement splices: the carried-pointer walk survives as plain
+        // pointer arithmetic on the entry-scope local — rider state across splices
+        hasc(t, "cur = (xs + (i));")
+        hasc(t, "cur = (cur + (1));")
+        hasc(t, "boost += 0.5f;")
+        // peek's value splice reads the carried state
+        hasc(t, "(cur[0] * boost)")
+        // store's computed argument hoists into a splice-local const bind
+        hasc(t, "const float v_s")
+        hasc(t, "ys[i] = v_s")
         // a free function called from the kernel body still emits at global scope
         hasc(t, "float ufx_sky(float d)")
     }
