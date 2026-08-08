@@ -11,6 +11,24 @@ def make_str(x : int) : string {
     return string(x) // return position - never wrapped
 }
 
+// [never_inline] pins the propagation path - auto-inline would splice the body and the
+// call site would reclaim via the direct-arg rule instead of the propagated flag
+
+[never_inline]
+def wrap_conv(x : int) : string {
+    return string(x) // every return is a fresh producer -> flag propagates
+}
+
+[never_inline]
+def wrap_pick(c : bool; x : int; y : int) : string {
+    return c ? to_upper("v{x}") : string(y) // ternary of fresh producers qualifies
+}
+
+[never_inline]
+def wrap_pass(s : string) : string {
+    return s // passthrough - must NOT be flagged
+}
+
 [test]
 def test_temp_string_reclaim_flatness(t : T?) {
     t |> run("conversion consumed in a call is reclaimed") @@(t) {
@@ -99,5 +117,49 @@ def test_temp_string_reclaim_correctness(t : T?) {
 
     t |> run("wrapper passthrough on non-heap strings is a no-op") @@(t) {
         t |> equal(_temp_string_result("literal"), "literal")
+    }
+}
+
+[test]
+def test_temp_string_reclaim_propagation(t : T?) {
+    t |> run("das function with fresh returns is reclaimed transitively") @@(t) {
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(50000)) {
+            summ += length(wrap_conv(i))
+        }
+        let after = string_heap_bytes_allocated()
+        t |> success(summ > 0)
+        t |> success(after - before < 256ul, "propagated flag should reclaim like the extern")
+    }
+
+    t |> run("ternary of fresh producers qualifies") @@(t) {
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(50000)) {
+            summ += length(wrap_pick((i & 1) == 0, i, i))
+        }
+        let after = string_heap_bytes_allocated()
+        t |> success(summ > 0)
+        t |> success(after - before < 256ul, "ternary branches are both fresh")
+        for (i in range(20)) {
+            let expected_len = (i & 1) == 0 ? length("V{i}") : length("{i}")
+            t |> equal(length(wrap_pick((i & 1) == 0, i, i)), expected_len)
+        }
+    }
+
+    t |> run("passthrough function is NOT flagged - source survives") @@(t) {
+        let keep = make_str(555555)
+        var churn = 0
+        for (_i in range(1000)) {
+            // if wrap_pass were wrongly flagged, this would queue keep's own pointer
+            // and the churn below would reuse its cell
+            churn += length(wrap_pass(keep))
+        }
+        for (i in range(1000)) {
+            churn += length(string(9999000 + i))
+        }
+        t |> success(churn > 0)
+        t |> equal(keep, "555555")
     }
 }

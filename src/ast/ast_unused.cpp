@@ -85,6 +85,34 @@ namespace das {
         ->
      */
 
+    // temp-string-result propagation: a das function is a fresh-string producer iff every
+    // function-level return yields a fresh producer - a [temp_string_result] call, a string
+    // builder, or a ternary of qualifying branches. No locals in v1: `return s` never
+    // qualifies, which buys the no-retention property without escape analysis
+    static bool isFreshStringExpr ( Expression * expr ) {
+        if ( !expr ) return false;
+        if ( expr->rtti_isStringBuilder() ) return true;
+        if ( expr->rtti_isCall() ) {
+            auto c = static_cast<ExprCall *>(expr);
+            return c->func && c->func->tempStringResult;
+        }
+        if ( expr->rtti_isOp3() ) {
+            auto op3 = static_cast<ExprOp3 *>(expr);
+            return isFreshStringExpr(op3->left) && isFreshStringExpr(op3->right);
+        }
+        return false;
+    }
+
+    class CheckFreshStringReturns : public Visitor {
+    public:
+        bool allFresh = true;
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->returnInBlock ) return;      // a block return yields the block, not the function
+            if ( !isFreshStringExpr(expr->subexpr) ) allFresh = false;
+        }
+    };
+
     // here we propagate r2cr flag
     //  a.@b    ->  $a.@b
     //  a@[b]   ->  $a@[b]
@@ -518,6 +546,14 @@ namespace das {
             if ( flags & uint32_t(SideEffects::captureString) ) {
                 fnc->captureString = true;
                 flags &= ~uint32_t(SideEffects::captureString);
+            }
+            // temp-string-result: computed bottom-up (callees resolved by the dep loop above,
+            // pessimistic on cycles via `asked`); the [temp_string_result] annotation is a
+            // manual override and is never cleared here
+            if ( !fnc->tempStringResult && fnc->result && fnc->result->isString() && !fnc->result->ref ) {
+                CheckFreshStringReturns cfr;
+                fnc->visit(cfr);
+                if ( cfr.allFresh ) fnc->tempStringResult = true;
             }
             fnc->sideEffectFlags |= flags;
             return flags;
