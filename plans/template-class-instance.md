@@ -263,14 +263,18 @@ stamp twins stay distinguishable in GPU captures; explicit `name=` behavior unch
 **Known limitation (parse-order):** the reifier can only treat as "bound" names already
 parsed — a struct declared BELOW the instance still false-errors the eager check (the
 SqAttn args structs moved above the kernel section for exactly this). Escapes:
-declaration order, or `late_bind = true`. Candidate design if it keeps biting: an
-explicit `params = "KT"` annotation arg makes the check exact and order-independent —
-Boris's call, ledgered not built.
+declaration order, or `late_bind = true` (Boris: the existing override suffices — no
+`params=` axis).
 
-**Macro-diagnostics paper cut (observed, not fixed):** when the inherited reifier and the
-instance's own `[metal_dispatch]` both error, the console collapses the second same-line
-error into "+1 more on this line" — the reifier's named error (the actionable one) was
-invisible through the whole debug round; MCP compile_check collapses it too.
+**Macro-diagnostics paper cut (observed 2026-08-07, fix under discussion):** Rule 2 of
+`Program::deduplicateErrors` (cbc2184f0) collapses same-line same-cerr different-text
+errors to the first plus "+N more on this line". All macro-apply failures share cerr
+20800 `runtime_annotation`, so when two macros on one declaration both error (the
+inherited reifier + the instance's own `[metal_dispatch]`), the second macro's named
+error — an independent, actionable message — is dropped. Candidate fix: exempt the
+macro-diagnostic cerr family (20800, 31200, 31210, 50501) from Rule 2; Rule 1
+(byte-identical dedup) still applies, and macro errors are bounded by the annotation
+list so they cannot avalanche like the inference noise Rule 2 exists for.
 
 ## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
 
