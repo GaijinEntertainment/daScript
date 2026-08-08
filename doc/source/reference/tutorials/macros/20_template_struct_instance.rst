@@ -140,6 +140,11 @@ in the object and nothing blocks inlining. Compare this with the
 already spells out, while a call parameter is open — a new instance can
 route to a function the template has never heard of.
 
+Only the bare spelling rebinds. ``_::dot_i(...)`` and ``__::dot_i(...)``
+keep their normal ``_`` / ``__`` resolution rules, so a template body that
+must reach the real ``dot_i`` no matter what an instance rebinds spells the
+call qualified.
+
 
 What the reifier does
 =====================

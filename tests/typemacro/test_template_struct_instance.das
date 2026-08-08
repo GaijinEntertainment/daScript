@@ -123,7 +123,7 @@ class template DotT {
         return tsi_via_ptr(@@tsi_sdot, x, v) // @@ address targets rebind too
     }
     def run_qual(v : KT) : KT {
-        return _::tsi_sdot(x, v) // module-qualified spelling rebinds too
+        return _::tsi_sdot(x, v) // `_::` keeps normal resolution: pinned to the real function, past any rebind
     }
 }
 
@@ -230,8 +230,8 @@ def test_tsi_call_rebind(t : T?) {
             t |> equal(c->run(7), 42000)     // string-form rebind
             t |> equal(a->run_ptr(7), 42)    // @@ address target, default
             t |> equal(b->run_ptr(7), 42000) // @@ address target, rebound
-            t |> equal(a->run_qual(7), 42)   // _:: qualified spelling, default
-            t |> equal(b->run_qual(7), 42000) // _:: qualified spelling, rebound
+            t |> equal(a->run_qual(7), 42) // `_::` spelling pinned to the real callee...
+            t |> equal(b->run_qual(7), 42) // ...even on the rebinding instance, by design
         }
     }
 }

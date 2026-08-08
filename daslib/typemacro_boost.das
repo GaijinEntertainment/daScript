@@ -706,9 +706,8 @@ def private tsi_bind_calls(var st : StructurePtr; temMethods : array<FunctionPtr
         }
         var callee = ""
         if (!tsi_callee_name(f.init, callee, errors)) return false
-        // both spellings, same as method renames: `_::slot(...)` / `@@_::slot` must rebind too
+        // bare spelling only, by design: `_::slot` / `__::slot` keep normal `_`/`__` resolution — the pinned escape to the real function
         rules |> renameCall(slot, callee)
-        rules |> renameCall("_::{slot}", "_::{callee}")
         callIdx |> push(i)
     }
     for (i in range(length(callIdx))) {
@@ -803,7 +802,7 @@ def private tsi_normalize_fields(var st : StructurePtr; var rules : Template) {
 
 [structure_macro(name = "template_struct_instance")]
 class TemplateStructInstance : AstStructureAnnotation {
-    //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — calls AND ``@@`` addresses; erased too), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
+    //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@`` addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
     //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. ``[|> template_struct_instance(late_bind = true)]`` skips the unbound-alias check, for templates whose type parameters another macro supplies later (e.g. from a ``[dirty_infer_macro]``).
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (st.flags.isTemplate) {

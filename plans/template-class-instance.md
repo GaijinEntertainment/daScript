@@ -218,6 +218,12 @@ before the `skills/make_pr.md` checklist:
    erased like a constant, direct call in the stamped class. Replaces the closed-set
    `static_if` route for callee selection with an open one (a new instance can route
    to a function the template never names).
+6. Rebind scope (Boris, PR round): the BARE spelling only. `_::slot` / `__::slot`
+   keep their normal `_`/`__` resolution rules — the pinned escape to the real
+   function past any rebind (probe-verified both forms; consistent with constants,
+   whose replaceVariable is bare-keyed too). This superseded the Copilot round-1
+   "rename the qualified spelling too" fix; the parser-generated `@@_::Tem`m`
+   method-pointer twins are machine references and still retarget.
 
 ## Stage 2 pointer (not planned here)
 
