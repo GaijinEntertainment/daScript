@@ -7,7 +7,9 @@ module typemacro_boost shared private
 //! Type macro and template structure support.
 //!
 //! Implements ``[template_structure]`` annotation that generates
-//! type-parameterized structs (similar to C++ templates), and provides
+//! type-parameterized structs (similar to C++ templates),
+//! ``[template_struct_instance]`` which reifies a ``struct template`` /
+//! ``class template`` parent into an inheriting instance, and provides
 //! ``int64_to_enum``, enum-to-string, and other type-manipulation
 //! helpers.
 
@@ -15,6 +17,7 @@ require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost public
 require daslib/ast_boost public
+require daslib/strings_boost
 require strings
 
 def public int64_to_enum(_enu : auto(ET); value : int64) : ET {
@@ -150,7 +153,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         compiling_module() |> add_structure(cls)
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE037 — pre-existing typemacro patch pass; the if/elif AST routing is one order-coupled flow
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
@@ -386,7 +389,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         }
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE038 — pre-existing typemacro patch pass; sequential AST build, no free-standing seam
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
@@ -528,7 +531,7 @@ class TemplateStructure : AstStructureAnnotation {
 [structure_macro(name="template_tuple")]
 class TemplateTuple : AstStructureAnnotation {
     //! Like ``[template_structure]``, but produces a typemacro that returns a named tuple instead of cloning a structure. Result is structural — no module home, no per-consumer cloning. Use for sum-type / discriminated- pair shapes (``Option``, ``Result``) where structural identity across transitive ``require ... public`` is the desired behavior (issue #2598).
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool { // nolint:STYLE038 — pre-existing tuple-typemacro emission; one sequential build, no free-standing seam
         if (length(args) == 0) {
             errors := "expecting at least one template argument name"
             return false
@@ -613,6 +616,237 @@ class TemplateTuple : AstStructureAnnotation {
         if (!(compiling_module() |> add_function(typeMacroFunction))) {
             panic("can't add function {typeMacroFunctionName}")
         }
+        return true
+    }
+}
+
+[macro_function]
+def private tsi_method_name(func : FunctionPtr) : string {
+    let parts <- split(string(func.name), "`")
+    return parts[length(parts) - 1]
+}
+
+[macro_function]
+def private tsi_collect_alias_names(t : TypeDeclPtr; var names : table<string>) {
+    if (t == null) return
+    if (t.baseType == Type.alias) {
+        names |> insert(string(t.alias))
+    }
+    tsi_collect_alias_names(t.firstType, names)
+    tsi_collect_alias_names(t.secondType, names)
+    for (arg in t.argTypes) {
+        tsi_collect_alias_names(arg, names)
+    }
+}
+
+[macro_function]
+def private tsi_bind_aliases(st : StructurePtr; temMethods : array<FunctionPtr>; var rules : Template; lateBind : bool; var errors : das_string) : bool {
+    // every alias the instance carries (own typedefs + the template's, via the parser's clone) becomes a rule
+    var bound : table<string>
+    st |> for_each_structure_alias() $(var td) {
+        bound |> insert(string(td.alias))
+        rules |> replaceTypeWithTypeDecl(string(td.alias)) <| clone_type(td)
+    }
+    // module-level typedefs resolve at infer on their own — only an unbindable template parameter should error
+    program_for_each_module(compiling_program()) $(m) {
+        m |> for_each_typedef() $(tname, _td) {
+            bound |> insert(string(tname))
+        }
+    }
+    var used : table<string>
+    for (f in st.fields) {
+        tsi_collect_alias_names(f._type, used)
+    }
+    for (func in temMethods) {
+        tsi_collect_alias_names(func.result, used)
+        for (arg in func.arguments) {
+            tsi_collect_alias_names(arg._type, used)
+        }
+    }
+    var missing <- [for (aname in keys(used)); aname; where !key_exists(bound, aname)]
+    if (!lateBind && !empty(missing)) { // late_bind = true: a later macro may still bind; infer reports what stays unbound
+        missing |> sort()
+        errors := "[template_struct_instance] {st.name} is missing 'typedef {missing[0]} = <type>'" + (
+            length(missing) > 1 ? " (also: {join(missing, ", ")})" : "")
+        return false
+    }
+    return true
+}
+
+[macro_function]
+def private tsi_callee_name(e : ExpressionPtr; var callee : string&; var errors : das_string) : bool {
+    if (e is ExprConstString) {
+        callee = string((e as ExprConstString).value)
+        return true
+    }
+    if (e is ExprAddr) {
+        callee = string((e as ExprAddr).target)
+        return true
+    }
+    errors := "[template_struct_instance] @template_call value must be a function address (@@name) or a string constant"
+    return false
+}
+
+[macro_function]
+def private tsi_bind_calls(var st : StructurePtr; temMethods : array<FunctionPtr>; var rules : Template; var errors : das_string) : bool {
+    var callIdx : array<int>
+    for (i in range(length(st.fields))) {
+        assume f = st.fields[i]
+        if (find_arg(f.annotation, "template_call") is nothing) continue
+        let slot = string(f.name)
+        for (func in temMethods) {
+            if (tsi_method_name(func) == slot) {
+                errors := "[template_struct_instance] @template_call '{slot}' collides with a template method name"
+                return false
+            }
+        }
+        if (f.init == null) {
+            errors := "[template_struct_instance] @template_call field '{f.name}' of {st.name} must be initialized with @@name or a string constant"
+            return false
+        }
+        var callee = ""
+        if (!tsi_callee_name(f.init, callee, errors)) return false
+        // bare spelling only, by design: `_::slot` / `__::slot` keep normal `_`/`__` resolution — the pinned escape to the real function
+        rules |> renameCall(slot, callee)
+        callIdx |> push(i)
+    }
+    for (i in range(length(callIdx))) {
+        st.fields |> erase(callIdx[length(callIdx) - 1 - i]) // reverse keeps indices valid
+    }
+    return true
+}
+
+[macro_function]
+def private tsi_is_const_init(e : ExpressionPtr) : bool {
+    if (is_expr_const(e)) return true
+    // a signed literal (`-1`) is still ExprOp1 over the constant this early, pre-fold
+    if (e is ExprOp1) {
+        let op1 = e as ExprOp1
+        return (op1.op == "-" || op1.op == "+") && is_expr_const(op1.subexpr)
+    }
+    return false
+}
+
+[macro_function]
+def private tsi_bind_constants(var st : StructurePtr; var rules : Template; var errors : das_string) : bool {
+    var constIdx : array<int>
+    for (i in range(length(st.fields))) {
+        assume f = st.fields[i]
+        if (find_arg(f.annotation, "template_constant") is nothing) continue
+        if (f.init == null || !tsi_is_const_init(f.init)) {
+            errors := "[template_struct_instance] @template_constant field '{f.name}' of {st.name} must be initialized with a constant literal"
+            return false
+        }
+        rules |> replaceVariable(string(f.name)) <| clone_expression(f.init)
+        constIdx |> push(i)
+    }
+    for (i in range(length(constIdx))) {
+        st.fields |> erase(constIdx[length(constIdx) - 1 - i]) // reverse keeps indices valid
+    }
+    return true
+}
+
+[macro_function]
+def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMethods : array<FunctionPtr>; ownMethods : table<string>; var rules : Template; var errors : das_string) : bool {
+    if (empty(temMethods)) return true
+    let temName = string(tem.name)
+    let instName = string(st.name)
+    var mod = compiling_module()
+    // both spellings: inherited method-pointer field inits hold module-qualified @@_::Tem`m
+    for (func in temMethods) {
+        let fn = string(func.name)
+        let mname = tsi_method_name(func)
+        rules |> renameVariable(fn, "{instName}`{mname}")
+        rules |> renameVariable("_::{fn}", "_::{instName}`{mname}")
+    }
+    for (func in temMethods) {
+        let mname = tsi_method_name(func)
+        // skip ctor + '__finalize (the instance parser already made its own); instance-authored methods win
+        if (mname == temName || func.name == "{temName}'__finalize" || key_exists(ownMethods, mname)) {
+            continue
+        }
+        var fc <- clone_function(func)
+        fc.name := "{instName}`{mname}"
+        fc.moreFlags.isTemplate = false
+        fc.classParent = st
+        fc.result = apply_template(rules, func.at, clone_type(func.result))
+        for (arg in fc.arguments) {
+            arg._type = apply_template(rules, arg.at, clone_type(arg._type))
+        }
+        fc.body = apply_template(rules, func.at, clone_expression(func.body), false)
+        if (!(mod |> add_function(fc))) {
+            errors := "[template_struct_instance] can't add method {instName}`{mname}"
+            return false
+        }
+    }
+    return true
+}
+
+[macro_function]
+def private tsi_normalize_fields(var st : StructurePtr; var rules : Template) {
+    for (f in st.fields) {
+        f._type = apply_template(rules, f.at, clone_type(f._type))
+        if (f.init != null) {
+            f.init = apply_template(rules, f.at, clone_expression(f.init))
+        }
+        // the generated derived-class __finalize (cast<auto> init + parentType) resolves only through a live parent — we cut it, so normalize to the parentless shape
+        f.flags.parentType = false
+        if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {
+            let c = f.init as ExprCast
+            if (c.castType != null && c.castType.baseType == Type.autoinfer) {
+                f.init = clone_expression(c.subexpr)
+            }
+        }
+    }
+}
+
+[structure_macro(name = "template_struct_instance")]
+class TemplateStructInstance : AstStructureAnnotation {
+    //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@`` addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
+    //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. ``[|> template_struct_instance(late_bind = true)]`` skips the unbound-alias check, for templates whose type parameters another macro supplies later (e.g. from a ``[dirty_infer_macro]``).
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (st.flags.isTemplate) {
+            return true // [|> ...] fires on the template itself: nothing to reify
+        }
+        if (st.parent == null || !st.parent.flags.isTemplate) {
+            errors := "[template_struct_instance] {st.name} must derive from a struct template or a class template"
+            return false
+        }
+        var tem = st.parent
+        var mod = compiling_module()
+        var temMethods, instMethods : array<FunctionPtr>
+        for_each_function(tem._module, "") $(func) {
+            if (func.flags.isClassMethod && func.classParent == tem) {
+                temMethods |> push(func)
+            }
+        }
+        for_each_function(mod, "") $(func) {
+            if (func.flags.isClassMethod && func.classParent == st && !func.flags.generated) {
+                instMethods |> push(func)
+            }
+        }
+        var ownMethods : table<string>
+        for (func in instMethods) {
+            ownMethods |> insert(tsi_method_name(func))
+        }
+        // no inscope: implicit delete of the lambda-holding Template needs unsafe; macro contexts free wholesale (ast_match pattern)
+        var rules : Template
+        var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
+        rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
+        rules |> replaceTypeWithTypeDecl(string(tem.name)) <| clone_type(instType)
+        let lateBind = find_arg(args, "late_bind") ?as tBool ?? false
+        if (!tsi_bind_aliases(st, temMethods, rules, lateBind, errors)
+                || !tsi_bind_constants(st, rules, errors)
+                || !tsi_bind_calls(st, temMethods, rules, errors)
+                || !tsi_stamp_methods(st, tem, temMethods, ownMethods, rules, errors)) {
+            return false
+        }
+        for (func in instMethods) {
+            // constants + aliases substitute inside instance-authored bodies too
+            func.body = apply_template(rules, func.at, func.body, false)
+        }
+        tsi_normalize_fields(st, rules)
+        st.parent = tem.parent // cut the template out of the ancestry, keep its base (if any)
         return true
     }
 }

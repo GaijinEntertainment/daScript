@@ -142,9 +142,29 @@ Note adapters can still *emit* code referencing the contributor's symbols by nam
 
 The trap also bites READS: module B calling A's accessor function reads **B's context copy** of A's globals — silently empty, no error (2026-07-12: llvm_exe calling llvm_tune's scope bank got `{}` while llvm_tune's own annotations saw it filled). Anything another macro module must read goes through the **AST** (annotations/stamps — `tune_scopes_status(prog)` walks `[tune_scope]` declarations instead of the bank), **files**, or **env** — never a shared macro global.
 
+## Pass macros — `[infer_macro]` needs a CLEAN tree; `[dirty_infer_macro]` runs every pass
+
+- `[infer_macro]` (AstPassMacro) fires only AFTER inference succeeds — `inferTypes` bails
+  to `failed_to_infer` before its loop, so it never sees a program with errors. Use it to
+  instrument well-typed trees (coverage, heartbeat, quote).
+- `[dirty_infer_macro]` fires after EVERY infer pass, errors present or not ("assume
+  half-way-there tree") — the hook for augmenting a not-yet-inferable program, e.g.
+  adding a structure alias mid-infer. Each pass starts by clearing `program->errors`, and
+  the loop continues only while a macro returns true (astChanged) or inference
+  progresses — a late-binder must return true when it changes the tree, or the loop stops
+  and the current errors become final. (C++ naming crossover: `[infer_macro]` registers
+  into `Module::macros`, `[dirty_infer_macro]` into `Module::inferMacros`.)
+- StructureAnnotation `finish`/`patch` do NOT run for a struct whose inference failed —
+  `apply` is the only hook guaranteed to fire, so a deferred "better error" for a failing
+  struct cannot live in `finish` (probe-verified 2026-08-07).
+
 ## Structure macros — generating types and functions
 
 - **`[structure_macro(name=foo)]`** — annotation on a class inheriting `AstStructureAnnotation`; the `apply` method runs at compile time when a struct has `[foo]`. Use to generate companion types, operators, and functions.
+- **`apply` runs at parse time, in written order, sequentially** (repo-only: `parser_impl.cpp` `ast_structureDeclaration`) — a later annotation in the same bracket group sees every mutation the earlier one made (added fields, methods). Multiple structure macros on one struct are fine; the "only one" restriction is for handled-type annotations.
+- **`[|> foo]` marks an annotation inherited** (probe-verified 2026-08-08): it is copied to every DERIVED struct/class down the parent chain and PREPENDED before the child's own annotations, so it always applies first. It also fires on the carrying struct itself — discriminate with `st.flags.isTemplate` / other flags when the parent is a `struct template`/`class template`.
+- **`typedef NAME = <type>` inside a struct/class body is grammar** — it registers a structure alias (same slot as `add_structure_alias`), readable at apply time via `get_structure_alias(st, name)`; infer resolves alias-typed fields against the owning struct's aliases.
+- **Never certify a macro rail green while ANY other compile error is present** — final-verify errors (e.g. an unresolved `cast<auto>` from generated class machinery) are silently masked when an earlier unrelated error stops compilation first; two runs differing only by the unrelated error can flip a "green" macro red (probe-verified 2026-08-08).
 - **`clone_structure(st)`** — deep-copies a `StructurePtr` for creating modified companion types (e.g., SOA layout where every field becomes `array<FieldType>`). Pass the pointer directly — no `get_ptr` wrapping.
 - **`compiling_module() |> add_function(fn)`** — registers a concrete function in the current module
 - **`compiling_module() |> add_generic(fn)`** — registers a generic function (instanced per call site)

@@ -1,0 +1,338 @@
+# `[template_struct_instance]` — template reification (stamped instances)
+
+Boris + Claude, 2026-08-07. **Stage 0 (probes) DONE — results below; zero C++ changes
+needed. Stage 1 IMPLEMENTED 2026-08-07 on `bbatkin/template-struct-instance` (macro +
+tests + tutorial, all green; landed deltas below).** Naming + const-marking ruled (see
+Decisions). Stage 2 =
+the dasLLAMA kernel restamp, planned separately once stage 1 lands; its worklist is the
+reification cluster table in `plans/vulkan-on-mac.md` (SqAttn 23→~6 first, then KqMv,
+MulMm/MoeMulMm with followup_general #8's A/B measurement discipline, RopeStore).
+
+## The idea
+
+A `class template` (existing grammar) is the shared body; an instance is an ordinary class
+that inherits from it. The reifier — a structure macro — flattens the template into the
+instance at parse time with substitutions, so every instance gets its OWN specialized copy
+of the methods (types baked, constants folded, no virtual hops), and every downstream
+structure annotation (`[metal_dispatch]` and friends) sees a finished concrete class.
+
+```das
+[|> template_struct_instance]                 // rides down to every instance, prepended
+class template MoeMulMmT {
+    @ssbo @binding = 3 @role = "read" xf : array<float4>
+    @workgroup ta : KT[2048]                  // KT: unresolved alias = type parameter
+    @template_constant WIDE : bool = true     // constant parameter, erased at reify
+    def run {
+        static_if (WIDE) { ... } else { ... } // folds per instance, in infer, for free
+        stage_a(wb, kb, il0, tA0)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_mulmm_k4", pso = "g_moe_mulmm_k4_pso", tg = 64, ...)]
+class MetalMoeMulMmK4 : MoeMulMmT {
+    typedef KT = float16                      // binds the type parameter (full type grammar)
+    override WIDE = false                     // binds the constant (init replacement)
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16>
+    def override stage_a(wb, kb, il0, tA0 : uint) { ... }   // instance body wins
+    [metal_kernel(name = "metal_moe_mulmm_k4_msl")]
+    def metal_moe_mulmm_k4 { run() }
+}
+```
+
+Covers the four dedup axes from the vulkan-on-mac peek with one mechanism: type axis →
+typedef; small format delta → `static_if` on a const; big delta → instance method override;
+pass axis → the already-landed `kernel=` multi-kernel. Dissolves followup_general #8's
+blockers by construction (the whole stamped body is the instance's — K6's cross-iteration
+scalars and Q8's advancing pointers live inline; Mx4's prologue is its own `run`).
+
+## Stage 0 — probe results (2026-08-07, this M1, bin/daslang @ bbatkin/profiling-rail)
+
+Everything below is witnessed, not inferred. Probe files lived in the job scratch dir
+(gone with the job); the mini-reifier probe is the stage-1 skeleton and is reproduced by
+the stage-1 implementation itself.
+
+GREEN — proven and load-bearing for the design:
+
+1. **Structure-annotation `apply` runs at parse time, in written order, sequentially**
+   (`parser_impl.cpp:492`); a later macro sees an earlier macro's mutations (added fields
+   visible). The "one macro only" restriction is for handled-type annotations, not
+   structure macros.
+2. **`[|> name]` (RPIPE prefix, `ds2_parser.ypp:1331`) marks an annotation inherited**:
+   copied to every child down the parent chain, PREPENDED before the child's own
+   annotations (`parser_impl.cpp:473-490`) — so the reifier always runs before the
+   instance's dispatch/lens annotations, and instances write zero reifier boilerplate.
+   It also fires on the template itself; `st.flags.isTemplate` is the discriminator.
+3. **`typedef NAME = <type>` inside a struct/class body is existing grammar**
+   (`ds2_parser.ypp:2601` → structure alias). Visible via `get_structure_alias` at apply
+   time; infer resolves inherited alias-typed fields against the owning struct's aliases
+   (the qmacro_template_class mechanism) — the type axis needs no field rewriting.
+4. **`override WIDE = false` parses bare** (no type respell) and replaces the inherited
+   field's init (`parser_impl.cpp:446-464` — the error message even says "use override to
+   replace initial value instead"). Constants ride the class body, per Boris's call.
+5. **Parent fields are already merged into the child at parse** (marked `inherited`,
+   `parser_impl.cpp:374`), including fields a macro added to the template earlier.
+6. **The Template rules engine does everything the reifier needs pre-infer**: bare field
+   reads inside class-method bodies are `ExprVar`s under the parser's `with(self)` wrap,
+   so `replaceVariable("WIDE", <init-clone>)` hits them; `replaceStructWithTypeDecl` +
+   `replaceTypeWithTypeDecl` retype signatures; `renameVariable` must be added in BOTH
+   spellings (`Tem`m` and `_::Tem`m`) because inherited method-pointer field inits hold
+   module-qualified `@@_::Tem`m` targets — same as `apply_qmacro_template_class:1401`.
+   Witnessed: a cloned body carrying `static_if(false)` with the substituted literal.
+7. **Method clone + rename + classParent retarget + field-init repair all work** with the
+   existing machinery (`clone_function`, `apply_template`, `add_function`); the child's
+   own `def override` methods win (skip-if-owned); the ctor and the `'`-spelled
+   `Tem'__finalize` are skipped (the child parser already generated its own).
+8. **Struct rail is FULLY GREEN end-to-end**: reify + const-field erase
+   (`st.fields |> erase(i)` works) + `parent = null` + correct runtime values. Clearing
+   parent also sidesteps the debug-info verify `!st.isTemplate`
+   (`ast_debug_info_helper.cpp:188`) that a kept template-parent trips.
+9. **`static_if` needs NO reifier folding** (Boris's position, now with evidence): MSL
+   emission runs at the `fixup` annotation stage (`msl_shader.das` → `generate_msl`) —
+   post-infer, after `visit(ExprIfThenElse)` has already folded static branches
+   (`ast_infer_type.cpp:4793`). The emitter only ever sees the taken branch. Residual
+   stage-2 note only: the metal lens derives roles pre-infer and would see BOTH branches
+   (union roles — conservative); revisit only if a real family over-declares.
+
+RESOLVED — what looked like a C++ gap was the reifier's own bug (Boris's push-back on
+"small C++ change" forced the trace that found it):
+
+10. **Templates are ALREADY fully inference-inert by existing design** — no C++ change
+    needed. `canVisitStructure` skips `isTemplate` structs outright
+    (`ast_infer_type.cpp:277`), `canVisitFunction` skips template functions (`:671`),
+    parsed template-class methods are auto-flagged (`ds2_parser.ypp:2635`), and
+    `makeClassFinalize` marks the template's own finalizer
+    `func->isTemplate = baseClass->isTemplate` (`ast_generate.cpp:2258`).
+    The real 30805: `makeClassFinalize` gives a DERIVED class's `__finalize` field the
+    with-parent shape — `cast<auto>(@@Cls'__finalize)` init + `parentType` flag
+    (`ast_generate.cpp:2233`) — which resolves ONLY through a live parent
+    (`visitStructureField`'s `decl.parentType && st->parent` path,
+    `ast_infer_type.cpp:331`). The reifier cut the parent and left that shape orphaned:
+    no resolution path, `cast<auto>` reported at final verify, anchored at whatever
+    LineInfo the inherited copy carried (template's or child's — which misled the first
+    diagnosis). The fix is IN THE REIFIER, ~8 lines: when clearing `parent`, normalize
+    generated fields to the parentless shape `makeClassFinalize` itself produces
+    (`ast_generate.cpp:2239`) — strip the `cast<auto>` from `__finalize`'s init to the
+    bare `@@fn`, and clear `flags.parentType` on every field. With that, the ENTIRE
+    previously-red matrix is green with exact runtime values (`plain=42 gated=142
+    doubled=840`): same-module and cross-module templates, 1 and 2 clones, override
+    arms, used and unused instances, struct and class rails.
+    ⚠ Probe trap worth recording: runs where an UNRELATED error fired earlier looked
+    "green" for the class rail — compilation stopped before final verify. Two probe
+    variants differing only by the erroring line proved the masking. Never certify a
+    macro rail green while any other error is present.
+
+## Stage 1 — daslib implementation (LANDED; no C++ changes)
+
+Home: `daslib/typemacro_boost.das`, beside its named siblings `[template_structure]` /
+`[template_tuple]` (the file already requires templates_boost publicly). The apply is
+factored into `[macro_function]` helpers (`tsi_bind_aliases` / `tsi_is_const_init` /
+`tsi_bind_constants` / `tsi_stamp_methods` / `tsi_normalize_fields`), per the pre-PR
+rail's STYLE037/038 pre-scoping. One name serves both rails; the typemacro rail stays
+untouched.
+
+Landed deltas vs the stage-0 spec (each probe-verified):
+- **`st.parent = tem.parent`, not `null`** — a `class template X : ConcreteBase` keeps
+  its base in the stamped instance (upcast + dispatch-through-base green); same move as
+  `apply_qmacro_template_class:1355`. The `__finalize` parentless-shape normalization
+  works under a live grandparent too.
+- **Rules also run over instance-authored method bodies** (in place, no clone) — a
+  `@template_constant` read inside a `def override` body substitutes like everywhere
+  else; constants behave as class-wide compile-time values.
+- **Unbound-alias check counts module-level typedefs as bound** (walks
+  `for_each_typedef` across the program library) — a field typed by an ordinary module
+  alias no longer false-positives; only a genuinely unbindable parameter gets the named
+  error, listing every missing name.
+- **`@template_constant` accepts signed literals** (`-1` is `ExprOp1` over the const
+  pre-fold; `tsi_is_const_init` peels one unary `+`/`-`).
+- **`KT(1)`-style ctor-casts in template bodies need no rule** — infer resolves
+  call-position alias names through the instance's structure aliases (probe-verified).
+- **`late_bind = true`** (decision 4) — annotation argument on the template, rides the
+  inherited copy down to every instance; test arm binds KT from a sibling structure
+  annotation that runs after the reifier.
+- **`@template_call`** (decision 5) — harvest mirrors `@template_constant`
+  (validate `@@name`/string init, `renameCall` rule, erase field, slot-vs-method-name
+  collision check); tests cover default, `@@` rebind, string rebind, and `@@` address
+  targets through a function-pointer taker; negative fixture for a non-callee init.
+
+Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodies —
+`ToyNarrow`gated` compiles to `return x + 100`): `test_template_struct_instance.das`
+(class rail incl. static_if fold + override-wins + const defaults arm, struct rail with
+two instances + const in field init, template-with-base arm, cross-module arm via
+`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` /
+`_not_template_parent` / `_nonconst` (expect 20800) + `_field_collision` (expect 20503,
+parser-level). `tests/aot/CMakeLists.txt` typemacro glob now excludes `failed_*`.
+
+Docs: macro tutorial 20 (`tutorials/macros/20_template_struct_instance.das` +
+`template_struct_instance_mod.das`, RST under `doc/source/reference/tutorials/macros/`,
+toctree + tutorial-19 next-link updated; Sphinx -W clean). `skills/das_macros.md` carries
+the `[|>` inherited-annotation fact.
+
+Known lint interaction (report to Boris): **STYLE029 false-positives on a require whose
+only visible use is a reified template parent** — the reifier erases the parent link
+before lint runs, so the require looks redundant while being load-bearing. Nolint'd with
+reason in the tutorial usage file; a proper fix needs STYLE029 to see parse-time usage
+(or a reifier breadcrumb). Also: the formatter canonicalizes `[|>` to `[ |>`.
+
+## Stage-1 pre-PR rail (Boris, 2026-08-08: expect bulk lint, don't be surprised by it)
+
+The macro + tests + tutorial touch enough files that lint fires in bulk. In order,
+before the `skills/make_pr.md` checklist:
+
+1. **Fresh branch off latest master** (verify base == master; the stage-0 doc commits
+   ride along — they currently sit on the merged `bbatkin/vulkan-on-mac` branch and get
+   cherry-picked or land via master first).
+2. **Full lint sweep, both flavors**: MCP `lint` per changed file AND the CI
+   linux-flavor mirror (MCP lint ≠ CI lint) — put the whole finding set on the table
+   before any fix.
+3. **Fan out Opus agents over the findings** — one per file or rule-family, each under
+   the house discipline: fix the root cause; STYLE037/038 split only along a natural
+   seam, else `// nolint` with a tail-comment reason on the `def` line; lint TOOL bugs
+   get fixed, not worked around; no blanket suppressions. Merge, re-lint to zero.
+4. **Known pressure points from the stage-0 skeleton** (write these right at authoring
+   time, so the agents handle only residue): the single ~130-line `apply` trips
+   STYLE037/038 — factor into `[macro_function]` helpers from the start (alias
+   enumeration, const harvest, method cloning, generated-field normalization); plus
+   LINT003 let-vs-var, PERF007 das_string compares, PERF017 `empty()`, STYLE016 guard
+   merges — all already observed on the probe.
+
+## Decisions (ruled, Boris 2026-08-07)
+
+1. `@template_constant` — EXPLICIT marking. Constants are fields the template marks;
+   unmarked overridden fields stay ordinary fields.
+2. ONE annotation, named `[template_struct_instance]` — matches the existing
+   `template_structure` family; there is no `template_class` in the family, so no
+   class-flavored name yet. When class-flavored template macros show up, we add
+   `template_class_instance` alongside.
+3. Stage-1 GO given.
+4. Unbound-alias check: keep the eager named error by default;
+   `[ |> template_struct_instance(late_bind = true)]` on the template waives it for
+   macro-supplied parameters (option D). Probe round proved: natural resolution covers
+   signatures/bodies/fields on the clones (no rules needed), a `[dirty_infer_macro]`
+   can bind an alias mid-infer (NOT `[infer_macro]` — that one runs only on a clean
+   tree), and `finish`/`patch` never fire for a failed struct, so a deferred named
+   error is impossible — the opt-out knob is the only way to keep the good message.
+5. Call-parameter axis (`@template_call`, IMPLEMENTED same round): the field name is
+   what template bodies call, the init (`@@name` or string) is the default target,
+   instances redirect with `override sdot = @@ssdot`. Rides the rules engine's
+   existing `renameCall`/call2name, which rewrites calls AND `@@` address targets —
+   erased like a constant, direct call in the stamped class. Replaces the closed-set
+   `static_if` route for callee selection with an open one (a new instance can route
+   to a function the template never names).
+6. Rebind scope (Boris, PR round): the BARE spelling only. `_::slot` / `__::slot`
+   keep their normal `_`/`__` resolution rules — the pinned escape to the real
+   function past any rebind (probe-verified both forms; consistent with constants,
+   whose replaceVariable is bare-keyed too). This superseded the Copilot round-1
+   "rename the qualified spelling too" fix; the parser-generated `@@_::Tem`m`
+   method-pointer twins are machine references and still retarget.
+
+## Stage 2 pointer (not planned here)
+
+dasLLAMA restamp per the cluster table (`plans/vulkan-on-mac.md`): SqAttn first
+(typedef-only, 23→~6), KqMv (const stamp), then MulMm/MoeMulMm — where followup_general
+#8's constraints apply verbatim: every route rewrites hot inner loops, so interleaved A/B
+per format, oracles cover correctness only; Q8/Mx4 joining renumbers cnt/basep/bkt
+6/7/8 → 7/8/9 (encoder + oracle churn accepted once). MoeGemv stays inheritance (its
+dedup is genuinely is-a). The 96 unlensed classes ride the same wave as lens adoption.
+
+## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
+
+Hardcodes one alias ("KT") and one const ("WIDE") — stage 1 generalized exactly those
+two spots (plus `st.parent = tem.parent` instead of `null`; see the landed deltas). Ran
+green: same-module + cross-module class templates, struct templates, override arms,
+multi-clone, used/unused instances.
+
+```das
+[structure_macro(name = "tci_probe")]
+class TciProbe : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (st.flags.isTemplate) return true // on the template itself: nothing to do
+        if (st.parent == null || !st.parent.flags.isTemplate) {
+            errors := "parent is not a class template"
+            return false
+        }
+        var tem = st.parent
+        let temName = string(tem.name)
+        let instName = string(st.name)
+        var mod = compiling_module()
+        var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
+        var kt = get_structure_alias(st, "KT")               // stage 1: enumerate template aliases
+        var wideInit : ExpressionPtr                          // stage 1: fields marked @template_const
+        var wideIdx = -1
+        for (i in range(length(st.fields))) {
+            if (st.fields[i].name == "WIDE") {
+                wideInit = st.fields[i].init
+                wideIdx = i
+            }
+        }
+        var ownMethods : table<string>                        // instance-authored methods win
+        for_each_function(mod, "", $(func) {
+            if (func.flags.isClassMethod && func.classParent == st) {
+                var parts <- split(string(func.name), "`")
+                ownMethods |> insert(parts[length(parts) - 1])
+            }
+        })
+        var rules : Template
+        rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
+        rules |> replaceTypeWithTypeDecl(temName) <| clone_type(instType)
+        rules |> replaceTypeWithTypeDecl("KT") <| clone_type(kt)
+        rules |> replaceVariable("WIDE") <| clone_expression(wideInit)
+        for_each_function(tem._module, "", $(func) {          // both rename spellings: field
+            if (func.flags.isClassMethod && func.classParent == tem) {   // inits hold @@_::Tem`m
+                let fn = string(func.name)
+                var parts <- split(fn, "`")
+                let mname = parts[length(parts) - 1]
+                rules |> renameVariable(fn, "{instName}`{mname}")
+                rules |> renameVariable("_::{fn}", "_::{instName}`{mname}")
+            }
+        })
+        var toClone : array<FunctionPtr>                      // collect THEN add
+        for_each_function(tem._module, "", $(func) {
+            if (!(func.flags.isClassMethod && func.classParent == tem)) return
+            let fn = string(func.name)
+            var parts <- split(fn, "`")
+            let mname = parts[length(parts) - 1]
+            if (mname == temName || fn == "{temName}'__finalize" || key_exists(ownMethods, mname)) {
+                return // ctor + 'finalize (quote spelling): instance has its own; overrides win
+            }
+            toClone |> push(func)
+        })
+        for (func in toClone) {
+            var parts <- split(string(func.name), "`")
+            let mname = parts[length(parts) - 1]
+            var fc <- clone_function(func)
+            fc.name := "{instName}`{mname}"
+            fc.moreFlags.isTemplate = false
+            fc.classParent = st
+            fc.result = apply_template(rules, func.at, clone_type(func.result))
+            for (arg in fc.arguments) {
+                arg._type = apply_template(rules, arg.at, clone_type(arg._type))
+            }
+            fc.body = apply_template(rules, func.at, clone_expression(func.body), false)
+            if (!(mod |> add_function(fc))) {
+                errors := "can't add {instName}`{mname}"
+            }
+        }
+        for (f in st.fields) {                                // repair fields through the rules
+            f._type = apply_template(rules, f.at, clone_type(f._type))
+            if (f.init != null) {
+                f.init = apply_template(rules, f.at, clone_expression(f.init))
+            }
+            // derived-class generated __finalize has the with-parent shape (cast<auto> init +
+            // parentType, ast_generate.cpp:2233) resolvable only through a live parent; we cut
+            // the parent, so normalize to the parentless shape (ibid:2239): bare @@fn, no flag
+            f.flags.parentType = false
+            if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {
+                let c = f.init as ExprCast
+                if (c.castType != null && c.castType.baseType == Type.autoinfer) {
+                    f.init = clone_expression(c.subexpr)
+                }
+            }
+        }
+        if (wideIdx >= 0) {
+            st.fields |> erase(wideIdx)                       // consts never become fields
+        }
+        st.parent = null
+        return true
+    }
+}
+```
