@@ -411,7 +411,8 @@ selectSample = function(type, id) {
     const sel = sampleList[type];
     if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
     let vv = id !== undefined ? id : parseInt(sel.value);
-    if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
+    // samplesData arrives over the network - a "new" click can land before it does
+    if (!Number.isNaN(vv) && samplesData && samplesData[type] && samplesData[type][vv]) {
         // Remembered so the "new" button can reload THIS sample fresh — a visitor
         // who deep-linked into f2s and hacked on it expects new = fresh f2s, not
         // the default sample.

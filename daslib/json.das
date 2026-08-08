@@ -183,7 +183,7 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
     return false
 }
 
-def private _lexer(var stext : string implicit) {
+def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one linear lexer state machine
     //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt> {
         var tin : iterator<int>
@@ -392,7 +392,7 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
     }
 }
 
-def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {
+def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - recursive descent, one arm per json production
     //! parses a JSON value from the token iterator `itv`.
     var ahead : TokenAt
     if (!next(itv, ahead)) return null
@@ -703,7 +703,7 @@ def update(var obj : JsonValue?; key : string; var jsv : JsonValue?) {
     (obj.value as _object) |> insert(key, jsv)
 }
 
-def try_fixing_broken_json(var bad : string) {
+def try_fixing_broken_json(var bad : string) {  // nolint:STYLE038 - one linear repair scan; the fix-up cases share cursor state
     //! fixes broken json. so far supported 1. "string" + "string" string concatenation 2. "text "nested text" text" nested quotes 3. extra , at the end of object or array 4. /uXXXXXX sequences in the middle of white space
     return build_string() $(writer) {
         peek_data(bad) $(str) {

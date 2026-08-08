@@ -88,6 +88,24 @@ def private join_implement(iterable; separator : string; blk) : string {
     return st
 }
 
+// iterators must be iterated mutably (30939 on a const iterator), while the array/fixed-array
+// forms must keep binding let-declared sources - hence a var twin instead of one shared helper
+[temp_string_result]
+def private join_implement_iterator(var iterable : iterator<auto(TT)>; separator : string; blk) : string {
+    let st = build_string() $(var writer) {
+        var skip_first = true
+        for (elem in iterable) {
+            if (skip_first) {
+                skip_first = false
+            } else {
+                write(writer, separator)
+            }
+            blk |> invoke(writer, elem)
+        }
+    }
+    return st
+}
+
 def join(iterable : array<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
     //! joins iterable `it` elements into a single string with `separator` between elements
     return join_implement(iterable, separator, blk)
@@ -95,7 +113,7 @@ def join(iterable : array<auto(TT)>; separator : string; blk : block<(var writer
 
 def join(var iterable : iterator<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
     //! joins iterable `it` elements into a single string with `separator` between elements
-    return join_implement(iterable, separator, blk)
+    return join_implement_iterator(iterable, separator, blk)
 }
 
 def join(iterable : auto(TT)[]; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
