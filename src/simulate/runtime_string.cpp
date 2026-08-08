@@ -259,6 +259,13 @@ namespace das
         return das_lexical_cast_fp_T(x, __context__, at);
     }
 
+    // temp-string reclaim wrapper: the compiler inserts this around a [temp_string_result] call
+    // whose result dies in the consuming call - the fresh string rides the 1-slot dispose queue
+    char * das_temp_string_result ( char * str, Context * __context__, LineInfoArg * at ) {
+        __context__->freeTempString(str, at);
+        return str;
+    }
+
     // string operations
 
     vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context, LineInfo * at ) {

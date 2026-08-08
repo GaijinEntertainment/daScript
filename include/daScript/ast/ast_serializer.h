@@ -221,7 +221,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 107;   // 107: CodeOfPolicies::default_init_containers (106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName, 102: auto_inline policies + neverInline)
+            return 108;   // 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim (107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

@@ -183,6 +183,7 @@ namespace das {
     TypeDeclPtr makeStructureFlags();
     TypeDeclPtr makeFunctionFlags();
     TypeDeclPtr makeMoreFunctionFlags();
+    TypeDeclPtr makeMoreFunctionFlags2();
     TypeDeclPtr makeFunctionSideEffectFlags();
     TypeDeclPtr makeVariableFlags();
     TypeDeclPtr makeVariableAccessFlags();

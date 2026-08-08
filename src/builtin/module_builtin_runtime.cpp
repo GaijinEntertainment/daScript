@@ -218,6 +218,26 @@ namespace das
         };
     };
 
+    // [temp_string_result] - a contract: the result is always a fresh string allocation (or null),
+    // never a passthrough of an input, never retained by the callee. Lets the temp-string reclaim
+    // pass queue the result on the 1-slot dispose queue when it dies in the consuming call.
+    struct TempStringResultFunctionAnnotation : MarkFunctionAnnotation {
+        TempStringResultFunctionAnnotation() : MarkFunctionAnnotation("temp_string_result") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->tempStringResult = true;
+            return true;
+        };
+        virtual bool lint(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &,
+                const AnnotationArgumentList &, string & err) override {
+            // post-infer, so an inferred (auto) return type is concrete by now
+            if ( !func->result || !func->result->isString() ) {
+                err = "[temp_string_result] requires a function that returns a string";
+                return false;
+            }
+            return true;
+        }
+    };
+
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
         DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -2181,6 +2201,7 @@ namespace das
         addAnnotation(new InlineFunctionAnnotation());
         addAnnotation(new NeverInlineFunctionAnnotation());
         addAnnotation(new RequestNoDiscardFunctionAnnotation());
+        addAnnotation(new TempStringResultFunctionAnnotation());
         addAnnotation(new DeprecatedFunctionAnnotation());
         addAnnotation(new AliasCMRESFunctionAnnotation());
         addAnnotation(new NeverAliasCMRESFunctionAnnotation());

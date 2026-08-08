@@ -869,6 +869,7 @@ namespace das
         FunctionPtr setAnyTemplate();
         FunctionPtr setTempResult();
         FunctionPtr setCaptureString();
+        FunctionPtr setTempStringResult();
         FunctionPtr setNoDiscard();
         FunctionPtr setDeprecated(const string & message);
         FunctionPtr arg_init ( int argIndex, ExpressionPtr initValue ) {
@@ -994,9 +995,16 @@ namespace das
                 bool    isConstClassMethod : 1;      // method is const
                 bool    isCustomProperty : 1;        // this is a user function which looks like a property ("`name")
                 bool    neverInline : 1;             // [never_inline] - excluded from best-effort (auto) inlining; conflicts with [inline]
-                bool    localFunction : 1;           // @@{} local function body - generated, but the block is verbatim user code
             };
             uint32_t moreFlags = 0;
+        };
+
+        union {
+            struct {    // moreFlags is full (32 bits) - localFunction lives here so the word actually covers it (clone, serialization, das-side binding)
+                bool    localFunction : 1;           // @@{} local function body - generated, but the block is verbatim user code
+                bool    tempStringResult : 1;        // [temp_string_result] - result is always a fresh string allocation (or null), never a passthrough of an input, never retained by the callee
+            };
+            uint32_t moreFlags2 = 0;
         };
 
         union {
@@ -1614,6 +1622,7 @@ namespace das
         /*option*/ bool auto_inline_functions = true;              // heuristic best-effort inlining of plain calls and operator sites of small same-module [inline]-shaped functions (default ON; silent declines; optimized builds only; disable_auto_inline overrides)
         /*option*/ int32_t auto_inline_cost = 32;                  // auto_inline_functions budget: a callee body up to this many AST nodes is worth splicing (private single-call callees are exempt)
         /*option*/ bool disable_run = false;                       // disable compile-time function evaluation (RunFolding of pure calls over constants)
+        /*option*/ bool disable_temp_string_reclaim = false;       // disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
         /*option*/ bool no_infer_time_folding = false;             // disable infer-time constant folding
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT

@@ -920,6 +920,7 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_DISABLE_INLINE:         p->disable_inline = v; break;
         case DAS_POLICY_DISABLE_AUTO_INLINE:    p->disable_auto_inline = v; break;
         case DAS_POLICY_DISABLE_RUN:            p->disable_run = v; break;
+        case DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM: p->disable_temp_string_reclaim = v; break;
         case DAS_POLICY_LOG_OPTIMIZATION:       p->log_optimization = v; break;
         case DAS_POLICY_LOG_OPTIMIZATION_PASSES: p->log_optimization_passes = v; break;
         case DAS_POLICY_FUSION:                 p->fusion = v; break;

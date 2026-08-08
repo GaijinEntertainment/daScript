@@ -220,6 +220,8 @@ namespace das {
                 offsetof(Function, flags), makeFunctionFlags() );
             this->addFieldEx ( "moreFlags", "moreFlags",
                 offsetof(Function, moreFlags), makeMoreFunctionFlags() );
+            this->addFieldEx ( "moreFlags2", "moreFlags2",
+                offsetof(Function, moreFlags2), makeMoreFunctionFlags2() );
             this->addFieldEx ( "sideEffectFlags", "sideEffectFlags",
                 offsetof(Function, sideEffectFlags), makeFunctionSideEffectFlags() );
             this->template addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
