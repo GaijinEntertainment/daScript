@@ -5237,7 +5237,7 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var variants <- [
-            LabVariant(name = "v0_gemv", src = metal_q8_gemv_msl, entry = metal_q8_gemv_msl_entry,
+            LabVariant(name = "v0_gemv", src = MetalQ8Gemv_metal_q8_gemv_msl, entry = MetalQ8Gemv_metal_q8_gemv_msl_entry,
                        b_list <- [1]),
             LabVariant(name = "gemv_b2", src = lab_gemv_b2_msl, entry = lab_gemv_b2_msl_entry,
                        b_list <- [2]),

@@ -3768,7 +3768,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     }
     var ok = true
     // the GEMV / rms / add / swiglu MSL sources are the prefill module's, verbatim (own PSOs)
-    g_pso_gemv = compile_pso(metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, ok)
+    g_pso_gemv = compile_pso(MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, ok)
     g_gemv_rows = clamp(int64(g_env_metal.gemv_tg), 1l, 32l)
     g_pso_rms = compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
     g_pso_add = compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
@@ -6121,19 +6121,20 @@ class MetalMoeWScale {
     }
 }
 
-// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline — the SAME
-// dual-view W the mul_mm reads, bound at the tensor's byte offset): lane owns chunk lane%8 of
-// every 4th block, 4 in flight; the scale rides the quants' cacheline. Width-agnostic — rows/tg via DASLLAMA_METAL_GEMV_TG (g_gemv_rows).
-[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tg = "g_gemv_rows*32", grid = "d/g_gemv_rows", params = "d : int64")]
-class MetalQ8Gemv {
+// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline — the SAME dual-view
+// W the mul_mm reads, bound at the tensor's byte offset): lane owns chunk lane%8 of every 4th block,
+// 4 in flight; the scale rides the quants' cacheline. Rows/tg via DASLLAMA_METAL_GEMV_TG; BATCHED adds a grid-y position axis (the DnBa shape).
+[ |> template_struct_instance]
+class template MetalQ8GemvT {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view
-    @ssbo @binding = 3 @off = "yoff" @span = "d*4" y : array<float>     // [d] outputs
+    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view ([npos x n] when BATCHED)
+    @ssbo @binding = 3 @off = "yoff" @span = "d*4" y : array<float>     // [d] outputs ([npos x d] when BATCHED)
     @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
     @uniform @binding = 5 ddim : uint       // d (output rows)
+    @template_constant BATCHED : bool = false
 
-    [metal_kernel(name="metal_q8_gemv_msl")]
+    [metal_kernel]
     def metal_q8_gemv {
         let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (row >= ddim) {
@@ -6144,7 +6145,7 @@ class MetalQ8Gemv {
         let nb4 = ndim / 4u
         var sp = unsafe(addr(wsh[(row * nb + lane / 8u) * 17u]))
         var qp = unsafe(addr(wqb[(row * nb + lane / 8u) * 34u + 2u + (lane % 8u) * 4u]))
-        var x0 = unsafe(addr(x[lane]))
+        var x0 = unsafe(addr(x[BATCHED ? gl_WorkGroupID.y * nb4 + lane : lane]))
         var acc = 0.0
         var lw : float4[4]
         var k = lane
@@ -6169,16 +6170,26 @@ class MetalQ8Gemv {
             let bi = row * nb + k / 8u
             let d = float(wsh[bi * 17u])
             let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let xv = x[k]
+            let xv = x[BATCHED ? gl_WorkGroupID.y * nb4 + k : k]
             acc += (float(wqb[qb]) * xv.x + float(wqb[qb + 1u]) * xv.y +
                 float(wqb[qb + 2u]) * xv.z + float(wqb[qb + 3u]) * xv.w) * d
             k += gl_SubgroupSize
         }
         acc = simd_sum(acc)
         if (lane == 0u) {
-            y[row] = acc
+            y[BATCHED ? gl_WorkGroupID.y * ddim + row : row] = acc
         }
     }
+}
+
+[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tg = "g_gemv_rows*32", grid = "d/g_gemv_rows", params = "d : int64")]
+class MetalQ8Gemv : MetalQ8GemvT {
+}
+
+// Batched narrow projection twin (DeltaNet β/α: d = dt_rank, 16..64 — under every GEMM N tile):
+// one simdgroup per (output row, position). Hand-bound by the prefill driver — @off/@span inert.
+class MetalDnBa : MetalQ8GemvT {
+    override BATCHED = true
 }
 
 // Q4_K: lane owns 32 elems of every 4th superblock; lcpp's kmask halfword scale decode +

@@ -16,7 +16,7 @@ require dasllama/dasllama_metal_kernels public
 // layer stack on the GPU. Decode is GEMV-bandwidth-bound (one token streams every weight once)
 // AND launch-gap-bound (~4.3us per serial dispatch), so the layer runs 9 fused dispatches:
 //   fused QKV / W1|W3 GEMVs   the P1-lab-proven single-simdgroup-per-row Q8 GEMV
-//                             (metal_q8_gemv_msl, f32 activations) over CONCATENATED weight
+//                             (MetalQ8Gemv_metal_q8_gemv_msl, f32 activations) over CONCATENATED weight
 //                             regions (upload_region_cat3) into one output buffer each —
 //                             downstream dispatches bind at byte offsets
 //   metal_sq_attn16/32        single-query attention over the KV mirror, one threadgroup per

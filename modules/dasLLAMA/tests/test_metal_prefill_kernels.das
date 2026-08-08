@@ -1203,7 +1203,7 @@ def private pf_cat2_gate(t : T?; dev, queue; npos, d : int) {
 def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
     let tag = "dn_ba n={ndim} d={ddim} np={npos}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalDnBa_metal_q8_gemv_msl, MetalDnBa_metal_q8_gemv_msl_entry, MetalDnBa_metal_q8_gemv_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var blob : array<uint8>
@@ -1259,7 +1259,7 @@ def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
 // BIT-exact (see the call site for why exactness holds; pow2 scales are exact in f16).
 def private gemv_gate(t : T?; dev, queue; n, d : int) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, err)
     t |> success(pso != null, "gemv pipeline: {err}")
     if (pso == null) {
         return

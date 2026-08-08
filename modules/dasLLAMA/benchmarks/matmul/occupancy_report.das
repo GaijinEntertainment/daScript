@@ -40,7 +40,7 @@ def main {
         check(dev, "attn_av (classic)", metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath)
         check(dev, "attn_softmax", metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath)
         check(dev, "rmsnorm", metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath)
-        check(dev, "gemv (logits)", metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath)
+        check(dev, "gemv (logits)", MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath)
         check(dev, "swiglu", metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath)
         check(dev, "add", metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath)
         check(dev, "rope", metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath)

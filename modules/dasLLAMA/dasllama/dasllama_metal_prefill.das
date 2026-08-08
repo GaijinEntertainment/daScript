@@ -1777,66 +1777,8 @@ class MetalPfCat2 {
     }
 }
 
-// ===== DeltaNet (Wave D) — the qwen35 recurrent-layer chain =====
-
-// Batched narrow q8 GEMV for the β/α projections (d = dt_rank, 16..64 — under every GEMM
-// N tile): one simdgroup per (output row, position), the MetalQ8Gemv stream walk per row.
-class MetalDnBa {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "read" x : array<float4>    // [npos x n] f32 rows, float4 view
-    @ssbo @binding = 3 @role = "write" y : array<float>     // [npos x d]
-    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
-    @uniform @binding = 5 ddim : uint       // d (output rows per position)
-
-    [metal_kernel(name="metal_dn_ba_msl")]
-    def metal_dn_ba {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        let p = gl_WorkGroupID.y
-        if (row >= ddim) {
-            return
-        }
-        let lane = gl_SubgroupInvocationID
-        let nb = ndim / 32u
-        let nb4 = ndim / 4u
-        var sp = unsafe(addr(wsh[(row * nb + lane / 8u) * 17u]))
-        var qp = unsafe(addr(wqb[(row * nb + lane / 8u) * 34u + 2u + (lane % 8u) * 4u]))
-        var x0 = unsafe(addr(x[p * nb4 + lane]))
-        var acc = 0.0
-        var lw : float4[4]
-        var k = lane
-        while (k + 96u < nb4) {
-            // all 4 chunk dequants batch AHEAD of the fma chains (the MvB2 load batching)
-            for [unroll_full] (c in range(4)) {
-                let d = float(unsafe(sp[uint(c) * 68u]))   // chunk c sits 4 blocks (68 halves) on
-                let qb = uint(c) * 136u                    // ... and 136 quant bytes
-                lw[c] = float4(float(unsafe(qp[qb])), float(unsafe(qp[qb + 1u])),
-                    float(unsafe(qp[qb + 2u])), float(unsafe(qp[qb + 3u]))) * d
-            }
-            for [unroll_full] (c in range(4)) {
-                let xv = unsafe(x0[uint(c) * 32u])
-                acc += lw[c].x * xv.x + lw[c].y * xv.y + lw[c].z * xv.z + lw[c].w * xv.w
-            }
-            sp = unsafe(sp + 272)           // 16 blocks x 17 halves per stripe
-            qp = unsafe(qp + 544)           // 16 blocks x 34 bytes
-            x0 = unsafe(x0 + 128)
-            k += 128u
-        }
-        while (k < nb4) {
-            let bi = row * nb + k / 8u
-            let d = float(wsh[bi * 17u])
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let xv = x[p * nb4 + k]
-            acc += (float(wqb[qb]) * xv.x + float(wqb[qb + 1u]) * xv.y +
-                float(wqb[qb + 2u]) * xv.z + float(wqb[qb + 3u]) * xv.w) * d
-            k += gl_SubgroupSize
-        }
-        acc = simd_sum(acc)
-        if (lane == 0u) {
-            y[p * ddim + row] = acc
-        }
-    }
-}
+// DeltaNet (Wave D): the β/α projection GEMV (MetalDnBa) lives in dasllama_metal_kernels as
+// the BATCHED stamp of the MetalQ8GemvT template — same stream walk, grid-y position axis.
 
 // ===== the whole-prefill driver =====
 // Registered as prefill override "metal" (DASLLAMA_PIN_PREFILL). One command buffer per prefill;
@@ -2175,7 +2117,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_moe_mm_mx4_t = compile_pso(metal_moe_mulmm_mx4_t_msl, metal_moe_mulmm_mx4_t_msl_entry, metal_moe_mulmm_mx4_t_msl_fastmath, ok)
     }
     g_pf_pso_moe_mm_q51 = compile_pso(metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, ok)
-    g_pf_pso_dn_ba = compile_pso(metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, ok)
+    g_pf_pso_dn_ba = compile_pso(MetalDnBa_metal_q8_gemv_msl, MetalDnBa_metal_q8_gemv_msl_entry, MetalDnBa_metal_q8_gemv_msl_fastmath, ok)
     if (!ok) {
         metal_prefill_shutdown()
         g_pf_failed = true
