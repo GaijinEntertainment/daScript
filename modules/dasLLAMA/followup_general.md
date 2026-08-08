@@ -67,15 +67,18 @@
    lane mapping, so it needs a measurement, not a refactor. Done = each scheme either justified
    in a comment at its kernel or collapsed into the one that measures as fast.
 
-6. **The K-quant GEMV zoo is dedupable along its batch-width axis only.** Measured divergence
-   over stripped bodies: the FORMAT axis is genuinely different math (`kq_gemv_k4` vs `_k5` =
-   49% of lines differ; `kq_mvb2_k4` vs `_k6` = 43%) — those are separate block decodes and
-   must stay separate. The WIDTH axis is near-identical (`kq_mvb2_k4` vs `kq_mvb4_k4` = 11%,
-   and that 11% IS the unroll factor). So the nine `kq_mvb{2,4,8}_k{4,5,6}` kernels are three
-   families of three, each family one kernel with a compile-time width. That needs the width to
-   specialize at emission (an unrolled generic, not a value parameter — a runtime width would
-   delete the tuning). Done = decide whether msl_emit should specialize a compile-time constant
-   parameter, then collapse the nine to three or record why not.
+6. **KqMv merges only under measurement — the tonight-sweep (2026-08-08) left it for the
+   profiling followup.** The reifier now covers the mechanism (`[template_struct_instance]`,
+   `@template_constant` width — SqAttn's D pair uses exactly this), but the family fails the
+   free byte-identical-MSL gate on three facts: B8 is a DIFFERENT algorithm now (tgmem X-panel
+   staging, float4 accs — the old "three families of three" framing is stale on that leg);
+   B2 deliberately omits B4's live `colbase` column tiling (its dispatch pins gcols = 1), so
+   the merged body puts always-zero index math on the B=2 decode GEMV; K4↔K5's qh overlay
+   modifies the innermost w-decode line (earlier stripped-body measurement agrees: format axis
+   43-49% different, width axis 11% and that 11% IS the unroll factor). Done = the profiling
+   followup runs the interleaved A/B (M1, ≥3 launches/arm): unified B2-as-colbase-form (and
+   K4/K5 via static_if if the first arm is clean) vs master, then merge or record the number
+   that says no. Prediction on record (Boris): the B2 specialization is accidental — it merges.
 
 7. **Pointer families — a language-level idea, parked.** (Boris, 2026-07-30: "interesting follow …
    it maybe good - we are just not there yet.") Everything above about address spaces exists

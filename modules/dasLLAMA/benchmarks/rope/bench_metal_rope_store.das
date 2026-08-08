@@ -74,7 +74,7 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_ours = pipeline_from_source(dev, metal_rope_store_b16_msl, metal_rope_store_b16_msl_entry, true, err)
+    var pso_ours = pipeline_from_source(dev, MetalRopeStoreBF16_metal_rope_store_b_msl, MetalRopeStoreBF16_metal_rope_store_b_msl_entry, true, err)
     b |> success(pso_ours != null, "production rope-store kernel compiles")
     if (pso_ours == null) {
         metal_release(queue)

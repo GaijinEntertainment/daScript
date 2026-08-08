@@ -1375,22 +1375,24 @@ class MetalPreAddRms {
     }
 }
 
+
 // Fused rope + KV-row store, one thread per rotation pair (ntok == 1): q pairs rope in place; k
-// pairs rope straight into the mirror K row (±65504 clamp) and the same thread copies its V pair.
-// Replaces the rope_qk + kv_store dispatch pair.
-[metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
-class MetalRopeStoreF16 {
+// pairs rope straight into the mirror K row (f16 instances clamp to ±65504) and the same thread
+// copies its V pair. Replaces the rope_qk + kv_store dispatch pair. KT is the mirror element type.
+[ |> template_struct_instance]
+class template MetalRopeStoreKvT {
     @ssbo @binding = 0 qk : array<float>    // q at [0, qd) roped in place, k at [qd, qd + kvd)
     @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>    // raw v (the QKV buffer at the v offset)
-    @ssbo @binding = 2 @off = "koff" kd : array<float16>  // mirror K row (bound at the (layer, pos) row offset)
-    @ssbo @binding = 3 @off = "voff" vd : array<float16>
+    @ssbo @binding = 2 @off = "koff" kd : array<KT>  // mirror K row (bound at the (layer, pos) row offset)
+    @ssbo @binding = 3 @off = "voff" vd : array<KT>
     @ssbo @binding = 4 @role = "weight" tcos : array<float>  // [head_size/2] this position's rope row
     @ssbo @binding = 5 @role = "weight" tsin : array<float>
     @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 7 ka : RopeStoreArgs
+    @template_constant CLAMP16 : bool = true
 
-    [metal_kernel(name="metal_rope_store16_msl")]
-    def metal_rope_store16 {
+    [metal_kernel]
+    def metal_rope_store {
         let qd = ka.qd
         let head_size = ka.head_size
         let npairs_q = ka.npairs_q
@@ -1418,14 +1420,21 @@ class MetalRopeStoreF16 {
         if (isK) {
             let v0 = qk[qd + i] + (has_bias != 0u ? bias[qd + i] : 0.0)
             let v1 = qk[qd + i2] + (has_bias != 0u ? bias[qd + i2] : 0.0)
-            let r0 = v0 * fcr - v1 * fci
-            let r1 = v0 * fci + v1 * fcr
-            kd[i] = float16(min(max(r0, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
-            kd[i2] = float16(min(max(r1, -65504.0), 65504.0))   // nolint:STYLE019
-            let b0 = has_bias != 0u ? bias[qd + kvd + i] : 0.0
-            let b1 = has_bias != 0u ? bias[qd + kvd + i2] : 0.0
-            vd[i] = float16(min(max(vs[i] + b0, -65504.0), 65504.0))   // nolint:STYLE019
-            vd[i2] = float16(min(max(vs[i2] + b1, -65504.0), 65504.0))   // nolint:STYLE019
+            static_if (CLAMP16) {
+                let r0 = v0 * fcr - v1 * fci
+                let r1 = v0 * fci + v1 * fcr
+                kd[i] = float16(min(max(r0, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
+                kd[i2] = float16(min(max(r1, -65504.0), 65504.0))   // nolint:STYLE019
+                let b0 = has_bias != 0u ? bias[qd + kvd + i] : 0.0
+                let b1 = has_bias != 0u ? bias[qd + kvd + i2] : 0.0
+                vd[i] = float16(min(max(vs[i] + b0, -65504.0), 65504.0))   // nolint:STYLE019
+                vd[i2] = float16(min(max(vs[i2] + b1, -65504.0), 65504.0))   // nolint:STYLE019
+            } else {
+                kd[i] = v0 * fcr - v1 * fci
+                kd[i2] = v0 * fci + v1 * fcr
+                vd[i] = vs[i] + (has_bias != 0u ? bias[qd + kvd + i] : 0.0)
+                vd[i2] = vs[i2] + (has_bias != 0u ? bias[qd + kvd + i2] : 0.0)
+            }
         } else {
             let v0 = qk[i] + (has_bias != 0u ? bias[i] : 0.0)
             let v1 = qk[i2] + (has_bias != 0u ? bias[i2] : 0.0)
@@ -1433,6 +1442,18 @@ class MetalRopeStoreF16 {
             qk[i2] = v0 * fci + v1 * fcr
         }
     }
+}
+
+[metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
+class MetalRopeStoreF16 : MetalRopeStoreKvT {
+    typedef KT = float16
+}
+
+// f32-mirror twin — straight stores, no clamp.
+[metal_dispatch(name = "enc_rpst32_c", pso = "g_pso_rpst32", tg = 64, grid = "npairs/64", params = "npairs : int64")]
+class MetalRopeStoreF32 : MetalRopeStoreKvT {
+    typedef KT = float
+    override CLAMP16 = false
 }
 
 // The head-cooperative fused form (QK-norm models): ONE threadgroup per head folds bias ->
@@ -1509,59 +1530,6 @@ class MetalRopeStoreHF16 {
             kd[hh * hs + lid] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
         } else {
             vd[hh * hs + lid] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019
-        }
-    }
-}
-
-// f32-mirror twin — straight stores, no clamp.
-[metal_dispatch(name = "enc_rpst32_c", pso = "g_pso_rpst32", tg = 64, grid = "npairs/64", params = "npairs : int64")]
-class MetalRopeStoreF32 {
-    @ssbo @binding = 0 qk : array<float>
-    @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>
-    @ssbo @binding = 2 @off = "koff" kd : array<float>
-    @ssbo @binding = 3 @off = "voff" vd : array<float>
-    @ssbo @binding = 4 @role = "weight" tcos : array<float>
-    @ssbo @binding = 5 @role = "weight" tsin : array<float>
-    @ssbo @binding = 6 @role = "weight" bias : array<float>
-    @uniform @binding = 7 ka : RopeStoreArgs
-
-    [metal_kernel(name="metal_rope_store32_msl")]
-    def metal_rope_store32 {
-        let qd = ka.qd
-        let head_size = ka.head_size
-        let npairs_q = ka.npairs_q
-        let npairs = ka.npairs
-        let neox = ka.neox
-        let has_bias = ka.has_bias
-        let rot = ka.rot
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= npairs) {
-            return
-        }
-        let isK = gid >= npairs_q
-        let lgid = isK ? gid - npairs_q : gid
-        let half = head_size / 2u
-        let halfr = rot / 2u
-        let j = lgid % half
-        let hbase = (lgid / half) * head_size
-        let rotp = j < halfr
-        let i = neox != 0u ? (rotp ? hbase + j : hbase + rot + (j - halfr)) : hbase + 2u * j
-        let i2 = neox != 0u ? (rotp ? i + halfr : i + (half - halfr)) : i + 1u
-        let fcr = rotp ? tcos[j] : 1.0
-        let fci = rotp ? tsin[j] : 0.0
-        let kvd = npairs * 2u - qd
-        if (isK) {
-            let v0 = qk[qd + i] + (has_bias != 0u ? bias[qd + i] : 0.0)
-            let v1 = qk[qd + i2] + (has_bias != 0u ? bias[qd + i2] : 0.0)
-            kd[i] = v0 * fcr - v1 * fci
-            kd[i2] = v0 * fci + v1 * fcr
-            vd[i] = vs[i] + (has_bias != 0u ? bias[qd + kvd + i] : 0.0)
-            vd[i2] = vs[i2] + (has_bias != 0u ? bias[qd + kvd + i2] : 0.0)
-        } else {
-            let v0 = qk[i] + (has_bias != 0u ? bias[i] : 0.0)
-            let v1 = qk[i2] + (has_bias != 0u ? bias[i2] : 0.0)
-            qk[i] = v0 * fcr - v1 * fci
-            qk[i2] = v0 * fci + v1 * fcr
         }
     }
 }
@@ -3402,19 +3370,21 @@ class MetalSqAttnCombD {
 }
 
 // Batched fused rope + KV-row store: grid (pairs x B) — row b's q pairs rope in place, k pairs
-// rope into its mirror row (±65504 clamp) at depth cnt-1, v pairs copy alongside.
-class MetalRopeStoreBF16 {
+// rope into its mirror row (f16 instances clamp to ±65504) at depth cnt-1, v pairs copy alongside.
+[ |> template_struct_instance]
+class template MetalRopeStoreBKvT {
     @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
-    @ssbo @binding = 1 @role = "write" kd : array<float16>  // the whole mirror arena, f16 view (k dest)
-    @ssbo @binding = 2 @role = "write" vd : array<float16>
+    @ssbo @binding = 1 @role = "write" kd : array<KT>  // the whole mirror arena (k dest)
+    @ssbo @binding = 2 @role = "write" vd : array<KT>
     @ssbo @binding = 3 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 4 @role = "weight" tsin : array<float>
     @ssbo @binding = 5 @role = "read" rt : array<uint4>
     @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 7 ka : RopeStoreBArgs
+    @template_constant CLAMP16 : bool = true
 
-    [metal_kernel(name="metal_rope_store_b16_msl")]
-    def metal_rope_store_b16 {
+    [metal_kernel]
+    def metal_rope_store_b {
         let lay = ka.lay
         let kv_dim = ka.kv_dim
         let qd = ka.qd
@@ -3449,14 +3419,21 @@ class MetalRopeStoreBF16 {
             let vdst = rrow.y + lay * rrow.z + (rrow.w - 1u) * kv_dim
             let v0 = qk[qbase + qd + i] + (has_bias != 0u ? bias[qd + i] : 0.0)
             let v1 = qk[qbase + qd + i2] + (has_bias != 0u ? bias[qd + i2] : 0.0)
-            let r0 = v0 * fcr - v1 * fci
-            let r1 = v0 * fci + v1 * fcr
-            kd[kdst + i] = float16(min(max(r0, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
-            kd[kdst + i2] = float16(min(max(r1, -65504.0), 65504.0))   // nolint:STYLE019
-            let b0 = has_bias != 0u ? bias[qd + kv_dim + i] : 0.0
-            let b1 = has_bias != 0u ? bias[qd + kv_dim + i2] : 0.0
-            vd[vdst + i] = float16(min(max(qk[qbase + qd + kv_dim + i] + b0, -65504.0), 65504.0))   // nolint:STYLE019
-            vd[vdst + i2] = float16(min(max(qk[qbase + qd + kv_dim + i2] + b1, -65504.0), 65504.0))   // nolint:STYLE019
+            static_if (CLAMP16) {
+                let r0 = v0 * fcr - v1 * fci
+                let r1 = v0 * fci + v1 * fcr
+                kd[kdst + i] = float16(min(max(r0, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
+                kd[kdst + i2] = float16(min(max(r1, -65504.0), 65504.0))   // nolint:STYLE019
+                let b0 = has_bias != 0u ? bias[qd + kv_dim + i] : 0.0
+                let b1 = has_bias != 0u ? bias[qd + kv_dim + i2] : 0.0
+                vd[vdst + i] = float16(min(max(qk[qbase + qd + kv_dim + i] + b0, -65504.0), 65504.0))   // nolint:STYLE019
+                vd[vdst + i2] = float16(min(max(qk[qbase + qd + kv_dim + i2] + b1, -65504.0), 65504.0))   // nolint:STYLE019
+            } else {
+                kd[kdst + i] = v0 * fcr - v1 * fci
+                kd[kdst + i2] = v0 * fci + v1 * fcr
+                vd[vdst + i] = qk[qbase + qd + kv_dim + i] + (has_bias != 0u ? bias[qd + kv_dim + i] : 0.0)
+                vd[vdst + i2] = qk[qbase + qd + kv_dim + i2] + (has_bias != 0u ? bias[qd + kv_dim + i2] : 0.0)
+            }
         } else {
             let v0 = qk[qbase + i] + (has_bias != 0u ? bias[i] : 0.0)
             let v1 = qk[qbase + i2] + (has_bias != 0u ? bias[i2] : 0.0)
@@ -3464,68 +3441,17 @@ class MetalRopeStoreBF16 {
             qk[qbase + i2] = v0 * fci + v1 * fcr
         }
     }
+}
+
+class MetalRopeStoreBF16 : MetalRopeStoreBKvT {
+    typedef KT = float16
 }
 
 // f32-mirror twin — straight stores, no clamp.
-class MetalRopeStoreBF32 {
-    @ssbo @binding = 0 @role = "readwrite" qk : array<float>
-    @ssbo @binding = 1 @role = "write" kd : array<float>
-    @ssbo @binding = 2 @role = "write" vd : array<float>
-    @ssbo @binding = 3 @role = "weight" tcos : array<float>
-    @ssbo @binding = 4 @role = "weight" tsin : array<float>
-    @ssbo @binding = 5 @role = "read" rt : array<uint4>
-    @ssbo @binding = 6 @role = "weight" bias : array<float>
-    @uniform @binding = 7 ka : RopeStoreBArgs
-
-    [metal_kernel(name="metal_rope_store_b32_msl")]
-    def metal_rope_store_b32 {
-        let lay = ka.lay
-        let kv_dim = ka.kv_dim
-        let qd = ka.qd
-        let head_size = ka.head_size
-        let npairs_q = ka.npairs_q
-        let npairs = ka.npairs
-        let qstride = ka.qstride
-        let neox = ka.neox
-        let has_bias = ka.has_bias
-        let rot = ka.rot
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= npairs) {
-            return
-        }
-        let bb = gl_WorkGroupID.y
-        let rrow = rt[bb]
-        let qbase = bb * qstride
-        let half = head_size / 2u
-        let halfr = rot / 2u
-        let isK = gid >= npairs_q
-        let lgid = isK ? gid - npairs_q : gid
-        let j = lgid % half
-        let hbase = (lgid / half) * head_size
-        // threads j < rot/2 rotate the (j, j+rot/2) pair; the rest identity-cover [rot, hs)
-        let rotp = j < halfr
-        let i = neox != 0u ? (rotp ? hbase + j : hbase + rot + (j - halfr)) : hbase + 2u * j
-        let i2 = neox != 0u ? (rotp ? i + halfr : i + (half - halfr)) : i + 1u
-        let fcr = rotp ? tcos[bb * halfr + j] : 1.0
-        let fci = rotp ? tsin[bb * halfr + j] : 0.0
-        if (isK) {
-            let kdst = rrow.x + lay * rrow.z + (rrow.w - 1u) * kv_dim   // lay = element prefix
-            let vdst = rrow.y + lay * rrow.z + (rrow.w - 1u) * kv_dim
-            let v0 = qk[qbase + qd + i] + (has_bias != 0u ? bias[qd + i] : 0.0)
-            let v1 = qk[qbase + qd + i2] + (has_bias != 0u ? bias[qd + i2] : 0.0)
-            kd[kdst + i] = v0 * fcr - v1 * fci
-            kd[kdst + i2] = v0 * fci + v1 * fcr
-            vd[vdst + i] = qk[qbase + qd + kv_dim + i] + (has_bias != 0u ? bias[qd + kv_dim + i] : 0.0)
-            vd[vdst + i2] = qk[qbase + qd + kv_dim + i2] + (has_bias != 0u ? bias[qd + kv_dim + i2] : 0.0)
-        } else {
-            let v0 = qk[qbase + i] + (has_bias != 0u ? bias[i] : 0.0)
-            let v1 = qk[qbase + i2] + (has_bias != 0u ? bias[i2] : 0.0)
-            qk[qbase + i] = v0 * fcr - v1 * fci
-            qk[qbase + i2] = v0 * fci + v1 * fcr
-        }
-    }
+class MetalRopeStoreBF32 : MetalRopeStoreBKvT {
+    typedef KT = float
+    override CLAMP16 = false
 }
-
 // Quant partD twin pair (hs == 128 only, DF16 shape): one sg per (row, head, 32-position
 // slice), online slice merge, byte-offset row table. The sqd_*_blk_q stages overload on the
 // byte-view type, so only LANE_BYTES (quant bytes per lane's 4 elements) tells them apart.
@@ -3951,9 +3877,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attnp_q8 = compile_pso(MetalSqAttnPartQ8_metal_sq_attn_part_msl, MetalSqAttnPartQ8_metal_sq_attn_part_msl_entry, MetalSqAttnPartQ8_metal_sq_attn_part_msl_fastmath, ok)
     g_pso_attn_tq4 = compile_pso(MetalSqAttnTq4_metal_sq_attn_msl, MetalSqAttnTq4_metal_sq_attn_msl_entry, MetalSqAttnTq4_metal_sq_attn_msl_fastmath, ok)
     g_pso_attnp_tq4 = compile_pso(MetalSqAttnPartTq4_metal_sq_attn_part_msl, MetalSqAttnPartTq4_metal_sq_attn_part_msl_entry, MetalSqAttnPartTq4_metal_sq_attn_part_msl_fastmath, ok)
-    g_pso_rpst16 = compile_pso(metal_rope_store16_msl, metal_rope_store16_msl_entry, metal_rope_store16_msl_fastmath, ok)
+    g_pso_rpst16 = compile_pso(MetalRopeStoreF16_metal_rope_store_msl, MetalRopeStoreF16_metal_rope_store_msl_entry, MetalRopeStoreF16_metal_rope_store_msl_fastmath, ok)
     g_pso_rpst_h16 = compile_pso(metal_rope_store_h16_msl, metal_rope_store_h16_msl_entry, metal_rope_store_h16_msl_fastmath, ok)
-    g_pso_rpst32 = compile_pso(metal_rope_store32_msl, metal_rope_store32_msl_entry, metal_rope_store32_msl_fastmath, ok)
+    g_pso_rpst32 = compile_pso(MetalRopeStoreF32_metal_rope_store_msl, MetalRopeStoreF32_metal_rope_store_msl_entry, MetalRopeStoreF32_metal_rope_store_msl_fastmath, ok)
     g_pso_rpst_q8 = compile_pso(metal_rope_store_q8_msl, metal_rope_store_q8_msl_entry, metal_rope_store_q8_msl_fastmath, ok)
     g_pso_rpst_tq4 = compile_pso(metal_rope_store_tq4_msl, metal_rope_store_tq4_msl_entry, metal_rope_store_tq4_msl_fastmath, ok)
     g_pso_unsign = compile_pso(metal_fwht_unsign_msl, metal_fwht_unsign_msl_entry, metal_fwht_unsign_msl_fastmath, ok)
@@ -4044,8 +3970,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attnd_q8 = compile_pso(MetalSqAttnDQ8_metal_sq_attn_d_msl, MetalSqAttnDQ8_metal_sq_attn_d_msl_entry, MetalSqAttnDQ8_metal_sq_attn_d_msl_fastmath, ok)
     g_pso_attnd_tq4 = compile_pso(MetalSqAttnDTq4_metal_sq_attn_d_msl, MetalSqAttnDTq4_metal_sq_attn_d_msl_entry, MetalSqAttnDTq4_metal_sq_attn_d_msl_fastmath, ok)
     g_pso_attncombd = compile_pso(metal_sq_attn_comb_d_msl, metal_sq_attn_comb_d_msl_entry, metal_sq_attn_comb_d_msl_fastmath, ok)
-    g_pso_rpstb16 = compile_pso(metal_rope_store_b16_msl, metal_rope_store_b16_msl_entry, metal_rope_store_b16_msl_fastmath, ok)
-    g_pso_rpstb32 = compile_pso(metal_rope_store_b32_msl, metal_rope_store_b32_msl_entry, metal_rope_store_b32_msl_fastmath, ok)
+    g_pso_rpstb16 = compile_pso(MetalRopeStoreBF16_metal_rope_store_b_msl, MetalRopeStoreBF16_metal_rope_store_b_msl_entry, MetalRopeStoreBF16_metal_rope_store_b_msl_fastmath, ok)
+    g_pso_rpstb32 = compile_pso(MetalRopeStoreBF32_metal_rope_store_b_msl, MetalRopeStoreBF32_metal_rope_store_b_msl_entry, MetalRopeStoreBF32_metal_rope_store_b_msl_fastmath, ok)
     g_pso_rpstb_q8 = compile_pso(metal_rope_store_b_q8_msl, metal_rope_store_b_q8_msl_entry, metal_rope_store_b_q8_msl_fastmath, ok)
     g_pso_rpstb_tq4 = compile_pso(metal_rope_store_b_tq4_msl, metal_rope_store_b_tq4_msl_entry, metal_rope_store_b_tq4_msl_fastmath, ok)
     g_pso_addrmsb = compile_pso(metal_add_rms_b_msl, metal_add_rms_b_msl_entry, metal_add_rms_b_msl_fastmath, ok)
