@@ -2231,73 +2231,46 @@ class MetalSkReduce {
     }
 }
 
-// Metal-4 tensor twins of the batch GEMMs: same binds/grids, bodies lowered to one
-// tmm2d_q8b_f32 each (raced via runtime.metal_tensor — crowns "gemmb_q8" / "gemmb_sk_q8" /
-// "gemm64b_q8"). The split-K twin passes the FULL row stride in blocks (ldwb) with a k-slice kk.
-class MetalQ8GemmBT {
+// Metal-4 tensor twins of the batch GEMMs, one template: same binds/grids as their simdgroup
+// parents, bodies lowered to one tmm2d_q8b_f32 (raced via runtime.metal_tensor — crowns
+// "gemmb_q8" / "gemmb_sk_q8" / "gemm64b_q8"). Axes: TILE_N width, IS_SK k-slice, LDC_ND stride.
+[ |> template_struct_instance]
+class template MetalQ8GemmTensorT {
     @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
     @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
     @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
-    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
+    @ssbo @binding = 4 y : array<float>     // Y [M' x d]; SK: [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 ka : Q8GemmArgs
+    @template_constant TILE_N : uint = 32u
+    @template_constant IS_SK : bool = false
+    @template_constant LDC_ND : bool = false   // C stride = ka.ndim (SK planes, 64-wide) vs ka.ys
 
-    [metal_kernel(name="metal_q8_gemm_b_t_msl")]
+    [metal_kernel]
     def metal_q8_gemm_b_t {
-        let ntileN = ka.ndim / 32u
+        let ntileN = ka.ndim / TILE_N
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
-        let nBase = (gl_WorkGroupID.x % ntileN) * 32u
+        let nBase = (gl_WorkGroupID.x % ntileN) * TILE_N
         let nkb = ka.kdim / 32u
-        var sp = unsafe(addr(wsh[(nBase * nkb) * 17u]))
-        var wp = unsafe(addr(wqb[(nBase * nkb) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * ka.kdim]))
-        var cp = unsafe(addr(y[mBase * ka.ys + nBase]))
-        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, ka.kdim, cp, ka.ys, ka.kdim, nkb)
+        var sp = unsafe(addr(wsh[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 17u]))
+        var wp = unsafe(addr(wqb[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 34u + 2u]))
+        var ap = unsafe(addr(x[IS_SK ? mBase * ka.kdim + gl_WorkGroupID.y * (nkb / ka.ksplit) * 32u : mBase * ka.kdim]))
+        var cp = unsafe(addr(y[IS_SK ? gl_WorkGroupID.y * 32u * ka.ndim + mBase * ka.ndim + nBase : (LDC_ND ? mBase * ka.ndim + nBase : mBase * ka.ys + nBase)]))
+        tmm2d_q8b_f32(32u, TILE_N, 4u, sp, wp, ap, ka.kdim, cp, LDC_ND ? ka.ndim : ka.ys,
+            IS_SK ? (nkb / ka.ksplit) * 32u : ka.kdim, nkb)
     }
 }
 
-class MetalQ8GemmBSkT {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 x : array<float>     // X [32 x n] f32 rows
-    @ssbo @binding = 4 part : array<float>  // [ksplit x 32 x d] partial-C planes
-    @uniform @binding = 5 ka : Q8GemmArgs
-
-    [metal_kernel(name="metal_q8_gemm_b_sk_t_msl")]
-    def metal_q8_gemm_b_sk_t {
-        let ntileN = ka.ndim / 32u
-        let mBase = (gl_WorkGroupID.x / ntileN) * 32u
-        let nBase = (gl_WorkGroupID.x % ntileN) * 32u
-        let sl = gl_WorkGroupID.y
-        let nkb = ka.kdim / 32u
-        let kbn = nkb / ka.ksplit
-        let kb0 = sl * kbn
-        var sp = unsafe(addr(wsh[(nBase * nkb + kb0) * 17u]))
-        var wp = unsafe(addr(wqb[(nBase * nkb + kb0) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * ka.kdim + kb0 * 32u]))
-        var cp = unsafe(addr(part[sl * 32u * ka.ndim + mBase * ka.ndim + nBase]))
-        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, kbn * 32u, nkb)
-    }
+class MetalQ8GemmBT : MetalQ8GemmTensorT {
 }
 
-class MetalQ8Gemm64BT {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
-    @ssbo @binding = 4 y : array<float>     // Y [M' x d]
-    @uniform @binding = 5 ka : Q8GemmArgs
+class MetalQ8GemmBSkT : MetalQ8GemmTensorT {
+    override IS_SK = true
+    override LDC_ND = true
+}
 
-    [metal_kernel(name="metal_q8_gemm64_b_t_msl")]
-    def metal_q8_gemm64_b_t {
-        let ntileN = ka.ndim / 64u
-        let mBase = (gl_WorkGroupID.x / ntileN) * 32u
-        let nBase = (gl_WorkGroupID.x % ntileN) * 64u
-        let nkb = ka.kdim / 32u
-        var sp = unsafe(addr(wsh[(nBase * nkb) * 17u]))
-        var wp = unsafe(addr(wqb[(nBase * nkb) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * ka.kdim]))
-        var cp = unsafe(addr(y[mBase * ka.ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, nkb)
-    }
+class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
+    override TILE_N = 64u
+    override LDC_ND = true
 }
 
 // The 64-wide twin of MulMm's 32(M) x 64(N) tile: half the threadgroups (d/64) at ~29% fewer
@@ -3739,16 +3712,16 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_w13sw_b4 = compile_pso(MetalGemvW13SwB4_metal_gemv_w13sw_msl, MetalGemvW13SwB4_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB4_metal_gemv_w13sw_msl_fastmath, ok)
     g_gemm_b_tensor = metal_tensor_crowned("gemmb_q8")
     g_pso_gemm_b = (g_gemm_b_tensor
-        ? compile_pso(metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath, ok)
+        ? compile_pso(MetalQ8GemmBT_metal_q8_gemm_b_t_msl, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_fastmath, ok)
         : compile_pso(MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, ok))
     g_gemm_b_sk_tensor = metal_tensor_crowned("gemmb_sk_q8")
     g_pso_gemm_b_sk = (g_gemm_b_sk_tensor
-        ? compile_pso(metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath, ok)
+        ? compile_pso(MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_fastmath, ok)
         : compile_pso(MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, ok))
     g_pso_skred = compile_pso(metal_sk_reduce_msl, metal_sk_reduce_msl_entry, metal_sk_reduce_msl_fastmath, ok)
     g_gemm64_b_tensor = metal_tensor_crowned("gemm64b_q8")
     g_pso_gemm64_b = (g_gemm64_b_tensor
-        ? compile_pso(metal_q8_gemm64_b_t_msl, metal_q8_gemm64_b_t_msl_entry, metal_q8_gemm64_b_t_msl_fastmath, ok)
+        ? compile_pso(MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_entry, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_fastmath, ok)
         : compile_pso(metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, ok))
     g_pso_mm = compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok)
     g_pso_attnb16 = compile_pso(MetalSqAttnBF16_metal_sq_attn_b_msl, MetalSqAttnBF16_metal_sq_attn_b_msl_entry, MetalSqAttnBF16_metal_sq_attn_b_msl_fastmath, ok)
@@ -4812,19 +4785,19 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var rka_sk = gemm_sk_ka(int64(kdim), int64(ndim), 4l)
     results |> emplace(race_decode_family(dev, queue, "gemmb_q8",
         MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem,
-        metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath,
+        MetalQ8GemmBT_metal_q8_gemm_b_t_msl, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_fastmath,
         32, kdim, ndim, 32 * ndim, uint3(uint(ndim / 32), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
     results |> emplace(race_decode_family(dev, queue, "gemmb_sk_q8",
         MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem,
-        metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath,
+        MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_fastmath,
         32, kdim, ndim, 4 * 32 * ndim, uint3(uint(ndim / 32), 4u, 1u), rka_sk) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
     results |> emplace(race_decode_family(dev, queue, "gemm64b_q8",
         metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, metal_q8_gemm64_b_msl_tgmem,
-        metal_q8_gemm64_b_t_msl, metal_q8_gemm64_b_t_msl_entry, metal_q8_gemm64_b_t_msl_fastmath,
+        MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_entry, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_fastmath,
         64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })

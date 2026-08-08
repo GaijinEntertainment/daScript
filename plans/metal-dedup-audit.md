@@ -22,17 +22,17 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 3 | ✅ **KqMulMmK6 joins K45T** | 3rd `static_if` arm (SIXBIT) | −75 landed **+ perf WIN** | DONE: the perf-verify found the cached sv/dall hoist cost an occupancy tier (896→1024 max_threads) — reload-per-kb is −1.7..−10.5% per shape (bench_metal_kq_mm_lab, 3 launches, bit-exact); K4/K5 stamps byte-identical |
 | 4 | ✅ **Q8GemmB/BSk** (the eyeball find) | template `IS_SK` (MetalQ8GemmBSplitT) | −69 landed | DONE: B stamp byte-identical (const-select folds); SK delta = sl/kbn/kb0 inlined (uniform, LICM); kernels suite 11/11 |
 | 5 | **RopeStore Q8/BQ8 + Tq4/BTq4** | free helper w/ row-base params (sq_fill_scores precedent) | −95..115 | ~73% verbatim per pair; the census's wrong-axis closure |
-| 6 | **MetalAddRmsB delete** | row-index no-op edit on AddRms (RmsNorm/enc_rms_b precedent) | −50..55 + a PSO | row≡0 at grid=1 compiler-verified |
-| 7 | **KqMulMmK4T/K5T** (prefill tensor twins) | template `BLK/QH` — exactly their merged parents | −48 | ~97% identical |
+| 6 | ✅ **MetalAddRmsB delete** | row axis on AddRms (RmsNorm precedent) | −61 landed | DONE: misc oracle green both modes; enc_add_rms_b redispatches the same PSO |
+| 7 | ✅ **KqMulMmK4T/K5T** | template `BLK/QH` (MetalKqMulMmK45TensorT) | −46 landed | DONE: both stamps byte-identical |
 | 8 | **K4/K5 scale-decode block** | shared helper | −40 | 13 lines byte-identical x5: MoeGemvK4/K5, KqGemvK4/K5/K5C |
 | 9 | **MetalPfCopy delete** | call enc_copy_row (lensed, public, already required) | −30 | tg-width 256-vs-64 perf sanity check at 2 sites |
 | 10 | **enc_qk/av/qk_mm/av_mm dispatch helper** | shared helper (same AttnArgs, 4x copy-paste) | −25..30 | removes 4-site hand-sync hazard |
 | 11 | **Swiglu/Geglu/Add/Sigmul quad** | template `@template_call combine` | −25 | UNFLAGGED by the tool; already share one encoder (enc_ew2) |
-| 12 | **Q8Gemm tensor triple (BT/BSkT/64BT)** | `TILE_N` + `IS_SK` axes | −10..18 | land with #4; BT≡64BT already exact clones |
+| 12 | ✅ **Q8Gemm tensor triple (BT/BSkT/64BT)** | `TILE_N` + `IS_SK` + `LDC_ND` (MetalQ8GemmTensorT) | −27 landed | DONE: BT/64BT byte-identical, SkT = locals inlined |
 | 13 | **Comb/CombB** | template `BATCHED` | −15..20 | chunk-range prologue is the only real delta |
 | 14 | **Router/RouterB** | template `BATCH` width (1 vs 8) | −15..20 | bit-identical-logits invariant is currently a COMMENT |
 | 15 | **SwigluOai/SwigluOaiPf** | template + optional guard | −16 | byte-identical clamp math x2 files; gated: can an instance ADD bindings? |
-| 16 | **enc_rms_last delete** | default `xoff` param on pf_enc_rms | −13 | 1 call site |
+| 16 | ✅ **enc_rms_last delete** | default `xoff` param on pf_enc_rms | −14 landed | DONE |
 
 Tier-1 total ≈ −550..650 LOC, most of it verbatim-duplicate risk removal.
 
