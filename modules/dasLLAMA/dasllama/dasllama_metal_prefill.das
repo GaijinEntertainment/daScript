@@ -973,7 +973,7 @@ class MetalMoeMulMmQ8 {
 
 // The MoE mul_mm family: one 32x64 simdgroup tile loop over an expert's rows, identical for every
 // weight format — a format differs only in its k-block decode and the expert-plane origin that
-// decode addresses from, hence exactly two overrides. K6/Q8 stay out: followup_general.md #8.
+// decode addresses from, hence exactly two overrides. Q8/Mx4 stay out: followup_general.md #8.
 class MetalMoeMulMmBase {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
@@ -1189,122 +1189,56 @@ class MetalMoeMulMmQ51 : MetalMoeMulMmBase {
     }
 }
 
-// Gathered Q6_K mul_mm — MetalKqMulMmK6's A stage with the expert superblock shift.
-class MetalMoeMulMmK6 {
+// Gathered Q6_K mul_mm — the k6 A stage on the family base. The superblock-scalar cache the
+// standalone kernel carried measured SLOWER than reload-per-kb (gmm6 lab, 3 launches: −2.4%
+// ms/mm at qwen3moe pp512 shapes), so the stateless stage_a is both the join and the win.
+class MetalMoeMulMmK6 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
-    @ssbo @binding = 3 @role = "read" xf : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ka : MoeMmArgs
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
-    @ssbo @binding = 9 @role = "read" bkt : array<uint>
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
+
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
+
+    def override stage_a(wb, kb, il0, tA0 : uint) {
+        var va : float16[16]
+        let sb = kb / 8u
+        let js = kb % 8u
+        let blk = wb + sb
+        let sv = ksc[blk]
+        let dall = float(kdh[blk])
+        let half6 = js / 4u
+        let gg = js % 4u
+        let si = half6 * 8u + gg * 2u + il0
+        let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+        let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+        let dsc = dall * s6
+        let dmn = dsc * 32.0
+        // shift folded into exact power-of-two pre-scales — see MetalKqMulMmK45T
+        let dsc1 = dsc * 0.00390625
+        let dsc2 = dsc * 0.0000152587890625
+        let dsc3 = dsc * 0.000000059604644775390625
+        let qb = blk * 48u + half6 * 16u + (gg & 1u) * 8u + il0 * 4u
+        let hb = blk * 48u + 32u + half6 * 8u + il0 * 4u
+        let nsh = (gg / 2u) * 4u
+        let hsh = gg * 2u
+        for [unroll_full] (k in range(4)) {
+            let u = kqu[qb + uint(k)]
+            let hu = kqu[hb + uint(k)]
+            let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+            va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
+            va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
+            va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
+            va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+        }
+        barrier()
+        for [unroll_full] (i in range(16)) {
+            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+        }
+    }
 
     [metal_kernel(name="metal_moe_mulmm_k6_msl")]
-    def metal_moe_mulmm_k6 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
-        let e = gl_WorkGroupID.z
-        let ce = cnt[e]
-        let mBase = gl_WorkGroupID.x * 32u
-        if (mBase >= (ce + 31u) / 32u * 32u) {
-            return
-        }
-        let rbase = basep[e]
-        let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let nBase = gl_WorkGroupID.y * 64u
-        var mc : simdgroup_float8x8[8]
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
-        var va : float16[16]
-        let kdim4 = ka.kdim / 4u
-        let nkb = ka.kdim / 32u
-        let lr0 = lid / 2u
-        let il0 = lid % 2u
-        let syA = lr0 / 8u
-        let lxA = lr0 % 8u
-        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
-        let lr1 = lid / 4u
-        let iy = (lid % 4u) * 8u
-        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
-        let aB = (sg % 2u) * 256u
-        let bB = (sg / 2u) * 128u
-        let nsb = ka.kdim / 256u
-        let ewsb = e * ka.eplane + (nBase + lr0) * nsb
-        var srcrow = rbase + mBase + lr1
-        if (ka.gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
-        }
-        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
-        var sv : uint4
-        var dall = 0.0
-        var kb = 0u
-        while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            let blk = ewsb + sb
-            let b0 = unsafe(xcur[0])
-            let b1 = unsafe(xcur[1])
-            let half6 = js / 4u
-            let gg = js % 4u
-            if (js == 0u) {   // superblock scalars change every 8th kb; uniform branch, no divergence
-                sv = ksc[blk]
-                dall = float(kdh[blk])
-            }
-            let si = half6 * 8u + gg * 2u + il0
-            let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
-            let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
-            let dsc = dall * s6
-            let dmn = dsc * 32.0
-            // shift folded into exact power-of-two pre-scales — see MetalKqMulMmK6
-            let dsc1 = dsc * 0.00390625
-            let dsc2 = dsc * 0.0000152587890625
-            let dsc3 = dsc * 0.000000059604644775390625
-            let qb = blk * 48u + half6 * 16u + (gg & 1u) * 8u + il0 * 4u
-            let hb = blk * 48u + 32u + half6 * 8u + il0 * 4u
-            let nsh = (gg / 2u) * 4u
-            let hsh = gg * 2u
-            for [unroll_full] (k in range(4)) {
-                let u = kqu[qb + uint(k)]
-                let hu = kqu[hb + uint(k)]
-                let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
-                va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
-                va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
-                va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
-                va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
-            }
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-            }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
-            barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
-            xcur = unsafe(xcur + 8)
-            kb++
-        }
-        let row0 = rbase + mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 32u
-        for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
-        }
+    def metal_moe_mulmm_k6 {
+        run()
     }
 }
 
