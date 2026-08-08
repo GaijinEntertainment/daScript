@@ -839,19 +839,41 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     if (got_result |> is_err) return some(got_result |> unwrap_err)
     let got <- got_result._value
     if (empty(got)) return some("check_schema: table \"{table_name}\" not found in DB.")
-    if (length(want) != length(got)) return some("check_schema: \"{table_name}\" column count mismatch - struct has {length(want)} field(s), DB has {length(got)} column(s).")
+    // A struct may omit GENERATED columns (the schema_from shape), so counts compare
+    // against the ordinary-column floor and the all-column ceiling, not strict equality.
+    var ordinary = 0
+    for (g in got) {
+        if (!g.generated) {
+            ordinary++
+        }
+    }
+    if (length(want) < ordinary || length(want) > length(got)) {
+        return some("check_schema: \"{table_name}\" column count mismatch - struct has {length(want)} field(s), DB has {length(got)} column(s).")
+    }
     // Name-keyed: [sql_table] emits SELECTs with explicit columns, so struct/DB order can differ.
-    // With equal counts, missing-from-struct is implied by no name match in the want-loop.
     var by_name : table<string; int>
     for (j in range(length(got))) {
         by_name |> insert(got[j].name, j)
     }
+    var covered : array<bool>
+    covered |> resize(length(got))
     for (w in want) {
         let g_idx = by_name?[w.name] ?? -1
         if (g_idx < 0) return some("check_schema: \"{table_name}\" struct field \"{w.name}\" not found in DB columns.")
+        covered[g_idx] = true
         let g = got[g_idx]
         let g_type = g.data_type
         if (w.data_type != g_type) return some("check_schema: \"{table_name}\".\"{w.name}\" SqlType mismatch - struct expects {sqlite_sql_type(w.data_type)}, DB has {sqlite_sql_type(g_type)} (declared \"{g.decl_type}\").")
+        if (w.is_computed != g.generated) {
+            if (w.is_computed) {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" computed mismatch - struct field is @sql_computed but DB column is not GENERATED.")
+            } else {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" computed mismatch - DB column is GENERATED but struct field is missing @sql_computed.")
+            }
+        }
+        // Generated columns reject NOT NULL and PRIMARY KEY in DDL, so neither
+        // contract is checkable on a computed pair - skip both.
+        if (w.is_computed) continue
         // SQLite quirk: INTEGER PRIMARY KEY reports notnull=0 in pragma_table_info — treat PK as NOT NULL.
         let g_nullable = !g.not_null && !g.pk
         if (w.is_nullable != g_nullable) {
@@ -867,6 +889,12 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
             } else {
                 return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch - DB column is PRIMARY KEY but struct field is missing @sql_primary_key.")
             }
+        }
+    }
+    // Every ordinary DB column must be covered; only GENERATED columns may be omitted.
+    for (is_covered, g in covered, got) {
+        if (!is_covered && !g.generated) {
+            return some("check_schema: \"{table_name}\" DB column \"{g.name}\" has no matching struct field.")
         }
     }
     return none(type<string>)

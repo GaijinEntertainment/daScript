@@ -146,7 +146,7 @@ struct UserAcct { ... }
 
 `fields` is a single string or a tuple of strings. `unique` defaults to `false`. `name` defaults to `idx_<table>_<col1>_<col2>`. Multiple `[sql_index]` lines are stackable. `@sql_unique` uses the same provider-neutral index rail for the one-column case; `[sql_index]` adds explicit naming and composite keys. Composite UNIQUE via `[sql_index(unique = true, fields = (...))]` is the prerequisite for `_sql_upsert` composite-conflict targets.
 
-`db |> create_table(type<T>)` issues the CREATE TABLE + every `[sql_index]` DDL. `db |> drop_table_if_exists(type<T>)` is the idempotent teardown. `db |> check_schema(type<T>)` validates the open DB matches the struct on (name, type, NOT NULL, PRIMARY KEY) — recommended startup pattern for code that opens a DB it didn't just create. **`check_schema` fails on a struct carrying `@sql_computed`**: it compares against `PRAGMA table_info`, which does not list generated columns, so it reports a column-count mismatch. Skip the check for computed-column tables.
+`db |> create_table(type<T>)` issues the CREATE TABLE + every `[sql_index]` DDL. `db |> drop_table_if_exists(type<T>)` is the idempotent teardown. `db |> check_schema(type<T>)` validates the open DB matches the struct on (name, type, NOT NULL, PRIMARY KEY, computed-ness) — recommended startup pattern for code that opens a DB it didn't just create. `@sql_computed` fields check against the DB's GENERATED columns; a struct may omit a generated column entirely, but every ordinary DB column must have a struct field.
 
 ## Nullability — `Option<T>` everywhere, never `T?`
 
@@ -774,7 +774,7 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 - **PRAGMA can't use `?` binds** — values are inlined into the SQL string by `set_pragma`; same for VACUUM INTO's path. `_sql(...)` `?` binds are fine in regular SELECTs.
 - **Views can't use `?` binds in their body** — `_create_view` inlines literals via `to_sql_literal`; values are frozen at creation time.
 - **`@safe_when_uninitialized` on `Option<T>` fields** — under `strict_smart_pointers` the `[sql_table]` row reader needs it on Option-bearing structs and on raw `array<uint8>` BLOB fields.
-- **`check_schema` and `@sql_computed` don't mix** — it reads `PRAGMA table_info`, which omits generated columns, so it reports a column-count mismatch on a table that is in fact correct.
+- **`check_schema` verifies computed-ness both ways** — a field marked `@sql_computed` over an ordinary DB column is a mismatch, and so is a plain field over a GENERATED column (its INSERT would fail). Omitting a generated column from the struct is always allowed.
 - **A raw-`query` row struct needs `[sql_table]`** — and a column whose name is a daslang keyword (`type`, `class`) needs `@sql_column = "type"` on a renamed field.
 - **`Result::Err` from `try_select_from` only catches sqlite3-level errors** — adapter panics (malformed JSON, corrupt archive) are NOT converted to Err. Validate JSON shape externally if you need defensive reads.
 - **Bulk insert composability** — `try_insert(rows)` auto-uses `BEGIN IMMEDIATE/COMMIT` standalone, `SAVEPOINT/RELEASE` when nested. Don't wrap a bulk insert in a manual `with_transaction` block expecting to skip the inner txn — the inner already does the right thing.

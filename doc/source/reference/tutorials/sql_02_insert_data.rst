@@ -95,9 +95,11 @@ Both panic on libsqlite3 error. The non-panicking siblings —
 
 After opening a DB you didn't just create, validate that the
 on-disk schema matches the ``[sql_table]`` struct on (name,
-SqlType, NOT NULL, PRIMARY KEY). Catches column renames, type
-changes, missing columns at the startup site instead of letting
-them surface as silent wrong-results later.
+SqlType, NOT NULL, PRIMARY KEY, ``@sql_computed`` vs GENERATED).
+Catches column renames, type changes, missing columns at the
+startup site instead of letting them surface as silent
+wrong-results later. A struct may omit a GENERATED column; every
+ordinary column needs a matching field.
 
 .. code-block:: das
 

@@ -1006,6 +1006,19 @@ class SqlTableMacro : AstStructureAnnotation {
             let col_name_s = cols[matched_col_idx].name
             let col_not_null = cols[matched_col_idx].not_null
             let col_pk = cols[matched_col_idx].pk
+            // Computed contract - GENERATED columns reject NOT NULL/PK in DDL, so a computed
+            // pair skips those checks below (SqlType still applies: reads bind the value).
+            let col_generated = cols[matched_col_idx].generated
+            let user_computed = find_arg(st.fields[ufi].annotation, "sql_computed")
+            let user_is_computed = user_computed is tString && !empty(user_computed as tString)
+            if (user_is_computed != col_generated) {
+                if (user_is_computed) {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - field '{ufname}' is @sql_computed but column \"{col_name_s}\" in \"{tbl_name}\" is not GENERATED."
+                } else {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - column \"{col_name_s}\" in \"{tbl_name}\" is GENERATED; declare field '{ufname}' with @sql_computed (the DB does not store the expression - copy it from your DDL)."
+                }
+                return false
+            }
             // PK contract.
             let user_is_pk = find_annotation(st.fields[ufi].annotation, "sql_primary_key", false)
             if (user_is_pk != col_pk) {
@@ -1051,7 +1064,10 @@ class SqlTableMacro : AstStructureAnnotation {
         }
         // Synthesize fields for uncovered schema columns.
         for (is_covered, col in covered, cols) {
-            if (is_covered) continue
+            // GENERATED columns get no synthesized field: the DB doesn't store the generation
+            // expression, so a faithful @sql_computed can't be emitted, and a plain field would
+            // break INSERTs. Hand-declare the field with @sql_computed to read it through linq.
+            if (is_covered || col.generated) continue
             let sql_type = col.data_type
             // SQLite quirk: INTEGER PRIMARY KEY columns report notnull=0 in pragma_table_info because
             // `INTEGER PRIMARY KEY` aliases rowid (which has its own NULL handling). Treat PK as NOT NULL.
@@ -1207,27 +1223,31 @@ class SqlTableMacro : AstStructureAnnotation {
             if (length(info.default_clause) > length(" DEFAULT ")) {
                 default_expr = info.default_clause |> slice(length(" DEFAULT "))
             }
+            let is_computed = info.is_computed
             if (info.is_json) {
                 push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
                     name = $v(name),
                     data_type = SqlType.Text,
                     is_pk = $v(is_pk),
                     is_nullable = $v(is_nullable),
-                    default_expr = $v(default_expr))); }))
+                    default_expr = $v(default_expr),
+                    is_computed = $v(is_computed))); }))
             } elif (info.is_blob) {
                 push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
                     name = $v(name),
                     data_type = SqlType.Blob,
                     is_pk = $v(is_pk),
                     is_nullable = $v(is_nullable),
-                    default_expr = $v(default_expr))); }))
+                    default_expr = $v(default_expr),
+                    is_computed = $v(is_computed))); }))
             } else {
                 push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
                     name = $v(name),
                     data_type = sql_storage_enum_for(type<$t(st.fields[i]._type)>),
                     is_pk = $v(is_pk),
                     is_nullable = $v(is_nullable),
-                    default_expr = $v(default_expr))); }))
+                    default_expr = $v(default_expr),
+                    is_computed = $v(is_computed))); }))
             }
         }
         var fn = qmacro_function("_sql_column_info") $(typ : $t(st)) : array<ColumnInfo> {
