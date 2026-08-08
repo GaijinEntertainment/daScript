@@ -93,22 +93,23 @@
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
 
-8. **Two MoE mul_mm formats stayed out of the family, for the same reason.** The k4/k5/q51 kernels
-   now share `MetalMoeMulMmBase` — one tile loop, two overrides (the k-block decode and the
-   expert-plane origin it addresses from). K6 and Q8 could not join: both carry state ACROSS loop
-   iterations that a per-iteration override cannot hold — k6 caches the superblock scalars
-   (`sv`/`dall`, reloaded every 8th k-block), q8 walks advancing weight pointers (`scur`/`qp`).
-   Both become expressible the moment a helper can take a pointer or a thread-space reference it
-   may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
-   `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.
-   Status 2026-08-07 (vulkan-on-mac leg (b) recon): the pointer-param unlock HAS landed in
-   msl_emit (address-space-checked pointer params), and Q8/K6 are also expressible without it
-   (index-math / reload-per-kb) — but every route changes these hot inner loops (interleaved A/B
-   measurement required; the kernels-suite oracles cover correctness only), Mx4 is a third
-   stay-out (pre-loop vtab staging + bias-seeded accumulator locals need a prologue hook), and
-   Q8/Mx4 joining the base renumbers cnt/basep/bkt 6/7/8 → 7/8/9 (encoder + oracle-gate churn).
-   Ruled 2026-08-07: folds into the reification arc (the families get restamped there; the
-   constraints above apply — see plans/vulkan-on-mac.md leg (b) recon).
+8. **MoE mul_mm family: K6 JOINED 2026-08-08 (021fffd87) — Q8/Mx4 remain.** K6's superblock-scalar
+   cache (`sv`/`dall`, reloaded every 8th k-block) measured SLOWER than reload-per-kb (gmm6 lab
+   section in bench_metal_moe_lab, qwen3moe pp512 shapes, 3 launches: −2.4% ms/mm), so the
+   stateless `stage_a` override was both the join and a perf win — the joined kernel is −2.0% vs
+   its old standalone form, bit-exact. The family is four of six (k4/k5/q51/k6). Remaining:
+   Q8 walks advancing weight pointers (`scur`/`qp` — index-math measured WORSE on AGX per the
+   kernel's own comment, so its route is stage_a taking/advancing pointer params — the
+   address-space-checked pointer-param unlock is in msl_emit) plus the cnt/basep/bkt
+   6/7/8 → 7/8/9 renumber (encoder + oracle churn, accepted once); Mx4 needs a prologue hook
+   (pre-loop vtab staging + bias-seeded accumulators). Boris ruled 2026-08-08: measure and
+   refactor, rollback is the safety net. NEW LEAD from the join: the family emits as a struct
+   with run()/stage_a METHODS, and the method-call MSL shape leaves ~0.5% vs flat text (measured
+   joined-vs-flat-reload) — an msl_emit method-flattening pass would pay across ALL riders.
+   ALSO: the MoE lab's per-site section (enc_lab_w13*/w2/pair arms) ROTTED at the kargs
+   migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check panics;
+   the lab now runs gmm6 first so the rot doesn't block it. Repair = rebind those encoders to
+   MoeGemvArgs kargs buffers and re-verify each arm.
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of

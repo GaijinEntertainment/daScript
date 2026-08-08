@@ -292,8 +292,12 @@ cover correctness only):
   The K4/K5 FORMAT-axis merge stays ruled out for the plain GEMVs: the qh overlay + hq
   staging + block stride would static_if-duplicate most of the body (the 43-49%-different
   measurement stands). BUT the mul_mm and B8 shapes merged on exactly that axis — see below.
-- MoeMulMm K6/Q8/Mx4 joining `MetalMoeMulMmBase` (followup_general #8: cross-iteration
-  state / prologue hook / binding renumber — every route rewrites hot inner loops).
+- ~~MoeMulMm K6~~ **JOINED 2026-08-08** (021fffd87, Boris ruling "measure and refactor"):
+  the scalar cache measured SLOWER than reload-per-kb (gmm6 lab, −2.4% ms/mm ×3 launches) —
+  the stateless stage_a is both the join and a −2.0% win vs the old standalone. Q8 (pointer
+  walk → pointer-param stage_a + the 6/7/8→7/8/9 renumber) and Mx4 (prologue hook) remain
+  per followup_general #8; new leads there: the msl_emit method-flattening ~0.5% and the
+  MoE-lab per-site rot repair.
 - ~~The plain GEMV width pairs~~ — Gemv + W13Sw **DONE 2026-08-08 free** (see below);
   Q8Mv B2/B4 CLOSED: 16-vs-8 lanes/row thread geometry IS the specialization (a
   pick-one-geometry unification is an optimization experiment, not a dedup).
