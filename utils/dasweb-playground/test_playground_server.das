@@ -77,7 +77,7 @@ def test_health_and_unknown_routes(t : T?) {
             GET("{base_url}/healthz") $(resp) {
                 tt |> success(resp != null, "response arrived")
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), "ok")
+                tt |> equal(resp.body, "ok")
             }
         }
         t |> run("unknown route is a json 404") @(tt : T?) {
@@ -116,7 +116,7 @@ def test_put_get_roundtrip(t : T?) {
             let hash = sha256_hex(source)
             GET("{base_url}/api/samples/{hash}") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), source)
+                tt |> equal(resp.body, source)
                 tt |> success(find(get_header(resp, "Content-Type"), "text/plain") >= 0, "text/plain")
                 tt |> success(find(get_header(resp, "Cache-Control"), "immutable") >= 0, "immutable cache header")
             }
@@ -270,7 +270,7 @@ def test_listed_and_reimport(t : T?) {
         with_playground_server(default_policy()) $(base_url) {
             GET("{base_url}/api/samples/listed") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), "[]")
+                tt |> equal(resp.body, "[]")
             }
             POST("{base_url}/admin/reimport", "") $(resp) {
                 tt |> equal(int(resp.status_code), 503)
@@ -300,7 +300,7 @@ def test_listed_and_reimport(t : T?) {
             }
             GET("{base_url}/api/samples/{hash}") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), "print(\"curated hello\")")
+                tt |> equal(resp.body, "print(\"curated hello\")")
             }
             POST("{base_url}/admin/reimport", "") $(resp) {
                 tt |> equal(int(resp.status_code), 200)

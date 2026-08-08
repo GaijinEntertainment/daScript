@@ -144,13 +144,13 @@ namespace das {
         addAnnotation(new TimeAnnotation(lib));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
         addExtern<DAS_BIND_FUN(iso8601_now)>(*this, lib, "iso8601_now",
-            SideEffects::accessExternal, "iso8601_now");
+            SideEffects::accessExternal, "iso8601_now")->setTempStringResult();
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
         // accessExternal (not none): reads process locale + timezone, so it must not be
         // CSE'd or constant-folded across environment changes — same as iso8601_now.
         addExtern<DAS_BIND_FUN(format_time)>(*this, lib, "format_time", SideEffects::accessExternal, "format_time")
-            ->args({"time","format","context","at"});
+            ->args({"time","format","context","at"})->setTempStringResult();
         // operations on time
         addExtern<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
             SideEffects::none, "time_equal");
@@ -2487,7 +2487,7 @@ namespace das {
                     ->args({"file","text","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread",
                 SideEffects::modifyExternal, "builtin_fread")
-                    ->args({"file","context","line"});
+                    ->args({"file","context","line"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_map_file)>(*this, lib, "fmap",
                 SideEffects::modifyExternal, "builtin_map_file")
                     ->args({"file","block","context","line"});
@@ -2523,7 +2523,7 @@ namespace das {
                     ->args({"base","bytes","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets",
                 SideEffects::modifyExternal, "builtin_fgets")
-                    ->args({"file","context","line"});
+                    ->args({"file","context","line"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite",
                 SideEffects::modifyExternal, "builtin_fwrite")
                     ->args({"file","text","context","line"});
@@ -2554,10 +2554,10 @@ namespace das {
                     ->args({"file","length","block"});
             addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name",
                 SideEffects::none, "builtin_dirname")
-                    ->args({"name","context","line"});
+                    ->args({"name","context","line"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "base_name",
                 SideEffects::none, "builtin_basename")
-                    ->args({"name","context","line"});
+                    ->args({"name","context","line"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat",
                 SideEffects::modifyArgumentAndExternal, "builtin_fstat")
                     ->args({"file","stat","context","line"});
@@ -2584,7 +2584,7 @@ namespace das {
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_getcwd)>(*this, lib, "getcwd",
                 SideEffects::modifyExternal, "builtin_getcwd")
-                    ->args({"context","at"});
+                    ->args({"context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin",
                 SideEffects::modifyExternal, "builtin_stdin");
             addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout",
@@ -2628,13 +2628,13 @@ namespace das {
                     ->args({"command","context","at"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
                 SideEffects::accessExternal, "get_full_file_name")
-                    ->args({"path","context","at"});
+                    ->args({"path","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_resolve_this_module_dir)>(*this, lib, "__builtin_resolve_this_module_dir",
                 SideEffects::accessExternal, "builtin_resolve_this_module_dir")
-                    ->args({"baked_path","standalone","context"});
+                    ->args({"baked_path","standalone","context"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(get_env_variable)>(*this, lib, "get_env_variable",
                 SideEffects::accessExternal, "get_env_variable")
-                    ->args({"var","context","at"});
+                    ->args({"var","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(set_env_variable)>(*this, lib, "set_env_variable",
                 SideEffects::modifyExternal, "set_env_variable")
                     ->args({"var","value","context","at"});
@@ -2658,34 +2658,34 @@ namespace das {
                     ->args({"block", "context","at"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
-                    ->args({"var","context","at"});
+                    ->args({"var","context","at"})->setTempStringResult();
             // filesystem operations (C++17 <filesystem>)
             addAnnotation(new DiskSpaceInfoAnnotation(lib));
             // path manipulation
             addExtern<DAS_BIND_FUN(builtin_fs_extension)>(*this, lib, "extension",
                 SideEffects::none, "builtin_fs_extension")
-                    ->args({"path","context","at"});
+                    ->args({"path","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_stem)>(*this, lib, "stem",
                 SideEffects::none, "builtin_fs_stem")
-                    ->args({"path","context","at"});
+                    ->args({"path","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_replace_extension)>(*this, lib, "replace_extension",
                 SideEffects::none, "builtin_fs_replace_extension")
-                    ->args({"path","new_ext","context","at"});
+                    ->args({"path","new_ext","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_join)>(*this, lib, "path_join",
                 SideEffects::none, "builtin_fs_join")
-                    ->args({"a","b","context","at"});
+                    ->args({"a","b","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_normalize)>(*this, lib, "normalize",
                 SideEffects::none, "builtin_fs_normalize")
-                    ->args({"path","context","at"});
+                    ->args({"path","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_is_absolute)>(*this, lib, "is_absolute",
                 SideEffects::none, "builtin_fs_is_absolute")
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_fs_relative)>(*this, lib, "relative",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_relative")
-                    ->args({"path","base","error","context","at"});
+                    ->args({"path","base","error","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_parent)>(*this, lib, "parent",
                 SideEffects::none, "builtin_fs_parent")
-                    ->args({"path","context","at"});
+                    ->args({"path","context","at"})->setTempStringResult();
             // file queries
             addExtern<DAS_BIND_FUN(builtin_fs_file_size)>(*this, lib, "file_size",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_file_size")
@@ -2710,13 +2710,13 @@ namespace das {
             // system queries
             addExtern<DAS_BIND_FUN(builtin_fs_temp_directory)>(*this, lib, "temp_directory",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_temp_directory")
-                    ->args({"error","context","at"});
+                    ->args({"error","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_create_temp_file)>(*this, lib, "create_temp_file",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_create_temp_file")
-                    ->args({"prefix","ext","error","context","at"});
+                    ->args({"prefix","ext","error","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_create_temp_directory)>(*this, lib, "create_temp_directory",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_create_temp_directory")
-                    ->args({"prefix","error","context","at"});
+                    ->args({"prefix","error","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_fs_disk_space)>(*this, lib, "builtin_disk_space",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_disk_space")
                     ->args({"path","info","error","context","at"});

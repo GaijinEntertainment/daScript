@@ -98,6 +98,9 @@ struct DastestArgs {
     @clarg_doc = "Compile every test with the DSE (dead-store-elimination) pass disabled (cop.disable_dse)"
     disable_dse : bool = false
 
+    @clarg_doc = "Compile every test with the temp-string reclaim pass disabled (cop.disable_temp_string_reclaim)"
+    disable_temp_string_reclaim : bool = false
+
     @clarg_doc = "Compile every test with the [inline] function inliner disabled (cop.disable_inline)"
     disable_inline : bool = false
 

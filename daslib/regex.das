@@ -650,7 +650,7 @@ def private  re_re(expr : string; offset : int) : MaybeReNode {
 }
 
 // <basic-RE> ::= <star> | <plus> | <question> | <repeat> | <elementary-RE> <star> ::= <elementary-RE> "*" <plus> ::= <elementary-RE> "+" <question> ::= <elementary-RE> "?" <repeat> ::= <elementary-RE> "{" <n> "}" | <elementary-RE> "{" <n> "," "}" | <elementary-RE> "{" <n> "," <m> "}"
-def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STYLE037 - one arm per regex grammar production
+def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STYLE037,STYLE038 - one arm per regex grammar production
     trace("re_basic", offset)
     if (eos(expr, offset)) return nada()
     var oelem = re_elementary(expr, offset)
@@ -1690,7 +1690,7 @@ def regex_foreach(var regex : Regex; str : string; blk : block<(at : range) : bo
     }
 }
 
-[unsafe_deref]
+[unsafe_deref, temp_string_result]
 def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : string>) {
     //! Iterates through all matches for the given regular expression in `str`.
     if (empty(str)) return ""
@@ -1815,7 +1815,7 @@ def private expand_replacement(regex : Regex; str : string; replacement : string
     }
 }
 
-[unsafe_deref]
+[unsafe_deref, temp_string_result]
 def regex_replace(var regex : Regex; str : string; replacement : string) : string {
     //! Replaces all matches of the regular expression in `str` with `replacement`.
     if (empty(str)) return ""
@@ -1931,6 +1931,7 @@ def regex_match_all(var regex : Regex; str : string) : array<range> {
     return <- result
 }
 
+[temp_string_result]
 def regex_group_by_name(regex : Regex; name : string; str : string) : string {
     //! Returns the matched string for the given named group.
     //! Returns empty string if the group name is not found.
@@ -1988,7 +1989,7 @@ def debug_set(cset : CharSet) {
     }
 }
 
-def private debug_re(node : ReNode?; tab : int) {  // nolint:STYLE037 - one arm per node kind, print-only
+def private debug_re(node : ReNode?; tab : int) {  // nolint:STYLE037,STYLE038 - one arm per node kind, print-only
     print("(")
     if (node != null) {
         print("#{node.id}")

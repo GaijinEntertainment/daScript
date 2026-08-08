@@ -1386,28 +1386,28 @@ namespace das {
                 ->args({"module","structure"});
         addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
             SideEffects::none, "ast_describe_typedecl")
-                ->args({"type","extra","contracts","module","context","lineinfo"});
+                ->args({"type","extra","contracts","module","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
             SideEffects::none, "ast_describe_typedecl_cpp")
-                ->args({"type","substitueRef","skipRef","skipConst","redundantConst", "choose_smart_ptr","context","lineinfo"});
+                ->args({"type","substitueRef","skipRef","skipConst","redundantConst", "choose_smart_ptr","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
             SideEffects::none, "ast_describe_expression")
-                ->args({"expression","context","lineinfo"});
+                ->args({"expression","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_add_ptr_ref_expression)>(*this, lib,  "add_ptr_ref",
             SideEffects::none, "ast_add_ptr_ref_expression")
                 ->args({"expression"});
         addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
             SideEffects::none, "ast_describe_function")
-                ->args({"function","context","lineinfo"});
+                ->args({"function","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_describe_program)>(*this, lib,  "describe_program",
             SideEffects::none, "ast_describe_program")
-                ->args({"program","context","lineinfo"});
+                ->args({"program","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
             SideEffects::none, "ast_find_bitfield_name")
-                ->args({"bit","value","context","lineinfo"});
+                ->args({"bit","value","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_find_enum_name)>(*this, lib,  "find_enum_name",
             SideEffects::none, "ast_find_enum_name")
-                ->args({"enum","value","context","lineinfo"});
+                ->args({"enum","value","context","lineinfo"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
             SideEffects::none, "ast_find_enum_value")
                 ->args({"enum","value"});
@@ -1416,19 +1416,19 @@ namespace das {
                 ->args({"structPtr","field","context","lineinfo"});
         addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name")
-                ->args({"function","context","line"});
+                ->args({"function","context","line"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_t")
-                ->args({"type","context","line"});
+                ->args({"type","context","line"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
             SideEffects::none, "das_get_builtin_function_address")
                 ->args({"fn","context","at"});
         addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_v")
-                ->args({"variable","context","line"});
+                ->args({"variable","context","line"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(get_mangled_name_b)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_b")
-                ->args({"variable","context","line"});
+                ->args({"variable","context","line"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(get_expression_annotation)>(*this, lib,  "get_expression_annotation",
             SideEffects::none, "get_expression_annotation")
                 ->args({"expr","context","line"});
@@ -1439,7 +1439,7 @@ namespace das {
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
             SideEffects::none, "ast_das_to_string")
-                ->args({"type","context","at"});
+                ->args({"type","context","at"})->setTempStringResult();
         // clone
         addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
             SideEffects::none, "clone_expression")
@@ -1672,7 +1672,7 @@ namespace das {
                 ->args({"fun"});
         addExtern<DAS_BIND_FUN(get_aot_hash_comment_fn)>(*this, lib,  "get_aot_hash_comment",
             SideEffects::none, "get_aot_hash_comment_fn")
-                ->args({"fun","context","line"});
+                ->args({"fun","context","line"})->setTempStringResult();
         // infer
         addExtern<DAS_BIND_FUN(inferGenericTypeEx)>(*this, lib,  "infer_generic_type",
             SideEffects::none, "inferGenericTypeEx")
@@ -1720,10 +1720,10 @@ namespace das {
             ->args({"helper","blk", "context", "at"});
         addExtern<DAS_BIND_FUN(debug_helper_find_type_cppname)>(*this, lib,  "debug_helper_find_type_cppname",
                                                            SideEffects::modifyExternal, "debug_helper_find_type_cppname")
-            ->args({"helper","type_info", "context", "at"});
+            ->args({"helper","type_info", "context", "at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(debug_helper_find_struct_cppname)>(*this, lib,  "debug_helper_find_struct_cppname",
                                                            SideEffects::modifyExternal, "debug_helper_find_struct_cppname")
-            ->args({"helper","struct_info", "context", "at"});
+            ->args({"helper","struct_info", "context", "at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(macro_aot_infix)>(*this, lib,  "macro_aot_infix",
                                                            SideEffects::modifyArgument, "macro_aot_infix")
             ->args({"macro","ss", "expr"});
@@ -1757,10 +1757,10 @@ namespace das {
             ->args({"macro","expr"});
         addExtern<DAS_BIND_FUN(getAotArgumentSuffix)>(*this, lib,  "get_aot_arg_suffix",
                                                   SideEffects::modifyExternal, "getAotArgumentSuffix")
-            ->args({"func","call", "argIndex","context","at"});
+            ->args({"func","call", "argIndex","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(getAotArgumentPrefix)>(*this, lib,  "get_aot_arg_prefix",
                                                   SideEffects::modifyExternal, "getAotArgumentPrefix")
-            ->args({"func","call", "argIndex","context","at"});
+            ->args({"func","call", "argIndex","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(aotFuncPrefix)>(*this, lib,  "get_func_aot_prefix",
                                                   SideEffects::modifyExternal, "aotFuncPrefix")
             ->args({"ann","stg", "call","context","at"});
@@ -1769,7 +1769,7 @@ namespace das {
             ->args({"ann","structure", "args", "stg","context","at"});
         addExtern<DAS_BIND_FUN(getAotName)>(*this, lib,  "get_aot_name",
                                                   SideEffects::modifyExternal, "getAotName")
-            ->args({"func","call","context","at"});
+            ->args({"func","call","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(aotBody)>(*this, lib,  "write_aot_body",
                                                   SideEffects::modifyExternal, "aotBody")
             ->args({"structure", "st", "args", "writer","context","at"});
@@ -1793,7 +1793,7 @@ namespace das {
             ->args({"ann", "ss", "name","context","at"});
         addExtern<DAS_BIND_FUN(stringBuilderStr)>(*this, lib,  "string_builder_str",
                                                         SideEffects::modifyArgumentAndExternal, "stringBuilderStr")
-            ->args({"ss","context","at"});
+            ->args({"ss","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(stringBuilderClear)>(*this, lib,  "string_builder_clear",
                                                         SideEffects::modifyArgument, "stringBuilderClear")
             ->args({"ss"});

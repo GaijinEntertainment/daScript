@@ -1487,7 +1487,7 @@ namespace debugger {
                     ->args({"context","line"});
             auto fngsw = addExtern<DAS_BIND_FUN(debuggerGetStackWalk)>(*this, lib, "get_stackwalk",
                 SideEffects::accessExternal, "debuggerGetStackWalk")
-                    ->args({"context","line","args","vars","out_of_scope","top_only","context","at"});
+                    ->args({"context","line","args","vars","out_of_scope","top_only","context","at"})->setTempStringResult();
             fngsw->arguments[2]->init = new ExprConstBool(true);
             fngsw->arguments[3]->init = new ExprConstBool(true);
             fngsw->arguments[4]->init = new ExprConstBool(false);

@@ -225,7 +225,7 @@ def private read_basic_string(data : array<uint8>&; var st : LexState&; var err 
     return ""
 }
 
-def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var err : string&) : string {
+def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var err : string&) : string {  // nolint:STYLE037,STYLE038 - one linear scan; escape/quote cases share cursor state
     // st.pos is just past the opening """ Per TOML §Multi-line Basic Strings: an immediate newline after opening """ is trimmed.
     if (st.pos < st.n && int(data[st.pos]) == '\r' && st.pos + 1 < st.n && int(data[st.pos + 1]) == '\n') {
         advance(data, st); advance(data, st)
@@ -521,7 +521,7 @@ def private rewind_to_bare(data : array<uint8>&; var st : LexState&; start_pos, 
     out = TomlTokenAt(value = TomlToken(_bare = bs), line = start_line, row = start_row)
 }
 
-def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&; var out : TomlTokenAt&) : bool {
+def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&; var out : TomlTokenAt&) : bool {  // nolint:STYLE037,STYLE038 - TOML's number/datetime grammar is one disambiguation ladder
     // Decides whether to lex a numeric / datetime token at st.pos. Returns true if consumed.
     let start_line = st.line
     let start_row = st.row
@@ -760,7 +760,7 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
     return true
 }
 
-def private next_token(data : array<uint8>&; var st : LexState&; var out : TomlTokenAt&) : bool {
+def private next_token(data : array<uint8>&; var st : LexState&; var out : TomlTokenAt&) : bool {  // nolint:STYLE038 - one lexer dispatch, one arm per token kind
     // Skip inline whitespace + comments. Newline IS a token.
     while (st.pos < st.n) {
         let c = int(data[st.pos])
@@ -1218,7 +1218,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
             }
             if (existing.value is _array) {
                 // Array of tables — descend into last entry (TOML semantics: super-path of [[a]] is the LAST [[a]] element).
-                var arr & = get_array(existing)                    // nolint:LINT003 — index must yield mutable for `cur = ...`
+                var arr & = get_array(existing)                    // nolint:LINT003,LINT019 — index must yield mutable for `cur = ...`; LINT003 fires only in downstream compiles
                 if (empty(arr)) {
                     err = "empty array-of-tables traversal at '{key}'"
                     return null
@@ -1315,7 +1315,7 @@ def private apply_keyval(var state : TomlState&; var current : JsonValue?; path 
     return true
 }
 
-def public read_toml(text : string implicit; var error : string&) : JsonValue? {
+def public read_toml(text : string implicit; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - the table/array-of-tables/key-path state machine is one document walk
     //! Reads TOML 1.0 from ``text``. On parse failure returns ``null`` and
     //! populates ``error``; on success returns the root table as a
     //! ``JsonValue?`` (``_object`` variant).
@@ -1638,6 +1638,7 @@ def private write_toml_table(var writer : StringBuilderWriter; tab : table<strin
     return true
 }
 
+[temp_string_result]
 def public write_toml(root : JsonValue?; var error : string&) : string {
     //! Serializes a ``read_toml``-shaped tree back to TOML 1.0 text: keys sorted per table,
     //! sub-tables as ``[a.b]`` sections, all-table arrays as ``[[a.b]]``. Date-times round-trip

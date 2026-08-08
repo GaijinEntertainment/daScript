@@ -1,0 +1,1 @@
+Temp-string reclaim wrapper, inserted by the compiler around a fresh-string call whose result dies in the consuming call: queues the string on the 1-slot dispose queue and returns it unchanged. Internal machinery; user code has no reason to call it directly.

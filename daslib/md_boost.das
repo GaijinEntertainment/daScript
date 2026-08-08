@@ -25,6 +25,7 @@ def public md_bold(s : string) : string {
 }
 
 //! Escapes the ``|`` cell separator in ``s`` so it renders as literal text inside a table cell.
+[temp_string_result]
 def public md_escape(s : string) : string {
     return s |> replace("|", "\\|")
 }
@@ -63,6 +64,7 @@ def private md_sep(aligns : array<ColAlign>; width : array<int>) : string {
 }
 
 //! Renders a GitHub-Markdown table from PRE-FORMATTED cells. ``headers`` names the columns, ``aligns`` sets each column's alignment (right ``---:`` / left ``:---``), and ``rows`` holds the already-formatted cell strings — numbers pre-formatted (e.g. ``"{x:.2f}"``), winners already wrapped via [[md_bold]].
+[temp_string_result]
 def public render_md_table(headers : array<string>; aligns : array<ColAlign>; rows : array<array<string>>) : string {
     let ncol = length(headers)
     var width : array<int>

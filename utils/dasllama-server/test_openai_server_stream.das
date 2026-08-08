@@ -190,7 +190,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 var js = read_json(string(resp.body), perr)
                 t |> success(js != null, "error body parses")
                 if (js != null) {
-                    t |> equal(string(js?["error"]?["type"] ?? ""), "invalid_request_error")
+                    t |> equal(js?["error"]?["type"] ?? "", "invalid_request_error")
                     unsafe {
                         delete js
                     }

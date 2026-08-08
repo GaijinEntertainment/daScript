@@ -13,6 +13,7 @@ Module this function belongs to
 Parent structure if this is a method
 Function flags
 More function flags
+Even more function flags (temp-string reclaim analysis lives here)
 Function side effect flags
 Inference history
 If this function was instantiated from a generic function, pointer to the generic function

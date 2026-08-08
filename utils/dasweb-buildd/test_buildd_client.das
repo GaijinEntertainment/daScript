@@ -42,7 +42,7 @@ class StubPlayground : HvWebServer {
             if (!stub_bearer_ok(req)) {
                 return resp |> TEXT_PLAIN("unauthorized", http_status.UNAUTHORIZED)
             }
-            if (string(req.body) != TC_JOB) {
+            if (req.body != TC_JOB) {
                 return resp |> TEXT_PLAIN("bad toolchain", http_status.BAD_REQUEST)
             }
             return resp |> JSON("\{\"toolchain\":\"{TC_JOB}\"}")
@@ -51,7 +51,7 @@ class StubPlayground : HvWebServer {
             if (!stub_bearer_ok(req)) {
                 return resp |> TEXT_PLAIN("unauthorized", http_status.UNAUTHORIZED)
             }
-            if (string(req.body) != TC_JOB) {
+            if (req.body != TC_JOB) {
                 return http_status.NO_CONTENT
             }
             return resp |> JSON(write_json(JV((hash = JOB_HASH, toolchain_id = TC_JOB,

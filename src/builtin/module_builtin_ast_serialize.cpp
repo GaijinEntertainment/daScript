@@ -1480,7 +1480,7 @@ namespace das {
         ser << at            << atDecl          << module;
         ser << hash          << aotHash;  // do not serialize inferStack
         ser << resultAliases << argumentAliases << resultAliasesGlobals;
-        ser << flags         << moreFlags       << sideEffectFlags;
+        ser << flags         << moreFlags       << moreFlags2      << sideEffectFlags;
     }
 
 // Expressions
@@ -2749,6 +2749,7 @@ namespace das {
               << value.fast_math
               << value.disable_dse
               << value.disable_cse
+              << value.disable_temp_string_reclaim
               << value.disable_inline
               << value.disable_auto_inline
               << value.auto_inline_functions
