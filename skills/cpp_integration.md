@@ -214,7 +214,7 @@ addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
 // Unary: addExtern<...>(*this, lib, "-", ...)->args({"a"});
 ```
 
-Operators bind by name — `+ - * / % << >> < > <= >= & | ^ ~ ! && ||`, the compound-assign family (`+= -= *= /= %= <<= >>= &= |= ^=`), `++` / `--`, and `[]`. The special names `clone` and `finalize` bind the same way. There is **no whitelist** — `isValidBuiltinName(name, canPunkt = true)` (`src/ast/ast_module.cpp`) only validates the characters, so any punctuation name the parser can produce is bindable.
+Operators bind by name — `+ - * / % << >> < > <= >= & | ^ ~ ! && ||`, the compound-assign family (`+= -= *= /= %= <<= >>= &= |= ^=`), `++` / `--`, and `[]`. The special names `clone` and `finalize` bind the same way. There is **no whitelist** — `isValidBuiltinName(name, canPunkt = true)` (`src/ast/ast_module.cpp`, repo-only) only validates the characters, so any punctuation name the parser can produce is bindable.
 
 **Equality**: `addEquNeq<T>(*this, lib)` binds both `==` and `!=` (requires `operator==` and `operator!=` on T).
 
