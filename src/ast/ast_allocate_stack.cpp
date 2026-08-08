@@ -1111,7 +1111,8 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             auto f = expr->func;
-            if ( !f || f->mayQueueTempString || (f->builtIn && f->invoke) ) found = true;
+            // a das function the side-effect pass never computed reads as all-clear - treat as danger
+            if ( !f || f->mayQueueTempString || (f->builtIn ? f->invoke : !f->knownSideEffects) ) found = true;
         }
     };
 
@@ -1123,12 +1124,22 @@ namespace das {
 
     class MarkTempStrings : public Visitor {
     public:
-        MarkTempStrings ( Function * wrapperFn, bool insertWrappers_ )
-            : wrapper(wrapperFn), insertWrappers(insertWrappers_) {}
+        MarkTempStrings ( Function * wrapperFn, bool insertWrappers_, bool everything_ )
+            : wrapper(wrapperFn), insertWrappers(insertWrappers_), isEverything(everything_) {}
     protected:
         Function *  wrapper = nullptr;
         bool        insertWrappers = false;
+        bool        isEverything = false;
         int32_t     inhibit = 0;
+        // same gates as every pass in this file: templates are uninstantiated (never mutate),
+        // argument/field inits were cloned to their use sites at infer, quotes are inert AST
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+        }
         das_hash_map<ExprCall *, Expression *> siteOf;
         bool isWrapperCall ( Expression * e ) const {
             return wrapper && e->rtti_isCall() && static_cast<ExprCall *>(e)->func == wrapper;
@@ -1141,6 +1152,7 @@ namespace das {
             // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
             if ( efun->policyBased || efun->invoke || efun->captureString ) return;
             if ( efun->mayQueueTempString ) return;     // the callee's own body could flush the parked temp while still reading it
+            if ( !efun->builtIn && !efun->knownSideEffects ) return;    // uncomputed das function - its flags cannot be trusted
             for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
                 auto & arg = expr->arguments[ai];
                 bool eligible = arg->rtti_isStringBuilder() || isWrapperCall(arg)
@@ -1216,6 +1228,7 @@ namespace das {
             auto f = call->func;
             if ( !f || f->captureString || f->invoke || f->policyBased ) return;
             if ( f->mayQueueTempString ) return;    // its body could flush the parked temp mid-read
+            if ( !f->builtIn && !f->knownSideEffects ) return;  // uncomputed das function - flags untrusted
             auto barg = peelR2V(arg);
             if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
         }
@@ -1239,8 +1252,10 @@ namespace das {
             Visitor::preVisit(expr);
             auto f = expr->func;
             // lexical sites (the wrapper) plus the interprocedural half: calls whose bodies
-            // may queue. A plain [temp_string_result] call is NOT a site by itself
-            if ( !f || f==wrapper || f->mayQueueTempString || (f->builtIn && f->invoke) ) found = true;
+            // may queue. A plain [temp_string_result] call is NOT a site by itself. An
+            // uncomputed das function (no knownSideEffects) reads as all-clear - treat as a site
+            if ( !f || f==wrapper || f->mayQueueTempString
+                || (f->builtIn ? f->invoke : !f->knownSideEffects) ) found = true;
         }
     };
 
@@ -1257,9 +1272,19 @@ namespace das {
     // (each nested temp dies before the next link queues).
     class WrapLetTempStrings : public Visitor {
     public:
-        WrapLetTempStrings ( Function * wrapperFn ) : wrapper(wrapperFn) {}
+        WrapLetTempStrings ( Function * wrapperFn, bool everything_ )
+            : wrapper(wrapperFn), isEverything(everything_) {}
     protected:
-        Function * wrapper = nullptr;
+        Function *  wrapper = nullptr;
+        bool        isEverything = false;
+        // same gates as MarkTempStrings above - this pass mutates let initializers
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+        }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             auto & stmts = block->list;
             for ( int i=int(stmts.size())-1; i>=0; --i ) {
@@ -1323,10 +1348,10 @@ namespace das {
                     wrapperFn = bmod->findUniqueFunction("_temp_string_result");
                 }
             }
-            MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr);
+            MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr, everything);
             visit(mts);
             if ( wrapperFn ) {
-                WrapLetTempStrings wlt(wrapperFn);
+                WrapLetTempStrings wlt(wrapperFn, everything);
                 visit(wlt);
             }
         }

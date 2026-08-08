@@ -106,6 +106,11 @@ namespace das {
     class CheckFreshStringReturns : public Visitor {
     public:
         bool allFresh = true;
+        // runs on one pre-gated (non-template, non-stub) function; inits cannot hold
+        // function-level returns and quotes are inert - skip both outright
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual void preVisit ( ExprReturn * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->returnInBlock ) return;      // a block return yields the block, not the function
