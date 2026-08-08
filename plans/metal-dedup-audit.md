@@ -34,7 +34,13 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 15 | ⏸ **SwigluOai/SwigluOaiPf** | RE-GRADED: gate answered — instances canNOT add bindings; the Pf twin adds 4 (cnt/basep/ne/nfe), so the single would carry dummy binds | fold into the LENS arc | net ≈ −8 after encoder additions; not worth pre-lens |
 | 16 | ✅ **enc_rms_last delete** | default `xoff` param on pf_enc_rms | −14 landed | DONE |
 
-Tier-1 total ≈ −550..650 LOC, most of it verbatim-duplicate risk removal.
+Tier-1 CLOSED 2026-08-08 (single session, 8 commits f39e6c46d..d963f6480): 13 of 16 landed
+at −584 LOC net; 13/15 re-graded into the lens arc (instances cannot add fields — the audit's
+estimates assumed they could); 14 decided + queued as the next opener. Riders: TWO tool fixes
+(msl_emit const-select fold = the value-position static_if invariant; kernel_access resolves
+buffer access through splice-method calls) and ONE measured production win (k6 prefill GEMM
+reload-per-kb: the cached superblock scalars cost an occupancy tier — −1.7..−10.5% per shape,
+bench_metal_kq_mm_lab is the standing guard).
 
 ## Tier 2 — MAYBE (judgment calls)
 
