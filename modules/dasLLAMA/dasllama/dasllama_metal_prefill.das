@@ -13,7 +13,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common   // decline enums/tables + the shared block_q8_0 blob cache (W1 split)
 require dasllama/dasllama_metal_kernels   // the family-shared [metal_kernel] classes both drivers dispatch (M1 move)
-require dasllama/dasllama_metal_lens   // census policing — no [metal_dispatch] classes remain here (they live in kernels)
+require dasllama/dasllama_metal_lens   // [metal_dispatch] builders + census policing (lensed classes live next to their use)
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the GEMMs:
 // rmsnorm, table-driven RoPE, fused causal-softmax attention scores, the P·V gather, fused
@@ -1033,15 +1033,16 @@ class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
 // One thread per rotation pair: NORM (2j, 2j+1 within each head) or NEOX (j, j+half) per the
 // mode uniform, matching rope_scaled_tab / rope_scaled_neox_tab exactly via the position's
 // precomputed table row. One kernel serves q (n = qd) and k (n = kv_dim) as two dispatches.
+[metal_dispatch(name = "enc_rope", pso = "g_pf_pso_rope", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRope {
-    @ssbo @binding = 0 @role = "readwrite" v : array<float>     // [ntok x n], roped in place
+    @ssbo @binding = 0 @role = "readwrite" @off = "voff" v : array<float>     // [ntok x n], roped in place
     @ssbo @binding = 1 @role = "weight" tcos : array<float>  // [ntok x head_size/2]
     @ssbo @binding = 2 @role = "weight" tsin : array<float>
     @uniform @binding = 3 n : uint          // row width (qd or kv_dim), % head_size
     @uniform @binding = 4 head_size : uint
     @uniform @binding = 5 npairs : uint     // ntok * n/2 — grid guard
     @uniform @binding = 6 neox : uint       // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @uniform @binding = 7 rot : uint        // partial rotary width; == head_size for full (table rows rot/2 wide)
+    @uniform @binding = 7 @default = head_size rot : uint   // partial rotary width; null bind = full rope (== head_size)
 
     [metal_kernel(name="metal_rope_msl")]
     def metal_rope {
@@ -1185,10 +1186,11 @@ class MetalAttnQK {
 // One threadgroup (128 threads = 4 simdgroups) per (query row < npos, head): causal in-row
 // softmax via a width-32 simd_shuffle_xor butterfly; the tail (cnt, np32) is ZEROED so the AV
 // GEMM can run whole blocks. A continuation chunk sees qoff existing keys: cnt = qoff + qi + 1.
+[metal_dispatch(name = "enc_softmax", pso = "g_pf_pso_softmax", tgmem = "metal_attn_softmax_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
 class MetalAttnSoftmax {
     @ssbo @binding = 0 @role = "readwrite" att : array<float>   // [n_heads x qrows x np32], normalized in place
     @uniform @binding = 1 ka : AttnArgs
-    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> // [nheads] this layer's attention sinks (hass models); null = identity
     @workgroup red : float[4]               // one per simdgroup
     @workgroup bcast : float
 
@@ -2382,20 +2384,7 @@ def private enc_qk_norm_pf(enc : MetalComputeEncoder?; bx, bw : MetalBuffer?; va
     kn_dispatch(enc, uint3(uint(ntg), uint(nrows), 1u), uint3(uint(hs), 1u, 1u))
 }
 
-def private enc_rope(enc : MetalComputeEncoder?; bv, bcos, bsin, bn, bhs, bnpairs, bneox : MetalBuffer?; npairs : int64; off : uint64 = 0ul; brot : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pf_pso_rope)
-    kn_buffer(enc, bv, off, 0)
-    kn_buffer(enc, bcos, 0ul, 1)
-    kn_buffer(enc, bsin, 0ul, 2)
-    kn_buffer(enc, bn, 0ul, 3)
-    kn_buffer(enc, bhs, 0ul, 4)
-    kn_buffer(enc, bnpairs, 0ul, 5)
-    kn_buffer(enc, bneox, 0ul, 6)
-    kn_buffer(enc, brot != null ? brot : bhs, 0ul, 7)   // rot defaults to head_size (full rope)
-    hz_write(bv)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((npairs + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
-}
+// enc_rope is [metal_dispatch]-generated from MetalRope (rot @default = head_size — full rope on null).
 
 
 
@@ -2436,16 +2425,7 @@ def private enc_qk(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var 
     enc_attn3(enc, g_pf_pso_qk, metal_attn_qk_msl_tgmem, bq, bk, batt, ka, mp / 32l, nk64 / 32l, heads)
 }
 
-def private enc_softmax(enc : MetalComputeEncoder?; batt : MetalBuffer?; var ka : AttnArgs; npos, heads : int64; bsink : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pf_pso_softmax)
-    kn_tgmem(enc, metal_attn_softmax_msl_tgmem, 0)
-    kn_buffer(enc, batt, 0ul, 0)
-    kn_kargs(enc, ka, 1)
-    kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
-    hz_write(batt)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(npos), uint(heads), 1u), uint3(128u, 1u, 1u))
-}
+// enc_softmax is [metal_dispatch]-generated from MetalAttnSoftmax (sink @default = g_one — identity on null).
 
 def private enc_av(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
     enc_attn3(enc, g_pf_pso_av, metal_attn_av_msl_tgmem, batt, bv, bxb, ka, mp / 32l, head_size / 32l, heads)
@@ -3137,9 +3117,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // hetero: the swa pair's rows are hs_sw/2 wide — the class's own width)
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                    enc_rope(enc, bq, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, npos * qd_l / 2l, [brot = u_rot])
+                    enc_rope(enc, bq, 0ul, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, npos * qd_l / 2l)
                     if (!kvsh) {
-                        enc_rope(enc, bks[l], bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, npos * kvd_l / 2l, koff, [brot = u_rot])
+                        enc_rope(enc, bks[l], koff, bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, npos * kvd_l / 2l)
                     }
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {
@@ -3165,7 +3145,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (c.attn_sinks) {
                             bsnk = upload_region(unsafe(addr < void? >(t.fblob[t.sinks_off + l * n_heads])), uint64(n_heads * 4l))
                         }
-                        enc_softmax(enc, batt, atka, npos, n_heads, bsnk)
+                        enc_softmax(enc, batt, atka, bsnk, npos, n_heads)
                     }
                     if (g_pf_skip != "attn_av") {
                         if (mmattn) {

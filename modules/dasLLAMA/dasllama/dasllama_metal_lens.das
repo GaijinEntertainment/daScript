@@ -33,6 +33,9 @@ struct private BufField {
     @do_not_delete kt : TypeDeclPtr
     off : string     // @off = "<param>" — bind at a caller-passed uint64 offset ("" = 0)
     rng : string     // @span = "<a*b*4>" product over params — exact hz length ("" = whole buffer)
+    dref : string    // @default = name (bare identifier) resolved: sibling field -> its builder
+                     // param, else module global. Caller passes null; bind AND hz stage the
+                     // `!= null ? param : dref` result. "" = required bind (no default)
 }
 
 def private mk_kn_pipeline(at : LineInfo; pso : string) : ExpressionPtr {
@@ -65,12 +68,22 @@ def private mk_kn_kargs(at : LineInfo; pname : string; binding : int) : Expressi
     return c
 }
 
-def private mk_kn_buffer(at : LineInfo; pname : string; binding : int; off : string) : ExpressionPtr {
+// the buffer reference a bind/hz uses: the builder param, or `param ?? default` when @default set
+def private mk_buf_ref(at : LineInfo; bf : BufField) : ExpressionPtr {
+    if (empty(bf.dref)) {
+        return new ExprVar(at = at, name := "b{bf.name}")
+    }
+    let braw = "b{bf.name}"
+    let bdef = bf.dref
+    return qmacro($i(braw) != null ? $i(braw) : $i(bdef))
+}
+
+def private mk_kn_buffer(at : LineInfo; bf : BufField) : ExpressionPtr {
     var c = new ExprCall(at = at, name := "kn_buffer")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := pname)
-    c.arguments |> emplace_new <| mk_off_arg(at, off)
-    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = binding)
+    c.arguments |> emplace_new <| mk_buf_ref(at, bf)
+    c.arguments |> emplace_new <| mk_off_arg(at, bf.off)
+    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = bf.binding)
     return c
 }
 
@@ -86,7 +99,7 @@ def private kargs_type_of(ft : TypeDecl const?; is_ssbo : bool) : TypeDeclPtr {
 
 // one bind statement: a kargs value binds by value, everything else is a buffer at an offset
 def private mk_bind(at : LineInfo; bf : BufField) : ExpressionPtr {
-    return (bf.kt == null ? mk_kn_buffer(at, "b{bf.name}", bf.binding, bf.off)
+    return (bf.kt == null ? mk_kn_buffer(at, bf)
         : mk_kn_kargs(at, "{bf.name}", bf.binding))
 }
 
@@ -126,7 +139,7 @@ def private mk_range_len(at : LineInfo; spec : string) : Expression? {
 // hz_read/hz_write for one field: whole-buffer, or (@off, @span) exact
 def private mk_hz(at : LineInfo; call_name : string; bf : BufField) : ExpressionPtr {
     var c = new ExprCall(at = at, name := call_name)
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := "b{bf.name}")
+    c.arguments |> emplace_new <| mk_buf_ref(at, bf)
     if (!empty(bf.rng)) {
         c.arguments |> emplace_new <| mk_off_arg(at, bf.off)
         c.arguments |> emplace_new <| mk_range_len(at, bf.rng)
@@ -294,9 +307,27 @@ class MetalDispatch : AstStructureAnnotation {
             // a struct-typed @uniform is a kargs value: it binds by VALUE, so the builder takes
             // the struct, not a buffer, and the emitter's `constant Foo&` parameter reads it
             var kt = kargs_type_of(field._type, is_ssbo)
-            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr))
+            let dflt = find_arg(field.annotation, "default") ?as tString ?? ""
+            if (!empty(dflt) && kt != null) {
+                errors := "[metal_dispatch] {fn_name}: field '{field.name}' — @default is for buffer binds, not kargs values"
+                return false
+            }
+            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr, dref = dflt))
         }
         sort(bufs) $(a, b) => a.binding < b.binding
+
+        // @default = name (bare identifier): a sibling field's name resolves to its builder
+        // param (the rope rebind shape), anything else passes through as a module global
+        var fldnames : table<string>
+        for (bf in bufs) {
+            fldnames |> insert(bf.name)
+        }
+        for (bf in bufs) {
+            if (!empty(bf.dref) && key_exists(fldnames, bf.dref)) {
+                bf.dref = "b{bf.dref}"
+            }
+        }
+        delete fldnames
 
         // The read/write axis is DERIVED from the kernel body (shared classifier, field mode).
         // A declared read/write/readwrite is a cross-checked assertion (mismatch = compile

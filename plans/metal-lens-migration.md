@@ -43,28 +43,34 @@ Each phase gets decided in detail when reached.
 - **Composite (1):** pf_enc_moe_route — 3 dispatches + 2 skip rails + encode-time
   upload_region; stays a wrapper composing 3 builders.
 
-## Open design decisions (Boris, when reached)
+## Design decisions (1-3 RULED 2026-08-08; 4 in discussion)
 
-1. **Where do lensed classes live?** prefill.das requires the lens with "census policing — no
-   [metal_dispatch] classes remain here (they live in kernels)". Is that an observation or a
-   rule? If a rule, migrating prefill = moving ~30 classes into kernels.das (7k lines already).
-   Alternative: lift the rule, lens classes in place, keep the census.
-2. **Items 13 (Comb/CombB) + 15 (SwigluOai/Pf) — instance-added bindings.** Two options:
-   (a) template carries the binding UNION, singles bind dummies (the item-14 dead-ns precedent
-   says runtime-free, but CombB adds an rt table + args struct — call-site noise is real);
-   (b) extend [template_struct_instance] with axis-gated fields (bindings present only when a
-   template-constant axis is on). (b) is cleaner and serves future single/batch twins;
-   (a) needs zero tooling.
-3. **enc_attn3's pso-as-parameter shape** — lens the four attn classes individually (four
-   builders, delete enc_attn3), or teach the lens a pso-param mode. Leaning four builders:
-   the mini-lens exists only because the classes weren't lensed.
-4. **Optional binds with defaults** (softmax sink `?: g_one`, rope `brot ?: bhs` at two
-   slots) — wrapper-level defaulting vs a `@default = "g_one"` field annotation.
+1. ✅ **Lensed classes live next to where they are used** — prefill classes lens IN PLACE.
+   Update prefill's require comment ("no [metal_dispatch] classes remain here") when the
+   first one lands.
+2. ✅ **Items 13/15 via (b): extend [template_struct_instance] with axis-gated fields**
+   (bindings present only when a template-constant axis is on) — cleaner than union+dummy,
+   serves future single/batch twins.
+3. ✅ **Four per-class builders, delete enc_attn3.** Beyond simplicity: per-class DERIVED
+   hazard staging is more precise than enc_attn3's one-shape-fits-all hand staging.
+4. ✅ **`@default = name` field annotation — bare identifier, NOT a string** (Boris's call;
+   grammar already allows it: ds2_parser.ypp:1179 stores an unquoted NAME value as tString,
+   probe-verified 2026-08-08, formatter-safe — token-based, never re-quotes). Resolution:
+   sibling-field name first (→ its builder param), else module global. The builder param
+   stays required; sites without the buffer pass `null` and the builder body resolves
+   `b ?? default` once — bind AND hz staging use the resolved buffer.
 
 ## Phasing (decide-when-reached)
 
-- **P0** — drop-ins: lens the cat-d classes, delete their encoders. No lens changes. Gates:
-  builder `dump=true` byte-identity vs the hand twin (the lens's own proof rail), kernels arm.
+- **P0** — drop-ins: lens the cat-d classes, delete their encoders. Gates: builder
+  `dump=true` byte-identity vs the hand twin (the lens's own proof rail), kernels arm.
+  STARTED 2026-08-08: `@default` shipped (lens `mk_buf_ref` ternary — `??` on pointers
+  DEREFS, use `!= null ?:`; `default` keyword whitelisted into annotation-argument-name in
+  BOTH grammars, one line each) + first two users lensed in place: MetalRope (`@off = voff`,
+  `rot @default = head_size`) and MetalAttnSoftmax (`sink @default = g_one`), hand encoders
+  deleted. Gates run: kernels 11/11, prefill-base llama token-exact (null-sink default path),
+  fam-gptoss maxd bit-identical to pre-change (real-sink path). Known delta vs hand twins:
+  derived staging adds the hz_read the hand encoders under-staged on in-place buffers.
 - **P1** — @off/dual-view sites. No lens changes expected.
 - **P2** — format-axis: per-class builders + thin wrappers. Gates: kernels arm + one
   PARITY_FULL family cell per touched axis (gptoss/qwen3moe pattern from item 14).

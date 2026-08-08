@@ -259,6 +259,7 @@ module.exports = grammar({
       $.identifier,
       'type',
       'in',
+      'default',
     ),
 
     _annotation_argument_value: $ => choice(
