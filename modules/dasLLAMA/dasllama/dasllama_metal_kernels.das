@@ -1245,9 +1245,9 @@ class MetalEmbedK6 {
     }
 }
 
-// Fused residual-add + rmsnorm: x += a in place, then y = rms(x)·w, one dispatch instead of two.
-// The added row stages through the threadgroup slab since barrier() is a threadgroup fence only.
-// dim caps at the slab; wider models take the unfused pair (enc_add_rms_site).
+// Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
+// (the row stages through the tgmem slab — barrier() is a threadgroup fence only; dim caps at the
+// slab, wider models take enc_add_rms_site). Single-row = the lensed grid=1; batch = enc_add_rms_b.
 [metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "1")]
 class MetalAddRms {
     @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
@@ -1264,12 +1264,13 @@ class MetalAddRms {
 
     [metal_kernel(name="metal_add_rms_msl")]
     def metal_add_rms {
+        let row = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
         var ss = 0.0
         var k = lid
         while (k < dim) {
-            let vv = (x[k] + a[k]) * ascale
-            x[k] = vv
+            let vv = (x[row * dim + k] + a[row * dim + k]) * ascale
+            x[row * dim + k] = vv
             xrow[k] = vv
             ss += vv * vv
             k += gl_WorkGroupSize.x
@@ -1292,7 +1293,7 @@ class MetalAddRms {
         let inv = inv_sh
         k = lid
         while (k < dim) {
-            y[k] = w[k] * (xrow[k] * inv)
+            y[row * dim + k] = w[k] * (xrow[k] * inv)
             k += gl_WorkGroupSize.x
         }
     }
@@ -2097,12 +2098,9 @@ class MetalGemvW13SwB4 : MetalGemvW13SwB24T {
     override WIDE = true
 }
 
-// M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows): MulMm's staging discipline on a
-// 32x32 tile, 110 instr/k-block vs the old 235 (1.16-1.33x on every decode shape). Pad token rows
-// carry stale bytes by design — C rows are per-token independent, pad Y rows are never read back.
-// IS_SK: grid.y gains a k-slice axis, each threadgroup walks its own partial-C plane (a separate
-// MetalSkReduce dispatch sums them — no float atomics, deterministic); the only way to grow the
-// grid past d/32 on starved sites at M-pad-32.
+// M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows): MulMm's staging on a 32x32 tile;
+// pad token rows carry stale bytes by design (C rows independent, pad Y rows never read back).
+// IS_SK: grid.y = k-slice axis, per-tg partial-C planes, MetalSkReduce sums them (deterministic).
 [ |> template_struct_instance]
 class template MetalQ8GemmBSplitT {
     @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
@@ -2115,7 +2113,7 @@ class template MetalQ8GemmBSplitT {
     @template_constant IS_SK : bool = false
 
     [metal_kernel]
-    def metal_q8_gemm_b {
+    def metal_q8_gemm_b {   // nolint:STYLE038 — MSL kernel body; the staging tiles are barrier coupled
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let ntileN = ka.ndim / 32u
@@ -3610,60 +3608,6 @@ class MetalRopeStoreBTq4 {
     }
 }
 
-// Batched fused residual add + rmsnorm (MetalAddRms with a row grid): one threadgroup per row,
-// x += a in place, y = rms(x)·w. Same tgmem row slab — dim caps at ADD_RMS_MAX_DIM (the batch
-// driver pairs enc_ew2-add + enc_rms_b past the slab, mirroring enc_add_rms_site).
-class MetalAddRmsB {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>     // [B x dim] residual stream, add target
-    @ssbo @binding = 1 @role = "read" a : array<float>     // [B x dim] addend
-    @ssbo @binding = 2 @role = "weight" w : array<float>     // [dim] norm weight
-    @ssbo @binding = 3 @role = "write" y : array<float>     // [B x dim] normed out (y may alias a)
-    @uniform @binding = 4 dim : uint
-    @uniform @binding = 5 eps : float
-    @uniform @binding = 6 ascale : float    // (x + a) * ascale — gemma4 layer_out_scale scales
-                                            // the WHOLE layer output; every other site binds 1.0
-    @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM
-    @workgroup partial : float[32]
-    @workgroup inv_sh : float
-
-    [metal_kernel(name="metal_add_rms_b_msl")]
-    def metal_add_rms_b {
-        let row = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var k = lid
-        while (k < dim) {
-            let vv = (x[row * dim + k] + a[row * dim + k]) * ascale
-            x[row * dim + k] = vv
-            xrow[k] = vv
-            ss += vv * vv
-            k += gl_WorkGroupSize.x
-        }
-        ss = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            inv_sh = rsqrt(tot / float(dim) + eps)
-        }
-        barrier()
-        let inv = inv_sh
-        k = lid
-        while (k < dim) {
-            y[row * dim + k] = w[k] * (xrow[k] * inv)
-            k += gl_WorkGroupSize.x
-        }
-    }
-}
-
-
 // The decode PSO + resource globals moved to dasllama_metal_common (declared there so
 // [metal_dispatch]-generated builders can see the pipeline they dispatch); the compile_pso()
 // assignments below and the shutdown releases stay here.
@@ -3825,7 +3769,6 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_rpstb32 = compile_pso(MetalRopeStoreBF32_metal_rope_store_b_msl, MetalRopeStoreBF32_metal_rope_store_b_msl_entry, MetalRopeStoreBF32_metal_rope_store_b_msl_fastmath, ok)
     g_pso_rpstb_q8 = compile_pso(metal_rope_store_b_q8_msl, metal_rope_store_b_q8_msl_entry, metal_rope_store_b_q8_msl_fastmath, ok)
     g_pso_rpstb_tq4 = compile_pso(metal_rope_store_b_tq4_msl, metal_rope_store_b_tq4_msl_entry, metal_rope_store_b_tq4_msl_fastmath, ok)
-    g_pso_addrmsb = compile_pso(metal_add_rms_b_msl, metal_add_rms_b_msl_entry, metal_add_rms_b_msl_fastmath, ok)
     if (!ok) {
         // no steps are in flight at init time — releasing PSOs + shared state suffices
         metal_kernels_release()
@@ -4567,8 +4510,8 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias
 }
 
 def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pso_addrmsb)
-    kn_tgmem(enc, metal_add_rms_b_msl_tgmem, 0)
+    kn_pipeline(enc, g_pso_addrms)
+    kn_tgmem(enc, metal_add_rms_msl_tgmem, 0)
     kn_buffer(enc, bx, 0ul, 0)
     kn_buffer(enc, ba, 0ul, 1)
     kn_buffer(enc, bw, 0ul, 2)
@@ -4777,7 +4720,6 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_rpstb32)
     release_pso(g_pso_rpstb_q8)
     release_pso(g_pso_rpstb_tq4)
-    release_pso(g_pso_addrmsb)
 }
 
 

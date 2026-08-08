@@ -236,7 +236,6 @@ var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
 var g_pso_rpstb_q8 : MetalComputePipeline?
 var g_pso_rpstb_tq4 : MetalComputePipeline?
-var g_pso_addrmsb : MetalComputePipeline?
 // uids a batch step is actively encoding against — eviction must never free a batch row's slice
 // out from under the step being assembled (the single path's `keep` protects only one uid)
 var g_pin : table<uint64>
