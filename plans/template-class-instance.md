@@ -244,6 +244,19 @@ per format, oracles cover correctness only; Q8/Mx4 joining renumbers cnt/basep/b
 6/7/8 → 7/8/9 (encoder + oracle churn accepted once). MoeGemv stays inheritance (its
 dedup is genuinely is-a). The 96 unlensed classes ride the same wave as lens adoption.
 
+### Stage 2, SqAttn COMPLETE (2026-08-08): 23 classes → 10 templates + 3 combs
+
+Remaining tiers followed the plain-tier pattern (e2f5b026f, −361 LOC net): per tier a
+KvT template (typedef KT — `half4`/`float4` on the D tier) + a QuantT template (typedef
+QB + fill/vacc `@template_call` slots). The D quant pair needed NO call slots — its
+`sqd_*_blk_q` stages overload on the byte-view type — and instead carries
+`@template_constant LANE_BYTES` (4 quant bytes vs 2 nibble bytes per lane), the constant
+axis's first production use. DQ8/DTq4 were non-adjacent in the file; the pair now sits
+together. B/PartB tiers have no `[metal_dispatch]` (hand-encoded batch dispatch, declared
+roles) — their instances are 2-4 lines. All 16 kernels: MSL byte-identical
+(entry-normalized diff empty), kernels suite 7/7. Combs (3) have no format axis — as-is.
+Next per the cluster table: KqMv (batch width as a stamp constant, 9→4).
+
 ### Stage 2 first vehicle (2026-08-07): plain SqAttn tier, 4→2 templates
 
 `MetalSqAttn{F16,F32}` → `MetalSqAttnKvT` (typedef `KT`); `MetalSqAttn{Q8,Tq4}` →
