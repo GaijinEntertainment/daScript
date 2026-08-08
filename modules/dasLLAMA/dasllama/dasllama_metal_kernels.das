@@ -4239,47 +4239,34 @@ def enc_pre_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bwpa, bwffn, by, bd
     }
 }
 
-def enc_attn(enc : MetalComputeEncoder?; f16 : bool; kmb, vmb : MetalBuffer?; koff, voff : uint64;
+// one fmt-dispatching encoder per attention shape — the KV codec picks the generated _c builder
+// (f16/f32: one view per K/V slab; q8_0/tq4: the slabs bind TWICE each, half-scale + byte views
+// at the same layer offset, and nblk replaces the kv_dim uniform)
+def enc_attn(enc : MetalComputeEncoder?; kdt : KVDtype; kmb, vmb : MetalBuffer?; koff, voff : uint64;
              bq, by : MetalBuffer?; var ka : SqAttnArgs; nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    if (f16) {
-        enc_attn16_c(enc, kmb, koff, vmb, voff, bq, by, ka, bsink != null ? bsink : g_one, nheads, head_size)
+    let bsnk = bsink != null ? bsink : g_one
+    if (kdt == KVDtype.q8_0) {
+        enc_attn_q8_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, by, ka, bsnk, nheads, head_size)
+    } elif (kdt == KVDtype.tq4) {
+        enc_attn_tq4_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, by, ka, bsnk, nheads, head_size)
+    } elif (kdt == KVDtype.f16) {
+        enc_attn16_c(enc, kmb, koff, vmb, voff, bq, by, ka, bsnk, nheads, head_size)
     } else {
-        enc_attn32_c(enc, kmb, koff, vmb, voff, bq, by, ka, bsink != null ? bsink : g_one, nheads, head_size)
+        enc_attn32_c(enc, kmb, koff, vmb, voff, bq, by, ka, bsnk, nheads, head_size)
     }
 }
 
-def enc_attn_part(enc : MetalComputeEncoder?; f16 : bool; kmb, vmb : MetalBuffer?; koff, voff : uint64;
+def enc_attn_part(enc : MetalComputeEncoder?; kdt : KVDtype; kmb, vmb : MetalBuffer?; koff, voff : uint64;
                   bq, bpart : MetalBuffer?; var ka : SqAttnPartArgs; ntg, head_size : int64) {
-    if (f16) {
+    if (kdt == KVDtype.q8_0) {
+        enc_attnp_q8_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, bpart, ka, ntg, head_size)
+    } elif (kdt == KVDtype.tq4) {
+        enc_attnp_tq4_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, bpart, ka, ntg, head_size)
+    } elif (kdt == KVDtype.f16) {
         enc_attnp16_c(enc, kmb, koff, vmb, voff, bq, bpart, ka, ntg, head_size)
     } else {
         enc_attnp32_c(enc, kmb, koff, vmb, voff, bq, bpart, ka, ntg, head_size)
     }
-}
-
-// tq4-mirror attention twins — same dual-view shape as the q8_0 encoders below
-def enc_attn_tq4(enc : MetalComputeEncoder?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                 bq, by : MetalBuffer?; var ka : SqAttnArgs; nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    enc_attn_tq4_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, by, ka,
-        bsink != null ? bsink : g_one, nheads, head_size)
-}
-
-def enc_attn_part_tq4(enc : MetalComputeEncoder?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                      bq, bpart : MetalBuffer?; var ka : SqAttnPartArgs; ntg, head_size : int64) {
-    enc_attnp_tq4_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, bpart, ka, ntg, head_size)
-}
-
-// q8_0-mirror attention twins: the K/V slabs bind TWICE each (half-scale + byte views at the
-// same layer offset); nblk (blocks per row) replaces the kv_dim uniform
-def enc_attn_q8(enc : MetalComputeEncoder?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                bq, by : MetalBuffer?; var ka : SqAttnArgs; nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    enc_attn_q8_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, by, ka,
-        bsink != null ? bsink : g_one, nheads, head_size)
-}
-
-def enc_attn_part_q8(enc : MetalComputeEncoder?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                     bq, bpart : MetalBuffer?; var ka : SqAttnPartArgs; ntg, head_size : int64) {
-    enc_attnp_q8_c(enc, kmb, koff, kmb, vmb, voff, vmb, bq, bpart, ka, ntg, head_size)
 }
 
 def enc_attn_comb(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; var ka : SqAttnCombArgs; nheads, head_size : int64; bsink : MetalBuffer? = null) {
@@ -4470,15 +4457,32 @@ def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
 // owns a bit; a barrier is inserted iff a dispatch's read hits a pending write (RAW), or its
 // write hits a pending write/read (WAW/WAR) — read-after-read runs concurrently.
 
-def enc_attn_b(enc : MetalComputeEncoder?; f16 : bool; bq, by, brt : MetalBuffer?; var ka : SqAttnBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null; rtoff : uint64 = 0ul) {
-    kn_pipeline(enc, f16 ? g_pso_attnb16 : g_pso_attnb32)
-    kn_tgmem(enc, f16 ? MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem : MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem, 0)
+// the batch attention family dispatches on the KV codec: f16/f32 bind the arena twice (K + V
+// views), q8_0/tq4 FOUR times (half-scale + byte views for each) and shift the tail binds by 2;
+// for the quant codecs the row table carries byte offsets and nblk replaces the kv_dim uniform
+def enc_attn_b(enc : MetalComputeEncoder?; kdt : KVDtype; bq, by, brt : MetalBuffer?; var ka : SqAttnBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null; rtoff : uint64 = 0ul) {
+    if (kdt == KVDtype.q8_0) {
+        kn_pipeline(enc, g_pso_attnb_q8)
+        kn_tgmem(enc, MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem, 0)
+    } elif (kdt == KVDtype.tq4) {
+        kn_pipeline(enc, g_pso_attnb_tq4)
+        kn_tgmem(enc, MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem, 0)
+    } else {
+        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnb16 : g_pso_attnb32)
+        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem : MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem, 0)
+    }
+    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
     kn_buffer(enc, g_arena, 0ul, 0)
     kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, bq, 0ul, 2)
-    kn_buffer(enc, by, 0ul, 3)
-    kn_buffer(enc, brt, rtoff, 4)
-    kn_kargs(enc, ka, 5)
+    if (quant) {
+        kn_buffer(enc, g_arena, 0ul, 2)
+        kn_buffer(enc, g_arena, 0ul, 3)
+    }
+    let sh = quant ? 2 : 0
+    kn_buffer(enc, bq, 0ul, 2 + sh)
+    kn_buffer(enc, by, 0ul, 3 + sh)
+    kn_buffer(enc, brt, rtoff, 4 + sh)
+    kn_kargs(enc, ka, 5 + sh)
     kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
     hz_read(g_arena)
     hz_read(bq)
@@ -4487,15 +4491,29 @@ def enc_attn_b(enc : MetalComputeEncoder?; f16 : bool; bq, by, brt : MetalBuffer
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-def enc_attn_part_b(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt : MetalBuffer?; var ka : SqAttnPartBArgs; nrows, nchmax, nheads, head_size : int64; rtoff : uint64 = 0ul) {
-    kn_pipeline(enc, f16 ? g_pso_attnpb16 : g_pso_attnpb32)
-    kn_tgmem(enc, f16 ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem, 0)
+def enc_attn_part_b(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnPartBArgs; nrows, nchmax, nheads, head_size : int64; rtoff : uint64 = 0ul) {
+    if (kdt == KVDtype.q8_0) {
+        kn_pipeline(enc, g_pso_attnpb_q8)
+        kn_tgmem(enc, MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem, 0)
+    } elif (kdt == KVDtype.tq4) {
+        kn_pipeline(enc, g_pso_attnpb_tq4)
+        kn_tgmem(enc, MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem, 0)
+    } else {
+        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnpb16 : g_pso_attnpb32)
+        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem, 0)
+    }
+    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
     kn_buffer(enc, g_arena, 0ul, 0)
     kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, bq, 0ul, 2)
-    kn_buffer(enc, bpart, 0ul, 3)
-    kn_buffer(enc, brt, rtoff, 4)
-    kn_kargs(enc, ka, 5)
+    if (quant) {
+        kn_buffer(enc, g_arena, 0ul, 2)
+        kn_buffer(enc, g_arena, 0ul, 3)
+    }
+    let sh = quant ? 2 : 0
+    kn_buffer(enc, bq, 0ul, 2 + sh)
+    kn_buffer(enc, bpart, 0ul, 3 + sh)
+    kn_buffer(enc, brt, rtoff, 4 + sh)
+    kn_kargs(enc, ka, 5 + sh)
     hz_read(g_arena)
     hz_read(bq)
     hz_write(bpart)
@@ -4503,113 +4521,29 @@ def enc_attn_part_b(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt : Met
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-// tq4-mirror batch attention twins — same four-way arena binding as the q8_0 encoders below
-def enc_attn_b_tq4(enc : MetalComputeEncoder?; bq, by, brt : MetalBuffer?; var ka : SqAttnBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pso_attnb_tq4)
-    kn_tgmem(enc, MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem, 0)
+def enc_attn_d(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
+    if (kdt == KVDtype.q8_0) {
+        kn_pipeline(enc, g_pso_attnd_q8)
+        kn_tgmem(enc, MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem, 0)
+    } elif (kdt == KVDtype.tq4) {
+        kn_pipeline(enc, g_pso_attnd_tq4)
+        kn_tgmem(enc, MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem, 0)
+    } else {
+        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnd16 : g_pso_attnd32)
+        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem : MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem, 0)
+    }
+    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
     kn_buffer(enc, g_arena, 0ul, 0)
     kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, by, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
-}
-
-def enc_attn_part_b_tq4(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnPartBArgs; nrows, nchmax, nheads, head_size : int64) {
-    kn_pipeline(enc, g_pso_attnpb_tq4)
-    kn_tgmem(enc, MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, bpart, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
-}
-
-def enc_attn_d_tq4(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
-    kn_pipeline(enc, g_pso_attnd_tq4)
-    kn_tgmem(enc, MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, bpart, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
-}
-
-// q8_0-mirror batch attention twins: the arena binds FOUR times (half-scale + byte views for K
-// and V); the row table carries byte offsets and nblk replaces the kv_dim uniform
-def enc_attn_b_q8(enc : MetalComputeEncoder?; bq, by, brt : MetalBuffer?; var ka : SqAttnBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pso_attnb_q8)
-    kn_tgmem(enc, MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, by, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
-}
-
-def enc_attn_part_b_q8(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnPartBArgs; nrows, nchmax, nheads, head_size : int64) {
-    kn_pipeline(enc, g_pso_attnpb_q8)
-    kn_tgmem(enc, MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, bpart, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
-}
-
-def enc_attn_d_q8(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
-    kn_pipeline(enc, g_pso_attnd_q8)
-    kn_tgmem(enc, MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, bq, 0ul, 4)
-    kn_buffer(enc, bpart, 0ul, 5)
-    kn_buffer(enc, brt, 0ul, 6)
-    kn_kargs(enc, ka, 7)
+    if (quant) {
+        kn_buffer(enc, g_arena, 0ul, 2)
+        kn_buffer(enc, g_arena, 0ul, 3)
+    }
+    let sh = quant ? 2 : 0
+    kn_buffer(enc, bq, 0ul, 2 + sh)
+    kn_buffer(enc, bpart, 0ul, 3 + sh)
+    kn_buffer(enc, brt, 0ul, 4 + sh)
+    kn_kargs(enc, ka, 5 + sh)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
     hz_read(g_arena)
     hz_read(bq)
@@ -4629,23 +4563,6 @@ def enc_attn_comb_b(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; v
     hz_write(by)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
-}
-
-def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
-    kn_pipeline(enc, f16 ? g_pso_attnd16 : g_pso_attnd32)
-    kn_tgmem(enc, f16 ? MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem : MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem, 0)
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, bq, 0ul, 2)
-    kn_buffer(enc, bpart, 0ul, 3)
-    kn_buffer(enc, brt, 0ul, 4)
-    kn_kargs(enc, ka, 5)
-    // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
 }
 
 def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; var ka : SqAttnCombDArgs; nrows, nheads, head_size : int64) {

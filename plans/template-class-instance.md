@@ -325,11 +325,18 @@ census's "MoeGemv base+5 ~200 LOC" was optimistic like the KqMv row; only the ~1
 prologue is shared), Bf16MulMm↔Q8MulMm (field sets differ — a template must declare every
 field its body references, the same blocker as MoE Q8/Mx4).
 
-**Next (Boris's ordering 2026-08-08): the enc_ twins followup commit.** The kernel merges
-unified binding contracts, so the per-format encoder wrappers converged into literal twins
-(e.g. `enc_attn_q8`/`enc_attn_tq4` and their `_part` pair — identical bodies modulo the
-generated `_c` builder they call). Scope: collapse each format-wrapper family into one
-fmt-taking dispatcher; touches decode/prefill callers → gate with the attn/batch decode arms.
+**enc_ twins commit DONE 2026-08-08.** The kernel merges unified binding contracts, so the
+per-format encoder wrappers converged into literal twins. Collapsed onto the existing
+`KVDtype` axis: single-row `enc_attn`/`enc_attn_part` absorb the `_q8`/`_tq4` twins (the
+generated `_c` builders differ per codec, one dispatcher each); batch
+`enc_attn_b`/`enc_attn_part_b`/`enc_attn_d` go 9 functions → 3 (quant codecs bind the arena
+4× and shift the tail binds by 2 — a `quant` flag + slot shift, the pso/tgmem pick is a
+KVDtype ladder). The 5 decode call-site ladders become single calls passing `kdt` — the
+tq4-before-blockc ordering hazard at those sites is gone. Out of scope on inspection:
+`enc_kq_mvb`/`enc_kq_gemm_mm_b` (already fmt-driven; residue is global NAMES, not structure)
+and the rope-store families (distinct args types + grid math — different, not twins).
+Gates: kernels suite attn arm 7 files green; decode parity arm1-basic + arm7-q8kv +
+arm7b-tq4kv + arm11-depth + batch all PASS.
 
 ### KqMv B2/B4 measured round + restamp (2026-08-08): 9→3 templates + B8 trio, −116 LOC
 
