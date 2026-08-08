@@ -17,8 +17,10 @@ Always require `daslib/fio` — never `fio_core` directly. `daslib/fio` does `re
 
 Two layers, one require:
 
-- **`fio_core`** (C++ builtins) — the path primitives that are basically free function calls into `std::filesystem`: `path_join`, `is_absolute`, `normalize`, `relative` (3-arg with error out-param), `dir_name`, `base_name`, `parent`, `extension`, `stem`, `replace_extension`, `fexist`, `stat`, `dir`, `dir_rec` (builtin), `fopen` (2-arg returning `FILE?`), `mkdir`/`rmdir`, `remove`/`rename`, `copy_file`, temp files/dirs, env vars, `popen`/`system`. Listed via `mcp__daslang__list_module_api fio_core`.
-- **`daslib/fio`** (the daslang wrapper) — adds RAII `fopen` with block, `dir_rec` generic, `FStat` daslib overload (sets `is_valid`), `disk_space` struct return, whole-file `fread(path)`/`fwrite(path, text)`, `mkdir_rec`, the `_result` variants that wrap error out-params into a `fs_result_string`/`fs_result_bool` variant, and the **glob bundle**: `match_glob`, `glob`, `glob_filtered`, `is_glob_pattern`, `to_generic_path`, `expand_glob`, `parse_file_list`. Source: [daslib/fio.das](daslib/fio.das).
+- **`fio_core`** (C++ builtins) — the path primitives that are basically free function calls into `std::filesystem`: `path_join`, `is_absolute`, `normalize`, `relative` (3-arg with error out-param), `dir_name`, `base_name`, `parent`, `extension`, `stem`, `replace_extension`, `fexist`, `stat`, `builtin_dir` / `builtin_dir_rec`, `fopen` (2-arg returning `FILE?`), `fmap`, `mkdir`/`rmdir`, `remove`/`rename`, `copy_file`, temp files/dirs, env vars, `popen`/`system`. Listed via `mcp__daslang__list_module_api fio_core`.
+- **`daslib/fio`** (the daslang wrapper) — adds RAII `fopen` with block, the callable `dir` / `dir_rec` generics, `fstat(f) : FStat` and the `stat(path) : FStat` daslib overload (both set `is_valid`), `disk_space` struct return, whole-file `fread(path)`/`fwrite(path, text)`, POD `fread`/`fwrite` plus their 64-bit `long_fread`/`long_fwrite` twins, `fload`/`fsave` (length-prefixed binary round-trip), `mkdir_rec`, `run_and_capture(args, var output, timeout_sec = 0.0) : int` (shell-free `popen_argv` wrapper capturing merged stdout+stderr), the `_result` variants that wrap error out-params into a `fs_result_string`/`fs_result_bool` variant, and the **glob bundle**: `match_glob`, `glob`, `glob_filtered`, `is_glob_pattern`, `to_generic_path`, `expand_glob`, `parse_file_list`. Source: [daslib/fio.das](daslib/fio.das).
+
+`run_and_capture` has a Windows trap: `args[0]` must use backslashes, because `CreateProcess` will not resolve a forward-slash relative path such as `bin/daslang` — `replace(exe, "/", "\\")` first.
 
 The "Pick the right tool first" table below mixes both — it doesn't matter which layer a function lives in, only that you use the right one. Hand-rolling any of these (typically with `find`/`rfind`/`slice` on `/` or `\\`) is wrong on Windows or in edge cases.
 
@@ -61,8 +63,8 @@ let base = stem(p)                 // "main"
 let cpp  = replace_extension(p, ".cpp")  // "/usr/local/share/daslang/main.cpp"
 
 let full = path_join("assets", "sprites/hero.png")  // platform-correct
-let norm = normalize("a/b/../c/./d")                // "a/c/d"
-let abs  = is_absolute(p)                           // true
+let norm = normalize("a/b/../c/./d")                // "a/c/d" on POSIX, "a\c\d" on Windows — normalize uses the platform separator
+let abs  = is_absolute(p)                           // true on POSIX, false on Windows (no drive/UNC root — std::filesystem semantics)
 ```
 
 Walk a directory and pick `.das` files using `extension`, not string suffix matching:
@@ -128,13 +130,15 @@ Binary memory-mapped read:
 
 ```das
 fopen(path, "rb") $(f) {
-    fmap(f) $(data : array<uint8>) {
+    fmap(f) $(data) {          // data : array<uint8># — a mutable temporary; don't annotate it
         decode(data)
     }
 }
 ```
 
-POD struct / array I/O via the generic `fread(f, var buf)` / `fwrite(f, buf)` overloads — see [daslib/fio.das:101-131](daslib/fio.das#L101-L131). They wrap `_builtin_read`/`_builtin_write` with a `concept_assert` that the type is raw POD.
+POD struct / array I/O via the generic `fread(f, var buf)` / `fwrite(f, buf)` overloads — see [daslib/fio.das:107-169](daslib/fio.das#L107-L169). They wrap `_builtin_read`/`_builtin_write` with a `concept_assert` that the type is raw POD.
+
+The array forms **panic above 2 GiB** rather than truncating (`fread: … does not fit the int byte count — use long_fread`). `long_fread(f, buf)` / `long_fwrite(f, buf)` return `int64` and have no size cap. `int64(fread(f, buf))` is LINT017: the cast happens after the panic guard, so it buys nothing.
 
 ## Mutating filesystem operations
 
@@ -157,7 +161,7 @@ Pick the form by what the caller does with failures:
 - **`error` out-param** — `mkdir(p, error)`. C++-`error_code` style. Use when you want to log or surface the message but stay imperative.
 - **`_result` variant** — returns `variant fs_result_bool { value : bool; error : string }` (or `_int64`/`_string`). Functional style; pairs with `is _value` / `as _value` checks. Use when chaining or returning to a caller that wants exhaustive matching.
 
-Full `_result` set in [daslib/fio.das:523-627](daslib/fio.das#L523-L627): `file_size_result`, `equivalent_result`, `is_symlink_result`, `copy_file_result`, `set_mtime_result`, `temp_directory_result`, `create_temp_file_result`, `create_temp_directory_result`, `relative_result`, `remove_result`, `rename_result`, `mkdir_result`, `rmdir_result`, `rmdir_rec_result`.
+Full `_result` set in [daslib/fio.das:545-656](daslib/fio.das#L545-L656): `file_size_result`, `equivalent_result`, `is_symlink_result`, `copy_file_result`, `set_mtime_result`, `temp_directory_result`, `create_temp_file_result`, `create_temp_directory_result`, `relative_result`, `remove_result`, `rename_result`, `mkdir_result`, `rmdir_result`, `rmdir_rec_result`.
 
 ```das
 let r = mkdir_result("output/cache")
@@ -220,7 +224,7 @@ See [skills/daspkg.md](skills/daspkg.md#L224) for the bundle-shipping side of th
 - `dir(path)` callback yields `.` and `..` on POSIX — skip them.
 - `dir_name`/`base_name` use platform-specific code (POSIX `dirname`/Windows `_splitpath`); `parent`/`stem`/`extension` use C++17 `std::filesystem` and are uniform across platforms. All are exposed; either set is correct.
 - `getcwd()` and `chdir()` are no-ops on Emscripten — guard if your code runs there.
-- **Out of scope for this skill** (same C++ module, but different concerns): `popen`, `popen_timeout`, `system`, `exit`, `get_env_variable`, `has_env_variable`, `sleep`, `get_clock`, `mktime`, `register_dynamic_module`. Use them directly from `fio`; they're not the focus here.
+- **Out of scope for this skill** (same C++ module, but different concerns): `popen`, `popen_timeout`, `system`, `exit`, `get_env_variable`, `has_env_variable`, `sleep`, `get_clock`, `mktime`, `register_dynamic_module`. Use them directly from `fio`; they're not the focus here. (`run_and_capture` is the exception — it is a `daslib/fio` function and is listed above, because it's the shell-free way to run a child process and capture its output.)
 
 ## Reference
 

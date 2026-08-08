@@ -18,17 +18,21 @@ require daslib/regex_boost
 ```daslang
 def regex_compile(expr : string; case_insensitive : bool = false; dot_all : bool = false) : Regex
 def regex_compile(var re : Regex; expr : string; case_insensitive : bool = false; dot_all : bool = false) : bool
-def is_valid(var re : Regex) : bool
+def is_valid(re : Regex) : bool
 ```
+
+Unlike the match functions, `is_valid` takes a const `Regex`, so it works on a `let`.
 
 For literal patterns, prefer the **reader macro** over runtime compilation:
 
 ```daslang
 var private RE <- %regex~^\s*(?:def|struct)\s+private\b%%
-var private RE_I <- %regex~hello%%i        // case-insensitive
-var private RE_S <- %regex~start.*end%%s   // dot-all (`.` matches `\n`)
-var private RE_IS <- %regex~Foo%%is        // both flags
+var private RE_I <- %regex~hello~i%%        // case-insensitive
+var private RE_S <- %regex~start.*end~s%%   // dot-all (`.` matches `\n`)
+var private RE_IS <- %regex~Foo~is%%        // both flags
 ```
+
+Flags go after a **trailing `~` inside the macro** — `%regex~pattern~flags%%`. Anything written after the closing `%%` is left in the token stream and is a syntax error. Only `i` and `s` are recognized; an unrecognized flag letter is silently treated as part of the pattern.
 
 The macro compiles the pattern at parse time and embeds the resulting `Regex` directly into the AST. Three benefits: (1) no escape-doubling — write `\s+` not `"\\s+"`; (2) parse-time validation — bad patterns surface as compile errors; (3) no per-call compilation cost. Module-scope `var` (mutable, since matching mutates internal state) is the standard pattern — see `daslib/cpp_gen.das:757` and `daslib/faker.das:70` for production use.
 
@@ -42,12 +46,12 @@ Anchored at `offset` — checks "does the regex match starting here?". Returns t
 ```daslang
 def regex_search(var regex : Regex; str : string; offset : int = 0) : int2
 ```
-Scans forward — returns `int2(start, end)` of the first match, or `int2(-1, -1)` if not found. Use this for substring search.
+Scans forward — returns `int2(start, end)` of the first match, or `int2(-1, -1)` if not found. `end` is **exclusive** (the offset of the first byte after the match), so `slice(str, r.x, r.y)` is the matched text. Use this for substring search.
 
 ```daslang
 def regex_match_all(var regex : Regex; str : string) : array<range>
 ```
-Returns every match position as an `array<range>` (each `range.x` = start, `range.y` = end+1).
+Returns every match position as an `array<range>` — `range.x` = start, `range.y` = end (exclusive), the same convention as `regex_search`.
 
 ### Group access
 
@@ -85,7 +89,14 @@ let rewritten = regex_replace(re, src) <| $(matched) {       // callback
 | `$0` or `$&` | the whole match |
 | `$1`–`$9` | numbered capture groups |
 | `${name}` | named capture group |
+| `${N}` | numbered capture group, any index (`${0}` = whole match; reaches past `$9`) |
 | `$$` | literal `$` |
+
+In a das source string the braces of the `${...}` forms must be escaped — write `"$\{name\}"`, not `"${name}"`. An unescaped `{` starts a string interpolation, so the group name is resolved as a variable (`error[30838] can't locate variable 'name'`).
+
+### Other exports
+
+`daslib/regex` also ships `re_gen(var re : Regex; var rnd : ReGenRandom) : string` (generate a random string matching the pattern — this is what `daslib/faker` is built on), `regex_debug(re)` (human-readable dump of the compiled program), and a one-argument `regex_compile(var re : Regex)` finalizer overload — that last one is what the reader macro emits, not something to call by hand.
 
 ## Syntax (this engine)
 
@@ -111,6 +122,7 @@ Pure NFA implementation in `daslib/regex.das` — not PCRE, not POSIX. Supports:
 ## Gotchas
 
 - **`regex_match` is anchored, not substring.** `regex_match(re, "abc")` only matches at offset 0; for "find anywhere" use `regex_search`.
+- **Every entry point short-circuits on the empty string.** `regex_match` / `regex_search` / `regex_foreach` / `regex_split` / `regex_replace` all test `empty(str)` before matching, so a pattern that legitimately matches `""` (`^$`, `a*`) reports *no match* against `""` — `-1`, `int2(-1,-1)`, no block calls, an empty array, an empty string. Handle empty input explicitly at the top of any wrapper.
 - **ASCII-only.** The engine's char sets are 256-bit; no Unicode classes, no Unicode-aware case folding. `case_insensitive=true` only folds ASCII A–Z.
 - **Pure NFA.** Catastrophic backtracking is possible on poorly-anchored patterns with nested quantifiers — anchor with `^`, use atomic-style non-capturing groups, and avoid nested `*`/`+` whenever possible.
 - **Escape doubling in plain string literals.** `regex_compile("\\d+")` versus `%regex~\d+%%` — reader macro wins for literal patterns. Reach for runtime `regex_compile` only when the pattern is constructed dynamically.

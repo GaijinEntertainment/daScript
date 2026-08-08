@@ -186,7 +186,9 @@ Parameterless blocks also do not need the ``$`` prefix:
         write(writer, "hello")
     }
 
-    sort(arr) @(a, b) => a < b           // lambda — @ is still required
+    sort(arr) $(a, b) => a < b           // single-expression block — arrow shorthand
+
+    apply_twice(3) @(a : int) => a * 2   // lambda — @ is still required
 
 This shorthand — called **assumed pipe** — works with all three call forms:
 
@@ -213,9 +215,10 @@ This shorthand — called **assumed pipe** — works with all three call forms:
         return 77
     }
 
-It also works with lambdas (``@``) and no-capture lambdas (``@@``).
-The explicit ``<|`` is still needed when a block is passed to an expression
-(e.g. ``<| new ...``) or for the ``=>`` lambda shorthand (``<| $(a,b) => a < b``).
+It also works with lambdas (``@``) and no-capture lambdas (``@@``), and with the
+``=>`` single-expression shorthand — ``arr |> sort() $(a, b) => a < b`` needs no ``<|``.
+The explicit ``<|`` is still needed when a non-block expression is piped as the last
+argument (e.g. ``take() <| new Node(v = 5)``).
 
 The ``lpipe`` macro from ``daslib/lpipe`` allows piping to the expression on the previous line:
 

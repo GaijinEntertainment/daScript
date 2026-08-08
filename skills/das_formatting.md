@@ -11,7 +11,9 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 
 For a module under `modules/` whose files `require` sibling modules (e.g. `require openai/openai_chat`), pass `-load_module <moduleDir>` before `--` so cross-module requires resolve. The formatter only parses, so it works regardless; lint reports `SKIP … missing prerequisite` for files it can't fully resolve (e.g. examples/tests before the module is registered/installed).
 
-> **WARNING:** `utils/das-fmt/` (script `dasfmt.das`) is the formatter. Do NOT confuse it with `utils/dasFormatter/` — a *different* directory holding the **v1→v2 syntax converter**, which is not a code formatter.
+> **WARNING — two different things are spelled `das-fmt`.** The formatter is the daslang script `utils/das-fmt/dasfmt.das` (flags `--path` / `--verify`). The CMake target *and* the installed `bin/das-fmt` binary are built from `utils/dasFormatter/main.cpp` — the **v1→v2 syntax converter** (flags `-i` / `--tests` / `--semicolon`), which is not a code formatter. Both ship side by side in an install. Always invoke the formatter through the script (`bin/daslang utils/das-fmt/dasfmt.das -- ...`) or the MCP `format_file` tool; never by running `bin/das-fmt`.
+
+**What the formatter does and does not do.** It normalizes spacing inside expressions (`if( a>0 )` → `if (a > 0)`, `print( x )` → `print(x)`). It does **not** re-indent: a misindented file is rewritten with its indentation untouched and still passes `--verify`, so it also passes the CI format gate. Indent width is taken from the file itself — inferred from the first indented line, or pinned by a file-level `options indenting = N` (clamped 1..8). Getting indentation right is on you; neither the formatter nor CI will catch it.
 
 **CI check (repo-only):** The `extended_checks` job builds `das-fmt` from the in-tree `utils/das-fmt/dasfmt.das` and runs the formatter over the whole tree twice — interpreted (`daslang utils/das-fmt/dasfmt.das -- --path ./ --verify`) and compiled (`das-fmt.exe --path ./ --verify`). Both call `daslib/das_source_formatter` — the same engine as the MCP `format_file` tool. If CI reports `[E] Unformatted file`, the file was not formatted.
 
@@ -19,9 +21,7 @@ For a module under `modules/` whose files `require` sibling modules (e.g. `requi
 
 1. **Back up** the file before formatting: copy it to `<filename>.das.bak`
 2. **Run the formatter:** use the MCP `format_file` tool with the file path
-3. **Verify** the formatted file still compiles: use the MCP `compile_check` tool
-   - For test files (no `main`), compile-check with: `bin/daslang dastest/dastest.das -- --test path/to/test.das`
-   - For module files (no `main`), verify by running a file that requires them
+3. **Verify** the formatted file still compiles: use the MCP `compile_check` tool — it handles test files and module files (no `main` required) directly. CLI equivalents: `bin/daslang -compile-only path/to/file.das`, or `bin/daslang dastest/dastest.das -- --compile-only --test path/to/test.das` for a test file (`--compile-only` compiles without executing).
 4. **Remove the backup** if formatting succeeded: delete `<filename>.das.bak`
 5. **Restore from backup** if formatting broke the file: copy `.das.bak` back over the `.das` file, delete the backup, and report the issue
 

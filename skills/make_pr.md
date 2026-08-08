@@ -371,6 +371,22 @@ Creating the PR does not complete the workflow. Continue immediately with
 
 Never merge solely because CI is green. CI green + Copilot reviewed current tip + zero unresolved conversations is the merge gate.
 
+## 7. After the PR lands — sweep the untracked goo
+
+Once the PR is merged, list what the arc left behind and delete the session debris:
+
+```bash
+git ls-files --others --exclude-standard
+```
+
+Probe scripts, dump/disassembly text files, ad-hoc logs (typically `_`-prefixed at the repo
+root or beside tests), and `__pycache__` directories go. They are never good: they rot, they
+mislead the next session into treating them as project files, and they bury real changes in
+`git status`. Keep intentional artifacts — configs, tune manifests/backups, user-owned
+assets — per the Workspace Hygiene rules in `CLAUDE.md`. Probes belong in the session
+scratchpad in the first place; a probe that had to live in-tree dies with the arc that
+created it.
+
 ## Quick reference
 
 | Step | Tool/Command | Fix policy |
@@ -391,3 +407,4 @@ Never merge solely because CI is green. CI green + Copilot reviewed current tip 
 | Push after PR creation | Re-request Copilot review | Mandatory after every push; latest review must target current tip |
 | Review acceptance | Require realistic reachability, scale, and impact | Reject theoretical defensive programming; prose-only round → resolve and land |
 | Babysit | Follow `skills/babysit.md` | Merge only when CI is green and Copilot is dry on current tip |
+| Post-land sweep | `git ls-files --others --exclude-standard` | Delete session debris (`_`-prefixed probes/dumps, `__pycache__`, ad-hoc logs); keep configs/manifests/user assets |

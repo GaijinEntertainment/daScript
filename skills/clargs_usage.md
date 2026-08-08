@@ -20,13 +20,14 @@ renderer, and uniform behavior across every tool.
 
 1. **Add the require:** `require daslib/clargs`.
 
-2. **Pick the argv accessor by host shape:**
-   - **Standalone tool** (AOT-built `.exe` you ship, or any binary
-     where `argv[0]` is the program and `argv[1..]` are the flags) →
-     `get_program_args()`.
-   - **Daslang-script host** (run via `daslang script.das -- args...`
-     — real flags live after the `--` separator) →
-     `get_cli_arguments()`.
+2. **Don't pick an argv accessor.** The macro-generated
+   `parse_args(type<Config>)` pulls argv through `get_user_args()`,
+   which is mode-aware: `argv[1..]` for a standalone `daslang -exe`
+   binary, the post-`--` slice under the interpreter or JIT. The same
+   source works in all three. Reach for `get_program_args()` /
+   `get_cli_arguments()` only when you need one specific slice
+   regardless of host, or when you're feeding an explicit
+   `array<string>` to the two-arg form.
 
 3. **Declare the config struct** (every flag is a field; metadata is
    `@clarg_*` annotations on the field):
@@ -82,6 +83,17 @@ renderer, and uniform behavior across every tool.
      double dash.
    - `@clarg_short` declares a short alias (`-n`, `-?`).
 
+   Beyond the five above, five more forms carry the cases a
+   hand-rolled parser usually gets wrong:
+
+   | Annotation / form | Behaviour |
+   |---|---|
+   | `@clarg_positional` | Positional args, consumed in declaration order. `string`, `Option<string>`, and `array<string>` only; an `array<string>` positional must be last; a required positional can't follow an optional one; can't combine with `@clarg_short` or `@clarg_count`. |
+   | `@clarg_count` | Plain `int` field; sums every occurrence, so `-v -v -v` → `3`. **Short-flag bundling is not implemented** — `-vvv` parses as nothing and leaves the field `0`. |
+   | `@clarg_mutex_group = "name"` | Mutually exclusive group. A violation reports `clargs: --fast, --slow: mutually exclusive (group 'mode')`. |
+   | `@clarg_skip` | Excludes the field from the CLI schema entirely — for state the struct carries but the user never sets. |
+   | `Option<T>` field type | Distinguishes "not supplied" from the zero value (`require daslib/option`). |
+
 4. **Parse and check help:**
 
    ```das
@@ -107,8 +119,32 @@ renderer, and uniform behavior across every tool.
    `unwrap_err` to inspect failure and `move_unwrap` to take the
    populated struct on success.
 
-   The single-arg `parse_args(type<Config>)` form pulls argv via the
-   macro's chosen accessor automatically. The two-arg
+   **Shorter, and correct by default: `parse_args_with_help`.** The
+   macro generates it for every `[CommandLineArgs]` struct that does
+   not declare its own `--help` / `-h` field. It intercepts those two
+   flags, prints `format_help_with_auto_help`, and returns `0` = help
+   printed, `-1` = clean parse (your struct is populated), `1` = parse
+   error (already logged at `LOG_ERROR`). That collapses the twelve
+   lines above to four:
+
+   ```das
+   [export]
+   def main : int {
+       var cfg : Config
+       let rc = parse_args_with_help(cfg, "tool-name")
+       return rc if (rc >= 0)
+
+       // ... use cfg.name, cfg.repeat, cfg.verbose, cfg.level, cfg.tag ...
+       return 0
+   }
+   ```
+
+   Its auto `--help` / `-h` is only reachable from a standalone
+   `daslang -exe` binary — under the script host those two flags never
+   reach your script (see the pitfall below).
+
+   The single-arg `parse_args(type<Config>)` form pulls argv via
+   `get_user_args()` automatically. The two-arg
    `parse_args(type<Config>, args)` form lets you pass an explicit
    `array<string>` — useful for tests, scripts that already split
    argv, or callers that need to share argv with another consumer
@@ -164,11 +200,12 @@ area structs, its `ENVIRONMENT.md` generated from the info).
 ## Help-flag pitfall
 
 When run under `daslang` (script-host case), the host intercepts
-`-h` / `--help` itself before forwarding script args. Wire your help
-field to `-?` instead — see the `?` short flag in the example above.
-AOT-built standalone binaries that own argv directly via
-`get_program_args()` can use `-h` / `--help` as the natural
-convention.
+`-h` / `--help` itself before forwarding script args — even after the
+`--` separator. Wire your help field to `-?` instead — see the `?`
+short flag in the example above. Standalone `daslang -exe` binaries own
+argv directly and can use `-h` / `--help` as the natural convention,
+which is also the only mode where `parse_args_with_help`'s auto help
+flag is reachable.
 
 ## Daslang convention for long flags
 
@@ -181,8 +218,13 @@ existing flags like `--track-smart-ptr`, `--das-profiler-log-file`.
 
 ## Reference
 
-- `daslib/clargs.das` — implementation (macro, `parse_args`,
-  `print_help`, `get_program_args`, `get_cli_arguments`).
+- `daslib/clargs.das` — implementation. Macro-generated per struct:
+  `parse_args` (one- and two-arg), `parse_args_with_help`,
+  `get_command_info`. Hand-written public API: `print_help`,
+  `format_help` (the string-returning sibling),
+  `format_help_with_auto_help`, `make_auto_help_arg`,
+  `get_user_args`, `get_program_args`, `get_cli_arguments`,
+  `collect_positional_args`, `count_flag`, `find_mutex_violation`.
 - `examples/clargs/main.das` — minimal end-to-end example with
   required flag, short flags, enum, array, and help wiring.
 - `utils/daspkg/commands.das` — production use across multiple
@@ -194,4 +236,4 @@ existing flags like `--track-smart-ptr`, `--das-profiler-log-file`.
 
 Standing rule: when you edit any in-tree tool that still parses `get_command_line_arguments()` directly, migrate its argv handling to `daslib/clargs` in the same PR. Don't open a dedicated "migrate every tool" PR — keep migrations opportunistic so they ride along with whatever you were already doing. Migrate **only** the tool you're already editing.
 
-To find remaining callers, grep `get_command_line_arguments` under `utils/`, `daslib/`, and `examples/` before adding "still pending" claims to a PR description. The migration is a small, self-contained change: declare the config struct, pick the argv accessor, call `parse_args`, wire help. The reference example is `examples/clargs/main.das`; production patterns are in `utils/daspkg/commands.das`.
+To find remaining callers, grep `get_command_line_arguments` under `utils/`, `daslib/`, and `examples/` before adding "still pending" claims to a PR description. The migration is a small, self-contained change: declare the config struct, call `parse_args_with_help` (or `parse_args`), wire help. The reference example is `examples/clargs/main.das`; production patterns are in `utils/daspkg/commands.das`.

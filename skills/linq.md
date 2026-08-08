@@ -42,19 +42,27 @@ If you need to chain (filter, then sort, then take), or you want a lazy iterator
 
 ## When to use LINQ
 
-LINQ is the chainable iterator surface in `daslib/linq` plus the pipe/dot-syntax shorthand macros in `daslib/linq_boost`. It covers everything comprehension can't:
+LINQ is the chainable iterator surface in `daslib/linq` plus the pipe/dot-syntax shorthand macros in `daslib/linq_boost`. The `_fold` machinery is its own 7-file family (`daslib/linq_fold.das` + `linq_fold_common` / `_array` / `_decs` / `_json` / `_table` / `_sql`), which `linq_boost` re-exports publicly — so `require daslib/linq_boost` still pulls everything. LINQ covers everything comprehension can't:
 
 - Multiple wheres, multiple selects, sorts, groupings, joins, set operations.
-- Aggregations: `count`, `sum`, `min`, `max`, `min_max`, `min_max_average`, `aggregate`.
+- Aggregations: `count`, `long_count`, `sum`, `average`, `min`, `max`, `min_by`, `max_by`, `min_max`, `min_max_by`, `min_max_average`, `min_max_average_by`, `aggregate`.
 - Set ops: `distinct`, `distinct_by`, `union`, `union_by`, `except`, `except_by`, `intersect`, `intersect_by`, `unique`, `unique_by`.
-- Element ops: `first`, `first_or_default`, `last`, `last_or_default`, `single`, `element_at`, `element_at_or_default`.
+- Element ops: `first`, `first_or_default`, `last`, `last_or_default`, `single`, `single_or_default`, `element_at`, `element_at_or_default`.
 - Querying: `any`, `all`, `none`, `contains`, `sequence_equal`, `sequence_equal_by`.
-- Partitioning: `skip`, `skip_while`, `take`, `take_while`, `skip_last`, `take_last`, `chunk`.
-- Joins/groups: `join`, `group_join`, `group_by`, `group_by_lazy`.
-- Transforms: `select`, `select_to_array`, `select_many`, `zip`.
+- Partitioning: `skip`, `skip_while`, `take`, `take_while`, `skip_last`, `take_last`, `chunk`, and the `top_n` family (`top_n`, `top_n_by`, `top_n_descending`, `top_n_by_descending`, `top_n_by_with_cmp`).
+- Ordering: `order_by`, `order_by_descending`, `order`, `order_descending`, `order_by_keys`, `reverse`.
+- Joins/groups: `join`, `group_join`, `group_by`, `group_by_lazy`, `having_`.
+- Transforms: `select`, `select_to_array`, `select_many`, `select_many_pair`, `zip`, `prepend`, `append`.
 - Materialize: `*_to_array` variants for any of the above.
+- Mutating twins: an `*_inplace` family (`order_by_inplace`, `distinct_inplace`, `reverse_inplace`, `take_inplace`, …) that `_fold` selects automatically when the source is a mutable local array. Don't call these by hand — let `_fold` pick them.
 
-The **binary two-source** ops — `join` / `group_join` / `left_join` / `right_join` / `full_outer_join` / `cross_join`, `union` / `union_by` / `intersect` / `intersect_by` / `except` / `except_by` / `concat`, and `sequence_equal` / `sequence_equal_by` — accept **one `array` and one `iterator` source mixed** (e.g. `from_xml_node(...) |> _join(dealersArray, ...)` or `eachIter |> union(otherArray)`), not just both-array or both-iterator. `zip` accepts a mixed source in its **2-source** forms too — `zip(xmlIter, arr)` / `zip(arr, xmlIter)`, with or without a result selector (`zip_to_array` likewise) — so an XML iterator zips with a bare in-memory array without `each(...)`. `zip` is N-ary (up to 8 sources), and full mixed coverage across all arities is combinatorial; for **3-or-more-source** `zip`, mix the operands with `each(arr)` rather than a per-combination overload.
+The filter operator is spelled **`where_`** with a trailing underscore (and the group filter `having_` likewise) — `where` is the reserved comprehension keyword. The `_where` / `_having` shorthands have no underscore problem.
+
+The **binary two-source** ops — `join` / `group_join` / `left_join` / `right_join` / `full_outer_join` / `cross_join`, `union` / `union_by` / `intersect` / `intersect_by` / `except` / `except_by` / `concat`, and `sequence_equal` / `sequence_equal_by` — come in four shapes: **iterator + iterator**, **iterator + array**, **array + iterator**, and **array + array**. The mixed forms let an XML/decs iterator meet a bare in-memory array without materializing (e.g. `from_xml_node(...) |> _join(dealersArray, ...)` or `eachIter |> union(otherArray)`).
+
+**Do not append `_to_array` to a both-array call.** The array+array base overload already returns `array<T>` (only the iterator-carrying shapes are lazy), so the `*_to_array` twins carry just the three iterator shapes — `union_to_array(a, b)` / `join_to_array(a, b, ...)` on two arrays is `error[30341] no matching functions or generics`. Call the bare op: `union(a, b)`, `join(a, b, keya, keyb, result)`. Wrap a side in `unsafe(each(arr))` only when you actually want the lazy iterator result.
+
+`zip` accepts a mixed source in its **2-source** forms too — `zip(xmlIter, arr)` / `zip(arr, xmlIter)`, with or without a result selector (`zip_to_array` likewise). `zip` is N-ary (up to 8 sources), and full mixed coverage across all arities is combinatorial; for **3-or-more-source** `zip`, mix the operands with `each(arr)` rather than a per-combination overload.
 
 ```das
 require daslib/linq_boost
@@ -62,23 +70,32 @@ require daslib/linq_boost
 
 This re-exports `daslib/linq` publicly. Don't `require` both.
 
-### `_fold` — the default wrapper for any chain
+### `_fold` — the default terminator for any chain
 
-Wrap every LINQ chain in `_fold(...)`. It rewrites the chain so it stays in **array form** end-to-end: each step becomes a call against an intermediate `array<T>`, picking `*_inplace` ops where the source is a mutable local and `*_to_array` for the materialize step. No lazy iterators, just array-against-array passes that the CPU and AOT codegen are good at — cheaper than the lazy form on essentially every input, with the largest win when the chain already starts from an `array<T>` (the common case) and the first step turns into an inplace mutation.
+Fold every LINQ chain. It rewrites the chain so it stays in **array form** end-to-end: each step becomes a call against an intermediate `array<T>`, picking `*_inplace` ops where the source is a mutable local and `*_to_array` for the materialize step. No lazy iterators, just array-against-array passes that the CPU and AOT codegen are good at — cheaper than the lazy form on essentially every input, with the largest win when the chain already starts from an `array<T>` (the common case) and the first step turns into an inplace mutation.
+
+**`_fold` goes last, as a trailing call on the chain** — `chain._fold()` (or `chain |> _fold()`):
+
+```das
+let names <- arr._where(_.flag)._select(_.name)._fold()
+let xs    <- arr |> _select(_ * 2) |> to_array() |> _fold()
+```
+
+The wrapping form `_fold(chain)` works only when `chain` ends in a terminator (`to_array` / `count` / `to_table` / …). A wrapping `_fold` over a chain that ends in a bare `_select` currently fails to infer the selector — `_fold(arr |> _where(_.flag) |> _select(_.name))` reports `error[30341] no matching functions or generics: result_selector(...)`, with follow-on errors pointing into `daslib/linq_fold_common.das`. Trailing position has no such restriction, so write it that way and the question never comes up.
 
 Skip `_fold` only when you genuinely need a lazy `iterator<T>` out (because the chain is being composed into a larger pipeline that consumes one element at a time).
 
-The shorthand operators (`_<op>`) come from `linq_boost`: they expand `_<op>(iter, expr)` to `<op>(iter, $(_) => expr)` with `_` as the implicit element name. Available: `_where`, `_select`, `_min_by`, `_max_by`, `_min_max_by`, `_min_max_average_by`, `_skip_while`, `_take_while`, `_all`, `_any`, `_none`, `_count`, `_unique_by`, `_distinct_by`, `_order_by`, `_order_by_descending`, `_sequence_equal_by`, `_except_by`, `_intersect_by`, `_union_by`, `_group_by_lazy`, `_having`.
+The shorthand operators (`_<op>`) come from `linq_boost`: they expand `_<op>(iter, expr)` to `<op>(iter, $(_) => expr)` with `_` as the implicit element name. Available: `_where`, `_having`, `_select`, `_select_many`, `_select_many_2`, `_min_by`, `_max_by`, `_min_max_by`, `_min_max_average_by`, `_skip_while`, `_take_while`, `_all`, `_any`, `_none`, `_count`, `_long_count`, `_in`, `_not_in`, `_unique_by`, `_distinct_by`, `_order_by`, `_order_by_descending`, `_order_by_keys`, `_group_by`, `_group_by_lazy`, `_sequence_equal_by`, `_except_by`, `_intersect_by`, `_union_by`, and the join family `_join`, `_group_join`, `_left_join`, `_right_join`, `_full_outer_join`, `_cross_join`. Most also have a `_<op>_to_array` twin that materializes in one step (`_where_to_array`, `_select_to_array`, `_order_by_to_array`, `_group_by_to_array`, …).
 
 ### How to actually write a chain — the working shape
 
-Use **dot form for the chain steps**, end with `.to_array()._fold()`, and pipe-into any non-linq consumer (like string `join`):
+Use **dot form for the chain steps**, end with a trailing `._fold()`, and pipe-into any non-linq consumer (like string `join`):
 
 ```das
-// For an array<T> source — call _select / _where directly:
+// For an array<T> source — call _select / _where directly; the result is already array<T>:
 let s = (arr._select("{_:d}")._fold()) |> join(", ")
-// or with a filter, materializing to array:
-let names = (arr._where(_.flag)._select(_.name).to_array()._fold()) |> join(", ")
+// or with a filter:
+let names = (arr._where(_.flag)._select(_.name)._fold()) |> join(", ")
 
 // For an iterator source (range(N), or anything returning iterator<T>) —
 // prepend each() so dot-form works:
@@ -90,10 +107,11 @@ let types = (each(typeDecl.argTypes)._select(describeCppTypeEx(_, ...)).to_array
 
 There are several tripwires to know about — they're not arbitrary, they fall out of how the call macros and the dot-pseudo-pipe interact. Treat the dot-form rules below as load-bearing:
 
-- **The `_select` / `_where` / ... shorthand needs an iterator or array input.** The `linq_boost` macros validate `arg0type.isIterator || arg0type.isGoodArrayType` on the receiver, so `arr._select(...)` works because `arr : array<T>` is an accepted input. `range(N)._select(...)` does NOT — `range(N)` produces a `range` value (a separate kind of iterable), not an iterator or array, and the typer fails with "type<auto> can't be fully inferred". Convert with `each(range(N))._select(...)` so `each()` produces `iterator<int>`. Same for any C++-bound `dasvector` / sequence-like field when you want dot-form chaining — start with `each(...)`.
-- **Pipe form does not compose with `_fold`.** A chain like `arr |> _select(...) |> to_array() |> _fold()` fails with "expecting linq expression" — the `_fold` macro needs to see the chain in the dot/call shape, and pipe rewrites confuse its pattern match. Always use dot form for the chain and switch to pipe only at the boundary into the final consumer (e.g. `(chain) |> join(",")`).
+- **The `_select` / `_where` / ... shorthand needs an iterator or array input.** The `linq_boost` macros validate `arg0type.isIterator || arg0type.isGoodArrayType` on the receiver, so `arr._select(...)` works because `arr : array<T>` is an accepted input. `range(N)._select(...)` does NOT — `range(N)` produces a `range` value (a separate kind of iterable), not an iterator or array, and the typer fails with `error[50503] expecting iterator or array` (plus a follow-on `error[30838] can't locate variable '_'`). Convert with `each(range(N))._select(...)` so `each()` produces `iterator<int>`. Same for any C++-bound `dasvector` / sequence-like field when you want dot-form chaining — start with `each(...)`.
+- **Pipe form composes with `_fold` fine.** `arr |> _select(...) |> to_array() |> _fold()` works. What matters is `_fold`'s **position**, not pipe vs dot — see the `_fold` section above. Dot form still reads better for a multi-step chain; switch to pipe at the boundary into the final consumer (e.g. `(chain) |> join(",")`).
+- **`each(...)` is `[unsafe_outside_of_for]` for arrays too**, not just for `each_kv` / `keys`. Inside a `_fold` chain the macro peels the `each` before infer, so no wrap is needed there; feeding `each(arr)` straight to a plain linq function needs `unsafe(each(arr))` or you get `error[31013] ... is unsafe, when not source of the for-loop`.
 - **Multi-line chains need surrounding parens.** Statement-level newlines are significant outside brackets — `let x = a._foo()._bar()` on one line is fine, but breaking across lines requires `let x = (a._foo()._bar())`. The trailing `|> join(...)` can go on the same closing-paren line.
-- **`_fold` defaults to iterator output unless you ask for array.** End with `.to_array()._fold()` to get `array<T>` out. End with just `._fold()` (no preceding `.to_array()`) and you get `iterator<T>` — fine if the next step accepts iterators (string `join` does), but you give up the array-form optimization that's the whole point of `_fold`.
+- **`_fold`'s output type follows the source, not the spelling.** An `array<T>` source stays `array<T>` either way — `arr._select(...)._fold()` is already `array<T>`, because linq's array overloads return arrays. An **iterator** source (`each(...)`, `range(...)`) folds to `iterator<T>`, so add `.to_array()` before the `._fold()` when you need a materialized array out of one.
 - **Inside `_<op>` bodies, `_` is the element.** `_select("{unsafe(info.dim[_]):d}")` substitutes `_` correctly inside string interpolation. Multi-statement bodies via `build_string() $(w) { ... use _ ... }` work too — the macro substitutes `_` throughout the literal AST you pass.
 - **String `join(arr, sep)` lives in `strings` / `strings_boost`** — `linq` itself has a different `join` (SQL-style two-iterator inner join with key + result projection). They coexist; the typer picks the right one by argument types. If you see "module strings_boost is not visible" and "missing argument blk" pointed at your join call, you're missing `require daslib/strings_boost` (or `require strings`).
 - **The `_` placeholder is local to the closest enclosing `_<op>(...)`.** If you nest, give inner closures explicit names (`@@(x) => ...`). Don't try to shadow `_` between outer and inner shorthand calls.
@@ -131,22 +149,27 @@ Pick **one** style per transformation and stay in it:
 
 ```das
 // Bad — comprehension feeding a linq sequence operator (join is high-order):
-let pairs <- join_to_array(
+let pairs <- join(
     [for (x in customers); x],
     orders,
-    @@(c) => c.id,
-    @@(o) => o.customer_id,
-    @@(c, o) => Pair(c, o))
+    @@(c : Cust) => c.id,
+    @@(o : Ord) => o.customer_id,
+    @@(c : Cust; o : Ord) => Pair(c = c, o = o))
 
-// Good — pure linq:
-let pairs <- _fold(customers |> join_to_array(orders, @@(c) => c.id, @@(o) => o.customer_id, @@(c, o) => Pair(c, o)))
+// Good — pure linq (both sources are arrays, so plain `join` already returns array<Pair>):
+let pairs <- customers |> join(orders,
+    @@(c : Cust) => c.id,
+    @@(o : Ord) => o.customer_id,
+    @@(c : Cust; o : Ord) => Pair(c = c, o = o))
 
 // Bad — linq chain handing off to a comprehension:
 let names <- [for (x in arr |> _where(_.flag)); x.name]
 
-// Good — pure linq:
-let names <- _fold(arr |> _where(_.flag) |> _select(_.name))
+// Good — pure linq, `_fold` trailing:
+let names <- arr._where(_.flag)._select(_.name)._fold()
 ```
+
+Two things the join example is load-bearing about. The key/result selectors need **typed** parameters — bare `@@(c) => c.id` gives `error[30341]` plus `error[30928] can't get field 'id' of auto const&`. And struct construction takes **named** arguments — `Pair(c, o)` is `error[30160] can only generate default structure constructor without arguments`.
 
 The rule applies to any sequence-consuming high-order primitive, including string `join`. If a single comprehension suffices and is fed only to free functions like `length` or basic terminus calls, that's still one style. The split happens when an operator that itself walks a sequence (linq `join` / `concat` / `zip` / `aggregate` / string `join(arr, sep)`) shows up — at that point the upstream should be linq, not a comprehension.
 
@@ -187,11 +210,11 @@ write(writer, "{join(args, "")}")
 // Comprehension — the transformation fits in one expression:
 let xs <- [for (x in arr); f(x)]
 
-// LINQ — chain of operators in dot form, ending in .to_array()._fold():
-let xs <- arr._where(_.flag)._select(_.name).to_array()._fold()
+// LINQ — chain of operators in dot form, ending in a trailing ._fold():
+let xs <- arr._where(_.flag)._select(_.name)._fold()
 
 // LINQ piping into a non-linq consumer (string join here):
-let csv = (arr._select(_.name).to_array()._fold()) |> join(", ")
+let csv = (arr._select(_.name)._fold()) |> join(", ")
 
 // Plain for-loop — the body has a side effect:
 for (argT in typeDecl.argTypes) {
@@ -203,5 +226,5 @@ for (argT in typeDecl.argTypes) {
 
 1. Result is a value derived from one source by one expression (with optional filter), and the result is consumed plainly (no further sequence operator)? → **comprehension**.
 2. Body has side effects or needs `break`? → **plain `for`**.
-3. Chain of operators (multi-where, sort, group, set-op, aggregation), OR a transformation feeding a sequence-consuming primitive like `join` / `concat` / `aggregate` / string `join(arr, sep)`? → **`_fold(arr |> _<op>(...) |> ...)`** with the `_<op>` shorthand. Drop `_fold` only if the result must be a lazy `iterator<T>` for downstream composition.
+3. Chain of operators (multi-where, sort, group, set-op, aggregation), OR a transformation feeding a sequence-consuming primitive like `join` / `concat` / `aggregate` / string `join(arr, sep)`? → **`arr._<op>(...)._<op>(...)._fold()`** with the `_<op>` shorthand and `_fold` trailing. Drop `_fold` only if the result must be a lazy `iterator<T>` for downstream composition.
 4. Tempted to import `daslib/functional`? → almost always one of (1), (2), (3) is the right answer.

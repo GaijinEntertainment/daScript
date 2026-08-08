@@ -50,15 +50,18 @@ Language and Syntax
      - Description
    * - ``gen2``
      - bool
-     - false
-     - Enables generation-2 syntax. Requires ``{ }`` braces for all blocks
-       and disables legacy make syntax (``[[...]]`` for structs, ``[{...}]`` for arrays).
-       Applied immediately during parsing.
+     - true
+     - Selects generation-2 syntax. Gen2 is the **default** parser: every file parses as
+       gen2 unless it explicitly opts out with ``options gen2 = false``. Gen2 requires
+       ``{ }`` braces for all blocks and disables legacy make syntax (``[[...]]`` for
+       structs, ``[{...}]`` for arrays). Applied immediately during parsing — the parser
+       scans the source text for this option before lexing, so it takes effect for the
+       whole file regardless of where the ``options`` statement appears.
    * - ``indenting``
      - int
      - 0
-     - Tab size for indentation-sensitive parsing. Valid values are ``0`` (disabled), ``2``, ``4``, ``8``.
-       Applied immediately during parsing.
+     - Tab size for indentation-sensitive parsing. Valid values are ``0`` (use the default
+       tab size, which is 4), ``2``, ``4``, ``8``. Applied immediately during parsing.
    * - ``always_export_initializer``
      - bool
      - false

@@ -142,7 +142,8 @@ This expands to:
         __builtin_table_free(a,8,4,__context__)
     }
 
-Custom finalizers are generated for structures. Fields annotated as @do_not_delete are ignored.
+Custom finalizers are generated for structures. A field annotated ``@do_not_delete`` is skipped
+entirely — no ``finalize`` call is generated for it, and nothing it owns is freed.
 ``memzero`` clears structure memory at the end:
 
 .. code-block:: das
@@ -161,9 +162,11 @@ This expands to:
 
     def finalize ( var __this:Goo explicit ) {
         _::finalize(__this.a)
-        __::builtin`finalize(__this.b)
         memzero(__this)
     }
+
+``b`` does not appear in the generated body at all. The trailing ``memzero`` still zeroes its
+bytes together with the rest of the structure.
 
 Tuples behave similarly to structures. There is no way to ignore individual fields:
 

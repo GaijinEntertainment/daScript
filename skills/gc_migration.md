@@ -26,17 +26,20 @@ The following AST types changed from `smart_ptr<T>` (reference-counted) to `gc_n
 | `Variable` | `smart_ptr<Variable>` | `Variable*` | `Variable?` (alias `VariablePtr`) |
 | `MakeFieldDecl` | `smart_ptr<MakeFieldDecl>` | `MakeFieldDecl*` | `MakeFieldDecl?` (alias `MakeFieldDeclPtr`) |
 | `MakeStruct` | `smart_ptr<MakeStruct>` | `MakeStruct*` | — |
-| `Annotation` (all subclasses) | `smart_ptr<Annotation>` | `Annotation*` | `Annotation?` (alias `AnnotationPtr`) |
+| `Annotation` (all subclasses) | `smart_ptr<Annotation>` | `Annotation*` | `Annotation?` (no das alias — spell the pointer type) |
 | `AnnotationDeclaration` | `smart_ptr<AnnotationDeclaration>` | `AnnotationDeclaration*` | `AnnotationDeclaration?` (alias `AnnotationDeclarationPtr`) |
 | `FunctionAnnotation` | `smart_ptr<FunctionAnnotation>` | `FunctionAnnotation*` | `FunctionAnnotation?` (alias `FunctionAnnotationPtr`) |
 | `StructureAnnotation` | `smart_ptr<StructureAnnotation>` | `StructureAnnotation*` | `StructureAnnotation?` (alias `StructureAnnotationPtr`) |
 | `EnumerationAnnotation` | `smart_ptr<EnumerationAnnotation>` | `EnumerationAnnotation*` | `EnumerationAnnotation?` (alias `EnumerationAnnotationPtr`) |
-| `TypeAnnotation` | `smart_ptr<TypeAnnotation>` | `TypeAnnotation*` | `TypeAnnotation?` (alias `TypeAnnotationPtr`) |
+| `TypeAnnotation` | `smart_ptr<TypeAnnotation>` | `TypeAnnotation*` | `TypeAnnotation?` (no das alias — spell the pointer type) |
+
+(`AnnotationPtr` / `TypeAnnotationPtr` exist as C++ typedefs only; in das they are `error[30812] … don't know what 'AnnotationPtr' is`. The das aliases that DO exist are the `…Ptr` names in `daslib/ast.das:14-36` plus `AnnotationDeclarationPtr` in `daslib/ast_boost.das`.)
 
 **NOT migrated** (still smart_ptr):
-- `ProgramPtr = smart_ptr<Program>`
-- `VisitorAdapterPtr` (from `make_visitor`)
-- `smart_ptr<Context>`
+- `ProgramPtr = smart_ptr<Program>` (`daslib/ast.das`) — das-visible
+- `FileAccessPtr = smart_ptr<FileAccess>` (`daslib/rtti.das`) — das-visible
+- `Context` and `DebugAgent` — refcounted C++ side; `ContextPtr` / `DebugAgentPtr` are C++ typedefs with no das spelling
+- `VisitorAdapter` — the das type is `VisitorAdapter?`; `VisitorAdapterPtr` is C++ only
 
 ## daScript code migration (.das files)
 
@@ -49,10 +52,10 @@ This is the main section for migrating user/module `.das` code.
 | `var inscope x <- new ExprCall(...)` | `var x = new ExprCall(...)` | No `inscope`, no `<-` |
 | `var inscope x <- clone_expression(e)` | `var x = clone_expression(e)` | |
 | `var inscope x <- clone_type(t)` | `var x = clone_type(t)` | |
-| `var inscope x <- clone_function(f)` | `var x <- clone_function(f)` | `clone_function` still returns via move |
+| `var inscope x <- clone_function(f)` | `var x = clone_function(f)` | |
 | `var inscope x <- qmacro(...)` | `var x = qmacro(...)` | |
 | `var inscope x <- qmacro_block() { ... }` | `var x = qmacro_block() { ... }` | |
-| `var inscope x <- qmacro_function(...) $(args) { ... }` | `var x <- qmacro_function(...) $(args) { ... }` | `qmacro_function` returns via move |
+| `var inscope x <- qmacro_function(...) $(args) { ... }` | `var x = qmacro_function(...) $(args) { ... }` | |
 | `var inscope x <- qmacro_type(type<T>)` | `var x = qmacro_type(type<T>)` | |
 | `var inscope x <- typeinfo ast_typedecl(type<T>)` | `var x = typeinfo ast_typedecl(type<T>)` | |
 | `var inscope x : array<ExpressionPtr>` | `var x : array<ExpressionPtr>` | No `inscope` for arrays of gc types |
@@ -63,9 +66,9 @@ This is the main section for migrating user/module `.das` code.
 | `var inscope ann <- make_enumeration_annotation(...)` | `var ann = make_enumeration_annotation(...)` | |
 | `var inscope decl <- new AnnotationDeclaration(...)` | `var decl = new AnnotationDeclaration(...)` | |
 
-**Rule of thumb:** If the type is a gc_node pointer (`ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`, `AnnotationDeclarationPtr`, `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`) or an array/table of one, remove `inscope` and change `<-` to `=`. Exception: `clone_function` and `qmacro_function` still use `<-` because they return via move semantics on the daScript side.
+**Rule of thumb:** If the type is a gc_node pointer (`ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`, `AnnotationDeclarationPtr`, `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`) or an array/table of one, remove `inscope` and change `<-` to `=`. This includes `clone_function` and `qmacro_function` — both hand back a raw pointer, so `<-` there is just the memcpy+memset this file warns about.
 
-**Still needs `var inscope <-`:** `make_visitor(...)` returns `smart_ptr<VisitorAdapter>` — keep `var inscope adapter <- make_visitor(*v)`.
+**`make_visitor` changed shape too:** it is block-taking — `make_visitor(someClass) $(adapter) { … }` — with no returning overload and no `unsafe` needed at the call site. Rewrite `var inscope adapter <- make_visitor(*v); unsafe { … }` as `make_visitor(*v) $(adapter) { … }`.
 
 ### Return statements
 

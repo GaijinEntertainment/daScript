@@ -109,13 +109,17 @@ query() $(name : string; alpha : float = 0.5) {
 }
 ```
 
-**Optional pointer parameters** are different — annotate the argument as `[optional]` and declare it as a pointer:
+**Optional pointer parameters** are different — annotate the argument as `@optional` and declare it as a pointer:
 
 ```das
+options relaxed_pointer_const     // required — see below
+
 query() $(name : string; @optional shield : bool?) {
     if (shield != null) { ... }
 }
 ```
+
+**A file that uses `@optional` query parameters must declare `options relaxed_pointer_const`.** Without it the build fails with `error[30915] can only copy compatible type ... can't copy constant to non-constant pointer`, pointed at `daslib/functional.das` — the `repeat` generator behind `get_optional`. The error names neither decs nor your query, so it reads like an unrelated library bug.
 
 `@optional` arguments cannot have default values and must be pointer types. Internally these route to `get_optional`, returning `null` for entities that lack the component. Don't confuse the two forms — the default-value form is for "use X when missing", the optional-pointer form is for "tell me whether it was missing".
 
@@ -124,7 +128,7 @@ query() $(name : string; @optional shield : bool?) {
 A struct annotated with `[decs_template]` becomes a bundle of components. The macro generates four functions:
 
 - `apply_decs_template(cmp, src)` — sets each field on a `ComponentMap` with prefix `StructName_`
-- `remove_decs_template(cmp, src)` — removes those components
+- ``remove_decs_template`StructName(cmp, src)`` — removes those components. The generated name carries the struct in a backtick suffix, unlike `apply_decs_template`; the unsuffixed spelling is `error[30341] no matching functions or generics`
 - `apply_decs_template_arch(arch, eidx, eid, src, cache)` — direct archetype write with cached indices
 - `create_entities\`T(count, blk)` — bulk creator using the cache, no per-entity ComponentMap
 
@@ -229,7 +233,7 @@ Use the backtick form for any hot-path bulk creation. Use the ComponentMap form 
 require daslib/linq_boost
 require daslib/decs_boost
 
-let qq = (
+let qq <- _fold(
     from_decs($(index : int; text : string) {})
         ._where(_.index < 2)
         .reverse()
@@ -239,7 +243,11 @@ let qq = (
 
 Tuple field names match the query parameter names — you can write `_.index`, `_.text`, etc. inside `_<op>` shorthands.
 
-`from_decs` is a materializing terminal — it evaluates the entire query into an `array<tuple>` up front. That's the right shape when you want sort/filter/take semantics on the query results, but it forfeits the archetype-pass-with-tight-inner-loop performance of plain `query`. For pure side-effects (mutate components, accumulate a sum, count matches), keep using `query`. Reach for `from_decs` when the consumer is genuinely a linq chain (`_where` + `_order_by` + `take` + `to_array`) or when you want the result as a value to return / pass / persist.
+**Wrap the chain in `_fold(...)`.** The decs adapter (`daslib/linq_fold_decs.das`) pattern-matches the post-expansion bridge and splices the chain directly into the `for_each_archetype` walk — no intermediate array. When a chain shape it doesn't recognize survives every splice arm, `_fold` says so on the compiler log ("the bridge materializes a temp `res` array") rather than silently degrading. **Unwrapped**, `from_decs` is a materializing terminal: it evaluates the whole query into an `array<tuple>` up front, forfeiting the archetype-pass-with-tight-inner-loop performance of plain `query`.
+
+For pure side-effects (mutate components, accumulate a sum, count matches), keep using `query`. Reach for `from_decs` when the consumer is genuinely a linq chain (`_where` + `_order_by` + `take` + `to_array`) or when you want the result as a value to return / pass / persist.
+
+**`from_decs_template(type<Foo>)`** is the same bridge over a `[decs_template]` struct — it reads the template's prefix and field list, so the record tuple carries the field names automatically instead of you respelling the parameter list. It is the primary source the `_fold` decs adapter dispatches on. Full pattern reference: `skills/linq_fold_patterns.md`.
 
 ## Component access on archetypes
 
@@ -266,7 +274,7 @@ let pos = get_component(hero, "pos", float3(0))    // returns float3
 let dead = get_component(deleted_eid, "hp", -999)  // -999
 ```
 
-`is_alive(eid)` — `false` for `INVALID_ENTITY_ID`, dead entities, or stale generation IDs. `entity_count()` returns total alive entities across all archetypes.
+`is_alive(eid)` — `false` for `INVALID_ENTITY_ID`, dead entities, or stale generation IDs. `entity_count()` returns total alive entities across all archetypes and **panics past `INT_MAX`**; `long_entity_count() : int64` is the int64-safe sibling. Same `length` / `long_length` contract as everywhere else.
 
 ## Serialization
 
@@ -296,6 +304,7 @@ Components serialize through the type-info `serializer` callback that `make_comp
 ## Reference
 
 - Tutorial — read first: [tutorials/language/34_decs.das](tutorials/language/34_decs.das)
+- decs ↔ linq tutorial: [tutorials/language/55_linq_decs.das](tutorials/language/55_linq_decs.das)
 - daslib sources: [daslib/decs.das](daslib/decs.das), [daslib/decs_boost.das](daslib/decs_boost.das), [daslib/decs_state.das](daslib/decs_state.das)
 - Tests as worked examples (repo-only): [tests/decs/](tests/decs/) — `test_queries.das`, `test_create_update_remove.das`, `test_bulk_create.das`, `test_optional_values.das`, `test_default_values.das`, `test_stages.das`, `test_serialize.das`
 - Linq bridge test (repo-only): [tests/linq/test_linq_from_decs.das](tests/linq/test_linq_from_decs.das)
