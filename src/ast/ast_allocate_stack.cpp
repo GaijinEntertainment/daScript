@@ -1073,6 +1073,30 @@ namespace das {
     // shoe would reissue the cell - a silent use-after-free. Hence ONE site per call, and site
     // creation is inhibited in every sibling subtree. (The old per-call "mark the last builder"
     // scan violated this: compare(to_upper("{b}"), "{a}") corrupted arg1 on every iteration.)
+    static bool isFreshStringCall ( Expression * e ) {
+        if ( !e->rtti_isCall() ) return false;
+        auto c = static_cast<ExprCall *>(e);
+        return c->func && c->func->tempStringResult && c->type && c->type->isString() && !c->type->ref;
+    }
+
+    static ExprCall * makeTempStringWrapper ( Function * wrapper, Expression * inner ) {
+        auto w = new ExprCall(inner->at, wrapper->name);
+        w->func = wrapper;
+        w->generated = true;
+        w->notDiscarded = true;
+        w->type = new TypeDecl(*wrapper->result);
+        w->arguments.push_back(inner);
+        auto fakeContext = new ExprFakeContext(inner->at);
+        fakeContext->generated = true;
+        fakeContext->type = new TypeDecl(Type::fakeContext);
+        w->arguments.push_back(fakeContext);
+        auto fakeLineInfo = new ExprFakeLineInfo(inner->at);
+        fakeLineInfo->generated = true;
+        fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo);
+        w->arguments.push_back(fakeLineInfo);
+        return w;
+    }
+
     class MarkTempStrings : public Visitor {
     public:
         MarkTempStrings ( Function * wrapperFn, bool insertWrappers_ )
@@ -1084,11 +1108,6 @@ namespace das {
         das_hash_map<ExprCall *, Expression *> siteOf;
         bool isWrapperCall ( Expression * e ) const {
             return wrapper && e->rtti_isCall() && static_cast<ExprCall *>(e)->func == wrapper;
-        }
-        static bool isFreshStringCall ( Expression * e ) {
-            if ( !e->rtti_isCall() ) return false;
-            auto c = static_cast<ExprCall *>(e);
-            return c->func && c->func->tempStringResult && c->type && c->type->isString() && !c->type->ref;
         }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
@@ -1107,20 +1126,7 @@ namespace das {
                     siteOf[expr] = arg;
                     break;
                 } else if ( insertWrappers && isFreshStringCall(arg) ) {
-                    auto w = new ExprCall(arg->at, wrapper->name);
-                    w->func = wrapper;
-                    w->generated = true;
-                    w->notDiscarded = true;
-                    w->type = new TypeDecl(*wrapper->result);
-                    w->arguments.push_back(arg);
-                    auto fakeContext = new ExprFakeContext(arg->at);
-                    fakeContext->generated = true;
-                    fakeContext->type = new TypeDecl(Type::fakeContext);
-                    w->arguments.push_back(fakeContext);
-                    auto fakeLineInfo = new ExprFakeLineInfo(arg->at);
-                    fakeLineInfo->generated = true;
-                    fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo);
-                    w->arguments.push_back(fakeLineInfo);
+                    auto w = makeTempStringWrapper(wrapper, arg);
                     arg = w;
                     siteOf[expr] = w;
                     break;
@@ -1143,6 +1149,123 @@ namespace das {
         }
     };
 
+    // counts references to one variable inside a statement, and how many are SAFE:
+    // a safe reference is a plain read that is the DIRECT argument of a non-capturing,
+    // non-invoke, non-policy call - what a nested call returns is a different value, so
+    // only the immediate consumer of the reference matters. any reference inside a block
+    // literal, and any other shape (return, store, addr, operator operand), stays unsafe
+    class VarUseClassifier : public Visitor {
+    public:
+        VarUseClassifier ( Variable * v ) : var(v) {}
+        uint32_t total = 0;
+        uint32_t safe = 0;
+    protected:
+        Variable *  var = nullptr;
+        int32_t     blockDepth = 0;
+        static Expression * peelR2V ( Expression * e ) {
+            return e->rtti_isR2V() ? static_cast<ExprRef2Value *>(e)->subexpr : e;
+        }
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->variable==var ) total ++;
+        }
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            blockDepth ++;
+        }
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            blockDepth --;
+            return Visitor::visit(expr);
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            if ( blockDepth ) return;
+            auto f = call->func;
+            if ( !f || f->captureString || f->invoke || f->policyBased ) return;
+            auto barg = peelR2V(arg);
+            if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
+        }
+    };
+
+    class HasQueueSite : public Visitor {
+    public:
+        HasQueueSite ( Function * w ) : wrapper(w) {}
+        bool found = false;
+    protected:
+        Function * wrapper = nullptr;
+        virtual void preVisit ( ExprStringBuilder * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->isTempString ) found = true;
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func==wrapper ) found = true;
+        }
+    };
+
+    // Phase B of temp-string reclaim: the let-local live range. `let s = <flagged call>`
+    // wraps its initializer when s provably dies before the next queue site:
+    //  - every reference to s is a safe read per VarUseClassifier;
+    //  - no statement from the let through the LAST-reference statement contains a queue
+    //    site (marked builder or wrapper call). Statements after the last use may queue
+    //    freely - s is dead by then. A loop re-executing the let is the same case: the
+    //    local's scope ends with the block, so the previous iteration's value is dead.
+    // Runs AFTER MarkTempStrings (per-call sites are final); candidates are processed in
+    // REVERSE statement order so a wrap here is visible as a site to earlier candidates.
+    // Sites inside the initializer's own subtree are fine - that is the chain pattern
+    // (each nested temp dies before the next link queues).
+    class WrapLetTempStrings : public Visitor {
+    public:
+        WrapLetTempStrings ( Function * wrapperFn ) : wrapper(wrapperFn) {}
+    protected:
+        Function * wrapper = nullptr;
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            auto & stmts = block->list;
+            for ( int i=int(stmts.size())-1; i>=0; --i ) {
+                if ( !stmts[i]->rtti_isLet() ) continue;
+                auto elet = static_cast<ExprLet *>(stmts[i]);
+                if ( elet->variables.size()!=1 ) continue;
+                auto & var = elet->variables[0];
+                if ( !var->init || !var->type || !var->type->isString() || var->type->ref ) continue;
+                // a builder initializer self-queues when marked - no wrapper call needed;
+                // an already-marked builder or an existing wrapper fails both tests - idempotent
+                bool builderInit = var->init->rtti_isStringBuilder()
+                    && !static_cast<ExprStringBuilder *>(var->init)->isTempString;
+                if ( !builderInit && !isFreshStringCall(var->init) ) continue;
+                int lastUse = -1;
+                bool ok = true;
+                for ( size_t j=i+1; j<stmts.size() && ok; ++j ) {
+                    VarUseClassifier uc(var);
+                    stmts[j]->visit(uc);
+                    if ( uc.total ) {
+                        if ( uc.total!=uc.safe ) ok = false;
+                        else lastUse = int(j);
+                    }
+                }
+                if ( ok ) {
+                    for ( auto & fs : block->finalList ) {          // finally is outside the range model
+                        VarUseClassifier uc(var);
+                        fs->visit(uc);
+                        if ( uc.total ) { ok = false; break; }
+                    }
+                }
+                if ( !ok || lastUse<0 ) continue;
+                for ( int j=i+1; j<=lastUse && ok; ++j ) {
+                    HasQueueSite qs(wrapper);
+                    stmts[j]->visit(qs);
+                    if ( qs.found ) ok = false;
+                }
+                if ( !ok ) continue;
+                if ( builderInit ) {
+                    static_cast<ExprStringBuilder *>(var->init)->isTempString = true;
+                } else {
+                    var->init = makeTempStringWrapper(wrapper, var->init);
+                }
+            }
+            return Visitor::visit(block);
+        }
+    };
+
     // program
 
     void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
@@ -1161,6 +1284,10 @@ namespace das {
             }
             MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr);
             visit(mts);
+            if ( wrapperFn ) {
+                WrapLetTempStrings wlt(wrapperFn);
+                visit(wlt);
+            }
         }
         // string heap
         AllocateConstString vstr;

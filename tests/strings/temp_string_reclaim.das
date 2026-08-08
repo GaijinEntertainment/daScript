@@ -163,3 +163,57 @@ def test_temp_string_reclaim_propagation(t : T?) {
         t |> equal(keep, "555555")
     }
 }
+
+[test]
+def test_temp_string_reclaim_let_local(t : T?) {
+    t |> run("f2s shape: let-local conversion is reclaimed") @@(t) {
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(100000)) {
+            let str = string(i)
+            summ += length(str)
+        }
+        let after = string_heap_bytes_allocated()
+        t |> success(summ > 0)
+        t |> success(after - before < 256ul, "let-local temps should be reclaimed")
+    }
+
+    t |> run("builder let-local is marked, not wrapped - reclaimed for free") @@(t) {
+        let before = string_heap_bytes_allocated()
+        var summ = 0
+        for (i in range(100000)) {
+            let str = "v{i}"
+            summ += length(str)
+        }
+        let after = string_heap_bytes_allocated()
+        t |> success(summ > 0)
+        t |> success(after - before < 256ul, "builder let-local temps should be reclaimed")
+    }
+
+    t |> run("adjacent let-locals: the earlier one must not be wrapped") @@(t) {
+        for (i in range(2000)) {
+            let a = string(100000 + i)
+            let b = string(500000 + i)
+            // b's wrapped let is a queue site between a's init and a's use,
+            // so a must stay unwrapped or its cell would be flushed mid-range
+            t |> success(compare_ignore_case(a, b) != 0)
+        }
+    }
+
+    t |> run("escaping let-local is not wrapped") @@(t) {
+        var arr : array<string>
+        for (i in range(100)) {
+            let s = string(3000000 + i)
+            arr |> push(s)
+        }
+        var churn = 0
+        for (i in range(1000)) {
+            churn += length(string(4444000 + i))
+        }
+        t |> success(churn > 0)
+        for (i in range(100)) {
+            let expected_elem = string(3000000 + i)
+            t |> equal(arr[i], expected_elem)
+        }
+    }
+}

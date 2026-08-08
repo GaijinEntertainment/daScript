@@ -150,6 +150,21 @@ Tests: f2s shape flat heap; `let a = string(x); let b = string(y); use(a, b)` NO
 aot), then the dasweb pipeline regenerates the front-page row. Opportunistic: check LSP/MCP
 RSS over a long session.
 
+P4 local numbers (2026-08-07, CLI = persistent heap, gate toggled via
+`options disable_temp_string_reclaim`):
+- **heap retained by f2s: 129,231,632 bytes → 8 bytes** (interp and JIT identical) — the
+  front-page retention mystery is closed.
+- time on the pure conversion loop: interp 0.108s → 0.121s (+12%), JIT 0.081s → 0.094s
+  (+16%) — the wrapper interop call costs ~13ns/conversion. Native chunk growth is cheap,
+  so natively the row trades time for memory. The PLAYGROUND verdict is still open: wasm
+  memory.grow for 129MB is far more expensive than native mallocs, so the live row may
+  still win time — measure there before deciding. Overhead-reduction candidates if needed:
+  a `stringDisposeQueLen` slot beside the queue pointer (kills the per-flush strlen; Context
+  layout/JIT-offset implications), or builder-style direct temp allocation for conversions
+  (per-backend special machinery — previously rejected).
+- builder-INIT let-locals (`let s = "{x}"`) are marked instead of wrapped — self-queueing,
+  zero wrapper overhead. Only call-inits pay the wrapper.
+
 **P5 — the SWEEP (planned agent fan-out, NOT a surprise).** Once machinery + pilot are
 green, parallel **Opus** agents extend the flags and clean the ecosystem. We WILL touch
 many files and lint errors WILL surface in them (whoever-stumbles-fixes) — that is
