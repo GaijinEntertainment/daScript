@@ -33,7 +33,7 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # Two exe naming conventions exist:
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
-#     daslang-live, das-fmt): platform-natural suffix (.exe on Windows,
+#     daslang-live, gen1_to_gen2): platform-natural suffix (.exe on Windows,
 #     none on Linux/macOS). These are the ONLY binaries the bundle contains,
 #     because only `add_executable` targets can carry an install(TARGETS) rule.
 #   * DASEXE_SUFFIX — for binaries built via `daslang -exe` (aot, benchctl,
@@ -100,7 +100,7 @@ COMPILE_TESTS=(
 # intercepts `--help` and prints its own usage even after the `--` separator,
 # swallowing the script's CLI surface.
 EXE_PRESENCE_TESTS=(
-    "das-fmt|cpp"
+    "gen1_to_gen2|cpp"
     "daslang-live|cpp"
 )
 

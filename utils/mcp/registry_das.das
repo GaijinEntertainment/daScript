@@ -30,7 +30,7 @@ require tools/live public
 
 // The full daslang compiler-backed tool set: compile/lint/AOT/introspection,
 // dupe detection, and the live-reload control surface.
-def build_das_tools(var reg : array<ToolDef>) {
+def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool-registration table, one emplace per tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "compile_check",
@@ -195,7 +195,7 @@ def build_das_tools(var reg : array<ToolDef>) {
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "convert_to_gen2",
-            "Convert a daslang source file from v1 (indentation-based) syntax to gen2 (braces, parentheses) syntax using das-fmt. Returns converted code or writes in place.",
+            "Convert a daslang source file from v1 (indentation-based) syntax to gen2 (braces, parentheses) syntax using the gen1_to_gen2 converter. Returns converted code or writes in place.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to the .das file to convert"),
                 "inplace" => PropertySchema(_type = "string", description = "If 'true', overwrite the file in place. Otherwise return converted code to stdout.")

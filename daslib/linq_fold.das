@@ -248,6 +248,8 @@ class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
+        // defer while the chain type carries a dependent spelling (`select`'s declared typedecl return, pre-instance) — firing then bakes the unresolved typedecl into the emitted buffer decl
+        macro_verify(!call.arguments[0]._type.isAutoOrAlias, prog, call.at, "_fold: chain type is not fully inferred yet")
         var res = try_splice_patterns(prog, call.arguments[0])
         if (res != null) return res
         // Theme 6 — warn when an adapter source (today: `from_decs_template`) survives every splice arm with a non-empty chain, so the bridge materializes a temp `res` array before the cascade. Suppress: `options _no_linq_perf_warn = true`.

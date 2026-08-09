@@ -55,4 +55,5 @@ struct ColumnInfo {
     is_pk : bool                   //!< this column is part of `PRIMARY KEY`
     is_nullable : bool             //!< the daslang field is `Option<T>` — column has no `NOT NULL`
     default_expr : string          //!< SQL default expression, or `""` if none
+    is_computed : bool             //!< `@sql_computed` — GENERATED ALWAYS AS column
 }

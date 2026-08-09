@@ -128,6 +128,17 @@ def run_argv(args : array<string>) : tuple<rc : int; out : string> {
     return run_argv(args, 0.0)
 }
 
+// A dynamically-linked artifact spawned outside the daslang bin dir (the exe rail's
+// temp-path das-lint) resolves libDaScriptDyn only through the loader's environment —
+// prepend the bin dir so spawned children inherit it.
+def prepend_loader_search_path(bin_dir : string) {
+    let platform = get_platform_name()
+    let vname = platform == "windows" ? "PATH" : (platform == "darwin" ? "DYLD_LIBRARY_PATH" : "LD_LIBRARY_PATH")
+    let sep = platform == "windows" ? ";" : ":"
+    let cur = get_env_variable(vname)
+    set_env_variable(vname, empty(cur) ? bin_dir : "{bin_dir}{sep}{cur}")
+}
+
 def tool_available(exe, probe_flag : string) : bool {
     let r = run_argv([exe, probe_flag], 30.0)
     return r.rc == 0
@@ -411,6 +422,9 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "das-lint -exe build failed — the CI exe rail would fail the same way", output = build.out)
     }
+    // the -exe artifact is dynamically linked (libDaScriptDyn); from the temp path the
+    // loader resolves it only via the environment — point it at the daslang bin dir
+    prepend_loader_search_path(dir_name(ctx.daslang))
     var exe_args <- ["{lint_exe_base}.exe"]
     exe_args |> push_from(files)
     exe_args |> push("--quiet")

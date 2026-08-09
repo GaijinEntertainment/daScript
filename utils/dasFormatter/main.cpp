@@ -34,7 +34,7 @@ void InitModules() {
 
 string help() {
     return "Tool to convert daslang v1 syntax to v2\n"
-           "das-fmt {-i} filename1 {filename2} ...:\n"
+           "gen1_to_gen2 {-i} filename1 {filename2} ...:\n"
            "   -i inplace conversion, write to the same file. Multiple filenames only allowed in inplace mode\n"
            "   --tests Run tests, no filenames required\n"
            "   --semicolon Keep semicolon after convertion\n"

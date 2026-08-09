@@ -425,7 +425,7 @@ namespace das
         }
 
         __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
-            if ( stringHeap->isIntern() ) return;
+            if ( stringHeap->isIntern() || stringHeap->isReclaimDisabled() ) return;
             if ( stringDisposeQue ) freeString(stringDisposeQue,(uint64_t)strlen(stringDisposeQue),at, /*temp*/true);
             stringDisposeQue = ptr;
         }

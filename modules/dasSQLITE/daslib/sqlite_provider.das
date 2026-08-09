@@ -58,14 +58,15 @@ def sqlite_affinity_to_sql_type(decl_type : string) : SqlType {
 }
 
 def sqlite_read_table_info(handle : sqlite3?; schema_name : string; tbl_name : string) : Result<array<SchemaFromCol>, string> {
-    //! `PRAGMA table_info` → normalized column metadata (`data_type` via affinity rules).
-    //! `schema_name` qualifies the pragma for ATTACH/with_schema readers; empty for the main DB.
+    //! `PRAGMA table_xinfo` → normalized column metadata (`data_type` via affinity rules).
+    //! `table_xinfo`, not `table_info` - the latter omits GENERATED columns entirely.
+    //! `schema_name` qualifies the pragma for ATTACH/with_schema readers; empty for main.
     var rows : array<SchemaFromCol>
-    let sql = empty(schema_name) ? "PRAGMA table_info({sql_quote_id(tbl_name)})" : "PRAGMA {sql_quote_id(schema_name)}.table_info({sql_quote_id(tbl_name)})"
+    let sql = empty(schema_name) ? "PRAGMA table_xinfo({sql_quote_id(tbl_name)})" : "PRAGMA {sql_quote_id(schema_name)}.table_xinfo({sql_quote_id(tbl_name)})"
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(handle, sql, stmt)
     if (prc != SQLITE_OK) {
-        let msg = "PRAGMA table_info({tbl_name}) prepare failed: {sqlite3_errmsg(handle)}"
+        let msg = "PRAGMA table_xinfo({tbl_name}) prepare failed: {sqlite3_errmsg(handle)}"
         sqlite3_finalize(stmt)
         return err(msg, type<array<SchemaFromCol>>)
     }
@@ -73,18 +74,22 @@ def sqlite_read_table_info(handle : sqlite3?; schema_name : string; tbl_name : s
         let src = sqlite3_step(stmt)
         if (src == SQLITE_DONE) break
         if (src != SQLITE_ROW) {
-            let msg = "PRAGMA table_info({tbl_name}) step failed: {sqlite3_errmsg(handle)}"
+            let msg = "PRAGMA table_xinfo({tbl_name}) step failed: {sqlite3_errmsg(handle)}"
             sqlite3_finalize(stmt)
             return err(msg, type<array<SchemaFromCol>>)
         }
-        // Columns: 0=cid, 1=name, 2=type, 3=notnull, 4=dflt_value, 5=pk
+        // Columns: 0=cid, 1=name, 2=type, 3=notnull, 4=dflt_value, 5=pk, 6=hidden
+        // hidden: 0=ordinary, 1=virtual-table hidden column, 2=VIRTUAL generated, 3=STORED generated
+        let hidden = sqlite3_column_int(stmt, 6)
+        if (hidden == 1) continue
         let dt = sqlite3_column_text_(stmt, 2)
         rows |> emplace(SchemaFromCol(
             name = sqlite3_column_text_(stmt, 1),
             decl_type = dt,
             data_type = sqlite_affinity_to_sql_type(dt),
             not_null = sqlite3_column_int(stmt, 3) != 0,
-            pk = sqlite3_column_int(stmt, 5) != 0
+            pk = sqlite3_column_int(stmt, 5) != 0,
+            generated = hidden == 2 || hidden == 3
         ))
     }
     sqlite3_finalize(stmt)

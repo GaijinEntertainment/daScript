@@ -1336,17 +1336,17 @@ namespace das {
 
     void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
         // temp-string sites: builder marking + [temp_string_result] wrapping (must precede AllocateStack).
-        // wrappers only pay where freeTempString can reclaim: persistent string heap, not interned;
-        // the intern case also no-ops at runtime, this just skips the wrapper call overhead
+        // ALWAYS wrap, regardless of heap options: this pass mutates function bodies (shared-module
+        // ASTs included), so gating it on the driving program's options makes a function's tree — and
+        // its AOT hash — depend on who compiled it first (macro-context compiles run with
+        // macro_context_persistent_heap and wrapped shared daslib functions that AOT stub generation
+        // left bare → error 50101 on link). The heap modes are handled at runtime instead:
+        // freeTempString no-ops for interned heaps and when reclaim is disabled, and linear-heap
+        // frees are safe bump-retreat no-ops.
         {
-            bool reclaimDisabled = options.getBoolOption("disable_temp_string_reclaim", policies.disable_temp_string_reclaim);
-            bool persistentHeap = options.getBoolOption("persistent_heap", policies.persistent_heap);
-            bool internStrings = options.getBoolOption("intern_strings", policies.intern_strings);
             Function * wrapperFn = nullptr;
-            if ( !reclaimDisabled && persistentHeap && !internStrings ) {
-                if ( auto bmod = Module::require("$") ) {
-                    wrapperFn = bmod->findUniqueFunction("_temp_string_result");
-                }
+            if ( auto bmod = Module::require("$") ) {
+                wrapperFn = bmod->findUniqueFunction("_temp_string_result");
             }
             MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr, everything);
             visit(mts);

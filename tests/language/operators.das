@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost public
 
-require daslib/strings_boost
-
 require _operators_derived
 
 struct Foo {
@@ -186,5 +184,57 @@ def test_index_operators(t : T?) {
         t |> equal(a[0], true)
         a[0] ^^= true
         t |> equal(a[0], false)
+    }
+}
+
+struct ArraySlots {
+    slots : array<array<int>>
+    def operator [] <-(index : int, var value : array<int>) {
+        slots[index] <- value
+    }
+}
+
+struct NamedRows {
+    rows : table<string; array<int>>
+}
+
+def operator [] <-(var n : NamedRows; key : string; var value : array<int>) {
+    n.rows[key] <- value
+}
+
+struct RefGrid {
+    cells : array<array<int>>
+}
+
+def operator [] (var g : RefGrid; index : int) : array<int>& {
+    unsafe {
+        return g.cells[index]
+    }
+}
+
+[test]
+def test_index_move_operator(t : T?) {
+    t |> run("[]<- free form") @(t : T?) {
+        var n : NamedRows
+        var v <- [1, 2, 3]
+        n["a"] <- v
+        t |> equal(0, length(v))
+        t |> equal(3, length(n.rows["a"]))
+    }
+    t |> run("[]<- method form") @(t : T?) {
+        var s : ArraySlots
+        s.slots |> resize(2)
+        var v <- [4, 5]
+        s[1] <- v
+        t |> equal(0, length(v))
+        t |> equal(2, length(s.slots[1]))
+    }
+    t |> run("move through operator [] ref") @(t : T?) {
+        var g : RefGrid
+        g.cells |> resize(1)
+        var v <- [1, 2]
+        g[0] <- v
+        t |> equal(0, length(v))
+        t |> equal(2, length(g.cells[0]))
     }
 }

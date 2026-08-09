@@ -643,6 +643,7 @@ namespace das {
 
         virtual ExpressionPtr visit(ExprCall *expr) override;
         // StringBuilder
+        virtual void preVisitStringBuilderElement(ExprStringBuilder *sb, Expression *expr, bool last) override;
         virtual ExpressionPtr visitStringBuilderElement(ExprStringBuilder *, Expression *expr, bool) override;
         virtual ExpressionPtr visit(ExprStringBuilder *expr) override;
         // make variant

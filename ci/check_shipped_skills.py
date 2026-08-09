@@ -40,7 +40,7 @@ PLATFORM_BIN = re.compile(r"bin/(?:Release|Debug|RelWithDebInfo|MinSizeRel)/")
 # `daslang.exe` and every module DLL", which is fine; `daslang.exe utils/aot/main.das`
 # is not. The discriminator is the next token: a flag, or a real file with an extension.
 EXE_CMD = re.compile(
-    r"(?<![\w/])(daslang|daslang-live|das-fmt|dastest)\.exe"
+    r"(?<![\w/])(daslang|daslang-live|das-fmt|gen1_to_gen2|dastest)\.exe"
     r"(?=\s+(?:-{1,2}[A-Za-z]|[A-Za-z0-9_./-]+\.(?:das|cpp|py|json|md)\b))")
 
 # SOMEONE'S MACHINE, not a generic example. Deliberately not "any absolute path": the

@@ -1250,7 +1250,10 @@ namespace das {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
             das_collect_all_keywords(mod,scanner);
-            if ( !info.importName.empty() ) {
+            // an explicit `as` alias registers for every require form; the importName gate
+            // only guards the implicit path-stem registration (path rails set it, the
+            // daslib / builtin / extraRoots / dynamic resolvers leave it empty)
+            if ( modalias || !info.importName.empty() ) {
                 auto malias = modalias ? *modalias : info.importName;
                 auto ita = yyextra->das_module_alias.find(malias);
                 if ( ita !=yyextra->das_module_alias.end() ) {

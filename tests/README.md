@@ -1023,7 +1023,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | temporary_strings.das | temp_string, build_temp_string — no heap allocations | |
 | temporary_strings_failed.das | temp_string rejects variables and function calls | **expect** `40102:3` |
 | test_bug_fixes.das | C++ bug fixes — chop bounds checking, edge cases | |
-| test_cpp_functions.das | C++ string functions — fmt, safe_unescape, to_lower_in_place, character_at | |
+| test_cpp_functions.das | C++ string functions — fmt, safe_unescape, character_at | |
 | test_new_string_functions.das | New string utilities — contains, count_chars, pad_left/right, trim_chars | |
 | test_strings_boost_extra.das | Extra strings_boost — wide, is_character_at, eq, join overloads | |
 | test_strings_convert.das | `daslib/strings_convert` — `try_to_*` returning `Result<T; ConversionError>` | |

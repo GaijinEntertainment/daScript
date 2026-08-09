@@ -41,6 +41,7 @@ struct public SchemaFromCol {
     data_type : SqlType
     not_null : bool
     pk : bool
+    generated : bool    //! GENERATED ALWAYS AS column (VIRTUAL or STORED)
 }
 
 struct public SqlProviderInfo {

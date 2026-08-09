@@ -1148,7 +1148,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   )
 endif()
 
-# flex/bison output (das-fmt's own copy) is not ours to clean
+# flex/bison output (the gen1_to_gen2 converter's own copy) is not ours to clean
 IF(MSVC)
   set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp PROPERTIES COMPILE_FLAGS "/W0")
 ELSE()
@@ -1556,19 +1556,16 @@ if (NOT ${DAS_TOOLS_DISABLED})
         FILES_MATCHING PATTERN "*.das"
     )
 
-    add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
-    TARGET_LINK_LIBRARIES(das-fmt libDaScriptDyn ${SRC_LIBRARIES})
-    ADD_DEPENDENCIES(das-fmt libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
-    target_include_directories(das-fmt PRIVATE ${NEED_MODULES_PATH})
+    add_executable(gen1_to_gen2 ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
+    TARGET_LINK_LIBRARIES(gen1_to_gen2 libDaScriptDyn ${SRC_LIBRARIES})
+    ADD_DEPENDENCIES(gen1_to_gen2 libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
+    target_include_directories(gen1_to_gen2 PRIVATE ${NEED_MODULES_PATH})
 
-    SETUP_CPP11(das-fmt)
-    DAS_APPLY_STRICT_WARNINGS(das-fmt)
-    SETUP_LTO(das-fmt)
-    SETUP_BIN_RPATH(das-fmt)
-    install(TARGETS das-fmt RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
-get_target_property(DAS_FMT_INCLUDES libDaScriptDyn INCLUDE_DIRECTORIES)
-get_target_property(DAS_FMT_DEFS das-fmt COMPILE_DEFINITIONS)
-get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
+    SETUP_CPP11(gen1_to_gen2)
+    DAS_APPLY_STRICT_WARNINGS(gen1_to_gen2)
+    SETUP_LTO(gen1_to_gen2)
+    SETUP_BIN_RPATH(gen1_to_gen2)
+    install(TARGETS gen1_to_gen2 RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 
     #IF(APPLE)
     #  add_executable(daslangOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})

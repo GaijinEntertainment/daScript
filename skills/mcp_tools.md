@@ -19,7 +19,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
 | `format_file` | Running the formatter script manually; supports comma-separated list or glob, returns JSON array of results |
-| `convert_to_gen2` | Running `das-fmt` manually to convert gen1→gen2 syntax |
+| `convert_to_gen2` | Running the `gen1_to_gen2` converter manually to convert gen1→gen2 syntax |
 | `goto_definition` | Manually tracing symbol definitions across files |
 | `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |

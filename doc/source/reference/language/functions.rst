@@ -657,6 +657,14 @@ compound variants like ``operator []+=`` define in-place index operations:
 
 Additional index operators include ``[]<-`` (move into index), ``[]:=`` (clone into index),
 ``[]-=``, ``[]*=``, and others matching the compound assignment family.
+``[]<-`` takes the right-hand side as a ``var`` parameter and moves from it (zeroing the
+source) — this is the store operator for non-copyable element types:
+
+.. code-block:: das
+
+    def operator []<-(var m : Rows; i : int; var v : array<int>) {
+        m.rows[i] <- v
+    }
 
 The safe index operator ``?[]`` can be overloaded to return a default value when the
 index is out of range.

@@ -229,11 +229,14 @@ namespace das {
         void impl_freeString ( char * text, uint64_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }
+        void setReclaimDisabled ( bool on ) { reclaimDisabled = on; }
+        bool isReclaimDisabled() const { return reclaimDisabled; }
         char * intern ( const char * str, uint64_t length ) const;
         void recognize ( char * str );
     protected:
         das_string_set internMap;
         bool needIntern = false;
+        bool reclaimDisabled = false;
     };
 
 #ifndef DAS_HEAP_DEBUGGER_BREAK_ON_FREE

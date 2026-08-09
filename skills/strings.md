@@ -30,7 +30,7 @@ The single most common antipattern in this codebase is opening `peek_data` and w
 | Split on any of several chars | `split_by_chars(s, " \t\n")` (boost) | byte loop with branching |
 | Trim whitespace | `trim(s)` / `strip(s)`, or `ltrim`/`rtrim`/`strip_left`/`strip_right` | manual leading/trailing scan |
 | Strip a known prefix/suffix | `trim_prefix(s, "foo/")` / `trim_suffix(s, ".das")` (boost) | `starts_with` + `slice` |
-| Uppercase / lowercase | `to_upper(s)` / `to_lower(s)` (allocate); `unsafe(to_lower_in_place(s))` mutates in place | manual case-fold loop |
+| Uppercase / lowercase | `to_upper(s)` / `to_lower(s)` | manual case-fold loop |
 | Pad to width | `pad_left(s, w, ' ')` / `pad_right(s, w, ' ')` (boost) | manual `repeat` + concat |
 | Repeat a unit | `repeat(unit, n)` | concat loop |
 | Reverse | `reverse(s)` | byte loop |
