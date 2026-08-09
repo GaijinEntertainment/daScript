@@ -83,15 +83,17 @@ belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5.
 
-**No new benchmark harness is written.** Performance is measured by the rigs `PROFILE.md`
-documents — `performance/gen_profile.das` (the routine check) and
-`performance/gen_bench_records.das` (`--oracle` = the regression gate, bare = the publishing
-board); both spawn `benchmarks/lcpp_bench.das`, the only thing that measures. A new timing
-harness, a one-off measurement script, or a revived rig is a defect. `PROFILE.md` carries the
-commands; the rig's shape is `ARCHITECTURE.md` §2.5. Carve-out: `benchmarks/asr/mem_census.sh`
-measures peak MEMORY (`/usr/bin/time -l` around a whole process — a quantity no in-process rig
-can observe about itself); it stays macOS-only and its numbers live in `PERF_LEDGER.md`, never
-in the record stores.
+**No new timing harness is written.** Time is measured by the rigs `PROFILE.md` documents —
+`performance/gen_profile.das` (the routine check) and `performance/gen_bench_records.das`
+(`--oracle` = the regression gate, bare = the publishing board); both spawn
+`benchmarks/lcpp_bench.das`, the only thing that measures. A new timing harness, a one-off
+measurement script, or a revived rig is a defect. `PROFILE.md` carries the commands; the rig's
+shape is `ARCHITECTURE.md` §2.5.
+
+**An out-of-process observer measures only what no in-process rig can observe about itself,
+and its numbers are ledger-grade.** The one instance is `benchmarks/asr/mem_census.sh`: peak
+memory via `/usr/bin/time -l` around a whole process. It stays macOS-only and its numbers live
+in `PERF_LEDGER.md`, never in the record stores.
 
 ---
 
