@@ -128,13 +128,14 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var ybuf = metal_new_buffer(dev, uint64(nb * dim * 4l))
     var dimbuf = upload_u32(dev, uint(dim))
     var epsbuf = upload_f32(dev, eps)
+    var ascalebuf = upload_f32(dev, 1.0)   // (x + a) * ascale — every non-gemma4 site binds 1.0
     // swiglu: ours in place on g
     var gbuf = upload_array(dev, gg, nb * hidden * 4l)
     var ubuf = upload_array(dev, uu, nb * hidden * 4l)
     var totalbuf = upload_u32(dev, uint(nb * hidden))
     // arm descriptors
     var psos_oa <- [pso_addrms]
-    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf]
+    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf, ascalebuf]
     var bufss_oa <- [bufs_oa]
     var groups_oa <- [uint3(uint(nb), 1u, 1u)]
     var threads_oa <- [1024u]
@@ -209,6 +210,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     metal_release(ybuf)
     metal_release(dimbuf)
     metal_release(epsbuf)
+    metal_release(ascalebuf)
     metal_release(gbuf)
     metal_release(ubuf)
     metal_release(totalbuf)

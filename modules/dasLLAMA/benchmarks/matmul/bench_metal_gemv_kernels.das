@@ -92,6 +92,8 @@ require strings
 // an unused colbase line — the static_if template stamp's only residue) is FREE: +-0.1% cls3b
 // all launches. Template verdict: k5 = plain colbase form; k4/k6 = TILED static_if
 // branch-duplicating only the b-loop and writeback tail (B4 byte-identical, B2 + dead decl).
+// The restamp then shipped exactly those three forms, so kq_mvb2s_k4 / kq_mvb2u_k5 /
+// kq_mvb2s_k6 became byte-identical to their production halves and are retired.
 
 // ===== kernel variants =====
 // Shared contract (f32-X planar): b0 wq [d x n] Q8 byte4 view, b1 ws [d x n/32] f32 scales,
@@ -288,7 +290,9 @@ class MetalGemvLabB1 {
 }
 
 // ===== production-B1 addressing A/B (index vs pointer-stream) — same buffers, same geometry =====
-// q8_b1i = the EXACT production MetalQ8Gemv body (4 blocks in flight, array-index addressing);
+// q8_b1i = the production MetalQ8Gemv ALGORITHM on the lab's planar layout (4 blocks in
+// flight, array-index addressing — production itself reads the 34B interleaved blob, so this
+// arm shares structure, not bytes);
 // q8_b1p = the identical structure spelled as unsafe(addr()) pointer streams walked once per
 // 128-stride iteration with immediate offsets inside the body (the MvB2 discipline). The single
 // variable is the addressing shape the compiler sees — the A/B for whether the production
@@ -3732,10 +3736,9 @@ class MetalKqLabK4ExtX8 {
 // time, so the naive colbase form leaves a runtime mul per b-iteration — the hoist reduces the
 // delta to one add per chunk. It rewrites BOTH widths, so B4 gets its own prod/hoisted arms
 // (kq_mvb4_* / kq_mvb4h_*, nr = 4 args, gcols still 1 — the nlive == 4 dispatch).
-// The *s twins are the STATIC_IF-stamp preview: a TILED template constant branch-duplicating
-// only the b-loop and writeback tail emits production text for both widths EXCEPT one dead
-// `colbase` decl at B2 (the emitter keeps unused lets; the tail's use site forces a body-top
-// decl). These arms = production B2 text + that dead line — the only delta the route leaves.
+// The k4/k6 static_if-stamp previews and the k5 plain-colbase preview are GONE: production
+// stamped exactly those forms, so each pair compiled byte-identical MSL and the arm A/B'd
+// itself. What is left measures a form production did NOT take.
 
 class MetalKqMvLabB2K4U {
     @ssbo @binding = 0 ksh : array<float16>
@@ -3784,84 +3787,6 @@ class MetalKqMvLabB2K4U {
                     }
                 }
                 let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
-                for [unroll_full] (b in range(2)) {
-                    let xb4 = (colbase + uint(b)) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
-            sb++
-        }
-        for [unroll_full] (b in range(2)) {
-            var s = sumf[b]
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
-                y[(colbase + uint(b)) * ka.ys + row] = s
-            }
-        }
-    }
-}
-
-class MetalKqMvLabB2K5U {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-
-    [metal_kernel(name="lab_kq_mvb2u_k5_msl")]
-    def lab_kq_mvb2u_k5 {
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let colbase = gl_WorkGroupID.y * 2u
-        let nb = ka.ndim / 256u
-        let q4i = tx / 4u
-        let hp = (tx % 4u) / 2u
-        let lo = (tx % 2u) * 4u
-        let jl = 2u * q4i + hp
-        let nib = (tx % 4u) < 2u
-        let nsh = nib ? 0u : 4u
-        let nb4 = ka.ndim / 4u
-        var sumf : float[2]
-        var sb = 0u
-        while (sb < nb) {
-            let blk = row * nb + sb
-            let sv = ks4[blk]
-            let dd = float(ksh[blk * 8u])
-            let dm = float(ksh[blk * 8u + 1u])
-            var hq : uint[4]
-            for [unroll_full] (u in range(4)) {
-                hq[u] = kqu[blk * 40u + 32u + lo + uint(u)]
-            }
-            for [unroll_full] (ch in range(2)) {
-                let sy = (sv.y >> (8u * jl)) & 255u
-                let szv = (sv.z >> (8u * jl)) & 255u
-                let sw = (sv.w >> (8u * jl)) & 255u
-                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
-                let dl = dd * float(sc)
-                let ml = dm * float(mn)
-                let qb = blk * 40u + (q4i + uint(ch) * 2u) * 8u + lo
-                let hsh = jl + 4u * uint(ch)
-                var w : float[16]
-                for [unroll_full] (u in range(4)) {
-                    let qv = kqu[qb + uint(u)]
-                    for [unroll_full] (e in range(4)) {
-                        let byv = (qv >> (8u * uint(e))) & 255u
-                        let hb = (hq[u] >> (8u * uint(e) + hsh)) & 1u
-                        w[4 * u + e] = float(((byv >> nsh) & 0x0Fu) | (hb << 4u)) * dl - ml
-                    }
-                }
-                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
                 for [unroll_full] (b in range(2)) {
                     let xb4 = (colbase + uint(b)) * nb4 + cx4
                     var acc = 0.0
@@ -4243,146 +4168,6 @@ class MetalKqMvLabB4K6H {
     }
 }
 
-class MetalKqMvLabB2K4S {
-    @ssbo @binding = 0 ksh : array<float16>
-    @ssbo @binding = 1 ks4 : array<uint4>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-
-    [metal_kernel(name="lab_kq_mvb2s_k4_msl")]
-    def lab_kq_mvb2s_k4 {
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let colbase = gl_WorkGroupID.y * 2u   // nolint:LINT002 deliberately DEAD — the static_if stamp's residue
-        let nb = ka.ndim / 256u
-        let q4i = tx / 4u
-        let hp = (tx % 4u) / 2u
-        let lo = (tx % 2u) * 4u
-        let jl = 2u * q4i + hp
-        let nsh = (tx % 4u) < 2u ? 0u : 4u
-        let nb4 = ka.ndim / 4u
-        var sumf : float[2]
-        var sb = 0u
-        while (sb < nb) {
-            let blk = row * nb + sb
-            let sv = ks4[blk]
-            let dd = float(ksh[blk * 8u])
-            let dm = float(ksh[blk * 8u + 1u])
-            for [unroll_full] (ch in range(2)) {
-                let sy = (sv.y >> (8u * jl)) & 255u
-                let szv = (sv.z >> (8u * jl)) & 255u
-                let sw = (sv.w >> (8u * jl)) & 255u
-                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
-                let dl = dd * float(sc)
-                let ml = dm * float(mn)
-                let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
-                var w : float[16]
-                for [unroll_full] (u in range(4)) {
-                    let qv = kqu[qb + uint(u)]
-                    for [unroll_full] (e in range(4)) {
-                        let byv = (qv >> (8u * uint(e))) & 255u
-                        w[4 * u + e] = float((byv >> nsh) & 0x0Fu) * dl - ml
-                    }
-                }
-                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
-                for [unroll_full] (b in range(2)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
-            sb++
-        }
-        for [unroll_full] (b in range(2)) {
-            var s = sumf[b]
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
-            }
-        }
-    }
-}
-
-class MetalKqMvLabB2K6S {
-    @ssbo @binding = 0 kdh : array<float16>
-    @ssbo @binding = 1 kscb : array<uint8>
-    @ssbo @binding = 2 kqu : array<uint>
-    @ssbo @binding = 3 x : array<float4>
-    @ssbo @binding = 4 y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-
-    [metal_kernel(name="lab_kq_mvb2s_k6_msl")]
-    def lab_kq_mvb2s_k6 {
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let colbase = gl_WorkGroupID.y * 2u   // nolint:LINT002 deliberately DEAD — the static_if stamp's residue
-        let nb = ka.ndim / 256u
-        let s = tx / 2u
-        let o4 = (tx % 2u) * 4u
-        let qoff = (s % 2u) * 8u + o4
-        let shr = s < 2u ? 0u : 4u
-        let hsh = 2u * s
-        let nb4 = ka.ndim / 4u
-        var sumf : float[2]
-        var sb = 0u
-        while (sb < nb) {
-            let blk = row * nb + sb
-            let dd = float(kdh[blk])
-            for [unroll_full] (ch in range(2)) {
-                let ip = uint(ch)
-                let qb = blk * 48u + ip * 16u + qoff
-                let hb = blk * 48u + 32u + ip * 8u + o4
-                let g = ip * 8u + s * 2u + (tx % 2u)
-                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
-                let dl = dd * sc
-                let ml = dl * 32.0
-                var w : float[16]
-                for [unroll_full] (u in range(4)) {
-                    let qu = kqu[qb + uint(u)]
-                    let hu = kqu[hb + uint(u)]
-                    let qv = ((qu >> shr) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
-                    for [unroll_full] (e in range(4)) {
-                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
-                    }
-                }
-                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
-                for [unroll_full] (b in range(2)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
-            sb++
-        }
-        for [unroll_full] (b in range(2)) {
-            var sm = sumf[b]
-            sm += simd_shuffle_down(sm, 4u)
-            sm += simd_shuffle_down(sm, 2u)
-            sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = sm
-            }
-        }
-    }
-}
-
 // ===== driver (Apple-only; every Metal-typed helper is a generic so non-Apple never compiles it) =====
 
 struct private LabVariant {
@@ -4403,6 +4188,7 @@ struct private LabVariant {
     kq_ggml : bool = false                  // K-quant lcpp wall arm (b0/b1 = ggml interleaved stream)
     kq16 : bool = false                     // kq arm reads the 16B compact scale blocks instead
     kq_mvb : bool = false                   // production small-batch KqMv contract (KqMvArgs uniform at 5)
+    q8_blob : bool = false                  // b0/b1 = the 34B interleaved q8_0 blob, dual-viewed (MetalQ8Gemv)
     tgsz : int = 128                        // threads per threadgroup (kq arms ride lcpp's 64)
     rtg : int = 4                           // output rows per threadgroup (grid.x = ceil(d/rtg))
 }
@@ -4418,6 +4204,25 @@ def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, k : i
     }
     for (i in range64(rows * nb)) {
         s[i] = lut[int((i / 7l) % 4l)]
+    }
+}
+
+// The production q8_0 wire blob the dual-view MetalQ8Gemv reads: per row per 32-block,
+// [f16 d LE][32 int8 quants] = 34 bytes in ONE plane. Bit-exact against the planar arms — the
+// fill's pow2 scales are f16-exact, so the f32 and f16 scale views carry the same value.
+def private pack_q8_blob(wq : array<int8>; ws : array<float>; rows, k : int64; var blob : array<uint8>) {
+    let nb = k / 32l
+    blob |> resize(rows * nb * 34l)
+    for (r in range64(rows)) {
+        for (bl in range64(nb)) {
+            let o = (r * nb + bl) * 34l
+            let h = f32_to_f16(ws[r * nb + bl])
+            blob[o] = uint8(h & 255u)
+            blob[o + 1l] = uint8((h >> 8u) & 255u)
+            for (j in range64(32l)) {
+                blob[o + 2l + j] = uint8(wq[r * k + bl * 32l + j])
+            }
+        }
     }
 }
 
@@ -4786,6 +4591,9 @@ def private sk_idx(sv : int) : int => sv == 2 ? 0 : (sv == 4 ? 1 : 2)
 // per-output-row weight bytes for the wGB/s report: q8 planar = n + n/8; kq = superblocks x
 // (quant + scale block) — k4 144B compact / 148B with the padded 20B plane, k5 176B, k6 210B
 def private kq_wrow_bytes(v : LabVariant; n : int64) : int64 {
+    if (v.q8_blob) {   // 34B per 32 elems: n quant bytes + n/16 f16 scale bytes
+        return n + n / 16l
+    }
     if (v.kq == 5) {
         return (n / 256l) * 176l
     }
@@ -4813,7 +4621,10 @@ let KQA_G6 = 10
 let KQA_MVARGS = 11
 let KQA_MVARGS4 = 12
 
-def private make_bufs(v : LabVariant; var wbuf; var sbuf; var xfbuf; var xtbuf; var xqbuf; var xsbuf; var ybuf; var ndimbuf; var ddimbuf; var bbuf; var partbuf; var skbuf; var kqarr) {
+def private make_bufs(v : LabVariant; var wbuf; var sbuf; var wbbuf; var xfbuf; var xtbuf; var xqbuf; var xsbuf; var ybuf; var ndimbuf; var ddimbuf; var bbuf; var partbuf; var skbuf; var kqarr) {
+    if (v.q8_blob) {   // production q8 GEMV contract: the ONE 34B blob bound twice (half + byte view)
+        return <- [wbbuf, wbbuf, xfbuf, ybuf, ndimbuf, ddimbuf]
+    }
     if (v.kq_mvb) {    // production KqMv contract: plane views 0-2, x, y, KqMvArgs uniform at 5
         var argsbuf = v.b_list[0] == 4 ? kqarr[KQA_MVARGS4] : kqarr[KQA_MVARGS]
         if (v.kq == 5) {
@@ -4944,12 +4755,18 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         var anyk5 = false
         var anyk6 = false
         var anymvb = false
+        var anyblob = false
         for (v in variants) {
             let on = want(g_env_bench.lab_variants, v.name)
             anyk4 ||= v.kq == 4 && on
             anyk5 ||= v.kq == 5 && on
             anyk6 ||= v.kq == 6 && on
             anymvb ||= v.kq_mvb && on
+            anyblob ||= v.q8_blob && on
+        }
+        var wblob_h : array<uint8>
+        if (anyblob) {
+            pack_q8_blob(wq, ws, d, n, wblob_h)
         }
         var k4q_h : array<uint8>
         var k4s_h : array<uint8>
@@ -4987,6 +4804,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         }
         var wbuf = upload_array(dev, wq, d * n)
         var sbuf = upload_array(dev, ws, d * nb * 4l)
+        var wbbuf = anyblob ? upload_array(dev, wblob_h, d * nb * 34l) : null
         let nsball = (d * n) / 256l
         var kq4buf = anyk4 ? upload_array(dev, k4q_h, nsball * 128l) : null
         var ks4buf = anyk4 ? upload_array(dev, k4s_h, nsball * 20l) : null
@@ -5040,7 +4858,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         for (vi, nbatch, alv, est, bst in run_v, run_b, alive, est_ms, best) {
             alv = false
             bst = 1.0e30lf
-            var bufs <- make_bufs(variants[vi], wbuf, sbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
+            var bufs <- make_bufs(variants[vi], wbuf, sbuf, wbbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
             var ms = 0.0lf   // warmup + correctness dispatch
             if (variants[vi].gemm_sk) {
                 var rbufs <- [partbuf, ybuf, totalbuf, skbufs[sk_idx(variants[vi].sk)]]
@@ -5088,7 +4906,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                 if (!alv) {
                     continue
                 }
-                var bufs <- make_bufs(variants[vi], wbuf, sbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
+                var bufs <- make_bufs(variants[vi], wbuf, sbuf, wbbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
                 let reps = clamp(int(25.0lf / max(est, 0.01lf)) + 1, 1, 128)
                 var ms = 0.0lf
                 if (variants[vi].gemm_sk) {
@@ -5146,6 +4964,9 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             metal_release(kqmvargs)
             metal_release(kqmvargs4)
         }
+        if (anyblob) {
+            metal_release(wbbuf)
+        }
         kqarr |> clear()   // borrowed handles — released above
         unsafe {
             delete kqarr
@@ -5174,6 +4995,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         delete ygot
         delete wq
         delete ws
+        delete wblob_h
         delete xq
         delete xs
         delete xf
@@ -5238,7 +5060,7 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var variants <- [
             LabVariant(name = "v0_gemv", src = MetalQ8Gemv_metal_q8_gemv_msl, entry = MetalQ8Gemv_metal_q8_gemv_msl_entry,
-                       b_list <- [1]),
+                       b_list <- [1], q8_blob = true),
             LabVariant(name = "gemv_b2", src = lab_gemv_b2_msl, entry = lab_gemv_b2_msl_entry,
                        b_list <- [2]),
             LabVariant(name = "gemv_b4", src = lab_gemv_b4_msl, entry = lab_gemv_b4_msl_entry,
@@ -5359,8 +5181,6 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
                        b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
             LabVariant(name = "kq_mvb2_k5", src = MetalKqMvB2K5_metal_kq_mv_k5_msl, entry = MetalKqMvB2K5_metal_kq_mv_k5_msl_entry,
                        b_list <- [2], kq = 5, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
-            LabVariant(name = "kq_mvb2u_k5", src = lab_kq_mvb2u_k5_msl, entry = lab_kq_mvb2u_k5_msl_entry,
-                       b_list <- [2], kq = 5, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
             LabVariant(name = "kq_mvb2_k6", src = MetalKqMvB2K6_metal_kq_mv_k6_msl, entry = MetalKqMvB2K6_metal_kq_mv_k6_msl_entry,
                        b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
             LabVariant(name = "kq_mvb2u_k6", src = lab_kq_mvb2u_k6_msl, entry = lab_kq_mvb2u_k6_msl_entry,
@@ -5376,11 +5196,7 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
             LabVariant(name = "kq_mvb4_k6", src = MetalKqMvB4K6_metal_kq_mv_k6_msl, entry = MetalKqMvB4K6_metal_kq_mv_k6_msl_entry,
                        b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
             LabVariant(name = "kq_mvb4h_k6", src = lab_kq_mvb4h_k6_msl, entry = lab_kq_mvb4h_k6_msl_entry,
-                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
-            LabVariant(name = "kq_mvb2s_k4", src = lab_kq_mvb2s_k4_msl, entry = lab_kq_mvb2s_k4_msl_entry,
-                       b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
-            LabVariant(name = "kq_mvb2s_k6", src = lab_kq_mvb2s_k6_msl, entry = lab_kq_mvb2s_k6_msl_entry,
-                       b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8)
+                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8)
         ]
         run_lab(b, variants)
         delete variants
