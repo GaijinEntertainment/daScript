@@ -5,7 +5,8 @@ options indenting = 4
 // surface — plain-function prototypes then bodies, device/threadgroup/thread-ref parameter
 // address spaces from the das signature, write-set through the callee signature, hidden
 // builtin threading, generic twin instances, value returns. The behavioral GPU-vs-CPU twin
-// is tests/metal/test_metal_functions.das.
+// is tests/metal/test_metal_functions.das. The flatten half lives here too: the UfxKid splice
+// shapes, the StateArr state kinds, and the derived (no name=) companion/entry naming.
 
 require dastest/testing_boost public
 require _msl_common
@@ -22,6 +23,13 @@ def private hasc(t : T?; needle : string) {
     t |> success(find(ufxcls_msl, needle) >= 0, "emitted MSL carries `{needle}`")
     if (find(ufxcls_msl, needle) < 0) {
         to_log(LOG_ERROR, "MISSING `{needle}` in:\n{ufxcls_msl}\n")
+    }
+}
+
+def private hass(t : T?; needle : string) {
+    t |> success(find(statearr_msl, needle) >= 0, "emitted MSL carries `{needle}`")
+    if (find(statearr_msl, needle) < 0) {
+        to_log(LOG_ERROR, "MISSING `{needle}` in:\n{statearr_msl}\n")
     }
 }
 
@@ -103,5 +111,27 @@ def test_msl_functions(t : T?) {
         hasc(t, "ys[i] = v_s")
         // a free function called from the kernel body still emits at global scope
         hasc(t, "float ufx_sky(float d)")
+    }
+}
+
+[test]
+def test_msl_state_and_naming(t : T?) {
+    t |> run("the other state kinds: a fixed-array thread-local and a mutable-pointee rider") <| @(t : T?) {
+        // fixed-array state is a kernel-entry thread-local array, zero-init like a local
+        hass(t, "float hist[4] = \{\};")
+        // a MUTABLE pointee: taking the writable pointer IS the write declaration, so the root
+        // buffer lowers non-const with no deref tracking
+        hass(t, "device float * wcur = nullptr;")
+        hass(t, "device float* out_ [[buffer(1)]]")
+        hass(t, "wcur = (out_ + (i));")
+        hass(t, "wcur[0] = (((hist[0] + hist[1]) + hist[2]) + hist[3]);")
+        // the array state survives the splice boundary: written in one method, read in another
+        hass(t, "hist[k] = xs[(i + uint(k))];")
+    }
+    t |> run("no name= derives the companion names AND a qualified entry point") <| @(t : T?) {
+        t |> success(DerivedName_dkern_msl_entry == "DerivedName_dkern",
+            "the entry point is <Class>_<method>, not the bare method name")
+        t |> success(find(DerivedName_dkern_msl, "kernel void DerivedName_dkern(") >= 0,
+            "the emitted signature carries the derived entry name")
     }
 }

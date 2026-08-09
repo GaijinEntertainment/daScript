@@ -741,6 +741,54 @@ class UfxKid : UfxBase {
     }
 }
 
+// The remaining state-member kinds: a fixed-ARRAY state member (a kernel-entry thread-local
+// array — the per-thread scratch a rider carries across splices) and a MUTABLE-pointee pointer
+// rider. Taking a writable pointer into a buffer IS the write declaration (no deref tracking),
+// so `out_` lowers non-const from the binding alone.
+class StateArr {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 out_ : array<float>
+    hist : float[4]
+    wcur : float?
+
+    def load(i : uint) {
+        for (k in range(4)) {
+            hist[k] = xs[i + uint(k)]
+        }
+    }
+
+    def bind_out(i : uint) {
+        wcur = unsafe(addr(out_[i]))
+    }
+
+    def flush {
+        unsafe(wcur[0]) = ((hist[0] + hist[1]) + hist[2]) + hist[3]
+    }
+
+    [metal_kernel(name="statearr_msl"), marker(no_coverage)]
+    def statearr {
+        let i = gl_GlobalInvocationID.x
+        load(i)
+        bind_out(i)
+        flush()
+    }
+}
+
+// The DERIVED companion-name form: no `name=` on [metal_kernel], so the globals are
+// <Class>_<method>_msl and the MSL entry point is the qualified <Class>_<method> — which is what
+// keeps a stamped class's twins distinguishable in a GPU capture. Every other fixture here
+// passes name=, so this is the only one covering the derived path.
+class DerivedName {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [metal_kernel, marker(no_coverage)]
+    def dkern {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = xs[i] * 2.0
+    }
+}
+
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
 def public declared_msl_census : table<string> {   // nolint:STYLE038 — one flat literal per construct kind; the gate-B contract IS this list
@@ -1021,6 +1069,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "splice.method.value",
         "splice.param.hoist",
         "decl.state",
+        "decl.state.arr",
         "decl.state.ptr"
     }
 }
@@ -1031,5 +1080,6 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census]
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, statearr_msl_census,
+        DerivedName_dkern_msl_census]
 }

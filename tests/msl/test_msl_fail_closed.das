@@ -11,7 +11,14 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 // @workgroup, and a dynamic-array @workgroup; the user-function surface: a RECURSIVE helper,
 // an un-lowerable helper PARAMETER type, and a @workgroup member bound to a thread-space `&`
 // parameter; the Phase-5 simdgroup_matrix surface: `.data` access in a kernel, an @ssbo of
-// tiles, a non-member load source, and a threadgroup store.
+// tiles, a non-member load source, and a threadgroup store; the flatten surface: recursive
+// methods in BOTH positions (the value one is refused while binding arguments, the statement
+// one only by the scan — emit lowers a splice by recursion), the value-position body shape, a
+// discarded value return, a non-tail `return`, the state-member kinds (bound, initialized
+// pointer, unbound pointer, dual-root pointer), and the splice argument binder (writable scalar
+// and writable pointer in value position, an un-lowerable parameter type, a twice-named
+// parameter, an untraceable pointer space, a non-pointer argument, a non-aliasable `&`
+// argument).
 
 require dastest/testing_boost public
 require daslib/ast
@@ -69,5 +76,21 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_sgmat_member", "element type metal_builtins::simdgroup_float8x8 has no MSL form")
         check_rejects(t, "_fc_sgmat_src", "simdgroup_load source must be an @ssbo or @workgroup member")
         check_rejects(t, "_fc_sgmat_store_tg", "simdgroup_store targets an @ssbo buffer")
+        // the flatten (method-splice) surface
+        check_rejects(t, "_fc_method_recursion_stmt", "method `mrec` is recursive")
+        check_rejects(t, "_fc_method_value_body", "used in value position must be a single `return <expr>` body")
+        check_rejects(t, "_fc_method_discard", "returns a value its statement call discards")
+        check_rejects(t, "_fc_method_nontail", "contains `return` but the call is not in kernel tail position")
+        check_rejects(t, "_fc_state_binding", "plain members are thread-locals, not bindable buffers")
+        check_rejects(t, "_fc_state_ptr_init", "pointer state member `cur` takes no initializer")
+        check_rejects(t, "_fc_state_ptr_unbound", "is never assigned from a kernel buffer")
+        check_rejects(t, "_fc_state_ptr_dual", "one root buffer per pointer member")
+        check_rejects(t, "_fc_splice_writable_value", "writable parameter `v` cannot splice in value position")
+        check_rejects(t, "_fc_splice_param_type", "parameter `p` type has no MSL form")
+        check_rejects(t, "_fc_splice_param_multi", "names parameter `k` more than once")
+        check_rejects(t, "_fc_splice_ptr_value", "writable parameter `p` cannot splice in value position")
+        check_rejects(t, "_fc_splice_ptr_trace", "pointer parameter `p` has no traceable address space")
+        check_rejects(t, "_fc_splice_ptr_arg", "buffer/pointer parameter `p` needs a member, pointer local, or addr() argument")
+        check_rejects(t, "_fc_splice_ref_arg", "`&` parameter `acc` needs an lvalue argument")
     }
 }

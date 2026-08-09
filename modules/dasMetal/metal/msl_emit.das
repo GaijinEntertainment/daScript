@@ -247,6 +247,13 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                     err(ctx, fld.at, "pointer member `{fld.name}` pointee type {describe(spt)} has no MSL pointer form")
                     continue
                 }
+                if (fld.init != null) {
+                    // the decl is always `= nullptr`: a pointer's address space (and its root
+                    // buffer) resolve from the ASSIGNMENT sites, and there is no kernel-entry
+                    // value to point at yet
+                    err(ctx, fld.at, "pointer state member `{fld.name}` takes no initializer - bind it inside a method (`{fld.name} = unsafe(addr(buffer[i]))`)")
+                    continue
+                }
                 ctx.renames[sName] = msl_safe_name(sName)
                 ctx.members[sName] = MslMember(msl_name = msl_safe_name(sName), elem = pelem, value_elem = pelem,
                     binding = -1, wg_dim = -1, state = true, sptr = true, sptr_const = spt.flags.constant)
@@ -1574,6 +1581,11 @@ def private count_var_refs(e : Expression?; name : string) : int {
     }
     if (e is ExprOp3) {
         let o3 = e as ExprOp3
+        if (o3.subexpr is ExprConstBool) {
+            // emit folds a const-cond select to the taken arm — count what the TEXT names, or a
+            // parameter spelled once per arm reads as two uses and the splice is refused
+            return count_var_refs((o3.subexpr as ExprConstBool).value ? o3.left : o3.right, name)
+        }
         return count_var_refs(o3.subexpr, name) + (count_var_refs(o3.left, name) + count_var_refs(o3.right, name))
     }
     if (e is ExprAt) {
@@ -1712,18 +1724,39 @@ def private arg_ptrish(e : Expression?) : bool {
     return e is ExprVar || e is ExprField
 }
 
+// MSL declaration type for a hoisted pointer-parameter copy: `<space>[ const] <elem>*`. das `T?`
+// carries no address space, so it comes from what the ARGUMENT points into — an untraceable
+// argument has no declarable local and fails closed. "" = error already reported.
+def private splice_ptr_local_type(var ctx : MslCtx; pt : TypeDecl?; arg : Expression?;
+                                  mname, pname : string; at : LineInfo) : string {
+    let pointee = pt.firstType
+    if (pointee == null) {
+        err(ctx, at, "method `{mname}` parameter `{pname}` is a void pointer - MSL needs an element type")
+        return ""
+    }
+    if (reject_cpu_only_width(ctx, at, pointee)) {
+        return ""
+    }
+    let elem = msl_buffer_elem_name(pointee)
+    if (empty(elem) || elem != msl_type_name(pointee)) {
+        err(ctx, at, "method `{mname}` parameter `{pname}` pointee type {describe(pointee)} has no MSL pointer form")
+        return ""
+    }
+    let space = ptr_arg_space(ctx, arg)
+    if (empty(space)) {
+        err(ctx, at, "method `{mname}` pointer parameter `{pname}` has no traceable address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
+        return ""
+    }
+    return pointee.flags.constant ? "{space} const {elem}*" : "{space} {elem}*"
+}
+
 // Per-parameter binding, argument texts emitted under the CALLER's frame. Substitution when
 // the shape allows it; a hoisted `_s<N>` decl otherwise (statement position only).
-def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvoke?; value_pos : bool; var bind : SpliceBind) {
+def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string; ei : ExprInvoke?; value_pos : bool; var bind : SpliceBind) {
     bind.ok = true
-    let mname = call_base_name("{mfn.name}")
-    let na = length(ei.arguments) - 2
-    let np = length(mfn.arguments) - 1
-    if (na != np) {
-        err(ctx, ei.at, "method `{mname}` call has {na} arguments for {np} parameters - default arguments do not splice")
-        bind.ok = false
-        return
-    }
+    // infer pads defaulted arguments before the emitter sees the invoke, so the two counts always
+    // agree and a defaulted parameter splices like any other — min() is bounds hygiene, not a gate
+    let np = min(length(ei.arguments) - 2, length(mfn.arguments) - 1)
     for (i in range(np)) {
         let pv = mfn.arguments[i + 1]
         let pt = pv._type
@@ -1732,6 +1765,32 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvok
         if (pt == null) {
             err(ctx, ei.at, "method `{mname}` parameter `{pname}` has no type")
             bind.ok = false
+            continue
+        }
+        // das passes a POINTER by value — a `var` parameter walks its OWN copy. Substituting the
+        // caller's text would advance the caller's pointer instead, and keep it advanced across
+        // calls; so a writable pointer parameter takes a hoisted copy. A buffer parameter
+        // (array / fixed array) is a reference either way and still substitutes.
+        if (pt.baseType == Type.tPointer && !pt.flags.constant && !pt.flags.ref) {
+            if (!arg_ptrish(arg)) {
+                err(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` needs a member, pointer local, or addr() argument to splice")
+                bind.ok = false
+                continue
+            }
+            if (value_pos) {
+                err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
+                bind.ok = false
+                continue
+            }
+            let ptn = splice_ptr_local_type(ctx, pt, arg, mname, pname, ei.at)
+            if (empty(ptn)) {
+                bind.ok = false
+                continue
+            }
+            let hn = "{msl_safe_name(pname)}_s{ctx.splice_seq}"
+            note(ctx, "splice.param.hoist")
+            bind.hoists |> push("{ptn} {hn} = {emit_value(ctx, arg)};")
+            bind.binds[pname] = hn
             continue
         }
         if (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.baseType == Type.tPointer) {
@@ -1815,7 +1874,7 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     }
     ctx.splice_seq++
     var inscope bind = SpliceBind()
-    bind_method_args(ctx, mfn, ei, true, bind)
+    bind_method_args(ctx, mfn, mname, ei, true, bind)
     if (!bind.ok) {
         return "/*invoke {mname}*/"
     }
@@ -1859,7 +1918,7 @@ def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : stri
     }
     ctx.splice_seq++
     var inscope bind = SpliceBind()
-    bind_method_args(ctx, mfn, ei, false, bind)
+    bind_method_args(ctx, mfn, mname, ei, false, bind)
     if (!bind.ok) {
         return
     }
@@ -2725,14 +2784,17 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
         hiIsConst = src.arguments[na - 1] is ExprConstInt || src.arguments[na - 1] is ExprConstUInt
     }
     let ivName = string(iv.name)
-    ctx.renames[ivName] = msl_safe_name(ivName)
+    // the induction variable is a local like any other: inside a splice it must not capture a
+    // substituted argument's text (an outer `i` passed as an argument, an inner `for (i ...)`)
+    ctx.renames[ivName] = local_msl_name(ctx, ivName)
     let mn = ctx.renames[ivName]
     emit_loop_hints(ctx, fr.annotations, fr.at, indent, lines)
     note(ctx, "stmt.for")
     if (hiIsConst) {
         lines |> push("{indent}for ({tname} {mn} = {lo}; {mn} < {hi}; ++{mn}) \{")
     } else {
-        lines |> push("{indent}for ({tname} {mn} = {lo}, {mn}_end = {hi}; {mn} < {mn}_end; ++{mn}) \{")
+        let en = local_msl_name(ctx, "{mn}_end")     // the derived bound is a local too
+        lines |> push("{indent}for ({tname} {mn} = {lo}, {en} = {hi}; {mn} < {en}; ++{mn}) \{")
     }
     emit_stmt(ctx, fr.body, indent + "    ", lines)
     lines |> push("{indent}\}")
@@ -2951,6 +3013,13 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     ctx.kcls = unsafe(reinterpret<StructurePtr>(fn.classParent))   // the devirtualization table
     scan_members(ctx, fn)
     scan_body(ctx, fn.body)
+    // The emit pass RE-walks what the scan just refused, and a splice emits by recursion — a
+    // recursive method the scan already reported would blow the emitter's own stack and lose the
+    // clean diagnostic. Nothing below can un-refuse a scan error, so stop here.
+    if (!empty(ctx.errors)) {
+        errors |> push_from(ctx.errors)
+        return ""
+    }
 
     // @workgroup members lower to ONE dynamic [[threadgroup(0)]] buffer + derived pointers, NOT
     // static threadgroup arrays: the AGX backend constant-folds tile pointers into a static
@@ -2998,7 +3067,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             note(ctx, "decl.state.ptr")
             state_lines |> push("    {m.sptr_space}{m.sptr_const ? " const" : ""} {m.elem} * {m.msl_name} = nullptr;")
         } elif (m.wg_dim > 0) {
-            note(ctx, "decl.state")
+            note(ctx, "decl.state.arr")
             state_lines |> push("    {m.elem} {m.msl_name}[{m.wg_dim}] = \{\};")
         } else {
             note(ctx, "decl.state")
