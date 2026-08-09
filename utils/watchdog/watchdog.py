@@ -26,7 +26,9 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from urllib.error import URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -64,6 +66,10 @@ STATE: dict[str, object] = {
     "child_exit_code": None,
     "restart_delay": 0.0,
     "stage": None,
+    # Health as the tray/control surfaces see it: None = not yet known (booting), then the
+    # last health_ok verdict. serving_since anchors the "healthy for" display.
+    "healthy": None,
+    "serving_since": 0.0,
     # Progress of an in-flight tune, folded from llvm_tune's @tune events. Counters only —
     # nothing here is an estimate, because the tuner cannot know how long it has left.
     "tune": {},
@@ -680,6 +686,182 @@ def start_control_plugin(script_dir: Path, logger: logging.Logger, args: argpars
     return handle
 
 
+def tray_default_url(health_url: object) -> str | None:
+    """The page a bare left-click opens when --tray-url is not set: the health URL's origin.
+    For dasllama-server that is the control page (http://127.0.0.1:8080/). Defensive on type:
+    watchdog.json values reach args via set_defaults with no argparse coercion, and a null
+    health_url must degrade to no-link, not break the never-fatal tray contract."""
+    if not isinstance(health_url, str) or not health_url:
+        return None
+    parts = urlsplit(health_url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}/"
+
+
+def load_tray_image(script_dir: Path, cwd: Path, name: str):
+    """Brand mark if the bundle ships one (tray.ico / tray.png beside watchdog.py or in the
+    bundle dir), else a generated placeholder so --tray works before the mark exists."""
+    from PIL import Image, ImageDraw
+    for candidate in ("tray.ico", "tray.png"):
+        for base in (script_dir, cwd):
+            path = base / candidate
+            if path.is_file():
+                # copy + close: Image.open keeps the file handle for the image's lifetime,
+                # and the tray icon lives as long as the watchdog — on Windows that open
+                # handle would block deploy-jit from replacing tray.ico in a live bundle.
+                with Image.open(path) as img:
+                    return img.copy()
+    size = 64
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((4, 4, size - 4, size - 4), radius=14, fill=(232, 89, 12, 255))
+    initial = (name[:1] or "?").upper()
+    # The PIL default bitmap font is ~10px no matter the canvas — invisible at tray
+    # scale. Use a system truetype at real size; fall back to a bare glyphless square.
+    from PIL import ImageFont
+    font = None
+    for candidate in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
+        try:
+            font = ImageFont.truetype(candidate, 42)
+            break
+        except OSError:
+            continue
+    if font is not None:
+        draw.text((size / 2, size / 2 - 2), initial, fill=(255, 255, 255, 255),
+                  anchor="mm", font=font)
+    return image
+
+
+def pid_alive(pid: int) -> bool:
+    """Best-effort liveness for the single-instance guard. On Windows os.kill(pid, 0)
+    TERMINATES the target (TerminateProcess with exit code 0), so probe through the same
+    OpenProcess rail the memory metrics use; POSIX gets the classic signal-0 idiom."""
+    if pid <= 0:
+        return False
+    if IS_WINDOWS:
+        return windows_process_metrics(pid) is not None
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def tray_status() -> str:
+    """One line of truth for the tooltip and the menu's status row, read from the same STATE
+    the control plugin sees. Counters only, no prediction — same rule as the tune fold."""
+    s = read_state()
+    if not s.get("child_pid"):
+        delay = float(s.get("restart_delay") or 0.0)
+        code = s.get("child_exit_code")
+        if delay > 0:
+            return f"restarting in {delay:.0f}s (exit {code})"
+        return "stopped"
+    tune = s.get("tune") or {}
+    if isinstance(tune, dict) and tune.get("total"):
+        done, total = tune.get("done", 0), tune.get("total", 0)
+        kernel = tune.get("kernel") or ""
+        rounds = int(tune.get("rounds") or 0)
+        detail = f" — {kernel} {tune.get('round', 0)}/{rounds}" if kernel and rounds else \
+             (f" — {kernel}" if kernel else "")
+        return f"minting kernels {done}/{total}{detail}"
+    healthy = s.get("healthy")
+    if healthy is True:
+        since = float(s.get("serving_since") or 0.0)
+        up = time.time() - since if since else 0.0
+        hours, mins = int(up // 3600), int(up % 3600 // 60)
+        return f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+    stage = s.get("stage")
+    if healthy is False:
+        return f"unhealthy ({stage})" if stage else "unhealthy"
+    return f"booting ({stage})" if stage else "booting"
+
+
+def tray_tick(icon, name: str) -> None:
+    """Refresh the tooltip from live state. Called from the supervision loop's 0.25s tick;
+    writes only on change so the shell isn't spammed with NOTIFYICONDATA updates."""
+    if icon is None:
+        return
+    title = f"{name} — {tray_status()}"
+    if getattr(icon, "_das_last_title", None) != title:
+        try:
+            icon.title = title
+            icon._das_last_title = title
+        except Exception:  # noqa: BLE001 - a dead tray must not touch supervision
+            pass
+
+
+def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
+    """Optional system-tray icon: a live status line (tooltip + first menu row), an "Open"
+    item enabled only while the service is actually healthy, and "Shutdown" routed into the
+    same stopping Event the signal handlers set. Never fatal — a desktop nicety must not
+    take supervision down. macOS needs the tray on the main thread (AppKit runloop), which
+    conflicts with the supervision loop owning it; not wired yet."""
+    if not args.tray:
+        return None
+    if sys.platform == "darwin":
+        emit(logger, "tray_unavailable", reason="macOS tray needs the main-thread runloop; not wired yet")
+        return None
+    try:
+        import pystray
+    except ImportError as exc:
+        emit(logger, "tray_unavailable", reason=str(exc), hint="pip install pystray pillow")
+        return None
+    url = args.tray_url if isinstance(args.tray_url, str) and args.tray_url else None
+    if url is None:
+        url = tray_default_url(args.health_url)
+
+    def on_open(_icon, _item) -> None:
+        # Callback runs on the tray backend's thread; an escaped exception can take the
+        # icon loop down. Same never-fatal rule as everywhere else in the tray.
+        try:
+            webbrowser.open(url)
+        except Exception as exc:  # noqa: BLE001
+            emit(logger, "tray_open_failed", reason=repr(exc))
+
+    def on_shutdown(_icon, _item) -> None:
+        emit(logger, "tray_shutdown_requested")
+        stopping.set()
+
+    # Menu text/enabled are callables: pystray re-evaluates them each time the menu opens,
+    # so the menu is honest without an update pump. "Open" greys out until health is green —
+    # offering a page that isn't up is how a tray lies.
+    items = [pystray.MenuItem(lambda item: tray_status(), None, enabled=False)]
+    if url:
+        items.append(pystray.MenuItem(
+            f"Open {args.name}",
+            on_open,
+            default=True,
+            enabled=lambda item: read_state().get("healthy") is True,
+        ))
+    items.append(pystray.MenuItem("Shutdown", on_shutdown))
+    try:
+        icon = pystray.Icon(
+            args.name,
+            load_tray_image(SCRIPT_DIR, args.cwd, args.name),
+            title=f"{args.name} — booting",
+            menu=pystray.Menu(*items),
+        )
+        icon.run_detached()
+    except Exception as exc:  # noqa: BLE001 - no tray host, headless X, broken backend
+        emit(logger, "tray_unavailable", reason=repr(exc))
+        return None
+    emit(logger, "tray_started", url=url or "")
+    return icon
+
+
+def stop_tray(icon, logger: logging.Logger) -> None:
+    if icon is None:
+        return
+    try:
+        icon.stop()
+    except Exception as exc:  # noqa: BLE001 - teardown must not mask the real exit path
+        emit(logger, "tray_stop_failed", reason=repr(exc))
+
+
 def load_config(script_dir: Path) -> dict[str, object]:
     """Read watchdog.json beside this script. Missing is fine; malformed is fatal."""
     path = script_dir / CONFIG_NAME
@@ -800,6 +982,16 @@ def parse_cli() -> argparse.Namespace:
         help="JIT artifact cache copied into each crash bundle",
     )
     parser.add_argument("--no-crash-bundle", action="store_true")
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="Show a system-tray icon (open the service page / shutdown) for desktop runs",
+    )
+    parser.add_argument(
+        "--tray-url",
+        default=None,
+        help="Page the tray opens on click; defaults to the --health-url origin",
+    )
     parser.add_argument("server_args", nargs=argparse.REMAINDER)
     apply_config(parser, load_config(SCRIPT_DIR), SCRIPT_DIR / CONFIG_NAME)
     args = parser.parse_args()
@@ -913,6 +1105,22 @@ def main() -> int:
             )
             return 2
 
+    # Single-instance guard: two watchdogs mean two children fighting over the same port —
+    # the loser crash-loops invisibly. The pid file records; this makes it also protect.
+    prior = 0
+    try:
+        prior = int(args.pid_file.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        prior = 0
+    if prior and prior != os.getpid() and pid_alive(prior):
+        emit(logger, "watchdog_already_running", pid=prior, pid_file=str(args.pid_file))
+        print(
+            f"watchdog: {args.name} is already supervised by pid {prior} "
+            f"(per {args.pid_file}). Stop it first (tray Shutdown / Ctrl-C), "
+            f"or delete the pid file if it is stale."
+        )
+        return 2
+
     args.pid_file.parent.mkdir(parents=True, exist_ok=True)
     args.pid_file.write_text(str(os.getpid()), encoding="ascii")
     stopping = threading.Event()
@@ -923,6 +1131,7 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, stop_handler)
     signal.signal(signal.SIGTERM, stop_handler)
+    tray_icon = start_tray(args, logger, stopping)
     failures = 0
     recovery_pending = False
     stop_file = args.stop_file
@@ -960,7 +1169,8 @@ def main() -> int:
 
             emit(logger, "child_started", pid=child.pid)
             set_state(child_pid=child.pid, child_started_at=started_at,
-                      child_exit_code=None, restart_delay=0.0, stage=None)
+                      child_exit_code=None, restart_delay=0.0, stage=None,
+                      healthy=None, serving_since=0.0)
             tune_restart_seen = threading.Event()
             jit_dlls: set[Path] = set()
             stage: dict[str, object] = {"name": None, "rank": 0, "since": time.monotonic()}
@@ -1016,6 +1226,9 @@ def main() -> int:
                         last_health = healthy
                         last_health_change = now
                         next_heartbeat = now + HEALTH_HEARTBEAT_SECONDS
+                        set_state(healthy=healthy)
+                        if healthy:
+                            set_state(serving_since=time.time())
                     elif healthy and now >= next_heartbeat:
                         emit(logger, "health_heartbeat", pid=child.pid,
                              ok=True, healthy_for_s=round(now - last_health_change))
@@ -1030,6 +1243,7 @@ def main() -> int:
                     windows_balloon(f"{args.name} recovered", f"Process is running (pid {child.pid})")
                     emit(logger, "recovered", pid=child.pid)
                     recovery_pending = False
+                tray_tick(tray_icon, args.name)
                 time.sleep(0.25)
 
             child_pid = child.pid
@@ -1038,6 +1252,7 @@ def main() -> int:
             uptime = time.time() - started_at
             emit(logger, "child_exited", pid=child_pid, code=return_code, uptime_seconds=uptime)
             set_state(child_pid=0, child_exit_code=return_code)
+            tray_tick(tray_icon, args.name)
             child = None
             if stopping.is_set():
                 return 0
@@ -1071,7 +1286,8 @@ def main() -> int:
                 wer=wer or "",
                 dump=str(dump_path) if dump_path is not None else "",
             )
-            set_state(restart_delay=delay)
+            set_state(restart_delay=delay, healthy=None)
+            tray_tick(tray_icon, args.name)
             bundle_path: Path | None = None
             if not args.no_crash_bundle:
                 try:
@@ -1117,6 +1333,7 @@ def main() -> int:
                 stop_file.unlink()
             except OSError:
                 pass
+        stop_tray(tray_icon, logger)
         emit(logger, "watchdog_stopped")
 
     return 0
