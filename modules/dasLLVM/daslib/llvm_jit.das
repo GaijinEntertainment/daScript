@@ -7936,6 +7936,12 @@ class public DisableJitVisitor : AstVisitor {
     def TypeInfoVisitor {
         disable = false
     }
+    // Default-argument inits are inlined into call sites at infer, so the copy left on the
+    // argument is a dead husk LlvmJitVisitor declines too - and ClearUnusedSymbols nulls refs
+    // inside it, so expr.func there is legitimately null.
+    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool {
+        return false
+    }
     // 16/8-bit lattice floor: data movement (loads/stores/moves/locals/indexing/swizzles) and the
     // vec4f wrapper ABI lower natively; what still falls back is lattice values crossing a BUILTIN CALL
     // boundary (ctors/converts/operators) — the builtin-address gates below catch those.
@@ -8010,6 +8016,10 @@ class public DisableJitVisitor : AstVisitor {
     }
 
     def disable_builtin_call(expr : ExprCallFunc?) {
+        // an unresolved call has no builtin to gate on; ResolveExternVisitor takes the same early out
+        if (expr.func == null) {
+            return
+        }
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
                 to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")

@@ -43,6 +43,23 @@ struct UsesBuiltinGlobal {
     p : float = PI
 }
 
+// default-argument initializers are the same story: MarkSymbolUse skips them too
+// (canVisitArgumentInit is false there), so a helper whose only anchor is `x = arg_helper()`
+// is freed while the surviving function keeps the raw pointer in arg->init. arg_helper writes
+// a global so const folding can't erase the call, and g_arg_state rides along as the Variable
+// half of the same pin
+var private g_arg_state = 1
+
+def private arg_helper() : int {
+    g_arg_state ++
+    return g_arg_state
+}
+
+[export]
+def default_arg_anchor(x : int = arg_helper()) : int {
+    return x
+}
+
 variant PodVariant {
     i : int
     f : float
