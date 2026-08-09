@@ -3799,24 +3799,12 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
                      bs : MetalBuffer?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
                      bk, bn : MetalBuffer?; mp, rows : int64) {
     if (fmt == KqFmt.k6) {
-        kn_pipeline(enc, g_pso_kq_mm_b6)
-        kn_tgmem(enc, MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem, 0)
-        kn_buffer(enc, bs, doff, 0)
+        enc_kq_mm_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
+    } elif (fmt == KqFmt.k4) {
+        enc_kq_mm_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     } else {
-        kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_mm_b4 : g_pso_kq_mm_b5)
-        kn_tgmem(enc, fmt == KqFmt.k4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem, 0)
-        kn_buffer(enc, bs, soff, 0)
+        enc_kq_mm_k5_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, bk, bn, mp, rows)
     }
-    kn_buffer(enc, bs, soff, 1)
-    kn_buffer(enc, bq, qoff, 2)
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, yoff, 4)
-    kn_buffer(enc, bk, 0ul, 5)
-    kn_buffer(enc, bn, 0ul, 6)
-    hz_read(bx)
-    hz_write(by, yoff, uint64(mp * rows * 4l))
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(rows / 64l), 1u), uint3(128u, 1u, 1u))
 }
 
 // One weight site's GEMV — a q8-tagged tensor rides the planar q8 kernels, a kq tensor the
@@ -4163,18 +4151,7 @@ def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?;
 // y ROW STRIDE while this tensor's output width d shapes the grid (d % 64 == 0, mp % 32 == 0)
 def enc_gemm_mm_b(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                   bx, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?; mp, d : int64) {
-    kn_pipeline(enc, g_pso_mm)
-    kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
-    kn_buffer(enc, bwblob, wboff, 0)
-    kn_buffer(enc, bwblob, wboff, 1)
-    kn_buffer(enc, bx, 0ul, 2)
-    kn_buffer(enc, by, yoff, 3)
-    kn_buffer(enc, bk, 0ul, 4)
-    kn_buffer(enc, bn, 0ul, 5)
-    hz_read(bx)
-    hz_write(by, yoff, uint64(mp * d * 4l))
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(d / 64l), 1u), uint3(128u, 1u, 1u))
+    enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, mp, d)
 }
 
 // the M-pad-32 GEMM (B >= 5): raw f32 X, dual-view blob W at the tensor's byte offset
@@ -4823,11 +4800,12 @@ class MetalMmTileBase {
 // The production GEMM: 64-output x 32-token C tiles (4 simdgroups, 8 accumulators), W as
 // interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
 // arrays. Requires out-dim % 64, M padded to 64. Beats llama.cpp's equivalent 2-3% on M1 Max.
+[metal_dispatch(name = "enc_gemm_mm_c", pso = "g_pso_mm", tgmem = "metal_q8_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
 class MetalQ8MulMm : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // raw f32 activations, float4 view
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
     // inherited ta = W tiles (k row, wrow col), tb = X tiles (token row, k col)
@@ -4901,11 +4879,12 @@ class MetalQ8MulMm : MetalMmTileBase {
 // everything around it shared). Q8 (blob walk) stays its own class.
 [ |> template_struct_instance]
 class template MetalKqMulMmK45T : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (k6: 16 int8 sub-scales at blk, bound at 0)
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32; k6 ql at 48*blk, qh at 48*blk+32)
+    // s0off is the SLOT-0 view offset: k4/k5 callers pass soff again, k6 passes the d-plane doff
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (k6: 16 int8 sub-scales at blk, bound at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32; k6 ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" xf : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints (unused in the SIXBIT arm — k6 strides are hardcoded 48/16/8)
@@ -5035,11 +5014,13 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     }
 }
 
+[metal_dispatch(name = "enc_kq_mm_k4_c", pso = "g_pso_kq_mm_b4", tgmem = "MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmK4 : MetalKqMulMmK45T {
     override BLK = 32u
     override QH = false
 }
 
+[metal_dispatch(name = "enc_kq_mm_k5_c", pso = "g_pso_kq_mm_b5", tgmem = "MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmK5 : MetalKqMulMmK45T {
     override BLK = 40u
     override QH = true
@@ -5047,6 +5028,7 @@ class MetalKqMulMmK5 : MetalKqMulMmK45T {
 
 // q6_K rides the SIXBIT arm; scalars reload per kb — the cached form cost an occupancy tier
 // (896 vs 1024 max_threads; bench_metal_kq_mm_lab measured -1.7..-10% per shape).
+[metal_dispatch(name = "enc_kq_mm_k6_c", pso = "g_pso_kq_mm_b6", tgmem = "MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
 class MetalKqMulMmK6 : MetalKqMulMmK45T {
     override SIXBIT = true
 }
@@ -5928,12 +5910,13 @@ class MetalDnBa : MetalQ8GemvT {
 
 // Q4_K: lane owns 32 elems of every 4th superblock; lcpp's kmask halfword scale decode +
 // nibble-mask acc folds (x16/x256 groups folded by pow2 constants).
+[metal_dispatch(name = "enc_kq_k4_c", pso = "g_pso_kq_k4", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvK4 {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -6008,12 +5991,13 @@ class MetalKqGemvK4 {
 
 // Q5_K: int-composed q5 (nibble | qh bit << 4) — one fma per element; same kmask scale decode.
 // The quant plane is [qs 128][qh 32] per superblock, read through the byte view.
+[metal_dispatch(name = "enc_kq_k5_c", pso = "g_pso_kq_k5", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvK5 {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -6159,12 +6143,13 @@ class MetalKqGemvK5C {
 
 // Q6_K: 6-bit q = nibble | 2 qh bits, minus 32; per-16-element SIGNED sub-scales as 4 scattered
 // byte loads (the uint4+select form costs 2 resident simdgroups); d off the trailing f16 plane.
+[metal_dispatch(name = "enc_kq_k6_c", pso = "g_pso_kq_k6", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvK6 {
-    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 

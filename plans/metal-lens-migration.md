@@ -104,8 +104,36 @@ Each phase gets decided in detail when reached.
   fam-gptoss PARITY_FULL maxd bit-identical (0.25608706/0.23721886 — the route leg through
   the generated builder); gemma4e E4B coverage census metal_ple_gather_q8 = 2; decode base
   parity green; all 8 new/changed builders dump-proven against their hand twins.
-- **P2** — format-axis: per-class builders + thin wrappers. Gates: kernels arm + one
-  PARITY_FULL family cell per touched axis (gptoss/qwen3moe pattern from item 14).
+- **P2** — format-axis: per-class builders + thin wrappers. ✅ DONE 2026-08-08 (no lens
+  changes). 21 builders across 5 axes; every raw kn_ body in the format dispatchers deleted
+  (−89 net). (a) q8 GEMM: MetalQ8MulMm (kernels) → `enc_gemm_mm_c`, MetalQ8MulMmT →
+  `enc_gemm_mm_t_c`; prefill `enc_gemm_mm` = twin pick, decode `enc_gemm_mm_b` = 1-line rider
+  over the same core. (b) kq site mm: the MetalKqMulMmK45T stamps (K4/K5/K6, kernels) +
+  K4T/K5T/K6T (prefill) → `enc_kq_mm_k{4,5,6}[_t]_c`; `pf_enc_kq_site_mm` = 6-arm pick,
+  decode `enc_kq_gemm_mm_b` = 3-arm rider. The shared base template's slot-0 scale-view
+  offset is the NEUTRAL param `s0off` (k4/k5 pass soff again, k6 passes the d-plane doff) —
+  one field annotation cannot carry two names across stamps. (c) kq gemv: MetalKqGemvK4/K5/K6
+  (kernels) → `enc_kq_k{4,5,6}_c`; `pf_enc_kq_gemv` = 3-arm pick (grew an `n` param for the
+  exact x span). Decode's `enc_kq_gemv`/`enc_kq_mvb` keep their hand bodies (k5c/b8 select
+  arms, P4 fodder — the base builders now exist to ride). (d) moe mm: all 8 classes →
+  `pf_enc_moe_mm_{q8,q8_t,k4,k5,k6,q51,mx4,mx4_t}_c`; the two wrappers keep fmt switch +
+  plane resolution + contiguous/crown gating; `kn_moe_mm_family_tail` survives ONLY for the
+  A/B race harnesses (comment says so). (e) bf16: MetalBf16MulMm/T → `pf_enc_bf16_mm[_t]_c`
+  under a new `pf_enc_bf16_mm` wrapper replacing the inline site (ONE PSO global holds
+  whichever compiled — the pick is tgmem/layout, not pso).
+  ⚠ Lesson: a tensor twin with NO @role gets its weight views DERIVED as reads and staged
+  (`hz_read` on the blob per dispatch) — the exact tracked-weight scheduler tax the untracked
+  doctrine exists to avoid; every twin's weight/bias/vtab fields got explicit
+  `@role = "weight"`. Deltas (strictly-more-correct): kq gemv x read staged exact
+  (`n*4` @ xoff; prefill hand was whole-buffer — decode's exact form); Q8T/Mx4T drop the hand
+  twin path's dead `hz_read(bbkt)` and Mx4T the dead bkt@8 bind (no such field). Grid
+  ceil-div ≡ hand exact-div under the %32/%64 shape gates. All 21 dump-proven
+  (dump = true + ast_dump). Gates: kernels 7/7; prefill parity base/s16/kq/cont/qkv +
+  dim-8B(PARITY_FULL) token-exact — the kq arm IS the kq-mm+classifier cell; decode
+  arm1-basic + batch (batchB7-partd/batchB8-kq) + arm10-kq + poison; fam-gptoss PARITY_FULL
+  maxd bit-identical to P0/P1 (0.25608706/0.23721886 — mx4 mm + route + swiglu via builders);
+  fam-qwen3moe PARITY_FULL k4-MoE token-identical (' sea'==' sea', maxd 0.6937207 in tol);
+  gemma4e census metal_bf16_mulmm = 2 + metal_ple_gather_q8 = 2.
 - **P3** — items 13/15 via decision #2; absorbs the dedup leftovers.
 - **P4** — pf_enc_moe_route composite + the census ratchet end-state (every dispatch through
   the kn_ rail, `_metal_manual_dispatch` opt-outs burned down).
