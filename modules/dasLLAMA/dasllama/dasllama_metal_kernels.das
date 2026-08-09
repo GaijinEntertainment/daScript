@@ -3539,7 +3539,7 @@ def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : Metal
     var err : string
     var pso = pipeline_from_source(g_dev, source, entry, fastmath, err)
     if (pso == null) {
-        to_log(LOG_ERROR, "dasLLAMA metal decode: `{entry}` compile failed — {err}\n")
+        to_log(LOG_ERROR, "dasLLAMA metal decode: `{entry}` compile failed - {err}\n")
         ok = false
     } else {
         kcov_register(pso, entry)   // the coverage census names every compiled kernel

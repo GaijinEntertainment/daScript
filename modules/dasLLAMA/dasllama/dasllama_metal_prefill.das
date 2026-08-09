@@ -1880,7 +1880,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         return false
     }
     if (!metal_common_init()) {   // ONE device + queue for the whole family (M3) — this also arms the hazard-rail knobs on prefill-first runs
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: no Metal device — prefill stays on the CPU\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: no Metal device - prefill stays on the CPU\n")
         g_pf_failed = true
         return false
     }
@@ -3225,7 +3225,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         readback_us += int64(get_time_usec(ts_rb))
         g_prefills++
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal prefill: dispatch failed ({err}) - falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalPrefillDecline.gpu_error)
     }
     // return the pooled buffers (uniforms too); the weight regions stay resident
@@ -3404,7 +3404,7 @@ def dasllama_metal_prefill_register() {
     g_pf_env_ncb = g_env_metal.ncb
     if (!empty(g_env_metal.prefill_skip)) {
         g_pf_skip = g_env_metal.prefill_skip
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} - timing-attribution mode, output is GARBAGE\n")
     }
 }
 

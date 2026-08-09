@@ -4718,7 +4718,7 @@ def private compile_lab_pso(dev; v : LabVariant) {
     var err : string
     var pso = pipeline_from_source(dev, v.src, v.entry, true, err)
     if (pso == null) {
-        to_log(LOG_ERROR, "{v.name}: kernel compile failed — {err}\n")
+        to_log(LOG_ERROR, "{v.name}: kernel compile failed - {err}\n")
     }
     return pso
 }

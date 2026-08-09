@@ -208,11 +208,11 @@ def private main_apple(dummy) {
                 }
             }
             if (untouched > 0) {
-                panic("{sh._0}: {untouched} outputs untouched — dispatch geometry wrong")
+                panic("{sh._0}: {untouched} outputs untouched - dispatch geometry wrong")
             }
         }
         if (mismatches > 0) {
-            panic("{sh._0}: {mismatches} of {m * d} outputs differ — arms are not the same arithmetic")
+            panic("{sh._0}: {mismatches} of {m * d} outputs differ - arms are not the same arithmetic")
         }
         let mac_mm = double(m) * double(n) * double(d)
         var best_a = 1e30lf

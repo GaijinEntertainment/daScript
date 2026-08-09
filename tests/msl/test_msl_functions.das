@@ -27,7 +27,7 @@ def private hasc(t : T?; needle : string) {
 
 [test]
 def test_msl_functions(t : T?) {
-    t |> run("user functions lower 1:1 — signatures, address spaces, hidden builtins") <| @(t : T?) {
+    t |> run("user functions lower 1:1 - signatures, address spaces, hidden builtins") <| @(t : T?) {
         // free function with a value return, called nested
         has(t, "float ufx_sky(float d)")
         has(t, "float ufx_shade(float d, int bounce)")
@@ -75,7 +75,7 @@ def test_msl_functions(t : T?) {
         t |> success(base >= 0, "float instance emitted")
         t |> success(twin >= 0, "half instance emitted under a suffixed name")
     }
-    t |> run("class methods flatten — bodies splice inline, statically devirtualized") <| @(t : T?) {
+    t |> run("class methods flatten - bodies splice inline, statically devirtualized") <| @(t : T?) {
         // no struct, no self fill: members stay kernel parameters, the write-set flows
         // through the SPLICED method bodies (ys is written only inside store's body)
         t |> success(find(ufxcls_msl, "struct UfxKid") < 0, "no MSL struct emits")

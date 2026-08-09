@@ -309,7 +309,7 @@ class MetalDispatch : AstStructureAnnotation {
             var kt = kargs_type_of(field._type, is_ssbo)
             let dflt = find_arg(field.annotation, "default") ?as tString ?? ""
             if (!empty(dflt) && kt != null) {
-                errors := "[metal_dispatch] {fn_name}: field '{field.name}' — @default is for buffer binds, not kargs values"
+                errors := "[metal_dispatch] {fn_name}: field '{field.name}' - @default is for buffer binds, not kargs values"
                 return false
             }
             bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr, dref = dflt))
@@ -346,7 +346,7 @@ class MetalDispatch : AstStructureAnnotation {
         if (accessForce) {
             for (bf in bufs) {
                 if (bf.ssbo && empty(bf.role)) {
-                    errors := "[metal_dispatch] {fn_name}: access_force=true — @ssbo field '{bf.name}' must declare a @role"
+                    errors := "[metal_dispatch] {fn_name}: access_force=true - @ssbo field '{bf.name}' must declare a @role"
                     return false
                 }
             }
@@ -370,7 +370,7 @@ class MetalDispatch : AstStructureAnnotation {
                 return false
             }
             if (!multi && nmatch != 1) {
-                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — multi-kernel classes pick per instance via kernel="
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} - multi-kernel classes pick per instance via kernel="
                 delete tracked
                 return false
             }
@@ -400,7 +400,7 @@ class MetalDispatch : AstStructureAnnotation {
                     let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
                         || (decl == "readwrite" && (dr == "read" || dr == "write")))
                     if (!cov) {
-                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' — the declared role must cover every kernel"
+                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel"
                         delete res
                         delete tracked
                         return false
@@ -413,7 +413,7 @@ class MetalDispatch : AstStructureAnnotation {
                     bf.hzrole = derived_role(res, bf.name)
                 } elif (empty(decl)) {
                     if (empty(dr)) {
-                        errors := "[metal_dispatch] {fn_name}: @ssbo field '{bf.name}' is never accessed by the kernel body — declare @role (weight/alias) or drop the binding"
+                        errors := "[metal_dispatch] {fn_name}: @ssbo field '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding"
                         delete res
                         delete tracked
                         return false
@@ -426,7 +426,7 @@ class MetalDispatch : AstStructureAnnotation {
                     var wk <- [for (k in keys(res.writes)); k]
                     sort(rk)   // keys() order is unspecified — sorted for deterministic diagnostics
                     sort(wk)
-                    errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but the body derives '{drName}' — fix whichever is wrong (access_force=true to override) [derived reads: {join(rk, ",")} writes: {join(wk, ",")}]"
+                    errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong (access_force=true to override) [derived reads: {join(rk, ",")} writes: {join(wk, ",")}]"
                     delete rk
                     delete wk
                     delete res
@@ -524,7 +524,7 @@ class private MetalCensusVisitor : AstVisitor {
     def override preVisitExprCall(var expr : ExprCall?) : void {
         let base = callee_base_name("{expr.name}")
         if (base == "metal_dispatch_threadgroups") {
-            macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module — dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
+            macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module - dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
         }
         if (base == "kn_kargs") {
             nkargs++
@@ -550,7 +550,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                 // loses its kn_kargs leaves the kernel reading an unbound argument buffer — the
                 // GPU produces garbage with no error anywhere.
                 if (v.nkargs > 0 && v.nkargs != v.ndispatch) {
-                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch — every dispatch path must bind its kargs")
+                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch - every dispatch path must bind its kargs")
                 }
             }
         }
@@ -602,7 +602,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                             let dr = derived_role(res, "{field.name}")
                             if (dr != role) {
                                 let drName = empty(dr) ? "unused" : dr
-                                macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' — fix the stale declaration")
+                                macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' - fix the stale declaration")
                             }
                         }
                     }

@@ -1734,7 +1734,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 ge = metal_command_buffer_gpu_end_time(r.cb)))
         }
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({cb_error_text(r.cb)}) — falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal decode: dispatch failed ({cb_error_text(r.cb)}) - falling back to the CPU layer loop\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
     return ok
@@ -3168,7 +3168,7 @@ def dasllama_metal_decode_register() {
     g_env_mtp_debug = g_env_metal.mtp_debug
     if (!empty(g_env_metal.decode_skip)) {
         g_skip = g_env_metal.decode_skip
-        to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} — timing-attribution mode, output is GARBAGE\n")
+        to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} - timing-attribution mode, output is GARBAGE\n")
     }
     if (is_some(g_env_metal.spec)) {   // the spec chain's A/B rail: 0 off, 1 forced, -1 adaptive
         set_metal_decode_speculate(unwrap(g_env_metal.spec))

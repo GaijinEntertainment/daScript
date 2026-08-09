@@ -229,14 +229,14 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             // plain member = STATE: a kernel-entry thread-local every spliced method body sees —
             // loop-carried rider state (carried pointer walks) from class-grade source
             if (binding >= 0) {
-                err(ctx, fld.at, "state member `{fld.name}` has @binding = {binding} — plain members are thread-locals, not bindable buffers")
+                err(ctx, fld.at, "state member `{fld.name}` has @binding = {binding} - plain members are thread-locals, not bindable buffers")
                 continue
             }
             let sName = string(fld.name)
             if (fld._type != null && fld._type.baseType == Type.tPointer) {
                 let spt = fld._type.firstType
                 if (spt == null) {
-                    err(ctx, fld.at, "pointer member `{fld.name}` is a void pointer — MSL needs an element type")
+                    err(ctx, fld.at, "pointer member `{fld.name}` is a void pointer - MSL needs an element type")
                     continue
                 }
                 if (reject_cpu_only_width(ctx, fld.at, spt)) {
@@ -263,7 +263,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                     continue
                 }
                 if (fld.init != null) {
-                    err(ctx, fld.at, "state member `{fld.name}` takes no array initializer — das zero-init is the MSL form")
+                    err(ctx, fld.at, "state member `{fld.name}` takes no array initializer - das zero-init is the MSL form")
                     continue
                 }
                 ctx.renames[sName] = msl_safe_name(sName)
@@ -287,7 +287,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 }
                 if (!(sie is ExprConstInt || sie is ExprConstUInt || sie is ExprConstFloat ||
                         sie is ExprConstFloat16 || sie is ExprConstBool)) {
-                    err(ctx, fld.at, "state member `{fld.name}` initializer must be a scalar constant — complex init belongs in a method")
+                    err(ctx, fld.at, "state member `{fld.name}` initializer must be a scalar constant - complex init belongs in a method")
                     continue
                 }
                 initText = emit_value(ctx, sie)
@@ -491,7 +491,7 @@ def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
     }
     let prevRoot = ctx.members?[mem]?.sptr_root ?? ""
     if (!empty(prevRoot) && prevRoot != root) {
-        err(ctx, left.at, "pointer member `{mem}` is assigned from both `{prevRoot}` and `{root}` — one root buffer per pointer member")
+        err(ctx, left.at, "pointer member `{mem}` is assigned from both `{prevRoot}` and `{root}` - one root buffer per pointer member")
         return
     }
     let rootWg = ctx.members?[root]?.workgroup ?? false
@@ -1720,7 +1720,7 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvok
     let na = length(ei.arguments) - 2
     let np = length(mfn.arguments) - 1
     if (na != np) {
-        err(ctx, ei.at, "method `{mname}` call has {na} arguments for {np} parameters — default arguments do not splice")
+        err(ctx, ei.at, "method `{mname}` call has {na} arguments for {np} parameters - default arguments do not splice")
         bind.ok = false
         return
     }
@@ -1760,7 +1760,7 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvok
         }
         let writable = !pt.flags.constant && !pt.flags.ref
         if (writable && value_pos) {
-            err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position — call it as a statement")
+            err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
             bind.ok = false
             continue
         }
@@ -1781,7 +1781,7 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvok
             }
         } elif (value_pos) {
             if (body_var_refs(mfn.body, pname) > 1) {
-                err(ctx, ei.at, "method `{mname}` names parameter `{pname}` more than once — a computed argument cannot splice in value position; hoist it to a local first")
+                err(ctx, ei.at, "method `{mname}` names parameter `{pname}` more than once - a computed argument cannot splice in value position; hoist it to a local first")
                 bind.ok = false
                 continue
             }
@@ -1810,7 +1810,7 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     }
     let ret = lone_stmt(mfn.body) ?as ExprReturn
     if (ret == null || ret.subexpr == null) {
-        err(ctx, ei.at, "method `{mname}` used in value position must be a single `return <expr>` body (arrow form) — call it as a statement instead")
+        err(ctx, ei.at, "method `{mname}` used in value position must be a single `return <expr>` body (arrow form) - call it as a statement instead")
         return "/*invoke {mname}*/"
     }
     ctx.splice_seq++
@@ -1841,7 +1841,7 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
 def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : string; var lines : array<string>) {
     let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
     if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
-        err(ctx, ei.at, "invoke has no MSL lowering — only method calls on the kernel's own self lower")
+        err(ctx, ei.at, "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return
     }
     let mname = string(mf.name)
@@ -1850,11 +1850,11 @@ def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : stri
         return
     }
     if (mfn.result != null && mfn.result.baseType != Type.tVoid) {
-        err(ctx, ei.at, "method `{mname}` returns a value its statement call discards — splice it in value position, or make it void")
+        err(ctx, ei.at, "method `{mname}` returns a value its statement call discards - splice it in value position, or make it void")
         return
     }
     if (!ctx.tail_ok && stmt_has_return(mfn.body)) {
-        err(ctx, ei.at, "method `{mname}` contains `return` but the call is not in kernel tail position — a spliced return would exit the whole kernel")
+        err(ctx, ei.at, "method `{mname}` contains `return` but the call is not in kernel tail position - a spliced return would exit the whole kernel")
         return
     }
     ctx.splice_seq++
@@ -2992,7 +2992,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         if (m.sptr) {
             if (empty(m.sptr_space)) {
-                err(ctx, fn.at, "pointer member `{name}` is never assigned from a kernel buffer — its address space cannot be resolved")
+                err(ctx, fn.at, "pointer member `{name}` is never assigned from a kernel buffer - its address space cannot be resolved")
                 continue
             }
             note(ctx, "decl.state.ptr")
