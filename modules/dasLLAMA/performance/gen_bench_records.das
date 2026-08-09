@@ -230,14 +230,30 @@ def private mint_check(dir, whose : string) {
 // a live two-lane working set once filled a 460 GB box to 97% and failed a bake mid-sweep.
 // A fresh box pays nothing extra: it starts with no images either way.
 def private batch_start_wipe(workload : string) {
-    let w_llm = dlim_wipe(models_dir())
-    if (w_llm.removed > 0) {
-        to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_llm.removed} image(s), {w_llm.freed >> 20l} MB in {models_dir()}\n")
+    // scoped to what THIS batch will re-bake: an ASR-only run must not wipe LLM images it
+    // never touches again, so it wipes per ASR carrier instead of the whole models dir
+    if (workload == "llm" || workload == "all") {
+        let w_llm = dlim_wipe(models_dir())
+        if (w_llm.removed > 0) {
+            to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_llm.removed} image(s), {w_llm.freed >> 20l} MB in {models_dir()}\n")
+        }
+    } else {
+        for (spec in asr_catalog()) {
+            let w = dlim_wipe(asr_model_path(spec))
+            if (w.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {spec.display}: {w.removed} image(s), {w.freed >> 20l} MB\n")
+            }
+        }
     }
     if (workload == "asr" || workload == "all") {
-        let w_w = dlim_wipe(whisper_models_dir())
-        if (w_w.removed > 0) {
-            to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_w.removed} image(s), {w_w.freed >> 20l} MB in {whisper_models_dir()}\n")
+        // a one-dir box points WHISPER_CPP_MODELS at the llm dir — skip the whole-dir form
+        // there on an ASR-only run (the per-carrier wipe above already covered it)
+        let wdir = whisper_models_dir()
+        if (workload == "all" || wdir != models_dir()) {
+            let w_w = dlim_wipe(wdir)
+            if (w_w.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_w.removed} image(s), {w_w.freed >> 20l} MB in {wdir}\n")
+            }
         }
     }
 }

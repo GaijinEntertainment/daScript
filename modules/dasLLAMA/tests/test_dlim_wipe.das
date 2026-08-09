@@ -7,10 +7,8 @@ require dasllama/dasllama_image
 // ARCHITECTURE.md 2.1) — but its reach must be exact: a model path wipes only that model's
 // images, a directory path wipes every image in it, and non-.dlim files are never touched.
 
-let TMP = "modules/dasLLAMA/tests/_test_wipe"
-
-def private plant(name : string) {
-    fopen("{TMP}/{name}", "wb") $(f) {
+def private plant(root, name : string) {
+    fopen(path_join(root, name), "wb") $(f) {
         if (f != null) {
             f |> fwrite("not a real image")
         }
@@ -19,25 +17,29 @@ def private plant(name : string) {
 
 [test]
 def test_dlim_wipe(t : T?) {
-    mkdir_rec(TMP)
-    plant("a.gguf")
-    plant("a.gguf.0xdead.dlim")
-    plant("a.gguf.0xbeef.dlim")
-    plant("b.gguf")
-    plant("b.gguf.0xdead.dlim")
-    t |> run("model-path wipe takes only that model's images") @(t : T?) {
-        let r = dlim_wipe("{TMP}/a.gguf")
-        t |> equal(2, r.removed)
-        t |> success(stat("{TMP}/a.gguf").is_valid, "gguf untouched")
-        t |> success(stat("{TMP}/b.gguf.0xdead.dlim").is_valid, "sibling model's image untouched")
+    var terr : string
+    let root = create_temp_directory("dasllama_wipe_test", terr)
+    if (!empty(terr)) {
+        t |> success(false, "cannot create a temp directory: {terr}")
+        return
     }
-    t |> run("directory wipe takes every image, nothing else") @(t : T?) {
-        let r = dlim_wipe(TMP)
-        t |> equal(1, r.removed)
-        t |> success(stat("{TMP}/a.gguf").is_valid && stat("{TMP}/b.gguf").is_valid, "ggufs untouched")
-        t |> equal(0, dlim_wipe(TMP).removed)
+    plant(root, "a.gguf")
+    plant(root, "a.gguf.0xdead.dlim")
+    plant(root, "a.gguf.0xbeef.dlim")
+    plant(root, "b.gguf")
+    plant(root, "b.gguf.0xdead.dlim")
+    t |> run("model-path wipe takes only that model's images") @(tt : T?) {
+        let r = dlim_wipe(path_join(root, "a.gguf"))
+        tt |> equal(2, r.removed)
+        tt |> success(stat(path_join(root, "a.gguf")).is_valid, "gguf untouched")
+        tt |> success(stat(path_join(root, "b.gguf.0xdead.dlim")).is_valid, "sibling model's image untouched")
     }
-    remove("{TMP}/a.gguf")
-    remove("{TMP}/b.gguf")
-    rmdir_result(TMP)
+    t |> run("directory wipe takes every image, nothing else") @(tt : T?) {
+        let r = dlim_wipe(root)
+        tt |> equal(1, r.removed)
+        tt |> success(stat(path_join(root, "a.gguf")).is_valid && stat(path_join(root, "b.gguf")).is_valid, "ggufs untouched")
+        tt |> equal(0, dlim_wipe(root).removed)
+    }
+    var rerr : string
+    rmdir_rec(root, rerr)
 }
