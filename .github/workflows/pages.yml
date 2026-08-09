@@ -47,7 +47,13 @@ jobs:
         sudo apt-get update
         # libc++ so the wasm cross-compile host can be built with the SAME C++
         # stdlib as the emscripten target (see the host build step below).
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
+        # libglfw3 is the RUNTIME .so for imgui2rst below: on a wasm-cache hit
+        # the host build is skipped, so the superbuild's libglfw.so.3 (found
+        # via build-tree rpath on full builds) doesn't exist — the cached
+        # imguiApp/dasGlfw shared modules then fail to dlopen and imgui2rst
+        # dies on `missing prerequisite 'imgui_app'`. The system soname
+        # satisfies the same lookup on both paths.
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev libglfw3
 
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
