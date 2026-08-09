@@ -73,6 +73,18 @@ extern "C" {
     double emscripten_get_now(void);
     int    __real_emscripten_futex_wait(volatile void *addr, uint32_t val, double max_wait_ms);
 
+    // Blocking the main thread is a sanctioned daslang pattern (join in the frame
+    // loop) — same physics as native. emscripten disagrees: pthread_cond_timedwait
+    // and pthread_join call this checker, whose JS-library body warnOnce()s
+    // "Blocking on the main thread is very dangerous" to console.error the first
+    // time the main thread actually parks (and aborts outright under
+    // -sALLOW_BLOCKING_ON_MAIN_THREAD=0). A native definition wins over the JS
+    // library fallback at link, so both C callers land here and the nag is gone.
+    // The wait itself is untouched — the main thread still takes emscripten's
+    // spin + _emscripten_yield() path, so proxied-call pumping (the real
+    // deadlock avoidance) stays intact.
+    void emscripten_check_blocking_allowed(void) {}
+
     int __wrap_emscripten_futex_wait(volatile void *addr, uint32_t val, double max_wait_ms) {
         if (!_emscripten_thread_supports_atomics_wait() && !emscripten_is_main_browser_thread()) {
             // pthread_mutex_lock is an infinite wait (max_wait_ms == INFINITY): spin on the futex word

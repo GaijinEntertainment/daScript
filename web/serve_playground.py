@@ -38,6 +38,9 @@ SOURCES = [
     ("site/playground/playground-wasm.js",    "playground/playground-wasm.js"),
     ("site/playground/playground-splitter.js","playground/playground-splitter.js"),
     ("web/examples/ui/src/main.js",           "playground/main.js"),
+    ("web/examples/ui/src/main.css",          "playground/main.css"),
+    ("site/playground/forge-skin.css",        "playground/forge-skin.css"),
+    ("site/coi-serviceworker.js",             "coi-serviceworker.js"),
     # The landing page, because the hero editor hands its buffer off to
     # /playground/ via #code= — that handoff is only testable with both pages
     # served from one origin.

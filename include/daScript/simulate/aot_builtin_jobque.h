@@ -96,38 +96,58 @@ namespace das {
                 tt(f.data, f.type, f.from ? f.from : owner);
             }
         }
+        // gather/gatherEx/gather_and_forward drain the pipe under the lock, then run
+        // the callback OUTSIDE it. The callback is arbitrary user code — it may push
+        // to or query this very channel (reentrancy), and it may be arbitrarily slow
+        // (the wasm AudioWorklet interprets the audio command ladder here; running it
+        // under the lock starved the main thread's per-frame push into a dead page).
+        // Items pushed during a gather join the next drain, never the current one.
         template <typename TT>
         void gather ( TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
-            for ( auto & f : pipe ) {
+            decltype(pipe) drained;
+            {
+                lock_guard<mutex> guard(mCompleteMutex);
+                drained.swap(pipe);
+            }
+            for ( auto & f : drained ) {
                 tt(f.data, f.type, f.from ? f.from : owner);
             }
-            pipe.clear();
         }
         template <typename TT>
         void gatherEx ( Context * ctx, TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
-            for ( auto f = pipe.begin(); f != pipe.end(); ) {
-                auto itOwner = f->from ? f->from : owner;
-                if ( itOwner == ctx ) {
-                    tt(f->data, f->type, itOwner);
-                    f = pipe.erase(f);
-                } else {
-                    ++f;
+            decltype(pipe) drained;
+            {
+                lock_guard<mutex> guard(mCompleteMutex);
+                for ( auto f = pipe.begin(); f != pipe.end(); ) {
+                    auto itOwner = f->from ? f->from : owner;
+                    if ( itOwner == ctx ) {
+                        drained.emplace_back(das::move(*f));
+                        f = pipe.erase(f);
+                    } else {
+                        ++f;
+                    }
                 }
+            }
+            for ( auto & f : drained ) {
+                tt(f.data, f.type, f.from ? f.from : owner);
             }
         }
         template <typename TT>
         void gather_and_forward ( Channel * that, TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
-            for ( auto & f : pipe ) {
+            decltype(pipe) drained;
+            {
+                lock_guard<mutex> guard(mCompleteMutex);
+                drained.swap(pipe);
+            }
+            for ( auto & f : drained ) {
                 tt(f.data, f.type, f.from ? f.from : owner);
             }
-            lock_guard<mutex> guard2(that->mCompleteMutex);
-            for ( auto & f : pipe ) {
-                that->pipe.emplace_back(das::move(f));
+            {
+                lock_guard<mutex> guard2(that->mCompleteMutex);
+                for ( auto & f : drained ) {
+                    that->pipe.emplace_back(das::move(f));
+                }
             }
-            pipe.clear();
             that->mCond.notify_all();  // notify_one??
         }
     protected:
@@ -159,15 +179,21 @@ namespace das {
                 tt(&arr);
             }
         }
+        // Same drain-first rule as Channel::gather above: the callback (the audio
+        // command ladder, arbitrary user code) runs OUTSIDE the lock and may push
+        // to or query this stream; items pushed during a gather join the next drain.
         template <typename TT>
         void gather ( TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
-            for ( auto & v : pipe ) {
+            decltype(pipe) drained;
+            {
+                lock_guard<mutex> guard(mCompleteMutex);
+                drained.swap(pipe);
+            }
+            for ( auto & v : drained ) {
                 Array arr;
                 array_mark_locked(arr, (void *)v.data(), v.size());
                 tt(&arr);
             }
-            pipe.clear();
         }
     protected:
         uint32_t                mSleepMs = 1;

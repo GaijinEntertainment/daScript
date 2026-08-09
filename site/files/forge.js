@@ -477,21 +477,38 @@ def main() {
         }).join('');
     }
 
-    // dasProfile workload names use hyphens (`spectral-norm`, `table-sort`);
-    // playground sample basenames use underscores (`spectral_norm.das`,
-    // `table_sort.das`). The cross-language harness keeps hyphens upstream
-    // so its scripts (`spectral-norm.lua`, etc.) keep working. Normalize
-    // here when building the playground URL.
-    function benchToSampleSlug(name) {
-        return name.replace(/-/g, '_');
-    }
+    // dasProfile workload names and playground sample basenames never agreed
+    // (`primes loop` ↔ primes.das, `sort` ↔ table_sort.das, `dictionary` ↔
+    // dict.das), so no spelling transform can bridge them — map explicitly.
+    // A workload with no entry renders no link (fail closed): a wrong slug
+    // silently opens the playground's default OpenGL sample instead of the
+    // workload the visitor clicked through for.
+    const BENCH_TO_SLUG = {
+        'sha256':               'sha256',
+        'dictionary':           'dict',
+        'n-bodies':             'nbodies',
+        'mandelbrot':           'mandelbrot',
+        'spectral norm':        'spectral_norm',
+        'exp loop':             'exp',
+        'string2float':         'f2i',
+        'float2string':         'f2s',
+        'particles kinematics': 'particles',
+        'queen':                'queen',
+        'fibonacci loop':       'fib_loop',
+        'fibonacci recursive':  'fib_recursive',
+        'primes loop':          'primes',
+        'sort':                 'table_sort',
+        'tree':                 'tree',
+        // 'native loop' — C-baseline workload, no playground sample.
+    };
 
     function renderFooter() {
         const el = document.getElementById('bench-footer');
         if (!el) return;
-        const slug = encodeURIComponent(benchToSampleSlug(benchBm));
-        el.innerHTML =
-            `<a href="/playground/index.html?example=${slug}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`;
+        const slug = BENCH_TO_SLUG[benchBm];
+        el.innerHTML = slug
+            ? `<a href="/playground/index.html?example=${encodeURIComponent(slug)}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`
+            : '';
     }
 
     // ─── § 06 News feed (top 5 from news.json) ─────────────────────
