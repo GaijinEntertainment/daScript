@@ -168,11 +168,12 @@ Each phase gets decided in detail when reached.
   Vulkan sentence moved to the Vulkan section, the kn_moe_mm_family_tail race carve-out, and
   three new-fashion rules (twins share a template; explicit @role = "weight" on weight fields;
   dispatch declared on the class, builders generated).
-  ⚠ surfaced (pre-existing, NOT fixed here): benchmarks/attn/bench_metal_sq_attn.das still
-  binds the pre-kargs scalar layout against production kernels (stale since the kargs
-  migration; also violates the enc_*-only rule) — needs its own pass or retirement; das2rst
-  full runs non-deterministically skip typemacro_boost's detail extraction (a minimal
-  require-pair extracts fine; generated/ is untracked so CI self-heals).
+  ⚠ surfaced: bench_metal_sq_attn's b2 production arms bound the pre-kargs scalar layout
+  (stale since the kargs migration) — FIXED in the follow-up commit (upload_kargs + the two
+  bind lists on the P3 layout; all 24 depth×arm oracles green, partD/old in the historical
+  band). Still open (pre-existing): das2rst full runs non-deterministically skip
+  typemacro_boost's detail extraction (a minimal require-pair extracts fine; generated/ is
+  untracked so CI self-heals).
 - **P4** — pf_enc_moe_route composite + the census ratchet end-state (every dispatch through
   the kn_ rail, `_metal_manual_dispatch` opt-outs burned down).
 
