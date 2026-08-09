@@ -26,17 +26,19 @@ def test_dlim_wipe(t : T?) {
     plant(root, "a.gguf")
     plant(root, "a.gguf.0xdead.dlim")
     plant(root, "a.gguf.0xbeef.dlim")
+    plant(root, "a.gguf2.0xdead.dlim")   // shared-prefix decoy: must survive a wipe of a.gguf
     plant(root, "b.gguf")
     plant(root, "b.gguf.0xdead.dlim")
     t |> run("model-path wipe takes only that model's images") @(tt : T?) {
         let r = dlim_wipe(path_join(root, "a.gguf"))
         tt |> equal(2, r.removed)
         tt |> success(stat(path_join(root, "a.gguf")).is_valid, "gguf untouched")
+        tt |> success(stat(path_join(root, "a.gguf2.0xdead.dlim")).is_valid, "shared-prefix sibling untouched")
         tt |> success(stat(path_join(root, "b.gguf.0xdead.dlim")).is_valid, "sibling model's image untouched")
     }
     t |> run("directory wipe takes every image, nothing else") @(tt : T?) {
         let r = dlim_wipe(root)
-        tt |> equal(1, r.removed)
+        tt |> equal(2, r.removed)
         tt |> success(stat(path_join(root, "a.gguf")).is_valid && stat(path_join(root, "b.gguf")).is_valid, "ggufs untouched")
         tt |> equal(0, dlim_wipe(root).removed)
     }

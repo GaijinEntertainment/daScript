@@ -305,7 +305,9 @@ def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
         return r
     }
     let dirp = st.is_dir ? gguf_path : dir_name(gguf_path)
-    let base = st.is_dir ? "" : base_name(gguf_path)
+    // image names are "<carrier>.<identity>.dlim" — requiring the dot keeps the reach exact
+    // (wiping "foo.gguf" must not take "foo.gguf2"'s images)
+    let base = st.is_dir ? "" : "{base_name(gguf_path)}."
     dir(dirp) $(name : string) {
         return if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base))))
         let full = path_join(dirp, name)
