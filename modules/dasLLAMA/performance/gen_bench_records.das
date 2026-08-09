@@ -5,7 +5,7 @@ options _function_length = 0   // same
 
 require profile_common
 require dasllama/dasllama_env   // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
-require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
+require dasllama/dasllama_image   // dlim_wipe + dlim_inventory — the batch lifecycle and the re-mint tripwire
 require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs
 require daslib/fio
@@ -86,7 +86,7 @@ struct Args {
     @clarg_doc = "Timed repetitions per ASR clip, best kept (default: 2 — clips are minutes, not seconds)"
     asr_reps : int = 2
 
-    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once and gate it against the store. A missing .dlim is minted and warmed by a prepare pass first, so only the timed cell is frozen. No refs, no store writes. Stops at the first FAIL"
+    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once and gate it against the store. The batch starts with an image wipe; a prepare pass bakes and warms each cell's image so only the timed cell is frozen, and a model's images are deleted after its last cell. No refs, no store writes. Stops at the first FAIL"
     oracle : bool
 
     @clarg_doc = "Oracle: run every row and report the full board instead of stopping at the first FAIL"
@@ -220,6 +220,25 @@ def private mint_check(dir, whose : string) {
             panic("gen_bench_records: {im.path} was minted {n} times in one sweep (last by {whose}) - two cells disagree on its identity, so their numbers are not comparable")
         }
         to_log(LOG_INFO, "gen_bench_records: minted {im.file} ({im.bytes >> 20l} MB) during {whose}\n")
+    }
+}
+
+// STEP ZERO of a validated batch: the rigs own the model dirs for the whole run — start by
+// deleting every image. Each model re-bakes when its first cell needs it (the cv warm-retry
+// absorbs the cold map; --oracle's prepare pass bakes before the timed cell) and its images die
+// after its last cell, so the disk high-water mark is ONE model's lanes, never the catalog's —
+// a live two-lane working set once filled a 460 GB box to 97% and failed a bake mid-sweep.
+// A fresh box pays nothing extra: it starts with no images either way.
+def private batch_start_wipe(workload : string) {
+    let w_llm = dlim_wipe(models_dir())
+    if (w_llm.removed > 0) {
+        to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_llm.removed} image(s), {w_llm.freed >> 20l} MB in {models_dir()}\n")
+    }
+    if (workload == "asr" || workload == "all") {
+        let w_w = dlim_wipe(whisper_models_dir())
+        if (w_w.removed > 0) {
+            to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_w.removed} image(s), {w_w.freed >> 20l} MB in {whisper_models_dir()}\n")
+        }
     }
 }
 
@@ -496,10 +515,10 @@ def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : 
         to_log(LOG_WARNING, "gen_bench_records: ORACLE PREPARE {gguf} {tag} rc={rc} - the frozen cell below reports it\n")
         return
     }
-    // Minting means the image was ABSENT, so the frozen cell below can no longer prove the pin-set
-    // still matches the one the stored row used — say so rather than let prepare hide the drift.
+    // Under the batch lifecycle the image is EXPECTED absent (the batch starts with a wipe) —
+    // the crossgen gate before this prepare already carried the pin-set proof via tune_sha.
     if (find(out, "prepared image streamed") >= 0) {
-        to_log(LOG_WARNING, "gen_bench_records: ORACLE PREPARE {gguf} {tag} - image was ABSENT and got minted ({elapsed_ms(t0)} ms); a pin-set change would go undetected for this cell\n")
+        to_log(LOG_INFO, "gen_bench_records: ORACLE PREPARE {gguf} {tag} - image baked ({elapsed_ms(t0)} ms)\n")
         return
     }
     to_log(LOG_INFO, "gen_bench_records: ORACLE PREPARE {gguf} {tag} - image mapped and warm ({elapsed_ms(t0)} ms)\n")
@@ -551,6 +570,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
         if (!empty(cfg.only) && find(m.gguf, cfg.only) < 0) {
             continue
         }
+        let cellsBefore = cells
         for (sr in m.runs) {
             break if (stopped)
             if (sr.engine != "das" || sr.box != box) {
@@ -638,6 +658,12 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 }
             } elif (v == OracleVerdict.warn) {
                 warns++
+            }
+        }
+        if (cells > cellsBefore) {   // fully profiled here - its images are done serving
+            let wm = dlim_wipe("{models_dir()}{m.gguf}")
+            if (wm.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: lifecycle - {m.gguf} profiled, {wm.removed} image(s) deleted ({wm.freed >> 20l} MB)\n")
             }
         }
     }
@@ -957,23 +983,9 @@ def main : int {
         to_log(LOG_INFO, "gen_bench_records: clearing inherited DAS_TUNE_MANIFEST - the bench exe carries its own winners\n")
         set_env_variable("DAS_TUNE_MANIFEST", "")
     }
-    // STEP ZERO, automatic: GC image siblings that can never load again (BROKEN/version-stale)
-    // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER STAYS, and
-    // keep_other is what makes that true: the cells measure through the bench EXE (its own baked
-    // winners), so this orchestrator cannot recompute their identities and must not judge them.
-    // --oracle skips it: the artifact set is frozen for the whole check.
-    if (!cfg.oracle) {
-        let gc_llm = dlim_clean(models_dir(), true, keep_other = true)
-        if (gc_llm.removed > 0) {
-            to_log(LOG_INFO, "gen_bench_records: GC freed {gc_llm.freed >> 20l} MB - {gc_llm.removed} stale image(s) in {models_dir()}\n")
-        }
-        if (cfg.workload == "asr" || cfg.workload == "all") {
-            let gc_w = dlim_clean(whisper_models_dir(), true, keep_other = true)
-            if (gc_w.removed > 0) {
-                to_log(LOG_INFO, "gen_bench_records: GC freed {gc_w.freed >> 20l} MB - {gc_w.removed} stale image(s) in {whisper_models_dir()}\n")
-            }
-        }
-    }
+    // The lifecycle wipe (batch_start_wipe) runs AFTER each mode's exe gate below — a batch
+    // that will refuse to measure must not destroy state first (bitten live: an exe-staleness
+    // refusal right after a 323 GB wipe).
     let apple = is_apple_box()
     if (cfg.backend == "metal" && !apple) {   // fail fast instead of running metal cells that all decline on non-Apple boxes
         to_log(LOG_ERROR, "gen_bench_records: --backend metal requested on a non-Apple box - Metal is macOS-only\n")
@@ -1022,7 +1034,8 @@ def main : int {
     }
     if (cfg.oracle) {
         // GATE 1: no refs run (binaries not even required); GATE 2: one das pass per stored row
-        // (the cv warm-retry stays — it REPLACES a bad cold measure); GATE 3: frozen artifacts.
+        // (the cv warm-retry stays — it REPLACES a bad cold measure); GATE 3: the timed cell is
+        // frozen — its image is baked by the prepare pass, and tune_sha carries the pin-set proof.
         let ostore = bench_records_path()
         var omodels : array<BenchModel>
         if (!read_bench_records(ostore, omodels)) {
@@ -1034,6 +1047,7 @@ def main : int {
         if (empty(oexe)) {
             return 1
         }
+        batch_start_wipe(cfg.workload)
         return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
             othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json", oexe)
     }
@@ -1051,6 +1065,7 @@ def main : int {
     if (empty(exe)) {
         return 1
     }
+    batch_start_wipe(cfg.workload)
     mkdir_rec("modules/dasLLAMA/performance/records")
     snapshot_tune_generation(exe)
     let store = bench_records_path()
@@ -1106,6 +1121,10 @@ def main : int {
             settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
+        let wm = dlim_wipe(path)   // fully profiled - its images are done serving
+        if (wm.removed > 0) {
+            to_log(LOG_INFO, "gen_bench_records: lifecycle - {file} profiled, {wm.removed} image(s) deleted ({wm.freed >> 20l} MB)\n")
+        }
     }
     if (doAsr) {
         let asrTier = parse_tier(cfg.asr_tier)
@@ -1131,6 +1150,10 @@ def main : int {
                 }
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
+            }
+            let wasr = dlim_wipe(asr_model_path(spec))   // same lifecycle for the audio images
+            if (wasr.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: lifecycle - {spec.display} profiled, {wasr.removed} image(s) deleted ({wasr.freed >> 20l} MB)\n")
             }
         }
     }

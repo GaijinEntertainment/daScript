@@ -295,6 +295,22 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
     return r
 }
 
+//! The batch-lifecycle sink: delete EVERY image beside `gguf_path` (one model file, or a whole
+//! directory), regardless of verdict or lane — for rigs that own the model dirs for a whole
+//! batch (wipe at start, re-bake per cell, delete after a model's last cell).
+def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
+    var r = (removed = 0, freed = 0l)
+    var inv <- dlim_inventory(gguf_path)
+    for (im in inv) {
+        if (remove(im.path)) {
+            r.removed++
+            r.freed += im.bytes
+        }
+    }
+    delete inv
+    return r
+}
+
 def pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page
