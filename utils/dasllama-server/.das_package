@@ -18,4 +18,5 @@ def release() {
     release_include_from("utils/watchdog/watchdog.py")
     release_include("watchdog.json")
     release_include("control.html")
+    release_include("tray.ico")   // the forge dasllama mark — watchdog --tray picks it up
 }
