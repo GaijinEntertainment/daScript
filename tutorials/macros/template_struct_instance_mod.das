@@ -56,3 +56,24 @@ class template public MixT {
         acc += dot_i(a, b)
     }
 }
+
+// A gated field. `@template_gate` names a bool `@template_constant`: the
+// field exists only in stamps where that constant is true (the string form
+// "!AXIS" inverts). A gated-off field is erased as if never written — the
+// body may still name it inside the dead arm of a `static_if`.
+[ |> template_struct_instance]
+class template public SumT {
+    total : int = 0
+    n : int = 0
+    @template_gate = WEIGHTED w : int
+    @template_constant WEIGHTED : bool = false
+
+    def add(v : int) {
+        static_if (WEIGHTED) {
+            total += v * w
+        } else {
+            total += v
+        }
+        n++
+    }
+}

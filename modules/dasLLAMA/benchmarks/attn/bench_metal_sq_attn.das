@@ -1066,7 +1066,7 @@ def private run_attn_b2_sidebyside(b) {
     var err : string
     var pso_part = pipeline_from_source(dev, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_entry, true, err)
     b |> success(pso_part != null, "production part kernel compiles")
-    var pso_comb = pipeline_from_source(dev, metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, true, err)
+    var pso_comb = pipeline_from_source(dev, MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, true, err)
     b |> success(pso_comb != null, "production comb kernel compiles")
     var pso_partp = pipeline_from_source(dev, lab_sq_attn_part_p_msl, lab_sq_attn_part_p_msl_entry, true, err)
     b |> success(pso_partp != null, "pointer-stream part kernel compiles")

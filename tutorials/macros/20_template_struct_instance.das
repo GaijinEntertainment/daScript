@@ -8,11 +8,13 @@ options gen2
 // `typedef`s pick the types, its `override`s pick the constants, and its
 // own methods replace the template's.
 //
-// Four patterns are demonstrated:
+// Five patterns are demonstrated:
 //   1. Type parameter     — typedef KT = float
 //   2. Constant parameter — override KEEP_LATEST = true, folded by static_if
 //   3. Method override    — the instance's own method wins
 //   4. Call parameter     — override dot_i = @@dot_i_scaled redirects a call
+//   5. Gated field        — @template_gate = WEIGHTED: the field exists only
+//                           in stamps that turn the axis on
 //
 // Run: daslang tutorials/macros/20_template_struct_instance.das
 
@@ -64,6 +66,19 @@ class MixLoud : MixT {
     override dot_i = @@dot_i_scaled
 }
 
+// --- 5. Gated field ---
+// SumT's `w` carries `@template_gate = WEIGHTED`. PlainSum never has the
+// field — not zeroed, not hidden: erased, so it costs nothing and cannot be
+// misused. WeightedSum has it like any ordinary field. The body's static_if
+// picks the matching arm, and the dead arm may still name the erased field.
+
+class PlainSum : SumT {
+}
+
+class WeightedSum : SumT {
+    override WEIGHTED = true
+}
+
 [export]
 def main {
     unsafe {
@@ -91,6 +106,16 @@ def main {
         loud->feed(2, 3)
         print("MixPlain:  acc={plain.acc}\n")
         print("MixLoud:   acc={loud.acc}\n")
+
+        var inscope psum <- new PlainSum()
+        var inscope wsum <- new WeightedSum()
+        wsum.w = 10 // only WeightedSum has the field at all
+        psum->add(2)
+        psum->add(3)
+        wsum->add(2)
+        wsum->add(3)
+        print("PlainSum:    total={psum.total}\n")
+        print("WeightedSum: total={wsum.total}\n")
     }
 }
 
@@ -100,3 +125,5 @@ def main {
 //   IntShouty: BEST 10 OF 3!
 //   MixPlain:  acc=6
 //   MixLoud:   acc=600
+//   PlainSum:    total=5
+//   WeightedSum: total=50

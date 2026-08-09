@@ -22,7 +22,9 @@ An instance is just a class that inherits from the template:
 - a ``typedef`` inside the instance binds a type parameter;
 - an ``override`` of a ``@template_constant`` field binds a constant;
 - an instance method with ``def override`` replaces the template's method;
-- an ``override`` of a ``@template_call`` field redirects a free-function call.
+- an ``override`` of a ``@template_call`` field redirects a free-function call;
+- a ``@template_gate`` field exists only in stamps where its named bool
+  constant is true.
 
 
 The template
@@ -73,7 +75,7 @@ Three things to notice:
   stamped and concrete.
 
 
-The four instance patterns
+The five instance patterns
 ==========================
 
 Full source: :download:`20_template_struct_instance.das <../../../../../tutorials/macros/20_template_struct_instance.das>`
@@ -145,6 +147,45 @@ keep their normal ``_`` / ``__`` resolution rules, so a template body that
 must reach the real ``dot_i`` no matter what an instance rebinds spells the
 call qualified.
 
+The fifth pattern gates a **field on an axis**. A kernel and its batched twin
+often differ by one extra field — a row table, a count buffer — and copying
+the whole class for that one field is what templates exist to avoid.
+``@template_gate`` names a bool ``@template_constant``; the field exists only
+in stamps where that constant is true:
+
+.. code-block:: das
+
+    [ |> template_struct_instance]
+    class template public SumT {
+        total : int = 0
+        n : int = 0
+        @template_gate = WEIGHTED w : int
+        @template_constant WEIGHTED : bool = false
+
+        def add(v : int) {
+            static_if (WEIGHTED) {
+                total += v * w
+            } else {
+                total += v
+            }
+            n++
+        }
+    }
+
+    class PlainSum : SumT {
+    }
+
+    class WeightedSum : SumT {
+        override WEIGHTED = true
+    }
+
+``WeightedSum`` has ``w`` like any ordinary field. ``PlainSum``'s stamp
+erases it: the class is smaller by one int, and code that names ``w`` on a
+``PlainSum`` is a compile error. The template body may still name the erased
+field inside the dead arm of a ``static_if`` — the arm folds away before the
+name would need to resolve. The string form inverts the gate:
+``@template_gate = "!WEIGHTED"`` keeps a field only where the axis is off.
+
 
 What the reifier does
 =====================
@@ -157,15 +198,17 @@ The macro runs at parse time, when the instance class is declared. It:
    missing one surfaces as an undefined-type error in the stamped code;
 2. harvests every ``@template_constant`` value, replaces its reads with the
    literal, and erases the field;
-3. harvests every ``@template_call`` target and renames the matching calls
+3. erases every ``@template_gate`` field whose axis is off for this
+   instance;
+4. harvests every ``@template_call`` target and renames the matching calls
    and ``@@`` addresses, erasing the field;
-4. clones each template method onto the instance, retyping signatures and
+5. clones each template method onto the instance, retyping signatures and
    bodies, skipping methods the instance defines itself;
-5. cuts the template out of the instance's ancestry. If the template itself
+6. cuts the template out of the instance's ancestry. If the template itself
    derives from a concrete base class, the instance keeps that base — normal
    inheritance, upcasts, and virtual dispatch through the base still work.
 
-After step 5 the instance is an ordinary class. Anything that inspects it
+After step 6 the instance is an ordinary class. Anything that inspects it
 later — other structure annotations, RTTI, AOT — sees plain concrete code.
 
 
@@ -179,6 +222,8 @@ Output
     IntShouty: BEST 10 OF 3!
     MixPlain:  acc=6
     MixLoud:   acc=600
+    PlainSum:    total=5
+    WeightedSum: total=50
 
 
 .. seealso::

@@ -506,7 +506,7 @@ def private swiglu_oai_ref(g, u : double) : double {
 def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
     let tag = "swiglu_oai total={total}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_swiglu_oai_msl, metal_swiglu_oai_msl_entry, metal_swiglu_oai_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSwigluOai_metal_swiglu_oai_msl, MetalSwigluOai_metal_swiglu_oai_msl_entry, MetalSwigluOai_metal_swiglu_oai_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var g : array<float>
@@ -548,7 +548,7 @@ def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
 def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int>; extra_rows : int) {
     let tag = "swiglu_oai_pf nfe={nfe}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSwigluOaiPf_metal_swiglu_oai_msl, MetalSwigluOaiPf_metal_swiglu_oai_msl_entry, MetalSwigluOaiPf_metal_swiglu_oai_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let ne = length(counts)

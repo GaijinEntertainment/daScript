@@ -741,7 +741,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                     kv_mul = kvm_u, hs = hs_u, scale = scale_u, nchunks = uint(nchunks),
                     softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u)
                 enc_attn_part(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bpart, pka, n_heads * nchunks, head_size)
-                var cka = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(n_heads), hs = hs_u,
+                var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads), hs = hs_u,
                     chlo = lsl ? r.k_chlo : 0u, hass = hass_u)
                 enc_attn_comb(enc, r.bpart, r.bxb, cka, n_heads, head_size, bsnk)
             } else {
@@ -1242,9 +1242,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                     kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
                     qstride = uint(qkvd), nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u)
                 enc_attn_part_b(enc, KVDtype.f16, r.bqkv, r.bpart, brt, pka, 2l, nchunks, n_heads, head_size, [rtoff = rtoff])
-                var cka = SqAttnCombBArgs(nchmax = uint(nchunks), nheads = uint(n_heads),
+                var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads),
                     hs = uint(head_size), window = 0u, hass = 0u)
-                enc_attn_comb_b(enc, r.bpart, r.bxb, brt, cka, 2l, n_heads, head_size, [rtoff = rtoff])
+                enc_attn_comb_b(enc, r.bpart, r.bxb, cka, brt, rtoff, null, n_heads * 2l, head_size)
             } else {
                 var bka = SqAttnBArgs(lay = 0u, kstride = uint(kv_dim), nheads = uint(n_heads),
                     kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
@@ -2661,9 +2661,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         kv_mul = kvm_l, hs = uint(hs_l), scale = scale_l, qstride = uint(qkvd_l),
                         nchmax = uint(nchmax), softcap = c.attn_logit_softcap, window = window_l)
                     enc_attn_part_b(enc, kdt, bqkv, bpart, brt, pka, nrows, nchmax, n_heads, hs_l)
-                    var cka = SqAttnCombBArgs(nchmax = uint(nchmax), nheads = uint(n_heads),
+                    var cka = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(n_heads),
                         hs = uint(hs_l), window = window_l, hass = hass_u)
-                    enc_attn_comb_b(enc, bpart, bxb, brt, cka, nrows, n_heads, hs_l, bsnk)
+                    enc_attn_comb_b(enc, bpart, bxb, cka, brt, 0ul, bsnk, n_heads * nrows, hs_l)
                 } else {
                     var bka = SqAttnBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
                         kv_mul = kvm_l, hs = uint(hs_l), scale = scale_l, qstride = uint(qkvd_l),

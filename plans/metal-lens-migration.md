@@ -134,7 +134,45 @@ Each phase gets decided in detail when reached.
   maxd bit-identical to P0/P1 (0.25608706/0.23721886 — mx4 mm + route + swiglu via builders);
   fam-qwen3moe PARITY_FULL k4-MoE token-identical (' sea'==' sea', maxd 0.6937207 in tol);
   gemma4e census metal_bf16_mulmm = 2 + metal_ple_gather_q8 = 2.
-- **P3** — items 13/15 via decision #2; absorbs the dedup leftovers.
+- **P3** — items 13/15 via decision #2. ✅ DONE 2026-08-08. The machinery: `@template_gate = AXIS`
+  in `[template_struct_instance]` (stdlib `daslib/typemacro_boost.das`) — the field exists only
+  in stamps where the named bool `@template_constant` is true, string form `"!AXIS"` inverts
+  (proactive, per ruling), erased fields vanish before any later structure annotation. ZERO
+  changes in the lens, msl_emit, or kernel_access: the classifier is name-keyed FROM st.fields,
+  so a dead static_if arm's reference to an erased field is just an untracked name (it does walk
+  both arms of a folded static_if — derivation over-approximates only if a dead arm touches a
+  field the live path doesn't). Tests: tests/typemacro gate coverage + 2 negatives; tutorial 20
+  (.das + RST) grew pattern 5. (15) MetalSwigluOaiT (kernels.das): single stamp keeps decode's
+  enc_ew2 slots 0-2; the PF stamp — the tree's first CROSS-MODULE stamp, prefill.das per ruling
+  1 — gates cnt/basep/ne/nfe at 3-6 behind `static_if (PF)` liveness. Both stamps byte-identical
+  modulo entry rename ONLY: a taken static_if arm splices zero-trace (settled empirically here).
+  (13) MetalSqAttnCombT (kernels.das): ONE SqAttnCombArgs, each form ignoring the other's field
+  (the Q8GemmArgs precedent; nchunks/nchmax → nch); the BATCHED stamp renumbers to ka@2 +
+  gated rt@3 (`@off = "rtoff"`) — into compliance with the twins-same-slot rule; hand
+  enc_attn_comb_b DELETED, the generated builder takes the name (grid microformat has no
+  products, so params carry wgs = nheads*nrows); the single wrapper simplifies via
+  `@default = g_one` on the template's sink. Byte-diffs documented: single = renames + the dead
+  window field + alias pre-declares; batch = the renumber + the same. No wall-clock spot-check,
+  with reasoning: every kernel-text delta is a rename, a dead struct field, or an alias the
+  Metal compiler folds — no mechanism for a perf change; encoder deltas are one null-check
+  (@default) and the batch's derived hz_read(rt) (staging the hand encoder omitted).
+  Gates: typemacro 37/37 (dastest, incl. failed_*); kernels suite 7/7 (attn gate hand-binds
+  renumbered — the independent witness of the new layout; swiglu gates on stamped sources);
+  decode arm1-basic + arm11-depth (chunked single comb) + batch (batchB7-partd/batchB8-kq —
+  batch comb via the generated builder); prefill parity base; fam-gptoss PARITY_FULL maxd
+  bit-identical (swiglu single via enc_ew2 + Pf via prefill + sinks through comb @default).
+  CombB window>0 model-level note: covered at the kernel-unit tier (the attn gate's window
+  arms); no batch-suite cell runs a sliding model — pre-existing shape, unchanged here.
+  In-batch: the CODEREVIEW.md sweep — env/profiling/hot_path rules shrunk to criteria
+  (mechanics → ARCHITECTURE.md §2.9-2.11), PSO rule reframed to class-file ownership with the
+  Vulkan sentence moved to the Vulkan section, the kn_moe_mm_family_tail race carve-out, and
+  three new-fashion rules (twins share a template; explicit @role = "weight" on weight fields;
+  dispatch declared on the class, builders generated).
+  ⚠ surfaced (pre-existing, NOT fixed here): benchmarks/attn/bench_metal_sq_attn.das still
+  binds the pre-kargs scalar layout against production kernels (stale since the kargs
+  migration; also violates the enc_*-only rule) — needs its own pass or retirement; das2rst
+  full runs non-deterministically skip typemacro_boost's detail extraction (a minimal
+  require-pair extracts fine; generated/ is untracked so CI self-heals).
 - **P4** — pf_enc_moe_route composite + the census ratchet end-state (every dispatch through
   the kn_ rail, `_metal_manual_dispatch` opt-outs burned down).
 

@@ -237,6 +237,68 @@ def test_tsi_call_rebind(t : T?) {
 }
 
 [ |> template_struct_instance]
+struct template GatePairT {
+    a : KT
+    @template_gate = BATCHED rt : KT
+    @template_gate = "!BATCHED" solo : KT
+    @template_constant BATCHED : bool = false
+}
+
+struct GateOff : GatePairT {
+    typedef KT = int
+}
+
+struct GateOn : GatePairT {
+    typedef KT = int
+    override BATCHED = true
+}
+
+[ |> template_struct_instance]
+class template GKernT {
+    x : int
+    @template_gate = EXT ext : int
+    @template_constant EXT : bool = false
+
+    def sum : int {
+        static_if (EXT) {
+            return x + ext
+        } else {
+            return x
+        }
+    }
+}
+
+class GBase : GKernT {}
+
+class GExt : GKernT {
+    override EXT = true
+}
+
+[test]
+def test_tsi_gated_fields(t : T?) {
+    t |> run("a gated field exists only where its axis says so, both polarities") @(t : T?) {
+        // each stamp dropped exactly one of the two gated ints — both remaining would be 12
+        t |> equal(int(typeinfo sizeof(type<GateOff>)), 8)
+        t |> equal(int(typeinfo sizeof(type<GateOn>)), 8)
+        let off = GateOff(a = 1, solo = 3) // named-arg construction pins WHICH field survived
+        let on = GateOn(a = 1, rt = 2)
+        t |> equal(off.a + off.solo, 4)
+        t |> equal(on.a + on.rt, 3)
+    }
+    t |> run("a dead static_if arm may reference a gated-off field") @(t : T?) {
+        unsafe {
+            var inscope b <- new GBase()
+            var inscope e <- new GExt()
+            b.x = 40
+            e.x = 40
+            e.ext = 2
+            t |> equal(b->sum(), 40) // EXT=false: ext erased, the dead arm still names it
+            t |> equal(e->sum(), 42)
+        }
+    }
+}
+
+[ |> template_struct_instance]
 class template TagKernT {
     x : KT
 

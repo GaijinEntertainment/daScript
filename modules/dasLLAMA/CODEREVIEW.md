@@ -230,12 +230,10 @@ is a defect.
 exception: `dasllama_metal_gemm.das` owns its second device+queue (ARCHITECTURE §1.5). Any
 other module creating a device is a defect.
 
-**A PSO set is compiled and released by the module that owns its kernels.** Decode:
-`metal_decode_init` / `metal_kernels_release` in `dasllama_metal_kernels`. Prefill:
-`metal_prefill_init` / `metal_prefill_shutdown` in `dasllama_metal_prefill`. A PSO compiled or
-released anywhere else in the engine is a defect. Vulkan: a pipeline is created only by a
-`[vk_dispatch]`-generated `ensure_*` and torn down by `vk_drop_model_state`; a hand-written
-pipeline build anywhere else in the engine is a defect. Tests are exempt: a kernel-unit gate
+**A PSO is compiled and released by the file that owns its kernel class**, through that file's
+init/release pair (`metal_decode_init` / `metal_kernels_release`; `metal_prefill_init` /
+`metal_prefill_shutdown`) — ownership follows the class, not the pipeline stage. A PSO compiled
+or released anywhere else in the engine is a defect. Tests are exempt: a kernel-unit gate
 compiles its own short-lived pipeline from the emitted source and releases it in the same gate.
 
 **Race code for a kernel family lives beside the family** — kernels races its families, prefill
@@ -367,6 +365,22 @@ a helper that looks specialized in das can still lower to a runtime multiply.
 **Twins of a kernel family bind the same kargs type at the same binding**, even where one twin
 ignores a field. A twin that shifts the other's fields to different slots is a defect.
 
+**Kernel twins share a template.** Same-body single/batch or format twins are stamps of one
+`class template` — a `@template_constant` axis carries the body divergence, a `@template_gate`
+field carries a stamp-varying binding. A copy-pasted twin class, or a new dummy-bound
+always-present field where a gated one serves, is a defect.
+
+**Every weight, bias, or lookup-table field on a kernel class declares `@role = "weight"`
+explicitly.** Derivation classifies an un-roled weight view as a read and stages the whole blob
+per dispatch — the tracked-weight scheduler tax the untracked-weights doctrine exists to avoid.
+A weight-shaped field with no `@role` is a defect even when the kernel compiles and passes
+parity.
+
+**A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
+carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
+`@span`. A NEW hand-written `enc_*` body is a defect unless it is one of the wrapper shapes the
+lens doctrine names: a format or twin pick, or a composite over generated builders.
+
 **No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
 Carve-out: a builder parameter the `grid=`/`tg=` spec consumes HOST-side (the dispatch
@@ -377,6 +391,8 @@ not one value bound twice.
 `enc_*` builder.** A hand-rolled bind list in `dasllama/`, `benchmarks/`, or `performance/`
 is a defect. The kernel-unit gates under `tests/` hand-bind on purpose: the gate is an
 independent witness of the binding contract, so a builder defect cannot mask a kernel defect.
+Carve-out: the moe mul_mm A/B race harnesses encode through `kn_moe_mm_family_tail`, the
+family's shared bind tail, so a binding renumber desyncs them loudly instead of unseen.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
@@ -403,36 +419,27 @@ that picks its own number — larger or smaller — is a defect, and so is a new
 declaration. See `ARCHITECTURE.md` §2.8.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
-a defect in engine code — instrumentation goes through the sanctioned rails: the
-`jobque_profile` markers (`profile_tag` / `profile_marker` and the `trace_*` wrappers in
-`dasllama_math.das`), the `prof_add`/`forward_profile_*` decode buckets
-(`dasllama_common.das`), and the `asr_prof_add` encode buckets (`dasllama_audio.das`).
-Carve-outs where a timed line is the deliverable or a one-shot report: `benchmarks/`,
-`performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
-stages, tokenizer build). A clock whose value feeds logic is not instrumentation — mark it
-`// clock: control` so the sweep and the future lint leave it alone.
+a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
+value feeds logic is marked `// clock: control`. The rails, the carve-outs (`benchmarks/`,
+`performance/`, `harness/`, cold one-shot load/mint progress logs), and the marker's why are
+`ARCHITECTURE.md` §2.10.
 
-**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** The annotation sits at
-the REGION ENTRY — the `*_encode` / `*_decode` / step drivers — and the `[no_alloc]` /
-`[no_env]` / `[no_io]` contracts arm transitively down the call graph, so interior kernels
-stay bare. A new function is a defect only when no annotated entry reaches it: a new entry
-point carries the annotation itself; a new backend entry (kernel-backend override, batch
-donor) carries it too, because backends are also reached from un-annotated harness paths.
+**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** A new function is a defect
+only when no annotated region entry reaches it — a new entry point (including a backend entry)
+carries the annotation itself. The transitive-arming model and the `@scratch` / `[cold_path]`
+companions are `ARCHITECTURE.md` §2.11.
 
-**No raw environment reads.** `get_env_variable` / `has_env_variable` (and literal-name
-`env_config_*` calls) are a defect anywhere in the module outside `dasllama_env.das` — a knob is
-an `[EnvConfig]` field there, read as `g_env_*.<field>`, which is also what generates its
-`ENVIRONMENT.md` row. Tri-state knobs (presence matters, or the effective default is computed at
-runtime) are `Option<T>` fields. Dynamic names — a variable named by data, not by code — go
-through `env_is_set` / `env_value_of`. The config loads once at context init, so
-`set_env_variable` mid-process is invisible to it: arm a child process's environment instead.
-A WRITE of a foreign library's knob (`set_env_variable` with a literal name) is allowed only
-before that library first reads it, and the name must be a declared `[EnvConfig]` knob — the
-registry test scans writes too, so a re-spelled name fails it.
-`tests/test_env_registry.das` enforces all of this.
+**No raw environment access outside `dasllama_env.das`.** A knob is an `[EnvConfig]` field
+there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /
+literal-name `env_config_*` anywhere else in the module is a defect. The sanctioned forms —
+tri-state knobs, dynamic names, pre-init foreign-library writes — are `ARCHITECTURE.md` §2.9,
+and `tests/test_env_registry.das` enforces the lot.
 
 
 ### Vulkan
+
+**A pipeline is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
+`vk_drop_model_state`.** A hand-written pipeline build anywhere else in the engine is a defect.
 
 **A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
 size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized

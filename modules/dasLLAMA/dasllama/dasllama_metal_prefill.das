@@ -486,33 +486,11 @@ class MetalMoeMulMmMx4T {
     }
 }
 
-// the prefill twin over the padded bucket panel: same math, plus ghost rows past the last
-// bucket's padded end (mpad worst-case vs the GPU-side true count) exit on a uniform-broadcast
-// liveness bound — they are never read by the down mm.
+// the prefill twin over the padded bucket panel: MetalSwigluOaiT's PF stamp — same math, plus
+// the PF-gated liveness exit over the bucket fields (slots 3-6).
 [metal_dispatch(name = "pf_enc_swiglu_oai", pso = "g_pf_pso_swiglu_oai", tg = 64, grid = "total/256", params = "total : int64")]
-class MetalSwigluOaiPf {
-    @ssbo @binding = 0 @role = "readwrite" g : array<float4>
-    @ssbo @binding = 1 @role = "read" u : array<float4>
-    @uniform @binding = 2 total : uint      // scalar element count (mpad worst-case bound)
-    @ssbo @binding = 3 @role = "read" cnt : array<uint>
-    @ssbo @binding = 4 @role = "read" basep : array<uint>
-    @uniform @binding = 5 ne : uint
-    @uniform @binding = 6 nfe : uint        // columns per bucket row (n_ff_exp)
-
-    [metal_kernel(name="metal_swiglu_oai_pf_msl")]
-    def metal_swiglu_oai_pf {
-        let gid = gl_GlobalInvocationID.x
-        if (gid * 4u >= total) {
-            return
-        }
-        let live = (basep[ne - 1u] + (cnt[ne - 1u] + 31u) / 32u * 32u) * nfe
-        if (gid * 4u >= live) {
-            return
-        }
-        let x = min(g[gid], float4(7.0))
-        let y = min(max(u[gid], float4(-7.0)), float4(7.0))   // nolint:STYLE019 — the MSL emitter doesn't lower clamp
-        g[gid] = (x / (float4(1.0) + exp(-1.702 * x))) * (y + float4(1.0))
-    }
+class MetalSwigluOaiPf : MetalSwigluOaiT {
+    override PF = true
 }
 
 // ===== MoE prefill CSR + gathered mul_mm (Wave C stage 2b) =====
@@ -1958,7 +1936,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_moe_mm_k4 = compile_pso(metal_moe_mulmm_k4_msl, metal_moe_mulmm_k4_msl_entry, metal_moe_mulmm_k4_msl_fastmath, ok)
     g_pf_pso_moe_mm_k5 = compile_pso(metal_moe_mulmm_k5_msl, metal_moe_mulmm_k5_msl_entry, metal_moe_mulmm_k5_msl_fastmath, ok)
     g_pf_pso_moe_mm_k6 = compile_pso(metal_moe_mulmm_k6_msl, metal_moe_mulmm_k6_msl_entry, metal_moe_mulmm_k6_msl_fastmath, ok)
-    g_pf_pso_swiglu_oai = compile_pso(metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, ok)
+    g_pf_pso_swiglu_oai = compile_pso(MetalSwigluOaiPf_metal_swiglu_oai_msl, MetalSwigluOaiPf_metal_swiglu_oai_msl_entry, MetalSwigluOaiPf_metal_swiglu_oai_msl_fastmath, ok)
     g_pf_pso_moe_mm_mx4 = compile_pso(metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, ok)
     g_pf_moe_mm_mx4_tensor = metal_tensor_crowned("moe_mulmm_mx4")
     if (g_pf_moe_mm_mx4_tensor) {

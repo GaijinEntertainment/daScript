@@ -432,11 +432,15 @@ struct SqAttnPartArgs {
     window : uint
 }
 
+// The comb pair binds ONE kargs shape at slot 2 (both stamps of MetalSqAttnCombT): `nch` is the
+// chunk stride (and the single's loop bound); the single reads `chlo`, the BATCHED stamp derives
+// per-row bounds from rt + `window`. Each form ignores the other's field.
 struct SqAttnCombArgs {
-    nchunks : uint
+    nch : uint
     nheads : uint
     hs : uint
     chlo : uint
+    window : uint
     hass : uint
 }
 
@@ -465,14 +469,6 @@ struct SqAttnPartBArgs {
     nchmax : uint
     softcap : float
     window : uint
-}
-
-struct SqAttnCombBArgs {
-    nchmax : uint
-    nheads : uint
-    hs : uint
-    window : uint
-    hass : uint
 }
 
 // The split-K "D" attention family binds its uniforms as ONE kargs value. `kstride` is the
@@ -763,28 +759,40 @@ class MetalSqAttnPartTq4 : MetalSqAttnPartQuantT {
 
 // Cross-chunk combine: one threadgroup per (stream, head), hs threads — rescale each chunk's
 // unnormalized partial to the global max, sum, normalize. Dtype-agnostic (partials are f32).
-[metal_dispatch(name = "enc_attncomb_c", pso = "g_pso_attncomb", tg = "head_size", grid = "nheads", params = "nheads : int64, head_size : int64")]
-class MetalSqAttnComb {
+// BATCHED gates the per-row chunk-count table rt@3: each row combines its OWN bounds.
+[ |> template_struct_instance]
+class template MetalSqAttnCombT {
     @ssbo @binding = 0 part : array<float>
     @ssbo @binding = 1 yo : array<float>
     @uniform @binding = 2 ka : SqAttnCombArgs
-    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @ssbo @binding = 3 @role = "read" @off = "rtoff" @template_gate = BATCHED rt : array<uint4>
+    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> // [nheads] this layer's attention sinks (hass models)
+    @template_constant BATCHED : bool = false
 
-    [metal_kernel(name="metal_sq_attn_comb_msl")]
+    [metal_kernel]
     def metal_sq_attn_comb {
-        let nchunks = ka.nchunks
+        let nchmax = ka.nch
         let nheads = ka.nheads
         let hs = ka.hs
-        let chlo = ka.chlo
         let hass = ka.hass
         let wg = gl_WorkGroupID.x
         let h = wg % nheads
         let bb = wg / nheads
         let lid = gl_LocalInvocationID.x
-        let base = (bb * nheads + h) * nchunks
+        var nch = nchmax     // nolint:LINT003,LINT010 — the single stamp reads these inits, the
+        var chlo = ka.chlo   // nolint:LINT003,LINT010 — BATCHED stamp overwrites them in its arm
+        static_if (BATCHED) {
+            // holes past a shallow row's last chunk are never read; sliding layers skip the
+            // row's below-window chunks
+            let cnt = rt[bb].w
+            nch = (cnt + 63u) / 64u
+            let wstart = ka.window > 0u && cnt > ka.window ? cnt - ka.window : 0u
+            chlo = wstart / 64u
+        }
+        let base = (bb * nheads + h) * nchmax
         var mm = -3.0e38
         var ci = chlo
-        while (ci < nchunks) {
+        while (ci < nch) {
             mm = max(mm, part[(base + ci) * (hs + 2u) + hs])
             ci++
         }
@@ -794,7 +802,7 @@ class MetalSqAttnComb {
         var acc = 0.0
         var l = 0.0
         ci = chlo
-        while (ci < nchunks) {
+        while (ci < nch) {
             let pb = (base + ci) * (hs + 2u)
             let w = exp(part[pb + hs] - mm)
             acc += part[pb + lid] * w
@@ -806,6 +814,10 @@ class MetalSqAttnComb {
         }
         yo[bb * (nheads * hs) + h * hs + lid] = acc / l
     }
+}
+
+[metal_dispatch(name = "enc_attncomb_c", pso = "g_pso_attncomb", tg = "head_size", grid = "nheads", params = "nheads : int64, head_size : int64")]
+class MetalSqAttnComb : MetalSqAttnCombT {
 }
 
 // The 2-rows-per-simdgroup fused QKV GEMV + rope + KV-row store: the rope pair's two elements
@@ -2683,55 +2695,11 @@ class MetalSqAttnPartBTq4 : MetalSqAttnPartBQuantT {
     override sq_vacc_q = @@sq_vacc_tq4
 }
 
-// Batched cross-chunk combine: grid (nheads x B) — each row combines its OWN chunk count
-// (from the table), holes past a shallow row's last chunk are never read.
-class MetalSqAttnCombB {
-    @ssbo @binding = 0 @role = "read" part : array<float>
-    @ssbo @binding = 1 @role = "write" yo : array<float>
-    @ssbo @binding = 2 @role = "read" rt : array<uint4>
-    @uniform @binding = 3 ka : SqAttnCombBArgs
-    @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
-
-    [metal_kernel(name="metal_sq_attn_comb_b_msl")]
-    def metal_sq_attn_comb_b {
-        let nchmax = ka.nchmax
-        let nheads = ka.nheads
-        let hs = ka.hs
-        let window = ka.window
-        let hass = ka.hass
-        let wg = gl_WorkGroupID.x
-        let h = wg % nheads
-        let bb = wg / nheads
-        let lid = gl_LocalInvocationID.x
-        let cnt = rt[bb].w
-        let nch = (cnt + 63u) / 64u
-        let wstart = window > 0u && cnt > window ? cnt - window : 0u
-        let chlo = wstart / 64u
-        let base = (bb * nheads + h) * nchmax
-        var mm = -3.0e38
-        var ci = chlo
-        while (ci < nch) {
-            mm = max(mm, part[(base + ci) * (hs + 2u) + hs])
-            ci++
-        }
-        if (hass != 0u) {
-            mm = max(mm, sink[h])
-        }
-        var acc = 0.0
-        var l = 0.0
-        ci = chlo
-        while (ci < nch) {
-            let pb = (base + ci) * (hs + 2u)
-            let w = exp(part[pb + hs] - mm)
-            acc += part[pb + lid] * w
-            l += part[pb + hs + 1u] * w
-            ci++
-        }
-        if (hass != 0u) {
-            l += exp(max(sink[h] - mm, -80.0))
-        }
-        yo[bb * (nheads * hs) + h * hs + lid] = acc / l
-    }
+// Batched cross-chunk combine: MetalSqAttnCombT's BATCHED stamp, grid flattened (nheads x B) —
+// callers pass wgs = nheads * nrows.
+[metal_dispatch(name = "enc_attn_comb_b", pso = "g_pso_attncombb", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+class MetalSqAttnCombB : MetalSqAttnCombT {
+    override BATCHED = true
 }
 
 // The split-K reduce's own pair — `total` is the flat element count of one partial plane.
@@ -3583,7 +3551,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attn32 = compile_pso(MetalSqAttnF32_metal_sq_attn_msl, MetalSqAttnF32_metal_sq_attn_msl_entry, MetalSqAttnF32_metal_sq_attn_msl_fastmath, ok)
     g_pso_attnp16 = compile_pso(MetalSqAttnPartF16_metal_sq_attn_part_msl, MetalSqAttnPartF16_metal_sq_attn_part_msl_entry, MetalSqAttnPartF16_metal_sq_attn_part_msl_fastmath, ok)
     g_pso_attnp32 = compile_pso(MetalSqAttnPartF32_metal_sq_attn_part_msl, MetalSqAttnPartF32_metal_sq_attn_part_msl_entry, MetalSqAttnPartF32_metal_sq_attn_part_msl_fastmath, ok)
-    g_pso_attncomb = compile_pso(metal_sq_attn_comb_msl, metal_sq_attn_comb_msl_entry, metal_sq_attn_comb_msl_fastmath, ok)
+    g_pso_attncomb = compile_pso(MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, ok)
     g_pso_attn_q8 = compile_pso(MetalSqAttnQ8_metal_sq_attn_msl, MetalSqAttnQ8_metal_sq_attn_msl_entry, MetalSqAttnQ8_metal_sq_attn_msl_fastmath, ok)
     g_pso_attnp_q8 = compile_pso(MetalSqAttnPartQ8_metal_sq_attn_part_msl, MetalSqAttnPartQ8_metal_sq_attn_part_msl_entry, MetalSqAttnPartQ8_metal_sq_attn_part_msl_fastmath, ok)
     g_pso_attn_tq4 = compile_pso(MetalSqAttnTq4_metal_sq_attn_msl, MetalSqAttnTq4_metal_sq_attn_msl_entry, MetalSqAttnTq4_metal_sq_attn_msl_fastmath, ok)
@@ -3607,7 +3575,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_combine = compile_pso(metal_moe_combine_msl, metal_moe_combine_msl_entry, metal_moe_combine_msl_fastmath, ok)
     g_pso_g4rnorm = compile_pso(metal_g4_router_norm_msl, metal_g4_router_norm_msl_entry, metal_g4_router_norm_msl_fastmath, ok)
     g_pso_moe_wscale = compile_pso(metal_moe_wscale_msl, metal_moe_wscale_msl_entry, metal_moe_wscale_msl_fastmath, ok)
-    g_pso_swiglu_oai = compile_pso(metal_swiglu_oai_msl, metal_swiglu_oai_msl_entry, metal_swiglu_oai_msl_fastmath, ok)
+    g_pso_swiglu_oai = compile_pso(MetalSwigluOai_metal_swiglu_oai_msl, MetalSwigluOai_metal_swiglu_oai_msl_entry, MetalSwigluOai_metal_swiglu_oai_msl_fastmath, ok)
     g_pso_moe_gemv_mx4 = compile_pso(metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath, ok)
     g_pso_moe_gemv_q51 = compile_pso(metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath, ok)
     g_pso_dn_conv = compile_pso(metal_dn_conv_msl, metal_dn_conv_msl_entry, metal_dn_conv_msl_fastmath, ok)
@@ -3677,7 +3645,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attnpb32 = compile_pso(MetalSqAttnPartBF32_metal_sq_attn_part_b_msl, MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_entry, MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_fastmath, ok)
     g_pso_attnpb_q8 = compile_pso(MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl, MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_entry, MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_fastmath, ok)
     g_pso_attnpb_tq4 = compile_pso(MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl, MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_entry, MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_fastmath, ok)
-    g_pso_attncombb = compile_pso(metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, metal_sq_attn_comb_b_msl_fastmath, ok)
+    g_pso_attncombb = compile_pso(MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, MetalSqAttnCombB_metal_sq_attn_comb_msl_fastmath, ok)
     g_pso_attnd16 = compile_pso(MetalSqAttnDF16_metal_sq_attn_d_msl, MetalSqAttnDF16_metal_sq_attn_d_msl_entry, MetalSqAttnDF16_metal_sq_attn_d_msl_fastmath, ok)
     g_pso_attnd32 = compile_pso(MetalSqAttnDF32_metal_sq_attn_d_msl, MetalSqAttnDF32_metal_sq_attn_d_msl_entry, MetalSqAttnDF32_metal_sq_attn_d_msl_fastmath, ok)
     g_pso_attnd_q8 = compile_pso(MetalSqAttnDQ8_metal_sq_attn_d_msl, MetalSqAttnDQ8_metal_sq_attn_d_msl_entry, MetalSqAttnDQ8_metal_sq_attn_d_msl_fastmath, ok)
@@ -4050,7 +4018,7 @@ def enc_attn_part(enc : MetalComputeEncoder?; kdt : KVDtype; kmb, vmb : MetalBuf
 }
 
 def enc_attn_comb(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; var ka : SqAttnCombArgs; nheads, head_size : int64; bsink : MetalBuffer? = null) {
-    enc_attncomb_c(enc, bpart, by, ka, bsink != null ? bsink : g_one, nheads, head_size)
+    enc_attncomb_c(enc, bpart, by, ka, bsink, nheads, head_size) // null sink resolves @default g_one
 }
 
 // swiglu and add share the (a, b, total) elementwise shape; offsets serve the fused-buffer binds
@@ -4319,19 +4287,6 @@ def enc_attn_d(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : Metal
     hz_write(bpart)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
-}
-
-def enc_attn_comb_b(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; var ka : SqAttnCombBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null; rtoff : uint64 = 0ul) {
-    kn_pipeline(enc, g_pso_attncombb)
-    kn_buffer(enc, bpart, 0ul, 0)
-    kn_buffer(enc, by, 0ul, 1)
-    kn_buffer(enc, brt, rtoff, 2)
-    kn_kargs(enc, ka, 3)
-    kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
-    hz_read(bpart)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
 def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; var ka : SqAttnCombDArgs; nrows, nheads, head_size : int64) {
@@ -5739,22 +5694,39 @@ class MetalMoeCombine {
 
 // gpt-oss clamped swiglu (stage 4): x = min(g, 7), y = clamp(u, -7, 7),
 // g = (x / (1 + exp(-1.702 x))) * (y + 1) — the clamps and the +1 are trained weights' contract.
-// SHARED with the decode rail (dasllama_metal_decode's enc_ew2 binds slots 0-2) — keep the layout.
-class MetalSwigluOai {
+// SHARED with decode's enc_ew2 (slots 0-2, keep) — the prefill twin's PF fields append at 3-6.
+[ |> template_struct_instance]
+class template MetalSwigluOaiT {
     @ssbo @binding = 0 @role = "readwrite" g : array<float4>
     @ssbo @binding = 1 @role = "read" u : array<float4>
     @uniform @binding = 2 total : uint      // scalar element count
+    @ssbo @binding = 3 @role = "read" @template_gate = PF cnt : array<uint>
+    @ssbo @binding = 4 @role = "read" @template_gate = PF basep : array<uint>
+    @uniform @binding = 5 @template_gate = PF ne : uint
+    @uniform @binding = 6 @template_gate = PF nfe : uint    // columns per bucket row (n_ff_exp)
+    @template_constant PF : bool = false
 
-    [metal_kernel(name="metal_swiglu_oai_msl")]
+    [metal_kernel]
     def metal_swiglu_oai {
         let gid = gl_GlobalInvocationID.x
         if (gid * 4u >= total) {
             return
         }
+        static_if (PF) {
+            // ghost rows past the last bucket's padded end (mpad worst-case vs the GPU-side true
+            // count) exit on a uniform-broadcast liveness bound — never read by the down mm
+            let live = (basep[ne - 1u] + (cnt[ne - 1u] + 31u) / 32u * 32u) * nfe
+            if (gid * 4u >= live) {
+                return
+            }
+        }
         let x = min(g[gid], float4(7.0))
         let y = min(max(u[gid], float4(-7.0)), float4(7.0))   // nolint:STYLE019 — the MSL emitter doesn't lower clamp
         g[gid] = (x / (float4(1.0) + exp(-1.702 * x))) * (y + float4(1.0))
     }
+}
+
+class MetalSwigluOai : MetalSwigluOaiT {
 }
 
 // gemma4 MoE router input (stage 3): y = x * rsqrt(mean(x^2) + eps) * (1/sqrt(dim)) * rscale[k],

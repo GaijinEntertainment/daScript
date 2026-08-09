@@ -219,7 +219,7 @@ def private sq_codec_part_gate(t : T?; dev, queue; codec : string; cnt, window :
     let tgm = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem : MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem)
     var pso_p = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_msl, metal_sq_attn_comb_msl_entry, metal_sq_attn_comb_msl_fastmath, err)
+    var pso_c = pipeline_from_source(dev, MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
     if (pso_p == null || pso_c == null) {
         metal_release(pso_p)
@@ -247,7 +247,7 @@ def private sq_codec_part_gate(t : T?; dev, queue; codec : string; cnt, window :
     var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
         nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
         nchunks = uint(nchunks), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+    var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
         chlo = uint(chlo), hass = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
@@ -505,7 +505,7 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
     let tgm = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem))
     var pso_p = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, metal_sq_attn_comb_b_msl_fastmath, err)
+    var pso_c = pipeline_from_source(dev, MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, MetalSqAttnCombB_metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
     if (pso_p == null || pso_c == null) {
         metal_release(pso_p)
@@ -535,7 +535,7 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
     var kap = SqAttnPartBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
         kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
         nchmax = uint(nchmax), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombBArgs(nchmax = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
+    var kac = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
         window = uint(window), hass = hass ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
@@ -561,8 +561,8 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
         metal_set_pipeline(enc, pso_c)
         metal_set_buffer(enc, bpart, 0ul, 0)
         metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, brt, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
+        metal_set_buffer(enc, brt, 0ul, 3)
         metal_set_buffer(enc, bsink, 0ul, 20)
         metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nb2), 1u, 1u), uint3(uint(HS), 1u, 1u))
     }
