@@ -66,18 +66,18 @@ let private REF_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from 
 def models_provenance() : array<ProvEntry> {   // nolint:STYLE038 — flat provenance manifest, one entry per carrier
     return <- [
         // ===== LLM board (pub_catalog), ascending size =====
-        ProvEntry(name = "gemma-4-12B-it-Q4_K_M.gguf", root = "llm",
-            url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
-            bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8"),
         // the tensor-arm twin carriers (tests/test_metal_support_matrix.das --arm tensor): small
         // on purpose - q8 drives the mulmm/attn twins, the K-quant one the kq mulmm twins. The
         // arm FAILS (not skips) when they are absent, so every box gets them provisioned here
-        ProvEntry(name = "Llama-3.2-1B-Instruct-Q8_0.gguf", root = "llm",
-            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
-            bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"),
         ProvEntry(name = "Llama-3.2-1B-Instruct-Q5_K_M.gguf", root = "llm",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q5_K_M.gguf",
             bytes = 911503488l, sha256 = "4f22f95fb1679ef8e2fd6f1659d23f06cd1dbedb79ff291db7413a7ae509e2a9"),
+        ProvEntry(name = "Llama-3.2-1B-Instruct-Q8_0.gguf", root = "llm",
+            url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
+            bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"),
+        ProvEntry(name = "gemma-4-12B-it-Q4_K_M.gguf", root = "llm",
+            url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
+            bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8"),
         ProvEntry(name = "gemma-4-E4B-it-Q8_0.gguf", root = "llm",
             url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
             bytes = 8031242688l, sha256 = "34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a"),

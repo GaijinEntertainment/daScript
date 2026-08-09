@@ -787,7 +787,7 @@ def private tensor_twin_row(t : T?; path, tag : string) {   // nolint:LINT012,LI
         // the carriers are provisioned (fetch_models.das), so absence is a RED, never a skip -
         // a box that skips here ships every tensor twin unexercised
         if (!stat(path).is_valid) {
-            t |> success(false, "tensor twin carrier missing: {path} - run fetch_models.das --fetch")
+            t |> success(false, "tensor twin carrier missing: {path} - bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch")
             return
         }
         let CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_q8,kq_mulmm_k4," +
