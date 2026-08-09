@@ -71,7 +71,8 @@ namespace das {
 
     // Macro-authored diagnostics are exempt from Rule 2: several macros can sit on one
     // declaration, each failing with its own independently-actionable message — same line,
-    // same cerr, different macro. Bounded by the annotation list, so they cannot avalanche.
+    // same cerr, different macro. Bounded per node per macro (annotations by the annotation
+    // list × call sites, lint findings by one per AST node per rule), so they cannot avalanche.
     static __forceinline bool isMacroDiagnostic ( CompilationError cerr ) {
         switch ( cerr ) {
             case CompilationError::runtime_annotation:
@@ -79,6 +80,8 @@ namespace das {
             case CompilationError::runtime_structure_annotation:
             case CompilationError::runtime_function_annotation:
             case CompilationError::runtime_macro:               // das-side macro_error()
+            case CompilationError::runtime_macro_performance:   // das-side macro_performance_warning() — perf_lint
+            case CompilationError::runtime_macro_style:         // das-side macro_style_warning() — style_lint
                 return true;
             default:
                 return false;

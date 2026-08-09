@@ -96,7 +96,7 @@ class XModInt : XModKern {
 
 [tsi_test_bind_kt]
 class LateInt : LateKern {
-    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; unbound names are infer's to resolve
+    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; unbound names are left for infer to resolve
 }
 
 def tsi_sdot(a, b : int) : int {

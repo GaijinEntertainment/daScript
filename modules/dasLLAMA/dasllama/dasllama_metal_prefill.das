@@ -2242,9 +2242,9 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by, bn, bd, b
     enc_moe_router_b(enc, bw, bx, by, bn, bd, bn, g_one, g_zero, bnp, d, npos)   // bxs = bn: per-position x stride = dim
 }
 
-// pf_enc_swiglu_oai is [metal_dispatch]-generated from MetalSwigluOaiPf — the float4-lane
-// swiglu_oai; the generated total/256 grid == the hand (total/4 + 63)/64 by the nested
-// ceil-div identity (exact for every total, not just the callers' %4 == 0 contract).
+// pf_enc_swiglu_oai is [metal_dispatch]-generated from MetalSwigluOaiPf (float4-lane swiglu_oai);
+// its total/256 grid == the hand (total/4 + 63)/64 under the callers' total % 4 == 0 contract —
+// off-contract the ceil form is the larger side, and the kernel guards gid * 4 >= total.
 
 // GPU-PLE gate (register_ple_gpu_gate): true iff THIS window's metal prefill will engage AND
 // the pre-step kernels cover the model — q8 emb table, kept-bf16 model_proj, slice/shape gates.
