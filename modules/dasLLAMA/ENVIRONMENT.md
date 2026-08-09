@@ -1,6 +1,6 @@
 # dasLLAMA environment variables
 
-GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` — do not edit
+GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` - do not edit
 by hand. Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read
 anywhere in the tree without a declaration fails `tests/test_env_registry.das`.
 
@@ -8,7 +8,7 @@ Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is fal
 anything else true; **number** falls back to the default when unset or unparseable, with
 a logged warning on garbage; **text** and **path** are taken verbatim. A SET-BUT-EMPTY
 variable counts as unset everywhere. Every knob loads ONCE, at context init, into the
-`g_env_*` globals — hot code reads struct fields, and `set_env_variable` after startup
+`g_env_*` globals - hot code reads struct fields, and `set_env_variable` after startup
 is invisible (arm a child process's environment instead).
 
 ## Engine
@@ -106,7 +106,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 
 ## MoltenVK (macOS)
 
-MoltenVK's own configuration — listed because the vulkan tier arms it on Apple.
+MoltenVK's own configuration - listed because the vulkan tier arms it on Apple.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
@@ -125,7 +125,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_ACCEL_MIN_MMAC` | number | backend default | Minimum MMAC count below which Accelerate declines and the daslang kernel runs. |
 | `DASLLAMA_ACCEL_MIN_NTOK` | number | 32 | Minimum token count for the Accelerate float-batch override, floor 1. |
 
-## Harness — tuner and probes
+## Harness - tuner and probes
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
@@ -214,14 +214,14 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 ## daslang core knobs dasLLAMA honours
 
-Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.
+Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `HF_HOME` | path | ~/.cache/huggingface | Hugging Face hub root; fetch_models --convert resolves checkpoint blobs under <HF_HOME>/hub. Falls back to HOME's default cache location when unset. |
 | `HOME` | path | unset | Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset. |
 | `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md. |
-| `DAS_JOBQUE_AFFINITY` | number | 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes. |
+| `DAS_JOBQUE_AFFINITY` | number | 2 on darwin (engine [init]), else 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask — on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
 | `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |

@@ -275,6 +275,16 @@ def dasllama_jobque_threads_cap() {
     set_jobque_threads_cap(max(get_total_hw_cores() - 1, 1))
 }
 
+// darwin: unclassified workers demote under ambient load (big-model decode measured -5% tg);
+// mode 2 there maps to QoS classification, not a core mask, so it is safe as an engine default.
+// Elsewhere mode 2 is a REAL mask — stays opt-in. DAS_JOBQUE_AFFINITY and app calls override.
+[init]
+def dasllama_jobque_affinity_default() {
+    if (get_platform_name() == "darwin" && get_jobque_affinity() < 0) {
+        set_jobque_affinity(2)
+    }
+}
+
 // Chunks-per-hw-job for the quantized matmuls' row split (the fp32 kernels use 1). Q8's
 // dequant-in-dot is compute-bound and balances better at 2 chunks/job; Q4's heavy nibble
 // unpack at 4 (both measured M1 Max). Per-box knobs; clamped to >= 1.
