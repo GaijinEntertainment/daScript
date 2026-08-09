@@ -1228,6 +1228,10 @@ def count_for_body_stmts(body_expr : Expression?) : int {
             let fe = stmt as ExprFor
             let fbody = fe.body as ExprBlock
             if (fbody == null) return -1
+            if (length(fbody.list) == 1 && fbody.list[0] is ExprBlock) {
+                let inner = fbody.list[0] as ExprBlock
+                if (inner.genFlags.generated) return length(inner.list)
+            }
             return length(fbody.list)
         }
     }
@@ -1364,7 +1368,7 @@ def test_target_each_range_count_runs(t : T?) {
 // branch in min/max emission and the `acc += ...` / `+= 1l` shape in sum/long_count
 // without locking into the exact ExprIfThenElse nesting (which is fragile to refactors).
 
-def count_op2(expr : Expression?; op : string) : int {
+def count_op2(expr : Expression?; op : string) : int {   // nolint:STYLE037 — exact-type `is` ladder, one arm per AST node kind
     if (expr == null) return 0
     var n = 0
     if (expr is ExprOp2 && (expr as ExprOp2).op == op) {
@@ -1435,7 +1439,7 @@ def count_op2(expr : Expression?; op : string) : int {
     return n
 }
 
-def count_call(expr : Expression?; funcName : string) : int {
+def count_call(expr : Expression?; funcName : string) : int {   // nolint:STYLE037 — exact-type `is` ladder, one arm per AST node kind
     if (expr == null) return 0
     var n = 0
     if (expr is ExprCall) {
@@ -1506,7 +1510,7 @@ def count_call(expr : Expression?; funcName : string) : int {
     return n
 }
 
-def count_op1(expr : Expression?; op : string) : int {
+def count_op1(expr : Expression?; op : string) : int {   // nolint:STYLE037 — exact-type `is` ladder, one arm per AST node kind
     if (expr == null) return 0
     var n = 0
     if (expr is ExprOp1 && (expr as ExprOp1).op == op) {
@@ -1569,7 +1573,7 @@ def count_op1(expr : Expression?; op : string) : int {
 // select+where dedup tests to prove that a pure projection's signature constant
 // (`_ * 7919`) appears exactly once in the emission (in the projection-bind statement),
 // rather than twice (inlined into predicate + cloned into valueExpr).
-def count_const_int(expr : Expression?; value : int) : int {
+def count_const_int(expr : Expression?; value : int) : int {   // nolint:STYLE037 — exact-type `is` ladder, one arm per AST node kind
     if (expr == null) return 0
     var n = 0
     if (expr is ExprConstInt && (expr as ExprConstInt).value == value) {
@@ -3629,7 +3633,7 @@ def test_element_at_or_default_no_panic(t : T?) {
 // Count ExprInvoke nodes anywhere in the subtree. The outer `_fold` splice wrapper
 // is an ExprInvoke; per-element block calls (when peel fails) also emit ExprInvoke.
 // Peeled aggregate bodies inline the block expression and emit zero inner invokes.
-def count_invoke_nodes(expr : Expression?) : int {
+def count_invoke_nodes(expr : Expression?) : int {   // nolint:STYLE037 — exact-type `is` ladder, one arm per AST node kind
     if (expr == null) return 0
     var n = 0
     if (expr is ExprInvoke) {
