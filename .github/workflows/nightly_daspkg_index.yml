@@ -155,7 +155,10 @@ jobs:
 
   daspkg_unit_macos:
     # the platform the unit suite exists to catch: the release layout forks
-    # into an .app bundle here. Interpreted run — no LLVM, plain build.
+    # into an .app bundle here. dasLLVM is ON because the suite's
+    # test_cmd_release_* family drives `daslang -exe` (the release bundler),
+    # which needs the LLVM shared lib at runtime — core-only builds fail
+    # every release test on `can't load library LLVM.dll`.
     if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
     runs-on: macos-15
     timeout-minutes: 60
@@ -173,10 +176,12 @@ jobs:
       # enough — same dependency build.yml's darwin lanes install.
       run: brew install bison
 
-    - name: "Build: Daslang (Release, core only)"
+    - name: "Build: Daslang (Release + dasLLVM)"
+      # CMake fetches the prebuilt mac_arm64 LLVM from the repo's llvm-v*
+      # release and stages lib/LLVM.dll itself — no brew llvm needed.
       run: |
         set -eux
-        cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=Release -G Ninja
+        cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=Release -DDAS_LLVM_DISABLED=OFF -G Ninja
         cmake --build ./build --config Release --target daslang
 
     - name: "daspkg unit suite"
