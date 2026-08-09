@@ -686,9 +686,13 @@ def start_control_plugin(script_dir: Path, logger: logging.Logger, args: argpars
     return handle
 
 
-def tray_default_url(health_url: str) -> str | None:
+def tray_default_url(health_url: object) -> str | None:
     """The page a bare left-click opens when --tray-url is not set: the health URL's origin.
-    For dasllama-server that is the control page (http://127.0.0.1:8080/)."""
+    For dasllama-server that is the control page (http://127.0.0.1:8080/). Defensive on type:
+    watchdog.json values reach args via set_defaults with no argparse coercion, and a null
+    health_url must degrade to no-link, not break the never-fatal tray contract."""
+    if not isinstance(health_url, str) or not health_url:
+        return None
     parts = urlsplit(health_url)
     if not parts.scheme or not parts.netloc:
         return None
@@ -703,7 +707,11 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
         for base in (script_dir, cwd):
             path = base / candidate
             if path.is_file():
-                return Image.open(path)
+                # copy + close: Image.open keeps the file handle for the image's lifetime,
+                # and the tray icon lives as long as the watchdog — on Windows that open
+                # handle would block deploy-jit from replacing tray.ico in a live bundle.
+                with Image.open(path) as img:
+                    return img.copy()
     size = 64
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -802,10 +810,17 @@ def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threa
     except ImportError as exc:
         emit(logger, "tray_unavailable", reason=str(exc), hint="pip install pystray pillow")
         return None
-    url = args.tray_url or tray_default_url(args.health_url)
+    url = args.tray_url if isinstance(args.tray_url, str) and args.tray_url else None
+    if url is None:
+        url = tray_default_url(args.health_url)
 
     def on_open(_icon, _item) -> None:
-        webbrowser.open(url)
+        # Callback runs on the tray backend's thread; an escaped exception can take the
+        # icon loop down. Same never-fatal rule as everywhere else in the tray.
+        try:
+            webbrowser.open(url)
+        except Exception as exc:  # noqa: BLE001
+            emit(logger, "tray_open_failed", reason=repr(exc))
 
     def on_shutdown(_icon, _item) -> None:
         emit(logger, "tray_shutdown_requested")
