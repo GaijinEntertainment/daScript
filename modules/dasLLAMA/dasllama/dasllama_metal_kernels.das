@@ -1846,10 +1846,10 @@ class MetalFwhtUnsign {
 // thread at B2, two at B4), which WIDE carries; both stamps byte-identical.
 [ |> template_struct_instance]
 class template MetalGemvB24T {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x n] f32 rows, float4 view
-    @ssbo @binding = 4 @role = "write" y : array<float>     // [B x d]
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>     // [B x d]
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense)
@@ -1913,12 +1913,14 @@ class template MetalGemvB24T {
     }
 }
 
+[metal_dispatch(name = "enc_gemv_b2_c", pso = "g_pso_gemv_b2", tgmem = "MetalGemvB2_metal_gemv_msl_tgmem", tg = 128, grid = "d/4", params = "d : int64")]
 class MetalGemvB2 : MetalGemvB24T {
     override NR = 2
     override PANEL = 128
     override WIDE = false
 }
 
+[metal_dispatch(name = "enc_gemv_b4_c", pso = "g_pso_gemv_b4", tgmem = "MetalGemvB4_metal_gemv_msl_tgmem", tg = 128, grid = "d/4", params = "d : int64")]
 class MetalGemvB4 : MetalGemvB24T {
     override NR = 4
     override PANEL = 256
@@ -1928,11 +1930,12 @@ class MetalGemvB4 : MetalGemvB24T {
 // Skinny-batch GEMV: streamed form beats x-staged panel kernels ~12% at B <= 4. 64 threads = 2
 // simdgroups x 2 row-halves; 16 lanes stream one output row's interleaved 34B q8 blocks, batch
 // columns share the dequantized weight stream. Requires n % 256 == 0 (unguarded 4-chunk stripe).
+[metal_dispatch(name = "enc_mv_b2_c", pso = "g_pso_mv_b2", tg = 64, grid = "d/4", params = "d : int64")]
 class MetalQ8MvB2 {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "read" x : array<float4>    // [B rows x xs4 float4-stride] f32 rows
-    @ssbo @binding = 3 @role = "write" y : array<float>     // [B x ddim]
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "read" @off = "xoff" x : array<float4>    // [B rows x xs4 float4-stride] f32 rows
+    @ssbo @binding = 3 @role = "write" @off = "yoff" y : array<float>     // [B x ddim]
     @uniform @binding = 4 ka : Q8MvArgs
 
     [metal_kernel(name="metal_q8_mv_b2_msl")]
@@ -1988,11 +1991,12 @@ class MetalQ8MvB2 {
 // 4-column twin (serves B = 3..4; pad column reads clamp to row 0, stores gate on nrows). Drops
 // to 8 lanes per output row (4 rows/simdgroup, 8 rows/tg): fewer lanes per weight load, more
 // rows in flight hides the block-load latency instead.
+[metal_dispatch(name = "enc_mv_b4_c", pso = "g_pso_mv_b4", tg = 64, grid = "d/8", params = "d : int64")]
 class MetalQ8MvB4 {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16>
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>
-    @ssbo @binding = 2 @role = "read" x : array<float4>
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>
+    @ssbo @binding = 2 @role = "read" @off = "xoff" x : array<float4>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 4 ka : Q8MvArgs
 
     [metal_kernel(name="metal_q8_mv_b4_msl")]
@@ -2058,14 +2062,14 @@ class MetalQ8MvB4 {
 // Same WIDE panel-load split as MetalGemvB24T above.
 [ |> template_struct_instance]
 class template MetalGemvW13SwB24T {
-    @ssbo @binding = 0 @role = "weight" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
-    @ssbo @binding = 2 @role = "weight" wsh1 : array<float16>   // ... half-scale view
+    @ssbo @binding = 0 @role = "weight" @off = "w1off" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
+    @ssbo @binding = 2 @role = "weight" @off = "w1off" wsh1 : array<float16>   // ... half-scale view
     @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x ndim] f32 rows, float4 view
     @ssbo @binding = 4 @role = "write" y : array<float>     // [B x hidden] silu(gate)*up
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 hidden : uint     // output rows
-    @ssbo @binding = 8 @role = "weight" wqb3 : array<int8>   // w3 blob views
-    @ssbo @binding = 9 @role = "weight" wsh3 : array<float16>
+    @ssbo @binding = 8 @role = "weight" @off = "w3off" wqb3 : array<int8>   // w3 blob views
+    @ssbo @binding = 9 @role = "weight" @off = "w3off" wsh3 : array<float16>
     @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
     @template_constant NR : int = 2
     @template_constant PANEL : int = 128    // NR * 64 slots — override together with NR and WIDE
@@ -2134,12 +2138,14 @@ class template MetalGemvW13SwB24T {
     }
 }
 
+[metal_dispatch(name = "enc_w13sw_b2_c", pso = "g_pso_w13sw_b2", tgmem = "MetalGemvW13SwB2_metal_gemv_w13sw_msl_tgmem", tg = 128, grid = "hid/4", params = "hid : int64")]
 class MetalGemvW13SwB2 : MetalGemvW13SwB24T {
     override NR = 2
     override PANEL = 128
     override WIDE = false
 }
 
+[metal_dispatch(name = "enc_w13sw_b4_c", pso = "g_pso_w13sw_b4", tgmem = "MetalGemvW13SwB4_metal_gemv_w13sw_msl_tgmem", tg = 128, grid = "hid/4", params = "hid : int64")]
 class MetalGemvW13SwB4 : MetalGemvW13SwB24T {
     override NR = 4
     override PANEL = 256
@@ -2424,7 +2430,7 @@ class template MetalSqAttnBKvT {
     @ssbo @binding = 1 @role = "read" vc : array<KT>
     @ssbo @binding = 2 @role = "read" q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
     @ssbo @binding = 3 @role = "write" yo : array<float>    // [B x nheads*hs] attention out
-    @ssbo @binding = 4 @role = "read" rt : array<uint4>    // per-row (k base, v base, cap_rows, cnt) — arena elems
+    @ssbo @binding = 4 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base, v base, cap_rows, cnt) — arena elems
     @uniform @binding = 5 ka : SqAttnBArgs
     @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @workgroup scores : float[128]
@@ -2468,11 +2474,13 @@ class template MetalSqAttnBKvT {
     }
 }
 
+[metal_dispatch(name = "enc_attnb16_c", pso = "g_pso_attnb16", tgmem = "MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnBF16 : MetalSqAttnBKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin.
+[metal_dispatch(name = "enc_attnb32_c", pso = "g_pso_attnb32", tgmem = "MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnBF32 : MetalSqAttnBKvT {
     typedef KT = float
 }
@@ -2488,7 +2496,7 @@ class template MetalSqAttnBQuantT {
     @ssbo @binding = 3 @role = "read" vqb : array<QB>
     @ssbo @binding = 4 @role = "read" q : array<float>     // [B x qstride] roped queries (the fused QKV rows)
     @ssbo @binding = 5 @role = "write" yo : array<float>    // [B x nheads*hs] attention out
-    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 6 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 ka : SqAttnBArgs
     @ssbo @binding = 20 @role = "weight" sink : array<float> // [nheads] this layer's attention sinks (hass models)
     @workgroup scores : float[128]
@@ -2537,11 +2545,13 @@ class template MetalSqAttnBQuantT {
 }
 
 // q8_0 instance — rowb = nblk*34 (always even).
+[metal_dispatch(name = "enc_attnb_q8_c", pso = "g_pso_attnb_q8", tgmem = "MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnBQ8 : MetalSqAttnBQuantT {
     typedef QB = int8
 }
 
 // tq4-mirror batch twin (nibble reads over the byte-offset row table; rowb = nblk*18).
+[metal_dispatch(name = "enc_attnb_tq4_c", pso = "g_pso_attnb_tq4", tgmem = "MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnBTq4 : MetalSqAttnBQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -2556,7 +2566,7 @@ class template MetalSqAttnPartBKvT {
     @ssbo @binding = 1 @role = "read" vc : array<KT>
     @ssbo @binding = 2 @role = "read" q : array<float>
     @ssbo @binding = 3 @role = "write" part : array<float>  // [B x nheads x nchmax x (hs+2)]
-    @ssbo @binding = 4 @role = "read" rt : array<uint4>
+    @ssbo @binding = 4 @role = "read" @off = "rtoff" rt : array<uint4>
     @uniform @binding = 5 ka : SqAttnPartBArgs
     @workgroup scores : float[64]   // == ATTN_CHUNK_ROWS
     @workgroup red : float[16]
@@ -2612,11 +2622,13 @@ class template MetalSqAttnPartBKvT {
     }
 }
 
+[metal_dispatch(name = "enc_attnpb16_c", pso = "g_pso_attnpb16", tgmem = "MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnPartBF16 : MetalSqAttnPartBKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin.
+[metal_dispatch(name = "enc_attnpb32_c", pso = "g_pso_attnpb32", tgmem = "MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnPartBF32 : MetalSqAttnPartBKvT {
     typedef KT = float
 }
@@ -2631,7 +2643,7 @@ class template MetalSqAttnPartBQuantT {
     @ssbo @binding = 3 @role = "read" vqb : array<QB>
     @ssbo @binding = 4 @role = "read" q : array<float>
     @ssbo @binding = 5 @role = "write" part : array<float>  // [B x nheads x nchmax x (hs+2)]
-    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 6 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 ka : SqAttnPartBArgs
     @workgroup scores : float[64]   // == ATTN_CHUNK_ROWS
     @workgroup red : float[16]
@@ -2692,11 +2704,13 @@ class template MetalSqAttnPartBQuantT {
 }
 
 // q8_0 instance.
+[metal_dispatch(name = "enc_attnpb_q8_c", pso = "g_pso_attnpb_q8", tgmem = "MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnPartBQ8 : MetalSqAttnPartBQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads.
+[metal_dispatch(name = "enc_attnpb_tq4_c", pso = "g_pso_attnpb_tq4", tgmem = "MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
 class MetalSqAttnPartBTq4 : MetalSqAttnPartBQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -3127,17 +3141,20 @@ class template MetalSqAttnDKvT {
     }
 }
 
+[metal_dispatch(name = "enc_attnd16_c", pso = "g_pso_attnd16", tgmem = "MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
 class MetalSqAttnDF16 : MetalSqAttnDKvT {
     typedef KT = half4
 }
 
 // f32-mirror twin — float4 view, no conversion.
+[metal_dispatch(name = "enc_attnd32_c", pso = "g_pso_attnd32", tgmem = "MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
 class MetalSqAttnDF32 : MetalSqAttnDKvT {
     typedef KT = float4
 }
 
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
+[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = "head_size", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, head_size : int64")]
 class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
@@ -3211,7 +3228,7 @@ class template MetalRopeStoreBKvT {
     @ssbo @binding = 2 @role = "write" vd : array<KT>
     @ssbo @binding = 3 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 4 @role = "weight" tsin : array<float>
-    @ssbo @binding = 5 @role = "read" rt : array<uint4>
+    @ssbo @binding = 5 @role = "read" @off = "rtoff" rt : array<uint4>
     @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 7 ka : RopeStoreBArgs
     @template_constant CLAMP16 : bool = true
@@ -3276,11 +3293,13 @@ class template MetalRopeStoreBKvT {
     }
 }
 
+[metal_dispatch(name = "enc_rpstb16_c", pso = "g_pso_rpstb16", tg = 64, grid = "npairs/64, nrows", params = "npairs : int64, nrows : int64")]
 class MetalRopeStoreBF16 : MetalRopeStoreBKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin — straight stores, no clamp.
+[metal_dispatch(name = "enc_rpstb32_c", pso = "g_pso_rpstb32", tg = 64, grid = "npairs/64, nrows", params = "npairs : int64, nrows : int64")]
 class MetalRopeStoreBF32 : MetalRopeStoreBKvT {
     typedef KT = float
     override CLAMP16 = false
@@ -3353,11 +3372,13 @@ class template MetalSqAttnDQuantT {
 
 // q8_0 instance — K/V loads are 4 scalar int8s + block scale per position (34B blocks break
 // half4 alignment); scale folds in before the simd_sum.
+[metal_dispatch(name = "enc_attnd_q8_c", pso = "g_pso_attnd_q8", tgmem = "MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
 class MetalSqAttnDQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads: lane's 4 elements = 2 nibble bytes of block sl/8.
+[metal_dispatch(name = "enc_attnd_tq4_c", pso = "g_pso_attnd_tq4", tgmem = "MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
 class MetalSqAttnDTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
@@ -3365,6 +3386,7 @@ class MetalSqAttnDTq4 : MetalSqAttnDQuantT {
 
 // q8_0-mirror batched rope + KV-row store: the RopeStoreQ8 shape with the byte-offset row table
 // (grid y = batch row; the new KV row lands at cnt-1). Same quantize_q8kv_row semantics.
+[metal_dispatch(name = "enc_rpstb_q8_c", pso = "g_pso_rpstb_q8", tg = 64, grid = "nthreads/64, nrows", params = "nthreads : int64, nrows : int64")]
 class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
     @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes in place
     @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
@@ -3427,6 +3449,7 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
 
 // tq4-mirror batched rope + KV-row store: the RopeStoreTq4 shape (threadgroup per head) with the
 // byte-offset row table — grid (heads, batch rows); the new KV row lands at cnt-1.
+[metal_dispatch(name = "enc_rpstb_tq4_c", pso = "g_pso_rpstb_tq4", tgmem = "metal_rope_store_b_tq4_msl_tgmem", tg = "head_size", grid = "ntg, nrows", params = "ntg : int64, nrows : int64, head_size : int64")]
 class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
     @ssbo @binding = 0 @role = "readwrite" qk : array<float>    // [B x qstride] fused QKV rows — q ropes + rotates in place
     @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
@@ -4034,19 +4057,11 @@ def enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba : MetalB
 // 4 rows/tg — the x-staged cooperative-load slot math bakes 128 threads in.
 def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff : uint64;
                bx, by, bn, bd, bys : MetalBuffer?; d : int64; yoff : uint64 = 0ul) {
-    kn_pipeline(enc, four ? g_pso_gemv_b4 : g_pso_gemv_b2)
-    kn_tgmem(enc, four ? MetalGemvB4_metal_gemv_msl_tgmem : MetalGemvB2_metal_gemv_msl_tgmem, 0)
-    kn_buffer(enc, bw, boff, 0)   // byte view
-    kn_buffer(enc, bw, boff, 2)   // half-scale view
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, yoff, 4)
-    kn_buffer(enc, bn, 0ul, 5)
-    kn_buffer(enc, bd, 0ul, 6)
-    kn_buffer(enc, bys, 0ul, 7)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((d + 3l) / 4l), 1u, 1u), uint3(128u, 1u, 1u))
+    if (four) {
+        enc_gemv_b4_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, bys, d)
+    } else {
+        enc_gemv_b2_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, bys, d)
+    }
 }
 
 // the mul_mv-shape fixed-B GEMV on an interleaved 34B blob (dual views of the SAME buffer);
@@ -4054,18 +4069,13 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
 def enc_mv_b(enc : MetalComputeEncoder?; four : bool; bwblob : MetalBuffer?; wboff : uint64;
              bx, by : MetalBuffer?; var ka : Q8MvArgs;
              xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
-    kn_pipeline(enc, four ? g_pso_mv_b4 : g_pso_mv_b2)
-    kn_buffer(enc, bwblob, wboff, 0)
-    kn_buffer(enc, bwblob, wboff, 1)
-    kn_buffer(enc, bx, xoff, 2)
-    kn_buffer(enc, by, yoff, 3)
-    kn_kargs(enc, ka, 4)
-    // b2 = 4 rows/tg (16 lanes/row); b4 = 8 rows/tg (8 lanes/row)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    let d = ka.ddim
-    kn_dispatch(enc, uint3(four ? (d + 7u) / 8u : (d + 3u) / 4u, 1u, 1u), uint3(64u, 1u, 1u))
+    // b2 = 4 rows/tg (16 lanes/row, grid d/4); b4 = 8 rows/tg (8 lanes/row, grid d/8)
+    let d = int64(ka.ddim)
+    if (four) {
+        enc_mv_b4_c(enc, bwblob, wboff, bwblob, bx, xoff, by, yoff, ka, d)
+    } else {
+        enc_mv_b2_c(enc, bwblob, wboff, bwblob, bx, xoff, by, yoff, ka, d)
+    }
 }
 
 // one mv GEMV site: a single form dispatch at B <= 4, two 4-column tiles at B = 5..8 (the
@@ -4090,20 +4100,11 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 // with one dispatch. Same 4-rows/tg geometry, gridded over the hidden output rows.
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
                      bx, by, bn, bhid : MetalBuffer?; hidden : int64) {
-    kn_pipeline(enc, four ? g_pso_w13sw_b4 : g_pso_w13sw_b2)
-    kn_tgmem(enc, four ? MetalGemvW13SwB4_metal_gemv_w13sw_msl_tgmem : MetalGemvW13SwB2_metal_gemv_w13sw_msl_tgmem, 0)
-    kn_buffer(enc, bw, w1off, 0)   // w1: byte view
-    kn_buffer(enc, bw, w1off, 2)   // w1: half-scale view
-    kn_buffer(enc, bw, w3off, 8)   // w3: byte view
-    kn_buffer(enc, bw, w3off, 9)   // w3: half-scale view
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, 0ul, 4)
-    kn_buffer(enc, bn, 0ul, 5)
-    kn_buffer(enc, bhid, 0ul, 6)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((hidden + 3l) / 4l), 1u, 1u), uint3(128u, 1u, 1u))
+    if (four) {
+        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, by, bn, bhid, bw, w3off, bw, hidden)
+    } else {
+        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, by, bn, bhid, bw, w3off, bw, hidden)
+    }
 }
 
 // the production mul_mm dispatch (the prefill kernel: 34B-blob dual-view W, raw f32 X): y binds
@@ -4161,165 +4162,63 @@ def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
 // views), q8_0/tq4 FOUR times (half-scale + byte views for each) and shift the tail binds by 2;
 // for the quant codecs the row table carries byte offsets and nblk replaces the kv_dim uniform
 def enc_attn_b(enc : MetalComputeEncoder?; kdt : KVDtype; bq, by, brt : MetalBuffer?; var ka : SqAttnBArgs; nrows, nheads, head_size : int64; bsink : MetalBuffer? = null; rtoff : uint64 = 0ul) {
+    let bsnk = bsink != null ? bsink : g_one
+    let wgs = nheads * nrows
     if (kdt == KVDtype.q8_0) {
-        kn_pipeline(enc, g_pso_attnb_q8)
-        kn_tgmem(enc, MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem, 0)
+        enc_attnb_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, by, brt, rtoff, ka, bsnk, wgs, head_size)
     } elif (kdt == KVDtype.tq4) {
-        kn_pipeline(enc, g_pso_attnb_tq4)
-        kn_tgmem(enc, MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem, 0)
+        enc_attnb_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, by, brt, rtoff, ka, bsnk, wgs, head_size)
+    } elif (kdt == KVDtype.f16) {
+        enc_attnb16_c(enc, g_arena, g_arena, bq, by, brt, rtoff, ka, bsnk, wgs, head_size)
     } else {
-        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnb16 : g_pso_attnb32)
-        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem : MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem, 0)
+        enc_attnb32_c(enc, g_arena, g_arena, bq, by, brt, rtoff, ka, bsnk, wgs, head_size)
     }
-    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    if (quant) {
-        kn_buffer(enc, g_arena, 0ul, 2)
-        kn_buffer(enc, g_arena, 0ul, 3)
-    }
-    let sh = quant ? 2 : 0
-    kn_buffer(enc, bq, 0ul, 2 + sh)
-    kn_buffer(enc, by, 0ul, 3 + sh)
-    kn_buffer(enc, brt, rtoff, 4 + sh)
-    kn_kargs(enc, ka, 5 + sh)
-    kn_buffer(enc, bsink != null ? bsink : g_one, 0ul, 20)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
 def enc_attn_part_b(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnPartBArgs; nrows, nchmax, nheads, head_size : int64; rtoff : uint64 = 0ul) {
+    let wgs = nheads * nchmax * nrows
     if (kdt == KVDtype.q8_0) {
-        kn_pipeline(enc, g_pso_attnpb_q8)
-        kn_tgmem(enc, MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem, 0)
+        enc_attnpb_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, wgs, head_size)
     } elif (kdt == KVDtype.tq4) {
-        kn_pipeline(enc, g_pso_attnpb_tq4)
-        kn_tgmem(enc, MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem, 0)
+        enc_attnpb_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, wgs, head_size)
+    } elif (kdt == KVDtype.f16) {
+        enc_attnpb16_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, wgs, head_size)
     } else {
-        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnpb16 : g_pso_attnpb32)
-        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem, 0)
+        enc_attnpb32_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, wgs, head_size)
     }
-    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    if (quant) {
-        kn_buffer(enc, g_arena, 0ul, 2)
-        kn_buffer(enc, g_arena, 0ul, 3)
-    }
-    let sh = quant ? 2 : 0
-    kn_buffer(enc, bq, 0ul, 2 + sh)
-    kn_buffer(enc, bpart, 0ul, 3 + sh)
-    kn_buffer(enc, brt, rtoff, 4 + sh)
-    kn_kargs(enc, ka, 5 + sh)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
+// HEAD-FASTEST launch (grid.x = heads): consecutive tgs share position rows (SLC locality at depth)
 def enc_attn_d(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
     if (kdt == KVDtype.q8_0) {
-        kn_pipeline(enc, g_pso_attnd_q8)
-        kn_tgmem(enc, MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem, 0)
+        enc_attnd_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
     } elif (kdt == KVDtype.tq4) {
-        kn_pipeline(enc, g_pso_attnd_tq4)
-        kn_tgmem(enc, MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem, 0)
+        enc_attnd_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
+    } elif (kdt == KVDtype.f16) {
+        enc_attnd16_c(enc, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
     } else {
-        kn_pipeline(enc, kdt == KVDtype.f16 ? g_pso_attnd16 : g_pso_attnd32)
-        kn_tgmem(enc, kdt == KVDtype.f16 ? MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem : MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem, 0)
+        enc_attnd32_c(enc, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
     }
-    let quant = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-    kn_buffer(enc, g_arena, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    if (quant) {
-        kn_buffer(enc, g_arena, 0ul, 2)
-        kn_buffer(enc, g_arena, 0ul, 3)
-    }
-    let sh = quant ? 2 : 0
-    kn_buffer(enc, bq, 0ul, 2 + sh)
-    kn_buffer(enc, bpart, 0ul, 3 + sh)
-    kn_buffer(enc, brt, 0ul, 4 + sh)
-    kn_kargs(enc, ka, 5 + sh)
-    // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
-    hz_read(g_arena)
-    hz_read(bq)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
-}
-
-def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; var ka : SqAttnCombDArgs; nrows, nheads, head_size : int64) {
-    kn_pipeline(enc, g_pso_attncombd)
-    kn_tgmem(enc, metal_sq_attn_comb_d_msl_tgmem, 0)
-    kn_buffer(enc, bpart, 0ul, 0)
-    kn_buffer(enc, by, 0ul, 1)
-    kn_buffer(enc, brt, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(bpart)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nheads), uint(nrows), 1u), uint3(uint(head_size), 1u, 1u))
 }
 
 def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBArgs; npairs, nrows : int64; rtoff : uint64 = 0ul) {
-    kn_pipeline(enc, f16 ? g_pso_rpstb16 : g_pso_rpstb32)
-    kn_buffer(enc, bqkv, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, bcos, 0ul, 3)
-    kn_buffer(enc, bsin, 0ul, 4)
-    kn_buffer(enc, brt, rtoff, 5)
-    kn_buffer(enc, bbias, 0ul, 6)
-    kn_kargs(enc, ka, 7)
-    hz_write(bqkv)
-    hz_write(g_arena)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((npairs + 63l) / 64l), uint(nrows), 1u), uint3(64u, 1u, 1u))
+    if (f16) {
+        enc_rpstb16_c(enc, bqkv, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, npairs, nrows)
+    } else {
+        enc_rpstb32_c(enc, bqkv, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, npairs, nrows)
+    }
 }
 
 // tq4-mirror batched rope+store: one threadgroup per (head, batch row), arena bound four ways
 def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBTq4Args; ntg, nrows, head_size : int64) {
-    kn_pipeline(enc, g_pso_rpstb_tq4)
-    kn_tgmem(enc, metal_rope_store_b_tq4_msl_tgmem, 0)
-    kn_buffer(enc, bqkv, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, g_arena, 0ul, 4)
-    kn_buffer(enc, bcos, 0ul, 5)
-    kn_buffer(enc, bsin, 0ul, 6)
-    kn_buffer(enc, signs_buffer(), 0ul, 7)
-    kn_buffer(enc, brt, 0ul, 8)
-    kn_buffer(enc, bbias, 0ul, 9)
-    kn_kargs(enc, ka, 10)
-    hz_write(bqkv)
-    hz_write(g_arena)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(ntg), uint(nrows), 1u), uint3(uint(head_size), 1u, 1u))
+    enc_rpstb_tq4_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, signs_buffer(), brt, bbias,
+        ka, ntg, nrows, head_size)
 }
 
 // q8_0-mirror batched rope+store: arena bound four ways (K/V x scale/byte views); grid covers
 // the q pairs + one thread per K/V 32-block, one grid row per batch row
 def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64) {
-    kn_pipeline(enc, g_pso_rpstb_q8)
-    kn_buffer(enc, bqkv, 0ul, 0)
-    kn_buffer(enc, g_arena, 0ul, 1)
-    kn_buffer(enc, g_arena, 0ul, 2)
-    kn_buffer(enc, g_arena, 0ul, 3)
-    kn_buffer(enc, g_arena, 0ul, 4)
-    kn_buffer(enc, bcos, 0ul, 5)
-    kn_buffer(enc, bsin, 0ul, 6)
-    kn_buffer(enc, brt, 0ul, 7)
-    kn_buffer(enc, bbias, 0ul, 8)
-    kn_kargs(enc, ka, 9)
-    hz_write(bqkv)
-    hz_write(g_arena)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((nthreads + 63l) / 64l), uint(nrows), 1u), uint3(64u, 1u, 1u))
+    enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, bbias, ka, nthreads, nrows)
 }
 
 def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {

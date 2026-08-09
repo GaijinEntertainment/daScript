@@ -2653,7 +2653,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         qstride = uint(qkvd), nsgs = uint(d_nsgs))
                     enc_attn_d(enc, kdt, bqkv, bpart, brt, dka, d_nsgs, nrows, n_heads)
                     var cka = SqAttnCombDArgs(nchmax = uint(d_nsgs), nheads = uint(n_heads), hs = uint(head_size))
-                    enc_attn_comb_d(enc, bpart, bxb, brt, cka, nrows, n_heads, head_size)
+                    enc_attncombd_c(enc, bpart, bxb, brt, cka, n_heads, nrows, head_size)
                 } elif (chunked) {
                     // sliding layers carry the span; each row's kernels derive wstart from its own
                     // cnt (per-row depths differ), and the comb skips that row's below-window chunks
