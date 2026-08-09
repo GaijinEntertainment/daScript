@@ -204,10 +204,26 @@ Each phase gets decided in detail when reached.
   (0.25608706/0.23721886 == P0-P3) — both fam legs compiled with the full batch in tree.
   No wall-clock spot-check: no kernel text changed anywhere (the single router loses one
   parameter declaration), encoders are CPU-side.
-  **Arc boundary:** kernels.das still carries ~33 decode-side hand kn_ encoder bodies
-  (attnb/attnpb/attnd/attncombd, rpstb family, addrms, gemm_b family, moe gemv family, the
-  mm-core picks) — OUTSIDE this arc's census (the arc scoped prefill + the named decode
-  fodder). A decode-side lens arc is the natural successor if wanted.
+- **P5 — decode-side lens (folded into the arc per ruling, 2026-08-08).** The remaining
+  kernels.das hand surface: 27 production kn_pipeline sites across 17 encoder functions (the
+  2 sites in the tensor race harness stay, bench-only — same carve-out as prefill's). Census:
+  (a) moe expert GEMV — enc_moe_gemv (q8/q51/k4/k5/k6 arms) + enc_moe_gemv_mx4, classes
+  MetalMoeGemvQ8/Q51/K4/K5/K6/Mx4, P2 format-axis shape; (b) batch attn — enc_attn_b +
+  enc_attn_part_b, 4-dtype (f16/f32/q8/tq4) per-class builders + picks; (c) depth attn —
+  enc_attn_d (4 dtypes) + enc_attn_comb_d; (d) batch gemm — enc_gemm_b, enc_gemm_sk_b,
+  enc_sk_reduce_b, enc_gemm64_b, drop-ins; (e) batch gemv/mv boolean twins — enc_gemv_b,
+  enc_mv_b, enc_gemv_w13sw_b (b2/b4 class pairs); (f) batch rope-store — enc_rope_store_b
+  (16/32) + _tq4 + _q8; (g) enc_add_rms_b, drop-in; (h) enc_ew2. Single-decode attn already
+  rides P0-era builders (enc_attnp*_c) — only batch/depth families remain. TWO RULINGS:
+  (1) enc_ew2 (pso-parameterized, serving MetalSwiglu/Geglu/Add/Sigmul) migrates to
+  PER-CLASS builders — callers name the op, the pso handles stop leaking into driver code;
+  (2) item-14-style cleanups FOLD IN — where a dummy bind serves a format that can never
+  carry the field (moe gemv bias/hasb — only mx4 has bias), gate or drop it during the
+  migration, per the CODEREVIEW rule. Expected: zero lens changes; payoff is contract
+  enforcement (binding renumbers compiler-checked, derived staging, the CODEREVIEW
+  dispatch-on-class rule becomes tree-wide), not dedup. Perf guard: decode is the hot
+  per-token path — one wall-clock spot check when the batch lands, unless every builder
+  dump-proves statement-identical again (the P4 evidence class).
 
 Perf guard throughout: encoders are CPU-side — no kernel text changes except P3 (byte-diff
 gates there). Decode/prefill wall-clock spot-check per phase on the M1 (3 launches,
