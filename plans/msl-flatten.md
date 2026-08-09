@@ -95,7 +95,10 @@ member types keep the hard error (the old field gate, now scoped to what state c
       stash-interleaved A/B (3 pairs, M1): joined 4.7461/4.7462/4.7462 vs standalone
       4.7453/4.7454/4.7454 ms/mm — +0.02% flat, bit-exact, per-arm spread 0.002% (the
       kernel is DRAM-bound at ~67 wGB/s; no residue win, no regression — the join is free).
-- [ ] Tail: MoE-lab per-site repair (followup_general #8) — rebind enc_lab_w13*/w2/pair to
-      MoeGemvArgs kargs; drop the dead tail duplicate run_gmm6_lab call in main_apple
-- [ ] spirv_emit parity: dasGlsl/dasVulkan lowers no method classes today; if a joined class
-      ever crosses backends, the same flatten design applies there (not in this arc's scope)
+- [x] Tail: MoE-lab per-site repair (followup_general #8) — DONE in the lens-arc review round:
+      production arms on MoeGemvArgs kargs (lab twins keep historical layouts per arm), dead
+      tail duplicates dropped, main end-to-end to the leak assert, 19/19 checks rel 0
+- [ ] spirv_emit parity: dasSpirv lowers class kernels (devirtualized method CALLS) but not
+      the flatten/scope-splice or state-member forms — ledgered in dasMetal/MASTERPLAN.md
+      §Cross-backend parity; if a joined class ever crosses backends, the same flatten design
+      applies there (not in this arc's scope)

@@ -78,8 +78,11 @@
    b-loop/writeback (B4 byte-identical, B2 = production text + a dead colbase decl, measured
    free); K5T keeps one colbase spelling. K4↔K5 format merge stays ruled out (the qh
    overlay + hq staging would duplicate most of the body). B8 trio stays hand-written
-   (different algorithm). Standing tripwire: the lab's production arms reference the stamped
-   globals.
+   (different algorithm). 2026-08-09: adoption closed the A/B — the K4T/K6T `TILED=false`
+   stamps and K5T's single spelling ARE the previewed lab forms, so the three prod-vs-lab B2
+   pairs compiled byte-identical and were deleted (the measured ruling above stands as the
+   record; recreate the arm pattern if the question reopens). The tripwire stands: the lab's
+   surviving production arms reference the stamped globals.
 
 7. **Pointer families — a language-level idea, parked.** (Boris, 2026-07-30: "interesting follow …
    it maybe good - we are just not there yet.") Everything above about address spaces exists
@@ -105,23 +108,24 @@
    Side find from the gmm8 dump: the `addr()` escape for a pointer walk defeats the const
    analysis — Q8's weight buffers emit as non-const `device half*` (and win anyway, so
    constness is not the term).
-   ALSO: the MoE lab's per-site section (enc_lab_w13*/w2/pair arms) ROTTED at the kargs
-   migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check
-   panics; gmm6/gmm8/gmm4 now run first so the rot doesn't block them (the gmm4 prod arm's
-   own pre-kargs rot was repaired as part of the Mx4 join). Repair = rebind those encoders
-   to MoeGemvArgs kargs buffers and re-verify each arm; also drop the dead tail duplicate
-   run_gm*_lab calls in main_apple.
+   The per-site rot from the kargs migration (c45724dae) was REPAIRED in the lens-arc review
+   round (2026-08-09): production arms bind MoeGemvArgs kargs, the pre-kargs lab twins keep
+   their historical layouts behind per-arm bind splits, the dead tail-duplicate
+   run_gmm4/gmm6_lab calls are gone, and main runs end-to-end to the leak assert — all 19
+   correctness checks at rel 0, run_gmx4_lab reachable again (prod 300.6 wGB/s vs lcppe
+   302.1, prod = lcppe + an untaken bias branch). Don't trust rounds=1 numbers from this
+   lab — warm-up dominates.
 
-9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
-   dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of
-   `g_pso_qknorm` and a buffer offset on the x bind; `enc_rope` there is the same story. The MSL
-   source is one string in both cases, so the duplication is the PIPELINE object, not the shader —
-   prefill and decode own separate lifecycles (`metal_prefill_init` / `metal_decode_init`) and
-   each builds its own. The fix is not to merge the encoders but to decide who owns a PSO for a
-   kernel both stages dispatch: either a shared pipeline registry keyed by MSL source, or an
-   explicit rule that a stage-local PSO is the intended shape. Until that is settled, a lensed
-   class whose builder both stages could use still gets a hand-written twin on the prefill side.
-   Done = the rule is written in CODEREVIEW.md, and the twins either share a PSO or say why not.
+9. **Prefill compiles its own PSO for kernels decode already has — HALF RESOLVED by the lens
+   arc.** The qk_norm half closed in P1: `MetalQkNorm` gained `@off` on x, prefill rides
+   decode's generated builder, and `enc_qk_norm_pf` + `g_pf_pso_qknorm` are gone. The rope
+   half remains in the new shape: both stages' rope encoders are lens-generated now, but
+   prefill's `MetalRope` instance names `g_pf_pso_rope` compiled from the same
+   `metal_rope_msl` source decode compiles into its own PSO. The ownership rule is written
+   (CODEREVIEW.md: the class-owning file compiles/releases; instances may share a pso handle —
+   the MetalRmsNorm ×3 / tensor-twin precedent), so Done = prefill's rope instance either
+   names decode's pso global the shared-handle way or a comment says why stage-local is
+   intended.
 
 10. **The two fused QKV-GEMV twins are a D-family-shaped dedup that has not happened.**
     `MetalQ8GemvQkvRsF16` and `MetalQ8GemvQkvRsF32` are ~95 lines of near-identical body that

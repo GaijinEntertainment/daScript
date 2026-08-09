@@ -72,8 +72,8 @@ Each phase gets decided in detail when reached.
   DELETED; + MetalPleFinish, MetalMoeReduce, MetalSwigluOaiPf, MetalPfCat2 (the inline site
   became a pf_enc_cat2 call). The T twins needed no @role — the classifier's ptr-local +
   tmm2d_tg_store arms derive them. Grid equivalences used: mp/nk64 are 64-padded so ceil-div
-  == the hand exact div; swiglu's total/256 == (total/4+63)/64 by the nested ceil-div
-  identity. Gates: kernels suite 7/7; prefill-base llama token-exact (mm path); fam-phi3
+  == the hand exact div; swiglu's total/256 == (total/4+63)/64 under the callers'
+  total % 4 == 0 contract (off-contract the ceil form is the larger, guarded side). Gates: kernels suite 7/7; prefill-base llama token-exact (mm path); fam-phi3
   matrix (hs=96 ⇒ the non-mm trio); fam-gptoss PARITY_FULL maxd bit-identical
   (0.25608706/0.23721886 — swiglu_oai + moe_reduce + mm attn); gemma4e E4B coverage row
   census `metal_ple_finish = 2`; cat2 + ple_finish `dump=true` statement-identity vs the

@@ -146,9 +146,9 @@ Landed deltas vs the stage-0 spec (each probe-verified):
   pre-fold; `tsi_is_const_init` peels one unary `+`/`-`).
 - **`KT(1)`-style ctor-casts in template bodies need no rule** — infer resolves
   call-position alias names through the instance's structure aliases (probe-verified).
-- **`late_bind = true`** (decision 4) — annotation argument on the template, rides the
-  inherited copy down to every instance; test arm binds KT from a sibling structure
-  annotation that runs after the reifier.
+- **`late_bind = true`** (decision 4) — RETIRED with the eager unbound-alias check (see the
+  resolution further down): unbound names now flow to infer unconditionally, which reports
+  them at first use, so the opt-out flag had nothing left to opt out of.
 - **`@template_call`** (decision 5) — harvest mirrors `@template_constant`
   (validate `@@name`/string init, `renameCall` rule, erase field, slot-vs-method-name
   collision check); tests cover default, `@@` rebind, string rebind, and `@@` address
@@ -158,7 +158,8 @@ Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodie
 `ToyNarrow`gated` compiles to `return x + 100`): `test_template_struct_instance.das`
 (class rail incl. static_if fold + override-wins + const defaults arm, struct rail with
 two instances + const in field init, template-with-base arm, cross-module arm via
-`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` /
+`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` (expect 30826 —
+infer reports the unbound name at first use since the eager check retired) /
 `_not_template_parent` / `_nonconst` (expect 20800) + `_field_collision` (expect 20503,
 parser-level). `tests/aot/CMakeLists.txt` typemacro glob now excludes `failed_*`.
 
@@ -409,7 +410,7 @@ errors to the first plus "+N more on this line". All macro-apply failures share 
 inherited reifier + the instance's own `[metal_dispatch]`), the second macro's named
 error — an independent, actionable message — is dropped. Fix (Boris GO: "macro errors
 are too important"): `isMacroDiagnostic` exempts the macro cerr family (20800, 31200,
-31210, 50501) from Rule 2; Rule 1 (byte-identical dedup) still applies, and macro
+31210, 50501, 50503 — and post-review the lint pair 31208/31209) from Rule 2; Rule 1 (byte-identical dedup) still applies, and macro
 errors are bounded by the annotation list so they cannot avalanche like the inference
 noise Rule 2 exists for.
 

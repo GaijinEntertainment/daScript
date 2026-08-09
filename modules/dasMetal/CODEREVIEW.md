@@ -32,23 +32,30 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 ## Tests
 
-**A new emitter capability ships, in the same change: a text fixture under `tests/msl/`
-(`_msl_common.das` kernels), a census kind, and a `tests/msl/_fail_closed/` fixture for every
-new rejection path.** Any of the three missing is a defect.
+**A new emitter capability — a new emit site or a newly ACCEPTED construct — ships, in the
+same change, a text fixture under `tests/msl/` (`_msl_common.das` kernels) and a census kind
+of its own.** A new emit form that reuses a sibling's census kind hides its own loss; the
+default entry-point path counts as a construct (a fixture must exercise it).
+
+**A new rejection path ships a `tests/msl/_fail_closed/` fixture and asserts its needle in
+`tests/msl/test_msl_fail_closed.das`, in the same change.**
 
 **A behavioral change ships a CPU-oracle test under `tests/metal/`** — the kernel method runs
 on the CPU as ordinary das, and the GPU result must match it.
 
-**The census gate (gate B) is two-directional.** Every new emit site records a census kind,
-the kind joins `declared_msl_census`, and some fixture actually emits it — text has no
-disassembler, so the census is the emitter's only coverage proxy.
-
-**A new error path asserts its needle in `tests/msl/test_msl_fail_closed.das`.**
+**The census gate (gate B) is two-directional, and removal is a census event too.** Every new
+emit site records a census kind and the kind joins `declared_msl_census`; every removed emit
+site's kind leaves it, everywhere it is named. Whether a fixture actually emits each kind is
+settled by running `tests/msl` (`test_msl_census.das` asserts set equality both ways) — text
+has no disassembler, so the census is the emitter's only coverage proxy.
 
 ## Implementation
 
-**Every kernel — and every function it calls — runs on the CPU with identical semantics.** A
-construct that cannot run on the CPU has no place in the emitter.
+**Every kernel — and every function it calls — is a construct the CPU can execute.** One that
+cannot has no place in the emitter. Semantic equality is owned by the CPU-oracle rule above,
+under the lifetime contract: kernel state (plain members) is PER-THREAD, so the oracle
+constructs a fresh instance per simulated thread — a shared-instance oracle is a defect of
+the test, not evidence against the kernel.
 
 **Anything outside the lowered subset produces a clean compile error naming the construct —
 on every rail that can see the construct** — never a silently wrong kernel.

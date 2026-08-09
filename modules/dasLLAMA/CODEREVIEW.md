@@ -81,14 +81,24 @@ belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
-three worlds the gate covers are `ARCHITECTURE.md` §2.5.
+three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
+run under one tune state by construction, so the comparison holds untuned.
 
-**No new timing harness is written.** Time is measured by the rigs `PROFILE.md` documents —
-`performance/gen_profile.das` (the routine check) and `performance/gen_bench_records.das`
-(`--oracle` = the regression gate, bare = the publishing board); both spawn
-`benchmarks/lcpp_bench.das`, the only thing that measures. A new timing harness, a one-off
-measurement script, or a revived rig is a defect. `PROFILE.md` carries the commands; the rig's
-shape is `ARCHITECTURE.md` §2.5.
+**No new record-grade timing harness is written.** Model-level time is measured by the rigs
+`PROFILE.md` documents — `performance/gen_profile.das` (the routine check) and
+`performance/gen_bench_records.das` (`--oracle` = the regression gate, bare = the publishing
+board); both spawn `benchmarks/lcpp_bench.das`, the only thing that measures record-grade
+time. A new model-timing harness, a one-off measurement script, or a revived rig is a defect;
+the one sanctioned sub-model instrument is the kernel A/B lab (next rule). `PROFILE.md`
+carries the commands; the rig's shape is `ARCHITECTURE.md` §2.5.
+
+**A kernel A/B lab under `benchmarks/` is a decision instrument, never a record rig.** A lab
+answers a kernel-join question by interleaved same-instrument A/B with a bit-exact cross-arm
+gate; hand-rolled bind lists are legal there, which is exactly where binding rot hides — a lab
+races LIVE production classes, so the change that renumbers a binding fixes or deletes the lab
+arms it rots, in the same change. Two arms that compile identical kernel text measure noise:
+when adoption closes a lab's question, its arm pair is deleted, not kept. Lab numbers never
+enter the record stores or `PERF_LEDGER.md`.
 
 **An out-of-process observer measures only what no in-process rig can observe about itself,
 and its numbers are ledger-grade.** The one instance is `benchmarks/asr/mem_census.sh`: peak
@@ -233,8 +243,9 @@ exception: `dasllama_metal_gemm.das` owns its second device+queue (ARCHITECTURE 
 other module creating a device is a defect.
 
 **A PSO is compiled and released by the file that owns its kernel class**, through that file's
-init/release pair (`metal_decode_init` / `metal_kernels_release`; `metal_prefill_init` /
-`metal_prefill_shutdown`) — ownership follows the class, not the pipeline stage. A PSO compiled
+init/release pair (`metal_decode_init` / `metal_kernels_release`, both in
+`dasllama_metal_kernels.das`; `metal_prefill_init` / `metal_prefill_shutdown` in
+`dasllama_metal_prefill.das`) — ownership follows the class, not the pipeline stage. A PSO compiled
 or released anywhere else in the engine is a defect. Tests are exempt: a kernel-unit gate
 compiles its own short-lived pipeline from the emitted source and releases it in the same gate.
 
@@ -366,22 +377,28 @@ a helper that looks specialized in das can still lower to a runtime multiply.
 
 **Twins of a kernel family bind the same kargs type at the same binding**, even where one twin
 ignores a field. A twin that shifts the other's fields to different slots is a defect.
+Recorded exception: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
+keep the pre-family compact slots while their base classes bind the family numbers — the
+kernel-unit gate and the race arms fork on it deliberately, and no shared bind path may span
+that pair.
 
 **Kernel twins share a template.** Same-body single/batch or format twins are stamps of one
 `class template` — a `@template_constant` axis carries the body divergence, a `@template_gate`
 field carries a stamp-varying binding. A copy-pasted twin class, or a new dummy-bound
 always-present field where a gated one serves, is a defect.
 
-**Every weight, bias, or lookup-table field on a kernel class declares `@role = "weight"`
-explicitly.** Derivation classifies an un-roled weight view as a read and stages the whole blob
-per dispatch — the tracked-weight scheduler tax the untracked-weights doctrine exists to avoid.
-A weight-shaped field with no `@role` is a defect even when the kernel compiles and passes
-parity.
+**Every weight, bias, or lookup-table field on a `[metal_dispatch]` / `[vk_dispatch]` kernel
+class declares `@role = "weight"` explicitly.** Derivation classifies an un-roled weight view
+as a read and stages the whole blob per dispatch — the tracked-weight scheduler tax the
+untracked-weights doctrine exists to avoid. A weight-shaped field with no `@role` is a defect
+even when the kernel compiles and passes parity. Un-lensed lab classes in `benchmarks/` are
+out of scope — nothing derives their access.
 
 **A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
 carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
-`@span`. A NEW hand-written `enc_*` body is a defect unless it is one of the wrapper shapes the
-lens doctrine names: a format or twin pick, or a composite over generated builders.
+`@span` / `@default`. A NEW hand-written `enc_*` body is a defect unless it is a wrapper
+shape: a format or twin pick, a default-filling wrapper, or a composite over generated
+builders.
 
 **No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
@@ -389,12 +406,13 @@ Carve-out: a builder parameter the `grid=`/`tg=` spec consumes HOST-side (the di
 geometry) may repeat a kargs field the kernel reads device-side — those are two consumers,
 not one value bound twice.
 
-**Nothing in the engine, a benchmark, or a race harness dispatches a kernel except its
-`enc_*` builder.** A hand-rolled bind list in `dasllama/`, `benchmarks/`, or `performance/`
-is a defect. The kernel-unit gates under `tests/` hand-bind on purpose: the gate is an
-independent witness of the binding contract, so a builder defect cannot mask a kernel defect.
-Carve-out: the moe mul_mm A/B race harnesses encode through `kn_moe_mm_family_tail`, the
-family's shared bind tail, so a binding renumber desyncs them loudly instead of unseen.
+**Nothing in the engine or a race harness dispatches a kernel except its `enc_*` builder.** A
+hand-rolled bind list in `dasllama/` or `performance/` is a defect; kernel A/B labs under
+`benchmarks/` are the recorded exception (the lab rule above), and the kernel-unit gates under
+`tests/` hand-bind on purpose: the gate is an independent witness of the binding contract, so
+a builder defect cannot mask a kernel defect. Carve-out: the IN-ENGINE moe mul_mm A/B race
+harnesses (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail`, the family's
+shared private bind tail, so a binding renumber desyncs them loudly instead of unseen.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
@@ -426,10 +444,11 @@ value feeds logic is marked `// clock: control`. The rails, the carve-outs (`ben
 `performance/`, `harness/`, cold one-shot load/mint progress logs), and the marker's why are
 `ARCHITECTURE.md` §2.10.
 
-**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** A new function is a defect
-only when no annotated region entry reaches it — a new entry point (including a backend entry)
-carries the annotation itself. The transitive-arming model and the `@scratch` / `[cold_path]`
-companions are `ARCHITECTURE.md` §2.11.
+**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** A region entry is an
+`*_encode` / `*_decode` / step driver; a new function is a defect only when no annotated
+region entry reaches it — a new entry point (including a backend entry: kernel-backend
+override, batch donor) carries the annotation itself. The transitive-arming model and the
+`@scratch` / `[cold_path]` companions are `ARCHITECTURE.md` §2.11.
 
 **No raw environment access outside `dasllama_env.das`.** A knob is an `[EnvConfig]` field
 there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /

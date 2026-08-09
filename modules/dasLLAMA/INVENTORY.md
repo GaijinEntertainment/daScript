@@ -317,7 +317,8 @@ Vulkan lacks: mx4/q51 kernels, tq4/q8 KV codecs, Argmax/EmbedQ8/EmbedK6, MoE rou
 - kernels:6171–6172 describes `signs_buffer` (common:1057–1073).
 - llama:57–59 dangling continuation (head sentence left with `decode_shape_decline`); also names "attention depth" which shapes:34–35 marks RETIRED.
 - llama:139–141 describes `mirror_evict_to_cap` (common:715).
-- prefill:6069 swiglu/add comment belongs to `pf_enc_ew2` at :6228 (duplicated from kernels:6404).
+- ~~prefill swiglu/add comment beside `pf_enc_ew2`~~ — resolved: the ew2 pair died to per-op
+  generated builders in the lens arc.
 
 **B. kernels:6596–6598 stale mechanism description** — "each scratch buffer owns a bit" tracker is gone; common:1085 documents the current exact-range system as "since P3 the batch rail's ONLY hazard system".
 
@@ -326,7 +327,7 @@ Vulkan lacks: mx4/q51 kernels, tq4/q8 KV codecs, Argmax/EmbedQ8/EmbedK6, MoE rou
 **D. Duplicated dispatch paths between metal files:**
 - **Whole DeltaNet family has TWO dispatchers and TWO PSO sets**: lensed `enc_dn_*`/`g_pso_dn_*` (decode side only) vs hand-written `pf_enc_dn_*`/`g_pf_pso_dn_*` (prefill only). Same seven kernels, same MSL, two pipelines each; `pf_enc_dn_conv` ≡ generated `enc_dn_conv` line-for-line.
 - `enc_rms` ×4 geometries over one MSL, two PSOs (1024/1, 1024/nrows, 256/nrows, 256/1) — undocumented why.
-- Systematic `pf_` near-twins differing only in device/pool globals: `compile_pso`↔`pf_compile_pso`, `upload_region`↔`pf_upload_region`, `uniform_u32/f32`↔`pf_uniform_*`, `enc_ew2`↔`pf_enc_ew2`, `enc_gemm_mm_b`↔`enc_gemm_mm`. `g_one`/`g_zero` init blocks and mx4 value tables byte-identical ×2.
+- Systematic `pf_` near-twins differing only in device/pool globals: `compile_pso`↔`pf_compile_pso`, `upload_region`↔`pf_upload_region`, `uniform_u32/f32`↔`pf_uniform_*` (`enc_ew2`↔`pf_enc_ew2` resolved — both died to per-op generated builders; `enc_gemm_mm_b`↔`enc_gemm_mm` now thin picks over shared `_c` cores). `g_one`/`g_zero` init blocks and mx4 value tables byte-identical ×2.
 - `empty(a) ? KqFmt.q8 : a[l]` exists 4× under 3 names: `moe_fmt_at` (common:1078 AND shapes:196 — same name, two modules), `kq_fmt_at` (llama:91), `pf_fmt_at` (prefill:5573).
 
 **E. Lens coverage is a clean split, not a gradient:** kernels single-stream 24/24 lensed, batched P4 0/32 (boundary = the P4 divider); prefill 17/78. Naming diverges: kernels classes emit `enc_*_c` + thin wrapper, prefill classes emit bare `enc_*` (except lone `enc_gemv_c`). `@span` used 6× of 646 `@ssbo` fields — the "finer than lcpp" range tracker runs whole-buffer almost everywhere. `access_force` 0 uses.

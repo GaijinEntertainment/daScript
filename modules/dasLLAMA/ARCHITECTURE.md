@@ -230,6 +230,10 @@ entry here:**
   global, the `set_*` builder, the pipe slots — across classes with one binding layout. Metal's
   `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
   cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
+- **`@default` is Metal-only.** A `[metal_dispatch]` field may name a fallback global
+  (`@default = g_one`) that the generated builder binds when the caller passes null;
+  `[vk_dispatch]` has no counterpart — vulkan callers pass a real buffer at every slot. If
+  vulkan grows an optional-bind shape, it lands as this same annotation, not a new spelling.
 - **The workgroup-footprint gate is Vulkan-only.** `[vk_dispatch]` sums a class's `@workgroup`
   members and its generated `ensure_*` declines by name (`vkd_wg_fits`) before the pipeline
   build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` — and the
