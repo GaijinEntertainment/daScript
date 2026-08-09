@@ -6305,6 +6305,10 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
+    void InferTypes::preVisitStringBuilderElement(ExprStringBuilder *sb, Expression *expr, bool last) {
+        Visitor::preVisitStringBuilderElement(sb, expr, last);
+        markNoDiscard(expr);    // interpolation formats the value into the string — a [nodiscard] result here is consumed
+    }
     ExpressionPtr InferTypes::visitStringBuilderElement(ExprStringBuilder *, Expression *expr, bool) {
         auto res = Expression::autoDereference(expr);
         if (expr->type) {
