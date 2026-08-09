@@ -781,7 +781,13 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
 [unused_argument(t, path)]   // off-Apple the gated body is empty
 def private tensor_twin_row(t : T?; path, tag : string) {   // nolint:LINT012,LINT019 — tag is read by the das_metal arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        if (!family_on(t, "llama") || !arm_on(t, "tensor") || !model_available(t, path)) {
+        if (!family_on(t, "llama") || !arm_on(t, "tensor")) {
+            return
+        }
+        // the carriers are provisioned (fetch_models.das), so absence is a RED, never a skip -
+        // a box that skips here ships every tensor twin unexercised
+        if (!stat(path).is_valid) {
+            t |> success(false, "tensor twin carrier missing: {path} - run fetch_models.das --fetch")
             return
         }
         let CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_q8,kq_mulmm_k4," +
