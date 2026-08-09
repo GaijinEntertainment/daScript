@@ -1326,6 +1326,34 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
     return pp
 }
 
+// The confirm-model ladder: the env wins (the A/B rail); else the box's own models dir serves
+// a q8 carrier — the historical confirm carrier first, else the largest present q8 (bigger
+// matmuls = cleaner e2e margins). This is the LOCAL backup plan for unattended mints — a
+// served per-architecture sidecar is the regular user's path — and it exists because every
+// env-less mint used to pin the fallback silently (~4-6% pp on q8 models, twice in one day).
+def private resolve_confirm_model() : string {
+    if (!empty(g_env_harness.confirm_model)) {
+        return g_env_harness.confirm_model
+    }
+    let md = models_dir_resolved()
+    let preferred = "{md}gemma-4-E4B-it-Q8_0.gguf"
+    if (stat(preferred).is_valid) {
+        return preferred
+    }
+    var best = ""
+    var bestBytes = 0ul
+    dir(md) $(name : string) {
+        return if ((!ends_with(name, "-Q8_0.gguf") && !ends_with(name, "-q8_0.gguf"))
+            || find(name, "mmproj") >= 0 || starts_with(name, "ggml-vocab"))
+        let sz = stat("{md}{name}").size
+        if (sz > bestBytes) {
+            bestBytes = sz
+            best = "{md}{name}"
+        }
+    }
+    return best
+}
+
 // the confirmed q8q8 crown to QUEUE for the end-of-run write ("" = hard failure — write
 // nothing, fail the mint). All writes are deferred behind the end-of-run noise gate.
 def private confirm_winner(winner : string) : string {
@@ -1338,14 +1366,15 @@ def private confirm_winner(winner : string) : string {
         print("confirm: winner '{winner}' IS the per-ISA fallback - no e2e confirm needed\n")
         return winner
     }
-    let model = g_env_harness.confirm_model
+    let model = resolve_confirm_model()
     if (empty(model)) {
         print("confirm: winner '{winner}' DIVERGES from the per-ISA fallback '{fb}' - a 1-core crown must confirm end-to-end before it ships (the SPR amx lesson)\n")
-        print("confirm: pinning the fallback '{fb}' - re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
+        print("confirm: NO q8 model on this box to confirm with - pinning the fallback '{fb}'. Provision one (fetch_models.das --fetch) or set DASLLAMA_CONFIRM_MODEL=<q8 gguf>\n")
         // pin the fallback so the sidecar is COMPLETE — leaving the entry missing makes the
         // startup completeness gate re-tune on every run (the runtime rides the fallback either way)
         return fb
     }
+    print("confirm: model {model}{empty(g_env_harness.confirm_model) ? " (auto-resolved)" : " (env)"}\n")
     let tmpm = "{get_das_root()}/_tune_confirm_manifest.json"
     // the stamps read the manifest's "kernels" SECTION (read_manifest) — a flat root object
     // parses found-but-empty. And provenance.box is MANDATORY: the box-identity staleness rail
