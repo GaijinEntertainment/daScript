@@ -1,6 +1,7 @@
-// The "new" button: one click discards the autosaved session and reloads a
-// pristine sample — the last one selected, so a deep-linked visitor gets THEIR
-// sample back, not the default.
+// The "new" button: one click discards the autosaved session and leaves a
+// single empty main.das — a blank scratch buffer, whatever the page held
+// before (edited session, deep-linked sample). Samples stay one dropdown
+// pick away.
 
 const { test, expect } = require('./fixtures.js');
 
@@ -9,7 +10,7 @@ async function waitReady(page) {
     await page.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 15_000 });
 }
 
-test('new resets an edited session to the pristine sample', async ({ playground }) => {
+test('new resets an edited session to an empty buffer', async ({ playground }) => {
     await waitReady(playground);
 
     // Dirty the buffer and add a second file; wait for autosave to persist it.
@@ -29,21 +30,18 @@ test('new resets an edited session to the pristine sample', async ({ playground 
 
     await playground.locator('#new').click();
 
-    // Back to a single tab holding real sample content, marker gone.
+    // Back to a single empty tab, marker gone, autosave dropped.
     await expect.poll(
         () => playground.evaluate(() => Object.keys(window.pgState.files).length),
         { timeout: 10_000 }
     ).toBe(1);
     await expect.poll(
-        () => playground.evaluate(() => {
-            const text = window.pgState.files['main.das'].getValue();
-            return text.length > 0 && !text.includes('dirty marker');
-        }),
+        () => playground.evaluate(() => window.pgState.files['main.das'].getValue()),
         { timeout: 10_000 }
-    ).toBe(true);
+    ).toBe('');
 });
 
-test('new after a deep-link reloads that sample fresh', async ({ playground }) => {
+test('new after a deep-link clears that sample too', async ({ playground }) => {
     await playground.goto('/playground/?example=sha256');
     await waitReady(playground);
     await expect.poll(
@@ -51,13 +49,10 @@ test('new after a deep-link reloads that sample fresh', async ({ playground }) =
         { timeout: 10_000 }
     ).toMatch(/sha[- ]?256/i);
 
-    await playground.evaluate(() => {
-        window.code.getDoc().setValue('// hacked up\n');
-    });
     await playground.locator('#new').click();
 
     await expect.poll(
         () => playground.evaluate(() => window.pgState.files['main.das'].getValue()),
         { timeout: 10_000 }
-    ).toMatch(/sha[- ]?256/i);
+    ).toBe('');
 });

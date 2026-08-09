@@ -58,20 +58,14 @@ pageInit = function () {
          radio.addEventListener('change', updateButtonStates);
      }
 
-     // "new" — one click back to a pristine sample. Drops the autosaved session
-     // (playground-tabs.js owns the storage), then reloads the last selected
-     // sample — or the default one when nothing was ever picked (a restored
-     // autosave buffer never goes through selectSample).
+     // "new" — one click to a blank scratch buffer. Drops the autosaved
+     // session and collapses the tab strip to a single empty main.das
+     // (playground-tabs.js owns both); samples stay one dropdown pick away.
      const newBtn = document.getElementById('new');
      if (newBtn) newBtn.addEventListener('click', function () {
          if (typeof window.pgResetSession === 'function') window.pgResetSession();
          clearOutput();
-         const last = window.__pgLastSample;
-         if (last && samplesData && samplesData[last.type] && samplesData[last.type][last.id]) {
-             selectSample(last.type, last.id);
-         } else {
-             selectSample("examples", 0);
-         }
+         currentAssetsUrl = null;
      });
 
      // The curated list comes from the sample service (store-fed, phase 2 of
@@ -413,10 +407,6 @@ selectSample = function(type, id) {
     let vv = id !== undefined ? id : parseInt(sel.value);
     // samplesData arrives over the network - a "new" click can land before it does
     if (!Number.isNaN(vv) && samplesData && samplesData[type] && samplesData[type][vv]) {
-        // Remembered so the "new" button can reload THIS sample fresh — a visitor
-        // who deep-linked into f2s and hacked on it expects new = fresh f2s, not
-        // the default sample.
-        window.__pgLastSample = { type: type, id: vv };
         // Multi-file samples ship as files[] — load all in parallel, then hand
         // the bundle to the loader (single editor today, tab strip in phase 3).
         // Hide the canvas on every sample switch; a graphics program re-reveals
