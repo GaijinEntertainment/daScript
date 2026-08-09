@@ -26,7 +26,9 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from urllib.error import URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -680,6 +682,97 @@ def start_control_plugin(script_dir: Path, logger: logging.Logger, args: argpars
     return handle
 
 
+def tray_default_url(health_url: str) -> str | None:
+    """The page a bare left-click opens when --tray-url is not set: the health URL's origin.
+    For dasllama-server that is the control page (http://127.0.0.1:8080/)."""
+    parts = urlsplit(health_url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}/"
+
+
+def load_tray_image(script_dir: Path, cwd: Path, name: str):
+    """Brand mark if the bundle ships one (tray.ico / tray.png beside watchdog.py or in the
+    bundle dir), else a generated placeholder so --tray works before the mark exists."""
+    from PIL import Image, ImageDraw
+    for candidate in ("tray.ico", "tray.png"):
+        for base in (script_dir, cwd):
+            path = base / candidate
+            if path.is_file():
+                return Image.open(path)
+    size = 64
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((4, 4, size - 4, size - 4), radius=14, fill=(232, 89, 12, 255))
+    initial = (name[:1] or "?").upper()
+    # The PIL default bitmap font is ~10px no matter the canvas — invisible at tray
+    # scale. Use a system truetype at real size; fall back to a bare glyphless square.
+    from PIL import ImageFont
+    font = None
+    for candidate in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
+        try:
+            font = ImageFont.truetype(candidate, 42)
+            break
+        except OSError:
+            continue
+    if font is not None:
+        draw.text((size / 2, size / 2 - 2), initial, fill=(255, 255, 255, 255),
+                  anchor="mm", font=font)
+    return image
+
+
+def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
+    """Optional system-tray icon: left-click / "Open" launches the service page, "Shutdown"
+    routes into the same stopping Event the signal handlers set. Never fatal — a desktop
+    nicety must not take supervision down. macOS needs the tray on the main thread (AppKit
+    runloop), which conflicts with the supervision loop owning it; not wired yet."""
+    if not args.tray:
+        return None
+    if sys.platform == "darwin":
+        emit(logger, "tray_unavailable", reason="macOS tray needs the main-thread runloop; not wired yet")
+        return None
+    try:
+        import pystray
+    except ImportError as exc:
+        emit(logger, "tray_unavailable", reason=str(exc), hint="pip install pystray pillow")
+        return None
+    url = args.tray_url or tray_default_url(args.health_url)
+
+    def on_open(_icon, _item) -> None:
+        webbrowser.open(url)
+
+    def on_shutdown(_icon, _item) -> None:
+        emit(logger, "tray_shutdown_requested")
+        stopping.set()
+
+    items = []
+    if url:
+        items.append(pystray.MenuItem(f"Open {args.name}", on_open, default=True))
+    items.append(pystray.MenuItem("Shutdown", on_shutdown))
+    try:
+        icon = pystray.Icon(
+            args.name,
+            load_tray_image(SCRIPT_DIR, args.cwd, args.name),
+            title=f"{args.name} watchdog",
+            menu=pystray.Menu(*items),
+        )
+        icon.run_detached()
+    except Exception as exc:  # noqa: BLE001 - no tray host, headless X, broken backend
+        emit(logger, "tray_unavailable", reason=repr(exc))
+        return None
+    emit(logger, "tray_started", url=url or "")
+    return icon
+
+
+def stop_tray(icon, logger: logging.Logger) -> None:
+    if icon is None:
+        return
+    try:
+        icon.stop()
+    except Exception as exc:  # noqa: BLE001 - teardown must not mask the real exit path
+        emit(logger, "tray_stop_failed", reason=repr(exc))
+
+
 def load_config(script_dir: Path) -> dict[str, object]:
     """Read watchdog.json beside this script. Missing is fine; malformed is fatal."""
     path = script_dir / CONFIG_NAME
@@ -800,6 +893,16 @@ def parse_cli() -> argparse.Namespace:
         help="JIT artifact cache copied into each crash bundle",
     )
     parser.add_argument("--no-crash-bundle", action="store_true")
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="Show a system-tray icon (open the service page / shutdown) for desktop runs",
+    )
+    parser.add_argument(
+        "--tray-url",
+        default=None,
+        help="Page the tray opens on click; defaults to the --health-url origin",
+    )
     parser.add_argument("server_args", nargs=argparse.REMAINDER)
     apply_config(parser, load_config(SCRIPT_DIR), SCRIPT_DIR / CONFIG_NAME)
     args = parser.parse_args()
@@ -923,6 +1026,7 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, stop_handler)
     signal.signal(signal.SIGTERM, stop_handler)
+    tray_icon = start_tray(args, logger, stopping)
     failures = 0
     recovery_pending = False
     stop_file = args.stop_file
@@ -1117,6 +1221,7 @@ def main() -> int:
                 stop_file.unlink()
             except OSError:
                 pass
+        stop_tray(tray_icon, logger)
         emit(logger, "watchdog_stopped")
 
     return 0
