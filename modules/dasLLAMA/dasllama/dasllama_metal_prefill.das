@@ -497,6 +497,7 @@ class MetalSwigluOaiPf : MetalSwigluOaiT {
 // Atomics-free CSR: count (tg/expert) -> serial prefix (1 tg) -> bucket fill (tg/expert,
 // thread-0 serial walk in row order = the CPU moe_bkt order); buckets PAD to 32-row tiles.
 
+[metal_dispatch(name = "pf_enc_moe_count", pso = "g_pf_pso_moe_count", tg = 32, grid = "ne", params = "ne : int64")]
 class MetalMoeCount {
     @ssbo @binding = 0 @role = "read" seli : array<uint>   // [npos x 2k] selection rows (idx section)
     @ssbo @binding = 1 @role = "write" cnt : array<uint>    // [ne] out
@@ -526,6 +527,7 @@ class MetalMoeCount {
     }
 }
 
+[metal_dispatch(name = "pf_enc_moe_bucket", pso = "g_pf_pso_moe_bucket", tg = 32, grid = "nex", params = "nex : int64")]
 class MetalMoeBucket {
     @ssbo @binding = 0 @role = "read" seli : array<uint>
     @ssbo @binding = 1 @role = "write" basep : array<uint>  // [ne] exclusive prefix over the PADDED counts
@@ -2133,31 +2135,8 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
     return if (g_pf_skip == "moe_only_router")   // attribution: router GEMV alone, no select/CSR
     enc_moe_select(enc, blg, bsel, bsel, bne, bnk, bgm, npos)
     return if (g_pf_skip == "moe_only_sel")   // attribution: router + select, no CSR
-    kn_pipeline(enc, g_pf_pso_moe_count)
-    kn_buffer(enc, bsel, 0ul, 0)
-    kn_buffer(enc, bcnt, 0ul, 1)
-    kn_buffer(enc, btot, 0ul, 2)
-    kn_buffer(enc, bnk, 0ul, 3)
-    hz_read(bsel)
-    hz_write(bcnt)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(c.n_expert), 1u, 1u), uint3(32u, 1u, 1u))
-    kn_pipeline(enc, g_pf_pso_moe_bucket)
-    kn_buffer(enc, bsel, 0ul, 0)
-    kn_buffer(enc, bbase, 0ul, 1)
-    kn_buffer(enc, bbkt, 0ul, 2)
-    kn_buffer(enc, binv, 0ul, 3)
-    kn_buffer(enc, btot, 0ul, 4)
-    kn_buffer(enc, bnk, 0ul, 5)
-    kn_buffer(enc, bcnt, 0ul, 6)
-    kn_buffer(enc, bne, 0ul, 7)
-    hz_read(bsel)
-    hz_read(bcnt)
-    hz_write(bbase)
-    hz_write(bbkt)
-    hz_write(binv)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(c.n_expert), 1u, 1u), uint3(32u, 1u, 1u))
+    pf_enc_moe_count(enc, bsel, bcnt, btot, bnk, c.n_expert)
+    pf_enc_moe_bucket(enc, bsel, bbase, bbkt, binv, btot, bnk, bcnt, bne, c.n_expert)
 }
 
 // the MetalMoeMulMmBase family tail: xf@3 y@4 cnt@7 basep@8 bkt@9 (kargs@5 binds at the site).

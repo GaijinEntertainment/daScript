@@ -3682,30 +3682,17 @@ def enc_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, b
 def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;
                 bs : MetalBuffer?; soff, doff : uint64; bx, by, bn, bd : MetalBuffer?;
                 rows, n : int64; yoff : uint64 = 0ul; xoff : uint64 = 0ul) {
-    var groups = (rows + 3l) / 4l
     if (fmt == KqFmt.k6) {
-        kn_pipeline(enc, g_pso_kq_k6)
-        kn_buffer(enc, bs, doff, 0)   // the split plane's f16 d tail
+        enc_kq_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } elif (fmt == KqFmt.k5 && (n < 3072l || rows <= 1024l)) {
         // the select-form nr0=1 twin: wins every d at n < 3072 (gemv lab, 4B round) and the
         // small-d kv shape (b2r under-occupied); 2 rows/tg instead of b2r's 4
-        kn_pipeline(enc, g_pso_kq_k5c)
-        kn_buffer(enc, bs, soff, 0)
-        groups = (rows + 1l) / 2l
+        enc_kq_k5c_c(enc, bs, soff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
+    } elif (fmt == KqFmt.k4) {
+        enc_kq_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     } else {
-        kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_k4 : g_pso_kq_k5)
-        kn_buffer(enc, bs, soff, 0)
+        enc_kq_k5_c(enc, bs, soff, bs, soff, bq, qoff, bx, xoff, by, yoff, bn, bd, rows, n)
     }
-    kn_buffer(enc, bs, soff, 1)
-    kn_buffer(enc, bq, qoff, 2)
-    kn_buffer(enc, bx, xoff, 3)
-    kn_buffer(enc, by, yoff, 4)
-    kn_buffer(enc, bn, 0ul, 5)
-    kn_buffer(enc, bd, 0ul, 6)
-    hz_read(bx, xoff, uint64(n * 4l))
-    hz_write(by, yoff, uint64(rows * 4l))
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(groups), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
 // K-quant small-batch mv (B = 2..8): R=4 column groups via grid.y, R=2 via the B2 PSO; B = 5..8
@@ -3730,35 +3717,32 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
                var ka : KqMvArgs; rows, nlive : int64) {
     let two = nlive == 2l
     let b8 = nlive >= 5l && kq_b8_on()
+    let gcols = (nlive + 3l) / 4l
     if (fmt == KqFmt.k6) {
-        kn_pipeline(enc, b8 ? g_pso_kq_mvb8_k6 : (two ? g_pso_kq_mvb2_k6 : g_pso_kq_mvb4_k6))
         if (b8) {
-            kn_tgmem(enc, metal_kq_mvb8_k6_msl_tgmem, 0)
+            enc_kq_mvb8_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } elif (two) {
+            enc_kq_mvb2_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } else {
+            enc_kq_mvb4_k6_c(enc, bs, doff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
         }
-        kn_buffer(enc, bs, doff, 0)
     } elif (fmt == KqFmt.k5) {
-        kn_pipeline(enc, b8 ? g_pso_kq_mvb8_k5 : (two ? g_pso_kq_mvb2_k5 : g_pso_kq_mvb4_k5))
         if (b8) {
-            kn_tgmem(enc, MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem, 0)
+            enc_kq_mvb8_k5_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } elif (two) {
+            enc_kq_mvb2_k5_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } else {
+            enc_kq_mvb4_k5_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
         }
-        kn_buffer(enc, bs, soff, 0)
     } else {
-        kn_pipeline(enc, b8 ? g_pso_kq_mvb8_k4 : (two ? g_pso_kq_mvb2_k4 : g_pso_kq_mvb4_k4))
         if (b8) {
-            kn_tgmem(enc, MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem, 0)
+            enc_kq_mvb8_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } elif (two) {
+            enc_kq_mvb2_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
+        } else {
+            enc_kq_mvb4_k4_c(enc, bs, soff, bs, soff, bq, qoff, bx, by, yoff, ka, rows, gcols)
         }
-        kn_buffer(enc, bs, soff, 0)
     }
-    kn_buffer(enc, bs, soff, 1)
-    kn_buffer(enc, bq, qoff, 2)
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, yoff, 4)
-    kn_kargs(enc, ka, 5)
-    let gcols = uint((two || b8) ? 1l : (nlive + 3l) / 4l)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((rows + 7l) / 8l), gcols, 1u), uint3(64u, 1u, 1u))
 }
 
 // the batched kq GEMM (B >= 9): the prefill-owned kq mul_mm twins over the padded x panel —
@@ -4990,7 +4974,7 @@ class MetalKqMulMmK6 : MetalKqMulMmK45T {
 
 // Router GEMV over the uploaded fp32 router slab: y[ne] = W[ne x dim] . x per stream. ne <= 256
 // rows. Each sg serves NR positions per weight load (slab SLC traffic /NR); BATCHED stamps
-// clamp tails via ns, singles fold the clamp away and bind ns dead (g_zero).
+// clamp tails via ns; singles fold the clamp away and the gate erases ns outright.
 [ |> template_struct_instance]
 class template MetalMoeRouterT {
     @ssbo @binding = 0 @role = "weight" w : array<float4>    // [ne x dim] router weights, float4 view
@@ -5001,7 +4985,7 @@ class template MetalMoeRouterT {
     @uniform @binding = 5 xs : uint         // per-stream x stride, elements
     @ssbo @binding = 6 @role = "weight" rb : array<float>    // [ne] router bias row (hasb models — gpt-oss)
     @uniform @binding = 7 hasb : uint
-    @uniform @binding = 8 ns : uint         // stream count (npos) — read by BATCHED stamps only
+    @uniform @binding = 8 @template_gate = BATCHED ns : uint    // stream count (npos) — the BATCHED tail clamp; gated out of singles
     @template_constant NR : int = 1
     @template_constant NRU : uint = 1u      // NR's uint spelling (st0 math) — override BOTH together
     @template_constant BATCHED : bool = false
@@ -5020,17 +5004,32 @@ class template MetalMoeRouterT {
         var k = lane
         while (k < nb4) {
             let wv = w[row * nb4 + k]
+            // arms duplicated (the TILED precedent): the gated ns is only referable from a
+            // BATCHED static_if arm — infer sees both TERNARY arms, and the single stamp no
+            // longer has the field. Both stamps keep the pre-gate MSL byte-for-byte.
             for [unroll_full] (i in range(NR)) {
-                let st = BATCHED ? min(st0 + uint(i), ns - 1u) : st0
-                let xv = x[st * xs4 + k]
-                acc[i] += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
+                static_if (BATCHED) {
+                    let st = min(st0 + uint(i), ns - 1u)
+                    let xv = x[st * xs4 + k]
+                    acc[i] += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
+                } else {
+                    let st = st0
+                    let xv = x[st * xs4 + k]
+                    acc[i] += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
+                }
             }
             k += gl_SubgroupSize
         }
         for [unroll_full] (i in range(NR)) {
             let s = simd_sum(acc[i])
-            if (BATCHED ? lane == 0u && st0 + uint(i) < ns : lane == 0u) {
-                y[(st0 + uint(i)) * ddim + row] = hasb != 0u ? s + rb[row] : s
+            static_if (BATCHED) {
+                if (lane == 0u && st0 + uint(i) < ns) {
+                    y[(st0 + uint(i)) * ddim + row] = hasb != 0u ? s + rb[row] : s
+                }
+            } else {
+                if (lane == 0u) {
+                    y[(st0 + uint(i)) * ddim + row] = hasb != 0u ? s + rb[row] : s
+                }
             }
         }
     }
@@ -6037,12 +6036,13 @@ class MetalKqGemvK5 {
 // Q5_K, select-form nr0=1 twin (the gemv-lab b1c winner): one row per simdgroup, lcpp's q5 lane
 // map, qh via mask-selects. Wins at n < 3072 at EVERY d (-9..-11% vs b2r) and the small-d kv
 // shape (b2r under-occupied); b2r keeps n >= 3072. enc_kq_gemv picks per site.
+[metal_dispatch(name = "enc_kq_k5c_c", pso = "g_pso_kq_k5c", tg = 64, grid = "rows/2", params = "rows : int64, n : int64")]
 class MetalKqGemvK5C {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
@@ -6185,11 +6185,11 @@ class MetalKqGemvK6 {
 // costs +2% (k4) / +0.5% (k6) at cls (bench_metal_gemv_kernels KqMv round); B4 stamps byte-identical.
 [ |> template_struct_instance]
 class template MetalKqMvK4T {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
     @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @template_constant NR : int = 2
     @template_constant NRU : uint = 2u  // NR's uint spelling (colbase math) — override BOTH together
@@ -6282,12 +6282,14 @@ class template MetalKqMvK4T {
     }
 }
 
+[metal_dispatch(name = "enc_kq_mvb2_k4_c", pso = "g_pso_kq_mvb2_k4", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB2K4 : MetalKqMvK4T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
+[metal_dispatch(name = "enc_kq_mvb4_k4_c", pso = "g_pso_kq_mvb4_k4", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
 class MetalKqMvB4K4 : MetalKqMvK4T {
     override NR = 4
     override NRU = 4u
@@ -6296,11 +6298,11 @@ class MetalKqMvB4K4 : MetalKqMvK4T {
 
 [ |> template_struct_instance]
 class template MetalKqMvK6T {
-    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @template_constant NR : int = 2
     @template_constant NRU : uint = 2u  // NR's uint spelling (colbase math) — override BOTH together
@@ -6393,12 +6395,14 @@ class template MetalKqMvK6T {
     }
 }
 
+[metal_dispatch(name = "enc_kq_mvb2_k6_c", pso = "g_pso_kq_mvb2_k6", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB2K6 : MetalKqMvK6T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
+[metal_dispatch(name = "enc_kq_mvb4_k6_c", pso = "g_pso_kq_mvb4_k6", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
 class MetalKqMvB4K6 : MetalKqMvK6T {
     override NR = 4
     override NRU = 4u
@@ -6413,11 +6417,11 @@ class MetalKqMvB4K6 : MetalKqMvK6T {
 // bench_metal_gemv_kernels KqMv round), so one spelling serves both widths; B4 stamps byte-identical.
 [ |> template_struct_instance]
 class template MetalKqMvK5T {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @template_constant NR : int = 2
     @template_constant NRU : uint = 2u  // NR's uint spelling (colbase math) — override BOTH together
@@ -6492,11 +6496,13 @@ class template MetalKqMvK5T {
     }
 }
 
+[metal_dispatch(name = "enc_kq_mvb2_k5_c", pso = "g_pso_kq_mvb2_k5", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB2K5 : MetalKqMvK5T {
     override NR = 2
     override NRU = 2u
 }
 
+[metal_dispatch(name = "enc_kq_mvb4_k5_c", pso = "g_pso_kq_mvb4_k5", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
 class MetalKqMvB4K5 : MetalKqMvK5T {
     override NR = 4
     override NRU = 4u
@@ -6507,11 +6513,11 @@ class MetalKqMvB4K5 : MetalKqMvK5T {
 // carries one dead uninitialized hq decl (no dataflow — below the measured-free bar). K6 stays.
 [ |> template_struct_instance]
 class template MetalKqMvB8K45T {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
     @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints
@@ -6609,22 +6615,25 @@ class template MetalKqMvB8K45T {
     }
 }
 
+[metal_dispatch(name = "enc_kq_mvb8_k4_c", pso = "g_pso_kq_mvb8_k4", tgmem = "MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K4 : MetalKqMvB8K45T {
     override BLK = 32u
     override QH = false
 }
 
+[metal_dispatch(name = "enc_kq_mvb8_k5_c", pso = "g_pso_kq_mvb8_k5", tgmem = "MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K5 : MetalKqMvB8K45T {
     override BLK = 40u
     override QH = true
 }
 
+[metal_dispatch(name = "enc_kq_mvb8_k6_c", pso = "g_pso_kq_mvb8_k6", tgmem = "metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K6 {
-    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]
 

@@ -1584,7 +1584,7 @@ def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
         metal_set_buffer(enc, bxs, 0ul, 5)
         metal_set_buffer(enc, bhb0, 0ul, 6)
         metal_set_buffer(enc, bhb0, 0ul, 7)
-        metal_set_buffer(enc, bhb0, 0ul, 8)   // ns — dead in the NR=1 stamp
+        // slot 8 (ns) is a HOLE here — @template_gate = BATCHED erases it from the single stamp
         metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "moe router dispatch n={n} ne={ne}: {err}")
