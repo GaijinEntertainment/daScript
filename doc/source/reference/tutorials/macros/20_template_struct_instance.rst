@@ -183,7 +183,10 @@ in stamps where that constant is true:
 erases it: the class is smaller by one int, and code that names ``w`` on a
 ``PlainSum`` is a compile error. The template body may still name the erased
 field inside the dead arm of a ``static_if`` — the arm folds away before the
-name would need to resolve. The string form inverts the gate:
+name would need to resolve. Only ``static_if`` arms get this: a
+``COND ? a : b`` ternary is inferred on *both* arms, so a dead ternary arm
+naming the erased field is a compile error — restructure it as a
+``static_if`` on the same axis. The string form inverts the gate:
 ``@template_gate = "!WEIGHTED"`` keeps a field only where the axis is off.
 
 

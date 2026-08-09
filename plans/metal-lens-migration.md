@@ -174,8 +174,40 @@ Each phase gets decided in detail when reached.
   band). Still open (pre-existing): das2rst full runs non-deterministically skip
   typemacro_boost's detail extraction (a minimal require-pair extracts fine; generated/ is
   untracked so CI self-heals).
-- **P4** — pf_enc_moe_route composite + the census ratchet end-state (every dispatch through
-  the kn_ rail, `_metal_manual_dispatch` opt-outs burned down).
+- **P4** — pf_enc_moe_route composite + the census ratchet end-state. ✅ DONE 2026-08-08
+  (2ca0c13b6, −12 net; no lens changes). (a) MetalMoeCount/MetalMoeBucket lensed in place
+  (`pf_enc_moe_count` grid "ne", `pf_enc_moe_bucket` grid "nex" — the class has a FIELD named
+  ne, so the grid param takes a distinct name); pf_enc_moe_route is now pure builder
+  composition — prefill production carries ZERO raw kn_ bodies (its 14 other kn_pipeline
+  sites are the A/B race harnesses, bench-only by design). (b) Decode's enc_kq_gemv rides the
+  P2 base builders: MetalKqGemvK5C got the sibling @off/@span set + `enc_kq_k5c_c`
+  (grid "rows/2"); the wrapper is the 4-arm pick, select condition unchanged. (c) Decode's
+  enc_kq_mvb rides 9 newly-lensed mv stamps (B2/B4 × k4/k5/k6 + the B8 trio; tgmem on B8 —
+  the lens folds the tgmem global to its constant; KqMvArgs as kargs@5; B4 stamps take the
+  2-D grid "rows/8, gcols"); the wrapper keeps the two/b8/fmt select. Stamped MSL names were
+  already the PSO-compile names — zero rename/census churn. (d) Item 14 CLOSED:
+  MetalMoeRouterT's ns is `@template_gate = BATCHED` — the single stamp drops the dead
+  uniform, 11 decode sites lose their g_zero, the kernel gate's slot-8 bind is the documented
+  HOLE. Rule sharpened en route (probe): the emitted MSL's dead-ternary fold runs POST-infer,
+  so a gated field is referable only from `static_if` arms on its axis — a dead TERNARY arm
+  naming it is error 30838; the router body uses the in-file TILED branch-duplication
+  precedent, and both stamps keep the pre-gate MSL byte-for-byte (single: exactly one dropped
+  declaration line; batched: byte-identical). Docs sharpened in-batch (typemacro_boost
+  docstring + tutorial 20 .das/.rst). 12 builders dump-proven statement-identical to the
+  deleted hand binds (k5c exact hz spans, mvb whole-buffer — hand parity, zero deltas).
+  **Census ratchet end-state CONFIRMED:** no direct metal_dispatch_threadgroups outside the
+  two PERMANENT opt-outs (dasllama_metal_common = the rail itself; dasllama_metal_gemm = the
+  sync donor below the graph layer, documented require-cycle); no migration opt-outs remain.
+  Gates: kernels 7/7 (pre- and post-ns); typemacro 37/37; decode arm1-basic + arm10-kq +
+  batch (batchB7-partd/batchB8-kq); prefill base; fam-qwen3moe PARITY_FULL token-identical
+  (' sea', maxd 0.6937207 == P2); fam-gptoss PARITY_FULL maxd bit-identical
+  (0.25608706/0.23721886 == P0-P3) — both fam legs compiled with the full batch in tree.
+  No wall-clock spot-check: no kernel text changed anywhere (the single router loses one
+  parameter declaration), encoders are CPU-side.
+  **Arc boundary:** kernels.das still carries ~33 decode-side hand kn_ encoder bodies
+  (attnb/attnpb/attnd/attncombd, rpstb family, addrms, gemm_b family, moe gemv family, the
+  mm-core picks) — OUTSIDE this arc's census (the arc scoped prefill + the named decode
+  fodder). A decode-side lens arc is the natural successor if wanted.
 
 Perf guard throughout: encoders are CPU-side — no kernel text changes except P3 (byte-diff
 gates there). Decode/prefill wall-clock spot-check per phase on the M1 (3 launches,

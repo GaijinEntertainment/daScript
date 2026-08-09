@@ -71,6 +71,8 @@ class MixLoud : MixT {
 // field — not zeroed, not hidden: erased, so it costs nothing and cannot be
 // misused. WeightedSum has it like any ordinary field. The body's static_if
 // picks the matching arm, and the dead arm may still name the erased field.
+// static_if arms ONLY: a `COND ? a : b` ternary is inferred on BOTH arms, so
+// a dead ternary arm naming the erased field is a compile error.
 
 class PlainSum : SumT {
 }
