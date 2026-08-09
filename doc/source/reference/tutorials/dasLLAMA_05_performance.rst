@@ -43,7 +43,10 @@ have tiny matmuls.
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute
 lanes on one physical core's SMT pair, which roughly halves batched prefill
-while barely moving decode.
+while barely moving decode. On macOS there is no pin API — mode ``2`` instead
+gives the workers QoS classification, and dasLLAMA turns it on by default
+there, because unclassified threads lose several percent of decode when the
+box is busy with anything else. Set ``0`` to switch it off.
 
 Both are daslang knobs rather than dasLLAMA ones — :ref:`the daslang environment
 variables <environment_variables>` page lists every one it reads. dasLLAMA has

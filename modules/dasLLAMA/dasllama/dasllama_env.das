@@ -609,8 +609,8 @@ struct public CoreEnv {
     @clarg_doc = "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md."
     jobque_threads : Option<int>
 
-    @clarg_default_doc = "0"
-    @clarg_doc = "Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes."
+    @clarg_default_doc = "2 on darwin (engine [init]), else 0"
+    @clarg_doc = "Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask — on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes."
     jobque_affinity : Option<int>
 
     @clarg_default_doc = "profile-driven"

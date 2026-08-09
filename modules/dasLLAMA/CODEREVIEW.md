@@ -51,8 +51,10 @@ model gate. A test that silently vanishes on one platform is a defect.
 under `DASLLAMA_PARITY_FULL=1` — a final pre-PR gate, never the iteration loop. Check what a
 test loads before launching it.
 
-**Every moved or extracted bit ships a test for the bit itself** — feed the function, check the
-bytes. "The model still runs" is not a test for a move.
+**Every moved or extracted function or data transform ships a test for the bit itself** — feed
+the function, check the bytes. "The model still runs" is not a test for a move. A
+platform-fixed predicate has no bytes to feed — test its observable (the argv it gates, the
+mode it selects) on the platform the test runs on.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.
@@ -189,7 +191,8 @@ provisioned box — BRINGUP.md §2 is the runbook.
 ### CPU kernel tiers
 
 - `dasllama_math.das` — the numeric abstraction: typedefs, active backend pointers, public
-  wrappers. No kernel bodies.
+  wrappers, dispatch shaping (jobque caps and OS-conditional scheduling defaults). No kernel
+  bodies.
 - `dasllama_math_default.das` — the portable kernel backend.
 - `dasllama_math_aarch64_neon.das` — the arm64 kernel backend.
 - `dasllama_math_accelerate.das` — the Accelerate/BNNS float tier.

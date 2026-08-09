@@ -73,9 +73,17 @@ def profile_threads() : int {
     return phys > 0 ? min(16, phys) : 16
 }
 
-//! True when profiling lanes pin to distinct physical cores (all Windows/x64 boxes — OS placement
-//! is a lottery: SMT pairs measured pp512 bimodal on the 3990X). macOS has no thread-affinity API.
+//! True when profiling lanes get explicit scheduling treatment. Windows/x64: pin to distinct
+//! physical cores (OS placement is a lottery — SMT pairs measured pp512 bimodal on the 3990X).
+//! darwin: jobque mode 2 maps to QoS classification — unclassified workers demote under ambient
+//! load (big-model decode measured -5% tg). The llama-bench CPU mask stays Windows-only: lcpp_mask_on.
 def affinity_on() : bool {
+    return is_windows() || get_platform_name() == "darwin"
+}
+
+//! True when llama-bench gets explicit CPU-mask arguments — Windows only; macOS llama-bench has
+//! no thread-affinity support, and the das-side darwin treatment (QoS) has no lcpp mirror.
+def lcpp_mask_on() : bool {
     return is_windows()
 }
 
@@ -84,7 +92,7 @@ def affinity_on() : bool {
 //! (16 -> 0x55555555) — plus --cpu-strict so the pins hold. The das-side mirror is jobque affinity.
 def lcpp_affinity_argv(threads : int) : array<string> {
     var args : array<string>
-    if (affinity_on()) {
+    if (lcpp_mask_on()) {
         var mask = 0ul
         for (i in range(min(threads, 32))) {
             mask |= 1ul << uint64(2 * i)

@@ -90,7 +90,7 @@ def main() : int {   // nolint:STYLE038 — flat profiler driver: arg/env/tier h
     }
     let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
-        set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror
+        set_jobque_affinity(2)   // 2 = hard mask (QoS classification on darwin), the llama-bench --cpu-strict mirror
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (cfg.no_fused) {

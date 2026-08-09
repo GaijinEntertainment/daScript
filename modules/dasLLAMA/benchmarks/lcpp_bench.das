@@ -593,11 +593,12 @@ def main() : int {
     }
     let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
-        set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
+        set_jobque_affinity(2)   // 2 = hard mask (QoS classification on darwin), the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
     // the regime is set BY THE BENCH, printed so nobody has to guess: N lanes = N-1 pool
     // workers + the computing main thread (DAS_JOBQUE_THREADS counts LANES, not workers)
-    say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? "hard mask (bench-forced)" : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
+    let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
+    say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
         return asr_cell_main(cfg.model, cfg.json_path, reps, threads) ? 0 : 1
     }

@@ -107,8 +107,8 @@ struct ServerArgs {
     @clarg_doc = "Jobque compute dispatch: hybrid (default; LLM team, ASR inline) | team | inline"
     team_dispatch : string
 
-    @clarg_doc = "Worker CPU affinity: 0 = off (default), 1 = ideal-CPU hint, 2 = hard mask (DAS_JOBQUE_AFFINITY env overrides)"
-    affinity : int
+    @clarg_doc = "Worker CPU affinity: -1 = platform default (QoS on darwin, off elsewhere), 0 = off, 1 = ideal-CPU hint, 2 = hard mask (DAS_JOBQUE_AFFINITY env overrides)"
+    affinity : int = -1
 
     @clarg_doc = "Prefill chunk in tokens: decode stalls at most this many per tick (default 64)"
     chunk : int
@@ -714,10 +714,14 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // DAS_JOBQUE_THREADS used to be mandatory. Must land before the jobque exists, same as affinity
     // below; the env still overrides. threads<=0 means "all cores" -> cap 0 (off, the stock default).
     set_jobque_threads_cap(threads > 0 ? max(1, threads - 1) : 0)
-    // worker CPU affinity — must land before the jobque exists (applied at worker spawn)
-    set_jobque_affinity(g_cfg.affinity)
+    // worker CPU affinity — must land before the jobque exists (applied at worker spawn);
+    // -1 keeps the engine's platform default (darwin QoS via dasllama_math [init])
+    if (g_cfg.affinity >= 0) {
+        set_jobque_affinity(g_cfg.affinity)
+    }
     let lanes_desc = threads > 0 ? "{threads}" : "all"
-    print("dispatch: {lanes_desc} worker lanes, affinity {g_cfg.affinity}\n")
+    let aff_desc = g_cfg.affinity >= 0 ? "{g_cfg.affinity}" : "platform default"
+    print("dispatch: {lanes_desc} worker lanes, affinity {aff_desc}\n")
     // tee every to_log/print to logs/dasllama-server.log (timestamped ndjson) AND the console
     logger_init_tee("dasllama-server")
     to_log(LOG_INFO, "dasllama-server: logging to {get_das_root()}/logs/dasllama-server.log\n")
