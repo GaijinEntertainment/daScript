@@ -2894,7 +2894,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if (!recr && c.q_gated && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     // gated-attention epilogue: out ⊙ σ(gate) between the attention output and wo (the CPU order)
-                    enc_ew2(enc, g_pso_sigmul, bxb, 0ul, bdngate, 0ul, u_qtot, npos * qd)
+                    enc_sigmul(enc, bxb, 0ul, bdngate, 0ul, u_qtot, npos * qd)
                 }
                 if (!recr && g_pf_skip != "gemm") {
                     let fo = fmt_at(t.wo_fmt, l)
@@ -2917,7 +2917,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
                         pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
                     }
-                    enc_ew2(enc, g_pso_add, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
+                    enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
                     pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
@@ -2978,12 +2978,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if (moe && g_pf_skip != "ew" && g_pf_skip != "nongemm" && g_pf_skip != "moe" && !pf_skip_moe_act()) {
                     if (c.ffn_act == FfnAct.swiglu_oai) {
-                        pf_enc_swiglu_oai(enc, bmg, bmg2, u_moe_ptot, bmcnt, bmbase, u_moe_ne, u_moe_nfe, mpad * c.n_ff_exp)
+                        pf_enc_swiglu_oai(enc, bmg, 0ul, bmg2, 0ul, u_moe_ptot, bmcnt, bmbase, u_moe_ne, u_moe_nfe, mpad * c.n_ff_exp)
                     } else {
-                        enc_ew2(enc, g4moe ? g_pso_geglu : g_pso_swiglu, bmg, 0ul, bmg2, 0ul, u_moe_ptot, mpad * c.n_ff_exp)
+                        if (g4moe) {
+                            enc_geglu(enc, bmg, 0ul, bmg2, 0ul, u_moe_ptot, mpad * c.n_ff_exp)
+                        } else {
+                            enc_swiglu(enc, bmg, 0ul, bmg2, 0ul, u_moe_ptot, mpad * c.n_ff_exp)
+                        }
                     }
                     if (nsh > 0l) {
-                        enc_ew2(enc, g_pso_swiglu, bhb, 0ul, bhb2, 0ul, u_moe_shtot, npos * nsh)
+                        enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_moe_shtot, npos * nsh)
                     }
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
@@ -3042,7 +3046,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    enc_ew2(enc, c.ffn_act != FfnAct.silu ? g_pso_geglu : g_pso_swiglu, bhb, 0ul, bhb2, 0ul, u_total_h, npos * hidden)
+                    if (c.ffn_act != FfnAct.silu) {
+                        enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, npos * hidden)
+                    } else {
+                        enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, npos * hidden)
+                    }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {
                     let f2 = fmt_at(t.w2_fmt, l)
@@ -3057,7 +3065,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                     var bw_pf1 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim])), uint64(dim * 4l))
                     pf_enc_rms(enc, bxb, 0ul, bw_pf1, bxb, u_dim, u_eps, npos)
-                    enc_ew2(enc, g_pso_add, bxb, 0ul, bmg4rt, 0ul, u_total_dim, npos * dim)
+                    enc_add(enc, bxb, 0ul, bmg4rt, 0ul, u_total_dim, npos * dim)
                 }
                 if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.pre_post_norm) {
@@ -3069,14 +3077,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // E-series PLE between FFN residual and out_scale (the CPU order): plain x_b +=
                     // ffn_branch, then branch = post_norm(proj · (gelu(gate · x_b) ⊙ side[l]))
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim)
+                        enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim)
                     }
                     if (g_pf_skip != "gemm") {
                         let bwpg = blob_of(g_dev, t, t.ple_gate_off + l * dim * ple_n)
                         enc_gemm_mm(enc, bwpg.buf, bwpg.boff, bx, bpleg, u_dim, u_ple, mp, ple_n)
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        enc_ew2(enc, g_pso_geglu, bpleg, 0ul, bple, uint64(l * npos * ple_n * 4l), u_ple_tot, npos * ple_n)
+                        enc_geglu(enc, bpleg, 0ul, bple, uint64(l * npos * ple_n * 4l), u_ple_tot, npos * ple_n)
                     }
                     if (g_pf_skip != "gemm") {
                         let bwpp = blob_of(g_dev, t, t.ple_proj_off + l * ple_n * dim)
@@ -3094,7 +3102,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     if (c.layer_out_scale) {
                         bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
                     }
-                    enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim, bosc)
+                    enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim, bosc)
                 }
             }
         }

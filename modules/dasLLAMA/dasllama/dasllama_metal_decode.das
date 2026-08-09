@@ -757,13 +757,13 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
         }
         if (!recr && c.q_gated && g_skip != "ew") {
             // gated-attention epilogue: out ⊙ σ(gate) between the attention output and wo (the CPU order)
-            enc_ew2(enc, g_pso_sigmul, r.bxb, 0ul, r.bdn_gate, 0ul, u_qd_l, qd)
+            enc_sigmul(enc, r.bxb, 0ul, r.bdn_gate, 0ul, u_qd_l, qd)
         }
         if (!recr && g_skip != "gemv" && g_skip != "wo") {   // recurrent layers have no wo — ssm_out (already in bxb2) is their out projection
             enc_site_gemv(enc, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, r.bxb, r.bxb2, u_qd_l, r.u_dim)
             if (c.attn_out_bias) {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                enc_ew2(enc, g_pso_add, r.bxb2, 0ul, bwo_b, 0ul, r.u_dim, dim)
+                enc_add(enc, r.bxb2, 0ul, bwo_b, 0ul, r.u_dim, dim)
             }
         }
         // ffn: [post-attn norm ->] fused add+norm -> W1|W3 -> swiglu/geglu -> W2 [-> post-ffn norm] -> fused add + next attn norm (pre_post_norm norms IN PLACE — the CPU order)
@@ -843,8 +843,13 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 }
             }
             if (g_skip != "ew") {
-                let pso_act = c.ffn_act == FfnAct.swiglu_oai ? g_pso_swiglu_oai : (g4 ? g_pso_geglu : g_pso_swiglu)
-                enc_ew2(enc, pso_act, r.bh12, 0ul, r.bh12, uint64(knfe * 4l), r.u_moe_knfe, knfe)
+                if (c.ffn_act == FfnAct.swiglu_oai) {
+                    enc_swiglu_oai(enc, r.bh12, 0ul, r.bh12, uint64(knfe * 4l), r.u_moe_knfe, knfe)
+                } elif (g4) {
+                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(knfe * 4l), r.u_moe_knfe, knfe)
+                } else {
+                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(knfe * 4l), r.u_moe_knfe, knfe)
+                }
             }
             if (g_skip != "gemv") {
                 if (g_skip != "moe_rt") {
@@ -894,7 +899,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                     }
                 }
                 if (g_skip != "ew" && !sh_w13_q8) {
-                    enc_ew2(enc, g_pso_geglu, r.bh12s, 0ul, r.bh12s, uint64(hidden * 4l), r.u_hidden, hidden)
+                    enc_geglu(enc, r.bh12s, 0ul, r.bh12s, uint64(hidden * 4l), r.u_hidden, hidden)
                 }
                 if (g_skip != "gemv" && g_skip != "moe_sh") {
                     enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12s, r.bxb, r.u_hidden, r.u_dim)
@@ -902,7 +907,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (g_skip != "ew") {
                     var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
                     enc_rms(enc, r.bxb, 0ul, bw_pf1, r.bxb, r.u_dim, r.u_eps)
-                    enc_ew2(enc, g_pso_add, r.bxb, 0ul, r.bmoe_rt, 0ul, r.u_dim, dim)
+                    enc_add(enc, r.bxb, 0ul, r.bmoe_rt, 0ul, r.u_dim, dim)
                 }
             }
         } else {
@@ -921,7 +926,11 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 }
             }
             if (g_skip != "ew" && !w13_q8) {
-                enc_ew2(enc, geglu ? g_pso_geglu : g_pso_swiglu, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
+                if (geglu) {
+                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
+                } else {
+                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
+                }
             }
             if (g_skip != "gemv") {
                 enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12, r.bxb, r.u_hidden, r.u_dim)
@@ -937,13 +946,13 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             // PLE between FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
             let ple = c.n_embd_per_layer
             if (g_skip != "ew") {
-                enc_ew2(enc, g_pso_add, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
+                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
             }
             if (g_skip != "gemv") {
                 enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
             }
             if (g_skip != "ew") {
-                enc_ew2(enc, g_pso_geglu, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
+                enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
             }
             if (g_skip != "gemv") {
                 enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
@@ -963,7 +972,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 var bw_attn = upload_region(addr < void? >(t.fblob[t.rms_att_off + (l + 1l) * dim]), uint64(dim * 4l))
                 enc_add_rms_site(enc, r.bx, r.bxb, bw_attn, r.bxb, r.u_dim, r.u_eps, dim, bosc)
             } else {
-                enc_ew2(enc, g_pso_add, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim, bosc)
+                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim, bosc)
             }
         }
     }
@@ -1252,20 +1261,20 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 enc_attn_b(enc, KVDtype.f16, r.bqkv, r.bxb, brt, bka, 2l, n_heads, head_size, [rtoff = rtoff])
             }
             if (c.q_gated) {
-                enc_ew2(enc, g_pso_sigmul, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, 2l * qd)
+                enc_sigmul(enc, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, 2l * qd)
             }
             enc_verify_site(t, enc, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, dim,
                 r.bxb, r.bxb2, r.u_qd, r.u_dim, r.u_dim)
             if (c.attn_out_bias) {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                enc_ew2(enc, g_pso_add, r.bxb2, 0ul, bwo_b, 0ul, r.u_total_dim, 2l * dim)
+                enc_add(enc, r.bxb2, 0ul, bwo_b, 0ul, r.u_total_dim, 2l * dim)
             }
         }
         var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
         if (dim <= ADD_RMS_MAX_DIM) {
             enc_add_rms_b(enc, r.bx, r.bxb2, bw_ffn, r.bxb, r.u_dim, r.u_eps, 2l)
         } else {
-            enc_ew2(enc, g_pso_add, r.bx, 0ul, r.bxb2, 0ul, r.u_total_dim, 2l * dim)
+            enc_add(enc, r.bx, 0ul, r.bxb2, 0ul, r.u_total_dim, 2l * dim)
             enc_rms_b(enc, r.bx, 0ul, bw_ffn, r.bxb, r.u_dim, r.u_eps, 2l)
         }
         if (r.moe) {
@@ -1293,7 +1302,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             var v3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
             enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12, r.bmoe_sel, v3a, uint64(2l * knfe * 4l))
-            enc_ew2(enc, g_pso_swiglu, r.bh12, 0ul, r.bh12, uint64(2l * knfe * 4l), r.u_moe_tot, 2l * knfe)
+            enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(2l * knfe * 4l), r.u_moe_tot, 2l * knfe)
             var v2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = r.k_moe_xs_dn, ss = r.k_moe_ss, bxs = r.k_moe_knfe, bys = r.k_moe_kdim, hasb = 0u)
             enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 2l, r.bh12, r.bmoe_dn, r.bmoe_sel, v2a)
@@ -1325,7 +1334,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 // gate rows land at 0, up rows at 2*hidden (bh12 is nrows * 2*hidden); swiglu fuses in place
                 enc_verify_site(t, enc, f1, t.w1_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden)
                 enc_verify_site(t, enc, f3, t.w3_offs[l], hidden, dim, hidden, r.bxb, r.bh12, r.u_dim, r.u_hidden, r.u_hidden, [ycol = 2l * hidden])
-                enc_ew2(enc, g_pso_swiglu, r.bh12, 0ul, r.bh12, uint64(2l * hidden * 4l), r.u_total_h, 2l * hidden)
+                enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(2l * hidden * 4l), r.u_total_h, 2l * hidden)
                 enc_verify_site(t, enc, f2, t.w2_offs[l], dim, hidden, dim, r.bh12, r.bxb, r.u_hidden, r.u_dim, r.u_dim)
             }
         }
@@ -1334,11 +1343,11 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             if (dim <= ADD_RMS_MAX_DIM) {
                 enc_add_rms_b(enc, r.bx, r.bxb, bw_attn, r.bxb, r.u_dim, r.u_eps, 2l)
             } else {
-                enc_ew2(enc, g_pso_add, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
+                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
                 enc_rms_b(enc, r.bx, 0ul, bw_attn, r.bxb, r.u_dim, r.u_eps, 2l)
             }
         } else {
-            enc_ew2(enc, g_pso_add, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
+            enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_total_dim, 2l * dim)
         }
     }
 }
@@ -2699,7 +2708,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             }
             if (c.attn_out_bias && g_skip != "gemv") {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                enc_ew2(enc, g_pso_add, bxb2, 0ul, bwo_b, 0ul, u_total_dim, nrows * dim)
+                enc_add(enc, bxb2, 0ul, bwo_b, 0ul, u_total_dim, nrows * dim)
             }
             // ffn: [post-attn norm ->] fused add+norm -> W1 / W3 (the cat region at byte offsets)
             // -> swiglu/geglu -> W2 [-> post-ffn norm] -> fused add + the NEXT layer's attention
@@ -2715,7 +2724,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
                     enc_add_rms_b(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, nrows)
                 } else {
-                    enc_ew2(enc, g_pso_add, bx, 0ul, bxb2, 0ul, u_total_dim, nrows * dim)
+                    enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, nrows * dim)
                     enc_rms_b(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, nrows)
                 }
             }
@@ -2768,8 +2777,13 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 }
             }
             if (moe && g_skip != "ew") {
-                let pso_act = c.ffn_act == FfnAct.swiglu_oai ? g_pso_swiglu_oai : (g4moe ? g_pso_geglu : g_pso_swiglu)
-                enc_ew2(enc, pso_act, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
+                if (c.ffn_act == FfnAct.swiglu_oai) {
+                    enc_swiglu_oai(enc, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
+                } elif (g4moe) {
+                    enc_geglu(enc, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
+                } else {
+                    enc_swiglu(enc, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
+                }
             }
             if (moe && g_skip != "gemv") {
                 let fe2 = fmt_at(t.we2_fmt, l)
@@ -2830,7 +2844,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             }
             if ((!moe || g4moe) && g_skip != "ew" && !fuse13) {
                 // the gate ew reads gate (bhb) + up (bhb2), writes act(gate)*up back into bhb
-                enc_ew2(enc, geglu ? g_pso_geglu : g_pso_swiglu, bhb, 0ul, bhb2, 0ul, u_total_h, nrows * hidden)
+                if (geglu) {
+                    enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, nrows * hidden)
+                } else {
+                    enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, nrows * hidden)
+                }
             }
             if ((!moe || g4moe) && g_skip != "gemv") {
                 if (f2 != KqFmt.q8) {
@@ -2858,7 +2876,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 // dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                 var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
                 enc_rms_b(enc, bxb, 0ul, bw_pf1, bxb, u_dim, u_eps, nrows)
-                enc_ew2(enc, g_pso_add, bxb, 0ul, bmg4rt, 0ul, u_total_dim, nrows * dim)
+                enc_add(enc, bxb, 0ul, bmg4rt, 0ul, u_total_dim, nrows * dim)
             }
             if (g_skip != "ew") {
                 if (c.pre_post_norm) {
@@ -2876,12 +2894,12 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
                         enc_add_rms_b(enc, bx, bxb, bw_attn, bxb, u_dim, u_eps, nrows, bosc)
                     } else {
-                        enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
+                        enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
                         enc_rms_b(enc, bx, 0ul, bw_attn, bxb, u_dim, u_eps, nrows)
                     }
                 } else {
                     // last layer: plain residual add into bx (the final rms reads bx)
-                    enc_ew2(enc, g_pso_add, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
+                    enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, nrows * dim, bosc)
                 }
             }
         }

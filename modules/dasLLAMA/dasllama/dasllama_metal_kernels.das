@@ -3944,7 +3944,7 @@ def enc_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : Me
     if (dim <= ADD_RMS_MAX_DIM) {
         enc_addrms_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one)
     } else {
-        enc_ew2(enc, g_pso_add, bx, 0ul, ba, 0ul, bdim, dim, bascale)
+        enc_add(enc, bx, 0ul, ba, 0ul, bdim, dim, bascale)
         enc_rms(enc, bx, 0ul, bw, by, bdim, beps)
     }
 }
@@ -3996,17 +3996,10 @@ def enc_attn_comb(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; var ka :
 }
 
 // swiglu and add share the (a, b, total) elementwise shape; offsets serve the fused-buffer binds
-def enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba : MetalBuffer?; aoff : uint64; bb : MetalBuffer?; boff : uint64; btot : MetalBuffer?; total : int64; bascale : MetalBuffer? = null) {
-    kn_pipeline(enc, pso)
-    kn_buffer(enc, ba, aoff, 0)
-    kn_buffer(enc, bb, boff, 1)
-    kn_buffer(enc, btot, 0ul, 2)
-    kn_buffer(enc, bascale != null ? bascale : g_one, 0ul, 3)   // the add's ascale slot (unused by swiglu/geglu)
-    hz_read(ba, aoff, uint64(total * 4l))
-    hz_read(bb, boff, uint64(total * 4l))
-    hz_write(ba, aoff, uint64(total * 4l))
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((total + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+// the ew2 combines are per-op [metal_dispatch] builders (enc_swiglu / enc_geglu / enc_sigmul /
+// enc_swiglu_oai, and enc_add_c under this g_one-defaulting wrapper) — callers name the op
+def enc_add(enc : MetalComputeEncoder?; bg : MetalBuffer?; goff : uint64; bu : MetalBuffer?; uoff : uint64; btot : MetalBuffer?; total : int64; bascale : MetalBuffer? = null) {
+    enc_add_c(enc, bg, goff, bu, uoff, btot, bascale != null ? bascale : g_one, total)
 }
 
 // ===== the batched-step encoders (P4) =====
@@ -5526,8 +5519,8 @@ class MetalMoeCombine {
 // SHARED with decode's enc_ew2 (slots 0-2, keep) — the prefill twin's PF fields append at 3-6.
 [ |> template_struct_instance]
 class template MetalSwigluOaiT {
-    @ssbo @binding = 0 @role = "readwrite" g : array<float4>
-    @ssbo @binding = 1 @role = "read" u : array<float4>
+    @ssbo @binding = 0 @role = "readwrite" @off = "goff" @span = "total*4" g : array<float4>
+    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" u : array<float4>
     @uniform @binding = 2 total : uint      // scalar element count
     @ssbo @binding = 3 @role = "read" @template_gate = PF cnt : array<uint>
     @ssbo @binding = 4 @role = "read" @template_gate = PF basep : array<uint>
@@ -5555,6 +5548,7 @@ class template MetalSwigluOaiT {
     }
 }
 
+[metal_dispatch(name = "enc_swiglu_oai", pso = "g_pso_swiglu_oai", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwigluOai : MetalSwigluOaiT {
 }
 
@@ -6576,13 +6570,15 @@ class MetalQkNorm {
 }
 
 // One elementwise combine g[i] = combine(g[i], u[i]), one thread per element — the ew2 family.
-// enc_ew2 dispatches all four; ascale rides slot 3 (the add's layer_out_scale, g_one elsewhere).
+// Per-op [metal_dispatch] builders on the stamps; the add's layer_out_scale rides the gated
+// ascale slot — the other combines erase it (field, binding, and MSL declaration all gone).
 [ |> template_struct_instance]
 class template MetalEw2T {
-    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // in place
-    @ssbo @binding = 1 @role = "read" u : array<float>
+    @ssbo @binding = 0 @role = "readwrite" @off = "goff" @span = "total*4" g : array<float>     // in place
+    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" u : array<float>
     @uniform @binding = 2 total : uint      // grid guard
-    @uniform @binding = 3 ascale : float    // the add's scale slot (unused by the other combines)
+    @uniform @binding = 3 @template_gate = HAS_ASCALE ascale : float
+    @template_constant HAS_ASCALE : bool = false
 
     def abstract combine(a, b : float) : float
 
@@ -6599,24 +6595,30 @@ class template MetalEw2T {
 
 // g = silu(g) * u — swiglu exactly (the CPU side's exp4 polynomial vs the GPU exp differ
 // inside the shared tolerance envelope)
+[metal_dispatch(name = "enc_swiglu", pso = "g_pso_swiglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwiglu : MetalEw2T {
     def override combine(a, b : float) : float => (a / (1.0 + exp(-a))) * b
 }
 
 // GeGLU twin (gemma line), the CPU's tanh-approx gelu via the exp identity — Metal tanh NaNs
 // past ~44 while exp saturates: exp(INF) -> denom INF -> the term is 0
+[metal_dispatch(name = "enc_geglu", pso = "g_pso_geglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeglu : MetalEw2T {
     def override combine(a, b : float) : float => (
         0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
 }
 
 // residual add: x += y, scaled — gemma4 layer_out_scale scales the WHOLE layer output
+[metal_dispatch(name = "enc_add_c", pso = "g_pso_add", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalAdd : MetalEw2T {
+    override HAS_ASCALE = true
+
     def override combine(a, b : float) : float => (a + b) * ascale
 }
 
 // per-head sigmoid output gate (sigmoid_gate): x ⊙ σ(g) in place — the gated-attention
 // epilogue between the attention output and the out projection
+[metal_dispatch(name = "enc_sigmul", pso = "g_pso_sigmul", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSigmul : MetalEw2T {
     def override combine(a, b : float) : float => a / (1.0 + exp(-b))
 }
