@@ -166,6 +166,13 @@ jobs:
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
+    - name: "Install bison (Homebrew)"
+      # Apple's stock /usr/bin/bison is 2.3 and can't parse the grammar
+      # (`%define api.prefix {das2_yy}` needs bison 3.x). CMake resolves the
+      # Homebrew keg via `brew --prefix bison` on Darwin, so installing it is
+      # enough — same dependency build.yml's darwin lanes install.
+      run: brew install bison
+
     - name: "Build: Daslang (Release, core only)"
       run: |
         set -eux
