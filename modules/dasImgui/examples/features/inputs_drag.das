@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 0b.2 — drag inputs", 800, 700)
+    harness_init("Phase 0b.2 - drag inputs", 800, 700)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,7 +34,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 660.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Drag inputs — phase 0b.2", closable = false,
+    window(MAIN_WIN, (text = "Drag inputs - phase 0b.2", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         // ----- Float scalars -----
         // Bounds set once-per-frame from source; assignment is idempotent.

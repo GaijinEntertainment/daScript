@@ -41,15 +41,17 @@ computing, and rounding back — correctly rounded per operation, bit-identical 
 hardware. Division follows IEEE (``1h / 0h`` is ``inf``; ``NaN != NaN``). ``float16`` literals
 use the ``h`` suffix: ``1.5h``. The integer families carry storage, converts, and the integer
 bit surface — but no arithmetic (``byte4 + byte4`` is a compile error): widen with the wider
-ctor (``int4(b4)`` sign-extends, ``short8(b8)``), narrow with the ctor (C truncation,
-``short4(i4)``) or the saturating ``_sat`` forms (``short4_sat(i4)``, ``byte8_sat(s8)``,
-clamping to the target range). The bit surface matches the 32-bit vector families:
+ctor of matching signedness (``int4(b4)`` sign-extends, ``short8(b8)``; unsigned lanes widen
+unsigned, ``uint4(us4)`` — there is no cross-signed form such as ``int4(us4)``), narrow with
+the ctor (C truncation, ``short4(i4)``) or the saturating ``_sat`` forms (``short4_sat(i4)``,
+``byte8_sat(s8)``, clamping to the target range). The bit surface matches the 32-bit vector families:
 ``<< >> & | ^`` and their compound assigns. Shifts take a scalar ``int`` count masked to the
 lane width (``b16 >> 9`` equals ``b16 >> 1``); signed lanes shift right arithmetically,
 unsigned logically; ``<<`` wraps each lane — ``shuffle(lut, nib >> 4)`` is the nibble-unpack
 shape. The fp16 family converts to and from float per arity (``half4(f4)`` rounds each lane,
-``float4(h4)`` is exact) plus ``half8(lo, hi)`` / ``half8_lo`` / ``half8_hi`` packing against
-two ``float4``.
+``float4(h4)`` is exact) plus ``half8_lo`` / ``half8_hi``, which unpack a ``half8`` into
+``float4`` halves, and the two-argument compose ``half8(f4lo, f4hi)``, whose operands are both
+``float4`` — there is no ``half8(half4, half4)`` form.
 
 The other exception to storage-only is the 16-lane 8-bit forms, which carry exact integer
 dot-product intrinsics — the hardware dot4 class (NEON ``sdot``/``usdot``, AVX-VNNI
@@ -58,8 +60,10 @@ dot-product intrinsics — the hardware dot4 class (NEON ``sdot``/``usdot``, AVX
 first operand may instead be ``ubyte16`` (lanes zero-extended, the quantized-kernel shape); the
 result is always signed and exact — no lane sum can overflow ``int``. ``shuffle(lut, idx)``
 selects bytes from a 16-entry table (``lut[idx & 15]`` per lane, the ``tbl``/``pshufb``
-semantic). For shader code, the packed single-group forms ``sdot4``/``usdot4`` (two ``uint``
-words as 4+4 8-bit lanes) live in ``daslib/shader_lingua_franca`` and lower to native GPU ops.
+semantic); ``lut`` is a ``byte16`` and the index operand must be a ``ubyte16`` (a ``byte16``
+index does not match). For shader code, the packed single-group forms ``sdot4``/``usdot4``
+(two ``uint`` words as 4+4 8-bit lanes) live in ``daslib/shader_lingua_franca`` and lower to
+native GPU ops.
 
 Beyond ``xyzw`` (which stays capped at 4 lanes), all vectors support OpenCL-style ``.s``
 swizzles — ``s`` followed by one hex lane digit per output lane, repeats allowed: ``v.s0``,
@@ -203,7 +207,8 @@ opening the door to general implicit conversions.
 Where promotion applies
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Promotion runs wherever the compiler already knows the target type:
+Promotion is **not** a general "the compiler already knows the target type" rule.
+It fires in a fixed set of contexts, and nowhere else:
 
 .. code-block:: das
 
@@ -218,9 +223,36 @@ Promotion runs wherever the compiler already knows the target type:
     var e : float = a + 1             // binary operator (either side)
     def fn() : uint8 { return 200 }   // return statement
 
-Function-call arguments and ``ExprMove`` (``<-``) are intentionally **not**
-promoted. ``foo(1)`` on a parameter typed ``float`` still needs ``foo(1.0f)``
-or ``foo(float(1))``.
+Where promotion does not apply
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Function-call arguments, function-parameter default values, and ``ExprMove``
+(``<-``) are intentionally **not** promoted, even though the target type is
+plainly visible in each case:
+
+.. code-block:: das
+
+    def take_f(a : float) {}
+    take_f(1)              // error[30341]: no matching functions or generics:
+                           //     take_f(int const)
+
+    def f(a : float = 1) {}
+    // error[30161]: function argument default value type mismatch
+    //     'float const' vs 'int const'
+
+    var m : float ; m <- 1 // error[30941]: can only move compatible type;
+                           //     float& -const = int const
+
+Spell the literal in the target type instead: ``take_f(1.0f)`` (or
+``take_f(float(1))``), and ``def f(a : float = 1.0f)``.
+
+Only *integer* literals promote. A float literal never promotes to ``double``:
+
+.. code-block:: das
+
+    var d : double = 1.0   // error[30344]: local variable d initialization
+                           //     type mismatch; double -const = float const
+    var d : double = 1.0lf // ok — double literal
 
 Accepted target types: ``int8`` / ``int16`` / ``int`` / ``int64``,
 ``uint8`` / ``uint16`` / ``uint`` / ``uint64``,

@@ -36,7 +36,7 @@ def test_imgui_type_text_buffer_fills(t : T?) {
         // Gate 2: error path — empty text rejected client-side by type_text.
         let empty_resp = type_text(d, "MAIN_WIN/DEMO_INPUT", "")
         t |> equal(empty_resp?["ok"] ?? true, false,
-                   "empty text → response.ok = false")
+                   "empty text -> response.ok = false")
 
         // Gate 3: payload accepted, ok-Result echoes target.
         let resp = type_text(d, "MAIN_WIN/DEMO_INPUT", "hello")

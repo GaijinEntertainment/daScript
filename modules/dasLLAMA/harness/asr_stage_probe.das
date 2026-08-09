@@ -99,7 +99,7 @@ def main() : int {
         return 0
     }
     if (!jit_enabled()) {
-        print("JIT-only — run with: daslang -jit <file>\n")
+        print("JIT-only - run with: daslang -jit <file>\n")
         return 1
     }
     set_asr_fp32(cfg.fp32)
@@ -114,7 +114,7 @@ def main() : int {
         return 1
     }
     if (!empty(cfg.trace) && !JOBQUE_PROFILING_ENABLED) {
-        print("--trace needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        print("--trace needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
         return 1
     }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
@@ -132,7 +132,7 @@ def main() : int {
         static_if (JOBQUE_PROFILING_ENABLED) {
             forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
         } else {
-            print("note: decoder-engine buckets need JOBQUE_PROFILING=1 — printing the ASR stage table only\n")
+            print("note: decoder-engine buckets need JOBQUE_PROFILING=1 - printing the ASR stage table only\n")
         }
         for (_rep in range(reps)) {
             run_once(m, samples)

@@ -179,7 +179,7 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
             if (skip_set && skip_set->count(normalize_module_name(das::string(c_file.name)))) {
                 // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
                 // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
-                fprintf(stderr, "Warning: local '%s' shadows global — using local\n", c_file.name);
+                fprintf(stderr, "Warning: local '%s' shadows global - using local\n", c_file.name);
                 continue;
             }
             if (disabled_set && disabled_set->count(force_lower(das::string(c_file.name)))) {
@@ -200,7 +200,7 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
             if (skip_set && skip_set->count(normalize_module_name(das::string(ent->d_name)))) {
                 // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
                 // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
-                fprintf(stderr, "Warning: local '%s' shadows global — using local\n", ent->d_name);
+                fprintf(stderr, "Warning: local '%s' shadows global - using local\n", ent->d_name);
                 continue;
             }
             if (disabled_set && disabled_set->count(force_lower(das::string(ent->d_name)))) {

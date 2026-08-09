@@ -200,6 +200,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now|format_time|clock)$%%),
         group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|das_is_exceptions_enabled|is_standalone_exe|get_platform_name|get_running_platform_name|get_cross_platform_name|get_architecture_name|cpu_supports)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
+        hide_group(group_by_regex("Temp string reclaim", mod, %regex~(_temp_string_result)$%%)),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
         group_by_regex("Lock checking", mod, %regex~(lock_count)$%%),
         group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz|mul128|__bit_set)$%%),
@@ -1322,7 +1323,8 @@ def document_module_lint(_root : string) {
 def document_module_lint_config(_root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
-        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled)$%%),
+        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled|lint_config_forces_on)$%%),
+        group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)

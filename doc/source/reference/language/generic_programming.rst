@@ -68,6 +68,7 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo sizeof(expr)`` — size of the type in bytes
 * ``typeinfo alignof(expr)`` — alignment of the type
 * ``typeinfo dim(expr)`` — size of the first dimension (fixed-size arrays)
+* ``typeinfo dim_table_value(expr)`` — size of the first dimension of a table's value type (the value must be a fixed-size array)
 * ``typeinfo offsetof<field>(expr)`` — byte offset of a field in a struct
 * ``typeinfo vector_dim(expr)`` — dimension of a vector type (e.g. 3 for ``float3``)
 
@@ -102,6 +103,7 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo is_dim(expr)`` — true if has any dimension (fixed-size array)
 * ``typeinfo is_enum(expr)`` — true if enumeration
 * ``typeinfo is_bitfield(expr)`` — true if bitfield
+* ``typeinfo is_distinct(expr)`` — true if a ``distinct`` type (see :ref:`Distinct types <distinct_types>`)
 * ``typeinfo is_tuple(expr)`` — true if tuple
 * ``typeinfo is_variant(expr)`` — true if variant
 * ``typeinfo is_function(expr)`` — true if function type
@@ -137,10 +139,11 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 
 * ``typeinfo has_field<name>(expr)`` — true if the struct/handle has a field named ``name``
 * ``typeinfo safe_has_field<name>(expr)`` — same as above, but returns false instead of error
-* ``typeinfo has_annotation<name>(expr)`` — true if the struct has annotation ``name``
-* ``typeinfo has_annotation_argument<name>(expr)`` — true if annotation has argument ``name``
-* ``typeinfo safe_has_annotation_argument<name>(expr)`` — returns false instead of error
-* ``typeinfo annotation_argument<name>(expr)`` — returns the value of an annotation argument
+* ``typeinfo struct_has_annotation<ann>(expr)`` — true if the struct has annotation ``ann``
+* ``typeinfo struct_safe_has_annotation<ann>(expr)`` — same as above, but returns false instead of error
+* ``typeinfo struct_has_annotation_argument<ann; arg>(expr)`` — true if annotation ``ann`` has argument ``arg``
+* ``typeinfo struct_safe_has_annotation_argument<ann; arg>(expr)`` — same as above, but returns false instead of error
+* ``typeinfo struct_get_annotation_argument<ann; arg>(expr)`` — returns the value of annotation argument ``arg``
 * ``typeinfo variant_index<name>(expr)`` — returns the index of a variant field
 * ``typeinfo safe_variant_index<name>(expr)`` — returns -1 instead of error
 
@@ -470,9 +473,12 @@ Prefix       Resolution
              caller's overloads are **not** visible.
 ``_::``      Resolved as if the call were made implicitly in the **current
              module** (the one that instances the generic) — the caller's
-             overloads **are** visible.
-``__::``     Resolved strictly in the module where the generic is **defined**
-             — only that module's own symbols, nothing imported.
+             overloads **are** visible, along with everything it requires.
+``__::``     Resolved in the **current module only** — the same module as
+             ``_::``, but restricted to symbols declared directly in it,
+             ignoring anything imported. Inside an instanced generic that
+             is the *caller's* module, so ``__::`` cannot pin a lookup to
+             the module where the generic was defined.
 ===========  ===================================================================
 
 This distinction matters whenever a library generic should dispatch to

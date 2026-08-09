@@ -165,7 +165,7 @@ def gemv_ladder(lanes : int) : int {
 [export]
 def main {
     if (!jit_enabled()) {
-        print("WARNING: interpreted run — numbers are meaningless for the fastpath A/B; use -jit\n")
+        print("WARNING: interpreted run - numbers are meaningless for the fastpath A/B; use -jit\n")
     }
     with_job_que() {
         setup_dasllama_jobque_()

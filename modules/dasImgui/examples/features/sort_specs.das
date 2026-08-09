@@ -92,7 +92,7 @@ def sort_items_with_specs(specs : array<TableSortSpec>) {
 
 [export]
 def init() {
-    harness_init("sort_specs — sortable inventory table", 640, 460)
+    harness_init("sort_specs - sortable inventory table", 640, 460)
 }
 
 [export]

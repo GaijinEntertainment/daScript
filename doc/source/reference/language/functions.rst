@@ -113,9 +113,13 @@ Functions can be ``private`` or ``public``
 
 .. code-block:: das
 
-    def private foo(a:bool)
+    def private foo(a:bool) {
+        print("{a}\n")
+    }
 
-    def public bar(a:float)
+    def public bar(a:float) {
+        print("{a}\n")
+    }
 
 If not specified, functions inherit module publicity (i.e. in public modules functions are public,
 and in private modules functions are private).
@@ -369,6 +373,8 @@ Function specialization can be limited by contracts (contract macros):
 
 .. code-block:: das
 
+    require daslib/contracts
+
     [expect_any_array(blah)]  // array<foo>, [], or dasvector`.... or similar
     def print_arr ( blah ) {
         for ( i in range(length(blah)) ) {
@@ -377,13 +383,18 @@ Function specialization can be limited by contracts (contract macros):
     }
 
 In the example above, only arrays will be matched.
+Contract annotations live in ``daslib/contracts``, which has to be required explicitly.
 
 It is possible to use boolean logic operations on contracts:
 
 .. code-block:: das
 
+    require daslib/contracts
+
     [expect_any_tuple(blah) || expect_any_variant(blah)]
-    def print_blah ...
+    def print_blah ( blah ) {
+        print("{blah}\n")
+    }
 
 In the example above print_blah will accept any tuple or variant.
 Available logic operations are ``!``, ``&&``, ``||`` and ``^^``.
@@ -392,7 +403,9 @@ LSP can be explicitly prohibited for a particular function argument via the ``ex
 
 .. code-block:: das
 
-    def foo ( a : Foo explicit ) // will accept Foo, but not any subtype of Foo
+    def foo ( a : Foo explicit ) {  // will accept Foo, but not any subtype of Foo
+        print("{a.a}\n")
+    }
 
 ^^^^^^^^^^^^^^^^^^
 Default Parameters
@@ -679,20 +692,36 @@ is, as, and ?as operators
 ---------------------------------------------
 
 The ``is``, ``as``, and ``?as`` operators can be overloaded for custom type-checking
-and casting behaviour:
+and casting behaviour. The target type is part of the operator *name*, not an argument —
+``def operator is Cat`` overloads ``x is Cat``:
 
 .. code-block:: das
 
-    def operator is(a : MyVariant; b : type<int>) : bool {
-        // return true if MyVariant currently holds an int
+    struct Animal {
+        legs : int
     }
 
-    def operator as(a : MyVariant; b : type<int>) : int {
-        // extract int value, panic if wrong type
+    struct Cat {
+        lives : int
     }
 
-    def operator ?as(a : MyVariant; b : type<int>) : int? {
-        // extract int value or return null
+    def operator is Cat(a : Animal) : bool {        // true if Animal is a Cat
+        return a.legs == 4
+    }
+
+    def operator as Cat(a : Animal) : Cat {         // convert, panic if not a Cat
+        assert(a.legs == 4)
+        return Cat(lives = 9)
+    }
+
+    def operator ?as Cat(a : Animal?) : Cat? {      // convert, or null if not a Cat
+        return a != null && a.legs == 4 ? new Cat(lives = 9) : null
+    }
+
+    def main {
+        var a = Animal(legs = 4)
+        print("{a is Cat}\n")           // true
+        print("{(a as Cat).lives}\n")   // 9
     }
 
 These are commonly used with variant types and in libraries like ``daslib/ast_boost``

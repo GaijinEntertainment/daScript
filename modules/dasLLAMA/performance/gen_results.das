@@ -85,7 +85,7 @@ def render_section(p : LlmProfile) : string {
     let parsec = pl.parsec_off ? "Parsec off" : "Parsec ON"
     let aff = empty(pl.affinity) ? "" : " Affinity: {pl.affinity}."
     return build_string() $(w) {
-        w |> write("## {pl.cpu}, {pl.threads} threads — daslang {pl.daslang}, llama.cpp {pl.llama_cpp}, {pl.date} ({parsec})\n\n")
+        w |> write("## {pl.cpu}, {pl.threads} threads - daslang {pl.daslang}, llama.cpp {pl.llama_cpp}, {pl.date} ({parsec})\n\n")
         w |> write("{pl.os}; box profile `{pl.box_profile}`.{aff}\n\n")
         w |> write(render_md_table(headers, aligns, rows))
         w |> write("\n")
@@ -94,8 +94,8 @@ def render_section(p : LlmProfile) : string {
 
 def render_doc(profiles : array<LlmProfile>) : string {
     return build_string() $(w) {
-        w |> write("# LLM CPU scoreboard (living doc — CURRENT numbers only; history in git)\n\n")
-        w |> write("GENERATED from `profile_llm_<box>.json` by `gen_results.das` — do not hand-edit. ")
+        w |> write("# LLM CPU scoreboard (living doc - CURRENT numbers only; history in git)\n\n")
+        w |> write("GENERATED from `profile_llm_<box>.json` by `gen_results.das` - do not hand-edit. ")
         w |> write("das = dasLLAMA (JIT; quant column = the GGUF's format, q4_k_m loads kq-native); llama.cpp = `llama-bench` CPU (`-ngl 0`, no Accelerate/AMX BLAS). ")
         w |> write("pp*N* = prefill throughput over *N* prompt tokens; tg*N* = greedy generation of *N* tokens. ")
         w |> write("Ratio = das / llama.cpp (>1 = das faster); winners bold.\n\n")
@@ -305,10 +305,10 @@ def render_libri(m : BenchModel; dr : BenchRun; refis : array<int>) : string {
 // One generated table's italic platform sub-line (precision + date + rev live here so they
 // auto-update with every sweep).
 def asr_platform_line(dr : BenchRun) : string {
-    let fmt = empty(dr.exec_fmt) ? "" : " — das {dr.exec_fmt}"
+    let fmt = empty(dr.exec_fmt) ? "" : " - das {dr.exec_fmt}"
     let rd = dr.hardware.remote_desktop
     let rdp = empty(rd) ? "" : (rd == "off" ? " (Parsec off)" : " (REMOTE DESKTOP: {rd})")
-    return "_{dr.hardware.cpu}, {dr.threads} threads{fmt} — daslang {dr.version} {dr.sha}, {dr.date}{rdp}._"
+    return "_{dr.hardware.cpu}, {dr.threads} threads{fmt} - daslang {dr.version} {dr.sha}, {dr.date}{rdp}._"
 }
 
 // Splice every box store's generated ASR tables into results.md (prose preserved). Returns
@@ -343,7 +343,7 @@ def regen_asr(stores : array<string>) : int {
                 }
             }
             if (spec_i < 0) {
-                print("  no catalog spec for {m.gguf} ({box}) — not rendered\n")
+                print("  no catalog spec for {m.gguf} ({box}) - not rendered\n")
                 continue
             }
             let refis <- asr_ref_runs(m, cat[spec_i])
@@ -391,7 +391,7 @@ def main() {
         }
     }
     if (empty(profiles)) {
-        print("no profile_llm_*.json under {PERF_DIR} — skipping LLM scoreboard\n")
+        print("no profile_llm_*.json under {PERF_DIR} - skipping LLM scoreboard\n")
     } else {
         let doc = render_doc(profiles)
         fopen(RESULTS_PATH, "wb") $(f) {
@@ -405,7 +405,7 @@ def main() {
     // ---- ASR scoreboard (regenerated in place from the record store, prose preserved) ----
     let asr <- list_record_stores()
     if (empty(asr)) {
-        print("no records/<box>.json under {PERF_DIR}/records — skipping ASR scoreboard\n")
+        print("no records/<box>.json under {PERF_DIR}/records - skipping ASR scoreboard\n")
     } else {
         let n = regen_asr(asr)
         print("asr: replaced {n} region(s) in {ASR_RESULTS_PATH}\n")

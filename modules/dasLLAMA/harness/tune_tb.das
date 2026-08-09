@@ -167,7 +167,7 @@ def bench_shape(name : string; n, d : int64) : int64 {   // nolint:STYLE037,STYL
 [export]
 def main {
     if (!jit_enabled()) {
-        print("skipped: interpreted — the gen repack backend (the only TB consumer) registers under -jit only\n")
+        print("skipped: interpreted - the gen repack backend (the only TB consumer) registers under -jit only\n")
         return
     }
     with_job_que() {
@@ -176,7 +176,7 @@ def main {
         print("active backend: {active_kernel_backend()} (needs_repack={need_repack})\n")
         let repack_backend = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
         if (active_kernel_backend() != repack_backend) {
-            print("skipped: {repack_backend} backend not active (needs its arch + jit) — TB is only read by the repack-tier batch kernels\n")
+            print("skipped: {repack_backend} backend not active (needs its arch + jit) - TB is only read by the repack-tier batch kernels\n")
             return
         }
         set_q8_l2_budget(1l << 40l)   // disable the production cliff-guard clamp — this harness MEASURES the raw TB curve (incl. the cliff)

@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("menu_label_static — boost v2 §3.4", 720, 360)
+    harness_init("menu_label_static - boost v2 sec 3.4", 720, 360)
 }
 
 [export]

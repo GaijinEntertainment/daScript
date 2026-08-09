@@ -81,7 +81,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
     print("loading {cfg.model}\n")
     var t <- load_gguf(cfg.model, QuantMode.q8)
     if (!convert_model_to_metal_blob(t)) {   // the drivers are blob-only
-        print("metal-blob transform declined — the drivers cannot serve this load\n")
+        print("metal-blob transform declined - the drivers cannot serve this load\n")
         delete t
         return
     }
@@ -195,7 +195,7 @@ def private dump_tsv(tr; path : string) {   // untyped param = generic — non-A
 [export]
 def main() {
     if (!jit_enabled()) {
-        print("This harness is JIT-only — run with: daslang -jit <file>\n")
+        print("This harness is JIT-only - run with: daslang -jit <file>\n")
         return
     }
     var r <- parse_args(type<Args>)

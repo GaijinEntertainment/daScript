@@ -263,7 +263,7 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
     }
     delete inv
     if (removed > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC freed {freed >> 20l} MB — {removed} dead sibling(s) of {base_name(source_path)}\n")
+        to_log(LOG_INFO, "dasLLAMA image: GC freed {freed >> 20l} MB - {removed} dead sibling(s) of {base_name(source_path)}\n")
     }
 }
 
@@ -290,7 +290,7 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
     }
     delete inv
     if (foreign_kept > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} foreign-flavor image(s) — their bake contexts own them\n")
+        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} foreign-flavor image(s) - their bake contexts own them\n")
     }
     return r
 }
@@ -340,7 +340,7 @@ def w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
     }
     if (w.mem != null) {
         if (nbytes > w.cap - w.cur) {
-            to_log(LOG_ERROR, "dasLLAMA image: chunk overrun at {int64(w.cur)} + {int64(nbytes)} > {int64(w.cap)} — image sizing is wrong\n")
+            to_log(LOG_ERROR, "dasLLAMA image: chunk overrun at {int64(w.cur)} + {int64(nbytes)} > {int64(w.cap)} - image sizing is wrong\n")
             w.ok = false
             return
         }
@@ -699,7 +699,7 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
         to_log(LOG_INFO, "dasLLAMA image:   plane {name} {mb} MB in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
     }
     if (!w.ok) {
-        to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' failed writing {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
+        to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' failed writing {int64(nbytes)} bytes at offset {int64(at)} - disk full? image save aborted\n")
         return
     }
     sections |> push(ImgSection(name = name, off = at, bytes = nbytes))
@@ -831,7 +831,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
         store_u64(hdr, 40, hash(ident))
         w.ok = w_header(w, dst, hdr)
         if (!w.ok) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed — image build aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed - image build aborted\n")
         }
         delete hdr
     }
@@ -846,14 +846,14 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
         // an ENOSPC that only surfaces at close still leaves a short file — check what landed
         var st : FStat
         if (!stat(tmp_path, st) || st.size != want_bytes) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(want_bytes)} — disk full? image save aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(want_bytes)} - disk full? image save aborted\n")
             ok = false
         }
     }
     if (!ok) {
         // a failed OPEN never created the file, so only warn about a tmp that is actually there
         if (stat(tmp_path).is_valid && !remove(tmp_path)) {
-            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed — clean it up by hand\n")
+            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed - clean it up by hand\n")
         }
         return false
     }
@@ -864,7 +864,7 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
     remove(path)
     if (!rename(tmp_path, path)) {
         if (!remove(tmp_path)) {
-            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed — clean it up by hand\n")
+            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed - clean it up by hand\n")
         }
         return false
     }
@@ -951,12 +951,12 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
         let at = w.cur
         if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
             // a failed transcode IS a failed write: kill the sink so the tmp never gets promoted
-            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image save aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed - image save aborted\n")
             w.ok = false
         }
         // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
         if (w.ok && w.cur - at != uint64(want)) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image save aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} - image save aborted\n")
             w.ok = false
         }
         sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
@@ -979,7 +979,7 @@ def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
     let esz = uint64(typeinfo sizeof(field[0]))
     // bytes-then-offset ordering keeps the bounds math wrap-free (off + bytes could overflow)
     if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes || sec.bytes % esz != 0ul) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' at {sec.off}+{sec.bytes} (esz {esz}) is malformed\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' at {sec.off}+{sec.bytes} (esz {esz}) is malformed\n")
         ok = false
     } else {
         unsafe {
@@ -999,12 +999,12 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
     let sec = by_name?[name] ?? ImgSection()
     // bytes-then-offset ordering keeps the bounds math wrap-free (off + bytes could overflow)
     if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' at {sec.off}+{sec.bytes} is malformed\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' at {sec.off}+{sec.bytes} is malformed\n")
         ok = false
         return
     }
     if (!_::plane_bind(pl, bp, int64(sec.off), int64(sec.bytes))) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' is {sec.bytes} bytes, not a whole number of elements\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' is {sec.bytes} bytes, not a whole number of elements\n")
         ok = false
     }
 }
@@ -1022,7 +1022,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         // every decline is loud (short of a missing file) — a silently regenerating cache is
         // undebuggable. A wrong version means the meta layout is unknowable, so this arm
         // cannot read the baked identity string the identity-mismatch arm below prints.
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)}\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)}\n")
         return false
     }
     let nsections = int(read_u32(bp, 12l))
@@ -1033,7 +1033,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     // int() casts the copy below takes (real meta blobs are a few MB, never empty — the
     // section table always rides there, and addr(meta_blob[0]) needs a nonzero resize)
     if (file_bytes != msize || meta_bytes == 0ul || meta_bytes > msize || meta_off > msize - meta_bytes || meta_bytes > uint64(INT_MAX)) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — header says {file_bytes} bytes / meta {meta_off}+{meta_bytes}, mapped {msize}\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - header says {file_bytes} bytes / meta {meta_off}+{meta_bytes}, mapped {msize}\n")
         return false
     }
     let want_ident = image_identity(tag, quant)
@@ -1049,7 +1049,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         var harch = Archive(reading = true, stream = hmeta)
         var baked_ident = ""
         harch |> serialize(baked_ident)
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — baked for '{hmeta->OK() ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - baked for '{hmeta->OK() ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
         delete head
         unsafe {
             delete hmeta
@@ -1074,7 +1074,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     // means header/meta corruption, and silently-absent sections would leave planes EMPTY
     // (indistinguishable from legitimately-empty ones)
     if (length(sections) != nsections) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — header says {nsections} sections, meta carries {length(sections)}\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - header says {nsections} sections, meta carries {length(sections)}\n")
         delete sections
         delete meta_blob
         unsafe {
@@ -1086,7 +1086,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     // duplicate section names would silently overwrite table entries and borrow the wrong
     // plane — a valid save never produces them, so a collision is corruption
     if (length(by_name) != length(sections)) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — {length(sections)} sections carry duplicate names\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - {length(sections)} sections carry duplicate names\n")
         delete by_name
         delete sections
         delete meta_blob
@@ -1100,7 +1100,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     // lastError, no panic) — decline BEFORE post_load, which would panic on garbage (e.g. an
     // unreadable arch name), and before any plane borrows
     if (!meta->OK()) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — meta blob is truncated/corrupt ({meta->getLastError()})\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - meta blob is truncated/corrupt ({meta->getLastError()})\n")
         delete t   // half-deserialized, all owned — nothing is borrowed yet
         delete meta_blob
         delete sections
@@ -1169,7 +1169,7 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
     if (base == null || int64(msize) < IMAGE_HEADER_BYTES) {
         // fmap_open declines with null (vanished file, mmap failure, >size_t on 32-bit) —
         // treat it like any other decline; the header reads need a real mapping
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — cannot map ({msize} bytes)\n")
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - cannot map ({msize} bytes)\n")
         if (base != null) {
             unsafe(fmap_close(base, msize))
         }
@@ -1206,15 +1206,15 @@ def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : s
             return false
         }
         image_chunk_free(w.mem)
-        panic("dasLLAMA: the image build failed after it began consuming the model — see the error above")
+        panic("dasLLAMA: the image build failed after it began consuming the model - see the error above")
     }
     to_log(LOG_INFO, "dasLLAMA image: built in memory in {get_time_usec(ts) / 1000} ms ({int64(w.cur) >> 20l} MB)\n")
     // the save is a courtesy to the NEXT run — a full disk must not cost this one its model
     if (save_to != "" && !write_chunk(w.mem, w.cur, save_to)) {
-        to_log(LOG_WARNING, "dasLLAMA image: could not write '{save_to}' — this run still serves the image it built\n")
+        to_log(LOG_WARNING, "dasLLAMA image: could not write '{save_to}' - this run still serves the image it built\n")
     }
     if (!adopt_image(w.mem, w.cur, save_to != "" ? save_to : "<in-memory image>", out, tag, quant)) {
-        panic("dasLLAMA: the image this process just built would not parse back — see the decline above")
+        panic("dasLLAMA: the image this process just built would not parse back - see the decline above")
     }
     return true
 }
@@ -1248,12 +1248,12 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
         w_zeros(w, pad_to_page(w.cur) - w.cur)
         let at = w.cur
         if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image build aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed - image build aborted\n")
             w.ok = false
         }
         // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
         if (w.ok && w.cur - at != uint64(want)) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image build aborted\n")
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} - image build aborted\n")
             w.ok = false
         }
         sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
@@ -1273,7 +1273,7 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
     let ts = ref_time_ticks()
     let img_v = image_path_for(path, vk_tag)
     if (save_model_image(t, img_v, vk_tag)) {
-        to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts) / 1000} ms — {img_v}\n")
+        to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts) / 1000} ms - {img_v}\n")
     }
     delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
     delete t.vkplan
@@ -1316,7 +1316,7 @@ def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var section
     }
     delete band
     if (!w.ok) {
-        to_log(LOG_ERROR, "dasLLAMA image: plane 'mblob' failed writing {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
+        to_log(LOG_ERROR, "dasLLAMA image: plane 'mblob' failed writing {int64(nbytes)} bytes at offset {int64(at)} - disk full? image save aborted\n")
         return
     }
     let ms = int64(get_time_usec(ts)) / 1000l
@@ -1365,17 +1365,17 @@ def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag :
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, plane)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
             delete st   // before the map, not after: holding both is what makes a cold load peak twice
             if (!load_image(img, out, tag, quant)) {
-                panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+                panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
             }
             return
         }
-        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — building the image in memory instead\n")
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - building the image in memory instead\n")
     }
     if (!chunk_rail(st, out, "", extra, tag, quant, plane)) {
-        panic("dasLLAMA: could not build the prepared image in memory — there is no other form to serve")
+        panic("dasLLAMA: could not build the prepared image in memory - there is no other form to serve")
     }
 }
 
@@ -1391,14 +1391,14 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
     }
     let ts = ref_time_ticks()
     if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
-        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — serving the carrier as loaded\n")
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - serving the carrier as loaded\n")
         out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         return
     }
-    to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+    to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
     delete m   // before the map, not after: holding both is what makes a cold load peak twice
     if (!load_image(img, out, tag, quant)) {
-        panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+        panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
     }
 }
 
@@ -1414,10 +1414,10 @@ def private guard_interp_gguf_load(path : string) {
         return
     }
     if (g_env_engine.allow_interp_load) {
-        to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB — expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
+        to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB - expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
         return
     }
-    panic("dasLLAMA: loading a {int64(st.size) >> 30l} GB gguf without -jit runs the load transforms interpreted (an hour on big models) — run with -jit, load a prepared .dlim, or set DASLLAMA_ALLOW_INTERP_LOAD=1")
+    panic("dasLLAMA: loading a {int64(st.size) >> 30l} GB gguf without -jit runs the load transforms interpreted (an hour on big models) - run with -jit, load a prepared .dlim, or set DASLLAMA_ALLOW_INTERP_LOAD=1")
 }
 
 //! Model entry point — see load_image (`tag` = the flavor, like save_model_image).
@@ -1467,9 +1467,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         if (!loaded) {
             let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""
-            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) — regenerate it from the source gguf")
+            panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) - regenerate it from the source gguf")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     // load-time flavor pick: blob-only metal when its drivers serve the config; the vulkan
@@ -1482,7 +1482,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         if (want_metal) {
             let img_m = image_path_for(path, METAL_IMAGE_TAG)
             if (load_model_image(img_m, t, METAL_IMAGE_TAG)) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img_m}\n")
+                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img_m}\n")
                 return <- t
             }
         }
@@ -1495,12 +1495,12 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             vulkan_bake_slice_begin()
             if (load_model_image(img_v, t, vk_tag)) {
                 vulkan_bake_slice_end(t)
-                to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms — {img_v}\n")
+                to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {img_v}\n")
                 return <- t
             }
             vulkan_bake_disarm()
             if (g_image_frozen) {
-                panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen — pre-mint it")
+                panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen - pre-mint it")
             }
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
@@ -1508,19 +1508,19 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         if (load_model_image(img, t, "", qs)) {
             vulkan_bake_flavor(t, path, vk_tag)
             if (!(want_metal && metal_model_servable(t))) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+                to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
                 return <- t
             }
             // a planar image of a metal-servable config under metal mode — drop the mapping
             // and regenerate the blob flavor (the planar file stays for CPU-mode loads)
             if (g_image_frozen) {
-                panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen — pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
+                panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen - pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
             }
             delete t
         }
         if (g_image_frozen) {
             let want = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
-            panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
+            panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen - pre-mint it")
         }
         guard_interp_gguf_load(path)
         // The cold build streams: planes go from the gguf mapping straight into the image, never
@@ -1549,9 +1549,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             delete jobs
             delete mt   // the streamed planes never became model planes; the rest goes now
             if (served && save) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms — {s_img}\n")
+                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms - {s_img}\n")
                 if (!load_image(s_img, streamed, s_tag, s_quant)) {
-                    panic("dasLLAMA: '{s_img}' was just streamed out and will not map back — see the decline above")
+                    panic("dasLLAMA: '{s_img}' was just streamed out and will not map back - see the decline above")
                 }
                 dlim_gc_stale(path, s_tag, s_quant)   // the fresh bake proves ITS LANE's siblings dead
             }
@@ -1564,7 +1564,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             }
             delete streamed
             if (ran) {
-                to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' — taking the eager rail\n")
+                to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' - taking the eager rail\n")
             }
         }
         var m <- load_model_(path, mode)
@@ -1598,7 +1598,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         return <- built
     }
     if (g_image_frozen) {
-        panic("dasLLAMA: the image rail is off/ineligible for '{path}' (mode {qs}) and artifacts are frozen — the oracle contract needs a prepared image")
+        panic("dasLLAMA: the image rail is off/ineligible for '{path}' (mode {qs}) and artifacts are frozen - the oracle contract needs a prepared image")
     }
     guard_interp_gguf_load(path)
     var m <- load_model_(path, mode)

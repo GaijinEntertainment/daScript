@@ -127,7 +127,7 @@ def private err(var ctx : MslCtx; at : LineInfo; msg : string) {
 // forms exist on the CPU only — shader vectors cap at 4 lanes on every target
 def private reject_cpu_only_width(var ctx : MslCtx; at : LineInfo; t : TypeDecl?) : bool {
     if (t != null && cpu_only_lattice_width(t.baseType)) {
-        err(ctx, at, "type {t.baseType} is CPU-only (8/16-lane lattice forms do not exist in shaders — vectors cap at 4 lanes)")
+        err(ctx, at, "type {t.baseType} is CPU-only (8/16-lane lattice forms do not exist in shaders - vectors cap at 4 lanes)")
         return true
     }
     return false
@@ -182,7 +182,7 @@ def private uniform_struct(var ctx : MslCtx; st : StructurePtr; at : LineInfo) :
         // int/uint/float only: every other MSL type either changes size across the seam or
         // carries alignment padding, and then the host's byte image stops matching
         if (empty(tn) || !(tn == "int" || tn == "uint" || tn == "float")) {
-            err(ctx, at, "@uniform struct `{st.name}` field `{f.name}` is {ft == null ? "?" : describe(ft)} — only int/uint/float fields lower (a 4-byte-scalar struct is the same bytes in das and MSL)")
+            err(ctx, at, "@uniform struct `{st.name}` field `{f.name}` is {ft == null ? "?" : describe(ft)} - only int/uint/float fields lower (a 4-byte-scalar struct is the same bytes in das and MSL)")
             bad = true
             continue
         }
@@ -298,15 +298,15 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             continue
         }
         if ((isSsbo ? 1 : 0) + (isUniform ? 1 : 0) + (isWorkgroup ? 1 : 0) > 1) {
-            err(ctx, fld.at, "member `{fld.name}` mixes @ssbo/@uniform/@workgroup — pick one")
+            err(ctx, fld.at, "member `{fld.name}` mixes @ssbo/@uniform/@workgroup - pick one")
             continue
         }
         if (setIdx != 0) {
-            err(ctx, fld.at, "member `{fld.name}` has @set = {setIdx} — Metal has no descriptor sets; only @set = 0 (or none) is allowed")
+            err(ctx, fld.at, "member `{fld.name}` has @set = {setIdx} - Metal has no descriptor sets; only @set = 0 (or none) is allowed")
         }
         if (isWorkgroup) {
             if (binding >= 0) {
-                err(ctx, fld.at, "@workgroup member `{fld.name}` has @binding = {binding} — threadgroup memory is not a bindable buffer")
+                err(ctx, fld.at, "@workgroup member `{fld.name}` has @binding = {binding} - threadgroup memory is not a bindable buffer")
                 continue
             }
             var wgElem = ""
@@ -339,7 +339,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             continue
         }
         if (binding < 0) {
-            err(ctx, fld.at, "member `{fld.name}` has no @binding — every buffer needs an explicit [[buffer(N)]] index")
+            err(ctx, fld.at, "member `{fld.name}` has no @binding - every buffer needs an explicit [[buffer(N)]] index")
             continue
         }
         var elem = ""
@@ -370,7 +370,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             isUstruct = true
         } else {
             if (fld._type != null && fld._type.baseType == Type.tArray) {
-                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, vector, or a struct of 4-byte scalars — array members are @ssbo buffers")
+                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, vector, or a struct of 4-byte scalars - array members are @ssbo buffers")
                 continue
             }
             if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
@@ -386,7 +386,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         let fldName = string(fld.name)
         for (existing, m in keys(ctx.members), values(ctx.members)) {
             if (m.binding == binding) {
-                err(ctx, fld.at, "members `{existing}` and `{fldName}` share @binding = {binding} — bindings must be unique within a kernel class")
+                err(ctx, fld.at, "members `{existing}` and `{fldName}` share @binding = {binding} - bindings must be unique within a kernel class")
             }
         }
         ctx.renames[fldName] = msl_safe_name(fldName)
@@ -401,7 +401,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         }
     }
     if (empty(ctx.errors) && ssboCount == 0) {
-        err(ctx, fn.at, "kernel class `{fn.classParent.name}` has no @ssbo members — a kernel with no buffers cannot observe or produce anything")
+        err(ctx, fn.at, "kernel class `{fn.classParent.name}` has no @ssbo members - a kernel with no buffers cannot observe or produce anything")
     }
 }
 
@@ -567,7 +567,7 @@ def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) 
     // recursive self-call would otherwise hit the fast path and lower silently
     for (s in ctx.scan_stack) {
         if (s == key) {
-            err(ctx, at, "function `{bn}` is recursive — MSL forbids recursion")
+            err(ctx, at, "function `{bn}` is recursive - MSL forbids recursion")
             return -1
         }
     }
@@ -625,7 +625,7 @@ def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string;
     let key = ufn_key(mfn)
     for (s in ctx.scan_stack) {
         if (s == key) {
-            err(ctx, at, "method `{mname}` is recursive — MSL forbids recursion")
+            err(ctx, at, "method `{mname}` is recursive - MSL forbids recursion")
             return -1
         }
     }
@@ -1064,7 +1064,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         // renames also catches for-loop iterators, whose ExprVar flags are not `local`
         if (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block || key_exists(ctx.renames, name)) {
             if (name == ctx.self_name) {
-                err(ctx, ev.at, "`self` used as a value — only member access (self.field) lowers to MSL")
+                err(ctx, ev.at, "`self` used as a value - only member access (self.field) lowers to MSL")
                 return "/*self*/"
             }
             note(ctx, "expr.var")
@@ -1075,7 +1075,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.builtin.{bi.attr}")
             return name
         }
-        err(ctx, ev.at, "global `{name}` is not a supported builtin — kernels reach data only through @ssbo members and builtin IDs")
+        err(ctx, ev.at, "global `{name}` is not a supported builtin - kernels reach data only through @ssbo members and builtin IDs")
         return "/*{name}*/"
     } elif (e is ExprField) {
         let ef = e as ExprField
@@ -1095,7 +1095,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.member.ustruct")
             return "{ctx.members[um].msl_name}.{msl_safe_name(fieldName)}"
         }
-        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access — only self.<@ssbo/@uniform member> and one hop into a @uniform struct lower to MSL")
+        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access - only self.<@ssbo/@uniform member> and one hop into a @uniform struct lower to MSL")
         return "/*.{fieldName}*/"
     } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
         // das pointer arithmetic (`p = unsafe(p + n)`): args = (ptr, elems, elem_size); MSL
@@ -1335,7 +1335,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let acls = census_class(ec.arguments[0]._type)
         let ok = (acls |> starts_with("f")) || (cname == "abs" && (acls |> starts_with("i")))
         if (!ok) {
-            err(ctx, ec.at, "{cname} lowers for float{cname == "abs" ? "/signed-int" : ""} classes only — argument is {acls}")
+            err(ctx, ec.at, "{cname} lowers for float{cname == "abs" ? "/signed-int" : ""} classes only - argument is {acls}")
             return "/*call {cname}*/"
         }
         let v = emit_value(ctx, ec.arguments[0])
@@ -1375,7 +1375,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         }
         let acls = census_class(ec.arguments[0]._type)
         if (!(acls |> starts_with("f")) && !(acls |> starts_with("i")) && !(acls |> starts_with("u"))) {
-            err(ctx, ec.at, "{cname} lowers for numeric classes only — argument is {acls}")
+            err(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
             return "/*call {cname}*/"
         }
         let a = emit_value(ctx, ec.arguments[0])
@@ -1471,7 +1471,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
                 let pt = ec.func.arguments[i]._type
                 let wm = member_lookup(ctx, ec.arguments[i])
                 if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
-                    err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
+                    err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter - address spaces differ; pass the fixed array itself")
                 }
                 check_ptr_arg(ctx, ec.func.arguments[i], ec.arguments[i], ec.at)
             }
@@ -1483,7 +1483,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         note(ctx, "call.user")
         return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
     }
-    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function — kernels reach only the MSL subset")
+    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function - kernels reach only the MSL subset")
     return "/*call {cname}*/"
 }
 
@@ -1800,7 +1800,7 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; ei : ExprInvok
 def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
     if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
-        err(ctx, ei.at, "invoke has no MSL lowering — only method calls on the kernel's own self lower")
+        err(ctx, ei.at, "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return "/*invoke*/"
     }
     let mname = string(mf.name)
@@ -1956,9 +1956,9 @@ def private check_ptr_arg(var ctx : MslCtx; pv : VariablePtr; arg : Expression?;
     let want = ptr_param_space(pv)
     let got = ptr_arg_space(ctx, arg)
     if (empty(got)) {
-        err(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable address space — pass `addr(member[i])`, a pointer local, or a pointer parameter")
+        err(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
     } elif (got != want) {
-        err(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points into {got} memory — {want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} or pass a {want} pointer")
+        err(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points into {got} memory - {want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} or pass a {want} pointer")
     }
 }
 
@@ -2011,7 +2011,7 @@ def private emit_store_target(var ctx : MslCtx; e : Expression?) : string {
         return "{sub}[{idx}]"
     }
     if (lvalue_touches_packed(ctx, e)) {
-        err(ctx, e.at, "component or swizzle writes into a packed 3-lane buffer element are not supported — assign the whole element")
+        err(ctx, e.at, "component or swizzle writes into a packed 3-lane buffer element are not supported - assign the whole element")
         return "/*packed store*/"
     }
     return emit_value(ctx, e)
@@ -2046,7 +2046,7 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
         let pmem0 = ctx.ptrs[pn0]
         let pmm = ctx.members[pmem0]
         if (!isLoad) {
-            err(ctx, ec.at, "simdgroup_store through a das pointer is not supported — store to the @ssbo member directly")
+            err(ctx, ec.at, "simdgroup_store through a das pointer is not supported - store to the @ssbo member directly")
             return
         }
         let pmv = emit_value(ctx, ec.arguments[0])
@@ -2070,11 +2070,11 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     }
     let m = ctx.members[mem]
     if (m.uniform) {
-        err(ctx, ec.at, "{cname} cannot address a @uniform member — use an @ssbo buffer")
+        err(ctx, ec.at, "{cname} cannot address a @uniform member - use an @ssbo buffer")
         return
     }
     if (m.workgroup && !isLoad) {
-        err(ctx, ec.at, "simdgroup_store targets an @ssbo buffer — threadgroup stores are not supported")
+        err(ctx, ec.at, "simdgroup_store targets an @ssbo buffer - threadgroup stores are not supported")
         return
     }
     let mv = emit_value(ctx, ec.arguments[0])
@@ -2458,7 +2458,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                     v._type.firstType.baseType != Type.tFixedArray) {
                 // single-dim fixed-array local; das zero-init semantics, no initializer form
                 if (v.init != null) {
-                    err(ctx, v.at, "fixed-array local `{v.name}` takes no initializer — das zero-init is the MSL form")
+                    err(ctx, v.at, "fixed-array local `{v.name}` takes no initializer - das zero-init is the MSL form")
                     continue
                 }
                 let et = v._type.firstType
@@ -2525,7 +2525,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             return
         }
         if (is_packed_elem_at(ctx, op2.left) || lvalue_touches_packed(ctx, op2.left)) {
-            err(ctx, op2.at, "compound assignment into a packed 3-lane buffer element is not supported — load into a local, compute, then assign the whole element")
+            err(ctx, op2.at, "compound assignment into a packed 3-lane buffer element is not supported - load into a local, compute, then assign the whole element")
             return
         }
         let l = emit_value(ctx, op2.left)
@@ -2609,7 +2609,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             note(ctx, "stmt.call_user")
             lines |> push("{indent}{emit_call_value(ctx, ec)};")
         } else {
-            err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering — only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
+            err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering - only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
     } elif (e is ExprBreak) {
         note(ctx, "stmt.break")
@@ -2621,7 +2621,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         let er = e as ExprReturn
         if (er.subexpr != null) {
             if (ctx.fn_depth == 0) {
-                err(ctx, er.at, "kernels return void — `return <value>` has no MSL form")
+                err(ctx, er.at, "kernels return void - `return <value>` has no MSL form")
                 return
             }
             note(ctx, "stmt.return_value")
@@ -2678,7 +2678,7 @@ def private emit_loop_hints(var ctx : MslCtx; anns : AnnotationArgumentList; at 
             note(ctx, "stmt.for.unroll")
             lines |> push("{indent}#pragma clang loop unroll_count({a.iValue})")
         } else {
-            err(ctx, at, "loop hint `{a.name}` has no MSL lowering — supported: unroll, unroll_full, unroll_disable, unroll_count=N")
+            err(ctx, at, "loop hint `{a.name}` has no MSL lowering - supported: unroll, unroll_full, unroll_disable, unroll_count=N")
         }
     }
 }
@@ -2756,7 +2756,7 @@ def private ufn_param_ptr(var ctx : MslCtx; v : VariablePtr; t : TypeDecl?;
                           dname, name : string; at : LineInfo) : string {
     let pt = t.firstType
     if (pt == null) {
-        err(ctx, at, "parameter `{dname}` is a void pointer — MSL needs an element type")
+        err(ctx, at, "parameter `{dname}` is a void pointer - MSL needs an element type")
         return ""
     }
     if (reject_cpu_only_width(ctx, at, pt)) {
@@ -2940,11 +2940,11 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         return ""
     }
     if (fn.classParent == null) {
-        errors |> push("[metal_kernel] `{fn.name}` is not a class method — kernels are methods of a class whose @ssbo members declare the buffers")
+        errors |> push("[metal_kernel] `{fn.name}` is not a class method - kernels are methods of a class whose @ssbo members declare the buffers")
         return ""
     }
     if ((fn.arguments |> length) != 1) {
-        errors |> push("[metal_kernel] `{fn.name}` must take no parameters beyond self — kernels read/write only @ssbo/@uniform members")
+        errors |> push("[metal_kernel] `{fn.name}` must take no parameters beyond self - kernels read/write only @ssbo/@uniform members")
         return ""
     }
     ctx.self_name = string(fn.arguments[0].name)
@@ -3026,7 +3026,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         if (m.uniform) {
             if (m.written) {
-                err(ctx, fn.at, "@uniform member `{name}` is written — uniforms are read-only; outputs are @ssbo buffers")
+                err(ctx, fn.at, "@uniform member `{name}` is written - uniforms are read-only; outputs are @ssbo buffers")
                 continue
             }
             note(ctx, m.packed ? "param.uniform_packed" : "param.uniform")

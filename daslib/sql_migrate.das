@@ -148,7 +148,7 @@ def private _verify_no_duplicate_versions(stream : string) : void {
 
 // ===== Internal helpers — audit table I/O and diagnostics =====
 
-let private ADOPTION_HINT = "this DB has existing tables/views/indexes but __schema_version is empty (no migration history yet). If your first migration creates tables that already exist, it will fail. To adopt migrations on an existing DB, call `db |> baseline(version = N)` before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 § \"Adopting migrations on an existing DB\"."
+let private ADOPTION_HINT = "this DB has existing tables/views/indexes but __schema_version is empty (no migration history yet). If your first migration creates tables that already exist, it will fail. To adopt migrations on an existing DB, call `db |> baseline(version = N)` before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 section \"Adopting migrations on an existing DB\"."
 
 def private _scalar_int_or_zero(db; sql : string) : int {
     // Treats query failure (e.g. "no such table") as 0 — natural default for COUNT/MAX probes.
@@ -180,9 +180,9 @@ def private _format_versions_csv(pending : array<MigrationEntry>; applied_count 
 
 def private _build_enriched_err(failed_version : int; failed_desc : string; underlying : string;
                                 rolled_back : string; layer2_hint : bool) : string {
-    var msg = "migration v{failed_version} '{failed_desc}' failed:\n  {underlying}\n\nnote: this migrate_to_latest call's transaction was rolled back — {rolled_back} are NOT applied. Fix the migration body and re-run; the corrected migration set will replay on the next call. The DB does not need to be reset."
+    var msg = "migration v{failed_version} '{failed_desc}' failed:\n  {underlying}\n\nnote: this migrate_to_latest call's transaction was rolled back - {rolled_back} are NOT applied. Fix the migration body and re-run; the corrected migration set will replay on the next call. The DB does not need to be reset."
     if (layer2_hint) {
-        msg += "\n\nnote: This is the first migration on this DB and __schema_version was empty before this call. Looks like an adoption attempt on an existing schema. Call `db |> baseline(version = N)` once before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 § \"Adopting migrations on an existing DB\"."
+        msg += "\n\nnote: This is the first migration on this DB and __schema_version was empty before this call. Looks like an adoption attempt on an existing schema. Call `db |> baseline(version = N)` once before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 section \"Adopting migrations on an existing DB\"."
     }
     return msg
 }
@@ -195,7 +195,7 @@ def private _log_warn_on_some(err : SqlError) : void {
 
 // ===== Internal runner — _migrate_inner =====
 
-def private _migrate_inner(db; blocking : bool) : Result<int, string> {
+def private _migrate_inner(db; blocking : bool) : Result<int, string> {   // nolint:STYLE038 - one linear migration protocol; the layers share the audit-table state
     let stream = _::_migration_stream_key(db)
     // Eager audit table; idempotent across concurrent runners.
     let create_err = db |> _::try_exec(AUDIT_CREATE_DDL)
@@ -213,7 +213,7 @@ def private _migrate_inner(db; blocking : bool) : Result<int, string> {
     let current = _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
     if (current > max_registered) {
         let bin_max = max_registered
-        to_log(LOG_WARNING, "DB at schema v{current} but this binary only knows up to v{bin_max} — DB appears to be running ahead of the binary. No migrations applied.\n")
+        to_log(LOG_WARNING, "DB at schema v{current} but this binary only knows up to v{bin_max} - DB appears to be running ahead of the binary. No migrations applied.\n")
         return ok(0, type<string>)
     }
     var pending <- _registry_sorted(stream)
@@ -279,7 +279,7 @@ def private _migrate_inner(db; blocking : bool) : Result<int, string> {
     } recover {
         let underlying = this_context().last_exception |> rtrim
         let rolled_back_str = _format_versions_csv(pending, applied_count)
-        to_log(LOG_ERROR, "migration v{failed_version} '{failed_desc}' FAILED — rolled back call\n  underlying error: {underlying}\n  rolled back: {rolled_back_str}\n")
+        to_log(LOG_ERROR, "migration v{failed_version} '{failed_desc}' FAILED - rolled back call\n  underlying error: {underlying}\n  rolled back: {rolled_back_str}\n")
         db |> _::try_exec("ROLLBACK") |> _log_warn_on_some
         let layer2_hint = audit_was_empty_before && (failed_version == pending[0].version)
         inner_err = _build_enriched_err(failed_version, failed_desc, underlying, rolled_back_str, layer2_hint)
@@ -400,7 +400,7 @@ def private _baseline_inner(db; version : int; blocking : bool) : Result<int, st
     let stream = _::_migration_stream_key(db)
     if (version <= 0) return err("baseline(version={version}) must be a positive integer", type<int>)
     let max_reg = _registry_max_version(stream)
-    if (version > max_reg) return err("baseline(version={version}) is above the highest registered migration (v{max_reg}) — looks like a typo", type<int>)
+    if (version > max_reg) return err("baseline(version={version}) is above the highest registered migration (v{max_reg}) - looks like a typo", type<int>)
     let create_err = db |> _::try_exec(AUDIT_CREATE_DDL)
     if (create_err |> is_some) return err(create_err |> unwrap, type<int>)
     // all-or-nothing per contract — on err the glue holds nothing; skipping _migration_end is correct
@@ -496,7 +496,7 @@ class SqlMigrationMacro : AstFunctionAnnotation {
     //! Marks ``def fn(db : <ProviderRunner>)`` as a versioned schema migration; runs once per
     //! DB. The runner parameter's type selects the provider STREAM; versions are unique per
     //! stream. Args: ``version=<int>`` (required), optional ``description``/``vacuum``/``analyze``.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat annotation-argument validation ladder
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_migration] is not supported on generic functions"
@@ -756,7 +756,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
     //! Marks ``def fn(old : S; var dst : T) : void`` for auto-derived field-by-field translation.
     //! Same-name-same-type / ``T → Option<T>`` / ``INT↔STRING↔FLOAT`` cast / ``@sql_renamed_from`` are
     //! filled in; an explicit ``dst.X = …`` (or ``<-``/``:=``) on the LHS suppresses the auto-fill for X.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE037,STYLE038 - one arm per auto-fill field mapping rule
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[struct_convert]: not supported on generic functions"
@@ -765,7 +765,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
         // Signature: def fn(old : S; var new : T) : void
         let nArgs = func.arguments |> length
         if (nArgs != 2) {
-            errors := "[struct_convert] '{func.name}': must take exactly two arguments — `old : S` and `var new : T`. Got {nArgs}."
+            errors := "[struct_convert] '{func.name}': must take exactly two arguments - `old : S` and `var new : T`. Got {nArgs}."
             return false
         }
         let arg0_type = func.arguments[0]._type
@@ -842,7 +842,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
                         tgt.$f(tname) = none(type<$t(t_payload)>);
                     }))
                 } else {
-                    errors := "[struct_convert] '{func.name}': new field '{tname}' has no default initializer and is not Option<T>. Provide a default like `{tname} : {describe(t_type)} = …` on the struct, or write `{new_param_name}.{tname} = …` in the body."
+                    errors := "[struct_convert] '{func.name}': new field '{tname}' has no default initializer and is not Option<T>. Provide a default like `{tname} : {describe(t_type)} = ...` on the struct, or write `{new_param_name}.{tname} = ...` in the body."
                     failed = true
                 }
             }

@@ -12,7 +12,7 @@ require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 
 [test]
 def test_kqfmt_enum_values(t : T?) {
-    t |> run("int(KqFmt.*) values are pinned — device tags and stream codes key off them") @(t : T?) {
+    t |> run("int(KqFmt.*) values are pinned - device tags and stream codes key off them") @(t : T?) {
         t |> equal(int(KqFmt.q8), 0)
         t |> equal(int(KqFmt.k4), 1)
         t |> equal(int(KqFmt.k5), 2)

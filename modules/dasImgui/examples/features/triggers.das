@@ -22,7 +22,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 0b.1 — triggers", 800, 600)
+    harness_init("Phase 0b.1 - triggers", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -33,7 +33,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 560.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Triggers — phase 0b.1", closable = false,
+    window(MAIN_WIN, (text = "Triggers - phase 0b.1", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         // ----- Click family -----
         text("Click family")
@@ -76,7 +76,7 @@ def update() {
         spacing()
 
         // ----- Grouped radios (shared state) -----
-        text("Difficulty (radio_button_int — three calls share DIFFICULTY)")
+        text("Difficulty (radio_button_int - three calls share DIFFICULTY)")
         separator()
         radio_button_int(DIFFICULTY, (text = "Easy", v_button = 0))
         same_line()

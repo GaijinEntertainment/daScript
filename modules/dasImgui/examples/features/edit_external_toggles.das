@@ -24,7 +24,7 @@ var private g_flags : int = 5
 
 [export]
 def init() {
-    harness_init("edit_external_toggles — boost v2 §3.7", 720, 380)
+    harness_init("edit_external_toggles - boost v2 sec 3.7", 720, 380)
 }
 
 [export]

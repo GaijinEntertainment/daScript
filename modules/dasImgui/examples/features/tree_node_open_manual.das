@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("tree_node_open / tree_pop — manual-pair", 520, 360)
+    harness_init("tree_node_open / tree_pop - manual-pair", 520, 360)
 }
 
 [export]
@@ -32,7 +32,7 @@ def update() {
     SetNextWindowSize(ImVec2(480.0, 320.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "tree_node_open + tree_pop", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Header has a sibling button on the SAME line — that pattern needs the manual pair."))
+        text(LEAD, (text = "Header has a sibling button on the SAME line - that pattern needs the manual pair."))
 
         // Render the header; if open, render an inline same_line widget
         // OUTSIDE the conditional body, then pop manually.
@@ -40,7 +40,7 @@ def update() {
         same_line()
         if (button(SETTINGS_RESET, (text = "reset"))) {}
         if (node_open) {
-            text(BODY_HINT, (text = "(node body — rendered only while open)"))
+            text(BODY_HINT, (text = "(node body - rendered only while open)"))
             text(BODY_LINE_1, (text = "  - option A"))
             text(BODY_LINE_2, (text = "  - option B"))
             tree_pop()

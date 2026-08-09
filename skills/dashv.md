@@ -10,6 +10,7 @@ Worked example end-to-end: `utils/dasllama-server/` (an OpenAI-compatible server
 require dashv/dashv_boost public   // HvWebServer, HvWebSocketClient, with_http_request, get_body_bytes
 require daslib/jobque_boost        // with_job_status / with_atomic32 (server threading, test harness)
 require daslib/json_boost          // read_json / write_json / sprint_json for JSON bodies
+require daslib/fio                 // sleep (the tick loop) — dashv_boost does not pull it in
 ```
 
 ## Server — subclass `HvWebServer`, register routes in `onInit`
@@ -37,8 +38,11 @@ def run() {
 }
 ```
 
-- **Route methods** (all on the server class): `GET` `POST` `PUT` `DELETE` `PATCH` `HEAD` `ANY`
-  for buffered handlers; `STREAM` for streaming (SSE / chunked). Literal routes outrank
+- **Route methods** (all on the server class): `GET` `POST` `PUT` `DELETE` `PATCH` `HEAD` `ANY` and
+  `SSE` take buffered handlers (`SSE` matches any method — use it when the whole event-stream body
+  is built up front); `STREAM` takes the incremental `HttpResponseWriter` handler for live SSE /
+  chunked. Static serving: `STATIC(path, dir)`, plus `set_document_root` / `set_home_page` /
+  `set_index_of` / `set_error_page` / `allow_cors` / `set_bind_host`. Literal routes outrank
   `:param` routes outrank `ANY("*")` (trie router; pinned by `test_server_routes.das`).
 - **Request access:** `string(req.body)`, `req.method`, `get_param(req, "id")` (path `:id` or query),
   `each_param(req) $(k, v) { }`, `get_header(req, "X-…")`, `each_header`, multipart via

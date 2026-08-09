@@ -296,7 +296,8 @@ public:
             "das_terminal::builtin_pty_terminate")->args({"pty", "exit_code"});
         addExtern<DAS_BIND_FUN(das_terminal::builtin_pty_error)>(*this, lib,
             "_pty_error", SideEffects::modifyExternal,
-            "das_terminal::builtin_pty_error")->args({"pty", "context", "at"});
+            "das_terminal::builtin_pty_error")->args({"pty", "context", "at"})
+                ->setTempStringResult();
 
         verifyBuiltinNames(uint32_t(VerifyBuiltinFlags::verifyAll));
         verifyAotReady();

@@ -952,7 +952,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
             invoke(blk, eid, i, cmp)
             cmp |> set("eid", eid)
             if (cmp_archetype_hash(cmp) != ahash) {
-                panic("decs: create_entities — all entities must have the same components (entity {i} differs from entity 0)")
+                panic("decs: create_entities - all entities must have the same components (entity {i} differs from entity 0)")
             }
             let eidx = base + int64(i)
             for (c, comp in arch.components, cmp) {
@@ -1101,7 +1101,7 @@ def public get(var cmp : ComponentMap; name : string; var value : auto(TT)) {
     return value
 }
 
-def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
+def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {   // nolint:STYLE038 - one no-capture lambda per ComponentValue callback slot
     cv.info.mkTypeInfo = @@() : TypeInfo const? {
         return unsafe(addr(typeinfo rtti_typeinfo(type<array<TT -const -& -#>>)))
     }
@@ -1218,7 +1218,7 @@ def public find_component_index(arch : Archetype; name : string) : int {
     for (i in range(length(arch.components))) {
         if (arch.components[i].name == name) return i
     }
-    panic("decs: find_component_index — component '{name}' not found in archetype")
+    panic("decs: find_component_index - component '{name}' not found in archetype")
     return -1
 }
 

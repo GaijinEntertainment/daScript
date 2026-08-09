@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("§4.7 — with_style", 640, 480)
+    harness_init("sec 4.7 - with_style", 640, 480)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -41,7 +41,7 @@ def update() {
         }
 
         separator()
-        text("Nested with_style — inner stacks on outer:")
+        text("Nested with_style - inner stacks on outer:")
         with_style((ImGuiCol.Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f))) {
             with_style((ImGuiCol.Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f))) {
                 button(NESTED_STYLED_BTN, (text = "Yellow text + blue button"))
@@ -49,7 +49,7 @@ def update() {
         }
 
         separator()
-        text("After with_style — baseline style restored:")
+        text("After with_style - baseline style restored:")
         // If push/pop counts were off, this button would render with stale
         // color/rounding — and ImGui's style stack auto-asserts unbalanced pops
         // at EndFrame, crashing the process. A normal-looking button = balanced.

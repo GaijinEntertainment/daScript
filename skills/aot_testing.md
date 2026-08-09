@@ -30,7 +30,7 @@ Key helpers used by the emitter:
 
 `tests/aot/CMakeLists.txt` defines the `test_aot` executable — a standalone binary with AOT stubs compiled in. It uses the same `main.cpp` as `daslang` but links additional AOT-generated object files.
 
-**Two binaries since 2026-07:**
+**Two C++-AOT binaries** (a third, LLVM-backed one is covered under "Registering a New Test Directory"):
 
 | Binary | Contents | In default build (ALL)? | Who builds/runs it |
 |---|---|---|---|
@@ -43,12 +43,14 @@ Neither binary uses LTO (the full binary's LTCG link alone was ~21 min on MSVC C
 
 ```
 tests/aot/
-    CMakeLists.txt          # Build rules for test_aot
-    test_arithmetic.das     # AOT test: math, functions, function pointers
-    test_strings.das        # AOT test: string operations
-    test_lambdas.das        # AOT test: lambdas, captures, higher-order functions
-    test_structures.das     # AOT test: structs, classes, arrays, tables
-    _aot_generated/         # Auto-generated C++ (gitignored)
+    CMakeLists.txt              # Build rules for test_aot / test_aot_subset / test_llvm_aot
+    test_arithmetic.das         # AOT test: math, functions, function pointers
+    test_strings.das            # AOT test: string operations
+    test_lambdas.das            # AOT test: lambdas, captures, higher-order functions
+    test_structures.das         # AOT test: structs, classes, arrays, tables
+    ...                         # ~27 test_*.das in all — codegen regressions get a file here
+    _template_member_fixture.das  # `_`-prefixed fixture: excluded from the glob (see below)
+    _aot_generated/             # Auto-generated C++ (gitignored)
 ```
 
 ### How it builds
@@ -66,6 +68,8 @@ tests/aot/
 | `DAS_AOT_LIB(files, genList, target, tool)` | AOT for library modules (daslib, dastest) | `-aotlib` |
 | `DAS_AOT_EXT(files, genList, target, tool, extra)` | Core macro — others call this | `extra` alone (no implicit `-aot`; `DAS_AOT` passes `-aot` as the extra) |
 | `DAS_AOT_CTX(files, genList, target, tool)` | AOT with custom context | `-ctx` |
+| `DAS_AOT_STANDALONE(files, genList, target, tool, extra)` | AOT for a standalone binary | `extra` |
+| `DAS_LLVM_AOT_LIB(files, genList, target)` | LLVM-backend AOT — emits native `.o`, not C++; runs `utils/jit/main.das` in batches of 32 | `--aot-object` |
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
@@ -127,17 +131,7 @@ def test_basic(t : T?) {
 }
 ```
 
-2. Add the file to `tests/aot/CMakeLists.txt`:
-
-```cmake
-SET(AOT_TEST_FILES
-    tests/aot/test_arithmetic.das
-    tests/aot/test_strings.das
-    tests/aot/test_lambdas.das
-    tests/aot/test_structures.das
-    tests/aot/test_foo.das          # <-- add here
-)
-```
+2. Nothing to do in CMake — `tests/aot/*.das` is globbed with `CONFIGURE_DEPENDS`. The only exception is a `_`-prefixed fixture module, which the glob filters out (`list(FILTER … EXCLUDE REGEX "/_")`) and which therefore needs an explicit entry if its functions must be AOT'd.
 
 3. Update `tests/README.md` with a row for the new file.
 
@@ -173,7 +167,7 @@ virtual ModuleAotType aotRequire(TextWriter & tw) const override {
 
 ## Block Locals and finally/defer
 
-Block-typed locals (`let foo = $() {...}`) are init-only, non-copyable, self-referential (`das_make_block`: `body = this`, functor held by pointer to a stack lambda) — a hoisted one can't take the declare-then-assign shape other locals use (`auto x;` doesn't compile; assigning from a temporary copies self-pointers of a dead object). Instead the emitter (`emitHoistedBlockLet` in `daslib/aot_cpp.das`) emits the **whole let** — named `_TempFunctor` lambda, `auto <name> = das_make_block<...>(...)`, const-ref alias — at the top of the nearest finally-carrying scope (`BlockVariableCollector.blockLets`, keyed by `getFinalBlock()`), *before* that scope's `das_finally` guard; the original `let` line renders as a no-op `name;`. Everything the block captures is already declared there (locals are storage-hoisted, loop iterators precede the body scope, `[&]` binds variables not values), and being constructed before the guard means the objects outlive it — a finally invoking the block reads live objects (clang-ASAN-clean; the `linux_asan` CI lane compiles `test_aot` with clang ASAN). That scope is the variable's *source* scope even after the optimizer's early-return→else restructuring (optimizer-made wrapper blocks carry no finalList), so it dominates every guard that can legally reference the variable. Consequence of initializing at the hoist point: on an early-exit path where the `let` never executed, an AOT finally invoking the block *runs it*, while the interpreter hits a zeroed slot (crash) — invoking a never-initialized block is undefined behavior; rely on neither. Tests: `tests/bare_block/test_block_in_finally.das`.
+Block-typed locals (`let foo = $() {...}`) are init-only, non-copyable, self-referential (`das_make_block`: `body = this`, functor held by pointer to a stack lambda) — a hoisted one can't take the declare-then-assign shape other locals use (`auto x;` doesn't compile; assigning from a temporary copies self-pointers of a dead object). Instead the emitter (`emitBlockLet` in `daslib/aot_cpp.das`, called from the hoist site just above it) emits the **whole let** — named `_TempFunctor` lambda, `auto <name> = das_make_block<...>(...)`, const-ref alias — at the top of the nearest finally-carrying scope (`BlockVariableCollector.blockLets`, keyed by `getFinalBlock()`), *before* that scope's `das_finally` guard; the original `let` line renders as a no-op `name;`. Everything the block captures is already declared there (locals are storage-hoisted, loop iterators precede the body scope, `[&]` binds variables not values), and being constructed before the guard means the objects outlive it — a finally invoking the block reads live objects (clang-ASAN-clean; the `linux_asan` CI lane compiles `test_aot` with clang ASAN). That scope is the variable's *source* scope even after the optimizer's early-return→else restructuring (optimizer-made wrapper blocks carry no finalList), so it dominates every guard that can legally reference the variable. Consequence of initializing at the hoist point: on an early-exit path where the `let` never executed, an AOT finally invoking the block *runs it*, while the interpreter hits a zeroed slot (crash) — invoking a never-initialized block is undefined behavior; rely on neither. Tests: `tests/bare_block/test_block_in_finally.das`.
 
 Also note: `dasAotStub_ast_boost.das.cpp` generation is nondeterministic across runs (the emitted representative of an identical-layout `Setup*` struct family varies) — a stub diff there does not imply your emitter change caused it; re-run twice with the same emitter to check.
 
@@ -344,7 +338,7 @@ After changing `Module::aotRequire()` or builtin bindings, regenerate:
 cmake --build build --config Release --target libDaScriptAot
 ```
 
-The generated files in `daslib/_aot_generated/` are tracked in git. Commit any changes.
+The generated files land in `daslib/_aot_generated/`, which is gitignored — nothing to commit.
 
 ## AOT Link Failures Are Real Failures
 
@@ -357,7 +351,7 @@ Common causes of AOT link failures:
 
 ## CI Integration
 
-The AOT tests run in `.github/workflows/build.yml` after the regular test step, Release builds only, driven through the `run_tests_aot` CMake target (`tests/CMakeLists.txt`) rather than a direct test_aot invocation — look for the "Slow Release Tests (AOT)" / "Test: AOT sweep" steps (`cmake --build ... --target run_tests_aot`). `windows32` is skipped (the matrix variable is `matrix.cmake_preset`).
+The full AOT sweep runs in `.github/workflows/build.yml` on **Release lanes of the nightly cron / `workflow_dispatch` only** — the step guard is `if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')`. It is driven through the `run_tests_aot` CMake target (`tests/CMakeLists.txt`) rather than a direct test_aot invocation — look for the "Slow Release Tests" / "Slow Release Tests (AOT)" / "Test: AOT sweep" steps (`cmake --build ... --target run_tests_aot`). Per-PR lanes get only the `test_aot_subset` compile+link gate from the Build step. `windows32` is skipped (the matrix variable is `matrix.cmake_preset`).
 
 ## _aot_generated Directories
 
@@ -371,30 +365,22 @@ All `_aot_generated/` directories are covered by a single broad pattern in `.git
 
 ## Registering a New Test Directory for AOT
 
-When you create a new test directory (e.g., `tests/foo/`), you MUST register it in `tests/aot/CMakeLists.txt` following this pattern:
+`tests/aot/CMakeLists.txt` is data-driven: three loops build every suite's scaffolding from a list, and they accumulate `TEST_AOT_TARGETS` / `TEST_AOT_GENVARS` / `TEST_AOT_ALL_DAS`, which in turn feed the source groups, the `add_executable(test_aot …)` sources and its `ADD_DEPENDENCIES`. There are no literal per-suite source lists to edit.
 
-**Step 1** — Add a glob to collect files (near the other `FILE(GLOB ...)` lines):
-```cmake
-# AOT for foo test files
-FILE(GLOB AOT_FOO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/foo/*.das")
-```
+**Step 1 — a plain suite.** Add the directory name to `set(DAS_AOT_SUITES …)`. That is the whole registration: the loop globs `tests/<name>/*.das`, creates `add_custom_target(test_aot_<name>)`, calls `DAS_AOT`, and wires the generated sources plus the dependency into `test_aot` for you.
 
-**Step 2** — Add a custom target and AOT call (near the other `add_custom_target` blocks):
-```cmake
-add_custom_target(test_aot_foo)
-SET(FOO_AOT_GENERATED_SRC)
-DAS_AOT("${AOT_FOO_FILES}" FOO_AOT_GENERATED_SRC test_aot_foo daslang)
-```
+**Step 2 — only if the file set is irregular.** Define `AOT_<UPPERCASE>_FILES` **above** the loop and it is used instead of the convention glob — either a curated `SET(...)`, or a `FILE(GLOB ...)` followed by `list(FILTER ... EXCLUDE REGEX ...)` to drop `failed_*` / `cant_*` / `_`-prefixed fixtures. The loop only globs when the variable is not already defined.
 
-**Step 3** — Add a source group (near the other `SOURCE_GROUP_FILES` lines):
-```cmake
-SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
-```
+**Step 3 — only if the directory has fixture modules.** `_`-prefixed modules that tests `require` are excluded by the `/_` filter and must be AOT'd as libraries: add the suite to `set(DAS_AOT_MODULE_SUITES …)` and define `AOT_<UC>_MODULE_FILES`. That loop calls `DAS_AOT_LIB` and creates `test_aot_<name>_modules`.
 
-**Step 4** — Add `${FOO_AOT_GENERATED_SRC}` to the `add_executable(test_aot ...)` source list.
+**Step 4 — only if the suite needs a CMake guard or extra dependencies.** Add a row to `set(DAS_AOT_IRREGULAR …)` instead of the plain list. The row format is `name|flavor|guard|EXTRA_DEPENDS|accumulate`, where flavor is `reg` (script AOT) or `mod`/`lib` (library AOT), guard is a CMake condition such as `NOT DAS_SQLITE_DISABLED` (`-` for none), `EXTRA_DEPENDS` names variables holding extra regen dependencies (`-` for none), and accumulate is `1` unless the row is subset-only.
 
-**Step 5** — Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list.
+**Why this matters**: the full `test_aot` runs ALL tests under `tests/` with `cop.fail_on_no_aot = true`. Without registration the test's functions have no AOT stubs → `error[50101]: AOT link failed`. Per-PR CI only builds `test_aot_subset`, so a missing registration passes PR CI and fails the nightly / `preflight --full`. `test_aot` builds and runs on Windows too — only 32-bit Windows is excluded (`NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)` gate in the root CMakeLists.txt); it requires tests and AOT examples enabled in the CMake configure.
 
-**Why this matters**: CI builds `test_aot` on Linux/macOS/Windows-64 and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. `test_aot` builds and runs fine on Windows (only 32-bit Windows is excluded — `NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)` gate in root CMakeLists.txt); it requires tests and AOT examples enabled in the CMake configure.
+### The LLVM-AOT rail (`test_llvm_aot`)
+
+There is a third binary beside `test_aot` / `test_aot_subset`. `test_llvm_aot` (LLVM-only, `EXCLUDE_FROM_ALL`, opt-in — not in ALL and not in CI) compiles each `.das` through the **LLVM backend** into a self-registering native `.o` (a `das_aot_register` load ctor), linked straight into the binary; `-use-aot` then binds each function as a `SimNode_Jit` via `linkCppAot`. It is built by `DAS_LLVM_AOT_LIB` (which drives `utils/jit/main.das --aot-object`, not the C++ AOT tool) and run through the `run_tests_llvm_aot` target in `tests/CMakeLists.txt`.
+
+**Its corpus is derived, so registering a suite enrols it here too.** `LLVM_AOT_TEST_FILES` is the accumulated `TEST_AOT_ALL_DAS` (every `reg`-flavor suite's test bodies) plus `tests/jit_tests/*.das`, minus `_`-prefixed files and a filter list (`cant_`, `llvm_tune`, `llvm_code`, `llvm_compile_only`, `dll_cache`, `jit_fastpath`, `typeinfo`, and all of `tests/msl/` + `tests/metal/`, which decline the JIT via `lattice_fallback`). Adding a directory to `DAS_AOT_SUITES` therefore silently adds it to the LLVM-AOT corpus — if it can't survive that rail, it needs a filter entry as well.
 
 Also ensure that wrapper functions in daslib `.das` files (like `daslib/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.

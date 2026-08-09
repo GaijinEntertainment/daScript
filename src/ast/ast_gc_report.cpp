@@ -114,7 +114,7 @@ namespace das {
             [](const pair<const string, FileBucket>* a, const pair<const string, FileBucket>* b){
                 return a->second.total.total > b->second.total.total;
             });
-        out << "=== AST gc histogram: " << (label ? label : "") << " — " << root.gc_count << " nodes ===\n";
+        out << "=== AST gc histogram: " << (label ? label : "") << " - " << root.gc_count << " nodes ===\n";
         for ( auto fp : files ) {
             if ( fp->second.total.total < minCount ) continue;
             out << "  " << fp->first << "  " << fp->second.total.total << "  ";
@@ -213,7 +213,7 @@ namespace das {
         });
         if ( deltas.empty() ) {
             out << "=== gc delta @ " << unit << " : " << (stage ? stage : "")
-                << " — no net change (" << root.gc_count << " nodes) ===\n";
+                << " - no net change (" << root.gc_count << " nodes) ===\n";
             prev = std::move(cur);
             return;
         }

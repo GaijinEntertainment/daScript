@@ -68,8 +68,8 @@ Consider the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`:
 
 .. code-block:: das
 
-    [_macro,private]
-    def setup {
+    [_macro]
+    def private setup {
         if ( is_compiling_macros_in_module("ast_boost") ) {
             add_new_function_annotation("macro", new MacroMacro())
         }

@@ -2338,7 +2338,7 @@ def private scalar_data_type(t : type<auto(T)>) : ImGuiDataType {
     } static_elif (typeinfo stripped_typename(t) == "double") {
         return ImGuiDataType.Double
     } else {
-        concept_assert(false, "scalar widget: unsupported type — expected int8/uint8/int16/uint16/int/uint/int64/uint64/float/double")
+        concept_assert(false, "scalar widget: unsupported type - expected int8/uint8/int16/uint16/int/uint/int64/uint64/float/double")
     }
 }
 

@@ -26,7 +26,7 @@ require llvm/daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch
 //! slower). Inference seams call it; scaffolding that only parses or peeks never crosses it.
 def guard_interp_inference(what : string) {
     if (!jit_enabled() && !is_standalone_exe()) {
-        panic("dasLLAMA: {what} requires -jit (or a compiled exe) — interpreted inference runs the kernels 10-40x slower")
+        panic("dasLLAMA: {what} requires -jit (or a compiled exe) - interpreted inference runs the kernels 10-40x slower")
     }
 }
 
@@ -1357,7 +1357,7 @@ def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 con
 }
 
 def private no_backend() {
-    panic("dasLLAMA: no Q8·Q8 kernel backend registered — require dasllama/dasllama_math_default")
+    panic("dasLLAMA: no Q8xQ8 kernel backend registered - require dasllama/dasllama_math_default")
 }
 def private backend_always_available() : bool => true
 def private q8_layout_grp4() : int => 4
@@ -1386,7 +1386,7 @@ def pin_backend_for_bake(cpu : DlimCpuConfig) : bool {
     }
     select_matmul_backend_for_load()   // the load enters repack stages only under a repack backend
     if (!kernel_backend_needs_repack(active_kernel_backend())) {
-        to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family — none is active here\n")
+        to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family - none is active here\n")
         return false
     }
     g_bake_cpu = cpu
@@ -1489,11 +1489,11 @@ def private mx4q8_unset_kernel(var yp : float?; wn : uint8 const?; we : uint8 co
 [unused_argument(yp, wn, we, xqp, xsp, n, d, ntok)]
 def private mx4q8_unset_batch(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     // reachable with a registered backend (slot is optional — see KernelBackend.mx4_batch)
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4·Q8 batch kernel (mx4_batch)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4xQ8 batch kernel (mx4_batch)")
 }
 [unused_argument(yp, wn, we, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private mx4q8_unset_batch_groupn(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4·Q8 batch groupN kernel (mx4_batch_groupn)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4xQ8 batch groupN kernel (mx4_batch_groupn)")
 }
 [unused_argument(yp, wp, sp, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private q8q8_unset_groupn(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) { no_backend() }
@@ -1614,7 +1614,7 @@ def private activate(be : KernelBackend) {
 // (same needs_repack, and for repack backends the same repack fn — laneq/grp4 are mutually unreadable).
 def private apply_batch_override(name : string) {
     if (!key_exists(g_kernel_backends, name)) {
-        to_log(LOG_WARNING, "dasLLAMA: batch backend '{name}' — no such backend registered; keeping '{g_active_backend}' batch kernels\n")
+        to_log(LOG_WARNING, "dasLLAMA: batch backend '{name}' - no such backend registered; keeping '{g_active_backend}' batch kernels\n")
         return
     }
     let be = g_kernel_backends[name]
@@ -1650,7 +1650,7 @@ def select_kernel_backend(name : string) {
         return
     }
     if (!invoke(g_kernel_backends[name].available)) {
-        to_log(LOG_WARNING, "dasLLAMA: select_kernel_backend('{name}') — backend reports itself unavailable in this configuration; keeping '{g_active_backend}'\n")
+        to_log(LOG_WARNING, "dasLLAMA: select_kernel_backend('{name}') - backend reports itself unavailable in this configuration; keeping '{g_active_backend}'\n")
         return
     }
     activate(g_kernel_backends[name])
@@ -1663,11 +1663,11 @@ def pin_kernel_backend(name : string) {
     // auto-activation AND keep select_matmul_backend_for_load from picking the best (repack) backend,
     // silently degrading to whatever is currently active. Keep the current backend and warn instead.
     if (!key_exists(g_kernel_backends, name)) {
-        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') — no such backend registered; keeping '{g_active_backend}'\n")
+        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - no such backend registered; keeping '{g_active_backend}'\n")
         return
     }
     if (!invoke(g_kernel_backends[name].available)) {
-        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') — backend reports itself unavailable in this configuration (stamped layout mismatch?); keeping '{g_active_backend}'\n")
+        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - backend reports itself unavailable in this configuration (stamped layout mismatch?); keeping '{g_active_backend}'\n")
         return
     }
     g_backend_pin = name

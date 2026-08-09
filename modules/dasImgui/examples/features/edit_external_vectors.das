@@ -40,7 +40,7 @@ var private g_di4 : int4 = int4(10, 20, 30, 40)
 
 [export]
 def init() {
-    harness_init("edit_external_vectors — boost v2 §3.7", 800, 760)
+    harness_init("edit_external_vectors - boost v2 sec 3.7", 800, 760)
 }
 
 [export]

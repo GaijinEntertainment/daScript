@@ -12,7 +12,7 @@ options gen2
 // Single-threaded on purpose — the engine wraps both loops in maybe_parallel_for over t;
 // the loop-form decision is per-row and carries over.
 
-require dasllama/dasllama_common // nolint:STYLE029,STYLE030 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
+require dasllama/dasllama_common // nolint:STYLE029,STYLE030,LINT019 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
 require dasllama/dasllama_math
 require daslib/clargs
 require math
@@ -255,8 +255,8 @@ def dwm_f4(var out : array<float>; x, wt, bm, bv, bw, bb : array<float>; d, tt :
 // ===== bench plumbing =====
 
 def sized(var a : array<float>; n : int64) {
-    a |> reserve(int(n))
-    a |> resize(int(n))
+    a |> reserve(n)
+    a |> resize(n)
 }
 
 def fill_sin(var a : array<float>; scale, step : float) {
@@ -417,7 +417,7 @@ def main() : int {
     let tt = a.tt > 0 ? int64(a.tt) : 138l
     let rounds = a.rounds > 0 ? a.rounds : 40
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     print("conv_module bench: tt={tt} d={DD} k={NK}, {rounds} rounds\n")
     if (a.glu || !a.dw) {

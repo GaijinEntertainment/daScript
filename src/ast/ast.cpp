@@ -756,6 +756,7 @@ namespace das {
         cfun->module = nullptr;
         cfun->flags = flags;
         cfun->moreFlags = moreFlags;
+        cfun->moreFlags2 = moreFlags2;
         cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
         cfun->classParent = classParent;
@@ -969,6 +970,11 @@ namespace das {
 
     FunctionPtr Function::setCaptureString() {
         captureString = true;
+        return this;
+    }
+
+    FunctionPtr Function::setTempStringResult() {
+        tempStringResult = true;
         return this;
     }
 

@@ -46,7 +46,7 @@ def main {
 
         var snap = wait_for_widget(app, T_LWIRE, 10.0f)
         if (snap == null) {
-            panic("{T_LWIRE} never registered — wrong app running?")
+            panic("{T_LWIRE} never registered - wrong app running?")
         }
 
         //! Initial cursor placement.

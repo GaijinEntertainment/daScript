@@ -217,7 +217,7 @@ def private load_truth(path : string; var feeds : array<int64>; var logits : arr
 def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, then one A/B cell per --bs entry
     allow_cpu_prefill()   // both halves prefill the streams on the CPU by design (truth + replay)
     if (!jit_enabled()) {
-        print("This probe is JIT-only — run with: daslang -jit <file>\n")
+        print("This probe is JIT-only - run with: daslang -jit <file>\n")
         return 1
     }
     var r <- parse_args(type<Args>)
@@ -249,7 +249,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
         tg <- tg2   // nolint:PERF030 — tg is still the default-constructed Model, nothing to release
         tg.config.seq_len = min(tg.config.seq_len, 1024l)
         if (!tg.metal_blob) {
-            print("WARNING: the replay model is NOT blob-form (a CPU-flavor .dlim?) — the GPU replay will decline `planar` and run on the CPU\n")
+            print("WARNING: the replay model is NOT blob-form (a CPU-flavor .dlim?) - the GPU replay will decline `planar` and run on the CPU\n")
         }
     }
     var rc = 0

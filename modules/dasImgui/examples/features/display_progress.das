@@ -21,7 +21,7 @@ var private g_t : float = 0.0f
 
 [export]
 def init() {
-    harness_init("progress_bar — boost v2 §3.2", 720, 360)
+    harness_init("progress_bar - boost v2 sec 3.2", 720, 360)
 }
 
 [export]
@@ -35,7 +35,7 @@ def update() {
     SetNextWindowSize(ImVec2(680.0, 300.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "progress_bar", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(PB_LEAD, (text = "Three progress bars — static, driven, no-overlay."))
+        text(PB_LEAD, (text = "Three progress bars - static, driven, no-overlay."))
         progress_bar(PB_STATIC, (fraction = 0.33f, size = float2(-1.0f, 0.0f),
                                   overlay = "33%"))
         progress_bar(PB_DRIVEN, (fraction = frac, size = float2(-1.0f, 0.0f),

@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 0b.3 — containers (layout family)", 800, 700)
+    harness_init("Phase 0b.3 - containers (layout family)", 800, 700)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -91,13 +91,13 @@ def update() {
             // ----- About tab -----
             tab_item(ABOUT_TAB, (text = "About", closable = false,
                                  flags = ImGuiTabItemFlags.None)) {
-                text("Phase 0b.3 — containers")
+                text("Phase 0b.3 - containers")
                 text("hierarchical registry path keys")
             }
         }
 
         spacing()
-        text("collapsing_header — like tree_node but no End-pair")
+        text("collapsing_header - like tree_node but no End-pair")
         separator()
         collapsing_header(LOG_HEADER, (text = "Log", closable = false,
                                        flags = ImGuiTreeNodeFlags.DefaultOpen)) {

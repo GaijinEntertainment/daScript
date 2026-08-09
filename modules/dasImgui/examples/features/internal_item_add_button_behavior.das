@@ -100,7 +100,7 @@ def update() {
         // ----- 3. ItemAdd 4-arg overload: a nav rect larger than the click box -----
         // The nav rect is what keyboard nav scrolls-to / highlights when the item is
         // focused; here it is inflated 16px around the visual button box.
-        text("ItemAdd 4-arg overload — explicit nav rect (inflated around the box):")
+        text("ItemAdd 4-arg overload - explicit nav rect (inflated around the box):")
         let p3 = GetCursorScreenPos()
         let bb3 = float4(p3.x, p3.y, p3.x + 220.0, p3.y + 36.0)
         let nav3 = float4(bb3.x - 16.0, bb3.y - 16.0, bb3.z + 16.0, bb3.w + 16.0)

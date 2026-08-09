@@ -24,7 +24,7 @@ var private g_global_scale : float = 1.0f
 
 [export]
 def init() {
-    harness_init("dynamic_font_scale — imgui 1.92 dynamic fonts", 760, 520)
+    harness_init("dynamic_font_scale - imgui 1.92 dynamic fonts", 760, 520)
 }
 
 [export]
@@ -39,7 +39,7 @@ def update() {
     SetNextWindowSize(ImVec2(720.0, 460.0), ImGuiCond.Always)
     window(FONT_WIN, (text = "dynamic_font_scale", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "imgui 1.92 re-rasterizes fonts on demand — scaling is crisp, not stretched."))
+        text(LEAD, (text = "imgui 1.92 re-rasterizes fonts on demand - scaling is crisp, not stretched."))
         separator()
 
         // ---- Lever 1: global scale ----
@@ -51,21 +51,21 @@ def update() {
         separator()
 
         // ---- Lever 2: per-push size via with_font(font, size) ----
-        text("with_font(font, size) — same font, three sizes, one frame:")
+        text("with_font(font, size) - same font, three sizes, one frame:")
         let f = GetFont()
         with_font(f, 16.0f) {
-            text(SIZE_16, (text = "16 px — with_font(f, 16.0f)"))
+            text(SIZE_16, (text = "16 px - with_font(f, 16.0f)"))
         }
         with_font(f, 24.0f) {
-            text(SIZE_24, (text = "24 px — with_font(f, 24.0f)"))
+            text(SIZE_24, (text = "24 px - with_font(f, 24.0f)"))
         }
         with_font(f, 32.0f) {
-            text(SIZE_32, (text = "32 px — with_font(f, 32.0f)"))
+            text(SIZE_32, (text = "32 px - with_font(f, 32.0f)"))
         }
         separator()
 
         with_font(f) {
-            text(SWAP_ONLY, (text = "with_font(f) with no size — pure swap, current size kept"))
+            text(SWAP_ONLY, (text = "with_font(f) with no size - pure swap, current size kept"))
         }
     }
 

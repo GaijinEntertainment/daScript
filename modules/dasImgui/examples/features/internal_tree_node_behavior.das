@@ -47,7 +47,7 @@ def update() {
 
         // ----- 1. hand-rolled, nested tree nodes from TreeNodeBehavior -----
         text("TreeNodeBehavior(id, flags, label): the raw open/closed state machine.")
-        text("  click an arrow to toggle — the public tree_node, assembled in user code.")
+        text("  click an arrow to toggle - the public tree_node, assembled in user code.")
         if (custom_tree("Fruits", ImGuiTreeNodeFlags.None)) {
             text("- apple")
             text("- banana")

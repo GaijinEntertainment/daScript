@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("narrative_bullet — boost v2 §3.2", 720, 360)
+    harness_init("narrative_bullet - boost v2 sec 3.2", 720, 360)
 }
 
 [export]
@@ -31,7 +31,7 @@ def update() {
     SetNextWindowSize(ImVec2(680.0, 300.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "bullet + bullet_text", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        bullet_text(BULLET_LIST_FAST, (text = "bullet_text(IDENT, (text=...)) — bullet glyph + text together, single telemetry slot."))
+        bullet_text(BULLET_LIST_FAST, (text = "bullet_text(IDENT, (text=...)) - bullet glyph + text together, single telemetry slot."))
         bullet_text(BULLET_LIST_TYPED, (text = "Payload echoes the rendered string under the value field; same shape as text() / text_wrapped()."))
         bullet_text(BULLET_LIST_RELOAD, (text = "Live-reload safe: NarrativeState carries no @live fields beyond the echoed copy."))
 
@@ -39,7 +39,7 @@ def update() {
         // the SAME line. State is empty; payload is `{}`. Use when you need
         // bullet-glyph-then-formatted-line (e.g. inline counters).
         bullet(MARKER_ONE)
-        text("plain text after bullet marker — telemetry attaches via auto-emit")
+        text("plain text after bullet marker - telemetry attaches via auto-emit")
         bullet(MARKER_TWO)
         text("second marker, second tail")
     }

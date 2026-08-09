@@ -106,7 +106,7 @@ def noise_gate(tag : string) : bool {
         // turbo recovering, a composite walk's writeback draining) fades in seconds; noise
         // from OUTSIDE the process does not. 8s: the in-situ streaming composites leave the
         // memory subsystem hotter than the old 2s window was sized for
-        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}% — settling 8s hot, re-probing\n")
+        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}% - settling 8s hot, re-probing\n")
         let cv0 = cv
         cv = probe_once(8000, med)
         g_probe_log |> push("{tag} cv {cv0:0.2f}% -> settled {cv:0.2f}%")
@@ -115,17 +115,17 @@ def noise_gate(tag : string) : bool {
     }
     g_floor_pct = max(g_floor_pct, cv)
     if (cv <= thr) {
-        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% <= {thr:0.1f}% — box is quiet (median {med:0.0f} us)\n")
+        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% <= {thr:0.1f}% - box is quiet (median {med:0.0f} us)\n")
         return true
     }
     tune_progress_finish()
-    print("NOISE GATE ({tag}): cv {cv:0.2f}% > {thr:0.1f}% (median {med:0.0f} us) — this box is not quiet enough to tune\n")
+    print("NOISE GATE ({tag}): cv {cv:0.2f}% > {thr:0.1f}% (median {med:0.0f} us) - this box is not quiet enough to tune\n")
     if (tune_noise_override()) {
         g_overridden = true
-        print("  DAS_TUNE_NOISE_OVERRIDE is set — tuning anyway; the sidecar will carry 'noise: overridden'\n")
+        print("  DAS_TUNE_NOISE_OVERRIDE is set - tuning anyway; the sidecar will carry 'noise: overridden'\n")
         return true
     }
-    print("  a winner raced in this noise is a lottery ticket, not a measurement — a sidecar minted now would poison every run that reads it\n")
+    print("  a winner raced in this noise is a lottery ticket, not a measurement - a sidecar minted now would poison every run that reads it\n")
     print("  quiet the box (close apps, stop background work) and re-run: the cv above should fall under the threshold\n")
     print("  escape hatches: DAS_TUNE_NOISE_CV=<pct> recalibrates the gate; DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped\n")
     return false

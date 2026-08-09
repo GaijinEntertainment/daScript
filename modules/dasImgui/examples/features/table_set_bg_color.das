@@ -39,7 +39,7 @@ var private BG_ROW_VALUE  : table<int; NarrativeState>
 
 [init]
 def seed_bg_rows() {
-    BG_ROWS <- [
+    BG_ROWS <- [  // nolint:PERF030 - [init] runs once; BG_ROWS is still empty
         StatusRow(id = 0, name = "server-01", status = "ok",   value = 12),
         StatusRow(id = 1, name = "server-02", status = "warn", value = 67),
         StatusRow(id = 2, name = "server-03", status = "crit", value = 94),
@@ -61,7 +61,7 @@ def private status_row_color(s : string) : uint {
 
 [export]
 def init() {
-    harness_init("table_set_bg_color — row & cell background tints", 560, 380)
+    harness_init("table_set_bg_color - row & cell background tints", 560, 380)
 }
 
 [export]

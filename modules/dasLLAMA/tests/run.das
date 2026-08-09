@@ -206,7 +206,7 @@ def main() : int {
             }
             let secs = double(get_time_usec(t0)) / 1000000.0lf
             let summary = log_summary(log_path)
-            let verdict = !empty(summary) ? summary : "no dastest summary — the run died early (read the log)"
+            let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             if (rc != 0) {
                 failures++

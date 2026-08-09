@@ -218,6 +218,28 @@ namespace das
         };
     };
 
+    // [temp_string_result] - a contract: the result is always a fresh string allocation (or null),
+    // never a passthrough of an input, never retained by the callee. Lets the temp-string reclaim
+    // pass queue the result on the 1-slot dispose queue when it dies in the consuming call.
+    struct TempStringResultFunctionAnnotation : MarkFunctionAnnotation {
+        TempStringResultFunctionAnnotation() : MarkFunctionAnnotation("temp_string_result") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->tempStringResult = true;
+            return true;
+        };
+        virtual bool lint(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &,
+                const AnnotationArgumentList &, string & err) override {
+            // post-infer, so an inferred (auto) return type is concrete by now. The contract is
+            // a BY-VALUE fresh allocation: a reference or temporary result points into storage
+            // the callee still owns, which is exactly what the flag promises never happens
+            if ( !func->result || !func->result->isString() || func->result->ref || func->result->temporary ) {
+                err = "[temp_string_result] requires a function that returns a string by value (not string& or string#)";
+                return false;
+            }
+            return true;
+        }
+    };
+
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
         DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -2181,6 +2203,7 @@ namespace das
         addAnnotation(new InlineFunctionAnnotation());
         addAnnotation(new NeverInlineFunctionAnnotation());
         addAnnotation(new RequestNoDiscardFunctionAnnotation());
+        addAnnotation(new TempStringResultFunctionAnnotation());
         addAnnotation(new DeprecatedFunctionAnnotation());
         addAnnotation(new AliasCMRESFunctionAnnotation());
         addAnnotation(new NeverAliasCMRESFunctionAnnotation());
@@ -2223,13 +2246,13 @@ namespace das
         // command line arguments
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
-                ->args({"context","at"});
+                ->args({"context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
             SideEffects::none,"builtin_shared_module_extension")
-                ->args({"context","at"});
+                ->args({"context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(builtin_get_das_version)>(*this, lib, "get_das_version",
             SideEffects::none,"builtin_get_das_version")
-                ->args({"context","at"});
+                ->args({"context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")
                 ->arg("arguments");
@@ -2329,10 +2352,10 @@ namespace das
                 ->args({"text","context","at"});
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
             SideEffects::modifyExternal, "builtin_sprint")
-                ->args({"value","flags"});
+                ->args({"value","flags"})->setTempStringResult();
         addInterop<builtin_json_sprint,char *,vec4f,bool>(*this, lib, "sprint_json",
             SideEffects::modifyExternal, "builtin_json_sprint")
-                ->args({"value","humanReadable"});
+                ->args({"value","humanReadable"})->setTempStringResult();
         addInterop<builtin_json_sscan,bool,char *,vec4f>(*this, lib, "sscan_json",
             SideEffects::modifyArgumentAndExternal, "builtin_json_sscan")
                 ->args({"json","value"});
@@ -2348,7 +2371,7 @@ namespace das
         fnsw->arguments[1]->init = new ExprConstBool(true);
         auto fngsw = addExtern<DAS_BIND_FUN(builtin_get_stackwalk)>(*this, lib, "get_stackwalk",
             SideEffects::accessExternal, "builtin_get_stackwalk")
-                ->args({"args","vars","out_of_scope","top_only","context","lineinfo"});
+                ->args({"args","vars","out_of_scope","top_only","context","lineinfo"})->setTempStringResult();
         fngsw->arguments[0]->init = new ExprConstBool(true);
         fngsw->arguments[1]->init = new ExprConstBool(true);
         fngsw->arguments[2]->init = new ExprConstBool(false);
@@ -2362,7 +2385,7 @@ namespace das
                 ->arg("context");
         addExtern<DAS_BIND_FUN(collectProfileInfo)>(*this, lib, "collect_profile_info",
             SideEffects::modifyExternal, "collectProfileInfo")
-                ->args({"context","at"});
+                ->args({"context","at"})->setTempStringResult();
         // variant
         addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
         addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
@@ -2665,13 +2688,13 @@ namespace das
         // das string binding
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
             SideEffects::none, "to_das_string")
-                ->args({"source","context","at"});
+                ->args({"source","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
             SideEffects::none, "pass_string", permanentArgFn())
                 ->args({"source"})->setCaptureString();
         addExtern<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
             SideEffects::none, "clone_pass_string", temporaryArgFn())
-                ->args({"source","context","at"});
+                ->args({"source","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});
@@ -2683,7 +2706,7 @@ namespace das
                 ->args({"src","block","context","line"})->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string",
             SideEffects::none, "builtin_string_clone")
-                ->args({"src","context","at"});
+                ->args({"src","context","at"})->setTempStringResult();
         // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
@@ -2755,7 +2778,7 @@ namespace das
         addExtern<DAS_BIND_FUN(compiling_module_name)>(*this, lib, "compiling_module_name",
             SideEffects::accessExternal, "compiling_module_name");
         addExtern<DAS_BIND_FUN(get_module_file_name)>(*this, lib, "get_module_file_name",
-            SideEffects::accessExternal, "get_module_file_name")->args({"name", "context"});
+            SideEffects::accessExternal, "get_module_file_name")->args({"name", "context"})->setTempStringResult();
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});
@@ -2847,24 +2870,24 @@ namespace das
             SideEffects::accessExternal, "das_cpu_supports")->args({"feature"});
         // fmt
         addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_i8")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_i8")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_u8")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_u8")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_i16")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_i16")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_u16")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_u16")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_i32")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_i32")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_u32")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_u32")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_i64")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_i64")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_u64")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_u64")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_f")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_f")->args({"format","value","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
-            SideEffects::none, "fmt_d")->args({"format","value","context","at"});
+            SideEffects::none, "fmt_d")->args({"format","value","context","at"})->setTempStringResult();
     }
 }

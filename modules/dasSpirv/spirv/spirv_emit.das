@@ -413,7 +413,7 @@ def private ssbo_element_layout(var m : SpirvModule; sname : string; et : TypeDe
         return (ok = false, elem_type = 0u, stride = 0)
     }
     if (matrix_info(et).ok) {
-        errors |> push("ssbo '{sname}' element is a matrix — wrap it in a struct (a bare matrix runtime-array element is not supported)")
+        errors |> push("ssbo '{sname}' element is a matrix - wrap it in a struct (a bare matrix runtime-array element is not supported)")
         return (ok = false, elem_type = 0u, stride = 0)
     }
     let bt = et.baseType
@@ -1873,23 +1873,23 @@ def private kernel_member_ok(s : KernelMemberScan; nm : string; var errors : arr
     let ncls = ((s.is_ssbo ? 1 : 0) + (s.is_uniform ? 1 : 0) + (s.is_push ? 1 : 0) +
         (s.is_workgroup ? 1 : 0) + (s.is_private ? 1 : 0))
     if (ncls == 0) {
-        errors |> push("kernel member '{nm}' is none of @ssbo/@uniform/@push_constant/@workgroup/@private_global — every member must declare its resource kind")
+        errors |> push("kernel member '{nm}' is none of @ssbo/@uniform/@push_constant/@workgroup/@private_global - every member must declare its resource kind")
         return false
     }
     if (ncls > 1) {
-        errors |> push("kernel member '{nm}' mixes resource kinds — pick exactly one of @ssbo/@uniform/@push_constant/@workgroup/@private_global")
+        errors |> push("kernel member '{nm}' mixes resource kinds - pick exactly one of @ssbo/@uniform/@push_constant/@workgroup/@private_global")
         return false
     }
     if (s.set_idx != 0) {
-        errors |> push("kernel member '{nm}' has @set = {s.set_idx} — a kernel class is one descriptor set; only @set = 0 (or none) is allowed")
+        errors |> push("kernel member '{nm}' has @set = {s.set_idx} - a kernel class is one descriptor set; only @set = 0 (or none) is allowed")
         return false
     }
     if ((s.is_workgroup || s.is_private || s.is_push) && s.has_binding) {
-        errors |> push("kernel member '{nm}' has @binding but is not a descriptor — @workgroup/@private_global/@push_constant members take no binding")
+        errors |> push("kernel member '{nm}' has @binding but is not a descriptor - @workgroup/@private_global/@push_constant members take no binding")
         return false
     }
     if ((s.is_ssbo || s.is_uniform) && !s.has_binding) {
-        errors |> push("kernel member '{nm}' has no @binding — every @ssbo/@uniform member needs an explicit binding index")
+        errors |> push("kernel member '{nm}' has no @binding - every @ssbo/@uniform member needs an explicit binding index")
         return false
     }
     return true
@@ -1940,7 +1940,7 @@ def private classify_kernel_members(var m : SpirvModule; var ctx : EmitCtx; kern
         classify_global(m, ctx, sv, stage, reflection, errors)
     }
     if (ssbo_count == 0) {
-        errors |> push("kernel class '{kernel_self.name}' has no @ssbo members — a kernel with no buffers cannot observe or produce anything")
+        errors |> push("kernel class '{kernel_self.name}' has no @ssbo members - a kernel with no buffers cannot observe or produce anything")
     }
 }
 
@@ -3007,7 +3007,7 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
         !matrix_info(v._type).ok) {
         // emit_type would panic on an unsupported base type; reject with a clean error instead.
         if (cpu_only_lattice_width(bt)) {
-            errors |> push("local '{v.name}': type {bt} is CPU-only (8/16-lane lattice forms do not exist in shaders — vectors cap at 4 lanes)")
+            errors |> push("local '{v.name}': type {bt} is CPU-only (8/16-lane lattice forms do not exist in shaders - vectors cap at 4 lanes)")
         } else {
             errors |> push("local '{v.name}': type {bt} is not supported yet (only int/uint/float scalars+vectors+matrices, bool, fixed arrays, and structs of those)")
         }
@@ -3309,7 +3309,7 @@ class SpirvEmit : AstVisitor {
         // (a swizzle of a swizzle, a call result). A multi-lane assignment target lands in
         // emit_write_swizzle instead, and reports the same thing there.
         if (e is ExprSwizzle) {
-            errs |> push("cannot assign through a swizzle of a value — a write-swizzle target must be addressable (a global, a `var` local, or an SSBO / UBO element)")
+            errs |> push("cannot assign through a swizzle of a value - a write-swizzle target must be addressable (a global, a `var` local, or an SSBO / UBO element)")
             return (id = 0u, pty = 0u)
         }
         // a module-scope constant (`let` fold or @constant_id spec constant) used as a write target:
@@ -3317,7 +3317,7 @@ class SpirvEmit : AstVisitor {
         // mistake instead of the generic internal message.
         let wg = global_var_of(ctx, e)
         if (wg != null && (ctx.globals?[intptr(wg)] ?? GlobalInfo()).is_constant) {
-            errs |> push("cannot assign to '{wg.name}' — module-scope constants (incl. @constant_id spec constants) are read-only in a shader")
+            errs |> push("cannot assign to '{wg.name}' - module-scope constants (incl. @constant_id spec constants) are read-only in a shader")
             return (id = 0u, pty = 0u)
         }
         errs |> push("internal: {e.__rtti} is not an lvalue")
@@ -4067,7 +4067,7 @@ class SpirvEmit : AstVisitor {
     def emit_write_swizzle(sw : ExprSwizzle?; rhs : ExpressionPtr) : void {
         var bm & = unsafe(*m)
         if (!key_exists(e2ptr, intptr(sw.value))) {
-            errs |> push("cannot assign through a swizzle of a value — a write-swizzle target must be addressable (a global, a `var` local, or an SSBO / UBO element)")
+            errs |> push("cannot assign through a swizzle of a value - a write-swizzle target must be addressable (a global, a `var` local, or an SSBO / UBO element)")
             return
         }
         let val = value_of(rhs)
@@ -5857,7 +5857,7 @@ class SpirvEmit : AstVisitor {
         // a resolved call we can't lower: a host/extern builtin (print, ...) or a daslang function in
         // an unsupported module. Fail-closed with a clear message rather than the generic one below.
         if (expr.func != null) {
-            errs |> push("cannot call '{name}' in a SPIR-V shader — only user-defined shader functions and built-in shader intrinsics (texture/imageStore/dot/math/...) are callable")
+            errs |> push("cannot call '{name}' in a SPIR-V shader - only user-defined shader functions and built-in shader intrinsics (texture/imageStore/dot/math/...) are callable")
             return expr
         }
         errs |> push("unsupported call '{name}' (not a vector constructor, dot, or GLSL.std.450 math builtin)")
@@ -6777,7 +6777,7 @@ def private discover_kernel_methods(var m : SpirvModule; var ctx : EmitCtx; body
             }
         }
         if (cyc) {
-            errors |> push("method '{mfn.name}' is part of a method call cycle — recursion is not supported in SPIR-V shaders")
+            errors |> push("method '{mfn.name}' is part of a method call cycle - recursion is not supported in SPIR-V shaders")
             continue
         }
         if (key_exists(ctx.user_funcs, key)) continue

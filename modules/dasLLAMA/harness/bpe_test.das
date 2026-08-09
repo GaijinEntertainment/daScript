@@ -33,8 +33,8 @@ def ids_equal(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        return false if (a[i] != b[i])
+    for (av, bv in a, b) {
+        return false if (av != bv)
     }
     return true
 }
@@ -67,7 +67,7 @@ def main() {
 
     to_log(LOG_INFO, "corpus: {length(inputs)} inputs, {length(outlines)} outputs\n")
     if (length(inputs) != length(outlines)) {
-        to_log(LOG_ERROR, "MISALIGNED corpus — input/output counts differ\n")
+        to_log(LOG_ERROR, "MISALIGNED corpus - input/output counts differ\n")
         return
     }
 
@@ -88,7 +88,7 @@ def main() {
     if (tk.pre == "llama-bpe") {  // golden ids captured from llama-tokenize on this exact vocab
         var fresh_ok = true
         fresh_ok = fresh_ok && check_fresh(tk, "Hello, world! It's 2026.", [9906l, 11l, 1917l, 0l, 1102l, 596l, 220l, 2366l, 21l, 13l])
-        fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])
+        fresh_ok = fresh_ok && check_fresh(tk, "dasLLAMA runs on daslang 🦙", [35989l, 4178l, 39200l, 8640l, 389l, 6754l, 5317l, 11410l, 99l, 247l])   // nolint:STYLE039 (the emoji IS the fixture - golden ids are the multi-byte UTF-8 split)
         fresh_ok = fresh_ok && check_fresh(tk, "  spaces   and\ttabs", [220l, 12908l, 256l, 323l, 3324l, 3518l])
         to_log(LOG_INFO, "fresh cross-check: {fresh_ok ? "PASS" : "FAIL"}\n")
     }

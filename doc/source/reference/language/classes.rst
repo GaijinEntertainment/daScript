@@ -413,9 +413,16 @@ from it. This requires the ``daslib/dynamic_cast_rtti`` module:
     verify(a is Animal)         // true — Dog is an Animal
     verify(!(a is Cat))         // true — a is not a Cat
 
-Without ``daslib/dynamic_cast_rtti``, the ``is`` operator performs a static (compile-time) type
-check only. With the module, it performs runtime RTTI checking by walking the class hierarchy
-via the ``__rtti`` field.
+The ``require`` is mandatory, not an upgrade. ``is`` on a class pointer is defined by that
+module; without it there is no fallback of any kind and the code does not compile:
+
+.. code-block:: das
+
+    var a : Animal? = new Dog()
+    if (a is Dog) { }           // error[30190]: is Dog only allowed for variants
+
+With the module, ``is`` performs runtime RTTI checking by walking the class hierarchy via the
+``__rtti`` field.
 
 ----------------------------
 Type Casting (as, ?as)

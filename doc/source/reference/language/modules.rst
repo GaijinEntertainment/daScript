@@ -182,8 +182,14 @@ If the function does not exist in that module, a compilation error will occur.
 If the function is private or not directly visible, a compilation error will occur.
 If multiple functions match an implicit function call, a compilation error will occur.
 
-Module names ``_`` and ``__`` are reserved to specify the `current module` and the `current module only`, respectively.
-It is particularly important for generic functions, which are always instanced as private functions in the current module:
+Module names ``_`` and ``__`` are reserved. Both refer to the module `currently being compiled`:
+``_`` searches everything visible there (its own symbols plus everything it requires),
+while ``__`` searches that module's own symbols only, ignoring anything imported.
+
+This is particularly important for generic functions, which are always instanced as private
+functions in the module that calls them. Inside an instanced generic, the module `currently
+being compiled` is therefore the **caller's** module — neither prefix pins a lookup to the
+module where the generic was written:
 
 .. code-block:: das
 
@@ -191,12 +197,12 @@ It is particularly important for generic functions, which are always instanced a
 
     [generic]
     def from_b_get_fun_4() {
-        return  _::fun_4()      //  call `fun_4', as if it was implicitly called from b
+        return  _::fun_4()      // `fun_4' as seen by the module which instanced this generic
     }
 
     [generic]
     def from_b_get_fun_5() {
-        return  __::fun_5()     // always b::fun_5
+        return  __::fun_5()     // `fun_5' declared directly in the instancing module
     }
 
 Specifying an empty prefix is the same as specifying no prefix.

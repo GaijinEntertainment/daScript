@@ -105,7 +105,7 @@ def vulkan_bake_slice_begin {
 //! (the slicer already declined to live gathers — correct, just slower) and is worth a rebake.
 def vulkan_bake_slice_end(t : Model) {
     if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != long_length(t.vkplan)) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers — the image is stale for this run's shape, consider rebaking\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers - the image is stale for this run's shape, consider rebaking\n")
     }
     g_vk_bake = VkBakeMode.off
 }
@@ -160,7 +160,7 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
             ws |> resize(0)
             return true
         }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} — regathering live from here\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} - regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
     }
@@ -171,7 +171,7 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
             ws |> resize(0)
             return true
         }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) — regathering live from here\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) - regathering live from here\n")
         g_vk_bake = VkBakeMode.off
         return false
     }
@@ -206,7 +206,7 @@ def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : 
         return
     }
     if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
     }
     layout_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
 }
@@ -217,7 +217,7 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
         return
     }
     if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
     }
     layout_gather_stack_kq(t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
@@ -229,7 +229,7 @@ def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_row
         return
     }
     if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
     }
     layout_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
 }
@@ -243,7 +243,7 @@ def trim_model_planes(var t : Model) : bool {
     }
     for (e in t.vkplan) {
         if (e.role != int(VkBakeRole.arena)) {
-            to_log(LOG_WARNING, "dasLLAMA trim: baked plan carries non-arena role {e.role} — only pure resident-driver dense models trim; declining\n")
+            to_log(LOG_WARNING, "dasLLAMA trim: baked plan carries non-arena role {e.role} - only pure resident-driver dense models trim; declining\n")
             return false
         }
     }
@@ -289,7 +289,7 @@ def trim_model_planes(var t : Model) : bool {
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
             } else {
-                to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair — declining\n")
+                to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair - declining\n")
                 return false
             }
         }
@@ -395,7 +395,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         return p
     }
     if (c.n_expert > 0l) {
-        p.reason = "MoE — the per-op offload tier serves routed experts, not the resident driver"
+        p.reason = "MoE - the per-op offload tier serves routed experts, not the resident driver"
         return p
     }
     // KV is reserved BEFORE weights and never grows: on a discrete card it competes directly with
@@ -443,7 +443,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes, 0l)
         let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
         p.reason = (cap_fit >= 512l
-            ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} — would fit at ctx {cap_fit}"
+            ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} - would fit at ctx {cap_fit}"
             : "needs {total >> 20l} MB of {usable >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB)")
     }
     return p
@@ -603,7 +603,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     for (pl in planes) {
         if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
-            to_log(LOG_WARNING, "dasLLAMA: resident driver declined — a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple\n")
+            to_log(LOG_WARNING, "dasLLAMA: resident driver declined - a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple\n")
             delete planes
             delete need
             return false
@@ -615,7 +615,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     var reserve_ok = true
     for (fmt, blocks in keys(need), values(need)) {
         if (!rdec_reserve(fmt, blocks)) {
-            to_log(LOG_WARNING, "dasLLAMA: resident driver — arena reserve failed (fmt {fmt}, {blocks} blocks)\n")
+            to_log(LOG_WARNING, "dasLLAMA: resident driver - arena reserve failed (fmt {fmt}, {blocks} blocks)\n")
             reserve_ok = false
         }
     }
@@ -638,7 +638,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
         let cq = rdec_quant_class(lf.fq)
         if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv)
                 || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
-            to_log(LOG_WARNING, "dasLLAMA: resident driver declined — layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)}, ffn {int(lf.f1)}/{int(lf.f3)})\n")
+            to_log(LOG_WARNING, "dasLLAMA: resident driver declined - layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)}, ffn {int(lf.f1)}/{int(lf.f3)})\n")
             return false
         }
         let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, qd, mr, kg, wb)
@@ -650,7 +650,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
         let b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
         if (bq < 0l || bk < 0l || bv < 0l || bo < 0l || b1 < 0l || b3 < 0l || b2 < 0l) {
-            to_log(LOG_WARNING, "dasLLAMA: resident driver — arena placement failed at layer {l}, declining\n")
+            to_log(LOG_WARNING, "dasLLAMA: resident driver - arena placement failed at layer {l}, declining\n")
             return false
         }
         rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2,
@@ -658,7 +658,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) {
-        to_log(LOG_WARNING, "dasLLAMA: resident driver — classifier placement failed, declining\n")
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - classifier placement failed, declining\n")
         return false
     }
     rdec_set_cls(bcls, int(cls_fmt))
@@ -715,7 +715,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     // ownership guard: the single mirror holds ONE session's rows (superseded => host has ours)
     if (s.rdec_gen != g_rdec_gen) {
         if (s.rdec_gen != 0l && !s.rdec_hydrated) {
-            panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration — engine bug (the steal path must hydrate first)")
+            panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
         }
         return false
     }
@@ -1013,7 +1013,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 return
             }
         } elif (!empty(plan.reason)) {
-            to_log(LOG_INFO, "dasLLAMA: resident driver declined — {plan.reason}\n")
+            to_log(LOG_INFO, "dasLLAMA: resident driver declined - {plan.reason}\n")
         }
     }
     // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it
@@ -1029,7 +1029,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     if (!empty(reason)) {
         set_moe_gpu_model_support(reason)
-        to_log(LOG_WARNING, "dasLLAMA: GPU tier armed but idle — {reason}\n")
+        to_log(LOG_WARNING, "dasLLAMA: GPU tier armed but idle - {reason}\n")
         return
     }
     let ts_gpu = ref_time_ticks()

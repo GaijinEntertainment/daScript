@@ -232,7 +232,7 @@ class WidgetCallMacro : AstCallMacro {
         return true
     }
 
-    def private emit_user_args(prog : ProgramPtr; expr : ExprCallMacro?; // nolint:STYLE037
+    def private emit_user_args(prog : ProgramPtr; expr : ExprCallMacro?; // nolint:STYLE037,STYLE038 - one linear walk over the render_fn decl; the arms share cursor state
                                var newCall : ExprCall?; firstUserArg : int;
                                renderArgStart : int) : bool {
         // Destructure user call args into render_fn decl order, filling skipped defaults. renderArgStart = first user param index (2 normally; 1 for verbatim forward).
@@ -370,7 +370,7 @@ class WidgetCallMacro : AstCallMacro {
         return <- newCall
     }
 
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr { // nolint:STYLE037
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr { // nolint:STYLE037,STYLE038 - one dispatch over the four call forms; splitting hides the shared expansion state
         return <- emit_forward_call(prog, expr) if (forward_argument)
         // Four call forms: 1 EXPLICIT kind(IDENT,(...)) drives the state global;
         // 2 AUTO-GEN kind((...)) and 3 POSITIONAL kind("str") synth the ident from
@@ -386,7 +386,7 @@ class WidgetCallMacro : AstCallMacro {
             // 2..N) has a default initializer (e.g. same_line / indent, but not
             // separator / spacing which have none).
             if (render_fn == null || !all_user_args_defaulted()) {
-                macro_error(prog, expr.at, "{kind_name}(...): missing widget body — pass `(named=arg, …)` or, for narrative widgets, a single string literal")
+                macro_error(prog, expr.at, "{kind_name}(...): missing widget body - pass `(named=arg, ...)` or, for narrative widgets, a single string literal")
                 return <- default<ExpressionPtr>
             }
             bareName = synth_bare_name(expr.at)
@@ -399,7 +399,7 @@ class WidgetCallMacro : AstCallMacro {
                 // interpolated string_builder, valid only when the signature is
                 // exactly (state; widget_ident; text : string).
                 if (!accepts_positional_string()) {
-                    macro_error(prog, head.at, "{kind_name}: positional-string form `{kind_name}(\"…\")` is only valid for single-string narrative widgets (text/text_unformatted/text_wrapped/text_disabled/bullet_text/separator_text). Use the named-tuple form `{kind_name}((…))` instead.")
+                    macro_error(prog, head.at, "{kind_name}: positional-string form `{kind_name}(\"...\")` is only valid for single-string narrative widgets (text/text_unformatted/text_wrapped/text_disabled/bullet_text/separator_text). Use the named-tuple form `{kind_name}((...))` instead.")
                     return <- default<ExpressionPtr>
                 }
                 bareName = synth_bare_name(expr.at)
@@ -461,11 +461,11 @@ class WidgetCallMacro : AstCallMacro {
             if (cursor is ExprVar) {
                 bareName = string((cursor as ExprVar).name)
             } else {
-                macro_error(prog, expr.at, "{kind_name}(...): first argument must be an identifier, named-tuple `(…)`, dotted-flag `IDENT.FLAG[.FLAG…]`, indexed `IDENT[key]`, or (for narrative widgets) a string literal; got {describe(expr.arguments[0])}")
+                macro_error(prog, expr.at, "{kind_name}(...): first argument must be an identifier, named-tuple `(...)`, dotted-flag `IDENT.FLAG[.FLAG...]`, indexed `IDENT[key]`, or (for narrative widgets) a string literal; got {describe(expr.arguments[0])}")
                 return <- default<ExpressionPtr>
             }
             if (indexExpr != null && !empty(flagsReversed)) {
-                macro_error(prog, expr.at, "{kind_name}({bareName}[k]): dotted flags (.PUBLIC/.NOTLIVE) not supported on indexed form — declare the table global with required annotations directly")
+                macro_error(prog, expr.at, "{kind_name}({bareName}[k]): dotted flags (.PUBLIC/.NOTLIVE) not supported on indexed form - declare the table global with required annotations directly")
                 return <- default<ExpressionPtr>
             }
             // Indexed (table-form) widget: table global is user-declared, wrapper
@@ -663,7 +663,7 @@ class WidgetCallMacro : AstCallMacro {
         return <- newCall
     }
 
-    def private emit_indexed_call(prog : ProgramPtr; mod : Module?; // nolint:STYLE037
+    def private emit_indexed_call(prog : ProgramPtr; mod : Module?; // nolint:STYLE037,STYLE038 - one AST emit sequence for the indexed form; the stages are order-coupled
                                   var expr : ExprCallMacro?;
                                   bareName : string;
                                   var indexExpr : ExpressionPtr) : ExpressionPtr {
@@ -719,7 +719,7 @@ class WidgetCallMacro : AstCallMacro {
         if (tabType.firstType == null ||
             (tabType.firstType.baseType != Type.tInt && tabType.firstType.baseType != Type.tString)) {
             macro_error(prog, expr.at,
-                "{kind_name}({bareName}[k]): only `table<int; …>` and `table<string; …>` are supported for indexed widgets (got `{describe(tabType)}`).")
+                "{kind_name}({bareName}[k]): only `table<int; ...>` and `table<string; ...>` are supported for indexed widgets (got `{describe(tabType)}`).")
             return <- default<ExpressionPtr>
         }
         let indexedAddrFnName = "__widget_addr$indexed${kind_name}${bareName}"
@@ -946,7 +946,7 @@ class EditExternalCallMacro : AstCallMacro {
         }
         if (!idPresent) {
             macro_error(prog, expr.at,
-                "{kind_name}(ptr, (id=\"...\", ...)): external-pointer widgets require an explicit `id=\"...\"` for the telemetry path. No auto-generation — pick a stable unique identifier.")
+                "{kind_name}(ptr, (id=\"...\", ...)): external-pointer widgets require an explicit `id=\"...\"` for the telemetry path. No auto-generation - pick a stable unique identifier.")
             return <- default<ExpressionPtr>
         }
         if (empty(idLit)) {

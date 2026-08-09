@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 1.3 — io mirror", 800, 600)
+    harness_init("Phase 1.3 - io mirror", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,7 +34,7 @@ def update() {
     SetNextWindowSize(ImVec2(560.0, 240.0), ImGuiCond.Always)
     window(IO_DEMO_WIN, (text = "io mirror demo", closable = false,
                         flags = ImGuiWindowFlags.None)) {
-        text("Move the mouse / hold a button — imgui_snapshot.io reflects it.")
+        text("Move the mouse / hold a button - imgui_snapshot.io reflects it.")
         let pos = GetMousePos()
         text("mouse_pos = ({pos.x}, {pos.y})")
         text("mouse_buttons = [{IsMouseDown(ImGuiMouseButton.Left)}, {IsMouseDown(ImGuiMouseButton.Middle)}, {IsMouseDown(ImGuiMouseButton.Right)}]")

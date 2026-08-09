@@ -118,7 +118,7 @@ def fread(f : file; buf : array<auto(BufType)> const implicit) {
     return 0 if (empty(buf))   // a 0-byte read; addr(buf[0]) on an empty array is out of bounds
     let nbytes = long_length(buf) * typeinfo sizeof(type<BufType>)
     if (nbytes > int64(INT_MAX)) {
-        panic("fread: {nbytes} bytes does not fit the int byte count — use long_fread")
+        panic("fread: {nbytes} bytes does not fit the int byte count - use long_fread")
     }
     unsafe {
         return _builtin_read(f, addr(buf[0]), int(nbytes))
@@ -150,7 +150,7 @@ def fwrite(f : file; buf : array<auto(BufType)> const implicit) {
     return 0 if (empty(buf))   // a 0-byte write; addr(buf[0]) on an empty array is out of bounds
     let nbytes = long_length(buf) * typeinfo sizeof(type<BufType>)
     if (nbytes > int64(INT_MAX)) {
-        panic("fwrite: {nbytes} bytes does not fit the int byte count — use long_fwrite")
+        panic("fwrite: {nbytes} bytes does not fit the int byte count - use long_fwrite")
     }
     unsafe {
         return _builtin_write(f, addr(buf[0]), int(nbytes))
@@ -363,6 +363,7 @@ def match_glob(pattern : string; path : string) : bool {
 }
 
 //! Convert a path to use forward slashes regardless of host OS.
+[temp_string_result]
 def to_generic_path(s : string) : string {
     return replace(s, "\\", "/")
 }

@@ -80,7 +80,7 @@ def assert_snapshots_equal(left, right : TerminalSnapshot const) {
 }
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - flat semantics list: one feed + assert group per terminal behaviour, no shared state to extract
     var inscope terminal <- terminal_create(8, 2)
     assert(terminal.columns == 8)
     assert(terminal.rows == 2)
@@ -128,7 +128,7 @@ def main {
     let bytes <- [uint8(0xe4), uint8(0xb8), uint8(0xad)]
     terminal_feed_bytes(styled, bytes)
     terminal_snapshot(styled, snapshot)
-    assert(snapshot.normal.cells[3].grapheme == "中")
+    assert(snapshot.normal.cells[3].grapheme == "中")  // nolint:STYLE039 - CJK glyph is the UTF-8 decode + double-width payload
     assert(snapshot.normal.cells[3].width == 2)
 
     var key_bytes : array<uint8>

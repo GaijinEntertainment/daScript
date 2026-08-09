@@ -361,7 +361,7 @@ def private cn_read_gemm(var recs : table<string; CnRec>; b : array<uint8> | #; 
     }
     let r = cn_take(recs, name)
     if (r.n_elem % 32l != 0l) {
-        panic("dasLLAMA canary q8: GEMM tensor '{name}' has {r.n_elem} elements — not 32-aligned")
+        panic("dasLLAMA canary q8: GEMM tensor '{name}' has {r.n_elem} elements - not 32-aligned")
     }
     if (long_length(wscratch) < r.n_elem) {
         wscratch |> reserve(r.n_elem)
@@ -400,7 +400,7 @@ def private cn_repack(var st : CanaryStaging; woff, n, d : int64) {
     }
     if (n % 32l != 0l) {
         // n_elem%32==0 does not imply per-row alignment — straddling blocks serve wrong scales
-        panic("dasLLAMA canary q8: GEMM row width {n} is not 32-aligned — Q8_0 blocks would straddle rows")
+        panic("dasLLAMA canary q8: GEMM row width {n} is not 32-aligned - Q8_0 blocks would straddle rows")
     }
     repack_q8q8_weight(st.qblob, st.qscales, woff, n, d)
 }
@@ -459,9 +459,9 @@ def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
         let ts_img = ref_time_ticks()
         var t = CanaryEncoder()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared canary-encoder image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source bin")
+            panic("dasLLAMA: '{path}' is not a prepared canary-encoder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source bin")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -470,7 +470,7 @@ def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
         let ts_img = ref_time_ticks()
         var t = CanaryEncoder()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var inscope st <- stage_canary_encoder(path, q8)
@@ -648,7 +648,7 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
 
         if (!empty(recs)) {
             let leftover <- [for (r in values(recs)); r.name]
-            panic("dasLLAMA canary: {length(recs)} unconsumed tensor(s) in encoder bin — converter drift: {join(leftover, ", ")}")
+            panic("dasLLAMA canary: {length(recs)} unconsumed tensor(s) in encoder bin - converter drift: {join(leftover, ", ")}")
         }
         delete recs
         delete wscratch
@@ -1111,7 +1111,7 @@ def canary_asr_caps() : AsrCaps {
 //! The facade's session arm: English-only validation, then a fresh decoder session.
 def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype.f16) : CanaryAsrSession {
     if (lang != "auto" && lang != "en") {
-        panic("dasLLAMA asr: this Canary-Qwen model is English-only — create the session with lang=\"en\" or \"auto\"")
+        panic("dasLLAMA asr: this Canary-Qwen model is English-only - create the session with lang=\"en\" or \"auto\"")
     }
     return <- CanaryAsrSession(qctx <- create_session_(dec, kv, kv))
 }
@@ -1193,7 +1193,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     if (!hit_eos) {
         // a budget exit truncates SILENTLY otherwise — the transcript and its timing would
         // publish indistinguishable from a complete decode
-        to_log(LOG_WARNING, "dasLLAMA canary: decode budget exhausted at {max_new} tokens — transcript is TRUNCATED\n")
+        to_log(LOG_WARNING, "dasLLAMA canary: decode budget exhausted at {max_new} tokens - transcript is TRUNCATED\n")
     }
 
     var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,

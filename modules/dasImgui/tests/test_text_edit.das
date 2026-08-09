@@ -19,7 +19,7 @@ let EDIT_TARGET = "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/EDITOR_PANE/
 let SAMPLE = ("The text editor arc, now with syntax. // E4\n"
     + "\n"
     + "def greet(name : string) : int \{\n"
-    + "\treturn print(\"héllo — 你好 \{name\}\") // 0x12AF2A 0x80FF8040\n"
+    + "\treturn print(\"héllo - 你好 \{name\}\") // 0x12AF2A 0x80FF8040\n"  // nolint:STYLE039 (multi-byte fixture exercises grapheme editing)
     + "\}\n")
 
 def private open_edit_fixture(t : T?; d : ImguiApp; label_ : string;

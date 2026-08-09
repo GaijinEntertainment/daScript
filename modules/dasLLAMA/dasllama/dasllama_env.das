@@ -710,14 +710,14 @@ def private write_section(var w : StringBuilderWriter; title, note : string) {
 def public env_markdown() : string {
     return build_string() $(var w) {
         w |> write("# dasLLAMA environment variables\n\n")
-        w |> write("GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` — do not edit\n")
+        w |> write("GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` - do not edit\n")
         w |> write("by hand. Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read\n")
         w |> write("anywhere in the tree without a declaration fails `tests/test_env_registry.das`.\n\n")
         w |> write("Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is false and\n")
         w |> write("anything else true; **number** falls back to the default when unset or unparseable, with\n")
         w |> write("a logged warning on garbage; **text** and **path** are taken verbatim. A SET-BUT-EMPTY\n")
         w |> write("variable counts as unset everywhere. Every knob loads ONCE, at context init, into the\n")
-        w |> write("`g_env_*` globals — hot code reads struct fields, and `set_env_variable` after startup\n")
+        w |> write("`g_env_*` globals - hot code reads struct fields, and `set_env_variable` after startup\n")
         w |> write("is invisible (arm a child process's environment instead).\n")
         write_section(w, "Engine",
             "Read by the inference engine itself, so these affect any program that loads a model.")
@@ -730,12 +730,12 @@ def public env_markdown() : string {
             "Vulkan GPU backend. Present only where the dasVulkan package is installed.")
         write_info_rows(w, get_env_config_info(type<VulkanEnv>))
         write_section(w, "MoltenVK (macOS)",
-            "MoltenVK's own configuration — listed because the vulkan tier arms it on Apple.")
+            "MoltenVK's own configuration - listed because the vulkan tier arms it on Apple.")
         write_info_rows(w, get_env_config_info(type<MoltenVkEnv>))
         write_section(w, "Accelerate / AMX backend",
             "Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.")
         write_info_rows(w, get_env_config_info(type<AccelerateEnv>))
-        write_section(w, "Harness — tuner and probes", "")
+        write_section(w, "Harness - tuner and probes", "")
         write_info_rows(w, get_env_config_info(type<HarnessEnv>))
         write_section(w, "Benchmarks", "")
         write_info_rows(w, get_env_config_info(type<BenchmarkEnv>))
@@ -746,7 +746,7 @@ def public env_markdown() : string {
         write_section(w, "Examples and tutorials", "")
         write_info_rows(w, get_env_config_info(type<ExampleEnv>))
         write_section(w, "daslang core knobs dasLLAMA honours",
-            "Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.")
+            "Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.")
         write_info_rows(w, get_env_config_info(type<CoreEnv>))
         var extras <- core_extra_rows()
         for (e in extras) {

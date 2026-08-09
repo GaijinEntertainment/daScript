@@ -53,6 +53,6 @@ def test_data_table_smoke(t : T?) {
         let qty0_x  = find_widget(snap, "MAIN_WIN/INVENTORY/GRID_ROW_QTY[0]")?["bbox"]?["x"] ?? 0.0f
         let pri0_x  = find_widget(snap, "MAIN_WIN/INVENTORY/GRID_ROW_PRICE[0]")?["bbox"]?["x"] ?? 0.0f
         t |> success(name0_x < qty0_x && qty0_x < pri0_x,
-                     "columns L→R: name({name0_x}) < qty({qty0_x}) < price({pri0_x})")
+                     "columns L->R: name({name0_x}) < qty({qty0_x}) < price({pri0_x})")
     }
 }

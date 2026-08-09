@@ -1,6 +1,8 @@
 options gen2
 options no_unused_block_arguments
 options no_unused_function_arguments = false
+options _cyclomatic_complexity = 0   // faithful testing copy of the engine backend — the validator is-ladders
+options _function_length = 0         // and the IR emitter mirror the engine source; keep the shapes in sync
 module shader_dsl_boost shared private
 
 require daslib/strings_boost
@@ -541,6 +543,44 @@ class ValidateShaderVisitor : AstVisitor {
         register_node(expr, node)
     }
 
+    // An init-less decl. In daslang a local without an initializer IS initialized —
+    // `var m : bool` is `var m = false`, `var v : float2` is `var v = float2(0, 0)` —
+    // the AST just carries no init node (the optimizer drops an init every path
+    // overwrites before reading). Synthesize the default-value const node and seed
+    // the variable's rail with its pin: accumulator seed (`var`) or read target (`let`).
+    def emit_default_init(v : VariablePtr&) {
+        let bt = v._type.baseType
+        let typeId = (bt == Type.tBool ? BoolConst
+                    : bt == Type.tFloat ? FloatConst
+                    : bt == Type.tFloat2 ? Float2Const
+                    : bt == Type.tFloat3 ? Float3Const
+                    : bt == Type.tFloat4 ? Float4Const
+                    : "")
+        if (empty(typeId)) {
+            errors.push(("unsupported variable type {describe(v._type)}", unsafe(addr(v.at))))
+            return
+        }
+        // constValue stays default<float4> — all zeros is exactly false / 0.0 / (0,0,…)
+        var node = IRNode(id = irNodeId, typeId = typeId, kind = ShaderNodeKind.Const)
+        if (DEBUG_AT) {
+            node.at = "default init of {v.name}"
+        }
+        var pin = new IRPin(id = irPinId, _type = pin_type_of(v._type))
+        pins[irPinId] = pin
+        irPinId++
+        node.outputs.push(pin)
+        nodes.emplace(node)
+        irNodeId++
+        add_variable(v)
+        let vid : Variable const? = v
+        if (!v._type.isConst) {
+            accumVars[vid] = true
+            accumCurPin[vid] = pin.id
+        } else {
+            variablePins[vid] = pin.id
+        }
+    }
+
     def emit_vector_ctor(expr : ExprCall?; dims : int; combineTypeId : string) {
         let argc = expr.arguments.length()
         if (argc == 1 && expr.arguments[0]._type.baseType == Type.tFloat) {
@@ -765,7 +805,7 @@ class ValidateShaderVisitor : AstVisitor {
         for (v in expr.variables) {
             // print("deep: let {v.name} = {describe(v.init)}")
             if (v.init == null) {
-                errors.push(("shader variables must be initialized with a constant expression", unsafe(addr(v.at))))
+                emit_default_init(v)
                 continue
             }
             if (v._type.isPointer) {

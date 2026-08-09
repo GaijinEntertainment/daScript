@@ -338,6 +338,7 @@ namespace das {
                 if ( fn->nodiscard ) { ss << "[nodiscard]"; }
                 ss << "\n";
             }
+            if ( fn->tempStringResult ) { ss << "// [temp_string_result]\n"; }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             // if ( fn->addr ) { ss << "[addr]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }

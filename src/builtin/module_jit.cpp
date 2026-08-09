@@ -464,7 +464,7 @@ extern "C" {
         }
         if (!found) {
             if ( !jit_module_is_registered(moduleName) ) {
-                DAS_FATAL_ERROR("Failed to find %s: module %s is not registered (its .shared_module may have failed to load — see errors above).\n", funcMangledName, moduleName);
+                DAS_FATAL_ERROR("Failed to find %s: module %s is not registered (its .shared_module may have failed to load - see errors above).\n", funcMangledName, moduleName);
             }
             DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
@@ -480,7 +480,7 @@ extern "C" {
         });
         if (!result) {
             if ( !jit_module_is_registered(moduleName) ) {
-                DAS_FATAL_ERROR("Failed to find annotation %s: module %s is not registered (its .shared_module may have failed to load — see errors above).\n", annName, moduleName);
+                DAS_FATAL_ERROR("Failed to find annotation %s: module %s is not registered (its .shared_module may have failed to load - see errors above).\n", annName, moduleName);
             }
             DAS_FATAL_ERROR("Failed to find annotation %s in module %s.\n", annName, moduleName);
         }

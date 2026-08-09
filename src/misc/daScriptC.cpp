@@ -920,6 +920,7 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_DISABLE_INLINE:         p->disable_inline = v; break;
         case DAS_POLICY_DISABLE_AUTO_INLINE:    p->disable_auto_inline = v; break;
         case DAS_POLICY_DISABLE_RUN:            p->disable_run = v; break;
+        case DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM: p->disable_temp_string_reclaim = v; break;
         case DAS_POLICY_LOG_OPTIMIZATION:       p->log_optimization = v; break;
         case DAS_POLICY_LOG_OPTIMIZATION_PASSES: p->log_optimization_passes = v; break;
         case DAS_POLICY_FUSION:                 p->fusion = v; break;
@@ -1410,14 +1411,14 @@ int das_func_info_get_stack_size ( das_func_info * info ) {
 // together pin every byte between `capacity` and `flags`.
 
 static_assert(sizeof(das_array) == sizeof(Array),
-    "das_array size must match das::Array — update daScriptC.h to mirror arraytype.h");
+    "das_array size must match das::Array - update daScriptC.h to mirror arraytype.h");
 static_assert(offsetof(das_array, data)     == offsetof(Array, data),     "das_array.data offset drift");
 static_assert(offsetof(das_array, size)     == offsetof(Array, size),     "das_array.size offset drift");
 static_assert(offsetof(das_array, capacity) == offsetof(Array, capacity), "das_array.capacity offset drift");
 static_assert(offsetof(das_array, flags)    == offsetof(Array, flags),    "das_array.flags offset drift");
 
 static_assert(sizeof(das_table) == sizeof(Table),
-    "das_table size must match das::Table — update daScriptC.h to mirror arraytype.h");
+    "das_table size must match das::Table - update daScriptC.h to mirror arraytype.h");
 static_assert(offsetof(das_table, data)       == offsetof(Table, data),       "das_table.data offset drift");
 static_assert(offsetof(das_table, size)       == offsetof(Table, size),       "das_table.size offset drift");
 static_assert(offsetof(das_table, capacity)   == offsetof(Table, capacity),   "das_table.capacity offset drift");

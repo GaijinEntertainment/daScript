@@ -2361,6 +2361,7 @@ namespace das {
     DAS_API char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at );
     DAS_API char * das_lexical_cast_int_i64 ( int64_t x, bool hex, Context * __context__, LineInfoArg * at );
     DAS_API char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_API char * das_temp_string_result ( char * str, Context * __context__, LineInfoArg * at );
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer;

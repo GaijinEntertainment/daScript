@@ -74,7 +74,7 @@ unreachable nodes.
   |---|---|---|
   | `TypeDeclPtr` | `clone_type(t)` | |
   | `ExpressionPtr` | `clone_expression(e)` | recursive deep clone |
-  | `FunctionPtr` | `clone_function(f)` | returned via move: `var x <- clone_function(f)` |
+  | `FunctionPtr` | `clone_function(f)` | |
   | `VariablePtr` | `clone_variable(v)` | |
   | `StructurePtr` | `clone_structure(s)` | (no `get_ptr(st)` wrapping needed) |
 
@@ -87,7 +87,7 @@ The post-migration rules above are correct as of daslang 0.6.x.
 
 ### Pre-set `_type` on emitted `ExprVar` (and similar nodes) that flow into typed positions
 
-`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1138](src/ast/ast.cpp#L1138), repo-only: `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
+`Expression::clone` deep-copies `_type` faithfully ([ast.cpp:1140](src/ast/ast.cpp#L1140), repo-only: `expr->type = type ? new TypeDecl(*type) : nullptr`). So whatever you put on the source propagates to every consumer. The trap is the **source**: `new ExprVar(at = at, name := wbName)` leaves `_type` null, every `clone_expression` of it inherits the null, and if any of those clones flows into a generic call (`push_clone`, `sum`, etc.) the typer fails with `30165: cannot infer ... return type with 'auto'`.
 
 Don't rely on the typer's later local-variable-resolution pass to fix this — its generic-instantiation pass runs **first** and commits to `auto`, cascading errors up through every downstream consumer.
 
@@ -116,17 +116,16 @@ A small set of types are still `smart_ptr<T>` (refcounted with manual
 addRef/releaseRef on the C++ side). These DO follow the older
 `var inscope` / `<-` patterns:
 
-- `ProgramPtr` = `smart_ptr<Program>`
-- `ContextPtr` = `smart_ptr<Context>`
-- `FileAccessPtr` = `smart_ptr<FileAccess>`
-- `DebugAgentPtr`, `VisitorAdapterPtr` (from `make_visitor`) — internal
+- `ProgramPtr` = `smart_ptr<Program>` (`daslib/ast.das`)
+- `FileAccessPtr` = `smart_ptr<FileAccess>` (`daslib/rtti.das` — needs `require daslib/rtti`)
+- `Context` and `DebugAgent` are refcounted on the C++ side only. `ContextPtr` / `DebugAgentPtr` are C++ typedefs; neither name exists in das (`error[30812] … don't know what 'ContextPtr' is`).
 
 For these:
 
 - **`<-` operator**: ALWAYS `memcpy(dest, src) + memset(src, 0)` — it is a raw memory operation, NOT smart_ptr-aware. It zeros the source regardless of type.
 - **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` for `smart_ptr<T>` transfers when the refcount needs to be tracked.
 - **`return <- expr`**: Moves value to return slot and zeroes `expr`. If `expr` is a `&` ref parameter, this zeroes the *caller's* variable since they share memory.
-- **Visitor adapters** (`make_visitor` returns `VisitorAdapterPtr`) need `var inscope adapter <- make_visitor(*v)` and an `unsafe` block at the call site — see `daslib/ast.das` for examples.
+- **Visitor adapters** — `make_visitor(someClass) $(adapter) { … }` takes a block; the adapter is scoped to it and the `unsafe` is handled inside `make_visitor`. There is no returning overload and no `var inscope adapter <- …` form. The das-side type is `VisitorAdapter?` (`VisitorAdapterPtr` is a C++ typedef only). See `daslib/ast.das` and the call sites in `daslib/aot_cpp.das`.
 
 ## Macro modules each compile into their own context — cross-module registration is intra-context only
 
@@ -173,10 +172,11 @@ The trap also bites READS: module B calling A's accessor function reads **B's co
 - **`compiling_module() |> add_structure(st)`** — registers a generated struct
 - **`compiling_module() |> add_alias(tdef)`** — registers a type alias
 - **`fn.flags |= FunctionFlags.generated`** — marks a function as compiler-generated (suppresses "unused" warnings, enables special error messages)
-- **`add_structure_field(st, name, typeDeclPtr, defaultExprPtr)`** — adds a field. Pass `clone_type(qmacro_type(type<int>))` for the type and `default<ExpressionPtr>` for "no default value":
+- **`add_structure_field(st, name, typeDeclPtr, defaultExprPtr)`** (in `daslib/templates_boost.das`, not the `ast` module) — adds a field and returns the new field's **index**. Pass `clone_type(qmacro_type(type<int>))` for the type and `default<ExpressionPtr>` for "no default value":
   ```das
-  st |> add_structure_field("count", clone_type(qmacro_type(type<int>)), default<ExpressionPtr>)
+  let fi = st |> add_structure_field("count", clone_type(qmacro_type(type<int>)), default<ExpressionPtr>)
   ```
+  Keep the index when you need to touch the field again (annotations, init rewrite) — `daslib/interfaces.das` and `daslib/sql_boost.das` both do.
 - **`ExprFieldFieldFlags.no_promotion`** / **`ExprAtFlags.no_promotion`** — prevent the compiler from promoting field access or index access to a different type; needed in generated AST to preserve exact types
 - **`[tag_function(tag_name)]`** on a function + **`[tag_function_macro(tag="tag_name")]`** on a class — intercepts calls to the tagged function and rewrites them in the `transform` method. Used for compile-time call rewriting (e.g., SOA `operator .` rewrites `soa[i].field` → `soa.field[i]`).
 - **Annotation argument names can't be grammar keywords.** `[myanno(default = "x")]` is `error[30151] syntax error, unexpected default` — the arg-list parser takes a `name`, and keywords (`default`, `type`, `in`, …) don't reduce to one. Pick a synonym (`fallback`, `kind`); verified 2026-07-02 on `[tuned]`.
@@ -203,7 +203,7 @@ The payoff is worth the care: keep the declarations in place while the derivatio
 `int[3][4]` is a chain of `TypeDecl` nodes, NOT a `dim` vector on the element — the `dim`/`dimExpr` fields are **deleted**:
 
 - One node per dimension: `baseType == Type.tFixedArray`, element in `firstType`, size in `fixedDim`, **outermost first** (`int[3][4]` = FA(3, FA(4, int))). Operate on the head's `fixedDim`/`firstType` and recurse — never assume one node covers all dims (the one-peel rule).
-- `fixedDim` sentinels pre-inference: `TypeDecl.dimAuto` (-1) for `[]`, `TypeDecl.dimConst` (-2) while `fixedDimExpr` awaits constant folding. Post-inference both are resolved; `fixedDim <= 0` reaching final verify is an error.
+- `fixedDim` sentinels pre-inference: **-1** (`TypeDecl::dimAuto`, C++ side) for `[]`, **-2** (`TypeDecl::dimConst`) while `fixedDimExpr` awaits constant folding. das macros compare against the literals — the C++ enum names are not bound to das. Post-inference both are resolved; `fixedDim <= 0` reaching final verify is an error.
 - ref/const/temporary qualifiers live on the **chain head only**. Build chains with `make_fixed_array_type(total, element)` from `daslib/ast_boost` — it hoists the element's qualifiers onto the new head for you.
 - **Typemacro payloads moved**: `$mytag(args...)` argument expressions are in `typeMacroExpr`, not `dimExpr`. Update any pre-0.6.3 macro that read `t.dimExpr` for tag payloads.
 - Walking to the element: `var leaf = t; while (leaf.baseType == Type.tFixedArray && leaf.firstType != null) { leaf = leaf.firstType; }` — collect `fixedDim` per level if you need the flattened dims (runtime `TypeInfo.dim[]` stays flattened; only the AST is structural).
@@ -256,10 +256,14 @@ Pattern tags inside `qmatch(expr, <pattern>)`:
 - `$f(name)` — bind a field name to outer `var name : string`
 - `$v(name)` — bind a constant value to a typed outer var
 - `$i(name)` — bind an identifier name to outer `var name : string`
+- `$t(name)` — bind a `TypeDeclPtr` out of an `ExprTypeDecl` node to outer `var name : TypeDeclPtr`
+- `$c(name)(args…)` — match a call's arguments while capturing the callee name into outer `var name : string`
 - `_` — anonymous wildcard (no bind)
 - Concrete operators (`&&`, `||`, `+`, `==`, `<`, dot-field, function-call) and literals match literally
 
-Result is `QMatchResult` with `.matched : bool` and `.error : QMatchError` — captured bindings live in the pre-declared outer variables, NOT on the result struct. On match failure the bindings are left untouched.
+Result is `QMatchResult` with `.matched : bool`, `.error : QMatchError`, and `.expr : Expression const?` — the node where matching failed (null on success), the fastest way to see WHICH sub-shape rejected. Captured bindings live in the pre-declared outer variables, NOT on the result struct.
+
+**On failure, `$e` and `$i` captures may already have been written.** They are assigned as the walk reaches them, with no guard and no rollback, so a partial match leaves stale bindings; `$v` and `$t` go through a `qm_guard` on the extract result and stay untouched. Which captures survive a failure is an accident of where the failure was detected — always gate on `.matched` before reading ANY binding, and never keep a binding across a failed match.
 
 Canonical examples in `daslib/sql_linq.das` — search for `qmatch(` for 37+ adoption sites. Tests (repo-only) in `tests/ast_match/test_qmatch_*.das` + `test_capture_*.das` exercise every tag and grammar form. Full pattern grammar lives in `daslib/ast_match.das`.
 
@@ -296,7 +300,7 @@ return false   // match is statement-shaped; flow analysis wants the trailing re
 - **das-vector fields can NOT be destructured** — `ExprCall.arguments` / `ExprBlock.list` are `dasvector`-backed and the array-pattern arm rejects them ("is not an array"). Capture the node and index/length-check manually; this is why deep block-shape probes (`extract_decs_bridge`) stay hand-rolled.
 - **Statement-shaped, not expression-shaped** — a tuple-returning recognizer that mixes name dispatch with structural probes (`is_bucket_reducer_call`) usually reads better hand-rolled; convert only when the ladder is the function.
 
-Canonical conversions: `is_key_ref` / `join_keyb_is_bare_key` (daslib/linq_fold_table.das / linq_fold_common.das), flatten_opt's `component_read_of` + `zero_const_of`. flatten_opt and the linq_fold family require BOTH libraries and use each where it fits — do the same.
+Canonical conversions: flatten_opt's `component_read_of` + `zero_const_of` (`daslib/flatten_opt_common.das`). flatten_opt and the linq_fold family require BOTH libraries and use each where it fits — do the same.
 
 ## `qmacro` vs `quote` (code generation)
 
@@ -319,7 +323,7 @@ Canonical conversions: `is_key_ref` / `join_keyb_is_bare_key` (daslib/linq_fold_
 
 ### Splice inputs are cloned for you — don't pre-clone with `clone_expression`
 
-`qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` all go through [`apply_template`](../daslib/templates_boost.das#L418), whose substitution visitor calls `clone_expression` on every `$e(...)` substitution input (templates_boost.das:252). So this is wasted work:
+`qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` all go through [`apply_template`](../daslib/templates_boost.das#L407), whose substitution visitor calls `clone_expression` on every `$e(...)` substitution input (templates_boost.das:244 and :257). So this is wasted work:
 
 ```das
 // WRONG — clones twice (once explicitly, once inside apply_template)
@@ -379,15 +383,15 @@ var pred = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
 Var-init-then-pass form is also flagged when every use is into an annotated arg position:
 
 ```das
-// WRONG — topClone's only use is annotated arg of finalize_emission_stmts
+// WRONG — topClone's only use is annotated arg of emit_length_shortcut
 var topClone = clone_expression(adapter.arrayTop)
-return finalize_emission_stmts(topClone, ...)
+return emit_length_shortcut(opName, topClone, srcName, at)
 
 // RIGHT
-return finalize_emission_stmts(adapter.arrayTop, ...)
+return emit_length_shortcut(opName, adapter.arrayTop, srcName, at)
 ```
 
-PERF024 catches both shapes. Canonical annotated set (grows over time): `peel_lambda_rename_var`/`_replace_var`/`_rename_2vars` + `qm_extract_stmts` in `ast_match`, `push_block_list` + `apply_qmacro_template_function` in `templates_boost`, the `emit_*`/`finalize_emission_stmts` family in `linq_fold`, `push_bind`/`push_inline_id`/`push_inline_lit` in `sql_linq`.
+PERF024 catches both shapes. Canonical annotated set (grows over time): `peel_lambda_rename_var`/`_replace_var`/`_rename_2vars` + `qm_extract_stmts` in `ast_match`, `push_block_list` + `apply_qmacro_template_function` in `templates_boost`, `emit_length_shortcut` in `linq_fold_common`, `push_bind`/`push_inline_id`/`push_inline_lit` in `sql_linq`.
 
 **To mark your own function** — add `[clone(p1, p2)]` (one annotation per function, comma-separated param names). The annotation is registered C++-side, no `require` needed.
 
@@ -395,15 +399,17 @@ PERF024 catches both shapes. Canonical annotated set (grows over time): `peel_la
 
 ### Default-initializing generated struct variables
 
-In macro-generated code, `var x : $t(st)` fails with "uninitialized variable" for structs without field defaults. Use `default<T>` instead:
+In macro-generated code, `var x : $t(st)` (no initializer) fails with `error[31016] Uninitialized variable x is unsafe` for **any** struct type — field defaults do not exempt it. Use `default<$t(st)>`, which does apply the field initializers:
 
 ```das
-// WRONG — fails if struct has uninitialized fields
+// WRONG — error[31016] regardless of whether the struct's fields have defaults
 blk |> push <| qmacro_block() { var entity : $t(st) }
 
-// CORRECT — default-initializes all fields
+// CORRECT — default-initializes all fields, applying their initializers
 blk |> push <| qmacro_block() { var entity := default<$t(st)> }
 ```
+
+For handled/backend types, where `default<>` is `error[50503] unsupported variable type`, set `td.flags.safeWhenUninitialized = true` on the cloned decl type instead.
 
 ### Push cluster consolidation
 

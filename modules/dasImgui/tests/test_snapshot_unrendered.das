@@ -31,7 +31,7 @@ def test_unrendered_widget_visible(t : T?) {
 
         // Gate 1: VISIBLE_VAL is rendered (has bbox).
         t |> success(widget_rendered(snap, "MAIN_WIN/VISIBLE_VAL"),
-                     "VISIBLE_VAL has bbox — rendered this frame")
+                     "VISIBLE_VAL has bbox - rendered this frame")
         var visible = find_widget(snap, "MAIN_WIN/VISIBLE_VAL")
         t |> equal(visible?["kind"] ?? "", "slider_float",
                    "VISIBLE_VAL.kind")
@@ -46,7 +46,7 @@ def test_unrendered_widget_visible(t : T?) {
         // Gate 3: NEVER_RENDERED carries rendered:false and a state payload.
         var hidden = find_widget(snap, "NEVER_RENDERED")
         t |> success(!widget_rendered(snap, "NEVER_RENDERED"),
-                     "NEVER_RENDERED has rendered:false — not rendered this frame")
+                     "NEVER_RENDERED has rendered:false - not rendered this frame")
         t |> equal(hidden?["rendered"] ?? true, false,
                    "NEVER_RENDERED.rendered == false")
         t |> equal(hidden?["kind"] ?? "", "slider_float",

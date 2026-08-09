@@ -257,7 +257,7 @@ def register_ple_pre_prefill_pad(fn : PlePrePrefillPadFn) {
 // Every call site is behind has_ple(config), so an unset rail means this program was built without
 // dasllama/dasllama_ple yet loaded a model that needs it — say which require is missing, loudly.
 def private ple_rail_missing() {
-    panic("dasLLAMA: this model needs the PLE rail — the program must require dasllama/dasllama_ple")
+    panic("dasLLAMA: this model needs the PLE rail - the program must require dasllama/dasllama_ple")
 }
 
 def private ple_pre_decode(t : Model; var s : Session; token : int64) {
@@ -401,7 +401,7 @@ def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStack
 
 def private layout_hooks_check {
     if (!g_layout_hooks_set) {
-        panic("dasLLAMA: layout hooks unset — the program must require dasllama/dasllama_layout")
+        panic("dasLLAMA: layout hooks unset - the program must require dasllama/dasllama_layout")
     }
 }
 
@@ -466,7 +466,7 @@ def gpu_upload_resident(t : Model) {
         // the transformer umbrella. Silently skipping the upload there would leave a model the tier
         // believes it serves with nothing on the device, so say so instead.
         if (moe_gpu_tier_installed()) {
-            panic("dasLLAMA: a GPU tier is installed but no residency rail registered — the program must require dasllama/dasllama_gpu_resident")
+            panic("dasLLAMA: a GPU tier is installed but no residency rail registered - the program must require dasllama/dasllama_gpu_resident")
         }
         return
     }
@@ -567,11 +567,11 @@ def private cpu_prefill_allowed : bool {
 // PLE — read the blob directly and stay legal.)
 def blob_only_panic(t : Model; what : string) {
     if (t.metal_blob) {
-        panic("dasLLAMA: CPU {what} on a blob-only metal-flavor model — serve it on the GPU (set_metal_mode / fix the declined gate) or load the CPU-flavor image (metal mode off at load_model)")
+        panic("dasLLAMA: CPU {what} on a blob-only metal-flavor model - serve it on the GPU (set_metal_mode / fix the declined gate) or load the CPU-flavor image (metal mode off at load_model)")
     }
     if (t.planes_trimmed) {
         // the resident overrides need an f32-KV session — the commonest decline on a trimmed image
-        panic("dasLLAMA: CPU {what} on a planes-trimmed vulkan-flavor image — the resident driver must serve it (create the session with KVDtype.f32, keep the tier armed) or rebake without --trim")
+        panic("dasLLAMA: CPU {what} on a planes-trimmed vulkan-flavor image - the resident driver must serve it (create the session with KVDtype.f32, keep the tier armed) or rebake without --trim")
     }
 }
 
@@ -603,7 +603,7 @@ def set_metal_mode(mode : MetalMode) {
         if (mode == MetalMode.required) {
             panic("dasLLAMA: metal mode `required`, but the metal overrides are not registered (non-Apple build or dasMetal missing)")
         }
-        to_log(LOG_WARNING, "dasLLAMA: metal mode requested, but the metal overrides are not registered — staying on the CPU paths\n")
+        to_log(LOG_WARNING, "dasLLAMA: metal mode requested, but the metal overrides are not registered - staying on the CPU paths\n")
         g_metal_mode = MetalMode.off
         return
     }
@@ -1192,7 +1192,7 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
 def apply_box_profile_runtime(path : string = "") {
     if (path == "" && box_profile_stale()) {
-        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary — runtime knobs not applied (re-tune)\n")
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
         return
     }
     let ppath = path != "" ? path : box_profile_path()
@@ -1201,7 +1201,7 @@ def apply_box_profile_runtime(path : string = "") {
     var err = ""
     let jv = read_json(text, err)
     if (jv == null) {
-        to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) — runtime knobs not applied\n")
+        to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) - runtime knobs not applied\n")
         return
     }
     let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
@@ -1381,7 +1381,7 @@ def moe_layer_sb_kq(t : Model; l : int64) : bool {
 // runtime-quantized tensors take one f16 rounding. Gated on the backend carrying f16-scale kernels.
 def wscale_convert_f16(var t : Model) {
     if (!kernel_backend_has_wscale16()) {
-        to_log(LOG_WARNING, "dasLLAMA: wscale_f16 requested but backend '{active_kernel_backend()}' has no f16-scale kernels — keeping the f32 scale plane\n")
+        to_log(LOG_WARNING, "dasLLAMA: wscale_f16 requested but backend '{active_kernel_backend()}' has no f16-scale kernels - keeping the f32 scale plane\n")
         return
     }
     let n = long_length(t.qscales)
@@ -1747,10 +1747,10 @@ def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
         let kvd = layer_kv_dim(c, l)
         let hs = layer_head_size(c, l)
         if (kvd % 32l != 0l || hs % 32l != 0l) {
-            panic("block-codec KV cache needs layer kv_dim and head_size to be multiples of 32 — layer {l} has kv_dim={kvd}, head_size={hs}")
+            panic("block-codec KV cache needs layer kv_dim and head_size to be multiples of 32 - layer {l} has kv_dim={kvd}, head_size={hs}")
         }
         if (tq4 && (hs & (hs - 1l)) != 0l) {
-            panic("tq4 KV cache needs a power-of-two head_size for the FWHT — layer {l} has head_size={hs}")
+            panic("tq4 KV cache needs a power-of-two head_size for the FWHT - layer {l} has head_size={hs}")
         }
     }
 }
@@ -1927,7 +1927,7 @@ def make_run_state_paged(c : Config; var pool : KVPool) : Session {
     }
     for (l in range64(kv_layers)) {
         if (pool.krow_bytes[pool.blob_of[l]] != kv_row_bytes(pool.kdt, layer_kv_dim(c, l))) {
-            panic("make_run_state_paged: pool row bytes mismatch at layer {l} — pool built for a different geometry")
+            panic("make_run_state_paged: pool row bytes mismatch at layer {l} - pool built for a different geometry")
         }
     }
     var s <- make_run_state(c, pool.kdt, pool.vdt, false)
@@ -3188,7 +3188,7 @@ def moe_pair_kform(f1, f3 : KqFmt) : bool {
     let k1 = kq_sb(f1)
     let k3 = kq_sb(f3)
     if (k1 != k3) {
-        panic("dasLLAMA: MoE gate/up expert stacks mix Q8_K-form and Q8_0-form weights — unsupported until per-stack activation planes land")
+        panic("dasLLAMA: MoE gate/up expert stacks mix Q8_K-form and Q8_0-form weights - unsupported until per-stack activation planes land")
     }
     return k1
 }
@@ -3586,7 +3586,7 @@ def private mm_cls(var y : array<float>; t : Model; x : array<float>; var xq : a
     let tied_f32 = t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
     if (t.planes_trimmed && !moe_gpu_cls_on_gpu(t.wcls_off)) {
         // fail closed LOUDLY: the CPU classifier path reads the trimmed families
-        panic("dasLLAMA: planes_trimmed image — the classifier must serve on the GPU (rebake without trim, or arm the tier as the image's config says)")
+        panic("dasLLAMA: planes_trimmed image - the classifier must serve on the GPU (rebake without trim, or arm the tier as the image's config says)")
     }
     if (moe_gpu_cls_on_gpu(t.wcls_off)) {
         if (cls_fmt == KqFmt.q8) {
@@ -4018,7 +4018,7 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
     let c = t.config
     assert(c.n_layer_nextn > 0l)
     if (t.quant == QuantMode.q4_0) {   // no batched prefill rail: the 2-row verify (and the warm) need it
-        panic("dasLLAMA: MTP self-spec decode needs the batched prefill path — load q8 or fp32, not q4_0")
+        panic("dasLLAMA: MTP self-spec decode needs the batched prefill path - load q8 or fp32, not q4_0")
     }
     let np = long_length(prompt)
     var ids : array<int64>
@@ -4241,7 +4241,7 @@ def forward_profile_reset() {
     } else {
         // a library function must not kill the process over a usage condition (see CLAUDE.md);
         // the loud line names the fix and the report half prints the same note
-        to_log(LOG_ERROR, "forward profiler needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling); no buckets will accumulate\n")
+        to_log(LOG_ERROR, "forward profiler needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (or --jobque-profiling); no buckets will accumulate\n")
     }
 }
 
@@ -4567,7 +4567,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
                 if (!invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)) {   // nolint:PERF026 — key_exists guards the line above, so the index cannot insert
                     // quality-only miss: the stale seam row dents draft acceptance until the next
                     // draft rewrites it (the verify keeps outputs exact) — loud so a dip is traceable
-                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} — draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 — fires only on a seam decline; loud by design so a quality dip is traceable
+                    to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} - draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 - fires only on a seam decline; loud by design so a quality dip is traceable
                 }
             }
         } else {
@@ -4713,7 +4713,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared
         if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
-            panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) — select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
+            panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {
             trace_marker("layer", int(l))

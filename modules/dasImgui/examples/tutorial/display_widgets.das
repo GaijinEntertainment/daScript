@@ -85,7 +85,7 @@ def update() {
         // Use the ImGui font atlas as our texture — always built by frame 1.
         let io & = unsafe(GetIO())
         if (io.Fonts.TexData == null) {
-            text("Font atlas not ready — wait for first frame.")
+            text("Font atlas not ready - wait for first frame.")
         } else {
             text("image() against the font atlas - varying uv + tint per call.")
             image(IMG_PLAIN, (user_texture_id = io.Fonts.TexRef,

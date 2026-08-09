@@ -10,7 +10,7 @@ require pugixml/PUGIXML_boost
 
 `PUGIXML_boost` re-exports the C++ `pugixml` module — never `require` both.
 
-The module is **gated by CMake**: `DAS_PUGIXML_DISABLED` (default `ON` = disabled). To use it locally, set `DAS_PUGIXML_DISABLED=OFF` in `cmake.configureSettings` of `.vscode/settings.json` and reconfigure. See `CLAUDE.md` § "Build Configurations" for the workflow.
+The module is gated by the CMake option `DAS_PUGIXML_DISABLED`, which defaults to `OFF` in the standard top-level build — dasPUGIXML is built by default. Set it to `ON` only to opt out; there is nothing to turn on for ordinary use. (The `web/` wasm host build is the exception: it defaults the option to `ON`.)
 
 ## Loading & parsing — RAII blocks
 
@@ -78,13 +78,13 @@ struct Car {
 for (car in from_xml_node(root, type<Car>)) { ... }                 // all children
 let makes <- [for (car in from_xml_node(root, type<Car>));          // comprehension
     car.make; where car.price < 30000.0]
-let cars <- unsafe(from_xml_node(root, "car", type<Car>) |> to_array())   // tag-filtered + collect
+let cars <- unsafe(from_xml_node(root, "car", type<Car>)) |> to_array()   // tag-filtered + collect
 ```
 
 - **Field mapping (v1):** every struct field reads from an attribute of the same name. Supported scalar types: `int`, `uint`, `float`, `double`, `bool`, `string`. Fields of other types keep their default. Child-element / text mapping (via `@xml_*` field annotations) is a planned growth path.
 - **Defaults:** a missing attribute leaves the field at its declared default (`year : int = 2000` above), because the field value is passed as the accessor's fallback.
 - **Lifetime-safe:** rows are owned values — string fields are cloned out of the document — so results collected with `to_array` / a comprehension stay valid **past** the `parse_xml` / `open_xml` RAII block. (Contrast: a raw `xml_node` must not escape the block.)
-- **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs an `unsafe` block.
+- **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs `unsafe(...)` **around the source call only** — expression-form `unsafe` does not reach into nested call arguments, so `unsafe(from_xml_node(...) |> to_array())` still fails at the inner call.
 - **Fused `_fold` lane (pass 2a/2b):** `_fold(unsafe(from_xml_node(root, type<Row>))._where(...)._select(...).count()/sum()/min()/max()/average()/any()/first()/take(N)...)` emits an inlined DOM child-walk via `XmlAdapter` (`require ?pugixml pugixml/linq_fold_xml`, gated by `static_if (typeinfo builtin_module_exists(pugixml))` in `daslib/linq_fold`) — no generator, no intermediate array. Pass the node by value (`var root`, not `let root`) since `_fold`'s macro-arg inference skips the const&→value copy. **Field-pruning (pass 2b):** the walk reads only the `Row` fields the chain actually references (via `read_xml_field` into scalar locals) — unread fields, especially `string` fields whose `clone_string` is the alloc cost, are never touched, so a float-only chain is alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (`to_array` / identity `_select(_)` / pass-to-fn) falls back to the full `build_xml_row`. Cascade shapes (order_by / distinct / group_by / join) fuse via the cascade arms (`wrap_source_loop` / `build_group_by_adapter`). **Reverse** has backward-DOM fast paths: `reverse |> take(N)` and no-predicate `last()` / `reverse |> first` walk `last_child` / `previous_sibling`, visiting only the kept tail (reverse-take m5f went 88.9 → 0.0 ns/op) — while predicated `[where] |> last` deliberately stays on the forward walk, since reverse DOM traversal is ~2× cache-hostile per node and a deep match would regress. All shapes produce the same result as plain array linq (a full parity suite under `tests/dasPUGIXML/parity_xml_*.das`, repo-only, asserts `m5f ≡ m3f ≡ m3` across the whole `loop_or_count` + cascade surface). A `from_xml_node` source can also be **joined / union'd with an in-memory array** directly (`from_xml_node(...) |> _join(dealersArray, ...)`) via linq's mixed `(iterator, array)` overloads. See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
 
 ## Quick accessors (with defaults)
@@ -107,7 +107,7 @@ These read; they do not mutate. Missing data returns the supplied default.
 ```das
 let x_attr = root["x"]                          // xml_attribute
 let x_val  = root["x"] as int                   // 0 if missing — does NOT crash
-let label  = root["label"] as string
+let lbl    = root["label"] as string            // `label` is a reserved word — name the local something else
 
 // Existence check on attribute / non-empty check on text
 if (root["x"] is int)        { ... }
@@ -190,7 +190,7 @@ Supports nested structs, enums, arrays, tables, tuples, variants, vector types (
 - **Errors are `ok` bool flags, not exceptions** — always branch on the second block parameter before using `doc`.
 - **No escape past the RAII block** — `xml_document?` and any `xml_node` derived from it are valid only inside the block. Returning them past the block exit is use-after-free.
 - **Missing attributes don't error**: `root["does_not_exist"] as int` returns `0`. Use the `is` test if you need to distinguish "missing" from "zero".
-- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, the module is disabled — flip `DAS_PUGIXML_DISABLED=OFF` (`CLAUDE.md` § "Build Configurations").
+- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, this build turned the module off — `DAS_PUGIXML_DISABLED` was set to `ON` (the top-level build defaults it to `OFF`; the `web/` wasm host defaults it to `ON`).
 - **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in its install rule, not just `*.das` — the dasPUGIXML rule in `tutorials/CMakeLists.txt` globs both for exactly this reason. Data-only files are the easy thing to forget.
 
 ## Reference

@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _ascii_strings = false   // i18n clipboard probe - unicode payloads are the test
 
 require clipboard/clipboard
 
@@ -7,8 +8,8 @@ let PROBE_MARKER = "daScript clipboard smoke — Привет 日本語 👩‍�
 
 def private equal_bytes(a, b : array<uint8> const) : bool {
     if (length(a) != length(b)) return false
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) return false
+    for (av, bv in a, b) {
+        if (av != bv) return false
     }
     return true
 }

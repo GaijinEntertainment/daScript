@@ -603,21 +603,9 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            // what we do here is check, if the function can't possibly capture string
-            // and if so, we mark the LAST string builder as temporary
-            auto efun = expr->func;
-            if ( !efun ) return;
-            if ( /*efun->builtIn &&*/       // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
-                 !efun->policyBased && !efun->invoke && !efun->captureString ) {
-                for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
-                    auto & arg = expr->arguments[ai];
-                    if ( arg->rtti_isStringBuilder() ) {
-                        auto sb = static_cast<ExprStringBuilder*>(arg);
-                        sb->isTempString = true;
-                        break;
-                    }
-                }
-            }
+            // temp-string marking (builders and [temp_string_result] calls) lives in
+            // MarkTempStrings - one global pass at the head of Program::allocateStack
+            if ( !expr->func ) return;
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
@@ -1073,9 +1061,300 @@ namespace das {
         }
     };
 
+    // Temp-string reclaim: pick ONE queue site per consuming call and route it through the
+    // 1-slot dispose queue - a marked string builder (allocates, then queues itself) or a
+    // [temp_string_result] call wrapped in _temp_string_result (frees the previously queued
+    // temp, parks the fresh result).
+    //
+    // Soundness: a queued temp lives until its consuming call returns, and the only code that
+    // can run in that window is the evaluation of the SIBLING arguments. Extern (interop)
+    // argument evaluation order is UNSPECIFIED (right-to-left on MSVC), so a nested queue site
+    // in ANY sibling subtree could flush the site while it is still live and the persistent-heap
+    // shoe would reissue the cell - a silent use-after-free. Hence ONE site per call, and site
+    // creation is inhibited in every sibling subtree. (The old per-call "mark the last builder"
+    // scan violated this: compare(to_upper("{b}"), "{a}") corrupted arg1 on every iteration.)
+    static bool isFreshStringCall ( Expression * e ) {
+        if ( !e->rtti_isCall() ) return false;
+        auto c = static_cast<ExprCall *>(e);
+        return c->func && c->func->tempStringResult && c->type && c->type->isString() && !c->type->ref;
+    }
+
+    static ExprCall * makeTempStringWrapper ( Function * wrapper, Expression * inner ) {
+        auto w = new ExprCall(inner->at, wrapper->name);
+        w->func = wrapper;
+        w->generated = true;
+        w->notDiscarded = true;
+        w->type = new TypeDecl(*wrapper->result);
+        w->arguments.push_back(inner);
+        auto fakeContext = new ExprFakeContext(inner->at);
+        fakeContext->generated = true;
+        fakeContext->type = new TypeDecl(Type::fakeContext);
+        w->arguments.push_back(fakeContext);
+        auto fakeLineInfo = new ExprFakeLineInfo(inner->at);
+        fakeLineInfo->generated = true;
+        fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo);
+        w->arguments.push_back(fakeLineInfo);
+        return w;
+    }
+
+    // does this subtree CALL INTO code that may hit a queue site? Lexical sites are handled
+    // by inhibition/scanning; this is the interprocedural half - a call to a may-queue das
+    // function, an invoke (unknown target), or an invoke-carrying extern (runs lambdas we
+    // cannot see). A parked temp must not be live across any of these.
+    class CallsIntoQueueSite : public Visitor {
+    public:
+        bool found = false;
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            found = true;
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            auto f = expr->func;
+            // a das function the side-effect pass never computed reads as all-clear - treat as danger
+            if ( !f || f->mayQueueTempString || (f->builtIn ? f->invoke : !f->knownSideEffects) ) found = true;
+        }
+    };
+
+    static bool callsIntoQueueSite ( Expression * e ) {
+        CallsIntoQueueSite cq;
+        e->visit(cq);
+        return cq.found;
+    }
+
+    class MarkTempStrings : public Visitor {
+    public:
+        MarkTempStrings ( Function * wrapperFn, bool insertWrappers_, bool everything_ )
+            : wrapper(wrapperFn), insertWrappers(insertWrappers_), isEverything(everything_) {}
+    protected:
+        Function *  wrapper = nullptr;
+        bool        insertWrappers = false;
+        bool        isEverything = false;
+        int32_t     inhibit = 0;
+        // same gates as every pass in this file: templates are uninstantiated (never mutate),
+        // argument/field inits were cloned to their use sites at infer, quotes are inert AST
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+        }
+        das_hash_map<ExprCall *, Expression *> siteOf;
+        bool isWrapperCall ( Expression * e ) const {
+            return wrapper && e->rtti_isCall() && static_cast<ExprCall *>(e)->func == wrapper;
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            auto efun = expr->func;
+            if ( !efun || efun==wrapper ) return;
+            if ( inhibit ) return;
+            // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
+            if ( efun->policyBased || efun->invoke || efun->captureString ) return;
+            if ( efun->mayQueueTempString ) return;     // the callee's own body could flush the parked temp while still reading it
+            if ( !efun->builtIn && !efun->knownSideEffects ) return;    // uncomputed das function - its flags cannot be trusted
+            for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
+                auto & arg = expr->arguments[ai];
+                bool eligible = arg->rtti_isStringBuilder() || isWrapperCall(arg)
+                    || (insertWrappers && isFreshStringCall(arg));
+                if ( !eligible ) continue;
+                // a SIBLING calling into may-queue code flushes this site while it is live
+                // (argument evaluation order is unspecified) - then no site at all
+                bool siblingDanger = false;
+                for ( int aj=int(expr->arguments.size())-1; aj>=0 && !siblingDanger; aj-- ) {
+                    if ( aj!=ai && callsIntoQueueSite(expr->arguments[aj]) ) siblingDanger = true;
+                }
+                if ( siblingDanger ) break;
+                if ( arg->rtti_isStringBuilder() ) {
+                    static_cast<ExprStringBuilder *>(arg)->isTempString = true;
+                    siteOf[expr] = arg;
+                } else if ( isWrapperCall(arg) ) {          // already wrapped - a re-run on the same tree
+                    siteOf[expr] = arg;
+                } else {
+                    auto w = makeTempStringWrapper(wrapper, arg);
+                    arg = w;
+                    siteOf[expr] = w;
+                }
+                break;
+            }
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            auto it = siteOf.find(call);
+            if ( it!=siteOf.end() && it->second!=arg ) inhibit ++;
+        }
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            auto it = siteOf.find(call);
+            if ( it!=siteOf.end() && it->second!=arg ) inhibit --;
+            return Visitor::visitCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            siteOf.erase(expr);
+            return Visitor::visit(expr);
+        }
+    };
+
+    // counts references to one variable inside a statement, and how many are SAFE:
+    // a safe reference is a plain read that is the DIRECT argument of a non-capturing,
+    // non-invoke, non-policy call - what a nested call returns is a different value, so
+    // only the immediate consumer of the reference matters. any reference inside a block
+    // literal, and any other shape (return, store, addr, operator operand), stays unsafe
+    class VarUseClassifier : public Visitor {
+    public:
+        VarUseClassifier ( Variable * v ) : var(v) {}
+        uint32_t total = 0;
+        uint32_t safe = 0;
+    protected:
+        Variable *  var = nullptr;
+        int32_t     blockDepth = 0;
+        static Expression * peelR2V ( Expression * e ) {
+            return e->rtti_isR2V() ? static_cast<ExprRef2Value *>(e)->subexpr : e;
+        }
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->variable==var ) total ++;
+        }
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            blockDepth ++;
+        }
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            blockDepth --;
+            return Visitor::visit(expr);
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            if ( blockDepth ) return;
+            auto f = call->func;
+            if ( !f || f->captureString || f->invoke || f->policyBased ) return;
+            if ( f->mayQueueTempString ) return;    // its body could flush the parked temp mid-read
+            if ( !f->builtIn && !f->knownSideEffects ) return;  // uncomputed das function - flags untrusted
+            auto barg = peelR2V(arg);
+            if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
+        }
+    };
+
+    class HasQueueSite : public Visitor {
+    public:
+        HasQueueSite ( Function * w ) : wrapper(w) {}
+        bool found = false;
+    protected:
+        Function * wrapper = nullptr;
+        virtual void preVisit ( ExprStringBuilder * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->isTempString ) found = true;
+        }
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            found = true;       // unknown target - may queue
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            auto f = expr->func;
+            // lexical sites (the wrapper) plus the interprocedural half: calls whose bodies
+            // may queue. A plain [temp_string_result] call is NOT a site by itself. An
+            // uncomputed das function (no knownSideEffects) reads as all-clear - treat as a site
+            if ( !f || f==wrapper || f->mayQueueTempString
+                || (f->builtIn ? f->invoke : !f->knownSideEffects) ) found = true;
+        }
+    };
+
+    // Phase B of temp-string reclaim: the let-local live range. `let s = <flagged call>`
+    // wraps its initializer when s provably dies before the next queue site:
+    //  - every reference to s is a safe read per VarUseClassifier;
+    //  - no statement from the let through the LAST-reference statement contains a queue
+    //    site (marked builder or wrapper call). Statements after the last use may queue
+    //    freely - s is dead by then. A loop re-executing the let is the same case: the
+    //    local's scope ends with the block, so the previous iteration's value is dead.
+    // Runs AFTER MarkTempStrings (per-call sites are final); candidates are processed in
+    // REVERSE statement order so a wrap here is visible as a site to earlier candidates.
+    // Sites inside the initializer's own subtree are fine - that is the chain pattern
+    // (each nested temp dies before the next link queues).
+    class WrapLetTempStrings : public Visitor {
+    public:
+        WrapLetTempStrings ( Function * wrapperFn, bool everything_ )
+            : wrapper(wrapperFn), isEverything(everything_) {}
+    protected:
+        Function *  wrapper = nullptr;
+        bool        isEverything = false;
+        // same gates as MarkTempStrings above - this pass mutates let initializers
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            auto & stmts = block->list;
+            for ( int i=int(stmts.size())-1; i>=0; --i ) {
+                if ( !stmts[i]->rtti_isLet() ) continue;
+                auto elet = static_cast<ExprLet *>(stmts[i]);
+                if ( elet->variables.size()!=1 ) continue;
+                auto & var = elet->variables[0];
+                if ( !var->init || !var->type || !var->type->isString() || var->type->ref ) continue;
+                // a builder initializer self-queues when marked - no wrapper call needed;
+                // an already-marked builder or an existing wrapper fails both tests - idempotent
+                bool builderInit = var->init->rtti_isStringBuilder()
+                    && !static_cast<ExprStringBuilder *>(var->init)->isTempString;
+                if ( !builderInit && !isFreshStringCall(var->init) ) continue;
+                int lastUse = -1;
+                bool ok = true;
+                for ( size_t j=i+1; j<stmts.size() && ok; ++j ) {
+                    VarUseClassifier uc(var);
+                    stmts[j]->visit(uc);
+                    if ( uc.total ) {
+                        if ( uc.total!=uc.safe ) ok = false;
+                        else lastUse = int(j);
+                    }
+                }
+                if ( ok ) {
+                    for ( auto & fs : block->finalList ) {          // finally is outside the range model
+                        VarUseClassifier uc(var);
+                        fs->visit(uc);
+                        if ( uc.total ) { ok = false; break; }
+                    }
+                }
+                if ( !ok || lastUse<0 ) continue;
+                for ( int j=i+1; j<=lastUse && ok; ++j ) {
+                    HasQueueSite qs(wrapper);
+                    stmts[j]->visit(qs);
+                    if ( qs.found ) ok = false;
+                }
+                if ( !ok ) continue;
+                if ( builderInit ) {
+                    static_cast<ExprStringBuilder *>(var->init)->isTempString = true;
+                } else {
+                    var->init = makeTempStringWrapper(wrapper, var->init);
+                }
+            }
+            return Visitor::visit(block);
+        }
+    };
+
     // program
 
     void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
+        // temp-string sites: builder marking + [temp_string_result] wrapping (must precede AllocateStack).
+        // wrappers only pay where freeTempString can reclaim: persistent string heap, not interned;
+        // the intern case also no-ops at runtime, this just skips the wrapper call overhead
+        {
+            bool reclaimDisabled = options.getBoolOption("disable_temp_string_reclaim", policies.disable_temp_string_reclaim);
+            bool persistentHeap = options.getBoolOption("persistent_heap", policies.persistent_heap);
+            bool internStrings = options.getBoolOption("intern_strings", policies.intern_strings);
+            Function * wrapperFn = nullptr;
+            if ( !reclaimDisabled && persistentHeap && !internStrings ) {
+                if ( auto bmod = Module::require("$") ) {
+                    wrapperFn = bmod->findUniqueFunction("_temp_string_result");
+                }
+            }
+            MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr, everything);
+            visit(mts);
+            if ( wrapperFn ) {
+                WrapLetTempStrings wlt(wrapperFn, everything);
+                visit(wlt);
+            }
+        }
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {

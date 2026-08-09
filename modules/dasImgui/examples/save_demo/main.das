@@ -24,7 +24,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("save_demo — playwright spec §7.1", 600, 240)
+    harness_init("save_demo - playwright spec sec 7.1", 600, 240)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }

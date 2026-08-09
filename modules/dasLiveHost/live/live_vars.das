@@ -37,7 +37,7 @@ require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/archive
+require daslib/archive // nolint:STYLE030 - keeps `archive` in the program so LiveVarsPass can find it and add_module_require it into the target module; the Archive/MemSerializer uses live in qmacro bodies
 
 [lint_macro]
 class LiveVarsLint : AstPassMacro {
@@ -47,7 +47,7 @@ class LiveVarsLint : AstPassMacro {
         mod |> for_each_global() $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
                 if (g._type.flags.constant) {
-                    macro_error(prog, g.at, "@live cannot be used on constant (let) variables — they never change: {g.name}")
+                    macro_error(prog, g.at, "@live cannot be used on constant (let) variables - they never change: {g.name}")
                 }
             }
         }
@@ -80,12 +80,12 @@ struct private LiveFieldTarget {
 [infer_macro]
 class LiveVarsPass : AstPassMacro {
     //! Infer pass macro that generates serialization for @live globals.
-    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+    def override apply(prog : ProgramPtr; mod : Module?) : bool {  // nolint:STYLE038 - one linear codegen pipeline: collect targets, build save blocks, build load blocks, emit the two functions
         // Skip self
         if (mod.name == "live_vars") return false
         // Idempotency: skip if already generated
         var found = false
-        mod |> for_each_function("__before_reload_live_vars") $(fn) {
+        mod |> for_each_function("__before_reload_live_vars") $(_fn) {
             found = true
         }
         if (found) return false

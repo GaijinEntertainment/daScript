@@ -90,7 +90,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
     //! This macro converts ``_where(iterator, expression)`` into equivalent inline code.
     //!     where_(iterator, $(_) => expression)
     //!
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - one arm per accepted predicate/iterable shape
         //! Visits the LINQ predicate macro call and rewrites it with a lambda argument.
         macro_verify(call.arguments |> length == 2, prog, call.at, "expecting {predName}(iterator, predicate)")
         assume arg0 = call.arguments[0]
@@ -452,7 +452,7 @@ def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at 
     }
     var op2 = ret.subexpr as ExprOp2
     if (op2.op != "==") {
-        macro_error(prog, on_pred.at, "equi-join `on` predicate must use `==` — theta joins and `&&`-chained multi-key equality are not supported; use raw SQL instead")
+        macro_error(prog, on_pred.at, "equi-join `on` predicate must use `==` - theta joins and `&&`-chained multi-key equality are not supported; use raw SQL instead")
         return parts
     }
     parts.ok = true

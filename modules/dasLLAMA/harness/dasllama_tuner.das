@@ -113,7 +113,7 @@ def private print_mint_diff(oldText, newText : string) {
         let shift = (tune_median(ratios) - 1.0lf) * 100.0lf
         print("dasllama_tuner: DIFF times moved {shift:0.2f}% median over {length(ratios)} shared rows\n")
     } elif (flips > 0) {
-        print("dasllama_tuner: DIFF (no race tables in the previous sidecar — margins start next mint)\n")
+        print("dasllama_tuner: DIFF (no race tables in the previous sidecar - margins start next mint)\n")
     }
     let freshTxt = fresh > 0 ? ", {fresh} entry(ies) with no previous baseline" : ""
     print("dasllama_tuner: DIFF {flips} winner change(s){freshTxt}; uniform shift = box state, scattered past-floor flips = a noisy mint\n")

@@ -30,7 +30,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("§4.8 — id_override (with_id)", 720, 540)
+    harness_init("sec 4.8 - id_override (with_id)", 720, 540)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }

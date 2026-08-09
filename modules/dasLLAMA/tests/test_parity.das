@@ -174,7 +174,7 @@ let LLAMA32_1B_GEN <- [11l, 304l, 264l, 2678l, 14458l, 89777l, 304l, 279l, 20700
 
 [test]
 def test_parity_llama3_2_1b(t : T?) {
-    t |> run("llama forward (Llama-3.2-1B-Instruct Q8, θ=500000)") @(t : T?) {
+    t |> run("llama forward (Llama-3.2-1B-Instruct Q8, theta=500000)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return

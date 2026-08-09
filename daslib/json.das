@@ -183,7 +183,7 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
     return false
 }
 
-def private _lexer(var stext : string implicit) {
+def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one linear lexer state machine
     //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt> {
         var tin : iterator<int>
@@ -261,7 +261,7 @@ def private _lexer(var stext : string implicit) {
                                     push(str, uint8('\\'))
                                     push(str, uint8('u'))
                                     for (b in hex_str) {
-                                        push(str, b) // nolint:PERF006 hex_str is 4 bytes max
+                                        push(str, b) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
                                     }
                                     if (!valid_hex) {
                                         push(str, uint8(ahead))
@@ -392,7 +392,7 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
     }
 }
 
-def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {
+def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - recursive descent, one arm per json production
     //! parses a JSON value from the token iterator `itv`.
     var ahead : TokenAt
     if (!next(itv, ahead)) return null
@@ -600,6 +600,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
     }
 }
 
+[temp_string_result]
 def write_json(val : JsonValue?) : string {
     //! returns JSON (textual) representation of JsonValue as a string.
     let st = build_string() $(var writer) {
@@ -662,6 +663,7 @@ def private write_value_compact(var writer : StringBuilderWriter; jsv : JsonValu
     }
 }
 
+[temp_string_result]
 def write_json_compact(val : JsonValue?) : string {
     //! ``write_json`` on one line: no newlines or indentation, ``", "`` / ``": "`` separators —
     //! the python ``json.dumps`` / jinja ``tojson`` shape chat templates and wire protocols carry.
@@ -701,7 +703,7 @@ def update(var obj : JsonValue?; key : string; var jsv : JsonValue?) {
     (obj.value as _object) |> insert(key, jsv)
 }
 
-def try_fixing_broken_json(var bad : string) {
+def try_fixing_broken_json(var bad : string) {  // nolint:STYLE038 - one linear repair scan; the fix-up cases share cursor state
     //! fixes broken json. so far supported 1. "string" + "string" string concatenation 2. "text "nested text" text" nested quotes 3. extra , at the end of object or array 4. /uXXXXXX sequences in the middle of white space
     return build_string() $(writer) {
         peek_data(bad) $(str) {

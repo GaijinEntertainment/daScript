@@ -156,7 +156,8 @@ namespace das {
             // Emit the first instance with optional count suffixes.
             Error out = e;
             if ( dupCount > 1 ) {
-                out.what += " (\xC3\x97" + to_string(dupCount) + ")";
+                // ASCII 'x', not U+00D7: diagnostics flow into logs that are not UTF-8 aware
+                out.what += " (x" + to_string(dupCount) + ")";
             }
             if ( sameLineSameCerrCount > 0 ) {
                 out.what += " (+" + to_string(sameLineSameCerrCount) + " more on this line)";

@@ -510,7 +510,7 @@ class GlslExport : AstVisitor {
                 flag_lattice(et.baseType, t.at)
                 tw |> write(glsl_types?[et.baseType] ?? "error")
             } elif (cpu_only_lattice_width(et.baseType)) {
-                error("type {et.baseType} is CPU-only (8/16-lane lattice forms do not exist in shaders — vectors cap at 4 lanes)", t.at)
+                error("type {et.baseType} is CPU-only (8/16-lane lattice forms do not exist in shaders - vectors cap at 4 lanes)", t.at)
                 tw |> write("error")
             } else {
                 error("unsupported type {et.baseType}", t.at)
@@ -1436,7 +1436,7 @@ class GlslExport : AstVisitor {
             cpuOnlyCross ||= cpu_only_lattice_width(arg._type.baseType)
         }
         if (cpuOnlyCross) {
-            error("call '{fnName}': CPU-only lattice width (8/16-lane forms do not exist in shaders — vectors cap at 4 lanes)", expr.at)
+            error("call '{fnName}': CPU-only lattice width (8/16-lane forms do not exist in shaders - vectors cap at 4 lanes)", expr.at)
         } elif (latticeCross && ends_with(fnName, "_sat")) {
             error("call '{fnName}': saturating narrows are not supported in shaders yet", expr.at)
         } elif (latticeCross) {

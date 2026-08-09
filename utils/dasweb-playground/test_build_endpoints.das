@@ -254,7 +254,7 @@ def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipel
         t |> run("the artifact serves byte-exact with immutable headers") @(tt : T?) {
             GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.wasm") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), "fake wasm payload for the pipeline test")
+                tt |> equal(resp.body, "fake wasm payload for the pipeline test")
                 tt |> success(find(get_header(resp, "Cache-Control"), "immutable") >= 0, "immutable")
                 tt |> equal(get_header(resp, "X-Content-Type-Options"), "nosniff")
             }
@@ -463,7 +463,7 @@ def test_page_build_flow(t : T?) {
         t |> run("the page document serves with the isolation headers") @(tt : T?) {
             GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.html") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(string(resp.body), "<html>page shell</html>")
+                tt |> equal(resp.body, "<html>page shell</html>")
                 tt |> equal(get_header(resp, "Cross-Origin-Resource-Policy"), "cross-origin")
                 tt |> equal(get_header(resp, "Cross-Origin-Embedder-Policy"), "require-corp")
                 // COOP + COEP is what makes crossOriginIsolated true for a page
@@ -570,7 +570,7 @@ def test_large_artifact_serves_whole(t : T?) {
             GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.wasm") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
                 tt |> equal(resp.content_length, length(payload))
-                tt |> success(string(resp.body) == payload, "body matches the uploaded bytes")
+                tt |> success(resp.body == payload, "body matches the uploaded bytes")
             }
         }
     }

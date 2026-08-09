@@ -503,20 +503,37 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
      - ``AstSimulateMacro``
      - Custom simulation node generation
    * - ``[infer_macro]``
-     - ``AstInferMacro``
+     - ``AstPassMacro``
      - Runs during type inference
    * - ``[dirty_infer_macro]``
-     - ``AstDirtyInferMacro``
+     - ``AstPassMacro``
      - Runs during dirty inference passes
    * - ``[optimization_macro]``
-     - ``AstOptimizationMacro``
+     - ``AstPassMacro``
      - Runs during optimization
+   * - ``[pre_infer_macro]``
+     - ``AstPassMacro``
+     - Runs before every (re-)inference pass
+   * - ``[pre_simulate_macro]``
+     - ``AstPassMacro``
+     - Runs after inference, before codegen
    * - ``[lint_macro]``
-     - ``AstLintMacro``
+     - ``AstPassMacro``
      - Runs during linting
    * - ``[global_lint_macro]``
-     - ``AstGlobalLintMacro``
+     - ``AstPassMacro``
      - Runs after all modules are compiled
+   * - ``[tag_function_macro(tag="...")]``
+     - ``AstFunctionAnnotation``
+     - Attaches the macro to every function tagged with ``[tag_function]``
+
+Every pass macro — ``[infer_macro]``, ``[dirty_infer_macro]``, ``[optimization_macro]``,
+``[pre_infer_macro]``, ``[pre_simulate_macro]``, ``[lint_macro]``, ``[global_lint_macro]`` —
+derives from the single ``AstPassMacro`` base class and overrides
+``apply(prog : ProgramPtr; mod : Module?) : bool``. There is no per-pass base class.
+
+``[tag_function_macro]`` additionally requires a ``tag`` argument; unlike the other
+annotations here, that one is not optional.
 
 Example:
 
@@ -564,6 +581,9 @@ Requires ``require daslib/contracts``.
      - Argument must be a numeric type
    * - ``[expect_any_workhorse(arg)]``
      - Argument must be a "workhorse" type (int, float, etc.)
+   * - ``[expect_any_workhorse_raw(arg)]``
+     - Argument must be a raw workhorse type — one with a ``T(x)`` constructor, or ``bool``.
+       Narrower than ``expect_any_workhorse``: pointers and enums are rejected
    * - ``[expect_any_tuple(arg)]``
      - Argument must be a tuple
    * - ``[expect_any_variant(arg)]``

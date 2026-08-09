@@ -165,6 +165,7 @@ def sha256_hex(data : array<uint8> const# implicit) : string {
     return sha256_hex_digest(sha256_final(st))
 }
 
+[temp_string_result]
 def sha256_file_hex(path : string) : string {
     //! SHA-256 of a file's bytes, lowercase hex; "" when the file is
     //! unreadable or empty.

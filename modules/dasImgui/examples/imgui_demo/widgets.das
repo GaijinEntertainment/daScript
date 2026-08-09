@@ -959,10 +959,10 @@ def private TextSection() {
                     "AddFontFromFileTTF() manually to load extra character ranges. " +
                     "Read docs/FONTS.md for details."))
                 // daslang source files are UTF-8 so the literals are stored as-is.
-                text("Hiragana: かきくけこ (kakikukeko)")
-                text("Kanjis: 日本語 (nihongo)")
+                text("Hiragana: かきくけこ (kakikukeko)")  // nolint:STYLE039 (upstream imgui_demo UTF-8 section)
+                text("Kanjis: 日本語 (nihongo)")  // nolint:STYLE039 (upstream imgui_demo UTF-8 section)
                 input_text(WIDGETS_TEXT_UTF8_INPUT,
-                    (text = "UTF-8 input", init = "日本語"))
+                    (text = "UTF-8 input", init = "日本語"))  // nolint:STYLE039 (upstream imgui_demo UTF-8 section)
             }
     }
 }

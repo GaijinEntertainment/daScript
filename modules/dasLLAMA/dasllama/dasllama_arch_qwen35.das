@@ -413,7 +413,7 @@ def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos :
         if (pos == 0l) {
             dn_reset(s)
         } elif (pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only — cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
+            panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
         }
         s.dn_pos = pos + 1l
     }
@@ -941,7 +941,7 @@ def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos
         if (start_pos == 0l) {
             dn_reset(s)
         } elif (start_pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only — cannot prefill from position {start_pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
+            panic("dasLLAMA: deltanet state is forward-only - cannot prefill from position {start_pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
         }
         s.dn_pos = start_pos + npos
     }

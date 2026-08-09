@@ -1,12 +1,7 @@
-// Float→String benchmark — ported from dasProfile/tests/f2s.das.
+// Float→String benchmark — the original dasProfile/tests/f2s.das kernel.
 options gen2
 
 require strings
-
-[sideeffects]
-def str_len(s : string) : int {
-    return length(s)
-}
 
 let TOTAL_NUMBERS = 10000
 let TOTAL_TIMES = 100
@@ -16,8 +11,7 @@ def f2s(nums) {
     var summ_q = 0
     for (_i in 0..TOTAL_TIMES) {
         for (s in nums) {
-            let str = string(s)
-            summ_q += str_len(str)
+            summ_q += length(string(s))
         }
     }
     return summ_q
@@ -34,8 +28,7 @@ def main {
     var summ = 0
     for (_j in 0..TOTAL_TIMES) {
         for (i in range(TOTAL_NUMBERS)) {
-            let str = string(mk_float(i))
-            summ += str_len(str)
+            summ += length(string(mk_float(i)))
         }
     }
     var f1 = 0

@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("display_image — boost v2 §3.2", 720, 420)
+    harness_init("display_image - boost v2 sec 3.2", 720, 420)
 }
 
 [export]
@@ -34,9 +34,9 @@ def update() {
                       closable = false, flags = ImGuiWindowFlags.None)) {
         let io & = unsafe(GetIO())
         if (io.Fonts.TexData == null) {
-            text(LEAD, (text = "Font atlas not yet built — wait for first frame."))
+            text(LEAD, (text = "Font atlas not yet built - wait for first frame."))
         } else {
-            text(LEAD, (text = "Three image() calls against the same atlas — varying size, uv, tint."))
+            text(LEAD, (text = "Three image() calls against the same atlas - varying size, uv, tint."))
             image(IMG_BASIC, (user_texture_id = io.Fonts.TexRef,
                               size = float2(128.0f, 128.0f),
                               uv0 = float2(0.0f, 0.0f),

@@ -197,7 +197,7 @@ def public harness_begin_frame() : bool {
         if (g_headless_max_uptime_sec > 0.0f && (now - g_headless_first_uptime) >= g_headless_max_uptime_sec) {
             // Cascade-guard fire — kept on stdout because it's diagnostic
             // (only emitted when the safety net actually trips, never in healthy runs).
-            print("[harness] headless timeout {g_headless_max_uptime_sec}s reached at uptime {now - g_headless_first_uptime}s — request_exit()\n")
+            print("[harness] headless timeout {g_headless_max_uptime_sec}s reached at uptime {now - g_headless_first_uptime}s - request_exit()\n")
             request_exit()
             return false
         }

@@ -167,7 +167,7 @@ def test_cors(t : T?) {
                 set_header(req, "Access-Control-Request-Method", "GET")
                 request(req) <| $(resp) {
                     let cors_origin = get_header(resp, "Access-Control-Allow-Origin")
-                    t |> success(!empty(string(cors_origin)), "Access-Control-Allow-Origin present")
+                    t |> success(!empty(cors_origin), "Access-Control-Allow-Origin present")
                 }
             }
         }
@@ -185,14 +185,14 @@ def test_redirect(t : T?) {
                 request(req) <| $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.MOVED_PERMANENTLY))
                     let location = get_header(resp, "Location")
-                    t |> success(!empty(string(location)), "Location header present")
+                    t |> success(!empty(location), "Location header present")
                 }
             }
         }
         t |> run("redirect followed arrives at destination") @(t : T?) {
             GET("{base_url}/old-path") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
-                t |> equal(string(resp.body), "arrived at new-path")
+                t |> equal(resp.body, "arrived at new-path")
             }
         }
     }
@@ -204,11 +204,11 @@ def test_custom_headers_caching(t : T?) {
         t |> run("custom Cache-Control and ETag headers") @(t : T?) {
             GET("{base_url}/cached") <| $(resp) {
                 let cc = get_header(resp, "Cache-Control")
-                t |> equal(string(cc), "max-age=3600")
+                t |> equal(cc, "max-age=3600")
                 let etag = get_header(resp, "ETag")
-                t |> equal(string(etag), "\"v1\"")
+                t |> equal(etag, "\"v1\"")
                 let xs = get_header(resp, "X-Server")
-                t |> equal(string(xs), "daslang-test")
+                t |> equal(xs, "daslang-test")
             }
         }
     }
@@ -222,7 +222,7 @@ def test_binary_data(t : T?) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> equal(resp.content_length, 12)
                 let ct = get_header(resp, "Content-Type")
-                t |> success(find(string(ct), "octet-stream") >= 0, "Content-Type is octet-stream")
+                t |> success(find(ct, "octet-stream") >= 0, "Content-Type is octet-stream")
             }
         }
     }
@@ -235,7 +235,7 @@ def test_custom_content_type(t : T?) {
             GET("{base_url}/html") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 let ct = get_header(resp, "Content-Type")
-                t |> success(find(string(ct), "text/html") >= 0, "Content-Type is text/html")
+                t |> success(find(ct, "text/html") >= 0, "Content-Type is text/html")
                 t |> success(find(string(resp.body), "<h1>Hello</h1>") >= 0, "body is HTML")
             }
         }
@@ -249,7 +249,7 @@ def test_status_404(t : T?) {
             GET("{base_url}/not-found") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NOT_FOUND))
                 let ct = get_header(resp, "Content-Type")
-                t |> success(find(string(ct), "application/json") >= 0, "Content-Type is JSON")
+                t |> success(find(ct, "application/json") >= 0, "Content-Type is JSON")
                 t |> success(find(string(resp.body), "not found") >= 0, "body contains error message")
             }
         }
@@ -263,7 +263,7 @@ def test_status_201_created(t : T?) {
             POST("{base_url}/items", "new item") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.CREATED))
                 let location = get_header(resp, "Location")
-                t |> equal(string(location), "/items/42")
+                t |> equal(location, "/items/42")
             }
         }
     }

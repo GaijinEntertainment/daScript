@@ -209,6 +209,15 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeMoreFunctionFlags2() {
+        auto ft = new TypeDecl(Type::tBitfield);
+        ft->alias = "MoreFunctionFlags2";
+        ft->argNames = {
+            "localFunction", "tempStringResult", "mayQueueTempString"
+        };
+        return ft;
+    }
+
     TypeDeclPtr makeFunctionSideEffectFlags() {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "FunctionSideEffectFlags";
@@ -283,6 +292,7 @@ namespace das {
         addAlias(makeExprPrintFlagsFlags());
         addAlias(makeFunctionFlags());
         addAlias(makeMoreFunctionFlags());
+        addAlias(makeMoreFunctionFlags2());
         addAlias(makeFunctionSideEffectFlags());
         addAlias(makeVariableFlags());
         addAlias(makeVariableAccessFlags());

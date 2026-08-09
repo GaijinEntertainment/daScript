@@ -18,7 +18,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 0b.2 — color inputs", 800, 760)
+    harness_init("Phase 0b.2 - color inputs", 800, 760)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -29,7 +29,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 720.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Color inputs — phase 0b.2", closable = false,
+    window(MAIN_WIN, (text = "Color inputs - phase 0b.2", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         // ----- Editors (compact RGB / RGBA boxes) -----
         text("Editors")

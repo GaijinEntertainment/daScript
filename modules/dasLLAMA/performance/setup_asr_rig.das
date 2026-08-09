@@ -60,7 +60,7 @@ def private run_step(what, cmd : string) : bool {
     let out = run_capture("{cmd} 2>&1", false)
     let rc_line = run_capture("echo $?", true)   // popen swallows the status; re-probe cheaply
     if (find(out, "fatal:") >= 0 || find(out, "error:") >= 0 || find(out, "Error") >= 0) {
-        to_log(LOG_ERROR, "setup_asr_rig: {what} FAILED — tail: {slice(out, max(0, length(out) - 400))}\n")
+        to_log(LOG_ERROR, "setup_asr_rig: {what} FAILED - tail: {slice(out, max(0, length(out) - 400))}\n")
         return false
     }
     return !empty(rc_line) || true
@@ -96,13 +96,13 @@ def private verify_manifest() : bool {
     for (row in rows) {
         let fi = file_identity("{asr_corpus_dir()}{row.name}", "clip")
         if (empty(fi.sha256)) {
-            to_log(LOG_ERROR, "setup_asr_rig: corpus {row.name} — MISSING\n")
+            to_log(LOG_ERROR, "setup_asr_rig: corpus {row.name} - MISSING\n")
             ok = false
         } elif (fi.sha256 != row.sha) {
-            to_log(LOG_ERROR, "setup_asr_rig: corpus {row.name} — sha MISMATCH (have {slice(fi.sha256, 0, 12)}…, manifest {slice(row.sha, 0, 12)}…) — different bytes would silently bench a different input\n")
+            to_log(LOG_ERROR, "setup_asr_rig: corpus {row.name} - sha MISMATCH (have {slice(fi.sha256, 0, 12)}..., manifest {slice(row.sha, 0, 12)}...) - different bytes would silently bench a different input\n")
             ok = false
         } else {
-            to_log(LOG_INFO, "setup_asr_rig: corpus {row.name} — ok\n")
+            to_log(LOG_INFO, "setup_asr_rig: corpus {row.name} - ok\n")
         }
     }
     delete rows
@@ -122,7 +122,7 @@ def private concat_wav(src : string; times : int; dst : string) : bool {
         }
     }
     if (length(bytes) < 44) {
-        to_log(LOG_ERROR, "setup_asr_rig: {src} — not a wav\n")
+        to_log(LOG_ERROR, "setup_asr_rig: {src} - not a wav\n")
         return false
     }
     // locate the data chunk (after fmt and any LIST/INFO chunks)
@@ -140,7 +140,7 @@ def private concat_wav(src : string; times : int; dst : string) : bool {
         pos += 8 + sz + (sz & 1)
     }
     if (data_off < 0) {
-        to_log(LOG_ERROR, "setup_asr_rig: {src} — no data chunk\n")
+        to_log(LOG_ERROR, "setup_asr_rig: {src} - no data chunk\n")
         return false
     }
     let total_data = data_len * times
@@ -194,7 +194,7 @@ def private setup_corpus() : bool {
             } elif (name == "gb1.wav") {
                 fetch_ogg_as_wav(GB1_URL, "_gb1.ogg", dst)
             } else {
-                to_log(LOG_ERROR, "setup_asr_rig: {src} missing — clone/checkout whisper.cpp first (--refs)\n")
+                to_log(LOG_ERROR, "setup_asr_rig: {src} missing - clone/checkout whisper.cpp first (--refs)\n")
                 return false
             }
         }
@@ -232,7 +232,7 @@ def private setup_libri() : bool {
         }
     }
     if (have >= 25) {
-        to_log(LOG_INFO, "setup_asr_rig: librispeech — {have} clip(s) already present\n")
+        to_log(LOG_INFO, "setup_asr_rig: librispeech - {have} clip(s) already present\n")
         return true
     }
     to_log(LOG_INFO, "setup_asr_rig: fetching LibriSpeech test-clean (346 MB, one-time)\n")
@@ -259,7 +259,7 @@ def private setup_libri() : bool {
     }
     remove(tarball)
     run_capture("rm -rf \"{asr_corpus_dir()}LibriSpeech\"", false)
-    to_log(LOG_INFO, "setup_asr_rig: librispeech — 25 clip(s) ready\n")
+    to_log(LOG_INFO, "setup_asr_rig: librispeech - 25 clip(s) ready\n")
     return true
 }
 
@@ -294,7 +294,7 @@ def private setup_refs(cfg : Args) : bool {
             let lead = is_windows_box() ? "call " : ""
             run_capture("{lead}\"{whisper_cpp_bin(pair.quant)}\" \"{src_path}\" \"{dst_path}\" q8_0", false)
             if (!stat(dst_path).is_valid) {
-                to_log(LOG_WARNING, "setup_asr_rig: q8_0 sibling {pair.dst} did not materialize — the {pair.quant} run failed\n")
+                to_log(LOG_WARNING, "setup_asr_rig: q8_0 sibling {pair.dst} did not materialize - the {pair.quant} run failed\n")
                 ok = false
             }
         }
@@ -332,7 +332,7 @@ def private base_python() : string {
         if (pv >= 310 && pv < 313) {
             return pinned
         }
-        to_log(LOG_WARNING, "setup_asr_rig: DASLLAMA_BASE_PYTHON={pinned} probes as {pv} — outside 3.10-3.12, ignoring\n")
+        to_log(LOG_WARNING, "setup_asr_rig: DASLLAMA_BASE_PYTHON={pinned} probes as {pv} - outside 3.10-3.12, ignoring\n")
     }
     for (cand in ["python3.11", "python3.10", "python3.12", "python3", "python"]) {
         let v = probe_python_version(cand)
@@ -356,7 +356,7 @@ def private setup_venvs() : bool {
     // `uv python install 3.11`, put its bin dir first on PATH.
     let basepy = base_python()
     if (empty(basepy)) {
-        to_log(LOG_ERROR, "setup_asr_rig: no CPython 3.10-3.12 found (PATH names or uv) — the venv pins were frozen on 3.11 and 3.13+ breaks them; `uv python install 3.11` (uv route above) and re-run\n")
+        to_log(LOG_ERROR, "setup_asr_rig: no CPython 3.10-3.12 found (PATH names or uv) - the venv pins were frozen on 3.11 and 3.13+ breaks them; `uv python install 3.11` (uv route above) and re-run\n")
         return false
     }
     var ok = true
@@ -364,12 +364,12 @@ def private setup_venvs() : bool {
         // present = the interpreter exists AND the pinned packages import — a half-made venv
         // (pip died mid-install) leaves the interpreter behind and must be rebuilt, not skipped
         if (stat(spec.py).is_valid && venv_ready(spec.name, spec.py)) {
-            to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv — present\n")
+            to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv - present\n")
             continue
         }
         let venv = normalize("{asr_dir()}/.venv-{spec.name}")
         if (stat(venv).is_valid) {
-            to_log(LOG_WARNING, "setup_asr_rig: {spec.name} venv at {venv} is half-made — rebuilding\n")
+            to_log(LOG_WARNING, "setup_asr_rig: {spec.name} venv at {venv} is half-made - rebuilding\n")
             run_capture("rm -rf \"{venv}\"", false)
         }
         to_log(LOG_INFO, "setup_asr_rig: creating {spec.name} venv at {venv} (base: {basepy})\n")
@@ -402,7 +402,7 @@ def private check_all() : bool {
     for (tool in ["whisper-cli", "parakeet-cli"]) {
         let bin = whisper_cpp_bin(tool)
         let good = stat(bin).is_valid
-        to_log(good ? LOG_INFO : LOG_ERROR, "setup_asr_rig: {tool} — {good ? "ok" : "MISSING"} ({bin})\n")
+        to_log(good ? LOG_INFO : LOG_ERROR, "setup_asr_rig: {tool} - {good ? "ok" : "MISSING"} ({bin})\n")
         ok = ok && good
     }
     let versions = whisper_cpp_versions()
@@ -411,13 +411,13 @@ def private check_all() : bool {
     for (dst in ["ggml-tiny-q8_0.bin", "ggml-large-v3-turbo-q8_0.bin",
                  "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"]) {
         let present = stat("{whisper_models_dir()}{dst}").is_valid
-        to_log(present ? LOG_INFO : LOG_WARNING, "setup_asr_rig: q8_0 ref {dst} — {present ? "ok" : "MISSING (cli refs will time nothing — run --refs)"}\n")
+        to_log(present ? LOG_INFO : LOG_WARNING, "setup_asr_rig: q8_0 ref {dst} - {present ? "ok" : "MISSING (cli refs will time nothing - run --refs)"}\n")
     }
     let mt = stat(mtmd_bin()).is_valid
-    to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli — {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
+    to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli - {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
     for (spec in [(name = "ONNX_PY", py = onnx_py()), (name = "NEMO_PY", py = nemo_py())]) {
         let good = stat(spec.py).is_valid
-        to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: {spec.name} — {good ? "ok" : "missing (those refs will skip)"} ({spec.py})\n")
+        to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: {spec.name} - {good ? "ok" : "missing (those refs will skip)"} ({spec.py})\n")
     }
     // pre-warm the onnx reference models: the first-ever run of a variant downloads its
     // weights, and that download eats the sweep's whole ref-leg budget (~90 s on zen2 —
@@ -431,7 +431,7 @@ def private check_all() : bool {
                                         "--out", asr_pybench_out_path()])
             let rows = find(out, "BENCH") >= 0 || find(fread(asr_pybench_out_path()), "BENCH") >= 0
             to_log(rows ? LOG_INFO : LOG_WARNING,
-                "setup_asr_rig: onnx {vkey} pre-warm — {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
+                "setup_asr_rig: onnx {vkey} pre-warm - {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
             ok = ok && rows
         }
     }
@@ -475,6 +475,6 @@ def main : int {
     if (cfg.check) {
         ok = check_all() && ok
     }
-    to_log(ok ? LOG_INFO : LOG_ERROR, "setup_asr_rig: {ok ? "COMPLETE" : "INCOMPLETE — fix the errors above before sweeping"}\n")
+    to_log(ok ? LOG_INFO : LOG_ERROR, "setup_asr_rig: {ok ? "COMPLETE" : "INCOMPLETE - fix the errors above before sweeping"}\n")
     return ok ? 0 : 1
 }
