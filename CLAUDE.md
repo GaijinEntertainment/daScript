@@ -136,8 +136,11 @@ cannot apply as written is a defect of the checklist, marked like any other find
 NEW CODEREVIEW.md includes that rule from its first commit. When a checklist audit runs for a
 PR, its scope is every CODEREVIEW.md discovered from the changed set (the `skills/make_pr.md`
 step-0a walk): each discovered checklist is itself audited under the self-review rule, not
-just applied. With several checklists in scope, the auditor fans out to parallel subagents —
-one per checklist — and merges the findings into one report.
+just applied. The implementer is the shared **`codereview-md-auditor` agent**
+(`.claude/agents/codereview-md-auditor.md`): one instance owns exactly one checklist, so with
+several in scope the ORCHESTRATOR launches one instance per checklist in parallel and merges
+the findings into one report. (The agent registry snapshots at session start — a freshly
+pulled or edited definition is live in the NEXT session, not the current one.)
 
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
 

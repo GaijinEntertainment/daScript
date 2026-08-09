@@ -38,6 +38,13 @@ git diff --name-only origin/master..HEAD | xargs -I{} dirname {} | sort -u \
 Worked example: `modules/dasImgui/CODEREVIEW.md` (tests placement + pre-PR suite
 run + multiplatform-tests rules for anything touching that module).
 
+The audit itself is the shared `codereview-md-auditor` agent
+(`.claude/agents/codereview-md-auditor.md`) — launch ONE instance per discovered
+CODEREVIEW.md (each audits only its assigned checklist, including the checklist itself
+under the self-review rule) and merge the reports. Registry caveat: agent definitions
+snapshot at session start, so a just-pulled or just-edited definition only exists in the
+next session.
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:
