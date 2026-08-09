@@ -330,178 +330,19 @@ class MetalSqAttnLabTq4 {
     }
 }
 
-// Pointer-stream rework candidate for the production part kernel (hs == 128 specialization,
-// epl == 4): K reads ONE half4 per lane per position through a walked device pointer (the
-// production form issues 4 scalar half loads + the epl guard chain), q hoists as ONE float4,
-// the V column walk becomes a pointer stream (base + uniform-scaled offsets, one bump per 4
-// positions). Same grid, same tgmem, same part/comb contract.
-// NEGATIVE (2026-07-14): the fully-fused lcpp-shape variant — one sg per 32-position slice,
-// score/softmax/weights all register-resident (keep-select + butterfly max + simd_shuffle
-// broadcast), zero barriers, part entries per-32-slice — reached ISA parity with fa_vec
-// (~15 issues/position vs their 14.7) but measured 15-20% SLOWER than THIS two-phase form at
-// every depth (d512 28.5 vs 23.5us; d2048 83.2 vs 74.5), both as 32-thread tgs and packed 4
-// slices per 128-thread tg. The per-slice prologue (~270 instr re-run per 32 positions vs per
-// 64 here) eats the softmax-pass savings. Issue count is not the limiter at this size.
-class MetalSqAttnPartLabP {
-    @ssbo @binding = 0 kc : array<half4>    // the same f16 mirror buffer, half4 view
-    @ssbo @binding = 1 vc : array<half4>    // ... V too — lane owns a half4 COLUMN GROUP
-    @ssbo @binding = 2 q : array<float4>    // the same q buffer, float4 view
-    @ssbo @binding = 3 part : array<float>
-    @ssbo @binding = 4 rt : array<uint4>
-    @uniform @binding = 5 lay : uint
-    @uniform @binding = 6 kv_dim : uint
-    @uniform @binding = 7 nheads : uint
-    @uniform @binding = 8 kv_mul : uint
-    @uniform @binding = 9 hs : uint
-    @uniform @binding = 10 scale : float
-    @uniform @binding = 11 qstride : uint
-    @uniform @binding = 12 nchmax : uint
-    @workgroup scores : float[64]
-    @workgroup red : float[4]
-    @workgroup vout : float[512]            // 4 per-sg partial planes x 128 columns
-
-    [metal_kernel(name="lab_sq_attn_part_p_msl")]
-    def lab_sq_attn_part_p {
-        let wg = gl_WorkGroupID.x
-        let h = wg % nheads
-        let ci = (wg / nheads) % nchmax
-        let bb = wg / (nheads * nchmax)
-        let rrow = rt[bb]
-        let cnt = rrow.w
-        let c0 = ci * 64u
-        if (c0 >= cnt) {
-            return
-        }
-        let lid = gl_LocalInvocationID.x
-        let nt = gl_WorkGroupSize.x
-        let kb0 = rrow.x + lay * rrow.z * kv_dim
-        let vb0 = rrow.y + lay * rrow.z * kv_dim
-        let khoff = (h / kv_mul) * hs
-        let qoff = bb * qstride + h * hs
-        let c1 = min(c0 + 64u, cnt)
-        let nrows = c1 - c0
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let kv4 = kv_dim / 4u
-        let q4 = float4(q[qoff / 4u + sl])
-        // K: each sg owns a contiguous 16-position slice, straight-line unrolled; lane sl KEEPS
-        // position sl's reduced score via a select (no divergent guard, no per-position store —
-        // the lcpp fa_vec ownership shape), then ONE batch store writes the whole slice.
-        // NEGATIVE (2026-07-14): [unroll_count=4] on the per-position guarded-store form was
-        // neutral — the simd_sum -> lane-0 store chain serialized the back-edge regardless.
-        let base16 = sg * 16u
-        if (base16 + 16u <= nrows) {
-            var kp = unsafe(addr(kc[(kb0 + (c0 + base16) * kv_dim + khoff) / 4u + sl]))
-            var keep = 0.0
-            for [unroll_full] (i in range(16)) {
-                let p = q4 * float4(unsafe(kp[0]))
-                let s = simd_sum(p.x + p.y + p.z + p.w)
-                keep = uint(i) == sl ? s : keep
-                kp = unsafe(kp + kv4)
-            }
-            if (sl < 16u) {
-                scores[base16 + sl] = keep * scale
-            }
-        } elif (base16 < nrows) {
-            // partial tail slice (cnt %64 rows) — the guarded per-position form
-            var kp = unsafe(addr(kc[(kb0 + (c0 + base16) * kv_dim + khoff) / 4u + sl]))
-            var j = base16
-            while (j < nrows) {
-                let p = q4 * float4(unsafe(kp[0]))
-                let s = simd_sum(p.x + p.y + p.z + p.w)
-                if (sl == 0u) {
-                    scores[j] = s * scale
-                }
-                kp = unsafe(kp + kv4)
-                j++
-            }
-        }
-        barrier()
-        var m = -3.0e38
-        var j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        // V: same ownership shape as K — each sg walks its contiguous 16-position slice, lane sl
-        // owns half4 column group sl (32 x 4 = 128 columns), ONE vector load per position per sg;
-        // the 4 per-sg float4 partials combine through the vout slab once per chunk
-        var acc4 = float4(0.0)
-        if (base16 + 16u <= nrows) {
-            var vp = unsafe(addr(vc[(vb0 + (c0 + base16) * kv_dim + khoff) / 4u + sl]))
-            for [unroll_full] (i in range(16)) {
-                acc4 += scores[base16 + uint(i)] * float4(unsafe(vp[0]))
-                vp = unsafe(vp + kv4)
-            }
-        } elif (base16 < nrows) {
-            var vp = unsafe(addr(vc[(vb0 + (c0 + base16) * kv_dim + khoff) / 4u + sl]))
-            j = base16
-            while (j < nrows) {
-                acc4 += scores[j] * float4(unsafe(vp[0]))
-                vp = unsafe(vp + kv4)
-                j++
-            }
-        }
-        let vo = sg * 128u + sl * 4u
-        vout[vo] = acc4.x
-        vout[vo + 1u] = acc4.y
-        vout[vo + 2u] = acc4.z
-        vout[vo + 3u] = acc4.w
-        barrier()
-        let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = vout[lid] + vout[128u + lid] + vout[256u + lid] + vout[384u + lid]
-        if (lid == 0u) {
-            part[pbase + hs] = mm
-            part[pbase + hs + 1u] = tot
-        }
-    }
-}
-
 // Fused single-pass form, take 2 (the lcpp fa_vec shape on our rails): one sg per (row, head,
 // 32-position slice), 4 slices packed per 128-thread tg (no barriers — divergent per-sg exit is
-// safe), score/softmax/weights register-resident. UNLIKE the first fused attempt (recorded
-// negative above), K/V loads use INDEPENDENT indexed offsets (kp[i * kv4]) instead of a walked
-// pointer — the walk built a 32-deep serial address chain every load depended on; lcpp's
-// unrolled body has base+immediate offsets (NS10 is an FC constant), all loads independent.
+// safe), score/softmax/weights register-resident.
+// NEGATIVE, take 1 (2026-07-14, class deleted): the fully-fused lcpp-shape variant — one sg
+// per 32-position slice, register-resident softmax (keep-select + butterfly max +
+// simd_shuffle broadcast), zero barriers, part entries per-32-slice — reached ISA parity with
+// fa_vec (~15 issues/position vs their 14.7) but measured 15-20% SLOWER than the two-phase
+// form at every depth (d512 28.5 vs 23.5us; d2048 83.2 vs 74.5), 32-thread tgs and packed
+// alike: the per-slice prologue (~270 instr re-run per 32 positions vs per 64) eats the
+// softmax-pass savings; issue count is not the limiter at this size.
+// UNLIKE that take, K/V loads here use INDEPENDENT indexed offsets (kp[i * kv4]) instead of a
+// walked pointer — the walk built a 32-deep serial address chain every load depended on;
+// lcpp's unrolled body has base+immediate offsets (NS10 is an FC constant), loads independent.
 class MetalSqAttnPartLabF {
     @ssbo @binding = 0 kc : array<half4>
     @ssbo @binding = 1 vc : array<half4>
@@ -990,6 +831,16 @@ def private upload_f32(dev; v : float) {
     return buf
 }
 
+// a kargs struct uploaded whole — the production kernels bind ONE constant& per slot
+def private upload_kargs(dev; ka) {
+    let sz = uint64(typeinfo sizeof(ka))
+    var buf = metal_new_buffer(dev, sz)
+    unsafe {
+        memcpy(metal_buffer_contents(buf), addr(ka), sz)
+    }
+    return buf
+}
+
 def private time_reps(queue; pso; bufs; groups : uint3; reps : int; tgmem : uint64) : double {
     var err : string
     var gpu_ms = 0.0lf
@@ -1064,15 +915,10 @@ def private run_attn_b2_sidebyside(b) {
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_part = pipeline_from_source(dev, metal_sq_attn_part_b16_msl, metal_sq_attn_part_b16_msl_entry, true, err)
+    var pso_part = pipeline_from_source(dev, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_entry, true, err)
     b |> success(pso_part != null, "production part kernel compiles")
-    var pso_comb = pipeline_from_source(dev, metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, true, err)
+    var pso_comb = pipeline_from_source(dev, MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, true, err)
     b |> success(pso_comb != null, "production comb kernel compiles")
-    var pso_partp = pipeline_from_source(dev, lab_sq_attn_part_p_msl, lab_sq_attn_part_p_msl_entry, true, err)
-    b |> success(pso_partp != null, "pointer-stream part kernel compiles")
-    if (pso_partp == null) {
-        to_log(LOG_ERROR, "pointer-stream part compile failed: {err}\n")
-    }
     var pso_partf = pipeline_from_source(dev, lab_sq_attn_part_f_msl, lab_sq_attn_part_f_msl_entry, true, err)
     b |> success(pso_partf != null, "fused part kernel compiles")
     if (pso_partf == null) {
@@ -1084,7 +930,7 @@ def private run_attn_b2_sidebyside(b) {
     b |> success(pso_partd != null, "deep-context part kernel compiles")
     var pso_combp = pipeline_from_source(dev, lab_sq_attn_comb_p_msl, lab_sq_attn_comb_p_msl_entry, true, err)
     b |> success(pso_combp != null, "32-slice comb twin compiles")
-    if (pso_part == null || pso_comb == null || pso_partp == null || pso_partf == null ||
+    if (pso_part == null || pso_comb == null || pso_partf == null ||
             pso_partg == null || pso_partd == null || pso_combp == null) {
         metal_release(queue)
         metal_release(dev)
@@ -1118,12 +964,9 @@ def private run_attn_b2_sidebyside(b) {
     var hsbuf = upload_u32(dev, uint(head_size))
     var scalebuf = upload_f32(dev, scale)
     var qstridebuf = upload_u32(dev, uint(qd))
-    var cap0buf = upload_f32(dev, 0.0)     // the production kernels' wave-B uniforms at llama-shape
-    var win0buf = upload_u32(dev, 0u)      // values: no soft cap, no sliding window
     var ygot : array<float>
     for (depth in [512l, 640l, 1024l, 2048l, 4096l, 16384l]) {
         let nch = (depth + 63l) / 64l
-        var nchmaxbuf = upload_u32(dev, uint(nch))
         let nch32 = (depth + 31l) / 32l
         var nchmax32buf = upload_u32(dev, uint(nch32))
         let nch64 = (depth + 63l) / 64l
@@ -1137,11 +980,17 @@ def private run_attn_b2_sidebyside(b) {
         var rte <- [0u, 0u, uint(depth), uint(depth), 0u, 0u, uint(depth), uint(depth)]
         var rtbuf = upload_array(dev, rte, nb * 16l)
         var yref <- cpu_sq_attn(kc, vc, q, nb, depth, nheads, head_size, kv_dim, kv_mul, scale)
-        var bufs_part <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nchmaxbuf, cap0buf, win0buf]
+        // the production pair binds ONE kargs (llama-shape: no soft cap, no window, no sinks)
+        var kapbuf = upload_kargs(dev, SqAttnPartBArgs(lay = 0u, kstride = uint(kv_dim),
+            nheads = uint(nheads), kv_mul = uint(kv_mul), hs = uint(head_size), scale = scale,
+            qstride = uint(qd), nchmax = uint(nch), softcap = 0.0, window = 0u))
+        var kacbuf = upload_kargs(dev, SqAttnCombArgs(nch = uint(nch), nheads = uint(nheads),
+            hs = uint(head_size), hass = 0u))
+        var bufs_part <- [kbuf, vbuf, qbuf, partbuf, rtbuf, kapbuf]
         var bufs_partf <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nchmax32buf]
         var bufs_partg <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nsgsbuf]
         var bufs_partd <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nsgsdbuf]
-        var bufs_comb <- [partbuf, ybuf, rtbuf, nchmaxbuf, nheadsbuf, hsbuf, win0buf]
+        var bufs_comb <- [partbuf, ybuf, kacbuf, rtbuf]   // production layout ka@2, rt@3; sink@20 unbound (hass=0, never read)
         var bufs_combp <- [partbuf, ybuf, rtbuf, nchmax32buf, nheadsbuf, hsbuf]
         var bufs_combg <- [partbuf, ybuf, rtbuf, nsgsbuf, nheadsbuf, hsbuf]
         var bufs_combd <- [partbuf, ybuf, rtbuf, nsgsdbuf, nheadsbuf, hsbuf]
@@ -1158,7 +1007,7 @@ def private run_attn_b2_sidebyside(b) {
         for (arm in range(4)) {
             var ms0 = 0.0lf
             if (arm == 0) {
-                ms0 = time_pair(queue, pso_part, bufs_part, groups_part, 128u, metal_sq_attn_part_b16_msl_tgmem,
+                ms0 = time_pair(queue, pso_part, bufs_part, groups_part, 128u, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem,
                     pso_comb, bufs_comb, groups_comb, 128u, 0ul, 1)
             } elif (arm == 1) {
                 ms0 = time_pair(queue, pso_partd, bufs_partd, groups_partd, 128u, lab_sq_attn_part_d_msl_tgmem,
@@ -1191,7 +1040,7 @@ def private run_attn_b2_sidebyside(b) {
                 let reps = clamp(int(5.0lf / max(est[arm], 0.005lf)) + 1, 1, 256)
                 var ms = 0.0lf
                 if (arm == 0) {
-                    ms = time_pair(queue, pso_part, bufs_part, groups_part, 128u, metal_sq_attn_part_b16_msl_tgmem,
+                    ms = time_pair(queue, pso_part, bufs_part, groups_part, 128u, MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem,
                         pso_comb, bufs_comb, groups_comb, 128u, 0ul, reps)
                 } elif (arm == 1) {
                     ms = time_pair(queue, pso_partd, bufs_partd, groups_partd, 128u, lab_sq_attn_part_d_msl_tgmem,
@@ -1231,7 +1080,8 @@ def private run_attn_b2_sidebyside(b) {
             delete bufs_combg
             delete bufs_combd
         }
-        metal_release(nchmaxbuf)
+        metal_release(kapbuf)
+        metal_release(kacbuf)
         metal_release(nchmax32buf)
         metal_release(nsgsbuf)
         metal_release(nsgsdbuf)
@@ -1251,11 +1101,8 @@ def private run_attn_b2_sidebyside(b) {
     metal_release(hsbuf)
     metal_release(scalebuf)
     metal_release(qstridebuf)
-    metal_release(cap0buf)
-    metal_release(win0buf)
     metal_release(pso_part)
     metal_release(pso_comb)
-    metal_release(pso_partp)
     metal_release(pso_partf)
     metal_release(pso_partg)
     metal_release(pso_partd)

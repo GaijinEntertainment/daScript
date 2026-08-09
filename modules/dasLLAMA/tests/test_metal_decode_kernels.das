@@ -93,7 +93,7 @@ def private oracle_all(cnt : int; scale, softcap, sink : float; window : int) : 
 // the single-threadgroup form: one dispatch, the whole context in one pass
 def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap : float; hass : bool) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_sq_attn16_msl, metal_sq_attn16_msl_entry, metal_sq_attn16_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, err)
     t |> success(pso != null, "{tag}: sq_attn16 pipeline: {err}")
     return if (pso == null)
     let scale = 1.0 / sqrt(float(HS))
@@ -110,7 +110,7 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
         hass = hass ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_sq_attn16_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalSqAttnF16_metal_sq_attn_msl_tgmem, 0)
         metal_set_buffer(enc, bk, 0ul, 0)
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)
@@ -133,9 +133,9 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
 // kernel rescales across chunks. `window` > 0 also exercises the chunk mask + the chlo skip.
 def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
     var err : string
-    var pso_p = pipeline_from_source(dev, metal_sq_attn_part16_msl, metal_sq_attn_part16_msl_entry, metal_sq_attn_part16_msl_fastmath, err)
+    var pso_p = pipeline_from_source(dev, MetalSqAttnPartF16_metal_sq_attn_part_msl, MetalSqAttnPartF16_metal_sq_attn_part_msl_entry, MetalSqAttnPartF16_metal_sq_attn_part_msl_fastmath, err)
     t |> success(pso_p != null, "{tag}: part16 pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_msl, metal_sq_attn_comb_msl_entry, metal_sq_attn_comb_msl_fastmath, err)
+    var pso_c = pipeline_from_source(dev, MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
     if (pso_p == null || pso_c == null) {
         metal_release(pso_p)
@@ -157,11 +157,11 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
     var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
         kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, nchunks = uint(nchunks),
         softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+    var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
         chlo = uint(chlo), hass = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
-        metal_set_threadgroup_memory_length(enc, metal_sq_attn_part16_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem, 0)
         metal_set_buffer(enc, bk, 0ul, 0)
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)

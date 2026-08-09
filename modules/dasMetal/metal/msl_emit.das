@@ -12,7 +12,10 @@ options _function_length = 0         // same ladders, measured by line
 // builtin globals become attributed parameters, the body lowers by manual recursion. 3-lane
 // buffer/uniform elements take MSL's packed_T3 spelling (das packs tightly; unified memory means
 // the das array IS the buffer) — loads wrap in the plain-type ctor, stores must assign the whole
-// element. Every construct records a census kind at its emit site (gate B: the union across all
+// element. Method calls FLATTEN: each (devirtualized) body splices inline at its call site, and a
+// plain (unannotated) member becomes a kernel-entry thread-local every spliced body sees — the
+// loop-carried rider state (carried pointer walks) a member-function emission cannot express.
+// Every construct records a census kind at its emit site (gate B: the union across all
 // test fixtures must equal declared_msl_census, both directions — text has no disassembler, so the
 // census IS the emitter's coverage proxy).
 
@@ -40,18 +43,25 @@ struct private MslMember {
     workgroup : bool
     packed : bool           // elem != value_elem: 3-lane element behind a packed_T3 param
     ustruct : bool          // @uniform STRUCT (kargs): one bound value holding many scalars
-    wg_dim : int            // @workgroup fixed-array count; -1 = scalar/vector
+    wg_dim : int            // @workgroup/state fixed-array count; -1 = scalar/vector
     wg_bytes : uint64       // @workgroup member's MSL byte size (whole member)
     wg_off : uint64         // @workgroup member's offset inside the dynamic shmem buffer
+    state : bool            // plain member: kernel-entry thread-local (flatten scope splicing)
+    sptr : bool             // pointer-typed state — carried-pointer rider state
+    sptr_space : string     // pointer state: address space resolved from its assignment sites
+    sptr_const : bool       // pointer state: pointee const (the das `T const?` position)
+    sptr_root : string      // pointer state: the ONE member buffer it points into
+    init_text : string      // scalar/vector state: constant initializer text; "" = zero-init
 }
 
 // one discovered user function (Phase 0: free functions lower 1:1 as plain MSL functions;
-// class methods lower as member functions of the ONE FLAT struct the kernel class emits as)
+// class methods never emit as functions — their bodies SPLICE inline at each call site, so a
+// method's UserFn entry is scan bookkeeping only: recursion detection + the write-set walk)
 struct private UserFn {
     @do_not_delete fn : FunctionPtr             // gc_node-owned AST — never finalized from here
     msl_name : string
-    is_method : bool            // member function of the kernel struct (self skipped, members visible)
-    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params; methods use struct fields)
+    is_method : bool            // spliced inline — no emitted function text
+    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params; spliced methods read entry params)
     calls : array<int>          // ufn indices this fn's body calls (transitive builtin closure)
     proto : string
     text : string
@@ -77,7 +87,10 @@ struct private MslCtx {
     cur_ufn : int = -1                          // ufn being scanned/emitted; -1 = the kernel itself
     fn_depth : int                              // > 0 while emitting a user function body
     @do_not_delete kcls : StructurePtr          // the CONCRETE kernel class (devirtualization table)
-    has_methods : bool                          // any method call discovered -> the class emits as a struct
+    tail_ok : bool = true                       // current statement is in kernel tail position (splice return gate)
+    splice_depth : int                          // > 0 while emitting a spliced method body
+    splice_seq : int                            // per-kernel counter naming hoisted binds / renamed locals
+    splice_forbidden : table<string>            // single-identifier substituted arg texts of the CURRENT splice
 }
 
 // MSL reserves the C++14 keyword set plus its own address-space/type keywords; colliding
@@ -213,7 +226,82 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             }
         }
         if (!isSsbo && !isUniform && !isWorkgroup) {
-            err(ctx, fld.at, "member `{fld.name}` is neither @ssbo, @uniform, nor @workgroup - kernels support @ssbo array<T> buffers, @uniform scalar/vector values, and @workgroup threadgroup memory")
+            // plain member = STATE: a kernel-entry thread-local every spliced method body sees —
+            // loop-carried rider state (carried pointer walks) from class-grade source
+            if (binding >= 0) {
+                err(ctx, fld.at, "state member `{fld.name}` has @binding = {binding} - plain members are thread-locals, not bindable buffers")
+                continue
+            }
+            let sName = string(fld.name)
+            if (fld._type != null && fld._type.baseType == Type.tPointer) {
+                let spt = fld._type.firstType
+                if (spt == null) {
+                    err(ctx, fld.at, "pointer member `{fld.name}` is a void pointer - MSL needs an element type")
+                    continue
+                }
+                if (reject_cpu_only_width(ctx, fld.at, spt)) {
+                    continue
+                }
+                let pelem = msl_buffer_elem_name(spt)
+                if (empty(pelem) || pelem != msl_type_name(spt)) {
+                    err(ctx, fld.at, "pointer member `{fld.name}` pointee type {describe(spt)} has no MSL pointer form")
+                    continue
+                }
+                if (fld.init != null) {
+                    // the decl is always `= nullptr`: a pointer's address space (and its root
+                    // buffer) resolve from the ASSIGNMENT sites, and there is no kernel-entry
+                    // value to point at yet
+                    err(ctx, fld.at, "pointer state member `{fld.name}` takes no initializer - bind it inside a method (`{fld.name} = unsafe(addr(buffer[i]))`)")
+                    continue
+                }
+                ctx.renames[sName] = msl_safe_name(sName)
+                ctx.members[sName] = MslMember(msl_name = msl_safe_name(sName), elem = pelem, value_elem = pelem,
+                    binding = -1, wg_dim = -1, state = true, sptr = true, sptr_const = spt.flags.constant)
+                continue
+            }
+            if (fld._type != null && fld._type.baseType == Type.tFixedArray && fld._type.firstType != null &&
+                    fld._type.firstType.baseType != Type.tFixedArray) {
+                if (reject_cpu_only_width(ctx, fld.at, fld._type.firstType)) {
+                    continue
+                }
+                let aelem = msl_type_name(fld._type.firstType)
+                if (empty(aelem) || fld._type.fixedDim == 0) {
+                    err(ctx, fld.at, "state member `{fld.name}` element type has no MSL form")
+                    continue
+                }
+                if (fld.init != null) {
+                    err(ctx, fld.at, "state member `{fld.name}` takes no array initializer - das zero-init is the MSL form")
+                    continue
+                }
+                ctx.renames[sName] = msl_safe_name(sName)
+                ctx.members[sName] = MslMember(msl_name = msl_safe_name(sName), elem = aelem, value_elem = aelem,
+                    binding = -1, wg_dim = fld._type.fixedDim, state = true)
+                continue
+            }
+            if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
+                continue
+            }
+            let selem = fld._type != null ? msl_type_name(fld._type) : ""
+            if (empty(selem)) {
+                err(ctx, fld.at, "member `{fld.name}` is neither @ssbo, @uniform, @workgroup, nor a state-capable thread-local (scalars, their vectors, T[N], T?); got {fld._type == null ? "?" : describe(fld._type)}")
+                continue
+            }
+            var initText = ""
+            if (fld.init != null) {
+                var sie = unsafe(reinterpret<ExpressionPtr>(fld.init))
+                if (sie is ExprRef2Value) {
+                    sie = (sie as ExprRef2Value).subexpr
+                }
+                if (!(sie is ExprConstInt || sie is ExprConstUInt || sie is ExprConstFloat ||
+                        sie is ExprConstFloat16 || sie is ExprConstBool)) {
+                    err(ctx, fld.at, "state member `{fld.name}` initializer must be a scalar constant - complex init belongs in a method")
+                    continue
+                }
+                initText = emit_value(ctx, sie)
+            }
+            ctx.renames[sName] = msl_safe_name(sName)
+            ctx.members[sName] = MslMember(msl_name = msl_safe_name(sName), elem = selem, value_elem = selem,
+                binding = -1, wg_dim = -1, state = true, init_text = initText)
             continue
         }
         if ((isSsbo ? 1 : 0) + (isUniform ? 1 : 0) + (isWorkgroup ? 1 : 0) > 1) {
@@ -315,7 +403,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
     }
     var ssboCount = 0
     for (m in values(ctx.members)) {
-        if (!m.uniform && !m.workgroup) {
+        if (!m.uniform && !m.workgroup && !m.state) {
             ssboCount++
         }
     }
@@ -354,6 +442,71 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
                 ctx.members[mem].written = true
             }
         }
+    }
+}
+
+// A pointer STATE member's address space + root buffer resolve from what its assignments point
+// into: `addr(member[..])` roots at member, `p + n` self-advances, a pointer local or another
+// pointer member forwards its root. Returns the root's das member name, "" when unresolved.
+def private state_ptr_root(var ctx : MslCtx; e : Expression?) : string {
+    if (e == null) {
+        return ""
+    }
+    if (e is ExprRef2Value) {
+        return state_ptr_root(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return state_ptr_root(ctx, (e as ExprCast).subexpr)
+    }
+    if (e is ExprRef2Ptr && (e as ExprRef2Ptr).subexpr is ExprAt) {
+        return member_lookup(ctx, ((e as ExprRef2Ptr).subexpr as ExprAt).subexpr)
+    }
+    if (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
+        return state_ptr_root(ctx, (e as ExprCall).arguments[0])
+    }
+    if (e is ExprField) {
+        let mem = member_lookup(ctx, e)
+        if (!empty(mem) && ctx.members[mem].sptr) {
+            return ctx.members[mem].sptr_root       // another pointer member forwards its root
+        }
+        return mem
+    }
+    if (e is ExprVar) {
+        return ctx.scan_ptrs?[string((e as ExprVar).name)] ?? ""
+    }
+    return ""
+}
+
+// Assignment INTO a pointer state member: bank space + root. ONE root buffer per pointer
+// member; a mutable-pointee pointer marks its root written outright (no deref tracking —
+// taking a writable pointer into a buffer IS the write declaration).
+def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
+    let mem = member_lookup(ctx, left)
+    if (empty(mem) || !ctx.members[mem].sptr) {
+        return
+    }
+    let root = state_ptr_root(ctx, right)
+    // "" = a self-advance seen before the binding site, or an unresolvable shape — the decl
+    // pass errors on a member whose space never resolves, so staying quiet here is safe
+    if (empty(root) || !key_exists(ctx.members, root)) {
+        return
+    }
+    let rootIsState = ctx.members?[root]?.state ?? false
+    let rootIsUniform = ctx.members?[root]?.uniform ?? false
+    if (rootIsState || rootIsUniform) {
+        return
+    }
+    let prevRoot = ctx.members?[mem]?.sptr_root ?? ""
+    if (!empty(prevRoot) && prevRoot != root) {
+        err(ctx, left.at, "pointer member `{mem}` is assigned from both `{prevRoot}` and `{root}` - one root buffer per pointer member")
+        return
+    }
+    let rootWg = ctx.members?[root]?.workgroup ?? false
+    let memConst = ctx.members?[mem]?.sptr_const ?? true
+    ctx.members[mem].sptr_root = root
+    ctx.members[mem].sptr_space = rootWg ? "threadgroup" : "device"
+    if (!memConst) {
+        ctx.members[root].written = true
     }
 }
 
@@ -490,7 +643,6 @@ def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string;
         err(ctx, at, "method `{mname}` has no body to lower")
         return -1
     }
-    ctx.has_methods = true
     let idx = length(ctx.ufns)
     ctx.user_fns[key] = idx
     ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
@@ -580,6 +732,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             scan_body(ctx, v.init)
         }
     } elif (e is ExprCopy) {
+        scan_state_ptr_assign(ctx, (e as ExprCopy).left, (e as ExprCopy).right)
         mark_write_target(ctx, (e as ExprCopy).left)
         scan_body(ctx, (e as ExprCopy).left)
         scan_body(ctx, (e as ExprCopy).right)
@@ -598,9 +751,16 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         scan_body(ctx, o1.subexpr)
     } elif (e is ExprOp3) {
-        scan_body(ctx, (e as ExprOp3).subexpr)
-        scan_body(ctx, (e as ExprOp3).left)
-        scan_body(ctx, (e as ExprOp3).right)
+        let o3 = e as ExprOp3
+        if (o3.subexpr is ExprConstBool) {
+            // compile-time select (stamped @template_constant cond) — untaken arm is dead text,
+            // must not register builtins or write marks
+            scan_body(ctx, (o3.subexpr as ExprConstBool).value ? o3.left : o3.right)
+        } else {
+            scan_body(ctx, o3.subexpr)
+            scan_body(ctx, o3.left)
+            scan_body(ctx, o3.right)
+        }
     } elif (e is ExprIfThenElse) {
         scan_body(ctx, (e as ExprIfThenElse).cond)
         scan_body(ctx, (e as ExprIfThenElse).if_true)
@@ -1082,6 +1242,11 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             err(ctx, op3.at, "ternary operator `{op3.op}` is not supported")
             return "/*op {op3.op}*/"
         }
+        if (op3.subexpr is ExprConstBool) {
+            // compile-time select folds to the taken side — the value-position twin of the
+            // static_if zero-trace invariant (stamped @template_constant conditions)
+            return emit_value(ctx, (op3.subexpr as ExprConstBool).value ? op3.left : op3.right)
+        }
         let c = emit_value(ctx, op3.subexpr)
         let tv = emit_value(ctx, op3.left)
         let fv = emit_value(ctx, op3.right)
@@ -1331,6 +1496,366 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
 
 // method call: mname(args) — inside the flat struct every method is a member function, and
 // the kernel body itself emits as one, so a plain call resolves in scope
+// ===== method splicing (flatten) =====
+// A method call inlines its (devirtualized) body at the call site. das scoping means a method
+// body names only its params + members — never caller locals — so the frame swap mirrors
+// emit_one_ufn: renames/ptrs move out, param bindings move in, restore after.
+
+struct private SpliceBind {
+    hoists : array<string>              // decl lines emitted at the top of the splice block
+    binds : table<string; string>       // param das name -> substituted MSL text
+    forbidden : table<string>           // single-identifier substituted texts (local shadow guard)
+    ok : bool
+}
+
+// walks Block/With wrappers down to the single real statement; null when there are several
+def private lone_stmt(e : Expression?) : Expression? {
+    var cur = unsafe(reinterpret<ExpressionPtr>(e))
+    while (cur != null) {
+        if (cur is ExprWith) {
+            cur = (cur as ExprWith).body
+        } elif (cur is ExprBlock) {
+            if (length((cur as ExprBlock).list) != 1) {
+                return null
+            }
+            cur = (cur as ExprBlock).list[0]
+        } else {
+            return cur
+        }
+    }
+    return null
+}
+
+def private stmt_has_return(e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprReturn) {
+        return true
+    }
+    if (e is ExprBlock) {
+        for (s in (e as ExprBlock).list) {
+            if (stmt_has_return(s)) {
+                return true
+            }
+        }
+        return false
+    }
+    if (e is ExprWith) {
+        return stmt_has_return((e as ExprWith).body)
+    }
+    if (e is ExprIfThenElse) {
+        return stmt_has_return((e as ExprIfThenElse).if_true) || stmt_has_return((e as ExprIfThenElse).if_false)
+    }
+    if (e is ExprWhile) {
+        return stmt_has_return((e as ExprWhile).body)
+    }
+    if (e is ExprFor) {
+        return stmt_has_return((e as ExprFor).body)
+    }
+    return false
+}
+
+// ExprVar references to `name` in an expression tree — the value-splice multi-use gate
+def private count_var_refs(e : Expression?; name : string) : int {
+    if (e == null) {
+        return 0
+    }
+    if (e is ExprVar) {
+        return (e as ExprVar).name == name ? 1 : 0
+    }
+    if (e is ExprRef2Value) {
+        return count_var_refs((e as ExprRef2Value).subexpr, name)
+    }
+    if (e is ExprRef2Ptr) {
+        return count_var_refs((e as ExprRef2Ptr).subexpr, name)
+    }
+    if (e is ExprCast) {
+        return count_var_refs((e as ExprCast).subexpr, name)
+    }
+    if (e is ExprOp1) {
+        return count_var_refs((e as ExprOp1).subexpr, name)
+    }
+    if (e is ExprOp2) {
+        return count_var_refs((e as ExprOp2).left, name) + count_var_refs((e as ExprOp2).right, name)
+    }
+    if (e is ExprOp3) {
+        let o3 = e as ExprOp3
+        if (o3.subexpr is ExprConstBool) {
+            // emit folds a const-cond select to the taken arm — count what the TEXT names, or a
+            // parameter spelled once per arm reads as two uses and the splice is refused
+            return count_var_refs((o3.subexpr as ExprConstBool).value ? o3.left : o3.right, name)
+        }
+        return count_var_refs(o3.subexpr, name) + (count_var_refs(o3.left, name) + count_var_refs(o3.right, name))
+    }
+    if (e is ExprAt) {
+        return count_var_refs((e as ExprAt).subexpr, name) + count_var_refs((e as ExprAt).index, name)
+    }
+    if (e is ExprField) {
+        return count_var_refs((e as ExprField).value, name)
+    }
+    if (e is ExprSwizzle) {
+        return count_var_refs((e as ExprSwizzle).value, name)
+    }
+    if (e is ExprCall) {
+        var n = 0
+        for (a in (e as ExprCall).arguments) {
+            n += count_var_refs(a, name)
+        }
+        return n
+    }
+    if (e is ExprInvoke) {
+        var n = 0
+        for (i in range(2, length((e as ExprInvoke).arguments))) {
+            n += count_var_refs((e as ExprInvoke).arguments[i], name)
+        }
+        return n
+    }
+    return 0
+}
+
+// count_var_refs over every real statement of a body (value bodies are single-return, but the
+// writable-param check wants the whole tree)
+def private body_var_refs(e : Expression?; name : string) : int {
+    if (e == null) {
+        return 0
+    }
+    if (e is ExprBlock) {
+        var n = 0
+        for (s in (e as ExprBlock).list) {
+            n += body_var_refs(s, name)
+        }
+        return n
+    }
+    if (e is ExprWith) {
+        return body_var_refs((e as ExprWith).body, name)
+    }
+    if (e is ExprLet) {
+        var n = 0
+        for (v in (e as ExprLet).variables) {
+            n += count_var_refs(v.init, name)
+        }
+        return n
+    }
+    if (e is ExprCopy) {
+        return count_var_refs((e as ExprCopy).left, name) + count_var_refs((e as ExprCopy).right, name)
+    }
+    if (e is ExprIfThenElse) {
+        let ite = e as ExprIfThenElse
+        return count_var_refs(ite.cond, name) + (body_var_refs(ite.if_true, name) + body_var_refs(ite.if_false, name))
+    }
+    if (e is ExprWhile) {
+        return count_var_refs((e as ExprWhile).cond, name) + body_var_refs((e as ExprWhile).body, name)
+    }
+    if (e is ExprFor) {
+        var n = body_var_refs((e as ExprFor).body, name)
+        for (src in (e as ExprFor).sources) {
+            n += count_var_refs(src, name)
+        }
+        return n
+    }
+    if (e is ExprReturn) {
+        return count_var_refs((e as ExprReturn).subexpr, name)
+    }
+    return count_var_refs(e, name)
+}
+
+// arg emits as one bare identifier (variable, plain member) — substitution needs no hoist and
+// the text joins the spliced body's local-shadow forbidden set
+def private arg_single_ident(ctx : MslCtx; e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return arg_single_ident(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprVar) {
+        return true
+    }
+    if (e is ExprField) {
+        let m = member_lookup(ctx, e)
+        return !empty(m) && !(ctx.members?[m]?.packed ?? true) && !(ctx.members?[m]?.ustruct ?? true)
+    }
+    return false
+}
+
+def private arg_pure_text(ctx : MslCtx; e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return arg_pure_text(ctx, (e as ExprRef2Value).subexpr)
+    }
+    return (arg_single_ident(ctx, e) || e is ExprConstInt || e is ExprConstUInt || e is ExprConstFloat ||
+        e is ExprConstFloat16 || e is ExprConstBool)
+}
+
+// lvalue shapes a `&` parameter may alias by substitution (variable / member / element / lane)
+def private arg_lvalue_shape(e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return arg_lvalue_shape((e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprAt) {
+        return arg_lvalue_shape((e as ExprAt).subexpr)
+    }
+    if (e is ExprSwizzle) {
+        return arg_lvalue_shape((e as ExprSwizzle).value)
+    }
+    return e is ExprVar || e is ExprField
+}
+
+// shapes that emit as pointer text for a buffer/pointer parameter
+def private arg_ptrish(e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return arg_ptrish((e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return arg_ptrish((e as ExprCast).subexpr)
+    }
+    if (e is ExprRef2Ptr || (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add")) {
+        return true
+    }
+    return e is ExprVar || e is ExprField
+}
+
+// MSL declaration type for a hoisted pointer-parameter copy: `<space>[ const] <elem>*`. das `T?`
+// carries no address space, so it comes from what the ARGUMENT points into — an untraceable
+// argument has no declarable local and fails closed. "" = error already reported.
+def private splice_ptr_local_type(var ctx : MslCtx; pt : TypeDecl?; arg : Expression?;
+                                  mname, pname : string; at : LineInfo) : string {
+    let pointee = pt.firstType
+    if (pointee == null) {
+        err(ctx, at, "method `{mname}` parameter `{pname}` is a void pointer - MSL needs an element type")
+        return ""
+    }
+    if (reject_cpu_only_width(ctx, at, pointee)) {
+        return ""
+    }
+    let elem = msl_buffer_elem_name(pointee)
+    if (empty(elem) || elem != msl_type_name(pointee)) {
+        err(ctx, at, "method `{mname}` parameter `{pname}` pointee type {describe(pointee)} has no MSL pointer form")
+        return ""
+    }
+    let space = ptr_arg_space(ctx, arg)
+    if (empty(space)) {
+        err(ctx, at, "method `{mname}` pointer parameter `{pname}` has no traceable address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
+        return ""
+    }
+    return pointee.flags.constant ? "{space} const {elem}*" : "{space} {elem}*"
+}
+
+// Per-parameter binding, argument texts emitted under the CALLER's frame. Substitution when
+// the shape allows it; a hoisted `_s<N>` decl otherwise (statement position only).
+def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string; ei : ExprInvoke?; value_pos : bool; var bind : SpliceBind) {
+    bind.ok = true
+    // infer pads defaulted arguments before the emitter sees the invoke, so the two counts always
+    // agree and a defaulted parameter splices like any other — min() is bounds hygiene, not a gate
+    let np = min(length(ei.arguments) - 2, length(mfn.arguments) - 1)
+    for (i in range(np)) {
+        let pv = mfn.arguments[i + 1]
+        let pt = pv._type
+        let pname = string(pv.name)
+        let arg = ei.arguments[i + 2]
+        if (pt == null) {
+            err(ctx, ei.at, "method `{mname}` parameter `{pname}` has no type")
+            bind.ok = false
+            continue
+        }
+        // das passes a POINTER by value — a `var` parameter walks its OWN copy. Substituting the
+        // caller's text would advance the caller's pointer instead, and keep it advanced across
+        // calls; so a writable pointer parameter takes a hoisted copy. A buffer parameter
+        // (array / fixed array) is a reference either way and still substitutes.
+        if (pt.baseType == Type.tPointer && !pt.flags.constant && !pt.flags.ref) {
+            if (!arg_ptrish(arg)) {
+                err(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` needs a member, pointer local, or addr() argument to splice")
+                bind.ok = false
+                continue
+            }
+            if (value_pos) {
+                err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
+                bind.ok = false
+                continue
+            }
+            let ptn = splice_ptr_local_type(ctx, pt, arg, mname, pname, ei.at)
+            if (empty(ptn)) {
+                bind.ok = false
+                continue
+            }
+            let hn = "{msl_safe_name(pname)}_s{ctx.splice_seq}"
+            note(ctx, "splice.param.hoist")
+            bind.hoists |> push("{ptn} {hn} = {emit_value(ctx, arg)};")
+            bind.binds[pname] = hn
+            continue
+        }
+        if (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.baseType == Type.tPointer) {
+            if (!arg_ptrish(arg)) {
+                err(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` needs a member, pointer local, or addr() argument to splice")
+                bind.ok = false
+                continue
+            }
+            bind.binds[pname] = emit_value(ctx, arg)
+            if (arg_single_ident(ctx, arg)) {
+                bind.forbidden |> insert(bind.binds[pname])
+            }
+            continue
+        }
+        if (pt.flags.ref && !pt.flags.constant) {
+            if (!arg_lvalue_shape(arg)) {
+                err(ctx, ei.at, "method `{mname}` `&` parameter `{pname}` needs an lvalue argument (variable, member, element)")
+                bind.ok = false
+                continue
+            }
+            bind.binds[pname] = emit_value(ctx, arg)
+            if (arg_single_ident(ctx, arg)) {
+                bind.forbidden |> insert(bind.binds[pname])
+            }
+            continue
+        }
+        let writable = !pt.flags.constant && !pt.flags.ref
+        if (writable && value_pos) {
+            err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
+            bind.ok = false
+            continue
+        }
+        if (reject_cpu_only_width(ctx, ei.at, pt)) {
+            bind.ok = false
+            continue
+        }
+        let tn = msl_type_name(pt)
+        if (empty(tn)) {
+            err(ctx, ei.at, "method `{mname}` parameter `{pname}` type has no MSL form")
+            bind.ok = false
+            continue
+        }
+        if (!writable && arg_pure_text(ctx, arg)) {
+            bind.binds[pname] = emit_value(ctx, arg)
+            if (arg_single_ident(ctx, arg)) {
+                bind.forbidden |> insert(bind.binds[pname])
+            }
+        } elif (value_pos) {
+            if (body_var_refs(mfn.body, pname) > 1) {
+                err(ctx, ei.at, "method `{mname}` names parameter `{pname}` more than once - a computed argument cannot splice in value position; hoist it to a local first")
+                bind.ok = false
+                continue
+            }
+            bind.binds[pname] = "({emit_value(ctx, arg)})"
+        } else {
+            let hn = "{msl_safe_name(pname)}_s{ctx.splice_seq}"
+            note(ctx, "splice.param.hoist")
+            bind.hoists |> push(writable ? "{tn} {hn} = {emit_value(ctx, arg)};" : "const {tn} {hn} = {emit_value(ctx, arg)};")
+            bind.binds[pname] = hn
+        }
+    }
+}
+
+// value-position splice: the (devirtualized) body must be a single `return <expr>` — the
+// result is that expression under the param bindings, parenthesized
 def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
     if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
@@ -1342,26 +1867,84 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     if (mfn == null) {
         return "/*invoke {mname}*/"
     }
-    let ui = ctx.user_fns?[ufn_key(mfn)] ?? -1
-    if (ui < 0) {
-        err(ctx, ei.at, "internal: method `{mname}` was not discovered at scan time")
+    let ret = lone_stmt(mfn.body) ?as ExprReturn
+    if (ret == null || ret.subexpr == null) {
+        err(ctx, ei.at, "method `{mname}` used in value position must be a single `return <expr>` body (arrow form) - call it as a statement instead")
         return "/*invoke {mname}*/"
     }
-    var args : array<string>
-    args |> reserve(length(ei.arguments))
-    for (i in range(2, length(ei.arguments))) {
-        if (i - 1 < length(mfn.arguments)) {
-            let pt = mfn.arguments[i - 1]._type
-            let wm = member_lookup(ctx, ei.arguments[i])
-            if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
-                err(ctx, ei.at, "@workgroup member `{wm}` bound to a `&` parameter - address spaces differ; pass the fixed array itself")
-            }
-            check_ptr_arg(ctx, mfn.arguments[i - 1], ei.arguments[i], ei.at)
-        }
-        args |> push(emit_value(ctx, ei.arguments[i]))
+    ctx.splice_seq++
+    var inscope bind = SpliceBind()
+    bind_method_args(ctx, mfn, mname, ei, true, bind)
+    if (!bind.ok) {
+        return "/*invoke {mname}*/"
     }
-    note(ctx, "call.method")
-    return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
+    var save_renames <- ctx.renames
+    var save_forbidden <- ctx.splice_forbidden
+    let save_self = ctx.self_name
+    ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
+    ctx.renames <- bind.binds
+    ctx.splice_forbidden <- bind.forbidden
+    ctx.splice_depth++
+    note(ctx, "splice.method.value")
+    let text = "({emit_value(ctx, ret.subexpr)})"
+    ctx.splice_depth--
+    ctx.self_name = save_self
+    ctx.renames <- save_renames
+    ctx.splice_forbidden <- save_forbidden
+    return text
+}
+
+// statement-position splice: `{ <hoisted binds>; <body> }`. Braces always — sequential splices
+// may reuse local names. A body containing `return` splices only at a kernel tail-position
+// site (a spliced return exits the whole kernel — correct exactly there).
+def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : string; var lines : array<string>) {
+    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+    if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
+        err(ctx, ei.at, "invoke has no MSL lowering - only method calls on the kernel's own self lower")
+        return
+    }
+    let mname = string(mf.name)
+    let mfn = resolve_method(ctx, mname, ei.at)
+    if (mfn == null) {
+        return
+    }
+    if (mfn.result != null && mfn.result.baseType != Type.tVoid) {
+        err(ctx, ei.at, "method `{mname}` returns a value its statement call discards - splice it in value position, or make it void")
+        return
+    }
+    if (!ctx.tail_ok && stmt_has_return(mfn.body)) {
+        err(ctx, ei.at, "method `{mname}` contains `return` but the call is not in kernel tail position - a spliced return would exit the whole kernel")
+        return
+    }
+    ctx.splice_seq++
+    var inscope bind = SpliceBind()
+    bind_method_args(ctx, mfn, mname, ei, false, bind)
+    if (!bind.ok) {
+        return
+    }
+    var save_renames <- ctx.renames
+    var save_ptrs <- ctx.ptrs
+    var save_ptr_space <- ctx.ptr_space
+    var save_forbidden <- ctx.splice_forbidden
+    let save_self = ctx.self_name
+    ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
+    ctx.renames <- bind.binds
+    ctx.splice_forbidden <- bind.forbidden
+    ctx.splice_depth++
+    note(ctx, "splice.method")
+    lines |> reserve(length(lines) + length(bind.hoists) + 2)
+    lines |> push("{indent}\{")
+    for (h in bind.hoists) {
+        lines |> push("{indent}    {h}")
+    }
+    emit_stmt(ctx, mfn.body, indent + "    ", lines)
+    lines |> push("{indent}\}")
+    ctx.splice_depth--
+    ctx.self_name = save_self
+    ctx.renames <- save_renames
+    ctx.ptrs <- save_ptrs
+    ctx.ptr_space <- save_ptr_space
+    ctx.splice_forbidden <- save_forbidden
 }
 
 def private base_is_self(ctx : MslCtx; e : Expression?) : bool {
@@ -1853,14 +2436,33 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     lines |> push("{indent}{hname}({join(vals, ", ")});")
 }
 
+// A local that would shadow a substituted single-identifier argument takes the splice suffix.
+// A local that would shadow a MEMBER is suffixed too: under flatten members are kernel-scope
+// names, and a caller-frame local must not capture a member reference emitted inside a nested
+// splice (e.g. run()'s `wb` local vs a rider's `wb` buffer).
+def private local_msl_name(ctx : MslCtx; name : string) : string {
+    let base = msl_safe_name(name)
+    if (ctx.splice_depth > 0 && key_exists(ctx.splice_forbidden, base)) {
+        return "{base}_s{ctx.splice_seq}"
+    }
+    return key_exists(ctx.members, name) ? "{base}_l" : base
+}
+
 def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var lines : array<string>) {
     if (e == null) {
         return
     }
     if (e is ExprBlock) {
-        for (s in (e as ExprBlock).list) {
-            emit_stmt(ctx, s, indent, lines)
+        // tail tracking (the splice return gate): a statement is in kernel tail position iff
+        // it is the last of its block and the block itself sits in tail position
+        let bl = e as ExprBlock
+        let n = length(bl.list)
+        let save_tail = ctx.tail_ok
+        for (i in range(n)) {
+            ctx.tail_ok = save_tail && (i == n - 1)
+            emit_stmt(ctx, bl.list[i], indent, lines)
         }
+        ctx.tail_ok = save_tail
     } elif (e is ExprWith) {
         // the typer's with(self) scope wrapper: member access inside is already explicit
         // (self.a[i]), so the wrapper itself is transparent — and census-silent, or the gate
@@ -1874,7 +2476,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             let sgname = sgmat_type_name(v._type)
             if (!empty(sgname)) {
                 let sgVarName = string(v.name)
-                ctx.renames[sgVarName] = msl_safe_name(sgVarName)
+                ctx.renames[sgVarName] = local_msl_name(ctx, sgVarName)
                 if (v.init == null) {
                     note(ctx, "stmt.var.sgmat.zero")
                     lines |> push("{indent}{sgname} {ctx.renames[sgVarName]} = {sgmat_zero_fill(sgname)};")
@@ -1902,7 +2504,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                     continue
                 }
                 let pname0 = string(v.name)
-                ctx.renames[pname0] = msl_safe_name(pname0)
+                ctx.renames[pname0] = local_msl_name(ctx, pname0)
                 ctx.ptrs[pname0] = pmem
                 let base = emit_value(ctx, pat.index)
                 let space = pm.workgroup ? "threadgroup" : (pm.written ? "device" : "device const")
@@ -1921,7 +2523,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 let et = v._type.firstType
                 let n = v._type.fixedDim
                 let aname = string(v.name)
-                ctx.renames[aname] = msl_safe_name(aname)
+                ctx.renames[aname] = local_msl_name(ctx, aname)
                 let an = ctx.renames[aname]
                 let asg = sgmat_type_name(et)
                 if (!empty(asg)) {
@@ -1956,7 +2558,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 continue
             }
             let vname = string(v.name)
-            ctx.renames[vname] = msl_safe_name(vname)
+            ctx.renames[vname] = local_msl_name(ctx, vname)
             if (v.init == null) {
                 // das zero-initializes locals declared without an initializer; = {} is MSL's spelling
                 note(ctx, "stmt.var.zero")
@@ -2021,13 +2623,18 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         emit_loop_hints(ctx, wh.annotations, wh.at, indent, lines)
         note(ctx, "stmt.while")
         lines |> push("{indent}while ({c}) \{")
+        let save_tail = ctx.tail_ok
+        ctx.tail_ok = false     // loop bodies are never tail — iteration continues after
         emit_stmt(ctx, wh.body, indent + "    ", lines)
+        ctx.tail_ok = save_tail
         lines |> push("{indent}\}")
     } elif (e is ExprFor) {
+        let save_tail = ctx.tail_ok
+        ctx.tail_ok = false
         emit_for(ctx, e as ExprFor, indent, lines)
+        ctx.tail_ok = save_tail
     } elif (e is ExprInvoke) {
-        note(ctx, "stmt.call_method")
-        lines |> push("{indent}{emit_invoke_value(ctx, e as ExprInvoke)};")
+        emit_method_splice(ctx, e as ExprInvoke, indent, lines)
     } elif (e is ExprCall) {
         let ec = e as ExprCall
         let cname = call_base_name("{ec.name}")
@@ -2177,14 +2784,17 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
         hiIsConst = src.arguments[na - 1] is ExprConstInt || src.arguments[na - 1] is ExprConstUInt
     }
     let ivName = string(iv.name)
-    ctx.renames[ivName] = msl_safe_name(ivName)
+    // the induction variable is a local like any other: inside a splice it must not capture a
+    // substituted argument's text (an outer `i` passed as an argument, an inner `for (i ...)`)
+    ctx.renames[ivName] = local_msl_name(ctx, ivName)
     let mn = ctx.renames[ivName]
     emit_loop_hints(ctx, fr.annotations, fr.at, indent, lines)
     note(ctx, "stmt.for")
     if (hiIsConst) {
         lines |> push("{indent}for ({tname} {mn} = {lo}; {mn} < {hi}; ++{mn}) \{")
     } else {
-        lines |> push("{indent}for ({tname} {mn} = {lo}, {mn}_end = {hi}; {mn} < {mn}_end; ++{mn}) \{")
+        let en = local_msl_name(ctx, "{mn}_end")     // the derived bound is a local too
+        lines |> push("{indent}for ({tname} {mn} = {lo}, {en} = {hi}; {mn} < {en}; ++{mn}) \{")
     }
     emit_stmt(ctx, fr.body, indent + "    ", lines)
     lines |> push("{indent}\}")
@@ -2296,33 +2906,23 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     var save_ptrs <- ctx.ptrs
     var save_ptr_space <- ctx.ptr_space
     let save_self = ctx.self_name
-    let is_method = ctx.ufns[idx].is_method
     let fn = ctx.ufns[idx].fn
-    // a method's members resolve through ITS self name; a free function has none
-    ctx.self_name = is_method && !empty(fn.arguments) ? string(fn.arguments[0].name) : ""
+    ctx.self_name = ""
     var params : array<string>
     params |> reserve(length(fn.arguments) + 4)
-    var first = true
     for (v in fn.arguments) {
-        if (first && is_method) {   // self becomes the implicit MSL `this`
-            first = false
-            continue
-        }
-        first = false
         let p = ufn_param(ctx, v, fn.at)
         if (!empty(p)) {
             params |> push(p)
         }
     }
-    if (!is_method) {   // methods read builtins as struct fields — no hidden threading
-        var hidden <- ufn_hidden_builtins(ctx, idx)
-        for (b in hidden) {
-            let bi = builtin_msl_info(b)
-            note(ctx, "ufn.param.hidden_builtin")
-            params |> push("{bi.mslType} {b}")
-        }
-        delete hidden
+    var hidden <- ufn_hidden_builtins(ctx, idx)
+    for (b in hidden) {
+        let bi = builtin_msl_info(b)
+        note(ctx, "ufn.param.hidden_builtin")
+        params |> push("{bi.mslType} {b}")
     }
+    delete hidden
     var ret = "void"
     if (fn.result != null && fn.result.baseType != Type.tVoid) {
         if (!reject_cpu_only_width(ctx, fn.at, fn.result)) {
@@ -2333,21 +2933,18 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
             }
         }
     }
-    let base_indent = is_method ? "    " : ""
     var body_lines : array<string>
     ctx.fn_depth++
-    emit_stmt(ctx, fn.body, base_indent + "    ", body_lines)
+    emit_stmt(ctx, fn.body, "    ", body_lines)
     ctx.fn_depth--
-    note(ctx, is_method ? "decl.method" : "decl.user_fn")
-    let sig = "{base_indent}{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
+    note(ctx, "decl.user_fn")
+    let sig = "{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
     ctx.ufns[idx].proto = "{sig};"
     ctx.ufns[idx].text = build_string() $(var w) {
         w |> write(sig)
         w |> write(" \{\n")
         w |> write(join(body_lines, "\n"))
-        w |> write("\n")
-        w |> write(base_indent)
-        w |> write("\}")
+        w |> write("\n\}")
     }
     delete params
     delete body_lines
@@ -2358,13 +2955,12 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
 }
 
 // free functions: prototypes first, then bodies, in pinned (name-sorted) order — call order
-// can't bite. Methods emit here too but their texts assemble into the struct (no prototypes:
-// C++ member functions see each other regardless of order).
+// can't bite. Methods never emit as functions — their bodies splice at each call site.
 def private emit_user_fns(var ctx : MslCtx) : string {
     if (empty(ctx.ufns)) {
         return ""
     }
-    var order <- [for (i in range(length(ctx.ufns))); i]
+    var order <- [for (i in range(length(ctx.ufns))); i; where !ctx.ufns[i].is_method]
     order |> sort() $(a, b : int) : bool {
         return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
     }
@@ -2373,27 +2969,9 @@ def private emit_user_fns(var ctx : MslCtx) : string {
     }
     return build_string() $(var w) {
         for (i in order) {
-            if (!ctx.ufns[i].is_method) {
-                w |> write(ctx.ufns[i].proto)
-                w |> write("\n")
-            }
+            w |> write(ctx.ufns[i].proto)
+            w |> write("\n")
         }
-        for (i in order) {
-            if (!ctx.ufns[i].is_method) {
-                w |> write(ctx.ufns[i].text)
-                w |> write("\n")
-            }
-        }
-    }
-}
-
-// method bodies in pinned order, ready to sit inside the struct declaration
-def private method_texts(ctx : MslCtx) : string {
-    var order <- [for (i in range(length(ctx.ufns))); i; where ctx.ufns[i].is_method]
-    order |> sort() $(a, b : int) : bool {
-        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
-    }
-    return build_string() $(var w) {
         for (i in order) {
             w |> write(ctx.ufns[i].text)
             w |> write("\n")
@@ -2435,6 +3013,13 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     ctx.kcls = unsafe(reinterpret<StructurePtr>(fn.classParent))   // the devirtualization table
     scan_members(ctx, fn)
     scan_body(ctx, fn.body)
+    // The emit pass RE-walks what the scan just refused, and a splice emits by recursion — a
+    // recursive method the scan already reported would blow the emitter's own stack and lose the
+    // clean diagnostic. Nothing below can un-refuse a scan error, so stop here.
+    if (!empty(ctx.errors)) {
+        errors |> push_from(ctx.errors)
+        return ""
+    }
 
     // @workgroup members lower to ONE dynamic [[threadgroup(0)]] buffer + derived pointers, NOT
     // static threadgroup arrays: the AGX backend constant-folds tile pointers into a static
@@ -2442,16 +3027,11 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     // the math-bound loop phase (ISA-measured on mul_mm: 40 vs 24 iadds/iteration, the das
     // kernel's whole residual vs llama.cpp). The opaque dynamic base keeps small carried
     // offsets. Layout: name-sorted, each member 16B-aligned; the total ships as the `_tgmem`
-    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it. In struct
-    // mode (the kernel calls methods) the derived pointers become struct fields filled at entry.
-    var tg_lines : array<string>       // flat mode: local declarations
-    var wg_fields : array<string>      // struct mode: pointer fields
-    var wg_fills : array<string>       // struct mode: entry fills
+    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it.
+    var tg_lines : array<string>
     var wg_names <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where m.workgroup]
     wg_names |> sort()
     tg_lines |> reserve(length(wg_names))
-    wg_fields |> reserve(length(wg_names))
-    wg_fills |> reserve(length(wg_names))
     tgmem = 0ul
     for (name in wg_names) {
         let moff = tgmem
@@ -2469,8 +3049,30 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             ctx.members[name].msl_name = "(*{pname})"
         }
         tg_lines |> push("    threadgroup {m.elem} * {pname} = (threadgroup {m.elem} *){base};")
-        wg_fields |> push("    threadgroup {m.elem} * {pname};")
-        wg_fills |> push("    self_.{pname} = (threadgroup {m.elem} *){base};")
+    }
+
+    // plain (state) members: kernel-entry thread-locals, declared after the threadgroup
+    // pointers — every spliced method body reads/writes them by name (scope splicing)
+    var state_lines : array<string>
+    var st_names <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where m.state]
+    st_names |> sort()
+    state_lines |> reserve(length(st_names))
+    for (name in st_names) {
+        let m = ctx.members[name]
+        if (m.sptr) {
+            if (empty(m.sptr_space)) {
+                err(ctx, fn.at, "pointer member `{name}` is never assigned from a kernel buffer - its address space cannot be resolved")
+                continue
+            }
+            note(ctx, "decl.state.ptr")
+            state_lines |> push("    {m.sptr_space}{m.sptr_const ? " const" : ""} {m.elem} * {m.msl_name} = nullptr;")
+        } elif (m.wg_dim > 0) {
+            note(ctx, "decl.state.arr")
+            state_lines |> push("    {m.elem} {m.msl_name}[{m.wg_dim}] = \{\};")
+        } else {
+            note(ctx, "decl.state")
+            state_lines |> push("    {m.elem} {m.msl_name} = {empty(m.init_text) ? "\{\}" : m.init_text};")
+        }
     }
 
     // user functions discovered by the scan emit after the tg rewrite (scalar-wg member reads
@@ -2478,11 +3080,12 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     let user_fn_text = emit_user_fns(ctx)
 
     var body_lines : array<string>
-    emit_stmt(ctx, fn.body, ctx.has_methods ? "        " : "    ", body_lines)
+    ctx.tail_ok = true
+    emit_stmt(ctx, fn.body, "    ", body_lines)
 
     var params : array<string>
     params |> reserve((ctx.members |> length) + (ctx.builtins_used |> length))
-    var ordered <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where !m.workgroup]
+    var ordered <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where !m.workgroup && !m.state]
     ordered |> sort() $(a, b : string) : bool {
         let ba = ctx.members?[a] ?. binding ?? 0
         let bb = ctx.members?[b] ?. binding ?? 0
@@ -2531,8 +3134,8 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         helper_text = join(hs, "\n") + "\n"
     }
     if (!empty(ctx.ustructs)) {
-        // @uniform struct definitions come first — the kernel signature names them, and in
-        // struct mode the flat class holds one by value. Sorted: table order is hash-based
+        // @uniform struct definitions come first — the kernel signature names them.
+        // Sorted: table order is hash-based
         var us <- [for (v in values(ctx.ustructs)); v]
         us |> sort()
         note(ctx, "decl.uniform_struct")
@@ -2552,66 +3155,14 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             }
         }
     }
-    if (!ctx.has_methods) {   // flat mode — kernels with no method calls emit exactly as before
-        let chunks = [
-            "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
-            join(params, ",\n        "),
-            ") \{\n",
-            empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
-            join(body_lines, "\n"),
-            "\n\}\n"
-        ]
-        for (kind in keys(ctx.census)) {
-            census |> insert(kind)
-        }
-        return join(chunks, "")
-    }
-
-    // struct mode: the kernel class emits as ONE FLAT MSL struct — members and every method
-    // (inherited or overriding, devirtualized) live in the concrete class; the entry keeps
-    // today's ABI, fills self, and calls the kernel method
-    note(ctx, "decl.class_struct")
-    note(ctx, "entry.self_fill")
-    let sname = msl_safe_name(string(ctx.kcls.name))
-    let kname = "{fn.name}"
-    let ktick = kname |> rfind("`")
-    let kmethod = msl_safe_name(ktick >= 0 ? (kname |> slice(ktick + 1)) : kname)
-    var field_lines : array<string>
-    var fill_lines : array<string>
-    field_lines |> reserve(length(ordered) + length(wg_fields) + length(bnames))
-    fill_lines |> reserve(length(ordered) + length(wg_fills) + length(bnames))
-    for (name in ordered) {
-        let m = ctx.members[name]
-        if (m.uniform) {
-            field_lines |> push("    {m.elem} {m.msl_name};")
-        } elif (m.written) {
-            field_lines |> push("    device {m.elem}* {m.msl_name};")
-        } else {
-            field_lines |> push("    device const {m.elem}* {m.msl_name};")
-        }
-        fill_lines |> push("    self_.{m.msl_name} = {m.msl_name};")
-    }
-    field_lines |> push_from(wg_fields)
-    fill_lines |> push_from(wg_fills)
-    for (name in bnames) {
-        let bi = builtin_msl_info(name)
-        field_lines |> push("    {bi.mslType} {name};")
-        fill_lines |> push("    self_.{name} = {name};")
-    }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}",
-        "struct {sname} \{\n",
-        join(field_lines, "\n"),
-        "\n",
-        method_texts(ctx),
-        "    void {kmethod}() \{\n",
-        join(body_lines, "\n"),
-        "\n    \}\n\};\n",
-        "kernel void {kernel_entry_name(fn, cfg)}(",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
         join(params, ",\n        "),
-        ") \{\n    {sname} self_;\n",
-        join(fill_lines, "\n"),
-        "\n    self_.{kmethod}();\n\}\n"
+        ") \{\n",
+        empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
+        empty(state_lines) ? "" : join(state_lines, "\n") + "\n",
+        join(body_lines, "\n"),
+        "\n\}\n"
     ]
     for (kind in keys(ctx.census)) {
         census |> insert(kind)

@@ -8,8 +8,11 @@ options indenting = 4
 // `fixup` FILLS them: every init is a constant node (ExprConstString/ExprConstBool), so the
 // patch/astChanged dance dasSpirv needs for its array<uint> call-init does not apply here.
 //
-// Companion globals, for annotation arg name=N (default `{func.name}`msl`, unreferenceable from
-// source — real consumers always pass name=):
+// Companion globals, for annotation arg name=N. Default (no name=): the mangled method name with
+// backticks flattened — `Class`m` gets N = Class_m_msl, spellable from source, unique per class;
+// a [template_struct_instance]-stamped method therefore names its globals per instance for free.
+// The derived form also sets the MSL entry point to Class_m (explicit name= keeps the bare method
+// name), so f16/f32 stamp twins stay distinguishable in GPU captures.
 //   N          : string  — the MSL source
 //   N_entry    : string  — the kernel entry-point name (feed to metal_new_function)
 //   N_fastmath : bool    — the [metal_kernel(fastmath=...)] property, default true; feed to
@@ -40,6 +43,15 @@ def private add_typed_global(name : string; bt : Type; at : LineInfo; var errors
 }
 
 [macro_function]
+def private msl_derived_name(func : FunctionPtr) : string => "{func.name}" |> replace("`", "_")
+
+[macro_function]
+def private msl_global_name(func : FunctionPtr; args : AnnotationArgumentList) : string {
+    let named = args |> find_arg("name") ?as tString ?? ""
+    return !empty(named) ? named : "{msl_derived_name(func)}_msl"
+}
+
+[macro_function]
 def private set_const_string_init(name : string; value : string; at : LineInfo) {
     var glob = find_variable(compiling_module(), name)
     if (glob != null && glob.init == null) {
@@ -53,7 +65,7 @@ def private set_const_string_init(name : string; value : string; at : LineInfo) 
 class MetalKernel : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true   // keeps the (typically uncalled) method alive through dependency collection
-        let argName = args |> find_arg("name") ?as tString ?? "{func.name}`msl"
+        let argName = msl_global_name(func, args)
         return (add_typed_global(argName, Type.tString, func.at, errors) &&
             add_typed_global("{argName}_entry", Type.tString, func.at, errors) &&
             add_typed_global("{argName}_fastmath", Type.tBool, func.at, errors) &&
@@ -79,7 +91,7 @@ class MetalKernel : AstFunctionAnnotation {
         return true
     }
     def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
-        let argName = args |> find_arg("name") ?as tString ?? "{func.name}`msl"
+        let argName = msl_global_name(func, args)
         let fastmath = args |> find_arg("fastmath") ?as tBool ?? true
         var glob = find_variable(compiling_module(), argName)
         if (glob == null || glob.init != null || glob.name != argName) {
@@ -87,7 +99,10 @@ class MetalKernel : AstFunctionAnnotation {
         }
         var err : array<string>
         var census : table<string>
-        let cfg = MslEmitConfig()
+        var cfg = MslEmitConfig()
+        if (empty(args |> find_arg("name") ?as tString ?? "")) {
+            cfg.kernel_name = msl_derived_name(func) // derived globals pair with a qualified entry point
+        }
         var tgmem = 0ul
         let text = generate_msl(func, err, cfg, census, tgmem)
         if (!empty(err)) {

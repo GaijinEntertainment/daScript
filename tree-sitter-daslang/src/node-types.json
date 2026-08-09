@@ -538,6 +538,10 @@
         "required": true,
         "types": [
           {
+            "type": "default",
+            "named": false
+          },
+          {
             "type": "identifier",
             "named": true
           },

@@ -158,6 +158,8 @@ var g_pso_rpst_q8 : MetalComputePipeline?   // per-32-block quantizing store
 var g_pso_rpst_tq4 : MetalComputePipeline?  // threadgroup-per-head FWHT + quantizing store
 var g_pso_unsign : MetalComputePipeline?    // the tq4 attention-output un-rotate
 var g_pso_qknorm : MetalComputePipeline?    // per-head QK RMSNorm prepass (MSL owned by prefill)
+var g_pso_dn_ba : MetalComputePipeline?     // DeltaNet β/α batched narrow GEMV (prefill-only dispatch)
+var g_pso_moe_router_b : MetalComputePipeline?   // position-blocked router / f32-slab GEMV (prefill-only dispatch)
 
 var g_pso_argmax : MetalComputePipeline?
 var g_pso_copy_row : MetalComputePipeline?   // zero-copy logits: staging row -> wrapped session storage
@@ -236,7 +238,6 @@ var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
 var g_pso_rpstb_q8 : MetalComputePipeline?
 var g_pso_rpstb_tq4 : MetalComputePipeline?
-var g_pso_addrmsb : MetalComputePipeline?
 // uids a batch step is actively encoding against — eviction must never free a batch row's slice
 // out from under the step being assembled (the single path's `keep` protects only one uid)
 var g_pin : table<uint64>
@@ -488,13 +489,13 @@ def public metal_decode_stage_report {
         to_log(LOG_INFO, "dasLLAMA metal batch decode: {g_batch_steps} steps ({g_batch_rows} rows)  per-step setup={float(g_us_bsetup) / n}us encode={float(g_us_bencode) / n}us wait={float(g_us_bwait) / n}us (sched {g_sched_b_ms * 1000.0lf / double(g_batch_steps)}us handoff {g_handoff_b_ms * 1000.0lf / double(g_batch_steps)}us gpu {g_gpu_b_ms * 1000.0lf / double(g_batch_steps)}us) readback+writeback={float(g_us_breadback) / n}us\n")
     }
     if (g_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_declines} —{declines_line(g_declines_by_reason)}\n")
+        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_declines} -{declines_line(g_declines_by_reason)}\n")
     }
     if (g_batch_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines} —{declines_line(g_batch_declines_by_reason)}\n")
+        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines} -{declines_line(g_batch_declines_by_reason)}\n")
     }
     if (g_prefill_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines} —{declines_line(g_prefill_declines_by_reason)}\n")
+        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines} -{declines_line(g_prefill_declines_by_reason)}\n")
     }
 }
 
@@ -1308,7 +1309,7 @@ def public metal_kernel_coverage_report {
     for (name in names) {
         if (cov[name] == 0l) {
             dead++
-            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
+            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
         }
     }
     to_log(LOG_INFO, "metal kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} compiled\n")
@@ -1469,7 +1470,7 @@ def private gr_schedule(var sched : KSched) : bool {
     sched.nodes = n
     for (j in range(n)) {
         if (g_gr_nodes[j].nrange == 0) {
-            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) - schedule refused\n")
             return false
         }
     }
@@ -1531,9 +1532,9 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
     if (!key_exists(g_gr_scheds, h)) {
         var s : KSched
         if (!gr_schedule(s)) {
-            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028,LINT019 — once per shape class, inside the schedule-compile miss
+            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches - schedule stays capture-order\n")   // nolint:PERF028,LINT019 — once per shape class, inside the schedule-compile miss
         }
-        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026,LINT019 — once per shape class, inside the schedule-compile miss
+        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled - {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026,LINT019 — once per shape class, inside the schedule-compile miss
         g_gr_scheds[h] <- s
     }
     graph_flush(enc, g_gr_scheds[h].order)
@@ -1571,7 +1572,7 @@ def hz_coverage_check(ndisp, ngated : int64) {
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
+        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder - ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 
@@ -1690,7 +1691,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026,LINT019 — error path; the re-upload it triggers dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) - pipelined step lost\n")   // nolint:PERF028,PERF026,LINT019 — error path; the re-upload it triggers dwarfs the log
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
         for (i in range64(g_lp_nrows)) {
@@ -1740,7 +1741,7 @@ def metal_common_init : bool {
     }
     g_dev = metal_create_system_default_device()
     if (g_dev == null) {
-        to_log(LOG_WARNING, "dasLLAMA metal decode: no Metal device — decode stays on the CPU\n")
+        to_log(LOG_WARNING, "dasLLAMA metal decode: no Metal device - decode stays on the CPU\n")
         g_failed = true
         return false
     }

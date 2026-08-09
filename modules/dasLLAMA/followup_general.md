@@ -67,15 +67,22 @@
    lane mapping, so it needs a measurement, not a refactor. Done = each scheme either justified
    in a comment at its kernel or collapsed into the one that measures as fast.
 
-6. **The K-quant GEMV zoo is dedupable along its batch-width axis only.** Measured divergence
-   over stripped bodies: the FORMAT axis is genuinely different math (`kq_gemv_k4` vs `_k5` =
-   49% of lines differ; `kq_mvb2_k4` vs `_k6` = 43%) — those are separate block decodes and
-   must stay separate. The WIDTH axis is near-identical (`kq_mvb2_k4` vs `kq_mvb4_k4` = 11%,
-   and that 11% IS the unroll factor). So the nine `kq_mvb{2,4,8}_k{4,5,6}` kernels are three
-   families of three, each family one kernel with a compile-time width. That needs the width to
-   specialize at emission (an unrolled generic, not a value parameter — a runtime width would
-   delete the tuning). Done = decide whether msl_emit should specialize a compile-time constant
-   parameter, then collapse the nine to three or record why not.
+6. **KqMv width merge RESOLVED by measurement (2026-08-08) — 9 classes → 3 templates + the B8
+   trio.** The A/B (bench_metal_gemv_kernels `kq_mvb*` arms, 3 launches, cls3b the honest cell)
+   ruled: a live colbase on B2 costs +2% (k4) / +0.5% (k6) — the specialization was
+   load-bearing, and NOT via the per-b mul (a hoisted form didn't recover it; occupancy
+   unchanged; mechanism unresolved at ISA level, the number is the ruling) — while k5's
+   colbase B2 measured neutral-to-BETTER (−1.4% cls3b, occupancy 448→512). Prediction outcome
+   (Boris: "accidental, will merge"): k5 hit, k4/k6 miss. The merge landed anyway via form
+   choice (46a6252f7): K4T/K6T carry a `TILED` static_if branch-duplicating only the
+   b-loop/writeback (B4 byte-identical, B2 = production text + a dead colbase decl, measured
+   free); K5T keeps one colbase spelling. K4↔K5 format merge stays ruled out (the qh
+   overlay + hq staging would duplicate most of the body). B8 trio stays hand-written
+   (different algorithm). 2026-08-09: adoption closed the A/B — the K4T/K6T `TILED=false`
+   stamps and K5T's single spelling ARE the previewed lab forms, so the three prod-vs-lab B2
+   pairs compiled byte-identical and were deleted (the measured ruling above stands as the
+   record; recreate the arm pattern if the question reopens). The tripwire stands: the lab's
+   surviving production arms reference the stamped globals.
 
 7. **Pointer families — a language-level idea, parked.** (Boris, 2026-07-30: "interesting follow …
    it maybe good - we are just not there yet.") Everything above about address spaces exists
@@ -89,33 +96,36 @@
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
 
-8. **Two MoE mul_mm formats stayed out of the family, for the same reason.** The k4/k5/q51 kernels
-   now share `MetalMoeMulMmBase` — one tile loop, two overrides (the k-block decode and the
-   expert-plane origin it addresses from). K6 and Q8 could not join: both carry state ACROSS loop
-   iterations that a per-iteration override cannot hold — k6 caches the superblock scalars
-   (`sv`/`dall`, reloaded every 8th k-block), q8 walks advancing weight pointers (`scur`/`qp`).
-   Both become expressible the moment a helper can take a pointer or a thread-space reference it
-   may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
-   `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.
-   Status 2026-08-07 (vulkan-on-mac leg (b) recon): the pointer-param unlock HAS landed in
-   msl_emit (address-space-checked pointer params), and Q8/K6 are also expressible without it
-   (index-math / reload-per-kb) — but every route changes these hot inner loops (interleaved A/B
-   measurement required; the kernels-suite oracles cover correctness only), Mx4 is a third
-   stay-out (pre-loop vtab staging + bias-seeded accumulator locals need a prologue hook), and
-   Q8/Mx4 joining the base renumbers cnt/basep/bkt 6/7/8 → 7/8/9 (encoder + oracle-gate churn).
-   Ruled 2026-08-07: folds into the reification arc (the families get restamped there; the
-   constraints above apply — see plans/vulkan-on-mac.md leg (b) recon).
+8. **MoE mul_mm family: COMPLETE — all six formats ride MetalMoeMulMmBase.** K6 joined
+   2026-08-08 (021fffd87, stateless stage_a, −2.0%). Q8 and Mx4 joined the same day via
+   msl_emit's flatten/scope-splice arc (plans/msl-flatten.md): Q8 keeps the carried-pointer
+   walk (plain `scur`/`qp` members bound in `stage_init`, advanced in stage_a — the
+   stateless index form measured OUT +3.4–3.6%), −0.5..−0.9% vs its deleted standalone;
+   Mx4 rides `stage_init` (vtab staging) + `stage_acc` (per-expert bias seed into the
+   accumulator array), +0.02% flat vs its standalone (DRAM-bound — the join is free). Both
+   binding contracts moved to the family numbers (xf@3 y@4 cnt@7 basep@8 bkt@9;
+   `kn_moe_mm_family_tail` spells the tail once; tensor twins keep their compact layouts).
+   Side find from the gmm8 dump: the `addr()` escape for a pointer walk defeats the const
+   analysis — Q8's weight buffers emit as non-const `device half*` (and win anyway, so
+   constness is not the term).
+   The per-site rot from the kargs migration (c45724dae) was REPAIRED in the lens-arc review
+   round (2026-08-09): production arms bind MoeGemvArgs kargs, the pre-kargs lab twins keep
+   their historical layouts behind per-arm bind splits, the dead tail-duplicate
+   run_gmm4/gmm6_lab calls are gone, and main runs end-to-end to the leak assert — all 19
+   correctness checks at rel 0, run_gmx4_lab reachable again (prod 300.6 wGB/s vs lcppe
+   302.1, prod = lcppe + an untaken bias branch). Don't trust rounds=1 numbers from this
+   lab — warm-up dominates.
 
-9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
-   dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of
-   `g_pso_qknorm` and a buffer offset on the x bind; `enc_rope` there is the same story. The MSL
-   source is one string in both cases, so the duplication is the PIPELINE object, not the shader —
-   prefill and decode own separate lifecycles (`metal_prefill_init` / `metal_decode_init`) and
-   each builds its own. The fix is not to merge the encoders but to decide who owns a PSO for a
-   kernel both stages dispatch: either a shared pipeline registry keyed by MSL source, or an
-   explicit rule that a stage-local PSO is the intended shape. Until that is settled, a lensed
-   class whose builder both stages could use still gets a hand-written twin on the prefill side.
-   Done = the rule is written in CODEREVIEW.md, and the twins either share a PSO or say why not.
+9. **Prefill compiles its own PSO for kernels decode already has — HALF RESOLVED by the lens
+   arc.** The qk_norm half closed in P1: `MetalQkNorm` gained `@off` on x, prefill rides
+   decode's generated builder, and `enc_qk_norm_pf` + `g_pf_pso_qknorm` are gone. The rope
+   half remains in the new shape: both stages' rope encoders are lens-generated now, but
+   prefill's `MetalRope` instance names `g_pf_pso_rope` compiled from the same
+   `metal_rope_msl` source decode compiles into its own PSO. The ownership rule is written
+   (CODEREVIEW.md: the class-owning file compiles/releases; instances may share a pso handle —
+   the MetalRmsNorm ×3 / tensor-twin precedent), so Done = prefill's rope instance either
+   names decode's pso global the shared-handle way or a comment says why stage-local is
+   intended.
 
 10. **The two fused QKV-GEMV twins are a D-family-shaped dedup that has not happened.**
     `MetalQ8GemvQkvRsF16` and `MetalQ8GemvQkvRsF32` are ~95 lines of near-identical body that

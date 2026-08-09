@@ -5,7 +5,7 @@ options auto_inline_functions = false   // lint fixtures assert source call/assi
 // Use ordinary copy/push for same-context storage, and clone_string explicitly when
 // a string crosses contexts. Temporary string# sources are the lifetime-safe exception.
 
-expect 50503:11
+expect 50503:13
 
 var bad_global := "global"                       // LINT016
 

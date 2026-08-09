@@ -96,7 +96,7 @@ class XModInt : XModKern {
 
 [tsi_test_bind_kt]
 class LateInt : LateKern {
-    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; late_bind waives the check
+    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; unbound names are left for infer to resolve
 }
 
 def tsi_sdot(a, b : int) : int {
@@ -206,7 +206,7 @@ def test_tsi_cross_module(t : T?) {
 
 [test]
 def test_tsi_late_bind(t : T?) {
-    t |> run("late_bind = true defers alias binding to a later macro") @(t : T?) {
+    t |> run("an alias another macro supplies after the reifier binds at infer") @(t : T?) {
         unsafe {
             var inscope k <- new LateInt()
             k.x = 40
@@ -232,6 +232,96 @@ def test_tsi_call_rebind(t : T?) {
             t |> equal(b->run_ptr(7), 42000) // @@ address target, rebound
             t |> equal(a->run_qual(7), 42) // `_::` spelling pinned to the real callee...
             t |> equal(b->run_qual(7), 42) // ...even on the rebinding instance, by design
+        }
+    }
+}
+
+[ |> template_struct_instance]
+struct template GatePairT {
+    a : KT
+    @template_gate = BATCHED rt : KT
+    @template_gate = "!BATCHED" solo : KT
+    @template_constant BATCHED : bool = false
+}
+
+struct GateOff : GatePairT {
+    typedef KT = int
+}
+
+struct GateOn : GatePairT {
+    typedef KT = int
+    override BATCHED = true
+}
+
+[ |> template_struct_instance]
+class template GKernT {
+    x : int
+    @template_gate = EXT ext : int
+    @template_constant EXT : bool = false
+
+    def sum : int {
+        static_if (EXT) {
+            return x + ext
+        } else {
+            return x
+        }
+    }
+}
+
+class GBase : GKernT {}
+
+class GExt : GKernT {
+    override EXT = true
+}
+
+[test]
+def test_tsi_gated_fields(t : T?) {
+    t |> run("a gated field exists only where its axis says so, both polarities") @(t : T?) {
+        // each stamp dropped exactly one of the two gated ints — both remaining would be 12
+        t |> equal(int(typeinfo sizeof(type<GateOff>)), 8)
+        t |> equal(int(typeinfo sizeof(type<GateOn>)), 8)
+        let off = GateOff(a = 1, solo = 3) // named-arg construction pins WHICH field survived
+        let on = GateOn(a = 1, rt = 2)
+        t |> equal(off.a + off.solo, 4)
+        t |> equal(on.a + on.rt, 3)
+    }
+    t |> run("a dead static_if arm may reference a gated-off field") @(t : T?) {
+        unsafe {
+            var inscope b <- new GBase()
+            var inscope e <- new GExt()
+            b.x = 40
+            e.x = 40
+            e.ext = 2
+            t |> equal(b->sum(), 40) // EXT=false: ext erased, the dead arm still names it
+            t |> equal(e->sum(), 42)
+        }
+    }
+}
+
+[ |> template_struct_instance]
+class template TagKernT {
+    x : KT
+
+    [tsi_test_fn_tag]
+    def tick : KT {
+        return x + x
+    }
+}
+
+class TagInt : TagKernT {
+    typedef KT = int
+}
+
+[test]
+def test_tsi_method_annotation_apply(t : T?) {
+    t |> run("stamped methods get their function-annotation applies") @(t : T?) {
+        // TsiTestFnTag`apply added this global when the reifier stamped TagInt`tick —
+        // referencing it IS the assertion (and a double apply fails the compile loudly)
+        t |> equal(TagInt_tick_tag, 0)
+        unsafe {
+            var inscope k <- new TagInt()
+            k.x = 21
+            t |> equal(k->tick(), 42)
         }
     }
 }

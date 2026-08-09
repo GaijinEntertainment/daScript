@@ -155,6 +155,7 @@ struct private WholeArg {
     buf : string
     callee : string
     idx : int
+    method : bool   // banked from an ExprInvoke: the callee IS a class method, not a free function
 }
 
 class private AccessVisitor : AstVisitor {
@@ -224,7 +225,7 @@ class private AccessVisitor : AstVisitor {
     // A POINTER into a tracked buffer handed to a helper — a pointer local, or an inline
     // `addr(buf[i])`. Direction comes from the callee's parameter, exactly as for a whole
     // buffer; the node is claimed so the conservative read does not also fire.
-    def bank_ptr_arg(cur : Expression const?; cname : string; aidx : int) : bool {
+    def bank_ptr_arg(cur : Expression const?; cname : string; aidx : int; isMethod : bool) : bool {
         var e = cur
         if (e is ExprUnsafe) {   // pre-infer bodies keep the unsafe() wrapper node
             e = (e as ExprUnsafe).body
@@ -232,7 +233,7 @@ class private AccessVisitor : AstVisitor {
         if (e is ExprVar && key_exists(ptrs, string((e as ExprVar).name))) {
             let pn = string((e as ExprVar).name)
             claimed |> insert("{pn}:{e.at.line}:{e.at.column}")
-            whole |> emplace(WholeArg(buf = ptrs[pn], callee = cname, idx = aidx))
+            whole |> emplace(WholeArg(buf = ptrs[pn], callee = cname, idx = aidx, method = isMethod))
             return true
         }
         var sub : Expression const?
@@ -246,7 +247,7 @@ class private AccessVisitor : AstVisitor {
         let name = write_root_name(sub, tracked, fieldMode, node)
         return false if (empty(name))
         claimed |> insert("{name}:{node.at.line}:{node.at.column}")
-        whole |> emplace(WholeArg(buf = name, callee = cname, idx = aidx))
+        whole |> emplace(WholeArg(buf = name, callee = cname, idx = aidx, method = isMethod))
         return true
     }
 
@@ -347,16 +348,18 @@ class private AccessVisitor : AstVisitor {
         // field-mode analysis does NOT recurse into free callees (bare-name matching would collide
         // with their locals).
         for (aidx, a in range(length(expr.arguments)), expr.arguments) {
-            bank_call_arg(a, cname, aidx)
+            // PRE-infer a method call is spelled as a bare ExprCall too, so this path cannot claim
+            // the callee is a free function — only the ExprInvoke path knows that much
+            bank_call_arg(a, cname, aidx, false)
         }
     }
 
-    def bank_call_arg(a : Expression const?; cname : string; aidx : int) {
+    def bank_call_arg(a : Expression const?; cname : string; aidx : int; isMethod : bool) {
         var cur = a
         if (cur is ExprRef2Value) {
             cur = (cur as ExprRef2Value).subexpr
         }
-        return if (bank_ptr_arg(cur, cname, aidx))
+        return if (bank_ptr_arg(cur, cname, aidx, isMethod))
         var bname = ""
         if (cur is ExprVar && is_tracked((cur as ExprVar).name)) {
             bname = string((cur as ExprVar).name)
@@ -367,7 +370,7 @@ class private AccessVisitor : AstVisitor {
         }
         return if (empty(bname))
         claimed |> insert("{bname}:{cur.at.line}:{cur.at.column}")
-        whole |> emplace(WholeArg(buf = bname, callee = cname, idx = aidx))
+        whole |> emplace(WholeArg(buf = bname, callee = cname, idx = aidx, method = isMethod))
     }
 
     // POST-infer a method call is an ExprInvoke, not an ExprCall — the kernel body's `run()`
@@ -383,6 +386,17 @@ class private AccessVisitor : AstVisitor {
         let ef = a0 ?as ExprField
         if (ef != null) {
             callees |> insert(string(ef.name))
+            // splice-method args: a tracked buffer passed whole resolves through the method's
+            // parameter direction, exactly like a free-helper call
+            var aidx = 0
+            for (a in expr.arguments) {
+                if (aidx > 1) {
+                    // post-infer invoke shape is [method-field, self, args...] — bank with the
+                    // self-free arg base the pre-infer ExprCall path uses
+                    bank_call_arg(a, string(ef.name), aidx - 2, true)
+                }
+                aidx++
+            }
         }
     }
 
@@ -410,7 +424,7 @@ class private AccessVisitor : AstVisitor {
     }
 }
 
-def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
+def private analyze_one(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
     var astVisitor = new AccessVisitor()
     astVisitor.tracked := tracked
     astVisitor.fieldMode = fieldMode
@@ -426,7 +440,19 @@ def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; 
     // buffers handed whole to a helper: the callee's parameter decides. A name that does not
     // resolve to exactly one declaration keeps the ratchet — it could be written through.
     for (wa in astVisitor.whole) {
-        let dir = callee_param_dir(mod, wa.callee, wa.idx)
+        let freeDir = callee_param_dir(mod, wa.callee, wa.idx)
+        let methodDir = fieldMode ? method_param_dir(mod, st, wa.callee, wa.idx) : ""
+        // An entry banked from an ExprInvoke IS a method call, so the method's parameter decides:
+        // a same-named free function must not steal the direction verdict that decides hazard
+        // staging. Everything else (free calls, and the pre-infer shape where a method call is
+        // still spelled as a plain ExprCall) asks the free functions first, methods as fallback.
+        var dir = wa.method && !empty(methodDir) ? methodDir : freeDir
+        if (empty(dir)) {
+            dir = methodDir
+        }
+        if (ACCESS_DEBUG) {
+            print("[access-dbg] whole {wa.buf} -> {wa.callee}[{wa.idx}] free='{freeDir}' method='{methodDir}' (invoke={wa.method}) -> '{dir}'\n")
+        }
         if (empty(dir)) {
             let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
             astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' - teach the intrinsic table or {escape}"
@@ -445,6 +471,22 @@ def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; 
     unsafe {
         delete astVisitor
     }
+}
+
+// Direction of a class METHOD's parameter at the invoke's `idx`-th argument. "" when the name is
+// not a resolvable method, or when the declarations do not agree.
+def private method_param_dir(mod : Module?; st : StructurePtr; mname : string; idx : int) : string {
+    // class (splice) methods: the parameter lives on the method function itself
+    let mfn = class_method(mod, st, mname)
+    if (mfn == null) {
+        return ""
+    }
+    var dir = ""
+    var found = false
+    var conflict = false
+    // + 1: the method function's arguments count self at 0, the banked idx does not
+    scan_param_dir(mfn, callee_base_name("{mfn.name}"), idx + 1, dir, found, conflict)
+    return found && !conflict ? dir : ""
 }
 
 // A kernel class's method, resolved the way the emitter resolves it: through the CONCRETE
@@ -498,7 +540,7 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
     var pending : table<string>
     var visited : table<string>
     var callees : table<string>
-    analyze_one(fn, mod, tracked, fieldMode, res, callees)
+    analyze_one(fn, mod, st, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
     // Field mode does not recurse into FREE callees — shader intrinsics have das shims whose
     // locals would false-positive on bare-name matching. It DOES recurse into the kernel class's
@@ -523,11 +565,11 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
         var next : table<string>
         let mfn = fieldMode ? class_method(mod, st, name) : null
         if (mfn != null) {
-            analyze_one(mfn, mod, tracked, fieldMode, res, next)
+            analyze_one(mfn, mod, st, tracked, fieldMode, res, next)
         } else {
             mod |> for_each_function(name) $(cfn) {
                 if (cfn.name == name) {
-                    analyze_one(cfn, mod, tracked, fieldMode, res, next)
+                    analyze_one(cfn, mod, st, tracked, fieldMode, res, next)
                 }
             }
         }

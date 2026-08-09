@@ -27,10 +27,12 @@ def private upload_array(dev; arr; bytes : int64) {
     return buf
 }
 
-def private upload_u32(dev; v : uint) {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
+def private upload_kargs(dev; ka) {
+    let sz = uint64(typeinfo sizeof(ka))
+    var buf = metal_new_buffer(dev, sz)
+    unsafe {
+        memcpy(metal_buffer_contents(buf), addr(ka), sz)
+    }
     return buf
 }
 
@@ -74,7 +76,7 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_ours = pipeline_from_source(dev, metal_rope_store_b16_msl, metal_rope_store_b16_msl_entry, true, err)
+    var pso_ours = pipeline_from_source(dev, MetalRopeStoreBF16_metal_rope_store_b_msl, MetalRopeStoreBF16_metal_rope_store_b_msl_entry, true, err)
     b |> success(pso_ours != null, "production rope-store kernel compiles")
     if (pso_ours == null) {
         metal_release(queue)
@@ -108,17 +110,15 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     var rtbuf = upload_array(dev, rte, nb * 16l)
     var karena = metal_new_buffer(dev, uint64(8l * cap * kv_dim * 2l))
     var varena = metal_new_buffer(dev, uint64(8l * cap * kv_dim * 2l))
-    var laybuf = upload_u32(dev, 0u)
-    var kvdimbuf = upload_u32(dev, uint(kv_dim))
-    var qdbuf = upload_u32(dev, uint(qd))
-    var hsbuf = upload_u32(dev, uint(hs))
     let npairs_q = qd / 2l
     let npairs = (qd + kv_dim) / 2l
-    var npqbuf = upload_u32(dev, uint(npairs_q))
-    var npbuf = upload_u32(dev, uint(npairs))
-    var qstridebuf = upload_u32(dev, uint(qkvd))
+    // bias is dummy-bound (has_bias = 0, never read); full rope (rot == head_size), adjacent pairs
+    var biasbuf = metal_new_buffer(dev, uint64(qkvd * 4l))
+    var kabuf = upload_kargs(dev, RopeStoreBArgs(lay = 0u, kv_dim = uint(kv_dim), qd = uint(qd),
+        head_size = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs), qstride = uint(qkvd),
+        neox = 0u, has_bias = 0u, rot = uint(hs)))
     // arm descriptors
-    var bufs_ours <- [qkbuf, karena, varena, tcosbuf, tsinbuf, rtbuf, laybuf, kvdimbuf, qdbuf, hsbuf, npqbuf, npbuf, qstridebuf]
+    var bufs_ours <- [qkbuf, karena, varena, tcosbuf, tsinbuf, rtbuf, biasbuf, kabuf]
     var psos_ours <- [pso_ours]
     var bufss_ours <- [bufs_ours]
     var groups_ours <- [uint3(uint((npairs + 63l) / 64l), uint(nb), 1u)]
@@ -186,13 +186,8 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     metal_release(rtbuf)
     metal_release(karena)
     metal_release(varena)
-    metal_release(laybuf)
-    metal_release(kvdimbuf)
-    metal_release(qdbuf)
-    metal_release(hsbuf)
-    metal_release(npqbuf)
-    metal_release(npbuf)
-    metal_release(qstridebuf)
+    metal_release(biasbuf)
+    metal_release(kabuf)
     metal_release(pso_ours)
     metal_release(queue)
     metal_release(dev)

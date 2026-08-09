@@ -24,7 +24,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // via `preVisitExprUnsafe` / `visitExprUnsafe`. Any second push (depth > 0
 // at entry) is a nested block.
 
-expect 31209:2
+expect 31209:3
 
 require daslib/style_lint
 

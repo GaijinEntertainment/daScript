@@ -55,6 +55,8 @@ kernel void control(device const uint* a [[buffer(0)]],
     uint dnap = (acc--);
     zed += ((acc + snap) + dnap);
     out1[i] = (hot ? zed : (zed + 7u));
+    out1[i] += zed;
+    out1[i] += (zed + 1u);
     int m = p[i];
     int w = q[i];
     int iacc = 0;
@@ -134,6 +136,10 @@ def test_control_shape(t : T?) {
         t |> success(contains(control_msl, "(s > z)") && contains(control_msl, "(s <= z)"), "float comparisons")
         t |> success(contains(control_msl, "(!(m > w))"), "logical not")
         t |> success(contains(control_msl, "(hot ? zed : (zed + 7u))"), "ternary select")
+        t |> success(contains(control_msl, "out1[i] += zed;") && contains(control_msl, "out1[i] += (zed + 1u);"),
+            "const-cond select folds to the taken side")
+        t |> success(!contains(control_msl, "12345u") && !contains(control_msl, "54321u") &&
+            !contains(control_msl, "(true ?") && !contains(control_msl, "(false ?"), "folded select leaves zero trace")
     }
 }
 

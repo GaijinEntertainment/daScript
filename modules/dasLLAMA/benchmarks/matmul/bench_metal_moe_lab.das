@@ -550,6 +550,15 @@ def private upload_u32v(dev; v : uint) {
     return buf
 }
 
+def private upload_kargs(dev; ka) {
+    let sz = uint64(typeinfo sizeof(ka))
+    var buf = metal_new_buffer(dev, sz)
+    unsafe {
+        memcpy(metal_buffer_contents(buf), addr(ka), sz)
+    }
+    return buf
+}
+
 // one command buffer: encoder (serial or concurrent), caller encodes, gpu window returned in us
 def private time_arm(queue; concurrent : bool; blk) : double {
     var cb = metal_new_command_buffer(queue)
@@ -585,6 +594,8 @@ let RB_UZERO = 12
 let RB_UXSNFE = 13
 let RB_UKNFE = 14
 let RB_UESHIFT = 15
+let RB_KA13 = 16   // MoeGemvArgs for the k4 w1/w3 site (the production kargs contract)
+let RB_KAW2 = 17   // MoeGemvArgs for the q51 w2 site (xs = NFE — the per-slot h12 stride)
 // psos slots
 let RP_K4 = 0      // production expert-indexed k4 GEMV
 let RP_Q51 = 1     // production expert-indexed q51 GEMV
@@ -602,26 +613,10 @@ let SEL_CW3_BASE = SEL_W3_BASE * 3ul
 def private h12_off(l : int64) : uint64 => uint64(l * 2l * KNFE * 4l)
 def private dn_off(l : int64) : uint64 => uint64(l * K * DIM * 4l)
 
-def private enc_lab_w13(bufs; psos; enc; l : int64; sel_base : uint64; up_half : bool) {
-    metal_set_pipeline(enc, psos[RP_K4])
-    metal_set_buffer(enc, bufs[RB_K4S], 0ul, 0)
-    metal_set_buffer(enc, bufs[RB_K4S], 0ul, 1)
-    metal_set_buffer(enc, bufs[RB_K4Q], 0ul, 2)
-    metal_set_buffer(enc, bufs[RB_X], 0ul, 3)
-    metal_set_buffer(enc, bufs[RB_H12], h12_off(l) + (up_half ? uint64(KNFE * 4l) : 0ul), 4)
-    metal_set_buffer(enc, bufs[RB_UDIM], 0ul, 5)
-    metal_set_buffer(enc, bufs[RB_UNFE], 0ul, 6)
-    metal_set_buffer(enc, bufs[RB_SEL], sel_base + uint64(l) * SEL_ROW_BYTES, 7)
-    metal_set_buffer(enc, bufs[RB_UESB], 0ul, 8)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 9)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 10)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 11)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 12)
-    metal_dispatch_threadgroups(enc, uint3(uint((NFE + 3l) / 4l), uint(K), 1u), uint3(64u, 1u, 1u))
-}
-
-// variant dispatch: same superset binding table (extra binds past a pipeline's table are ignored),
-// rows_tg = output rows per threadgroup (4 for the 2-row forms, 8 for r4)
+// w1/w3 site dispatch. The production k4 kernel binds ONE kargs (MoeGemvArgs at 5); the x4/r4
+// lab twins still declare the pre-kargs per-uniform layout (ndim@5, ddim@6, esb@8, xs@9). Slot 5
+// is the only conflict — everything else is shared, and extra binds past a pipeline's table are
+// ignored. rows_tg = output rows per threadgroup (4 for the 2-row forms, 8 for r4).
 def private enc_lab_w13v(bufs; psos; enc; l : int64; sel_base : uint64; up_half : bool; pslot : int; rows_tg : int64) {
     metal_set_pipeline(enc, psos[pslot])
     metal_set_buffer(enc, bufs[RB_K4S], 0ul, 0)
@@ -629,15 +624,20 @@ def private enc_lab_w13v(bufs; psos; enc; l : int64; sel_base : uint64; up_half 
     metal_set_buffer(enc, bufs[RB_K4Q], 0ul, 2)
     metal_set_buffer(enc, bufs[RB_X], 0ul, 3)
     metal_set_buffer(enc, bufs[RB_H12], h12_off(l) + (up_half ? uint64(KNFE * 4l) : 0ul), 4)
-    metal_set_buffer(enc, bufs[RB_UDIM], 0ul, 5)
-    metal_set_buffer(enc, bufs[RB_UNFE], 0ul, 6)
+    if (pslot == RP_K4) {
+        metal_set_buffer(enc, bufs[RB_KA13], 0ul, 5)
+    } else {
+        metal_set_buffer(enc, bufs[RB_UDIM], 0ul, 5)
+        metal_set_buffer(enc, bufs[RB_UNFE], 0ul, 6)
+        metal_set_buffer(enc, bufs[RB_UESB], 0ul, 8)
+        metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 9)
+    }
     metal_set_buffer(enc, bufs[RB_SEL], sel_base + uint64(l) * SEL_ROW_BYTES, 7)
-    metal_set_buffer(enc, bufs[RB_UESB], 0ul, 8)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 9)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 10)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 11)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 12)
     metal_dispatch_threadgroups(enc, uint3(uint((NFE + rows_tg - 1l) / rows_tg), uint(K), 1u), uint3(64u, 1u, 1u))
+}
+
+def private enc_lab_w13(bufs; psos; enc; l : int64; sel_base : uint64; up_half : bool) {
+    enc_lab_w13v(bufs, psos, enc, l, sel_base, up_half, RP_K4, 4l)
 }
 
 def private enc_lab_pair(bufs; psos; enc; l : int64; sel_base : uint64) {
@@ -664,20 +664,22 @@ def private enc_lab_glu(bufs; psos; enc; l : int64) {
     metal_dispatch_threadgroups(enc, uint3(uint((KNFE + 255l) / 256l), 1u, 1u), uint3(256u, 1u, 1u))
 }
 
+// w2 site: same slot-4 split — production q51 takes MoeGemvArgs there, the ic twin takes ndim
 def private enc_lab_w2(bufs; psos; enc; l : int64; sel_base : uint64; pslot : int = RP_Q51) {
     metal_set_pipeline(enc, psos[pslot])
     metal_set_buffer(enc, bufs[RB_Q51Q], 0ul, 0)
     metal_set_buffer(enc, bufs[RB_Q51S], 0ul, 1)
     metal_set_buffer(enc, bufs[RB_H12], h12_off(l), 2)
     metal_set_buffer(enc, bufs[RB_DN], dn_off(l), 3)
-    metal_set_buffer(enc, bufs[RB_UNFE], 0ul, 4)
-    metal_set_buffer(enc, bufs[RB_UDIM], 0ul, 5)
+    if (pslot == RP_Q51) {
+        metal_set_buffer(enc, bufs[RB_KAW2], 0ul, 4)
+    } else {
+        metal_set_buffer(enc, bufs[RB_UNFE], 0ul, 4)
+        metal_set_buffer(enc, bufs[RB_UDIM], 0ul, 5)
+        metal_set_buffer(enc, bufs[RB_UEBLK], 0ul, 7)
+        metal_set_buffer(enc, bufs[RB_UXSNFE], 0ul, 8)
+    }
     metal_set_buffer(enc, bufs[RB_SEL], sel_base + uint64(l) * SEL_ROW_BYTES, 6)
-    metal_set_buffer(enc, bufs[RB_UEBLK], 0ul, 7)
-    metal_set_buffer(enc, bufs[RB_UXSNFE], 0ul, 8)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 9)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 10)
-    metal_set_buffer(enc, bufs[RB_UZERO], 0ul, 11)
     metal_dispatch_threadgroups(enc, uint3(uint((DIM + 3l) / 4l), uint(K), 1u), uint3(64u, 1u, 1u))
 }
 
@@ -1124,8 +1126,25 @@ def private ref_mx4_row(gq, ge : array<uint8>; gx, etab, vtab : array<float>; pl
     return acc
 }
 
-// production binding table (MetalMoeGemvMx4): single-stream form (ss/bxs/bys = 0), no bias
-def private enc_gmx4(gbufs; pso; enc; l : int64) {
+// production binding table (MetalMoeGemvMx4): kargs at 4, sel at 6, the bias slot dummy-bound
+// (hasb = 0), the e8m0 scale computed in ALU — no etab, no byte/uint aliases of the plane
+def private enc_gmx4_prod(gbufs; pso; enc; l : int64) {
+    metal_set_pipeline(enc, pso)
+    metal_set_buffer(enc, gbufs[0], 0ul, 0)                                  // nibble plane (uint2 view)
+    metal_set_buffer(enc, gbufs[1], 0ul, 1)                                  // mxe
+    metal_set_buffer(enc, gbufs[2], 0ul, 2)                                  // x (float4 view)
+    metal_set_buffer(enc, gbufs[3], uint64(l * GK * GNFE * 4l), 3)           // y, per-layer block
+    metal_set_buffer(enc, gbufs[11], 0ul, 4)                                 // MoeGemvArgs
+    metal_set_buffer(enc, gbufs[6], uint64(l * GK * 4l), 6)                  // sel row
+    metal_set_buffer(enc, gbufs[2], 0ul, 12)                                 // wb dummy (hasb = 0)
+    metal_set_buffer(enc, gbufs[10], 0ul, 15)                                // vtab
+    metal_set_threadgroup_memory_length(enc, 128ul, 0)                       // LUT tgmem, 32-float worst case (@workgroup = dynamic shmem)
+    metal_dispatch_threadgroups(enc, uint3(uint((GNFE + 3l) / 4l), uint(GK), 1u), uint3(64u, 1u, 1u))
+}
+
+// the pre-kargs per-uniform layout the five mx4 lab twins still declare (single-stream form:
+// ss/bxs/bys = 0, no bias) — extra binds past a pipeline's table are ignored
+def private enc_gmx4_oldu(gbufs; pso; enc; l : int64) {
     metal_set_pipeline(enc, pso)
     metal_set_buffer(enc, gbufs[0], 0ul, 0)                                  // mxu (uint view)
     metal_set_buffer(enc, gbufs[1], 0ul, 1)                                  // mxe
@@ -1149,10 +1168,18 @@ def private enc_gmx4(gbufs; pso; enc; l : int64) {
     metal_dispatch_threadgroups(enc, uint3(uint((GNFE + 3l) / 4l), uint(GK), 1u), uint3(64u, 1u, 1u))
 }
 
-def private check_gmx4(queue; gbufs : array<MetalBuffer?>; cpso; name : string;
+def private enc_gmx4(gbufs; pso; enc; l : int64; prod : bool) {
+    if (prod) {
+        enc_gmx4_prod(gbufs, pso, enc, l)
+    } else {
+        enc_gmx4_oldu(gbufs, pso, enc, l)
+    }
+}
+
+def private check_gmx4(queue; gbufs : array<MetalBuffer?>; cpso; name : string; prod : bool;
                        gq, ge : array<uint8>; gx, etab, vtab : array<float>; gsel : array<uint>) {
     let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
-        enc_gmx4(gbufs, cpso, enc, 0l)
+        enc_gmx4(gbufs, cpso, enc, 0l, prod)
     }
     var worst = 0.0
     unsafe {
@@ -1187,7 +1214,11 @@ def private dump_gmx4_msl : bool {
     fwrite("{dd}/gmm4_prod.metal", metal_moe_mulmm_mx4_msl)
     fwrite("{dd}/gmm4_bf32.metal", lab_moe_mm_mx4_bf32_msl)
     fwrite("{dd}/gmm4_lcpp.metal", lab_moe_mm_mx4_lcpp_msl)
-    print("gmx4+gmm4 MSL dumped to {dd}\n")
+    fwrite("{dd}/gmm6_prod.metal", metal_moe_mulmm_k6_msl)
+    fwrite("{dd}/gmm6_flat.metal", lab_moe_mm_k6_flat_msl)
+    fwrite("{dd}/gmm8_prod.metal", metal_moe_mulmm_q8_msl)
+    fwrite("{dd}/gmm8_index.metal", lab_moe_mm_q8_index_msl)
+    print("gmx4+gmm4+gmm6+gmm8 MSL dumped to {dd}\n")
     return true
 }
 
@@ -1243,14 +1274,16 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     gbufs |> push(upload_u32v(dev, 0u))                                         // 8 zero
     gbufs |> push(upload_floats(dev, etab))                                     // 9 etab
     gbufs |> push(upload_floats(dev, vtab))                                     // 10 vtab
+    gbufs |> push(upload_kargs(dev, MoeGemvArgs(ndim = uint(GDIM), ddim = uint(GNFE),
+        eplane = uint(GEBLK))))                                                 // 11 kargs (production contract)
 
     // correctness: layer 0, all 4 slots x 4 rows vs the CPU ref (exact under the fill contract)
-    check_gmx4(queue, gbufs, pso, "gmx4", gq, ge, gx, etab, vtab, gsel)
-    check_gmx4(queue, gbufs, pso_a, "gmx4_arith", gq, ge, gx, etab, vtab, gsel)
-    check_gmx4(queue, gbufs, pso_t, "gmx4_tgv", gq, ge, gx, etab, vtab, gsel)
-    check_gmx4(queue, gbufs, pso_l, "gmx4_lcpp", gq, ge, gx, etab, vtab, gsel)
-    check_gmx4(queue, gbufs, pso_w, "gmx4_lcppw", gq, ge, gx, etab, vtab, gsel)
-    check_gmx4(queue, gbufs, pso_e, "gmx4_lcppe", gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso, "gmx4", true, gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso_a, "gmx4_arith", false, gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso_t, "gmx4_tgv", false, gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso_l, "gmx4_lcpp", false, gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso_w, "gmx4_lcppw", false, gq, ge, gx, etab, vtab, gsel)
+    check_gmx4(queue, gbufs, pso_e, "gmx4_lcppe", false, gq, ge, gx, etab, vtab, gsel)
 
     // the discriminator: pipe (kernel ceiling) vs serial (per-dispatch barrier tax), and the
     // challengers on the same pipe schedule
@@ -1271,7 +1304,7 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
             let us = time_arm(queue, true) $(enc : MetalComputeEncoder?) {
                 for (_p in range64(passes)) {
                     for (l in range64(GLAYERS)) {
-                        enc_gmx4(gbufs, psov[kind], enc, l)
+                        enc_gmx4(gbufs, psov[kind], enc, l, kind == 0)
                         if (barrier) {
                             metal_memory_barrier(enc)
                         }
@@ -1563,8 +1596,28 @@ let GM_UNTOK = 15
 let GM_VT = 16      // prod doubled-e2m1 LUT
 let GM_LVT = 17     // lcpp halved LUT
 let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
+let GM_KA = 19      // MoeMmArgs kargs (the joined family contract)
 
+// the production kernel's contract: kargs@5 + the MetalMoeMulMmBase family tail (mx4 joined
+// the family 2026-08-08)
 def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
+    metal_set_buffer(enc, gb[GM_GE], 0ul, 1)
+    metal_set_buffer(enc, gb[GM_X], 0ul, 3)
+    metal_set_buffer(enc, gb[yslot], 0ul, 4)
+    metal_set_buffer(enc, gb[GM_KA], 0ul, 5)
+    metal_set_buffer(enc, gb[GM_CNT], 0ul, 7)
+    metal_set_buffer(enc, gb[GM_BASE], 0ul, 8)
+    metal_set_buffer(enc, gb[GM_BKT], 0ul, 9)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wbias slot — never read at hasb=0, any float buffer satisfies binding validation
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
+    metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
+}
+
+// the pre-kargs per-uniform layout the bf32 lab twin still declares
+def private enc_gmm4_oldu(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_pipeline(enc, pso)
     metal_set_threadgroup_memory_length(enc, tgmem, 0)
     metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
@@ -1610,6 +1663,8 @@ def private check_gmm4(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; nam
     let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
         if (kind == 0) {
             enc_gmm4_prod(gb, pso, tgmem, enc, GM_Y1)
+        } elif (kind == 1) {
+            enc_gmm4_oldu(gb, pso, tgmem, enc, GM_Y1)
         } else {
             enc_gmm4_lcpp(gb, pso, tgmem, enc, GM_Y1)
         }
@@ -1720,11 +1775,20 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     basepb |> resize(length(basep) * 4)
     var bktb : array<uint8>
     bktb |> resize(length(bkt) * 4)
+    var kab : array<uint8>
+    kab |> resize(24)
     unsafe {
         memcpy(addr < void? >(hidsb[0]), addr < void? >(hids[0]), length(hids) * 4)
         memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
         memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
         memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+        var kap = addr<uint?>(kab[0])
+        kap[0] = uint(GDIM)     // kdim
+        kap[1] = uint(GNFE)     // ndim
+        kap[2] = uint(GEBLK)    // eplane, 32-blocks
+        kap[3] = uint(GK)       // nk
+        kap[4] = 1u             // gather
+        kap[5] = 0u             // hasb
     }
     var cmin = cnt[0]
     var cmax = cnt[0]
@@ -1754,10 +1818,11 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     gb |> push(upload_floats(dev, vtab))                                       // GM_VT
     gb |> push(upload_floats(dev, lvt))                                        // GM_LVT
     gb |> push(upload_u32v(dev, 0u))                                           // GM_U0
+    gb |> push(upload_bytes(dev, kab))                                         // GM_KA
 
     check_gmm4(queue, gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, "gmm4_prod", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
-    check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
-    check_gmm4(queue, gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, "gmm4_lcpp", 1, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 1, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, "gmm4_lcpp", 2, gq, ge, gx, etab, vtab, cnt, basep, bkt)
 
     // per pass: GLAYERS layers of the gathered 2880x2880 class that owns the pp window.
     // pipe = 2 mms/layer, concurrent, no barriers (ceiling); serial = barrier per dispatch;
@@ -1787,7 +1852,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
                             if (kind == 2) {
                                 enc_gmm4_lcpp(gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             } elif (kind == 1) {
-                                enc_gmm4_prod(gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
+                                enc_gmm4_oldu(gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             } else {
                                 enc_gmm4_prod(gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             }
@@ -1831,6 +1896,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     delete cntb
     delete basepb
     delete bktb
+    delete kab
     delete garms
     delete gbest
     for (b in gb) {
@@ -1843,6 +1909,707 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     metal_release(pso_p)
     metal_release(pso_b)
     metal_release(pso_l)
+}
+
+// ===== gmm6: gathered q6_K MUL_MM section (qwen3moe pp512 shapes — the reification followup) =====
+// The A/B on MetalMoeMulMmK6's EMISSION SHAPE, not its arithmetic. The join question that
+// started this section (cache the superblock scalars vs re-read them every kb) is CLOSED:
+// production took the stateless stage_a hook, so both texts reload sv/dall unconditionally and
+// neither carries a js == 0 guard. What is left is SPLICE vs FLAT — production's body arrives
+// through the stage_a splice (an extra brace scope, locals hoisted to the body top), gmm6_flat
+// is the same statements written out by hand. Same fill/routing contract as gmm4.
+
+let Q6E = 128l          // experts (Qwen3-30B-A3B)
+let Q6NFE = 768l        // expert ffn width
+let Q6DIM = 2048l       // model dim
+let Q6K = 8l            // experts per token
+let Q6NTOK = 512l       // pp512 token rows
+let Q6NSB = Q6DIM / 256l            // superblocks per weight row
+let Q6EPL = Q6NFE * Q6NSB           // superblocks per expert plane
+let Q6LAYERS = 8l
+let Q6ROWS = Q6NTOK * Q6K
+
+// MetalMoeMulMmK6's body written FLAT by hand: same statements, no splice brace scope, locals
+// declared where first used (the splice hoists them). Both forms reload sv/dall every k-block.
+class LabMoeMmK6Flat {
+    @ssbo @binding = 0 kdh : array<float16>
+    @ssbo @binding = 1 ksc : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 xf : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : MoeMmArgs
+    @ssbo @binding = 7 cnt : array<uint>
+    @ssbo @binding = 8 basep : array<uint>
+    @ssbo @binding = 9 bkt : array<uint>
+    @workgroup ta : float16[2048]
+    @workgroup tb : float16[1024]
+
+    [metal_kernel(name="lab_moe_mm_k6_flat_msl")]
+    def lab_moe_mm_k6_flat {
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {
+            return
+        }
+        let rbase = basep[e]
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let nBase = gl_WorkGroupID.y * 64u
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        var va : float16[16]
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        let nsb = ka.kdim / 256u
+        let ewsb = e * ka.eplane + (nBase + lr0) * nsb
+        var srcrow = rbase + mBase + lr1
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
+        }
+        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
+        var kb = 0u
+        while (kb < nkb) {
+            let sb = kb / 8u
+            let js = kb % 8u
+            let blk = ewsb + sb
+            let b0 = unsafe(xcur[0])
+            let b1 = unsafe(xcur[1])
+            let half6 = js / 4u
+            let gg = js % 4u
+            let sv = ksc[blk]                 // reloaded every k-block — production does the same
+            let dall = float(kdh[blk])
+            let si = half6 * 8u + gg * 2u + il0
+            let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+            let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+            let dsc = dall * s6
+            let dmn = dsc * 32.0
+            let dsc1 = dsc * 0.00390625
+            let dsc2 = dsc * 0.0000152587890625
+            let dsc3 = dsc * 0.000000059604644775390625
+            let qb = blk * 48u + half6 * 16u + (gg & 1u) * 8u + il0 * 4u
+            let hb = blk * 48u + 32u + half6 * 8u + il0 * 4u
+            let nsh = (gg / 2u) * 4u
+            let hsh = gg * 2u
+            for [unroll_full] (k in range(4)) {
+                let u = kqu[qb + uint(k)]
+                let hu = kqu[hb + uint(k)]
+                let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
+                va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
+                va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
+                va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(ta[aB]))
+            var bcur = unsafe(addr(tb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            xcur = unsafe(xcur + 8)
+            kb++
+        }
+        let row0 = rbase + mBase + (sg / 2u) * 16u
+        let col0 = nBase + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
+        }
+    }
+}
+
+// CPU reference for one gathered output element: x row dot the k6-decoded weight row `col`
+// of expert plane eoff (in superblocks) — the gemv-lab cpu_ref_k6 decode, plane-addressed
+def private ref_k6_row(kq, ksc, kd : array<uint8>; xrow : array<float>; eoff, col : int64) : float {
+    var acc = 0.0
+    for (sb in range64(Q6NSB)) {
+        let bi = eoff + col * Q6NSB + sb
+        let dd = f16_to_f32(uint(kd[bi * 2l]) | (uint(kd[bi * 2l + 1l]) << 8u))
+        let qo = bi * 192l
+        for (g in range64(8l)) {
+            let half6 = g / 4l
+            let gg = g % 4l
+            let qlb = qo + half6 * 64l + (gg & 1l) * 32l
+            let qhb = qo + 128l + half6 * 32l
+            let sh = gg < 2l ? 0 : 4
+            let hbit = int(gg) * 2
+            for (l in range64(32l)) {
+                let q6 = ((int(kq[qlb + l]) >> sh) & 15) | (((int(kq[qhb + l]) >> hbit) & 3) << 4)
+                let sci = bi * 16l + half6 * 8l + gg * 2l + l / 16l
+                let sc = (int(ksc[sci]) ^ 128) - 128
+                acc += dd * float(sc) * float(q6 - 32) * xrow[sb * 256l + half6 * 128l + gg * 32l + l]
+            }
+        }
+    }
+    return acc
+}
+
+// gb slots for the gmm6 arms (production MoeMmArgs binding contract)
+let G6_KD = 0
+let G6_KSC = 1
+let G6_KQ = 2
+let G6_X = 3
+let G6_Y = 4
+let G6_KA = 5
+let G6_CNT = 6
+let G6_BASE = 7
+let G6_BKT = 8
+
+def private enc_gmm6(gb; pso; tgmem : uint64; enc) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[G6_KD], 0ul, 0)
+    metal_set_buffer(enc, gb[G6_KSC], 0ul, 1)
+    metal_set_buffer(enc, gb[G6_KQ], 0ul, 2)
+    metal_set_buffer(enc, gb[G6_X], 0ul, 3)
+    metal_set_buffer(enc, gb[G6_Y], 0ul, 4)
+    metal_set_buffer(enc, gb[G6_KA], 0ul, 5)
+    metal_set_buffer(enc, gb[G6_CNT], 0ul, 7)
+    metal_set_buffer(enc, gb[G6_BASE], 0ul, 8)
+    metal_set_buffer(enc, gb[G6_BKT], 0ul, 9)
+    metal_dispatch_threadgroups(enc, uint3(uint((Q6NTOK + 31l) / 32l), uint(Q6NFE / 64l), uint(Q6E)), uint3(128u, 1u, 1u))
+}
+
+def private check_gmm6(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; name : string;
+                       kq, ksc, kd : array<uint8>; gx : array<float>;
+                       cnt, basep, bkt : array<uint>) {
+    let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmm6(gb, pso, tgmem, enc)
+    }
+    var xrow : array<float>
+    xrow |> resize(int(Q6DIM))
+    var worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gb[G6_Y]))
+        for (e in [0l, 17l, Q6E - 1l]) {
+            for (r in [0l, int64(cnt[e]) - 1l]) {
+                let tok = int64(bkt[int64(basep[e]) + r] / uint(Q6K))
+                for (i in range64(Q6DIM)) {
+                    xrow[i] = gx[tok * Q6DIM + i]
+                }
+                for (col in [0l, 1l, 500l, Q6NFE - 1l]) {
+                    let want_v = ref_k6_row(kq, ksc, kd, xrow, int64(e) * Q6EPL, col)
+                    let got = y[(int64(basep[e]) + r) * Q6NFE + col]
+                    let rel = abs(got - want_v) / max(1.0, abs(want_v))
+                    if (rel > 1e-5) {
+                        print("  MISMATCH e={e} r={r} col={col}: got {got} want {want_v} (rel {rel})\n")
+                    }
+                    worst = max(worst, rel)
+                }
+            }
+        }
+    }
+    delete xrow
+    if (worst > 1e-4) {
+        panic("{name} correctness: worst rel diff {worst}")
+    }
+    print("{name} correctness: worst rel {worst}  (single mm {t / 1000.0lf} ms)\n")
+}
+
+def private run_gmm6_lab(dev; queue; rounds : int; passes : int64) {
+    var pso_p = compile_or_die(dev, metal_moe_mulmm_k6_msl, metal_moe_mulmm_k6_msl_entry, metal_moe_mulmm_k6_msl_fastmath)
+    var pso_r = compile_or_die(dev, lab_moe_mm_k6_flat_msl, lab_moe_mm_k6_flat_msl_entry, lab_moe_mm_k6_flat_msl_fastmath)
+    let t_fill = ref_time_ticks()
+    let nsball = Q6E * Q6EPL
+    // exact-arithmetic k6 fill: pow2 d halves, sub-scales in [-7, 7], pseudo-random ql/qh bytes
+    var kd : array<uint8>
+    kd |> resize(int(nsball * 2l))
+    for (bi in range64(nsball)) {
+        let dh = uint(0x3400) + (uint((bi * 13l) % 3l) << 10u)   // 0.25 / 0.5 / 1.0 halves
+        kd[bi * 2l] = uint8(dh & 255u)
+        kd[bi * 2l + 1l] = uint8(dh >> 8u)
+    }
+    var ksc : array<uint8>
+    ksc |> resize(int(nsball * 16l))
+    for (i in range64(nsball * 16l)) {
+        ksc[i] = uint8((int((i * 5l) % 15l) - 7) & 255)   // int8 sub-scales in [-7, 7] — keeps w f16-exact
+    }
+    var kq : array<uint8>
+    kq |> resize(int(nsball * 192l))
+    for (i in range(length(kq))) {
+        kq[i] = uint8((i * 37) % 251)
+    }
+    var gx : array<float>
+    gx |> resize(int(Q6NTOK * Q6DIM))
+    for (i in range(length(gx))) {
+        gx[i] = float((i * 5) % 13 - 6)
+    }
+    // routing tables: the gmm4 pattern at k = 8 (odd stride mod E, hash jitter on the base)
+    var cnt : array<uint>
+    cnt |> resize(int(Q6E))
+    var selE : array<int>
+    selE |> resize(int(Q6ROWS))
+    for (tk in range64(Q6NTOK)) {
+        let base = int64((uint(int(tk)) * 2654435761u) >> 25u)
+        for (s in range64(Q6K)) {
+            let e = int((base + s * 13l) % Q6E)
+            selE[tk * Q6K + s] = e
+            cnt[e]++
+        }
+    }
+    var basep : array<uint>
+    basep |> resize(int(Q6E))
+    var ppad = 0l
+    for (e in range64(Q6E)) {
+        basep[e] = uint(ppad)
+        ppad += (int64(cnt[e]) + 31l) / 32l * 32l
+    }
+    var bkt : array<uint>
+    bkt |> resize(int(ppad))
+    var fill : array<uint>
+    fill |> resize(int(Q6E))
+    for (tk in range64(Q6NTOK)) {
+        for (s in range64(Q6K)) {
+            let e = selE[tk * Q6K + s]
+            bkt[int64(basep[e]) + int64(fill[e])] = uint(tk * Q6K + s)
+            fill[e]++
+        }
+    }
+    var cntb : array<uint8>
+    cntb |> resize(length(cnt) * 4)
+    var basepb : array<uint8>
+    basepb |> resize(length(basep) * 4)
+    var bktb : array<uint8>
+    bktb |> resize(length(bkt) * 4)
+    var kab : array<uint8>
+    kab |> resize(24)
+    unsafe {
+        memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
+        memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
+        memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+        var kap = addr<uint?>(kab[0])
+        kap[0] = uint(Q6DIM)    // kdim
+        kap[1] = uint(Q6NFE)    // ndim
+        kap[2] = uint(Q6EPL)    // eplane, superblocks
+        kap[3] = uint(Q6K)      // nk
+        kap[4] = 1u             // gather
+        kap[5] = 0u             // hasb
+    }
+    print("gmm6 host fill: {get_time_usec(t_fill) / 1000} ms ({int(nsball * 210l) / 1048576} MB planes; rows {Q6ROWS} padded {ppad})\n")
+
+    var gb : array<MetalBuffer?>
+    gb |> push(upload_bytes(dev, kd))                                          // G6_KD
+    gb |> push(upload_bytes(dev, ksc))                                         // G6_KSC
+    gb |> push(upload_bytes(dev, kq))                                          // G6_KQ
+    gb |> push(upload_floats(dev, gx))                                         // G6_X
+    gb |> push(metal_new_buffer_untracked(dev, uint64(ppad * Q6NFE * 4l)))     // G6_Y
+    gb |> push(upload_bytes(dev, kab))                                         // G6_KA
+    gb |> push(upload_bytes(dev, cntb))                                        // G6_CNT
+    gb |> push(upload_bytes(dev, basepb))                                      // G6_BASE
+    gb |> push(upload_bytes(dev, bktb))                                        // G6_BKT
+
+    check_gmm6(queue, gb, pso_p, metal_moe_mulmm_k6_msl_tgmem, "gmm6_prod", kq, ksc, kd, gx, cnt, basep, bkt)
+    check_gmm6(queue, gb, pso_r, lab_moe_mm_k6_flat_msl_tgmem, "gmm6_flat", kq, ksc, kd, gx, cnt, basep, bkt)
+
+    let mac_mm = double(Q6ROWS * Q6NFE * Q6DIM)
+    var garms <- [("gmm6_prod", 0), ("gmm6_flat", 1)]
+    var gbest : table<string; double>
+    for (a in garms) {
+        gbest[a._0] = 1e18lf
+    }
+    for (_rd in range(rounds)) {
+        for (a in garms) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
+                continue
+            }
+            let us = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+                for (_p in range64(passes)) {
+                    for (_l in range64(Q6LAYERS)) {
+                        enc_gmm6(gb, a._1 == 1 ? pso_r : pso_p, a._1 == 1 ? lab_moe_mm_k6_flat_msl_tgmem : metal_moe_mulmm_k6_msl_tgmem, enc)
+                        metal_memory_barrier(enc)
+                    }
+                }
+            }
+            let per = us / double(passes)
+            if (per < gbest[a._0]) {
+                gbest[a._0] = per
+            }
+        }
+    }
+    print("--- gmm6 (qwen3moe pp512 shapes: E={Q6E} nk={Q6K} ntok={Q6NTOK}, {int(Q6NFE)}x{int(Q6DIM)} planes, {int(mac_mm) / 1000000000} GMAC/mm) ---\n")
+    for (a in garms) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
+            continue
+        }
+        let per_mm = gbest[a._0] / double(Q6LAYERS)
+        print("  {a._0}: {gbest[a._0] / 1000.0lf} ms/pass  {per_mm / 1000.0lf} ms/mm  {mac_mm / per_mm / 1000.0lf} GMAC/s\n")
+    }
+
+    delete kd
+    delete ksc
+    delete kq
+    delete gx
+    delete cnt
+    delete selE
+    delete basep
+    delete bkt
+    delete fill
+    delete cntb
+    delete basepb
+    delete bktb
+    delete kab
+    delete garms
+    delete gbest
+    for (b in gb) {
+        metal_release(b)
+    }
+    gb |> clear()   // handles are metal_release-owned — delete on a ptr array would free pointees
+    unsafe {
+        delete gb
+    }
+    metal_release(pso_p)
+    metal_release(pso_r)
+}
+
+// ===== gmm8: gathered q8_0 MUL_MM section (qwen3moe-q8 pp512 shapes — the reification followup) =====
+// The A/B that decides how MetalMoeMulMmQ8 joins MetalMoeMulMmBase: production walks its two
+// weight views on CARRIED POINTERS (scur +17 / qp +34 per k-block — the dense twin's AGX comment
+// says pointer measured better, no number attached), while a stateless stage_a re-derives both
+// offsets from wb + kb every call. gmm8_prod = the production kernel verbatim; gmm8_index = the
+// exact text the stateless hook produces, at the BASE binding layout (xf@3 y@4 cnt/basep/bkt@7/8/9).
+
+let Q8E = 128l          // experts (Qwen3-30B-A3B geometry, q8_0 weights)
+let Q8NFE = 768l        // expert ffn width
+let Q8DIM = 2048l       // model dim
+let Q8K = 8l            // experts per token
+let Q8NTOK = 512l       // pp512 token rows
+let Q8NKB = Q8DIM / 32l             // q8_0 blocks per weight row
+let Q8EPL = Q8NFE * Q8NKB           // blocks per expert plane
+let Q8LAYERS = 8l
+let Q8ROWS = Q8NTOK * Q8K
+
+// production body with the weight-pointer walk replaced by per-kb index math — blk = wb0 + kb,
+// scale at blk*17 (half view), quants at blk*34+2 (byte view); everything else verbatim
+class LabMoeMmQ8Index {
+    @ssbo @binding = 0 wsh : array<float16>
+    @ssbo @binding = 1 wqb : array<int8>
+    @ssbo @binding = 3 xf : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : MoeMmArgs
+    @ssbo @binding = 7 cnt : array<uint>
+    @ssbo @binding = 8 basep : array<uint>
+    @ssbo @binding = 9 bkt : array<uint>
+    @workgroup ta : float16[2048]
+    @workgroup tb : float16[1024]
+
+    [metal_kernel(name="lab_moe_mm_q8_index_msl")]
+    def lab_moe_mm_q8_index {
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {
+            return
+        }
+        let rbase = basep[e]
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let nBase = gl_WorkGroupID.y * 64u
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        var va : float16[16]
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        let wb0 = e * ka.eplane + (nBase + lr0) * nkb
+        var srcrow = rbase + mBase + lr1
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
+        }
+        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
+        var kb = 0u
+        while (kb < nkb) {
+            let b0 = unsafe(xcur[0])
+            let b1 = unsafe(xcur[1])
+            let blk = wb0 + kb                // the index form: both offsets re-derived every k-block
+            let sA = float(wsh[blk * 17u])
+            let qb = blk * 34u + 2u + il0 * 16u
+            for [unroll_full] (i in range(16)) {
+                va[i] = float16(float(wqb[qb + uint(i)]) * sA)
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(ta[aB]))
+            var bcur = unsafe(addr(tb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            xcur = unsafe(xcur + 8)
+            kb++
+        }
+        let row0 = rbase + mBase + (sg / 2u) * 16u
+        let col0 = nBase + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
+        }
+    }
+}
+
+// CPU reference for one gathered output element: x row dot the q8_0-decoded weight row `col`
+// of expert plane eoff (in 32-elem blocks) — blob layout [d f16 | 32 int8 quants] per block
+def private ref_q8_row(blob : array<uint8>; xrow : array<float>; eoff, col : int64) : float {
+    var acc = 0.0
+    for (kb in range64(Q8NKB)) {
+        let bi = eoff + col * Q8NKB + kb
+        let d = f16_to_f32(uint(blob[bi * 34l]) | (uint(blob[bi * 34l + 1l]) << 8u))
+        for (l in range64(32l)) {
+            let q = (int(blob[bi * 34l + 2l + l]) ^ 128) - 128
+            acc += d * float(q) * xrow[kb * 32l + l]
+        }
+    }
+    return acc
+}
+
+// gb slots for the gmm8 arms (ONE blob buffer serves both weight views, bound at 0 and 1)
+let G8_BLOB = 0
+let G8_X = 1
+let G8_Y = 2
+let G8_KA = 3
+let G8_CNT = 4
+let G8_BASE = 5
+let G8_BKT = 6
+
+// both arms bind the MetalMoeMulMmBase family layout (prod joined the family 2026-08-08)
+def private enc_gmm8(gb; pso; tgmem : uint64; enc) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[G8_BLOB], 0ul, 0)
+    metal_set_buffer(enc, gb[G8_BLOB], 0ul, 1)
+    metal_set_buffer(enc, gb[G8_X], 0ul, 3)
+    metal_set_buffer(enc, gb[G8_Y], 0ul, 4)
+    metal_set_buffer(enc, gb[G8_KA], 0ul, 5)
+    metal_set_buffer(enc, gb[G8_CNT], 0ul, 7)
+    metal_set_buffer(enc, gb[G8_BASE], 0ul, 8)
+    metal_set_buffer(enc, gb[G8_BKT], 0ul, 9)
+    metal_dispatch_threadgroups(enc, uint3(uint((Q8NTOK + 31l) / 32l), uint(Q8NFE / 64l), uint(Q8E)), uint3(128u, 1u, 1u))
+}
+
+def private check_gmm8(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; name : string;
+                       blob : array<uint8>; gx : array<float>;
+                       cnt, basep, bkt : array<uint>) {
+    let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmm8(gb, pso, tgmem, enc)
+    }
+    var xrow : array<float>
+    xrow |> resize(int(Q8DIM))
+    var worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gb[G8_Y]))
+        for (e in [0l, 17l, Q8E - 1l]) {
+            for (r in [0l, int64(cnt[e]) - 1l]) {
+                let tok = int64(bkt[int64(basep[e]) + r] / uint(Q8K))
+                for (i in range64(Q8DIM)) {
+                    xrow[i] = gx[tok * Q8DIM + i]
+                }
+                for (col in [0l, 1l, 500l, Q8NFE - 1l]) {
+                    let want_v = ref_q8_row(blob, xrow, int64(e) * Q8EPL, col)
+                    let got = y[(int64(basep[e]) + r) * Q8NFE + col]
+                    let rel = abs(got - want_v) / max(1.0, abs(want_v))
+                    if (rel > 1e-5) {
+                        print("  MISMATCH e={e} r={r} col={col}: got {got} want {want_v} (rel {rel})\n")
+                    }
+                    worst = max(worst, rel)
+                }
+            }
+        }
+    }
+    delete xrow
+    if (worst > 1e-4) {
+        panic("{name} correctness: worst rel diff {worst}")
+    }
+    print("{name} correctness: worst rel {worst}  (single mm {t / 1000.0lf} ms)\n")
+}
+
+def private run_gmm8_lab(dev; queue; rounds : int; passes : int64) {
+    var pso_p = compile_or_die(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath)
+    var pso_i = compile_or_die(dev, lab_moe_mm_q8_index_msl, lab_moe_mm_q8_index_msl_entry, lab_moe_mm_q8_index_msl_fastmath)
+    let t_fill = ref_time_ticks()
+    let nball = Q8E * Q8EPL
+    // exact-arithmetic q8_0 fill: pow2 d halves, TRUE small-int8 quant bytes in [-7, 7]
+    var blob : array<uint8>
+    blob |> resize(int(nball * 34l))
+    for (bi in range64(nball)) {
+        let dh = uint(0x3400) + (uint((bi * 13l) % 3l) << 10u)   // 0.25 / 0.5 / 1.0 halves
+        blob[bi * 34l] = uint8(dh & 255u)
+        blob[bi * 34l + 1l] = uint8(dh >> 8u)
+        for (l in range64(32l)) {
+            blob[bi * 34l + 2l + l] = uint8((int((bi * 32l + l) * 37l % 15l) - 7) & 255)
+        }
+    }
+    var gx : array<float>
+    gx |> resize(int(Q8NTOK * Q8DIM))
+    for (i in range(length(gx))) {
+        gx[i] = float((i * 5) % 13 - 6)
+    }
+    // routing tables: the gmm4 pattern at k = 8 (odd stride mod E, hash jitter on the base)
+    var cnt : array<uint>
+    cnt |> resize(int(Q8E))
+    var selE : array<int>
+    selE |> resize(int(Q8ROWS))
+    for (tk in range64(Q8NTOK)) {
+        let base = int64((uint(int(tk)) * 2654435761u) >> 25u)
+        for (s in range64(Q8K)) {
+            let e = int((base + s * 13l) % Q8E)
+            selE[tk * Q8K + s] = e
+            cnt[e]++
+        }
+    }
+    var basep : array<uint>
+    basep |> resize(int(Q8E))
+    var ppad = 0l
+    for (e in range64(Q8E)) {
+        basep[e] = uint(ppad)
+        ppad += (int64(cnt[e]) + 31l) / 32l * 32l
+    }
+    var bkt : array<uint>
+    bkt |> resize(int(ppad))
+    var fill : array<uint>
+    fill |> resize(int(Q8E))
+    for (tk in range64(Q8NTOK)) {
+        for (s in range64(Q8K)) {
+            let e = selE[tk * Q8K + s]
+            bkt[int64(basep[e]) + int64(fill[e])] = uint(tk * Q8K + s)
+            fill[e]++
+        }
+    }
+    var cntb : array<uint8>
+    cntb |> resize(length(cnt) * 4)
+    var basepb : array<uint8>
+    basepb |> resize(length(basep) * 4)
+    var bktb : array<uint8>
+    bktb |> resize(length(bkt) * 4)
+    var kab : array<uint8>
+    kab |> resize(24)
+    unsafe {
+        memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
+        memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
+        memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+        var kap = addr<uint?>(kab[0])
+        kap[0] = uint(Q8DIM)    // kdim
+        kap[1] = uint(Q8NFE)    // ndim
+        kap[2] = uint(Q8EPL)    // eplane, q8_0 blocks
+        kap[3] = uint(Q8K)      // nk
+        kap[4] = 1u             // gather
+        kap[5] = 0u             // hasb
+    }
+    print("gmm8 host fill: {get_time_usec(t_fill) / 1000} ms ({int(nball * 34l) / 1048576} MB planes; rows {Q8ROWS} padded {ppad})\n")
+
+    var gb : array<MetalBuffer?>
+    gb |> push(upload_bytes(dev, blob))                                        // G8_BLOB
+    gb |> push(upload_floats(dev, gx))                                         // G8_X
+    gb |> push(metal_new_buffer_untracked(dev, uint64(ppad * Q8NFE * 4l)))     // G8_Y
+    gb |> push(upload_bytes(dev, kab))                                         // G8_KA
+    gb |> push(upload_bytes(dev, cntb))                                        // G8_CNT
+    gb |> push(upload_bytes(dev, basepb))                                      // G8_BASE
+    gb |> push(upload_bytes(dev, bktb))                                        // G8_BKT
+
+    check_gmm8(queue, gb, pso_p, metal_moe_mulmm_q8_msl_tgmem, "gmm8_prod", blob, gx, cnt, basep, bkt)
+    check_gmm8(queue, gb, pso_i, lab_moe_mm_q8_index_msl_tgmem, "gmm8_index", blob, gx, cnt, basep, bkt)
+
+    let mac_mm = double(Q8ROWS * Q8NFE * Q8DIM)
+    var garms <- [("gmm8_prod", 0), ("gmm8_index", 1)]
+    var gbest : table<string; double>
+    for (a in garms) {
+        gbest[a._0] = 1e18lf
+    }
+    for (_rd in range(rounds)) {
+        for (a in garms) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
+                continue
+            }
+            let us = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+                for (_p in range64(passes)) {
+                    for (_l in range64(Q8LAYERS)) {
+                        enc_gmm8(gb, a._1 == 1 ? pso_i : pso_p, a._1 == 1 ? lab_moe_mm_q8_index_msl_tgmem : metal_moe_mulmm_q8_msl_tgmem, enc)
+                        metal_memory_barrier(enc)
+                    }
+                }
+            }
+            let per = us / double(passes)
+            if (per < gbest[a._0]) {
+                gbest[a._0] = per
+            }
+        }
+    }
+    print("--- gmm8 (qwen3moe-q8 pp512 shapes: E={Q8E} nk={Q8K} ntok={Q8NTOK}, {int(Q8NFE)}x{int(Q8DIM)} planes, {int(mac_mm) / 1000000000} GMAC/mm) ---\n")
+    for (a in garms) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
+            continue
+        }
+        let per_mm = gbest[a._0] / double(Q8LAYERS)
+        print("  {a._0}: {gbest[a._0] / 1000.0lf} ms/pass  {per_mm / 1000.0lf} ms/mm  {mac_mm / per_mm / 1000.0lf} GMAC/s\n")
+    }
+
+    delete blob
+    delete gx
+    delete cnt
+    delete selE
+    delete basep
+    delete bkt
+    delete fill
+    delete cntb
+    delete basepb
+    delete bktb
+    delete gbest
+    for (b in gb) {
+        metal_release(b)
+    }
+    gb |> clear()   // handles are metal_release-owned — delete on a ptr array would free pointees
+    unsafe {
+        delete gb
+    }
+    metal_release(pso_p)
+    metal_release(pso_i)
 }
 
 def private main_apple(dummy) {
@@ -1858,10 +2625,13 @@ def private main_apple(dummy) {
     }
     print("device={metal_device_name(dev)} rounds={rounds} passes={passes}\n")
     var queue = metal_new_command_queue(dev)
+    run_gmm6_lab(dev, queue, rounds, passes)
+    run_gmm8_lab(dev, queue, rounds, passes)
+    run_gmm4_lab(dev, queue, rounds, passes)
     var psos : array<MetalComputePipeline?>
     psos |> push(compile_or_die(dev, metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath))
     psos |> push(compile_or_die(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath))
-    psos |> push(compile_or_die(dev, metal_geglu_msl, metal_geglu_msl_entry, metal_geglu_msl_fastmath))
+    psos |> push(compile_or_die(dev, MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_pair_msl, lab_moe_k4_pair_msl_entry, lab_moe_k4_pair_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_x4_msl, lab_moe_k4_x4_msl_entry, lab_moe_k4_x4_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_r4_msl, lab_moe_k4_r4_msl_entry, lab_moe_k4_r4_msl_fastmath))
@@ -1918,6 +2688,9 @@ def private main_apple(dummy) {
     bufs |> push(upload_u32v(dev, uint(NFE)))
     bufs |> push(upload_u32v(dev, uint(KNFE)))
     bufs |> push(upload_u32v(dev, uint(E)))
+    // single-stream kargs (ss/bxs/bys = 0, no bias): the w1/w3 k4 site, then the w2 q51 site
+    bufs |> push(upload_kargs(dev, MoeGemvArgs(ndim = uint(DIM), ddim = uint(NFE), eplane = uint(ESB))))
+    bufs |> push(upload_kargs(dev, MoeGemvArgs(ndim = uint(NFE), ddim = uint(DIM), eplane = uint(EBLK), xs = uint(NFE))))
 
     // ===== correctness: standalone w1 (k4), w2 (q51), and the pair kernel vs CPU refs =====
     var t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
@@ -2136,7 +2909,6 @@ def private main_apple(dummy) {
     delete sbest
 
     run_gmx4_lab(dev, queue, rounds, passes)
-    run_gmm4_lab(dev, queue, rounds, passes)
 
     delete k4q
     delete k4c

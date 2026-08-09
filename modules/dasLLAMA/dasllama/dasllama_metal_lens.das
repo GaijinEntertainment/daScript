@@ -33,6 +33,9 @@ struct private BufField {
     @do_not_delete kt : TypeDeclPtr
     off : string     // @off = "<param>" — bind at a caller-passed uint64 offset ("" = 0)
     rng : string     // @span = "<a*b*4>" product over params — exact hz length ("" = whole buffer)
+    dref : string    // @default = name (bare identifier) resolved: sibling field -> its builder
+                     // param, else module global. Caller passes null; bind AND hz stage the
+                     // `!= null ? param : dref` result. "" = required bind (no default)
 }
 
 def private mk_kn_pipeline(at : LineInfo; pso : string) : ExpressionPtr {
@@ -65,12 +68,22 @@ def private mk_kn_kargs(at : LineInfo; pname : string; binding : int) : Expressi
     return c
 }
 
-def private mk_kn_buffer(at : LineInfo; pname : string; binding : int; off : string) : ExpressionPtr {
+// the buffer reference a bind/hz uses: the builder param, or `param ?? default` when @default set
+def private mk_buf_ref(at : LineInfo; bf : BufField) : ExpressionPtr {
+    if (empty(bf.dref)) {
+        return new ExprVar(at = at, name := "b{bf.name}")
+    }
+    let braw = "b{bf.name}"
+    let bdef = bf.dref
+    return qmacro($i(braw) != null ? $i(braw) : $i(bdef))
+}
+
+def private mk_kn_buffer(at : LineInfo; bf : BufField) : ExpressionPtr {
     var c = new ExprCall(at = at, name := "kn_buffer")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := pname)
-    c.arguments |> emplace_new <| mk_off_arg(at, off)
-    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = binding)
+    c.arguments |> emplace_new <| mk_buf_ref(at, bf)
+    c.arguments |> emplace_new <| mk_off_arg(at, bf.off)
+    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = bf.binding)
     return c
 }
 
@@ -86,7 +99,7 @@ def private kargs_type_of(ft : TypeDecl const?; is_ssbo : bool) : TypeDeclPtr {
 
 // one bind statement: a kargs value binds by value, everything else is a buffer at an offset
 def private mk_bind(at : LineInfo; bf : BufField) : ExpressionPtr {
-    return (bf.kt == null ? mk_kn_buffer(at, "b{bf.name}", bf.binding, bf.off)
+    return (bf.kt == null ? mk_kn_buffer(at, bf)
         : mk_kn_kargs(at, "{bf.name}", bf.binding))
 }
 
@@ -126,7 +139,7 @@ def private mk_range_len(at : LineInfo; spec : string) : Expression? {
 // hz_read/hz_write for one field: whole-buffer, or (@off, @span) exact
 def private mk_hz(at : LineInfo; call_name : string; bf : BufField) : ExpressionPtr {
     var c = new ExprCall(at = at, name := call_name)
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := "b{bf.name}")
+    c.arguments |> emplace_new <| mk_buf_ref(at, bf)
     if (!empty(bf.rng)) {
         c.arguments |> emplace_new <| mk_off_arg(at, bf.off)
         c.arguments |> emplace_new <| mk_range_len(at, bf.rng)
@@ -294,9 +307,27 @@ class MetalDispatch : AstStructureAnnotation {
             // a struct-typed @uniform is a kargs value: it binds by VALUE, so the builder takes
             // the struct, not a buffer, and the emitter's `constant Foo&` parameter reads it
             var kt = kargs_type_of(field._type, is_ssbo)
-            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr))
+            let dflt = find_arg(field.annotation, "default") ?as tString ?? ""
+            if (!empty(dflt) && kt != null) {
+                errors := "[metal_dispatch] {fn_name}: field '{field.name}' - @default is for buffer binds, not kargs values"
+                return false
+            }
+            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr, dref = dflt))
         }
         sort(bufs) $(a, b) => a.binding < b.binding
+
+        // @default = name (bare identifier): a sibling field's name resolves to its builder
+        // param (the rope rebind shape), anything else passes through as a module global
+        var fldnames : table<string>
+        for (bf in bufs) {
+            fldnames |> insert(bf.name)
+        }
+        for (bf in bufs) {
+            if (!empty(bf.dref) && key_exists(fldnames, bf.dref)) {
+                bf.dref = "b{bf.dref}"
+            }
+        }
+        delete fldnames
 
         // The read/write axis is DERIVED from the kernel body (shared classifier, field mode).
         // A declared read/write/readwrite is a cross-checked assertion (mismatch = compile
@@ -315,7 +346,7 @@ class MetalDispatch : AstStructureAnnotation {
         if (accessForce) {
             for (bf in bufs) {
                 if (bf.ssbo && empty(bf.role)) {
-                    errors := "[metal_dispatch] {fn_name}: access_force=true — @ssbo field '{bf.name}' must declare a @role"
+                    errors := "[metal_dispatch] {fn_name}: access_force=true - @ssbo field '{bf.name}' must declare a @role"
                     return false
                 }
             }
@@ -339,7 +370,7 @@ class MetalDispatch : AstStructureAnnotation {
                 return false
             }
             if (!multi && nmatch != 1) {
-                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — multi-kernel classes pick per instance via kernel="
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} - multi-kernel classes pick per instance via kernel="
                 delete tracked
                 return false
             }
@@ -369,7 +400,7 @@ class MetalDispatch : AstStructureAnnotation {
                     let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
                         || (decl == "readwrite" && (dr == "read" || dr == "write")))
                     if (!cov) {
-                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' — the declared role must cover every kernel"
+                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel"
                         delete res
                         delete tracked
                         return false
@@ -382,7 +413,7 @@ class MetalDispatch : AstStructureAnnotation {
                     bf.hzrole = derived_role(res, bf.name)
                 } elif (empty(decl)) {
                     if (empty(dr)) {
-                        errors := "[metal_dispatch] {fn_name}: @ssbo field '{bf.name}' is never accessed by the kernel body — declare @role (weight/alias) or drop the binding"
+                        errors := "[metal_dispatch] {fn_name}: @ssbo field '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding"
                         delete res
                         delete tracked
                         return false
@@ -395,7 +426,7 @@ class MetalDispatch : AstStructureAnnotation {
                     var wk <- [for (k in keys(res.writes)); k]
                     sort(rk)   // keys() order is unspecified — sorted for deterministic diagnostics
                     sort(wk)
-                    errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but the body derives '{drName}' — fix whichever is wrong (access_force=true to override) [derived reads: {join(rk, ",")} writes: {join(wk, ",")}]"
+                    errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong (access_force=true to override) [derived reads: {join(rk, ",")} writes: {join(wk, ",")}]"
                     delete rk
                     delete wk
                     delete res
@@ -493,7 +524,7 @@ class private MetalCensusVisitor : AstVisitor {
     def override preVisitExprCall(var expr : ExprCall?) : void {
         let base = callee_base_name("{expr.name}")
         if (base == "metal_dispatch_threadgroups") {
-            macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module — dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
+            macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module - dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
         }
         if (base == "kn_kargs") {
             nkargs++
@@ -519,7 +550,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                 // loses its kn_kargs leaves the kernel reading an unbound argument buffer — the
                 // GPU produces garbage with no error anywhere.
                 if (v.nkargs > 0 && v.nkargs != v.ndispatch) {
-                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch — every dispatch path must bind its kargs")
+                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch - every dispatch path must bind its kargs")
                 }
             }
         }
@@ -571,7 +602,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                             let dr = derived_role(res, "{field.name}")
                             if (dr != role) {
                                 let drName = empty(dr) ? "unused" : dr
-                                macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' — fix the stale declaration")
+                                macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' - fix the stale declaration")
                             }
                         }
                     }

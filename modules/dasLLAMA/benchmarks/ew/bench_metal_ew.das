@@ -91,9 +91,9 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_addrms = pipeline_from_source(dev, metal_add_rms_b_msl, metal_add_rms_b_msl_entry, true, err)
+    var pso_addrms = pipeline_from_source(dev, metal_add_rms_msl, metal_add_rms_msl_entry, true, err)
     b |> success(pso_addrms != null, "production add+rms kernel compiles")
-    var pso_swiglu = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, true, err)
+    var pso_swiglu = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, true, err)
     b |> success(pso_swiglu != null, "production swiglu kernel compiles")
     if (pso_addrms == null || pso_swiglu == null) {
         metal_release(queue)
@@ -128,17 +128,18 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var ybuf = metal_new_buffer(dev, uint64(nb * dim * 4l))
     var dimbuf = upload_u32(dev, uint(dim))
     var epsbuf = upload_f32(dev, eps)
+    var ascalebuf = upload_f32(dev, 1.0)   // (x + a) * ascale — every non-gemma4 site binds 1.0
     // swiglu: ours in place on g
     var gbuf = upload_array(dev, gg, nb * hidden * 4l)
     var ubuf = upload_array(dev, uu, nb * hidden * 4l)
     var totalbuf = upload_u32(dev, uint(nb * hidden))
     // arm descriptors
     var psos_oa <- [pso_addrms]
-    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf]
+    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf, ascalebuf]
     var bufss_oa <- [bufs_oa]
     var groups_oa <- [uint3(uint(nb), 1u, 1u)]
     var threads_oa <- [1024u]
-    var tgm_oa <- [metal_add_rms_b_msl_tgmem]
+    var tgm_oa <- [metal_add_rms_msl_tgmem]
     var psos_os <- [pso_swiglu]
     var bufs_os <- [gbuf, ubuf, totalbuf]
     var bufss_os <- [bufs_os]
@@ -209,6 +210,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     metal_release(ybuf)
     metal_release(dimbuf)
     metal_release(epsbuf)
+    metal_release(ascalebuf)
     metal_release(gbuf)
     metal_release(ubuf)
     metal_release(totalbuf)

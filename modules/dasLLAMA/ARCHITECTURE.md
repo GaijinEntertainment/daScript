@@ -230,6 +230,10 @@ entry here:**
   global, the `set_*` builder, the pipe slots — across classes with one binding layout. Metal's
   `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
   cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
+- **`@default` is Metal-only.** A `[metal_dispatch]` field may name a fallback global
+  (`@default = g_one`) that the generated builder binds when the caller passes null;
+  `[vk_dispatch]` has no counterpart — vulkan callers pass a real buffer at every slot. If
+  vulkan grows an optional-bind shape, it lands as this same annotation, not a new spelling.
 - **The workgroup-footprint gate is Vulkan-only.** `[vk_dispatch]` sums a class's `@workgroup`
   members and its generated `ensure_*` declines by name (`vkd_wg_fits`) before the pipeline
   build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` — and the
@@ -470,6 +474,47 @@ the limit is discovered by crashing — and the program that crashes is whicheve
 rarest. A measurement rig sized below a test suite is the worst case of this, because the suite
 stays green while the rig dies. The cost of the uniform number is reserved address space per
 context; the cost of per-root numbers is a runtime crash found by the least-covered program.
+
+### 2.9 Environment knobs
+
+A knob is an `[EnvConfig]` field in `dasllama_env.das`, read as `g_env_*.<field>`; the field is
+also what generates its `ENVIRONMENT.md` row, so a knob declared anywhere else is invisible to
+the documentation and to the registry test. The sanctioned forms beyond a plain typed field:
+
+- **Tri-state knobs** — presence matters, or the effective default is computed at runtime — are
+  `Option<T>` fields.
+- **Dynamic names** — a variable named by data, not by code — go through `env_is_set` /
+  `env_value_of`; there is no field to declare because the name is not known at compile time.
+- **The config loads once at context init**, so `set_env_variable` mid-process is invisible to
+  the running config: arm a child process's environment instead.
+- **A write of a foreign library's knob** (`set_env_variable` with a literal name) is allowed
+  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob —
+  the registry test scans writes too, so a re-spelled name fails it.
+
+`tests/test_env_registry.das` enforces the lot in both directions (declared ↔ documented,
+read ↔ registered, writes included).
+
+### 2.10 Sanctioned instrumentation rails
+
+Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
+(`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`), the
+`prof_add` / `forward_profile_*` decode buckets (`dasllama_common.das`), and the `asr_prof_add`
+encode buckets (`dasllama_audio.das`). A new clock read paired with a print of the elapsed
+interval bypasses the aggregation — it measures one call site once, is not filterable, and rots
+where a rail entry would keep serving. Where a timed line IS the deliverable — `benchmarks/`,
+`performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
+stages, tokenizer build) — the rails do not apply. A clock whose value feeds logic is control
+flow, not instrumentation; it is marked `// clock: control` so the sweep and any future lint
+leave it alone.
+
+### 2.11 The [hot_path] coverage model
+
+`[hot_path]` sits at the REGION ENTRY — the `*_encode` / `*_decode` / step drivers — and its
+`[no_alloc]` / `[no_env]` / `[no_io]` contracts arm transitively down the call graph, so
+interior kernels stay bare. A new function needs the annotation itself only when no annotated
+entry reaches it: a new entry point carries it, and a new backend entry (kernel-backend
+override, batch donor) carries it too, because backends are also reached from un-annotated
+harness paths. Reused buffers take `@scratch`; debug and profiling legs take `[cold_path]`.
 
 ---
 

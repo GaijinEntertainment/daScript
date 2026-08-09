@@ -5,7 +5,8 @@ options indenting = 4
 // surface — plain-function prototypes then bodies, device/threadgroup/thread-ref parameter
 // address spaces from the das signature, write-set through the callee signature, hidden
 // builtin threading, generic twin instances, value returns. The behavioral GPU-vs-CPU twin
-// is tests/metal/test_metal_functions.das.
+// is tests/metal/test_metal_functions.das. The flatten half lives here too: the UfxKid splice
+// shapes, the StateArr state kinds, and the derived (no name=) companion/entry naming.
 
 require dastest/testing_boost public
 require _msl_common
@@ -25,9 +26,16 @@ def private hasc(t : T?; needle : string) {
     }
 }
 
+def private hass(t : T?; needle : string) {
+    t |> success(find(statearr_msl, needle) >= 0, "emitted MSL carries `{needle}`")
+    if (find(statearr_msl, needle) < 0) {
+        to_log(LOG_ERROR, "MISSING `{needle}` in:\n{statearr_msl}\n")
+    }
+}
+
 [test]
 def test_msl_functions(t : T?) {
-    t |> run("user functions lower 1:1 — signatures, address spaces, hidden builtins") <| @(t : T?) {
+    t |> run("user functions lower 1:1 - signatures, address spaces, hidden builtins") <| @(t : T?) {
         // free function with a value return, called nested
         has(t, "float ufx_sky(float d)")
         has(t, "float ufx_shade(float d, int bounce)")
@@ -75,28 +83,55 @@ def test_msl_functions(t : T?) {
         t |> success(base >= 0, "float instance emitted")
         t |> success(twin >= 0, "half instance emitted under a suffixed name")
     }
-    t |> run("class methods + inheritance — the one flat struct, statically devirtualized") <| @(t : T?) {
-        // the class emits as one flat struct: inherited members and methods live in the
-        // concrete class; @uniform members become by-value fields; the entry fills self
-        hasc(t, "struct UfxKid \{")
-        hasc(t, "device const float* xs;")
-        hasc(t, "device float* ys;")           // written only through the store METHOD body
-        hasc(t, "float gain;")
-        hasc(t, "threadgroup float * tmp;")
-        hasc(t, "uint3 gl_GlobalInvocationID;")
-        // methods as member functions; the base skeleton calls the KID's override
-        hasc(t, "float combo(uint i) \{")
-        hasc(t, "return stage(pick(i));")
-        hasc(t, "return (xs[i] + zs[i]);")     // Kid's pick — the devirtualized body
-        t |> success(find(ufxcls_msl, "return xs[i];") < 0, "Base's un-overridden pick never emits")
-        // the kernel body itself is a member function; the entry fills self and calls it
-        hasc(t, "void ufxcls() \{")
-        hasc(t, "UfxKid self_;")
-        hasc(t, "self_.xs = xs;")
-        hasc(t, "self_.gain = gain;")
-        hasc(t, "self_.gl_GlobalInvocationID = gl_GlobalInvocationID;")
-        hasc(t, "self_.ufxcls();")
+    t |> run("class methods flatten - bodies splice inline, statically devirtualized") <| @(t : T?) {
+        // no struct, no self fill: members stay kernel parameters, the write-set flows
+        // through the SPLICED method bodies (ys is written only inside store's body)
+        t |> success(find(ufxcls_msl, "struct UfxKid") < 0, "no MSL struct emits")
+        t |> success(find(ufxcls_msl, "self_") < 0, "no self fill emits")
+        hasc(t, "device const float* xs [[buffer(0)]]")
+        hasc(t, "device float* ys [[buffer(1)]]")
+        hasc(t, "constant float& gain [[buffer(2)]]")
+        // value-position splices: combo -> stage(pick(i)) collapses to one inline expression,
+        // with the KID's override devirtualized into place
+        hasc(t, "tmp[lid] = ((((((xs[i] + zs[i]))) * gain)));")
+        t |> success(find(ufxcls_msl, "combo(") < 0, "no member-function call remains")
+        t |> success(find(ufxcls_msl, "xs[i];") < 0, "Base's un-overridden pick never emits")
+        // plain members = STATE: kernel-entry thread-locals (name-sorted, after the tg pointers)
+        hasc(t, "float boost = 0.25f;")
+        hasc(t, "device const float * cur = nullptr;")
+        // the seed/advance statement splices: the carried-pointer walk survives as plain
+        // pointer arithmetic on the entry-scope local — rider state across splices
+        hasc(t, "cur = (xs + (i));")
+        hasc(t, "cur = (cur + (1));")
+        hasc(t, "boost += 0.5f;")
+        // peek's value splice reads the carried state
+        hasc(t, "(cur[0] * boost)")
+        // store's computed argument hoists into a splice-local const bind
+        hasc(t, "const float v_s")
+        hasc(t, "ys[i] = v_s")
         // a free function called from the kernel body still emits at global scope
         hasc(t, "float ufx_sky(float d)")
+    }
+}
+
+[test]
+def test_msl_state_and_naming(t : T?) {
+    t |> run("the other state kinds: a fixed-array thread-local and a mutable-pointee rider") <| @(t : T?) {
+        // fixed-array state is a kernel-entry thread-local array, zero-init like a local
+        hass(t, "float hist[4] = \{\};")
+        // a MUTABLE pointee: taking the writable pointer IS the write declaration, so the root
+        // buffer lowers non-const with no deref tracking
+        hass(t, "device float * wcur = nullptr;")
+        hass(t, "device float* out_ [[buffer(1)]]")
+        hass(t, "wcur = (out_ + (i));")
+        hass(t, "wcur[0] = (((hist[0] + hist[1]) + hist[2]) + hist[3]);")
+        // the array state survives the splice boundary: written in one method, read in another
+        hass(t, "hist[k] = xs[(i + uint(k))];")
+    }
+    t |> run("no name= derives the companion names AND a qualified entry point") <| @(t : T?) {
+        t |> success(DerivedName_dkern_msl_entry == "DerivedName_dkern",
+            "the entry point is <Class>_<method>, not the bare method name")
+        t |> success(find(DerivedName_dkern_msl, "kernel void DerivedName_dkern(") >= 0,
+            "the emitted signature carries the derived entry name")
     }
 }

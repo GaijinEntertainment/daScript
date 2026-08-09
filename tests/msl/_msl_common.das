@@ -107,7 +107,7 @@ class Control {
     @ssbo @binding = 8 out3 : array<float>
 
     [metal_kernel(name="control_msl"), marker(no_coverage)]
-    def control {
+    def control {   // nolint:STYLE037,STYLE038 — conformance fixture; flat one-statement-per-opcode enumeration is the design
         let i = gl_GlobalInvocationID.x
         let x = a[i]
         let y = b[i]
@@ -141,6 +141,9 @@ class Control {
         let dnap = acc--
         zed += (acc + snap) + dnap
         out1[i] = hot ? zed : (zed + 7u)
+        // const-cond selects (the stamped @template_constant shape) fold to the taken side
+        out1[i] += true ? zed : 12345u
+        out1[i] += false ? 54321u : (zed + 1u)
         let m = p[i]
         let w = q[i]
         var iacc = 0
@@ -691,7 +694,7 @@ class UkKern {
     }
 }
 
-// ===== Phase 0: class methods + inheritance (the ONE FLAT struct emission) =====
+// ===== Phase 0: class methods + inheritance (FLATTENED — bodies splice at call sites) =====
 
 class UfxBase {
     @ssbo @binding = 0 xs : array<float>
@@ -706,6 +709,8 @@ class UfxBase {
 class UfxKid : UfxBase {
     @ssbo @binding = 3 zs : array<float>
     @workgroup tmp : float[16]
+    cur : float const?      // plain member = STATE: carried-pointer rider (the Q8 walk shape)
+    boost : float = 0.25    // scalar state with a constant initializer
 
     def override pick(i : uint) : float => xs[i] + zs[i]   // what combo must actually call
 
@@ -713,13 +718,74 @@ class UfxKid : UfxBase {
         ys[i] = v
     }
 
+    def seed(i : uint) {    // the stage_init shape: bind the carried pointer once
+        cur = unsafe(addr(xs[i]))
+    }
+
+    def advance {           // per-iteration advance — state lives ACROSS splices
+        cur = unsafe(cur + 1)
+        boost += 0.5
+    }
+
+    def peek : float => unsafe(cur[0]) * boost
+
     [metal_kernel(name="ufxcls_msl"), marker(no_coverage)]
     def ufxcls {
         let i = gl_GlobalInvocationID.x
         let lid = gl_LocalInvocationID.x
         tmp[lid] = combo(i)
         barrier()
-        store(i, tmp[lid] + ufx_sky(xs[i]))
+        seed(i)
+        advance()
+        store(i, (tmp[lid] + ufx_sky(xs[i])) + peek())
+    }
+}
+
+// The remaining state-member kinds: a fixed-ARRAY state member (a kernel-entry thread-local
+// array — the per-thread scratch a rider carries across splices) and a MUTABLE-pointee pointer
+// rider. Taking a writable pointer into a buffer IS the write declaration (no deref tracking),
+// so `out_` lowers non-const from the binding alone.
+class StateArr {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 out_ : array<float>
+    hist : float[4]
+    wcur : float?
+
+    def load(i : uint) {
+        for (k in range(4)) {
+            hist[k] = xs[i + uint(k)]
+        }
+    }
+
+    def bind_out(i : uint) {
+        wcur = unsafe(addr(out_[i]))
+    }
+
+    def flush {
+        unsafe(wcur[0]) = ((hist[0] + hist[1]) + hist[2]) + hist[3]
+    }
+
+    [metal_kernel(name="statearr_msl"), marker(no_coverage)]
+    def statearr {
+        let i = gl_GlobalInvocationID.x
+        load(i)
+        bind_out(i)
+        flush()
+    }
+}
+
+// The DERIVED companion-name form: no `name=` on [metal_kernel], so the globals are
+// <Class>_<method>_msl and the MSL entry point is the qualified <Class>_<method> — which is what
+// keeps a stamped class's twins distinguishable in a GPU capture. Every other fixture here
+// passes name=, so this is the only one covering the derived path.
+class DerivedName {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [metal_kernel, marker(no_coverage)]
+    def dkern {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = xs[i] * 2.0
     }
 }
 
@@ -997,12 +1063,14 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "ufn.param.ref",
         "ufn.param.value",
         "ufn.param.hidden_builtin",
-        // Phase 0: class methods + inheritance (the flat-struct emission)
-        "decl.class_struct",
-        "decl.method",
-        "call.method",
-        "stmt.call_method",
-        "entry.self_fill"
+        // Phase 0: class methods + inheritance (flattened — bodies splice at call sites,
+        // plain members are kernel-entry thread-locals)
+        "splice.method",
+        "splice.method.value",
+        "splice.param.hoist",
+        "decl.state",
+        "decl.state.arr",
+        "decl.state.ptr"
     }
 }
 
@@ -1012,5 +1080,6 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census]
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, statearr_msl_census,
+        DerivedName_dkern_msl_census]
 }

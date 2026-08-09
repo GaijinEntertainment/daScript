@@ -136,10 +136,10 @@ def private q_rows : array<float> {
 def private sq_codec_single_gate(t : T?; dev, queue; codec : string; cnt : int; softcap : float; hass : bool) {
     let tag = "sq_attn_{codec} cnt={cnt} softcap={softcap} sink={hass}"
     var err : string
-    let src = codec == "f32" ? metal_sq_attn32_msl : (codec == "q8" ? metal_sq_attn_q8_msl : metal_sq_attn_tq4_msl)
-    let entry = codec == "f32" ? metal_sq_attn32_msl_entry : (codec == "q8" ? metal_sq_attn_q8_msl_entry : metal_sq_attn_tq4_msl_entry)
-    let fm = codec == "f32" ? metal_sq_attn32_msl_fastmath : (codec == "q8" ? metal_sq_attn_q8_msl_fastmath : metal_sq_attn_tq4_msl_fastmath)
-    let tgm = codec == "f32" ? metal_sq_attn32_msl_tgmem : (codec == "q8" ? metal_sq_attn_q8_msl_tgmem : metal_sq_attn_tq4_msl_tgmem)
+    let src = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl : MetalSqAttnTq4_metal_sq_attn_msl)
+    let entry = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_entry : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_entry : MetalSqAttnTq4_metal_sq_attn_msl_entry)
+    let fm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_fastmath : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_fastmath : MetalSqAttnTq4_metal_sq_attn_msl_fastmath)
+    let tgm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_tgmem : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_tgmem : MetalSqAttnTq4_metal_sq_attn_msl_tgmem)
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -213,13 +213,13 @@ def private sq_codec_single_gate(t : T?; dev, queue; codec : string; cnt : int; 
 def private sq_codec_part_gate(t : T?; dev, queue; codec : string; cnt, window : int) {
     let tag = "sq_attn_part_{codec} cnt={cnt} window={window}"
     var err : string
-    let src = codec == "f32" ? metal_sq_attn_part32_msl : (codec == "q8" ? metal_sq_attn_part_q8_msl : metal_sq_attn_part_tq4_msl)
-    let entry = codec == "f32" ? metal_sq_attn_part32_msl_entry : (codec == "q8" ? metal_sq_attn_part_q8_msl_entry : metal_sq_attn_part_tq4_msl_entry)
-    let fm = codec == "f32" ? metal_sq_attn_part32_msl_fastmath : (codec == "q8" ? metal_sq_attn_part_q8_msl_fastmath : metal_sq_attn_part_tq4_msl_fastmath)
-    let tgm = codec == "f32" ? metal_sq_attn_part32_msl_tgmem : (codec == "q8" ? metal_sq_attn_part_q8_msl_tgmem : metal_sq_attn_part_tq4_msl_tgmem)
+    let src = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl : MetalSqAttnPartTq4_metal_sq_attn_part_msl)
+    let entry = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_entry : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_entry : MetalSqAttnPartTq4_metal_sq_attn_part_msl_entry)
+    let fm = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_fastmath : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_fastmath : MetalSqAttnPartTq4_metal_sq_attn_part_msl_fastmath)
+    let tgm = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem : MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem)
     var pso_p = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_msl, metal_sq_attn_comb_msl_entry, metal_sq_attn_comb_msl_fastmath, err)
+    var pso_c = pipeline_from_source(dev, MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
     if (pso_p == null || pso_c == null) {
         metal_release(pso_p)
@@ -247,7 +247,7 @@ def private sq_codec_part_gate(t : T?; dev, queue; codec : string; cnt, window :
     var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
         nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
         nchunks = uint(nchunks), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+    var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
         chlo = uint(chlo), hass = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
@@ -428,10 +428,10 @@ def private batch_want(fx : BatchAttnFix; cnts : array<int>; qstride : int; scal
 def private sq_b_gate(t : T?; dev, queue; codec : string; cnts : array<int>; softcap : float; hass : bool) {
     let tag = "sq_attn_b_{codec} B={length(cnts)} softcap={softcap} sink={hass}"
     var err : string
-    let src = codec == "f16" ? metal_sq_attn_b16_msl : (codec == "f32" ? metal_sq_attn_b32_msl : (codec == "q8" ? metal_sq_attn_b_q8_msl : metal_sq_attn_b_tq4_msl))
-    let entry = codec == "f16" ? metal_sq_attn_b16_msl_entry : (codec == "f32" ? metal_sq_attn_b32_msl_entry : (codec == "q8" ? metal_sq_attn_b_q8_msl_entry : metal_sq_attn_b_tq4_msl_entry))
-    let fm = codec == "f16" ? metal_sq_attn_b16_msl_fastmath : (codec == "f32" ? metal_sq_attn_b32_msl_fastmath : (codec == "q8" ? metal_sq_attn_b_q8_msl_fastmath : metal_sq_attn_b_tq4_msl_fastmath))
-    let tgm = codec == "f16" ? metal_sq_attn_b16_msl_tgmem : (codec == "f32" ? metal_sq_attn_b32_msl_tgmem : (codec == "q8" ? metal_sq_attn_b_q8_msl_tgmem : metal_sq_attn_b_tq4_msl_tgmem))
+    let src = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl : MetalSqAttnBTq4_metal_sq_attn_b_msl))
+    let entry = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_entry : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_entry : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_entry : MetalSqAttnBTq4_metal_sq_attn_b_msl_entry))
+    let fm = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_fastmath : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_fastmath : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_fastmath : MetalSqAttnBTq4_metal_sq_attn_b_msl_fastmath))
+    let tgm = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem : MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -499,13 +499,13 @@ def private sq_b_gate(t : T?; dev, queue; codec : string; cnts : array<int>; sof
 def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>; window : int; hass : bool) {
     let tag = "sq_attn_part_b_{codec} B={length(cnts)} window={window} sink={hass}"
     var err : string
-    let src = codec == "f16" ? metal_sq_attn_part_b16_msl : (codec == "f32" ? metal_sq_attn_part_b32_msl : (codec == "q8" ? metal_sq_attn_part_b_q8_msl : metal_sq_attn_part_b_tq4_msl))
-    let entry = codec == "f16" ? metal_sq_attn_part_b16_msl_entry : (codec == "f32" ? metal_sq_attn_part_b32_msl_entry : (codec == "q8" ? metal_sq_attn_part_b_q8_msl_entry : metal_sq_attn_part_b_tq4_msl_entry))
-    let fm = codec == "f16" ? metal_sq_attn_part_b16_msl_fastmath : (codec == "f32" ? metal_sq_attn_part_b32_msl_fastmath : (codec == "q8" ? metal_sq_attn_part_b_q8_msl_fastmath : metal_sq_attn_part_b_tq4_msl_fastmath))
-    let tgm = codec == "f16" ? metal_sq_attn_part_b16_msl_tgmem : (codec == "f32" ? metal_sq_attn_part_b32_msl_tgmem : (codec == "q8" ? metal_sq_attn_part_b_q8_msl_tgmem : metal_sq_attn_part_b_tq4_msl_tgmem))
+    let src = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl))
+    let entry = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_entry : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_entry : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_entry : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_entry))
+    let fm = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_fastmath : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_fastmath : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_fastmath : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_fastmath))
+    let tgm = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem))
     var pso_p = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_b_msl, metal_sq_attn_comb_b_msl_entry, metal_sq_attn_comb_b_msl_fastmath, err)
+    var pso_c = pipeline_from_source(dev, MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, MetalSqAttnCombB_metal_sq_attn_comb_msl_fastmath, err)
     t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
     if (pso_p == null || pso_c == null) {
         metal_release(pso_p)
@@ -535,7 +535,7 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
     var kap = SqAttnPartBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
         kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
         nchmax = uint(nchmax), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombBArgs(nchmax = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
+    var kac = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
         window = uint(window), hass = hass ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
@@ -561,8 +561,8 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
         metal_set_pipeline(enc, pso_c)
         metal_set_buffer(enc, bpart, 0ul, 0)
         metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, brt, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
+        metal_set_buffer(enc, brt, 0ul, 3)
         metal_set_buffer(enc, bsink, 0ul, 20)
         metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nb2), 1u, 1u), uint3(uint(HS), 1u, 1u))
     }
@@ -625,10 +625,10 @@ def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<flo
 def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsgs : int) {
     let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs}"
     var err : string
-    let src = codec == "f16" ? metal_sq_attn_d16_msl : (codec == "f32" ? metal_sq_attn_d32_msl : (codec == "q8" ? metal_sq_attn_d_q8_msl : metal_sq_attn_d_tq4_msl))
-    let entry = codec == "f16" ? metal_sq_attn_d16_msl_entry : (codec == "f32" ? metal_sq_attn_d32_msl_entry : (codec == "q8" ? metal_sq_attn_d_q8_msl_entry : metal_sq_attn_d_tq4_msl_entry))
-    let fm = codec == "f16" ? metal_sq_attn_d16_msl_fastmath : (codec == "f32" ? metal_sq_attn_d32_msl_fastmath : (codec == "q8" ? metal_sq_attn_d_q8_msl_fastmath : metal_sq_attn_d_tq4_msl_fastmath))
-    let tgm = codec == "f16" ? metal_sq_attn_d16_msl_tgmem : (codec == "f32" ? metal_sq_attn_d32_msl_tgmem : (codec == "q8" ? metal_sq_attn_d_q8_msl_tgmem : metal_sq_attn_d_tq4_msl_tgmem))
+    let src = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl : MetalSqAttnDTq4_metal_sq_attn_d_msl))
+    let entry = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_entry : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_entry : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_entry : MetalSqAttnDTq4_metal_sq_attn_d_msl_entry))
+    let fm = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_fastmath : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_fastmath : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_fastmath : MetalSqAttnDTq4_metal_sq_attn_d_msl_fastmath))
+    let tgm = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem : MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem))
     var pso_d = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso_d != null, "{tag}: part pipeline: {err}")
     var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_d_msl, metal_sq_attn_comb_d_msl_entry, metal_sq_attn_comb_d_msl_fastmath, err)

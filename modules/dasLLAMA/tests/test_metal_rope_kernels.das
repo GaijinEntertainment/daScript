@@ -27,8 +27,8 @@ def private rpst_flat_gate(t : T?; dev, queue; f16dst : bool; hs, nheads, kv_mul
     let tag = "rpst{f16dst ? 16 : 32} hs={hs} nh={nheads} kvm={kv_mul} rot={rot} neox={neox} bias={hasbias}"
     var err : string
     var pso = (f16dst
-        ? pipeline_from_source(dev, metal_rope_store16_msl, metal_rope_store16_msl_entry, metal_rope_store16_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_rope_store32_msl, metal_rope_store32_msl_entry, metal_rope_store32_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalRopeStoreF16_metal_rope_store_msl, MetalRopeStoreF16_metal_rope_store_msl_entry, MetalRopeStoreF16_metal_rope_store_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalRopeStoreF32_metal_rope_store_msl, MetalRopeStoreF32_metal_rope_store_msl_entry, MetalRopeStoreF32_metal_rope_store_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let nkvh = nheads / kv_mul
@@ -532,8 +532,8 @@ def private rpst_b_gate(t : T?; dev, queue; f16dst : bool; hs, nheads, kv_mul, r
     let tag = "rpst_b{f16dst ? 16 : 32} hs={hs} nh={nheads} kvm={kv_mul} rot={rot} nb={nb} neox={neox} bias={hasbias}"
     var err : string
     var pso = (f16dst
-        ? pipeline_from_source(dev, metal_rope_store_b16_msl, metal_rope_store_b16_msl_entry, metal_rope_store_b16_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_rope_store_b32_msl, metal_rope_store_b32_msl_entry, metal_rope_store_b32_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalRopeStoreBF16_metal_rope_store_b_msl, MetalRopeStoreBF16_metal_rope_store_b_msl_entry, MetalRopeStoreBF16_metal_rope_store_b_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalRopeStoreBF32_metal_rope_store_b_msl, MetalRopeStoreBF32_metal_rope_store_b_msl_entry, MetalRopeStoreBF32_metal_rope_store_b_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let nkvh = nheads / kv_mul

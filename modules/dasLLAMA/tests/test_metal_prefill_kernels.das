@@ -343,9 +343,9 @@ def test_metal_prefill_kernels(t : T?) {
                 attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
 
                 // ===== swiglu + residual add =====
-                var pso_sw = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, err)
+                var pso_sw = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, err)
                 t |> success(pso_sw != null, "swiglu pipeline: {err}")
-                var pso_add = pipeline_from_source(dev, metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, err)
+                var pso_add = pipeline_from_source(dev, MetalAdd_metal_ew2_msl, MetalAdd_metal_ew2_msl_entry, MetalAdd_metal_ew2_msl_fastmath, err)
                 t |> success(pso_add != null, "add pipeline: {err}")
                 let total = NROWS * HIDDEN
                 var sg : array<float>
@@ -391,13 +391,13 @@ def test_metal_prefill_kernels(t : T?) {
                 unsafe {
                     delete addbufs
                 }
-                // flat copy (the gemma4 V-from-K panel copy): y = x, bit-exact
-                var pso_cp = pipeline_from_source(dev, metal_pf_copy_msl, metal_pf_copy_msl_entry, metal_pf_copy_msl_fastmath, err)
-                t |> success(pso_cp != null, "pf_copy pipeline: {err}")
+                // flat copy (the gemma4 V-from-K panel copy rides MetalCopyRow): dst = src, bit-exact
+                var pso_cp = pipeline_from_source(dev, metal_copy_row_msl, metal_copy_row_msl_entry, metal_copy_row_msl_fastmath, err)
+                t |> success(pso_cp != null, "copy_row pipeline: {err}")
                 var bcp = buf_upload(dev, su)   // pre-filled — fully overwritten by the copy
-                var cpbufs <- [bcp, bsg, btot]
-                let cpran = run_compute_1d(queue, pso_cp, cpbufs, uint(total), 64u, err)
-                t |> success(cpran, "pf_copy dispatch: {err}")
+                var cpbufs <- [bsg, bcp, btot]
+                let cpran = run_compute_1d(queue, pso_cp, cpbufs, uint(total), 256u, err)
+                t |> success(cpran, "copy_row dispatch: {err}")
                 t |> equal(buf_mismatch_exact(bcp, add_want), 0)
                 cpbufs |> clear()
                 unsafe {
@@ -506,7 +506,7 @@ def private swiglu_oai_ref(g, u : double) : double {
 def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
     let tag = "swiglu_oai total={total}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_swiglu_oai_msl, metal_swiglu_oai_msl_entry, metal_swiglu_oai_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSwigluOai_metal_swiglu_oai_msl, MetalSwigluOai_metal_swiglu_oai_msl_entry, MetalSwigluOai_metal_swiglu_oai_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var g : array<float>
@@ -548,7 +548,7 @@ def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
 def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int>; extra_rows : int) {
     let tag = "swiglu_oai_pf nfe={nfe}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSwigluOaiPf_metal_swiglu_oai_msl, MetalSwigluOaiPf_metal_swiglu_oai_msl_entry, MetalSwigluOaiPf_metal_swiglu_oai_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let ne = length(counts)
@@ -728,7 +728,7 @@ def private moe_wscale_gate(t : T?; dev, queue; rows, nk, ne : int) {
 def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
     let tag = "moe_router_b dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var w : array<float>
@@ -1203,7 +1203,7 @@ def private pf_cat2_gate(t : T?; dev, queue; npos, d : int) {
 def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
     let tag = "dn_ba n={ndim} d={ddim} np={npos}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalDnBa_metal_q8_gemv_msl, MetalDnBa_metal_q8_gemv_msl_entry, MetalDnBa_metal_q8_gemv_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var blob : array<uint8>
@@ -1259,7 +1259,7 @@ def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
 // BIT-exact (see the call site for why exactness holds; pow2 scales are exact in f16).
 def private gemv_gate(t : T?; dev, queue; n, d : int) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, err)
     t |> success(pso != null, "gemv pipeline: {err}")
     if (pso == null) {
         return
@@ -1543,7 +1543,7 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
 // The router GEMV on exact f32 data (integer w and x — every fma partial is exact), BIT-exact.
 def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_router_msl, metal_moe_router_msl_entry, metal_moe_router_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, err)
     t |> success(pso != null, "moe router pipeline: {err}")
     if (pso == null) {
         return
@@ -1584,6 +1584,7 @@ def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
         metal_set_buffer(enc, bxs, 0ul, 5)
         metal_set_buffer(enc, bhb0, 0ul, 6)
         metal_set_buffer(enc, bhb0, 0ul, 7)
+        // slot 8 (ns) is a HOLE here — @template_gate = BATCHED erases it from the single stamp
         metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "moe router dispatch n={n} ne={ne}: {err}")
@@ -2396,7 +2397,7 @@ def private dn_deint_sigmul_gate(t : T?; dev, queue; nh, hs, npos : int) {
     var err : string
     var pso_de = pipeline_from_source(dev, metal_dn_deint_msl, metal_dn_deint_msl_entry, metal_dn_deint_msl_fastmath, err)
     t |> success(pso_de != null, "dn deint pipeline: {err}")
-    var pso_sg = pipeline_from_source(dev, metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, err)
+    var pso_sg = pipeline_from_source(dev, MetalSigmul_metal_ew2_msl, MetalSigmul_metal_ew2_msl_entry, MetalSigmul_metal_ew2_msl_fastmath, err)
     t |> success(pso_sg != null, "sigmul pipeline: {err}")
     if (pso_de == null || pso_sg == null) {
         return

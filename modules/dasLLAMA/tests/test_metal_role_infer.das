@@ -59,7 +59,7 @@ def test_role_whole_buffer_rule(t : T?) {
             let good = compile_issues(fixture("_rf_read_through"))
             t |> success(good.ok, "read-only helper parameter derives 'read': {good.issues}")
             let bad = compile_issues(fixture("_rf_write_through"))
-            t |> success(!bad.ok, "a `var` helper parameter derives 'write' — the declared 'read' must be refused")
+            t |> success(!bad.ok, "a `var` helper parameter derives 'write' - the declared 'read' must be refused")
             t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
                 "the refusal names the contradiction")
             if (bad.ok) {
@@ -76,7 +76,7 @@ def test_role_whole_buffer_rule(t : T?) {
             let good = compile_issues(fixture("_rf_ptr_through"))
             t |> success(good.ok, "pointer local reads, inline addr() writes: {good.issues}")
             let bad = compile_issues(fixture("_rf_ptr_wrong"))
-            t |> success(!bad.ok, "a mutable-pointee pointer derives 'write' — the declared 'read' must be refused")
+            t |> success(!bad.ok, "a mutable-pointee pointer derives 'write' - the declared 'read' must be refused")
             t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
                 "the refusal names the contradiction")
             if (bad.ok) {
@@ -96,7 +96,7 @@ def test_role_whole_buffer_rule(t : T?) {
             // un-lensed: the lint-time census runs POST-infer, where the call is mangled
             let ubad = compile_issues(fixture("dasllama_metal_rf_unlensed"), true)
             t |> success(!ubad.ok, "the un-lensed census resolves the mangled instance name too")
-            t |> success(find(ubad.issues, "derives 'write' — fix the stale declaration") >= 0,
+            t |> success(find(ubad.issues, "derives 'write' - fix the stale declaration") >= 0,
                 "the census names the stale declaration")
             if (bad.ok || ubad.ok) {
                 to_log(LOG_ERROR, "ROLE-INFER: generic-callee fixture compiled clean\n")

@@ -101,15 +101,15 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
 def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
     let tag = "kq_mvb{bwidth}_k{fmt} n={n} d={d} nr={nr} ys={ys}"
     var err : string
-    let src = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl : (fmt == 5 ? metal_kq_mvb2_k5_msl : metal_kq_mvb2_k6_msl))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl : (fmt == 5 ? metal_kq_mvb4_k5_msl : metal_kq_mvb4_k6_msl))
-            : (fmt == 4 ? metal_kq_mvb8_k4_msl : (fmt == 5 ? metal_kq_mvb8_k5_msl : metal_kq_mvb8_k6_msl))))
-    let entry = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl_entry : (fmt == 5 ? metal_kq_mvb2_k5_msl_entry : metal_kq_mvb2_k6_msl_entry))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl_entry : (fmt == 5 ? metal_kq_mvb4_k5_msl_entry : metal_kq_mvb4_k6_msl_entry))
-            : (fmt == 4 ? metal_kq_mvb8_k4_msl_entry : (fmt == 5 ? metal_kq_mvb8_k5_msl_entry : metal_kq_mvb8_k6_msl_entry))))
-    let fm = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb2_k5_msl_fastmath : metal_kq_mvb2_k6_msl_fastmath))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb4_k5_msl_fastmath : metal_kq_mvb4_k6_msl_fastmath))
-            : (fmt == 4 ? metal_kq_mvb8_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb8_k5_msl_fastmath : metal_kq_mvb8_k6_msl_fastmath))))
+    let src = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl : MetalKqMvB2K6_metal_kq_mv_k6_msl))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl : MetalKqMvB4K6_metal_kq_mv_k6_msl))
+            : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl : metal_kq_mvb8_k6_msl))))
+    let entry = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_entry : MetalKqMvB2K6_metal_kq_mv_k6_msl_entry))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_entry : MetalKqMvB4K6_metal_kq_mv_k6_msl_entry))
+            : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_entry : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_entry : metal_kq_mvb8_k6_msl_entry))))
+    let fm = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB2K6_metal_kq_mv_k6_msl_fastmath))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB4K6_metal_kq_mv_k6_msl_fastmath))
+            : (fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_fastmath : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_fastmath : metal_kq_mvb8_k6_msl_fastmath))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
@@ -159,7 +159,7 @@ def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
         metal_set_pipeline(enc, pso)
         if (bwidth == 8) {
             metal_set_threadgroup_memory_length(enc,
-                fmt == 4 ? metal_kq_mvb8_k4_msl_tgmem : (fmt == 5 ? metal_kq_mvb8_k5_msl_tgmem : metal_kq_mvb8_k6_msl_tgmem), 0)
+                fmt == 4 ? MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem : (fmt == 5 ? MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem : metal_kq_mvb8_k6_msl_tgmem), 0)
         }
         metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
         metal_set_buffer(enc, bks, 0ul, 1)
@@ -504,8 +504,8 @@ def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
     let tag = "w13sw_b{bwidth} n={ndim} h={hidden}"
     var err : string
     var pso = (bwidth == 2
-        ? pipeline_from_source(dev, metal_gemv_w13sw_b2_msl, metal_gemv_w13sw_b2_msl_entry, metal_gemv_w13sw_b2_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_gemv_w13sw_b4_msl, metal_gemv_w13sw_b4_msl_entry, metal_gemv_w13sw_b4_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalGemvW13SwB2_metal_gemv_w13sw_msl, MetalGemvW13SwB2_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB2_metal_gemv_w13sw_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalGemvW13SwB4_metal_gemv_w13sw_msl, MetalGemvW13SwB4_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB4_metal_gemv_w13sw_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let nb = ndim / 32
@@ -545,7 +545,7 @@ def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
     var bhid = buf_u32(dev, uint(hidden))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_w13sw_b2_msl_tgmem : metal_gemv_w13sw_b4_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? MetalGemvW13SwB2_metal_gemv_w13sw_msl_tgmem : MetalGemvW13SwB4_metal_gemv_w13sw_msl_tgmem, 0)
         metal_set_buffer(enc, bw1, 0ul, 0)
         metal_set_buffer(enc, bw1, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -583,8 +583,8 @@ def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
     let tag = "gemv_b{bwidth} n={ndim} d={ddim} ys={ys}"
     var err : string
     var pso = (bwidth == 2
-        ? pipeline_from_source(dev, metal_gemv_b2_msl, metal_gemv_b2_msl_entry, metal_gemv_b2_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_gemv_b4_msl, metal_gemv_b4_msl_entry, metal_gemv_b4_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalGemvB2_metal_gemv_msl, MetalGemvB2_metal_gemv_msl_entry, MetalGemvB2_metal_gemv_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalGemvB4_metal_gemv_msl, MetalGemvB4_metal_gemv_msl_entry, MetalGemvB4_metal_gemv_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var blob : array<uint8>
@@ -614,7 +614,7 @@ def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
     var bys = buf_u32(dev, uint(ys))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_b2_msl_tgmem : metal_gemv_b4_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? MetalGemvB2_metal_gemv_msl_tgmem : MetalGemvB4_metal_gemv_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view
         metal_set_buffer(enc, bx, 0ul, 3)
