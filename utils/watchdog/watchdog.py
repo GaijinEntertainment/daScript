@@ -725,6 +725,23 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
     return image
 
 
+def pid_alive(pid: int) -> bool:
+    """Best-effort liveness for the single-instance guard. On Windows os.kill(pid, 0)
+    TERMINATES the target (TerminateProcess with exit code 0), so probe through the same
+    OpenProcess rail the memory metrics use; POSIX gets the classic signal-0 idiom."""
+    if pid <= 0:
+        return False
+    if IS_WINDOWS:
+        return windows_process_metrics(pid) is not None
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def tray_status() -> str:
     """One line of truth for the tooltip and the menu's status row, read from the same STATE
     the control plugin sees. Counters only, no prediction — same rule as the tune fold."""
@@ -1072,6 +1089,22 @@ def main() -> int:
                 True,
             )
             return 2
+
+    # Single-instance guard: two watchdogs mean two children fighting over the same port —
+    # the loser crash-loops invisibly. The pid file records; this makes it also protect.
+    prior = 0
+    try:
+        prior = int(args.pid_file.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        prior = 0
+    if prior and prior != os.getpid() and pid_alive(prior):
+        emit(logger, "watchdog_already_running", pid=prior, pid_file=str(args.pid_file))
+        print(
+            f"watchdog: {args.name} is already supervised by pid {prior} "
+            f"(per {args.pid_file}). Stop it first (tray Shutdown / Ctrl-C), "
+            f"or delete the pid file if it is stale."
+        )
+        return 2
 
     args.pid_file.parent.mkdir(parents=True, exist_ok=True)
     args.pid_file.write_text(str(os.getpid()), encoding="ascii")
