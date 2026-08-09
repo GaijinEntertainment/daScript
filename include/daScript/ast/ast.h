@@ -1258,7 +1258,7 @@ namespace das
         vector<unique_ptr<PassMacro>>               inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<unique_ptr<PassMacro>>               optimizationMacros; // optimization macros
         vector<unique_ptr<PassMacro>>               preInferMacros;     // run before (re-)inference, on a possibly dirty tree
-        vector<unique_ptr<PassMacro>>               preSimulateMacros;  // run after inference, before codegen
+        vector<unique_ptr<PassMacro>>               postInferMacros;    // run once inference is done, before lint / folding / codegen
         vector<unique_ptr<PassMacro>>               lintMacros;         // lint macros (assume read-only)
         vector<unique_ptr<PassMacro>>               globalLintMacros;   // lint macros which work everywhere
         vector<unique_ptr<VariantMacro>>            variantMacros;      //  X is Y, X as Y expression handler

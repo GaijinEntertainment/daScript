@@ -801,7 +801,7 @@ namespace das {
         for (auto & m : ptm->inferMacros) target->inferMacros.push_back(std::move(m));
         for (auto & m : ptm->optimizationMacros) target->optimizationMacros.push_back(std::move(m));
         for (auto & m : ptm->preInferMacros) target->preInferMacros.push_back(std::move(m));
-        for (auto & m : ptm->preSimulateMacros) target->preSimulateMacros.push_back(std::move(m));
+        for (auto & m : ptm->postInferMacros) target->postInferMacros.push_back(std::move(m));
         for (auto & m : ptm->lintMacros) target->lintMacros.push_back(std::move(m));
         for (auto & m : ptm->globalLintMacros) target->globalLintMacros.push_back(std::move(m));
         for ( auto & rm : ptm->readMacros ) {
