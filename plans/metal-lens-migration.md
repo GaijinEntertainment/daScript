@@ -204,26 +204,61 @@ Each phase gets decided in detail when reached.
   (0.25608706/0.23721886 == P0-P3) — both fam legs compiled with the full batch in tree.
   No wall-clock spot-check: no kernel text changed anywhere (the single router loses one
   parameter declaration), encoders are CPU-side.
-- **P5 — decode-side lens (folded into the arc per ruling, 2026-08-08).** The remaining
-  kernels.das hand surface: 27 production kn_pipeline sites across 17 encoder functions (the
-  2 sites in the tensor race harness stay, bench-only — same carve-out as prefill's). Census:
-  (a) moe expert GEMV — enc_moe_gemv (q8/q51/k4/k5/k6 arms) + enc_moe_gemv_mx4, classes
-  MetalMoeGemvQ8/Q51/K4/K5/K6/Mx4, P2 format-axis shape; (b) batch attn — enc_attn_b +
-  enc_attn_part_b, 4-dtype (f16/f32/q8/tq4) per-class builders + picks; (c) depth attn —
-  enc_attn_d (4 dtypes) + enc_attn_comb_d; (d) batch gemm — enc_gemm_b, enc_gemm_sk_b,
-  enc_sk_reduce_b, enc_gemm64_b, drop-ins; (e) batch gemv/mv boolean twins — enc_gemv_b,
-  enc_mv_b, enc_gemv_w13sw_b (b2/b4 class pairs); (f) batch rope-store — enc_rope_store_b
-  (16/32) + _tq4 + _q8; (g) enc_add_rms_b, drop-in; (h) enc_ew2. Single-decode attn already
-  rides P0-era builders (enc_attnp*_c) — only batch/depth families remain. TWO RULINGS:
-  (1) enc_ew2 (pso-parameterized, serving MetalSwiglu/Geglu/Add/Sigmul) migrates to
-  PER-CLASS builders — callers name the op, the pso handles stop leaking into driver code;
-  (2) item-14-style cleanups FOLD IN — where a dummy bind serves a format that can never
-  carry the field (moe gemv bias/hasb — only mx4 has bias), gate or drop it during the
-  migration, per the CODEREVIEW rule. Expected: zero lens changes; payoff is contract
-  enforcement (binding renumbers compiler-checked, derived staging, the CODEREVIEW
-  dispatch-on-class rule becomes tree-wide), not dedup. Perf guard: decode is the hot
-  per-token path — one wall-clock spot check when the batch lands, unless every builder
-  dump-proves statement-identical again (the P4 evidence class).
+- **P5 ✅ DONE (2026-08-08, commits cfc02a925 / 2894893b8 / 9f899d793 / 67c75fa94).** The
+  decode-side lens, folded into the arc per ruling. All 27 production kn_pipeline sites /
+  17 encoder functions migrated; **census end-state: kernels.das holds exactly the 2
+  tensor-race-harness sites** (bench-only carve-out), zero production hand dispatches
+  anywhere. Zero lens changes, as expected. The batches:
+  - **A (cfc02a925)** gemm quartet + add_rms_b: 8 builders. Tensor twins get their own
+    no-tgmem builders sharing the base's pso global (the MetalRmsNorm pso-sharing shape);
+    the hand tgmem conditional becomes the wrapper's pick. Product grids
+    (mp32/32 * d/32|64) pass as wrapper-computed ntg — the grid microformat stays
+    products-free. The tensor template gained the explicit roles its simdgroup parent had
+    (the P0 hz-tax trap, pre-empted). enc_add_rms_b_c ADDS the hz_read(x) the hand
+    under-staged on the in-place add.
+  - **B+C+D (2894893b8)** boolean twins (6), attn b/part_b/d/comb_d (13), rope-store
+    batch (4). Per-class builders absorb the KV-codec bind-shift outright (quant classes
+    carry their own 4-view layout — no shift arithmetic survives). enc_attn_comb_d
+    DELETED (single caller rides enc_attncombd_c — the P3 comb_b precedent). Derived
+    staging adds hz_read(rt) everywhere a row table is read + hz_read(qk) on the in-place
+    rope (hand under-staged both).
+  - **E (9f899d793)** moe gemv (6 format builders): the cleanest group — every dump
+    statement-identical including the named-coverage q8 grid (rows/g_gemv_rows), the
+    g_gemv_rows*32 tg, and the exact y @span (rows*k*nst*4) the hand staged. The
+    fmt dispatcher keeps only plane resolution + pick. The bias/hasb "dummy" from the
+    census turned out already clean (wb@12 exists only on the mx4 class; hasb rides
+    kargs) — the fold-in was a stale wrapper comment, corrected.
+  - **F (67c75fa94)** ew2 → per-op builders per ruling (enc_swiglu / enc_geglu /
+    enc_sigmul / enc_swiglu_oai direct; enc_add over enc_add_c keeps the g_one default).
+    ascale rides a new HAS_ASCALE gate — only MetalAdd carries it; the byte-diff on the
+    three non-add stamps is exactly one dropped 'constant float& ascale [[buffer(3)]]'
+    line (the item-14 class), add + swiglu_oai byte-identical. 33 call sites name the op;
+    enc_ew2 deleted. The shared SwigluOaiT template gained goff/uoff + exact spans, so
+    pf_enc_swiglu_oai staging tightened from whole-buffer to exact.
+  - **Dump-proof delta taxonomy (all builders proven, 36 total):** statement-identical;
+    ceil-div where the padding invariant holds (gemm SK d/32 — d is a 32-multiple by the
+    kernel's exact ntileN decomposition, the P0-accepted class); int64-vs-uint grid math
+    (mv d — value-equal below 2^31); binds reordered to @binding order (w13sw —
+    slot-addressed, order-free); derived-hz additions (strictly more correct); the gated
+    ascale bind dropped (byte-diff-gated).
+  - **Gates:** kernels 7/7 ×4 rounds; decode arm1+batch (and the BCD round added
+    arm7/arm7b/arm11 — substring match swept arm10/12/13/14 too); prefill base;
+    fam-qwen3moe PARITY_FULL token-identical (' sea', maxd 0.6937207 == P2/P4);
+    fam-gptoss PARITY_FULL maxd bit-identical (0.25608706/0.23721886 == P0-P4) — both
+    with the full A-F batch in tree.
+  - **Ledger observation (pre-existing, unchanged by P5):** decode's swiglu_oai rides the
+    ew2 scalar-count grid (total/64 = total threads for a float4-per-thread kernel) — a
+    4x overdispatch vs the prefill twin's total/256; the guard exits 3/4 of threads
+    immediately. Candidate micro-win for a future decode pass, NOT taken here (parity
+    discipline).
+  - **Wall-clock spot check (run — the derived-hz additions put P5 past the P4 skip
+    bar):** lcpp_bench, Llama-3.2-1B Q8, --ngl 99, interleaved A/B ×3 launches
+    (A = f5d840a8b pre-P5, B = 67c75fa94), same debug-jit instrument both arms.
+    tg128: B 180.12 vs A 180.11 tok/s (+0.006%); pp512: B 3900.1 vs A 3899.7 (+0.009%);
+    launch-level cv ~0.1%, warmup argmax identical. DEAD EVEN — mechanism: the kn_ rail
+    replays captured schedules, so encoder-side hz staging is capture-time-only; the
+    per-token replay never executes it. (Prediction made before the run: within ±1%,
+    capture-time-only cost. Hit.)
 
 Perf guard throughout: encoders are CPU-side — no kernel text changes except P3 (byte-diff
 gates there). Decode/prefill wall-clock spot-check per phase on the M1 (3 launches,
