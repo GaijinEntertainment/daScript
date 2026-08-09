@@ -1260,7 +1260,8 @@ class MetalEmbedK6 {
 // Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
 // (the row stages through the tgmem slab — barrier() is a threadgroup fence only; dim caps at the
 // slab, wider models take enc_add_rms_site). Single-row = the lensed grid=1; batch = enc_add_rms_b.
-[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "1")]
+[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalAddRms {
     @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
     @ssbo @binding = 1 a : array<float>     // [dim] addend (fully read before y is written — y may alias a)
@@ -2150,10 +2151,10 @@ class MetalGemvW13SwB4 : MetalGemvW13SwB24T {
 // IS_SK: grid.y = k-slice axis, per-tg partial-C planes, MetalSkReduce sums them (deterministic).
 [ |> template_struct_instance]
 class template MetalQ8GemmBSplitT {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B; the SK form runs at M' = 32)
-    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d] rows at ka.ys stride; SK: [ksplit x 32 x d] partial-C planes
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>     // Y [M' x d] rows at ka.ys stride; SK: [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 ka : Q8GemmArgs
     @workgroup tw : float16[1024]           // W: 4 k-tiles x 4 row-tiles of 8x8, (k row, wrow col)
     @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
@@ -2248,15 +2249,18 @@ class template MetalQ8GemmBSplitT {
     }
 }
 
+[metal_dispatch(name = "enc_gemm_b_c", pso = "g_pso_gemm_b", tgmem = "MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
 class MetalQ8GemmB : MetalQ8GemmBSplitT {
 }
 
+[metal_dispatch(name = "enc_gemm_sk_b_c", pso = "g_pso_gemm_b_sk", tgmem = "MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64")]
 class MetalQ8GemmBSk : MetalQ8GemmBSplitT {
     override IS_SK = true
 }
 
 // the split-K reduce: y = sum of the ksplit partial planes (one thread per output element);
 // total = 32 * d is both the element count and the plane stride
+[metal_dispatch(name = "enc_sk_reduce_c", pso = "g_pso_skred", tg = 128, grid = "total/128", params = "total : int64")]
 class MetalSkReduce {
     @ssbo @binding = 0 @role = "read" part : array<float>
     @ssbo @binding = 1 @role = "write" y : array<float>
@@ -2283,10 +2287,10 @@ class MetalSkReduce {
 // "gemmb_q8" / "gemmb_sk_q8" / "gemm64b_q8"). Axes: TILE_N width, IS_SK k-slice, LDC_ND stride.
 [ |> template_struct_instance]
 class template MetalQ8GemmTensorT {
-    @ssbo @binding = 0 wqb : array<int8>    // 34B-block W blob, byte view
-    @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
-    @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
-    @ssbo @binding = 4 y : array<float>     // Y [M' x d]; SK: [ksplit x 32 x d] partial-C planes
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view
+    @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view
+    @ssbo @binding = 3 @role = "read" x : array<float>     // X [M' x n] f32 rows
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>     // Y [M' x d]; SK: [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 ka : Q8GemmArgs
     @template_constant TILE_N : uint = 32u
     @template_constant IS_SK : bool = false
@@ -2307,14 +2311,17 @@ class template MetalQ8GemmTensorT {
     }
 }
 
+[metal_dispatch(name = "enc_gemm_b_t_c", pso = "g_pso_gemm_b", tg = 128, grid = "ntg", params = "ntg : int64")]
 class MetalQ8GemmBT : MetalQ8GemmTensorT {
 }
 
+[metal_dispatch(name = "enc_gemm_sk_b_t_c", pso = "g_pso_gemm_b_sk", tg = 128, grid = "d/32, nsk", params = "d : int64, nsk : int64")]
 class MetalQ8GemmBSkT : MetalQ8GemmTensorT {
     override IS_SK = true
     override LDC_ND = true
 }
 
+[metal_dispatch(name = "enc_gemm64_b_t_c", pso = "g_pso_gemm64_b", tg = 128, grid = "ntg", params = "ntg : int64")]
 class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
     override TILE_N = 64u
     override LDC_ND = true
@@ -2323,9 +2330,10 @@ class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
 // The 64-wide twin of MulMm's 32(M) x 64(N) tile: half the threadgroups (d/64) at ~29% fewer
 // instructions per element — wins where the grid stays fat (e.g. the vocab classifier). Each
 // simdgroup owns a 16x32 quadrant (2 token x 4 wrow tiles).
+[metal_dispatch(name = "enc_gemm64_b_c", pso = "g_pso_gemm64_b", tgmem = "metal_q8_gemm64_b_msl_tgmem", tg = 128, grid = "ntg", params = "ntg : int64")]
 class MetalQ8Gemm64B {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 @role = "weight" @off = "boff" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
     @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
     @uniform @binding = 5 ka : Q8GemmArgs
@@ -4109,19 +4117,12 @@ def enc_gemm_mm_b(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uin
 // the M-pad-32 GEMM (B >= 5): raw f32 X, dual-view blob W at the tensor's byte offset
 def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64; yoff : uint64 = 0ul) {
-    kn_pipeline(enc, g_pso_gemm_b)
-    if (!g_gemm_b_tensor) {
-        kn_tgmem(enc, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
+    let ntg = (mp32 / 32l) * (d / 32l)
+    if (g_gemm_b_tensor) {
+        enc_gemm_b_t_c(enc, bw, boff, bw, bx, by, yoff, ka, ntg)
+    } else {
+        enc_gemm_b_c(enc, bw, boff, bw, bx, by, yoff, ka, ntg)
     }
-    kn_buffer(enc, bw, boff, 0)   // byte view
-    kn_buffer(enc, bw, boff, 2)   // half-scale view
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, yoff, 4)
-    kn_kargs(enc, ka, 5)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((mp32 / 32l) * (d / 32l)), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
 // the split-K pair (per-site policy): the GEMM's grid.y is the k-slice axis, partial planes land
@@ -4129,49 +4130,27 @@ def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
 // Planes and grids assume mp == 32 (the policy gate).
 def enc_gemm_sk_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                   bx, bpart : MetalBuffer?; var ka : Q8GemmArgs; d, nsk : int64) {
-    kn_pipeline(enc, g_pso_gemm_b_sk)
-    if (!g_gemm_b_sk_tensor) {
-        kn_tgmem(enc, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
+    if (g_gemm_b_sk_tensor) {
+        enc_gemm_sk_b_t_c(enc, bw, boff, bw, bx, bpart, 0ul, ka, d, nsk)
+    } else {
+        enc_gemm_sk_b_c(enc, bw, boff, bw, bx, bpart, 0ul, ka, d, nsk)
     }
-    kn_buffer(enc, bw, boff, 0)   // byte view
-    kn_buffer(enc, bw, boff, 2)   // half-scale view
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, bpart, 0ul, 4)
-    kn_kargs(enc, ka, 5)
-    hz_read(bx)
-    hz_write(bpart)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(d / 32l), uint(nsk), 1u), uint3(128u, 1u, 1u))
 }
 
 def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; total, nsk : int64) {
     var ka = SkReduceArgs(total = uint(total), ksplit = uint(nsk))
-    kn_pipeline(enc, g_pso_skred)
-    kn_buffer(enc, bpart, 0ul, 0)
-    kn_buffer(enc, by, 0ul, 1)
-    kn_kargs(enc, ka, 2)
-    hz_read(bpart)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((total + 127l) / 128l), 1u, 1u), uint3(128u, 1u, 1u))
+    enc_sk_reduce_c(enc, bpart, by, ka, total)
 }
 
 // the 64-wide N tile (classifier site): the caller gates d % 64 == 0
 def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                  bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64) {
-    kn_pipeline(enc, g_pso_gemm64_b)
-    if (!g_gemm64_b_tensor) {
-        kn_tgmem(enc, metal_q8_gemm64_b_msl_tgmem, 0)
+    let ntg = (mp32 / 32l) * (d / 64l)
+    if (g_gemm64_b_tensor) {
+        enc_gemm64_b_t_c(enc, bw, boff, bw, bx, by, 0ul, ka, ntg)
+    } else {
+        enc_gemm64_b_c(enc, bw, boff, bw, bx, by, ka, ntg)
     }
-    kn_buffer(enc, bw, boff, 0)   // byte view
-    kn_buffer(enc, bw, boff, 2)   // half-scale view
-    kn_buffer(enc, bx, 0ul, 3)
-    kn_buffer(enc, by, 0ul, 4)
-    kn_kargs(enc, ka, 5)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((mp32 / 32l) * (d / 64l)), 1u, 1u), uint3(128u, 1u, 1u))
 }
 
 // Per-encoder buffer-hazard tracker for concurrent encoding (g_bconcurrent): each scratch buffer
@@ -4344,20 +4323,7 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias
 }
 
 def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    kn_pipeline(enc, g_pso_addrms)
-    kn_tgmem(enc, metal_add_rms_msl_tgmem, 0)
-    kn_buffer(enc, bx, 0ul, 0)
-    kn_buffer(enc, ba, 0ul, 1)
-    kn_buffer(enc, bw, 0ul, 2)
-    kn_buffer(enc, by, 0ul, 3)
-    kn_buffer(enc, bdim, 0ul, 4)
-    kn_buffer(enc, beps, 0ul, 5)
-    kn_buffer(enc, bascale != null ? bascale : g_one, 0ul, 6)   // the add's ascale slot
-    hz_read(ba)
-    hz_write(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
+    enc_add_rms_b_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, nrows)
 }
 
 // enc_rms_b (the batched prologue) and pf_enc_rms (the prefill 256/tg shape) are
