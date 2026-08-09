@@ -3912,72 +3912,31 @@ def enc_embed_k6(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; b
 // per-slot x stride, bss/bbxs/bbys = per-stream sel/x/y strides (single decode binds zeros)
 def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, k, nst : int64;
                  bx, by, bsel : MetalBuffer?; var ka : MoeGemvArgs; yoff : uint64 = 0ul) {
-    hz_read(bx)
-    hz_read(bsel)
-    hz_write(by, yoff, uint64(rows * k * nst * 4l))
     if (fmt == KqFmt.q8) {
         let bw = blob_of(g_dev, t, stack_off)
-        kn_pipeline(enc, g_pso_moe_gemv_q8)
-        kn_buffer(enc, bw.buf, bw.boff, 0)
-        kn_buffer(enc, bw.buf, bw.boff, 1)
-        kn_buffer(enc, bx, 0ul, 2)
-        kn_buffer(enc, by, yoff, 3)
-        kn_kargs(enc, ka, 4)
-        kn_buffer(enc, bsel, 0ul, 6)
-        hz_gate(enc)
-        kn_dispatch(enc, uint3(uint((rows + g_gemv_rows - 1l) / g_gemv_rows), uint(k), uint(nst)), uint3(uint(g_gemv_rows * 32l), 1u, 1u))
+        enc_moe_gemv_q8_c(enc, bw.buf, bw.boff, bw.buf, bx, by, yoff, ka, bsel, rows, k, nst)
     } elif (fmt == KqFmt.q51) {
         let qp = q51_planes_of(g_dev, t, stack_off)
-        kn_pipeline(enc, g_pso_moe_gemv_q51)
-        kn_buffer(enc, qp.qbuf, qp.qoff, 0)
-        kn_buffer(enc, qp.sbuf, qp.soff, 1)
-        kn_buffer(enc, bx, 0ul, 2)
-        kn_buffer(enc, by, yoff, 3)
-        kn_kargs(enc, ka, 4)
-        kn_buffer(enc, bsel, 0ul, 6)
-        hz_gate(enc)
-        kn_dispatch(enc, uint3(uint((rows + 3l) / 4l), uint(k), uint(nst)), uint3(64u, 1u, 1u))
+        enc_moe_gemv_q51_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, by, yoff, ka, bsel, rows, k, nst)
     } else {
         let bq = kq_quants_of(g_dev, t, fmt, stack_off)
         let bs = kq_scales_of(g_dev, t, fmt, stack_off)
         if (fmt == KqFmt.k6) {
-            kn_pipeline(enc, g_pso_moe_kq_k6)
-            kn_buffer(enc, bs.buf, bs.doff, 0)
+            enc_moe_gemv_k6_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+        } elif (fmt == KqFmt.k4) {
+            enc_moe_gemv_k4_c(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } else {
-            kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_moe_kq_k4 : g_pso_moe_kq_k5)
-            kn_buffer(enc, bs.buf, bs.soff, 0)
+            enc_moe_gemv_k5_c(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         }
-        kn_buffer(enc, bs.buf, bs.soff, 1)
-        kn_buffer(enc, bq.buf, bq.qoff, 2)
-        kn_buffer(enc, bx, 0ul, 3)
-        kn_buffer(enc, by, yoff, 4)
-        kn_kargs(enc, ka, 5)
-        kn_buffer(enc, bsel, 0ul, 7)
-        hz_gate(enc)
-        kn_dispatch(enc, uint3(uint((rows + 3l) / 4l), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     }
 }
 
 // the MXFP4 expert site (gpt-oss): the mx4 planes bind at the layer stack's byte offsets;
-// bwb/bhasb = the layer's per-expert bias slab (identity g_one + g_zero when absent)
+// bwb = the layer's per-expert bias slab (every caller uploads a real slab; ka.hasb gates the read)
 def enc_moe_gemv_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, k, nst : int64;
                      bx, by, bsel, bwb : MetalBuffer?; var ka : MoeGemvArgs; yoff : uint64 = 0ul) {
     let mp = mx4_of(g_dev, t, stack_off)
-    kn_pipeline(enc, g_pso_moe_gemv_mx4)
-    kn_tgmem(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
-    kn_buffer(enc, mp.qbuf, mp.qoff, 0)
-    kn_buffer(enc, mp.sbuf, mp.soff, 1)
-    kn_buffer(enc, bx, 0ul, 2)
-    kn_buffer(enc, by, yoff, 3)
-    kn_kargs(enc, ka, 4)
-    kn_buffer(enc, bsel, 0ul, 6)
-    kn_buffer(enc, bwb, 0ul, 12)
-    kn_buffer(enc, g_mx4_vtab, 0ul, 15)
-    hz_read(bx)
-    hz_read(bsel)
-    hz_write(by, yoff, uint64(rows * k * nst * 4l))
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((rows + 3l) / 4l), uint(k), uint(nst)), uint3(64u, 1u, 1u))
+    enc_moe_gemv_mx4_c(enc, mp.qbuf, mp.qoff, mp.sbuf, mp.soff, bx, by, yoff, ka, bsel, bwb, g_mx4_vtab, rows, k, nst)
 }
 
 // fused add + rms when dim fits the kernel's row slab, the unfused pair otherwise
@@ -5036,11 +4995,12 @@ class MetalMoeSelect {
 // Expert-indexed q8 GEMV — MetalQ8Gemv's exact dot with the expert plane picked GPU-side:
 // the blob binds at the layer's expert STACK base, the kernel adds sel[slot] * eblk to the
 // block index, reads x at slot * xs (0 = shared activation), writes y at slot * ddim.
+[metal_dispatch(name = "enc_moe_gemv_q8_c", pso = "g_pso_moe_gemv_q8", tg = "g_gemv_rows*32", grid = "rows/g_gemv_rows, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvQ8 {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // the expert stack's blob slice, half-scale view
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // the expert stack's blob slice, half-scale view
+    @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view
     @ssbo @binding = 2 @role = "read" x : array<float4>
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
@@ -5116,12 +5076,13 @@ def private kmask_scales(sv : uint4; iq : uint) : uint4 {
 // Expert-indexed Q4_K GEMV — MetalKqGemvK4's dot; the superblock index shifts by sel[slot] * esb.
 // x rides a float4 view: the 32-scalar-x-load form was load-issue-bound at the routed expert
 // shapes (nfe-row planes) — the vector view is 2.25x there (lab: bench_metal_moe_lab, 142→321 wGB/s).
+[metal_dispatch(name = "enc_moe_gemv_k4_c", pso = "g_pso_moe_kq_k4", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvK4 {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
     @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
@@ -5223,12 +5184,13 @@ class MetalMoeGemvK4 {
 }
 
 // Expert-indexed Q5_K GEMV — MetalKqGemvK5's dot with the expert superblock shift.
+[metal_dispatch(name = "enc_moe_gemv_k5_c", pso = "g_pso_moe_kq_k5", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvK5 {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
     @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
@@ -5307,12 +5269,13 @@ class MetalMoeGemvK5 {
 
 // Expert-indexed Q6_K GEMV — MetalKqGemvK6's dot; the expert shift covers sub-scales AND the
 // trailing f16 d plane (both indexed by the same region-relative superblock).
+[metal_dispatch(name = "enc_moe_gemv_k6_c", pso = "g_pso_moe_kq_k6", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvK6 {
-    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
+    @ssbo @binding = 0 @role = "weight" @off = "doff" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
     @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" y : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
@@ -5386,11 +5349,12 @@ class MetalMoeGemvK6 {
 // Expert-indexed MXFP4 GEMV (gpt-oss): a 32-elem block = 16 nibble bytes (byte b holds elems
 // b LOW / b+16 HIGH — the split-half layout) + one E8M0 scale byte; value = doubled-e2m1
 // magnitude x halved scale (2^(e-128)). Optional per-expert bias rows — gpt-oss's biased MoE.
+[metal_dispatch(name = "enc_moe_gemv_mx4_c", pso = "g_pso_moe_gemv_mx4", tgmem = "metal_moe_gemv_mx4_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvMx4 {
-    @ssbo @binding = 0 @role = "weight" mxu2 : array<uint2>  // nibble plane, uint2 view (block at 2*blk; off/2 % 8)
-    @ssbo @binding = 1 @role = "weight" mxe : array<uint8>   // E8M0 plane, bound at off/32
+    @ssbo @binding = 0 @role = "weight" @off = "qoff" mxu2 : array<uint2>  // nibble plane, uint2 view (block at 2*blk; off/2 % 8)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" mxe : array<uint8>   // E8M0 plane, bound at off/32
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ddim] per-expert bias rows (hasb models)
@@ -5463,11 +5427,12 @@ class MetalMoeGemvMx4 {
 // Expert-indexed Q5_1 GEMV — per-32 planes (a 20B quant block = 5 uints: 16 nibble bytes in the
 // k/k+16 split-half pairing + the qh u32; 4B scales = f16 d, m). value = d*q + m with
 // q = nibble | qh_bit << 4, folded as acc += d*Σ(q·x) + m*Σx per block (f32 activations).
+[metal_dispatch(name = "enc_moe_gemv_q51_c", pso = "g_pso_moe_gemv_q51", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvQ51 {
-    @ssbo @binding = 0 @role = "weight" wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
-    @ssbo @binding = 1 @role = "weight" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
+    @ssbo @binding = 0 @role = "weight" @off = "qoff" wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
-    @ssbo @binding = 3 @role = "write" y : array<float>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
     @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
