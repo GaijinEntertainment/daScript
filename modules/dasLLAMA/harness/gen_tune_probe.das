@@ -1345,9 +1345,10 @@ def private resolve_confirm_model() : string {
     dir(md) $(name : string) {
         return if ((!ends_with(name, "-Q8_0.gguf") && !ends_with(name, "-q8_0.gguf"))
             || find(name, "mmproj") >= 0 || starts_with(name, "ggml-vocab"))
-        let sz = stat("{md}{name}").size
-        if (sz > bestBytes) {
-            bestBytes = sz
+        let fst = stat("{md}{name}")
+        return if (!fst.is_valid || fst.is_dir)   // a dir named like a model must not become the confirm path
+        if (fst.size > bestBytes) {
+            bestBytes = fst.size
             best = "{md}{name}"
         }
     }
@@ -1369,7 +1370,7 @@ def private confirm_winner(winner : string) : string {
     let model = resolve_confirm_model()
     if (empty(model)) {
         print("confirm: winner '{winner}' DIVERGES from the per-ISA fallback '{fb}' - a 1-core crown must confirm end-to-end before it ships (the SPR amx lesson)\n")
-        print("confirm: NO q8 model on this box to confirm with - pinning the fallback '{fb}'. Provision one (fetch_models.das --fetch) or set DASLLAMA_CONFIRM_MODEL=<q8 gguf>\n")
+        print("confirm: NO q8 model on this box to confirm with - pinning the fallback '{fb}'. Provision one (bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch) or set DASLLAMA_CONFIRM_MODEL=<q8 gguf>\n")
         // pin the fallback so the sidecar is COMPLETE — leaving the entry missing makes the
         // startup completeness gate re-tune on every run (the runtime rides the fallback either way)
         return fb
