@@ -716,6 +716,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     set_jobque_threads_cap(threads > 0 ? max(1, threads - 1) : 0)
     // worker CPU affinity — must land before the jobque exists (applied at worker spawn);
     // -1 keeps the engine's platform default (darwin QoS via dasllama_math [init])
+    if (g_cfg.affinity < -1 || g_cfg.affinity > 2) {
+        print("error: --affinity must be -1 (platform default), 0 (off), 1 (hint), or 2 (mask; QoS on darwin)\n")
+        g_exit_code = 2
+        request_exit()
+        return
+    }
     if (g_cfg.affinity >= 0) {
         set_jobque_affinity(g_cfg.affinity)
     }

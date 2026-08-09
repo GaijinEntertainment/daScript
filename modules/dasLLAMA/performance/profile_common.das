@@ -87,9 +87,9 @@ def lcpp_mask_on() : bool {
     return is_windows()
 }
 
-//! llama-bench affinity arguments (leading space; "" when affinity is off): the first `threads`
-//! physical cores as a logical-CPU mask — SMT siblings are adjacent on Windows, so even bits
-//! (16 -> 0x55555555) — plus --cpu-strict so the pins hold. The das-side mirror is jobque affinity.
+//! llama-bench affinity arguments — an empty array when lcpp_mask_on() is false: the first
+//! `threads` physical cores as a logical-CPU mask — SMT siblings are adjacent on Windows, so even
+//! bits (16 -> 0x55555555) — plus --cpu-strict so the pins hold. The das-side mirror is jobque affinity.
 def lcpp_affinity_argv(threads : int) : array<string> {
     var args : array<string>
     if (lcpp_mask_on()) {
