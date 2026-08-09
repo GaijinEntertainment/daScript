@@ -3400,7 +3400,7 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
     @uniform @binding = 9 ka : RopeStoreBQ8Args
 
     [metal_kernel(name="metal_rope_store_b_q8_msl")]
-    def metal_rope_store_b_q8 {   // nolint:STYLE037 — MSL kernel body; rope + quant store share the row's register state
+    def metal_rope_store_b_q8 {
         let lay = ka.lay
         let nblk = ka.nblk
         let qd = ka.qd

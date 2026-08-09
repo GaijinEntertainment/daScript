@@ -1404,7 +1404,7 @@ class MetalAttnQKMm : MetalMmTileBase {
     // inherited ta = K tiles (k row, key col), tb = Q tiles (query row, k col)
 
     [metal_kernel(name="metal_attn_qk_mm_msl")]
-    def metal_attn_qk_mm {   // nolint:STYLE038 — MSL kernel body; the QK tiles are simdgroup-barrier coupled
+    def metal_attn_qk_mm {
         let mBase = gl_WorkGroupID.x * 32u  // query rows
         let nBase = gl_WorkGroupID.y * 64u  // key rows
         // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window

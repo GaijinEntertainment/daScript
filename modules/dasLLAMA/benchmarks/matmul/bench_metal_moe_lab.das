@@ -1914,7 +1914,7 @@ class LabMoeMmK6Reload {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="lab_moe_mm_k6_reload_msl")]
-    def lab_moe_mm_k6_reload {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
+    def lab_moe_mm_k6_reload {
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
         let mBase = gl_WorkGroupID.x * 32u
@@ -2288,7 +2288,7 @@ class LabMoeMmQ8Index {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="lab_moe_mm_q8_index_msl")]
-    def lab_moe_mm_q8_index {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
+    def lab_moe_mm_q8_index {
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
         let mBase = gl_WorkGroupID.x * 32u
