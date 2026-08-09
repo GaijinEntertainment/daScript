@@ -990,6 +990,16 @@ def private upload_f32(dev; v : float) {
     return buf
 }
 
+// a kargs struct uploaded whole — the production kernels bind ONE constant& per slot
+def private upload_kargs(dev; ka) {
+    let sz = uint64(typeinfo sizeof(ka))
+    var buf = metal_new_buffer(dev, sz)
+    unsafe {
+        memcpy(metal_buffer_contents(buf), addr(ka), sz)
+    }
+    return buf
+}
+
 def private time_reps(queue; pso; bufs; groups : uint3; reps : int; tgmem : uint64) : double {
     var err : string
     var gpu_ms = 0.0lf
@@ -1118,12 +1128,9 @@ def private run_attn_b2_sidebyside(b) {
     var hsbuf = upload_u32(dev, uint(head_size))
     var scalebuf = upload_f32(dev, scale)
     var qstridebuf = upload_u32(dev, uint(qd))
-    var cap0buf = upload_f32(dev, 0.0)     // the production kernels' wave-B uniforms at llama-shape
-    var win0buf = upload_u32(dev, 0u)      // values: no soft cap, no sliding window
     var ygot : array<float>
     for (depth in [512l, 640l, 1024l, 2048l, 4096l, 16384l]) {
         let nch = (depth + 63l) / 64l
-        var nchmaxbuf = upload_u32(dev, uint(nch))
         let nch32 = (depth + 31l) / 32l
         var nchmax32buf = upload_u32(dev, uint(nch32))
         let nch64 = (depth + 63l) / 64l
@@ -1137,11 +1144,17 @@ def private run_attn_b2_sidebyside(b) {
         var rte <- [0u, 0u, uint(depth), uint(depth), 0u, 0u, uint(depth), uint(depth)]
         var rtbuf = upload_array(dev, rte, nb * 16l)
         var yref <- cpu_sq_attn(kc, vc, q, nb, depth, nheads, head_size, kv_dim, kv_mul, scale)
-        var bufs_part <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nchmaxbuf, cap0buf, win0buf]
+        // the production pair binds ONE kargs (llama-shape: no soft cap, no window, no sinks)
+        var kapbuf = upload_kargs(dev, SqAttnPartBArgs(lay = 0u, kstride = uint(kv_dim),
+            nheads = uint(nheads), kv_mul = uint(kv_mul), hs = uint(head_size), scale = scale,
+            qstride = uint(qd), nchmax = uint(nch), softcap = 0.0, window = 0u))
+        var kacbuf = upload_kargs(dev, SqAttnCombArgs(nch = uint(nch), nheads = uint(nheads),
+            hs = uint(head_size), hass = 0u))
+        var bufs_part <- [kbuf, vbuf, qbuf, partbuf, rtbuf, kapbuf]
         var bufs_partf <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nchmax32buf]
         var bufs_partg <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nsgsbuf]
         var bufs_partd <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nsgsdbuf]
-        var bufs_comb <- [partbuf, ybuf, rtbuf, nchmaxbuf, nheadsbuf, hsbuf, win0buf]
+        var bufs_comb <- [partbuf, ybuf, kacbuf, rtbuf]   // production layout ka@2, rt@3; sink@20 unbound (hass=0, never read)
         var bufs_combp <- [partbuf, ybuf, rtbuf, nchmax32buf, nheadsbuf, hsbuf]
         var bufs_combg <- [partbuf, ybuf, rtbuf, nsgsbuf, nheadsbuf, hsbuf]
         var bufs_combd <- [partbuf, ybuf, rtbuf, nsgsdbuf, nheadsbuf, hsbuf]
@@ -1231,7 +1244,8 @@ def private run_attn_b2_sidebyside(b) {
             delete bufs_combg
             delete bufs_combd
         }
-        metal_release(nchmaxbuf)
+        metal_release(kapbuf)
+        metal_release(kacbuf)
         metal_release(nchmax32buf)
         metal_release(nsgsbuf)
         metal_release(nsgsdbuf)
@@ -1251,8 +1265,6 @@ def private run_attn_b2_sidebyside(b) {
     metal_release(hsbuf)
     metal_release(scalebuf)
     metal_release(qstridebuf)
-    metal_release(cap0buf)
-    metal_release(win0buf)
     metal_release(pso_part)
     metal_release(pso_comb)
     metal_release(pso_partp)
