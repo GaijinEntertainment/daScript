@@ -3936,6 +3936,7 @@ namespace das
 #endif
         DAS_ASSERTF(context.constStringHeap->depth()<=1, "strings must come in one page");
         context.stringHeap->setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
+        context.stringHeap->setReclaimDisabled(options.getBoolOption("disable_temp_string_reclaim", policies.disable_temp_string_reclaim));
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
             bool displayHash = options.getBoolOption("log_nodes_aot_hash",false);
