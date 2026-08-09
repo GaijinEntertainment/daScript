@@ -149,18 +149,18 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
     LIST(APPEND _run_utils_tests
         COMMAND ${CMAKE_COMMAND} -E echo "Running tests ${_das}"
         COMMAND daslang ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --test ${PROJECT_SOURCE_DIR}/utils/${_das}
-        DEPENDS das-fmt tree_sitter_daslang
+        DEPENDS gen1_to_gen2 tree_sitter_daslang
     )
 ENDFOREACH()
 
-# das-fmt (utils/dasFormatter, the gen1->gen2 syntax converter) carries its own
+# gen1_to_gen2 (utils/dasFormatter, the gen1->gen2 syntax converter) carries its own
 # --tests self-check suite. It's a C++ target (not a daslang -exe util), so invoke
 # the binary directly rather than through dastest. Previously uncovered by CI, which
 # let the make-literal verify-compile tests rot unnoticed. (issue #3094)
 LIST(APPEND _run_utils_tests
-    COMMAND ${CMAKE_COMMAND} -E echo "Running tests das-fmt dasFormatter --tests"
-    COMMAND $<TARGET_FILE:das-fmt> --tests
-    DEPENDS das-fmt
+    COMMAND ${CMAKE_COMMAND} -E echo "Running tests gen1_to_gen2 dasFormatter --tests"
+    COMMAND $<TARGET_FILE:gen1_to_gen2> --tests
+    DEPENDS gen1_to_gen2
 )
 ADD_CUSTOM_TARGET(run_utils_tests
     ${_run_utils_tests}

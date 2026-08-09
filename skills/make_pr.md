@@ -346,7 +346,7 @@ Do NOT format files you didn't change — only format files that are part of the
 
 CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify` — the script is **in the repo tree** and wraps the same `daslib/das_source_formatter` engine as MCP `format_file`, so the two agree (probe-verified: both rewrite `Foo(a=1)` → `Foo(a = 1)`). The pre-push hook runs the exact CI command on tracked files; if the hook passes, the CI formatter gate passes.
 
-**Name trap:** a locally built `bin/Release/das-fmt.exe` (the CMake `das-fmt` target, from `utils/dasFormatter/`) is the **v1→v2 syntax converter**, not the formatter. CI's `das-fmt.exe` verify pass works because CI first overwrites that binary with an `-exe`-compiled `dasfmt.das`. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`).
+**Not the converter:** `bin/Release/gen1_to_gen2.exe` (the CMake target from `utils/dasFormatter/`) is the **v1→v2 syntax converter**, a different tool. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`); CI additionally compiles the formatter itself to `bin/das-fmt.exe` via `-exe` and re-runs the verify with it.
 
 ## 6. Create the PR
 

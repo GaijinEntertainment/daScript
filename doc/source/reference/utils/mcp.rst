@@ -237,7 +237,7 @@ Code generation and transformation
      - Format a ``.das`` file using the built-in formatter.
    * - ``convert_to_gen2``
      - Convert a ``.das`` file from gen1 syntax to gen2 using
-       ``das-fmt``.  Optional ``inplace`` flag.
+       the ``gen1_to_gen2`` converter.  Optional ``inplace`` flag.
    * - ``aot``
      - Generate AOT (ahead-of-time) C++ code for a ``.das`` file or a
        single function.  Overloaded names return a disambiguation list.
