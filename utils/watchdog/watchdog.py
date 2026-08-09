@@ -66,6 +66,10 @@ STATE: dict[str, object] = {
     "child_exit_code": None,
     "restart_delay": 0.0,
     "stage": None,
+    # Health as the tray/control surfaces see it: None = not yet known (booting), then the
+    # last health_ok verdict. serving_since anchors the "healthy for" display.
+    "healthy": None,
+    "serving_since": 0.0,
     # Progress of an in-flight tune, folded from llvm_tune's @tune events. Counters only —
     # nothing here is an estimate, because the tuner cannot know how long it has left.
     "tune": {},
@@ -721,11 +725,56 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
     return image
 
 
+def tray_status() -> str:
+    """One line of truth for the tooltip and the menu's status row, read from the same STATE
+    the control plugin sees. Counters only, no prediction — same rule as the tune fold."""
+    s = read_state()
+    if not s.get("child_pid"):
+        delay = float(s.get("restart_delay") or 0.0)
+        code = s.get("child_exit_code")
+        if delay > 0:
+            return f"restarting in {delay:.0f}s (exit {code})"
+        return "stopped"
+    tune = s.get("tune") or {}
+    if isinstance(tune, dict) and tune.get("total"):
+        done, total = tune.get("done", 0), tune.get("total", 0)
+        kernel = tune.get("kernel") or ""
+        rounds = int(tune.get("rounds") or 0)
+        detail = f" — {kernel} {tune.get('round', 0)}/{rounds}" if kernel and rounds else \
+             (f" — {kernel}" if kernel else "")
+        return f"minting kernels {done}/{total}{detail}"
+    healthy = s.get("healthy")
+    if healthy is True:
+        since = float(s.get("serving_since") or 0.0)
+        up = time.time() - since if since else 0.0
+        hours, mins = int(up // 3600), int(up % 3600 // 60)
+        return f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+    stage = s.get("stage")
+    if healthy is False:
+        return f"unhealthy ({stage})" if stage else "unhealthy"
+    return f"booting ({stage})" if stage else "booting"
+
+
+def tray_tick(icon, name: str) -> None:
+    """Refresh the tooltip from live state. Called from the supervision loop's 0.25s tick;
+    writes only on change so the shell isn't spammed with NOTIFYICONDATA updates."""
+    if icon is None:
+        return
+    title = f"{name} — {tray_status()}"
+    if getattr(icon, "_das_last_title", None) != title:
+        try:
+            icon.title = title
+            icon._das_last_title = title
+        except Exception:  # noqa: BLE001 - a dead tray must not touch supervision
+            pass
+
+
 def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
-    """Optional system-tray icon: left-click / "Open" launches the service page, "Shutdown"
-    routes into the same stopping Event the signal handlers set. Never fatal — a desktop
-    nicety must not take supervision down. macOS needs the tray on the main thread (AppKit
-    runloop), which conflicts with the supervision loop owning it; not wired yet."""
+    """Optional system-tray icon: a live status line (tooltip + first menu row), an "Open"
+    item enabled only while the service is actually healthy, and "Shutdown" routed into the
+    same stopping Event the signal handlers set. Never fatal — a desktop nicety must not
+    take supervision down. macOS needs the tray on the main thread (AppKit runloop), which
+    conflicts with the supervision loop owning it; not wired yet."""
     if not args.tray:
         return None
     if sys.platform == "darwin":
@@ -745,15 +794,23 @@ def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threa
         emit(logger, "tray_shutdown_requested")
         stopping.set()
 
-    items = []
+    # Menu text/enabled are callables: pystray re-evaluates them each time the menu opens,
+    # so the menu is honest without an update pump. "Open" greys out until health is green —
+    # offering a page that isn't up is how a tray lies.
+    items = [pystray.MenuItem(lambda item: tray_status(), None, enabled=False)]
     if url:
-        items.append(pystray.MenuItem(f"Open {args.name}", on_open, default=True))
+        items.append(pystray.MenuItem(
+            f"Open {args.name}",
+            on_open,
+            default=True,
+            enabled=lambda item: read_state().get("healthy") is True,
+        ))
     items.append(pystray.MenuItem("Shutdown", on_shutdown))
     try:
         icon = pystray.Icon(
             args.name,
             load_tray_image(SCRIPT_DIR, args.cwd, args.name),
-            title=f"{args.name} watchdog",
+            title=f"{args.name} — booting",
             menu=pystray.Menu(*items),
         )
         icon.run_detached()
@@ -1064,7 +1121,8 @@ def main() -> int:
 
             emit(logger, "child_started", pid=child.pid)
             set_state(child_pid=child.pid, child_started_at=started_at,
-                      child_exit_code=None, restart_delay=0.0, stage=None)
+                      child_exit_code=None, restart_delay=0.0, stage=None,
+                      healthy=None, serving_since=0.0)
             tune_restart_seen = threading.Event()
             jit_dlls: set[Path] = set()
             stage: dict[str, object] = {"name": None, "rank": 0, "since": time.monotonic()}
@@ -1120,6 +1178,9 @@ def main() -> int:
                         last_health = healthy
                         last_health_change = now
                         next_heartbeat = now + HEALTH_HEARTBEAT_SECONDS
+                        set_state(healthy=healthy)
+                        if healthy:
+                            set_state(serving_since=time.time())
                     elif healthy and now >= next_heartbeat:
                         emit(logger, "health_heartbeat", pid=child.pid,
                              ok=True, healthy_for_s=round(now - last_health_change))
@@ -1134,6 +1195,7 @@ def main() -> int:
                     windows_balloon(f"{args.name} recovered", f"Process is running (pid {child.pid})")
                     emit(logger, "recovered", pid=child.pid)
                     recovery_pending = False
+                tray_tick(tray_icon, args.name)
                 time.sleep(0.25)
 
             child_pid = child.pid
@@ -1142,6 +1204,7 @@ def main() -> int:
             uptime = time.time() - started_at
             emit(logger, "child_exited", pid=child_pid, code=return_code, uptime_seconds=uptime)
             set_state(child_pid=0, child_exit_code=return_code)
+            tray_tick(tray_icon, args.name)
             child = None
             if stopping.is_set():
                 return 0
@@ -1175,7 +1238,8 @@ def main() -> int:
                 wer=wer or "",
                 dump=str(dump_path) if dump_path is not None else "",
             )
-            set_state(restart_delay=delay)
+            set_state(restart_delay=delay, healthy=None)
+            tray_tick(tray_icon, args.name)
             bundle_path: Path | None = None
             if not args.no_crash_bundle:
                 try:
