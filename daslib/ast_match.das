@@ -511,18 +511,18 @@ def private qm_stage(user_name : string; kind : string; var caps : QmCaptures&; 
     let tmp = next_var(index)
     caps.temps |> insert(user_name, tmp)
     if (kind == "expr") {
-        caps.decls |> push <| qmacro_expr(${ var $i(tmp) = $i(user_name); }) // nolint:LINT004
-        caps.commits |> push <| qmacro_expr(${ $i(user_name) <- $i(tmp); }) // nolint:PERF030 — commit replaces the capture target by design
+        caps.decls |> push <| qmacro_expr(${ var $i(tmp) = $i(user_name); }) // nolint:LINT004,LINT019
+        caps.commits |> push <| qmacro_expr(${ $i(user_name) <- $i(tmp); }) // nolint:PERF030,LINT019 — commit replaces the capture target by design
     } elif (kind == "copy") {
-        caps.decls |> push <| qmacro_expr(${ var $i(tmp) = $i(user_name); }) // nolint:LINT004
+        caps.decls |> push <| qmacro_expr(${ var $i(tmp) = $i(user_name); }) // nolint:LINT004,LINT019
         caps.commits |> push <| qmacro_expr(${ $i(user_name) = $i(tmp); })
     } else { // "stmts" / "args" — array temps: free the buffer deterministically on any exit
         if (kind == "stmts") {
-            caps.decls |> push <| qmacro_expr(${ var $i(tmp) = qm_tmp_stmts(); }) // nolint:LINT004
+            caps.decls |> push <| qmacro_expr(${ var $i(tmp) = qm_tmp_stmts(); }) // nolint:LINT004,LINT019
         } else {
-            caps.decls |> push <| qmacro_expr(${ var $i(tmp) = qm_tmp_args(); }) // nolint:LINT004
+            caps.decls |> push <| qmacro_expr(${ var $i(tmp) = qm_tmp_args(); }) // nolint:LINT004,LINT019
         }
-        caps.commits |> push <| qmacro_expr(${ $i(user_name) <- $i(tmp); }) // nolint:PERF030 — commit replaces the capture target by design
+        caps.commits |> push <| qmacro_expr(${ $i(user_name) <- $i(tmp); }) // nolint:PERF030,LINT019 — commit replaces the capture target by design
         // clear drops the (gc-owned, cloned) elements without touching them; delete frees the buffer
         caps.cleanups |> push <| qmacro_expr(${ $i(tmp) |> clear(); }) // nolint:STYLE012 — appends per capture
         caps.cleanups |> push <| qmacro_expr(${ unsafe { delete $i(tmp); } })
@@ -1172,10 +1172,10 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         let cast_var = next_var(index)
         var as_val = make_var_ref(at, actual_var)
         var as_cast = new ExprAsVariant(at = at, value = as_val, name := "ExprTypeDecl")
-        body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); }) // nolint:LINT004
+        body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); }) // nolint:LINT004,LINT019
         // Clone the typeexpr for matching
         let td_var = next_var(index)
-        body |> push <| qmacro_expr(${ var $i(td_var) = clone_type($i(cast_var).typeexpr); }) // nolint:LINT004
+        body |> push <| qmacro_expr(${ var $i(td_var) = clone_type($i(cast_var).typeexpr); }) // nolint:LINT004,LINT019
         generate_type_match((pattern as ExprTypeDecl).typeexpr, td_var, actual_var, body, caps, index, at)
         return
     }
@@ -1390,7 +1390,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         if (*pv != null) {
                             let child_pattern = *pv
                             let child_var = next_var(index)
-                            body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).$f(name)); }) // nolint:LINT004
+                            body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).$f(name)); }) // nolint:LINT004,LINT019
                             if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                                 var ncond = qmacro($i(child_var) == null)
                                 var nfail = qmacro(qm_fail_null())
@@ -1560,7 +1560,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         let cast_var = next_var(index)
         var as_val_c = make_var_ref(at, actual_var)
         var as_cast_c = new ExprAsVariant(at = at, value = as_val_c, name := rtti)
-        body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_c); }) // nolint:LINT004
+        body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_c); }) // nolint:LINT004,LINT019
         // Match name (ExprCall only) then match arguments (skipping fakeContext/fakeLineInfo)
         if (rtti == "ExprCall") {
             let call = pattern as ExprCall
@@ -1578,9 +1578,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_pattern = arg
                     if (child_pattern != null) {
                         let phys_var = next_var(index)
-                        body |> push <| qmacro_expr(${ var $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004
+                        body |> push <| qmacro_expr(${ var $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004,LINT019
                         let child_var = next_var(index)
-                        body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_var)]); }) // nolint:LINT004
+                        body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_var)]); }) // nolint:LINT004,LINT019
                         generate_match(child_pattern, child_var, body, caps, index, at)
                     }
                 }
@@ -1596,9 +1596,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_pattern = arg
                     if (child_pattern != null) {
                         let phys_var = next_var(index)
-                        body |> push <| qmacro_expr(${ let $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004
+                        body |> push <| qmacro_expr(${ let $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); }) // nolint:LINT004,LINT019
                         let child_var = next_var(index)
-                        body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_var)]); }) // nolint:LINT004
+                        body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_var)]); }) // nolint:LINT004,LINT019
                         generate_match(child_pattern, child_var, body, caps, index, at)
                     }
                 }
@@ -1614,7 +1614,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     let cast_var = next_var(index)
     var as_val2 = make_var_ref(at, actual_var)
     var as_cast2 = new ExprAsVariant(at = at, value = as_val2, name := rtti)
-    body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast2); }) // nolint:LINT004
+    body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast2); }) // nolint:LINT004,LINT019
 
     // Iterate fields via annotation reflection
     var ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(pattern)))
@@ -1654,7 +1654,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 if (*pv != null) {
                     let child_pattern = *pv
                     let child_var = next_var(index)
-                    body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).$f(name)); }) // nolint:LINT004
+                    body |> push <| qmacro_expr(${ var $i(child_var) = clone_expression($i(cast_var).$f(name)); }) // nolint:LINT004,LINT019
                     if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                         var ncond = qmacro($i(child_var) == null)
                         var nfail = qmacro(qm_fail_null())

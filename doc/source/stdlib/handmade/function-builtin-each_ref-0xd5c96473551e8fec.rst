@@ -1,0 +1,1 @@
+Wraps a lambda `lam` into an iterator that yields references to each value rather than copies. The lambda receives its pointer argument by reference — it writes the next element's address into it — and returns a bool indicating whether to continue.
