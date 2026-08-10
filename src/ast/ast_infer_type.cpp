@@ -1354,8 +1354,10 @@ namespace das {
             return Visitor::visit(expr); // failed to infer
         if (!expr->defaultValue->type || expr->defaultValue->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
-        if (auto opE = inferGenericOperator("??", expr->at, expr->subexpr, expr->defaultValue))
-            return opE;
+        if (!expr->no_promotion) {
+            if (auto opE = inferGenericOperator("??", expr->at, expr->subexpr, expr->defaultValue))
+                return opE;
+        }
         // infer
         expr->subexpr = Expression::autoDereference(expr->subexpr);
         auto seT = expr->subexpr->type;
@@ -2170,11 +2172,13 @@ namespace das {
         }
         // generic operator
         if ( !expr->typeexpr->isAutoOrAlias() ) {
-            auto tname = das_to_string(expr->typeexpr->baseType);
-            if (auto opE = inferGenericOperator("`is`" + tname, expr->at, expr->subexpr, nullptr))
-                return opE;
-            if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->subexpr, tname))
-                return opE;
+            if (!expr->no_promotion) {
+                auto tname = das_to_string(expr->typeexpr->baseType);
+                if (auto opE = inferGenericOperator("`is`" + tname, expr->at, expr->subexpr, nullptr))
+                    return opE;
+                if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->subexpr, tname))
+                    return opE;
+            }
         } else {
             error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be inferred", "", "",
                   expr->at, CompilationError::not_resolved_yet_is_expression_type);
@@ -3904,30 +3908,32 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprAsVariant *expr) {
         if (!expr->value->type || expr->value->type->isAliasOrExpr())
             return Visitor::visit(expr);
-        // implement variant macros
-        ExpressionPtr substitute = nullptr;
-        auto modMacro = [&](Module *mod) -> bool {
-            if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                for (const auto &pm : mod->variantMacros) {
-                    if ((substitute = pm->visitAs(program, thisModule, expr))) {
-                        return false;
+        if (!expr->no_promotion) {
+            // implement variant macros
+            ExpressionPtr substitute = nullptr;
+            auto modMacro = [&](Module *mod) -> bool {
+                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
+                    for (const auto &pm : mod->variantMacros) {
+                        if ((substitute = pm->visitAs(program, thisModule, expr))) {
+                            return false;
+                        }
                     }
                 }
+                return true;
+            };
+            Module::foreach (modMacro);
+            if (!substitute)
+                program->library.foreach (modMacro, "*");
+            if (substitute) {
+                reportAstChanged();
+                return substitute;
             }
-            return true;
-        };
-        Module::foreach (modMacro);
-        if (!substitute)
-            program->library.foreach (modMacro, "*");
-        if (substitute) {
-            reportAstChanged();
-            return substitute;
+            // generic operator
+            if (auto opE = inferGenericOperator("`as`" + expr->name, expr->at, expr->value, nullptr))
+                return opE;
+            if (auto opE = inferGenericOperatorWithName("`as", expr->at, expr->value, expr->name))
+                return opE;
         }
-        // generic operator
-        if (auto opE = inferGenericOperator("`as`" + expr->name, expr->at, expr->value, nullptr))
-            return opE;
-        if (auto opE = inferGenericOperatorWithName("`as", expr->at, expr->value, expr->name))
-            return opE;
         // regular infer
         auto valT = expr->value->type;
         if (!valT->isGoodVariantType()) {
@@ -3951,33 +3957,35 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprSafeAsVariant *expr) {
         if (!expr->value->type || expr->value->type->isAliasOrExpr())
             return Visitor::visit(expr);
-        // implement variant macros
-        ExpressionPtr substitute = nullptr;
-        auto modMacro = [&](Module *mod) -> bool {
-            if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                for (const auto &pm : mod->variantMacros) {
-                    if ((substitute = pm->visitSafeAs(program, thisModule, expr))) {
-                        return false;
+        if (!expr->no_promotion) {
+            // implement variant macros
+            ExpressionPtr substitute = nullptr;
+            auto modMacro = [&](Module *mod) -> bool {
+                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
+                    for (const auto &pm : mod->variantMacros) {
+                        if ((substitute = pm->visitSafeAs(program, thisModule, expr))) {
+                            return false;
+                        }
                     }
                 }
+                return true;
+            };
+            Module::foreach (modMacro);
+            if (!substitute)
+                program->library.foreach (modMacro, "*");
+            if (substitute) {
+                reportAstChanged();
+                return substitute;
             }
-            return true;
-        };
-        Module::foreach (modMacro);
-        if (!substitute)
-            program->library.foreach (modMacro, "*");
-        if (substitute) {
-            reportAstChanged();
-            return substitute;
-        }
-        // generic operator
-        if (auto opE = inferGenericOperator("?as`" + expr->name, expr->at, expr->value, nullptr)) {
-            reportAstChanged();
-            return opE;
-        }
-        if (auto opE = inferGenericOperatorWithName("?as", expr->at, expr->value, expr->name)) {
-            reportAstChanged();
-            return opE;
+            // generic operator
+            if (auto opE = inferGenericOperator("?as`" + expr->name, expr->at, expr->value, nullptr)) {
+                reportAstChanged();
+                return opE;
+            }
+            if (auto opE = inferGenericOperatorWithName("?as", expr->at, expr->value, expr->name)) {
+                reportAstChanged();
+                return opE;
+            }
         }
         // regular infer
         if (!expr->value->type->isPointer() && !safeExpression(expr)) {
@@ -4014,30 +4022,32 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprIsVariant *expr) {
         if (!expr->value->type || expr->value->type->isAliasOrExpr())
             return Visitor::visit(expr);
-        // implement variant macros
-        ExpressionPtr substitute = nullptr;
-        auto modMacro = [&](Module *mod) -> bool {
-            if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                for (const auto &pm : mod->variantMacros) {
-                    if ((substitute = pm->visitIs(program, thisModule, expr))) {
-                        return false;
+        if (!expr->no_promotion) {
+            // implement variant macros
+            ExpressionPtr substitute = nullptr;
+            auto modMacro = [&](Module *mod) -> bool {
+                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
+                    for (const auto &pm : mod->variantMacros) {
+                        if ((substitute = pm->visitIs(program, thisModule, expr))) {
+                            return false;
+                        }
                     }
                 }
+                return true;
+            };
+            Module::foreach (modMacro);
+            if (!substitute)
+                program->library.foreach (modMacro, "*");
+            if (substitute) {
+                reportAstChanged();
+                return substitute;
             }
-            return true;
-        };
-        Module::foreach (modMacro);
-        if (!substitute)
-            program->library.foreach (modMacro, "*");
-        if (substitute) {
-            reportAstChanged();
-            return substitute;
+            // generic operator
+            if (auto opE = inferGenericOperator("`is`" + expr->name, expr->at, expr->value, nullptr))
+                return opE;
+            if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->value, expr->name))
+                return opE;
         }
-        // generic operator
-        if (auto opE = inferGenericOperator("`is`" + expr->name, expr->at, expr->value, nullptr))
-            return opE;
-        if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->value, expr->name))
-            return opE;
         // regular infer
         auto valT = expr->value->type;
         if (!valT->isGoodVariantType()) {

@@ -425,7 +425,7 @@ class PrintVisitor : AstVisitor {
 // null coaelescing
     def override preVisitExprNullCoalescingDefault(expr : ExprNullCoalescing?; defval : ExpressionPtr) {
         //! Prints the null-coalescing operator (??).
-        write(*writer, " ?? ");
+        write(*writer, expr.no_promotion ? " !?? " : " ?? ");
     }
 // at
     def override visitExprAt(var expr : ExprAt?) : ExpressionPtr {
@@ -435,7 +435,7 @@ class PrintVisitor : AstVisitor {
     }
     def override preVisitExprAtIndex(expr : ExprAt?; index : ExpressionPtr) {
         //! Prints the opening bracket of an index-at expression.
-        write(*writer, "[");
+        write(*writer, expr.atFlags.no_promotion ? "![" : "[");
     }
 // safe at
     def override visitExprSafeAt(var expr : ExprSafeAt?) : ExpressionPtr {
@@ -445,12 +445,12 @@ class PrintVisitor : AstVisitor {
     }
     def override preVisitExprSafeAtIndex(expr : ExprSafeAt?; index : ExpressionPtr) {
         //! Prints the opening safe-index operator (?[).
-        write(*writer, "?[");
+        write(*writer, expr.atFlags.no_promotion ? "!?[" : "?[");
     }
 // is
     def override preVisitExprIsType(expr : ExprIs?; typeDecl : TypeDeclPtr) {
         //! Prints the is-type check expression.
-        write(*writer, "is type<{describe([decl=typeDecl,extra=false,contracts=true])}>");
+        write(*writer, "{expr.no_promotion ? "!is" : "is"} type<{describe([decl=typeDecl,extra=false,contracts=true])}>");
     }
 // op2
     def override preVisitExprOp2(expr : ExprOp2?) {
@@ -810,13 +810,13 @@ class PrintVisitor : AstVisitor {
 // field
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
         //! Prints a dot-field access expression.
-        write(*writer, ".{expr.name}");
+        write(*writer, "{expr.fieldFlags.no_promotion ? "!." : "."}{expr.name}");
         return <- expr;
     }
 // safe field
     def override visitExprSafeField(var expr : ExprSafeField?) : ExpressionPtr {
         //! Prints a safe-navigation (?.) field access expression.
-        write(*writer, "?.{expr.name}");
+        write(*writer, "{expr.fieldFlags.no_promotion ? "!?." : "?."}{expr.name}");
         return <- expr;
     }
 // swizzle
@@ -833,19 +833,19 @@ class PrintVisitor : AstVisitor {
 // is variant
     def override visitExprIsVariant(var expr : ExprIsVariant?) : ExpressionPtr {
         //! Prints an `is` variant type check expression.
-        write(*writer, " is {expr.name}");
+        write(*writer, " {expr.fieldFlags.no_promotion ? "!is" : "is"} {expr.name}");
         return <- expr;
     }
 // as variant
     def override visitExprAsVariant(var expr : ExprAsVariant?) : ExpressionPtr {
         //! Prints an `as` variant type conversion expression.
-        write(*writer, " as {expr.name}");
+        write(*writer, " {expr.fieldFlags.no_promotion ? "!as" : "as"} {expr.name}");
         return <- expr;
     }
 // safe as variant
     def override visitExprSafeAsVariant(var expr : ExprSafeAsVariant?) : ExpressionPtr {
         //! Prints a safe `?as` variant type conversion expression.
-        write(*writer, " ?as {expr.name}");
+        write(*writer, " {expr.fieldFlags.no_promotion ? "!?as" : "?as"} {expr.name}");
         return <- expr;
     }
 // op1

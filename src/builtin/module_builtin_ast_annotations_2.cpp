@@ -90,6 +90,7 @@ namespace das {
         AstExprNullCoalescingAnnotation(ModuleLibrary & ml)
             :  AstExprPtr2RefAnnotation<ExprNullCoalescing> ("ExprNullCoalescing", ml) {
             addField<DAS_BIND_MANAGED_FIELD(defaultValue)>("defaultValue");
+            addField<DAS_BIND_MANAGED_FIELD(no_promotion)>("no_promotion");
         }
     };
 
@@ -98,6 +99,7 @@ namespace das {
             :  AstExpressionAnnotation<ExprIs> ("ExprIs", ml) {
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
+            addField<DAS_BIND_MANAGED_FIELD(no_promotion)>("no_promotion");
         }
     };
 

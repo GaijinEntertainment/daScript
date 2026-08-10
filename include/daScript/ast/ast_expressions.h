@@ -110,6 +110,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
         ExpressionPtr   defaultValue = nullptr;
+        bool            no_promotion = false;
     };
 
     struct DAS_API ExprDelete : Expression {
@@ -1269,6 +1270,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr     typeexpr = nullptr;
+        bool            no_promotion = false;
     };
 
     struct DAS_API ExprAscend : Expression {

@@ -280,20 +280,29 @@ def operator .. (a, b : Deg) : range => range(a.d, b.d)              // same as 
 ### Field access and computed properties
 
 `operator .` can be overloaded generically (the field name arrives as a `string`) or per name.
-Inside such an operator, `t . . field` reaches the real field, bypassing the overload — the
-spaces are required, since `t..field` lexes as the interval operator. A read/write pair makes a
-computed property; the setter is `operator . name :=`, invoked with `:=` at the call site.
+Inside such an operator, `t!.field` reaches the real field, bypassing the overload. A
+read/write pair makes a computed property; the setter is `operator . name :=`, invoked with
+`:=` at the call site.
 
 ```das
 struct Goo { a : string }
-def operator . (t : Goo; name : string) : string => "{name}={t . . a}"   // any field name
-def operator . size (t : Goo) : int => length(t . . a)                   // just '.size'
+def operator . (t : Goo; name : string) : string => "{name}={t!.a}"   // any field name
+def operator . size (t : Goo) : int => length(t!.a)                   // just '.size'
 // with a = "hello": g.whatever is "whatever=hello", g.size is 5
 
 def operator . magnitude (b : Ball) : float => length(b.dir)
 def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.dir) * value }
 // ball.magnitude reads, ball.magnitude := 10.0 writes
 ```
+
+### Original-operator access (`!`)
+
+`!` in front of any overloadable access or test operator yields the **original** operator,
+never the overload: `a!.x` (raw field), `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`,
+`a !as x`, `a !?as x`. The variant and coalescing forms also bypass variant macros. Use these
+in generic or generated code that must get the language's own semantics regardless of what
+overloads are in scope. The legacy spelling `t . .field` (dot, space, dot) is equivalent to
+`t!.field` — the space is required there because `t..field` lexes as the interval operator.
 
 Operators also work as struct/class methods — mark read-only ones `const`:
 
