@@ -721,26 +721,50 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
     seg.stmts |> clear()
 }
 
-// `member <Class>`: the block's statements live inside a method of the named class — wrap
-// them in a helper method of a synthesized subclass so unqualified calls resolve against
-// the class surface (HvWebServer routes, adapters, ...)
-def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock) {
+// `member <Class>`: the block's content lives inside the named class — chunk-aware:
+// hoist chunks route to the page hoists, decl chunks (def override ... ) splice as
+// members of a synthesized subclass, statement chunks wrap in a helper method so
+// unqualified calls resolve against the class surface (HvWebServer routes, adapters, ...)
+def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock; var hoists : array<string>) {
     var body := blk.body
     mark_elisions(body)
-    var dc = DeclChunk(name = "_doc_member_{blk.rst_line}", lines <- [
-        "// --- member block at rst:{blk.rst_line}",
-        "class _doc_member_{blk.rst_line} : {blk.marker_arg} \{",
-        "    def _doc_body_{blk.rst_line}() \{"
-    ])
-    for (l in body) {
-        if (trim(l) == ELIDE) {
-            dc.lines |> push("        pass")
+    var members : array<string>
+    var stmts : array<string>
+    for (chunk in chunks_of(body)) {
+        if (chunk.kind == "hoist") {
+            for (h in chunk.lines) {
+                let t = trim(h)
+                continue if (t == ELIDE)
+                hoists |> push(t)
+            }
             continue
         }
-        let r = rename_line(ren, l)
-        dc.lines |> push(empty(trim(r)) ? "" : "        " + r)
+        // member content is class/method-scoped: aliases apply, names stay local
+        for (l in chunk.lines) {
+            if (trim(l) == ELIDE) {
+                continue if (chunk.kind == "decl")
+                stmts |> push("        pass")
+                continue
+            }
+            let r = rename_line_ex(ren, l, false)
+            if (chunk.kind == "decl") {
+                members |> push(empty(trim(r)) ? "" : "    " + r)
+            } else {
+                stmts |> push(empty(trim(r)) ? "" : "        " + r)
+            }
+        }
     }
-    dc.lines |> push_from(["    \}", "\}"])
+    var dc = DeclChunk(name = "_doc_member_{blk.rst_line}", lines <- [
+        "// --- member block at rst:{blk.rst_line}",
+        "class _doc_member_{blk.rst_line} : {blk.marker_arg} \{"
+    ])
+    dc.lines |> push_from(members)
+    if (!empty(stmts)) {
+        dc.lines |> push("    def _doc_body_{blk.rst_line}() \{")
+        dc.lines |> push_from(stmts)
+        dc.lines |> push("    \}")
+    }
+    dc.lines |> push("\}")
     seg.decls |> emplace(dc)
 }
 
@@ -792,7 +816,7 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
         continue if (handle_marker(blk, em, hoists, page.givens, out_base, path_join(cfg.out, "pages")))
         if (blk.marker == "member") {
             em.checked++
-            append_member_block(seg, ren, blk)
+            append_member_block(seg, ren, blk, hoists)
             continue
         }
         if (blk.marker == "fresh") {
