@@ -32,7 +32,11 @@ The user script
 
 The user defines a **component struct** whose field names match the C-side
 array names, declares **host-provided globals** with ``@required``, and
-writes ``[es]`` functions with **no arguments** -- the macro injects them:
+writes ``[es]`` functions with **no arguments** -- the macro injects them.
+``tutorial_c_12`` is the C-side module registered by the host, so this script
+only compiles inside that host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -89,6 +93,11 @@ The ``ecs_macro`` module provides the ``[es]`` function annotation:
 5. **Register** ``@required`` **globals** -- scans for the annotation argument
    on module globals and generates ``ecs_register_global`` calls with
    ``addr()`` of the global variable.
+
+The abridged macro body -- ``...`` marks omitted code; the full version is in
+``ecs_macro.das``, and ``ecs_register`` comes from the C-side module:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

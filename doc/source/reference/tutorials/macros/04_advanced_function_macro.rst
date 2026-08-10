@@ -58,11 +58,15 @@ uses three of them in sequence:
 What patch() generates
 =======================
 
-For a function ``fib(n : int) : int``, ``patch()`` produces three things:
+For a function ``fib(n : int) : int``, ``patch()`` produces three things.
+The generated names start with a backtick, which no hand-written source can
+spell — an identifier may *contain* backticks but must start with a letter or
+underscore, so only a macro can mint these names:
 
 **A private copy of the original function** (without ``[memoize]``) so the
 wrapper can call it without triggering ``transform()`` again:
 
+.. das-doc: skip
 .. code-block:: das
 
    def private `memoize`original`fib(n : int) : int {
@@ -72,6 +76,17 @@ wrapper can call it without triggering ``transform()`` again:
 
 **A private global cache variable:**
 
+.. das-doc: given require advanced_function_macro_mod
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var fn : FunctionPtr
+.. das-doc: given var astChanged = false
+.. das-doc: given let cacheName = "cache"
+.. das-doc: given let originalCopyName = "original"
+.. das-doc: given var callArgs : array<ExpressionPtr>
+.. das-doc: given var keyExpr : ExpressionPtr
+
+.. das-doc: skip
 .. code-block:: das
 
    var private `memoize`cache`fib : table<uint64; int>
@@ -79,6 +94,7 @@ wrapper can call it without triggering ``transform()`` again:
 **A private wrapper function** that checks the cache, calls the original
 on miss, and stores the result via ``insert_clone``:
 
+.. das-doc: skip
 .. code-block:: das
 
    def private `memoize`fib(n : int) : int {
@@ -102,7 +118,17 @@ Module file: ``advanced_function_macro_mod.das``
 apply() — pre-inference validation
 ------------------------------------
 
+.. das-doc: file advanced_function_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module advanced_function_macro_mod public
+
+   require daslib/ast
+   require daslib/ast_boost
+   require daslib/templates_boost
+   require daslib/strings_boost
 
    [function_macro(name="memoize")]
    class MemoizeMacro : AstFunctionAnnotation {
@@ -124,6 +150,9 @@ apply() — pre-inference validation
            return true
        }
 
+       // patch() and transform() follow, in the same class
+   }
+
 ``apply()`` rejects functions at parse time — before the compiler has
 resolved types.  The checks use pre-inference properties that are already
 available: ``isGeneric``, ``result.isVoid``, and ``length(arguments)``.
@@ -135,6 +164,7 @@ patch() — code generation after inference
 The "already processed" guard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    def override patch(var fn : FunctionPtr; var group : ModuleGroup;
@@ -151,6 +181,7 @@ generate duplicate functions and hit an infinite loop.
 Mark as processed and trigger restart
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        // Mark as processed and trigger inference restart
@@ -168,6 +199,7 @@ so ``transform()`` can read it.
 Step 1 — clone the original function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
        var originalCopy <- clone_function(fn)
@@ -194,6 +226,7 @@ unannotated copy.
 Step 2 — create the cache variable
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var retType = clone_type(fn.result)
@@ -215,6 +248,7 @@ value types.  ``clone_type(cacheType)`` is required because
 Step 4 — hash key computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var hashExprs : array<ExpressionPtr>
@@ -239,6 +273,7 @@ lexical scope for the intermediate variable inside the loop.
 Step 6 — assemble the wrapper body
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var bodyExprs : array<ExpressionPtr>
@@ -259,6 +294,7 @@ Each ``qmacro_expr`` generates one statement.  The splicing operators:
 Step 7–8 — create and add the wrapper function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
        var wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {
@@ -287,6 +323,7 @@ in the annotation arguments — ``transform()`` reads it on the next pass.
 transform() — call-site redirection
 --------------------------------------
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    def override transform(var call : ExprCallFunc?;
@@ -372,6 +409,7 @@ Compile-time error examples
 
 The ``apply()`` method rejects invalid uses at compile time:
 
+.. das-doc: fragment
 .. code-block:: das
 
    // ERROR: cannot memoize a void function — there is nothing to cache

@@ -42,7 +42,8 @@ Use ``typedef`` with the ``delegate()`` type macro.  Pass either
 Construction from lambdas
 ==========================
 
-Pass a lambda directly to the constructor:
+Pass a lambda directly to the constructor.  A delegate holds an array of
+lambdas, so bind it with ``<-``:
 
 .. code-block:: das
 
@@ -69,9 +70,8 @@ Pass a function pointer with ``@@``:
 
     var del <- OnDamage(@@apply_damage)
     let result = del.invoke("dragon", 25)
-    // output:
-    //   apply_damage(dragon, 25)
-    //   result = 50
+    // prints: apply_damage(dragon, 25)
+    // result == 50
 
 The function pointer is automatically wrapped in a lambda internally.
 
@@ -119,14 +119,15 @@ The ``+=`` operator appends a handler to the invocation list:
 
     // All handlers are called; the last handler's return value is returned
     let result = del.invoke("orc", 10)
-    // output:
+    // prints:
     //   handler 1: 10
     //   handler 2: 20
     //   apply_damage(orc, 10)
-    //   result (from last handler) = 20
+    // result == 20 — the value from the LAST handler
 
 For non-void delegates, all handlers execute in order but only the **last**
-handler's return value is returned.
+handler's return value is returned.  Invoking a delegate with no handlers
+registered is not an error: it returns a default-constructed value.
 
 
 Void delegates
@@ -160,8 +161,8 @@ Utilities: ``empty``, ``length``, ``clear``
     del.empty()     // true
     del.length()    // 0
 
-    del += @() { ... }
-    del += @() { ... }
+    del += @() { print("tick!\n") }
+    del += @() { print("tock!\n") }
     del.empty()     // false
     del.length()    // 2
 
@@ -186,7 +187,10 @@ Delegates support ``for``-loop iteration via the ``each`` iterator:
     }
     // count = 2
 
-This gives read-only access to the underlying lambda list.
+The loop walks the underlying lambda list.  ``each`` is declared
+``var self : T ==const``, so the delegate must be a ``var`` --- a ``let``
+delegate cannot be iterated at all --- and the loop variable is the
+stored handler itself, not a copy.
 
 
 Practical example — event system
@@ -213,10 +217,10 @@ Practical example — event system
     on_hit += @@log_hit
 
     let final_damage = on_hit.invoke("Hero", 12)
-    // output:
+    // prints:
     //   armor: 12 -> 7
     //   log: Hero took 12 damage
-    //   final_damage = 12
+    // final_damage == 12 — log_hit ran last and returned the damage
 
     // Replace all handlers — god mode!
     on_hit := @(player : string; damage : int) : int {
@@ -243,7 +247,7 @@ API summary
 +-----------------------------------+--------------------------------------------------+
 | ``del += handler``                | Append handler                                   |
 +-----------------------------------+--------------------------------------------------+
-| ``del.invoke(args...)``          | Call all handlers, return last result             |
+| ``del.invoke(args...)``           | Call all handlers, return last result            |
 +-----------------------------------+--------------------------------------------------+
 | ``del.empty()``                   | True if no handlers registered                   |
 +-----------------------------------+--------------------------------------------------+

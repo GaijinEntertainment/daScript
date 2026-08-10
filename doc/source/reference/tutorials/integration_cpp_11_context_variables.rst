@@ -122,6 +122,11 @@ immediately after simulation.
 The daslang side
 ===================
 
+``GameConfig`` is a handled type registered by ``11_context_variables.cpp``,
+so this script needs that tutorial's C++ host (module ``tutorial_11_cpp``):
+
+.. das-doc: fragment
+
 .. code-block:: das
 
    options gen2
@@ -134,8 +139,10 @@ The daslang side
 
    [export]
    def print_globals() {
-       print("score = {score}\n")
        // C++ changes are visible here
+       print("score = {score}\n")
+       print("config.gravity = {config.gravity}\n")
+   }
 
 
 Building and running

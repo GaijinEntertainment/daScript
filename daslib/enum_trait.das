@@ -7,8 +7,9 @@ module enum_trait shared private
 //! Enumeration reflection traits.
 //!
 //! Generates helper functions for enumerations: ``each`` (iterate over all
-//! values), ``each_name`` (iterate over all name strings), and
-//! ``find_value`` (look up a value by name).
+//! values), ``enum_names`` (all name strings), ``to_enum`` (look up a value
+//! by name, with or without a default), ``enum_to_table``, ``enum_length``,
+//! plus ``string``/``bool`` conversions and ``[string_to_enum]``.
 
 require daslib/ast
 require daslib/ast_boost

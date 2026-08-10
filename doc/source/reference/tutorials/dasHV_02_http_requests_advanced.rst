@@ -17,6 +17,9 @@ authentication, query parameters, redirects, and content type.
 
 Prerequisites: :ref:`tutorial_dasHV_http_requests` (the fire-and-forget API).
 
+.. das-doc: given let base_url = "http://127.0.0.1:18080"
+.. das-doc: given var req : HttpRequest?
+
 The with_http_request Pattern
 =============================
 

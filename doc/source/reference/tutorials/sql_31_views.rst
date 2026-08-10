@@ -57,6 +57,10 @@ view to see the new state.
 End-to-end
 ==========
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+.. das-doc: given [sql_view(name="HugeOrders")] struct HugeOrder { Id : int; CustomerId : int; Amount : int; Status : string }
+.. das-doc: given [sql_view(name="MaxOrders")] struct MaxOrder { Id : int; CustomerId : int; Amount : int; Status : string }
+
 .. code-block:: das
 
     [sql_table(name = "Customers")]
@@ -89,9 +93,9 @@ End-to-end
             db |> create_table(type<Order>)
             // ... insert rows ...
 
-            // CREATE VIEW BigOrders(Id, CustomerId, Amount, Status) AS
-            //   SELECT Id, CustomerId, Amount, Status FROM Orders
-            //   WHERE Amount >= 100
+            // CREATE VIEW "BigOrders"("Id", "CustomerId", "Amount", "Status") AS
+            //   SELECT "Id", "CustomerId", "Amount", "Status" FROM "Orders"
+            //   WHERE "Amount" >= 100
             db |> _create_view(type<BigOrder>,
                 db |> select_from(type<Order>) |> _where(_.Amount >= 100))
 
@@ -135,7 +139,7 @@ struct fields, function calls, arithmetic over the above:
 
 .. code-block:: das
 
-    let cutoff = 100
+    var cutoff = 100
     db |> _create_view(type<BigOrder>,
         db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
     // sqlite_schema now stores: ... WHERE "Amount" >= 100
@@ -155,7 +159,7 @@ does not update the view. To re-bake, drop and re-create:
 .. code-block:: das
 
     db |> drop_view_if_exists(type<BigOrder>)
-    let cutoff = 200
+    cutoff = 200
     db |> _create_view(type<BigOrder>,
         db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
 
@@ -186,13 +190,28 @@ precedence over the default set.
 
 .. code-block:: das
 
-    enum Status { Pending = 1; Shipped = 2 }
+    enum Status { Pending = 1, Shipped = 2 }
 
     def to_sql_literal(s : Status) : string => "{int(s)}"
 
+    [sql_table(name = "Shipments")]
+    struct Shipment {
+        @sql_primary_key Id : int
+        StatusVal : Status
+        Amount : int
+    }
+
+    [sql_view(name = "ShippedOrders")]
+    struct ShippedOrder {
+        Id : int
+        StatusVal : Status
+        Amount : int
+    }
+
     let want = Status.Shipped
-    db |> _create_view(type<ShippedOrders>,
-        db |> select_from(type<Order>) |> _where(_.StatusVal == want))
+    db |> _create_view(type<ShippedOrder>,
+        db |> select_from(type<Shipment>) |> _where(_.StatusVal == want))
+    // sqlite_schema now stores: ... WHERE "StatusVal" = 2
 
 Types with no overload fail at compile time with the catch-all's
 ``concept_assert`` message: *to_sql_literal: unsupported type for

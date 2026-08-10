@@ -18,6 +18,7 @@ Building the Request
 Only ``prompt`` is required on ``ImageRequest``; the rest are optional and are
 omitted from the wire payload when unset (``options rtti`` honors ``@optional``):
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    require openai/openai_images

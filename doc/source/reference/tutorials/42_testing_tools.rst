@@ -100,7 +100,7 @@ Faker has configurable fields to control the output:
 
     var fake <- Faker()
     fake.min_year = 2020u          // restrict year range
-    fake.total_years = 5u          // 2020-2025
+    fake.total_years = 5u          // dates land in 2020-2024
     fake.max_long_string = 32u     // limit long_string length
     delete fake
 
@@ -176,6 +176,16 @@ Testing string operations
 Faker's ``any_string`` is useful for testing string-processing functions:
 
 .. code-block:: das
+
+    def reverse_string(s : string) : string {
+        return build_string() $(var w) {
+            var i = length(s) - 1
+            while (i >= 0) {
+                w |> write(slice(s, i, i + 1))
+                i --
+            }
+        }
+    }
 
     var fake <- Faker()
     var failures = 0

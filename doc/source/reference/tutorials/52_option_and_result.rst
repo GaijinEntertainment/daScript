@@ -10,9 +10,17 @@ Option<T> and Result<T, E>
     single: Tutorial; Monadic types
     single: Tutorial; Error handling
 
-``daslib/option`` and ``daslib/result`` are two small template-structure modules
+``daslib/option`` and ``daslib/result`` are two small template-tuple modules
 that give daslang a principled way to express "value or nothing" and "value or
 error" for ordinary value types. They compose through the existing ``|>`` pipe.
+
+Both are declared with ``[template_tuple]``, so ``Option<T>`` resolves to
+``tuple<_has_value : bool; _value : T>`` and ``Result<T, E>`` to
+``tuple<_is_ok : bool; _value : T; _error : E>`` — a structural type with no
+module home, which is what lets the same type reached through any chain of
+``require ... public`` stay one canonical type. Because it is a tuple and not
+a variant, there is no ``r is ok``: read the tag and the payload through the
+accessor functions below.
 
 ``Option<T>`` models **absence**. ``Result<T, E>`` models **failure with a
 reason**. Prefer them over sentinel return values (``-1``, ``""``) or nullable
@@ -21,8 +29,7 @@ pointers (``T?``).
 The payload may be any type, including non-copyable ones (``array<T>``,
 ``table<K;V>``, lambdas) — see `Non-copyable payloads`_.
 
-Prerequisites: familiarity with template structures, blocks, and the pipe
-operator ``|>``.
+Prerequisites: familiarity with tuples, blocks, and the pipe operator ``|>``.
 
 .. code-block:: das
 
@@ -87,22 +94,24 @@ it to chain fallible steps; the chain short-circuits on the first ``none``.
 Filtering and fallbacks
 -----------------------
 
+.. das-doc: given def expensive() : int { return 99 }
 .. code-block:: das
 
     let kept = some(10) |> filter() $(x : int) { return x > 5; }  // some(10)
     let gone = some(3)  |> filter() $(x : int) { return x > 5; }  // none
 
     let eager = none(type<int>) |> or_value(99)                    // some(99)
-    let lazy  = none(type<int>) |> or_else() $ { return some(expensive()); }
+    let lazy  = none(type<int>) |> or_else() { return some(expensive()); }
 
 Extraction
 ----------
 
+.. das-doc: given def compute() : int { return 7 }
 .. code-block:: das
 
     some(5) |> unwrap              // 5   — panics on none
     none(type<int>) |> unwrap_or(7)   // 7
-    some(5) |> unwrap_or_else() $ { return compute(); }   // 5 (block not called)
+    some(5) |> unwrap_or_else() { return compute(); }   // 5 (block not called)
     none(type<string>) |> unwrap_or_default                // ""
 
 Operators
@@ -126,10 +135,12 @@ Operators
 Side-effect combinators
 -----------------------
 
+.. das-doc: given def do_work(x : int) { print("work {x}\n") }
+.. das-doc: given def report_missing() { print("missing\n") }
 .. code-block:: das
 
     some(3) |> if_some() $(x : int) { do_work(x); }
-    none(type<int>) |> if_none() $ { report_missing(); }
+    none(type<int>) |> if_none() { report_missing(); }
 
 Pairing two options with ``zip``
 --------------------------------
@@ -206,7 +217,7 @@ Same shape as ``Option``, plus ``unwrap_err`` for the error side:
 
     ok(42, type<string>) |> unwrap                 // 42
     err("e", type<int>) |> unwrap_or(17)           // 17
-    err("xx", type<int>) |> unwrap_or_else() $(e : string) { return length(e); }  // 2
+    err("xx", type<int>) |> unwrap_or_else() $(msg : string) { return length(msg); }  // 2
     err("boom", type<int>) |> unwrap_err           // "boom"
 
 Bridging to Option
@@ -226,9 +237,10 @@ Non-copyable payloads
 
 ``Option<T>`` and ``Result<T, E>`` work for any payload type, including
 non-copyable ones such as ``array<T>``, ``table<K;V>``, and lambdas. The
-constructors and combinators dispatch internally on
-``static_if (typeinfo can_copy(...))`` and clone (or move) on the non-copyable
-branch — call sites look identical to the workhorse-type case.
+cloning constructors (``some`` / ``ok`` / ``err``) and most combinators
+dispatch internally on ``static_if (typeinfo can_copy(...))`` and clone on
+the non-copyable branch; the ``move_`` constructors always move. Either
+way, call sites look identical to the workhorse-type case.
 
 .. code-block:: das
 
@@ -244,8 +256,8 @@ empty:
 .. code-block:: das
 
     var src <- [1, 2, 3]
-    let o = move_some(src)          // src is now []
-    // o |> unwrap == [1, 2, 3]
+    var o = move_some(src)          // src is now []
+    var got <- o |> move_unwrap     // got is [1, 2, 3]
 
 ``Result`` provides the same pair on each side: ``ok`` / ``err`` clone, while
 ``move_ok`` / ``move_err`` move:
@@ -253,13 +265,19 @@ empty:
 .. code-block:: das
 
     var payload <- [4, 5, 6]
-    let r = move_ok(payload, type<string>)   // payload is now []
-    // r |> unwrap == [4, 5, 6]
+    var r = move_ok(payload, type<string>)   // payload is now []
+    var back <- r |> move_unwrap             // back is [4, 5, 6]
+
+Extraction has the same pair. ``unwrap`` **clones** the payload out, which
+for an ``array<T>`` or ``table<K;V>`` is a deep copy; ``move_unwrap`` (and
+``move_unwrap_err`` on the error side) moves it out instead, leaving the
+option / result empty. Reach for the ``move_`` form whenever the payload is
+non-copyable and you do not need the container afterwards.
 
 For workhorse types (``int``, ``float``, ``bool``, ``string``, …) ``move_some`` /
-``move_ok`` / ``move_err`` are equivalent to their non-``move`` siblings —
-prefer the plain form for readability and use the move-variants only when
-you genuinely want to drain a non-copyable source.
+``move_ok`` / ``move_err`` / ``move_unwrap`` are equivalent to their
+non-``move`` siblings — prefer the plain form for readability and use the
+move-variants only when you genuinely want to drain a non-copyable source.
 
 
 API reference at a glance
@@ -289,7 +307,9 @@ Option<T>
 +-------------------------------+-------------------------------------------------+
 | ``or_else(o, f)``             | Lazy fallback on ``none``                       |
 +-------------------------------+-------------------------------------------------+
-| ``unwrap(o)``                 | Value or panic                                  |
+| ``unwrap(o)``                 | Value or panic (clones the payload)             |
++-------------------------------+-------------------------------------------------+
+| ``move_unwrap(o)``            | Value or panic, moved out of the option         |
 +-------------------------------+-------------------------------------------------+
 | ``unwrap_or(o, d)``           | Value or eager default                          |
 +-------------------------------+-------------------------------------------------+
@@ -305,7 +325,7 @@ Option<T>
 +-------------------------------+-------------------------------------------------+
 | ``zip(a, b)``                 | Pair two options; some iff both some            |
 +-------------------------------+-------------------------------------------------+
-| ``o ?? d``                    | Unwrap-or-default operator                      |
+| ``o ?? d``                    | Value, or the given fallback ``d``              |
 +-------------------------------+-------------------------------------------------+
 | ``a == b``                    | Structural equality                             |
 +-------------------------------+-------------------------------------------------+
@@ -338,7 +358,9 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``or_else(r, f)``               | Monadic recovery on err                         |
 +---------------------------------+-------------------------------------------------+
-| ``unwrap(r)``                   | Ok value or panic                               |
+| ``unwrap(r)``                   | Ok value or panic (clones the payload)          |
++---------------------------------+-------------------------------------------------+
+| ``move_unwrap(r)``              | Ok value or panic, moved out of the result      |
 +---------------------------------+-------------------------------------------------+
 | ``unwrap_or(r, d)``             | Ok value or eager default                       |
 +---------------------------------+-------------------------------------------------+
@@ -346,7 +368,9 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``unwrap_or_default(r)``        | Ok value or ``default<T>``                      |
 +---------------------------------+-------------------------------------------------+
-| ``unwrap_err(r)``               | Err value or panic                              |
+| ``unwrap_err(r)``               | Err value or panic (clones the payload)         |
++---------------------------------+-------------------------------------------------+
+| ``move_unwrap_err(r)``          | Err value or panic, moved out of the result     |
 +---------------------------------+-------------------------------------------------+
 | ``expect_value(r, msg)``        | Ok value or panic with custom message           |
 +---------------------------------+-------------------------------------------------+
@@ -358,7 +382,7 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``err_to_option(r)``            | Discard value; ``Option<E>``                    |
 +---------------------------------+-------------------------------------------------+
-| ``r ?? d``                      | Unwrap-or-default operator                      |
+| ``r ?? d``                      | Ok value, or the given fallback ``d``           |
 +---------------------------------+-------------------------------------------------+
 | ``a == b``                      | Structural equality                             |
 +---------------------------------+-------------------------------------------------+

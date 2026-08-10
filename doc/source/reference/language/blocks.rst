@@ -10,12 +10,14 @@ Blocks offer significant performance advantages over lambdas (see :ref:`Lambda <
 The block type can be declared with a function-like syntax.
 The type is written as ``block`` followed by an optional type signature in angle brackets:
 
+.. das-doc: fragment
 .. code-block:: das
 
     block < (arg1:int; arg2:float&) : bool >
 
 The ``->`` operator can be used instead of ``:`` for the return type:
 
+.. das-doc: fragment
 .. code-block:: das
 
     block < (arg1:int; arg2:float&) -> bool >   // equivalent
@@ -68,6 +70,9 @@ lambda placed immediately after a function call is automatically passed as the l
 argument.  This works with named function calls, dot-method calls, and arrow-method
 calls (see :ref:`Pipe Operators <expressions>` for full details):
 
+.. das-doc: given class Receiver { def call_method(b : block) { invoke(b) } def fn(b : block) { invoke(b) } }
+.. das-doc: given var res : int
+.. das-doc: given var c : Receiver?
 .. code-block:: das
 
     var v1 = 1
@@ -125,16 +130,19 @@ Nested blocks are allowed:
 
 Loop control expressions are not allowed to cross block boundaries:
 
+.. das-doc: given def take_any(b : block) { invoke(b) }
+.. das-doc: expect error[30125]
 .. code-block:: das
 
     while ( true ) {
         take_any() {
-            break               // 30125, captured block can't 'break' outside of the block
+            break               // error[30125] captured block can't 'break' outside of the block
         }
     }
 
 Blocks can have annotations:
 
+.. das-doc: fragment
 .. code-block:: das
 
     def queryOne(dt:float=1.0f) {

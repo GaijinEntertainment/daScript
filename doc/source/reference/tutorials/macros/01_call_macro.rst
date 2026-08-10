@@ -43,10 +43,23 @@ Key imports used by the module::
 Section 1 — hello(): Minimal call macro
 ========================================
 
-A call macro is a class that extends ``AstCallMacro``, annotated with
+A macro module needs a ``module`` declaration — without it the compiler
+rejects the file with *"module Module_Name is required"*.  A call macro is
+a class that extends ``AstCallMacro``, annotated with
 ``[call_macro(name="...")]``:
 
+.. das-doc: file call_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module call_macro_mod public
+
+   require daslib/ast
+   require daslib/ast_boost
+   require daslib/templates_boost
+   require daslib/strings_boost
+   require daslib/macro_boost
 
    [call_macro(name="hello")]
    class HelloMacro : AstCallMacro {
@@ -68,9 +81,13 @@ It returns an ``ExpressionPtr`` — the AST tree that replaces the call.
 ``qmacro(...)`` is a *reification* helper: you write normal daslang syntax
 inside it and it builds the corresponding AST at compile time.
 
-Usage::
+Usage, from the file that requires the module:
 
-  hello()   // → print("hello, call macro!\n")
+.. code-block:: das
+
+   require call_macro_mod
+
+   hello()   // → print("hello, call macro!\n")
 
 
 Section 2 — greet("name"): Argument validation
@@ -79,6 +96,7 @@ Section 2 — greet("name"): Argument validation
 The ``greet`` macro validates its single argument and builds a string
 interpolation expression:
 
+.. das-doc: file call_macro_mod.das
 .. code-block:: das
 
    [call_macro(name="greet")]
@@ -125,6 +143,7 @@ Section 3 — printf(fmt, args...): Format-string parsing
 The ``printf`` macro parses a format string at compile time, replacing
 ``(N)`` placeholders with the corresponding argument expressions:
 
+.. das-doc: given let score = 42
 .. code-block:: das
 
    printf("player (1) scored (2) points\n", "Alice", score)
@@ -144,6 +163,7 @@ looking for ``(`` ... ``)`` pairs.  For each placeholder it:
 2. Validates bounds with ``macro_verify``
 3. Inserts a ``clone_expression`` of the referenced argument
 
+.. das-doc: file call_macro_mod.das
 .. code-block:: das
 
    [call_macro(name="printf")]

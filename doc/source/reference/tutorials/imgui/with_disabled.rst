@@ -12,14 +12,18 @@ no idents — they exist to subsume the raw ``Push*`` / ``Pop*`` pairs that
 v2's lint flags as invisible state changes.
 
 * ``with_disabled(disabled, blk)`` — ``BeginDisabled`` / ``EndDisabled``.
-* ``with_font(font, blk)`` — ``PushFont`` / ``PopFont``.
-* ``with_button_repeat(repeat, blk)`` — ``PushButtonRepeat`` /
-  ``PopButtonRepeat``.
+* ``with_font(font, size, blk)`` — ``PushFont(font, size)`` / ``PopFont``;
+  ``size`` defaults to ``0.0f`` (keep the current size), so
+  ``with_font(f) { ... }`` is a pure font swap.
+* ``with_button_repeat(repeat, blk)`` —
+  ``PushItemFlag(ImGuiItemFlags.ButtonRepeat, repeat)`` / ``PopItemFlag``
+  (ImGui obsoleted the ``PushButtonRepeat`` shorthand in 1.91).
 * ``with_clip_rect(min, max, isect, blk)`` — ``PushClipRect`` /
   ``PopClipRect``.
 
 .. code-block:: das
 
+   checkbox(ENABLED_MASTER, (text = "Enable child group"))
    with_disabled(!ENABLED_MASTER.value) {
        button(CHILD_SAVE, (text = "Save"))
        button(CHILD_LOAD, (text = "Load"))
@@ -113,7 +117,7 @@ with_clip_rect
 
 The fourth scope wrapper isn't exercised in this tutorial — see
 ``modules/dasImgui/examples/features/clip_rect.das`` for a per-frame clipping demo.
-``with_clip_rect((min, max, isect), blk)`` is the safest way to install a
+``with_clip_rect(min, max, isect, blk)`` is the safest way to install a
 custom clip rectangle around custom-rendered content (drawlist primitives,
 images, manual layout) since the scope guarantees the prior clip rect is
 restored on exit.
@@ -125,6 +129,7 @@ The wrappers compose cleanly — nest them to layer scopes:
 
 .. code-block:: das
 
+   checkbox(FEATURE_ENABLED, (text = "Feature on"))
    with_disabled(!FEATURE_ENABLED.value) {
        with_button_repeat(true) {
            button(STEP_UP, (text = "+"))

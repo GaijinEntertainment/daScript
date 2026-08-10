@@ -34,6 +34,7 @@ the precision you ask for. ``QuantMode.q8`` (int8) is the fast everyday choice;
 ``QuantMode.fp32`` is the token-exact reference the test suite validates
 against llama.cpp.
 
+.. das-doc: given let path = "SmolLM2-135M-Instruct-Q8_0.gguf"
 .. code-block:: das
 
    require dasllama/dasllama
@@ -67,12 +68,14 @@ token); :ref:`tutorial 03 <tutorial_dasLLAMA_sampling>` covers the knobs.
 
 The kernels thread through the job queue — wrap generation in
 ``with_job_que()`` (from ``daslib/jobque_boost``), or model code will panic
-asking for one.
+asking for one. ``setup_dasllama_jobque()`` then tunes that queue for the
+fork/join matmul dispatch: pooled fork contexts, batched dispatch, and the
+worker spin window.
 
 .. code-block:: das
 
    with_job_que() {
-       set_jobque_fork_pool(true, true)   // pool per-job fork contexts
+       setup_dasllama_jobque()            // pooled forks, batched dispatch, spin window
        var s = create_session(m)
        generate(m, s, ids, SamplingParams(), 48l) $(_id, piece) {
            fprint(fstdout(), piece)
@@ -87,6 +90,8 @@ Stats
 ``stats`` reports the last ``generate``/``respond`` call on the session:
 token counts, time to first token, and prefill / generation throughput.
 
+.. das-doc: given var s : Session
+.. das-doc: alt
 .. code-block:: das
 
    let st = stats(s)

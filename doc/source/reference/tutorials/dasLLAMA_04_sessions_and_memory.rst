@@ -21,19 +21,23 @@ Run it like tutorial 01::
 The KV cache, and why you cap seq_len
 =====================================
 
-The KV cache is sized to ``config.seq_len`` *at* ``create_session`` time —
-roughly ``2 * n_layers * seq_len * kv_dim`` floats. Models ship with big
-native contexts (Llama-3's native ``seq_len`` is 131072, which means tens of
-GB of fp32 KV), so cap ``seq_len`` to the context you actually need **before**
-creating sessions:
+The KV cache is sized to ``config.seq_len`` *at* ``create_session`` time — one
+key row and one value row per position per layer, so
+``2 * n_layers * seq_len * kv_dim`` entries. ``create_session`` stores each
+entry as ``f16``, two bytes, unless you pass another ``kv_dtype``
+(``KVDtype.f32`` doubles the cache, ``KVDtype.q8_0`` roughly halves it).
+Models ship with big native contexts (Llama-3's native ``seq_len`` is 131072,
+which means tens of GB of KV), so cap ``seq_len`` to the context you actually
+need **before** creating sessions:
 
+.. das-doc: given var m = Model()
 .. code-block:: das
 
    m.config.seq_len = min(m.config.seq_len, 1024l)
    var s = create_session(m)
 
-On SmolLM2-135M that's the difference between ~377 MB per session at the
-native 8192 and ~47 MB at 1024.
+On SmolLM2-135M that's the difference between ~188 MB per session at the
+native 8192 and ~24 MB at 1024.
 
 One model, many sessions
 ========================
@@ -49,6 +53,7 @@ eval and sample by hand
 session's current position and advances it — prefill is just the whole prompt
 in one call. ``sample`` picks the next token from ``session.logits``:
 
+.. das-doc: given var prompt : array<int64>
 .. code-block:: das
 
    var s = create_session(m)

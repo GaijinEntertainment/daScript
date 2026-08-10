@@ -26,6 +26,9 @@ Part A: Alternation with ``< >``
 Angle brackets pick **one element per cycle**, advancing on each cycle
 and looping when it runs out:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; seconds : float = 4.0; cps : double = 0.5lf) { }
+
 .. code-block:: das
 
     let pat <- s("<bd sd cp>")
@@ -79,9 +82,9 @@ probability. Hi-hats are the canonical use:
     play(pat, 6.0)
 
 The kick and snare are reliable; the hats appear roughly half the time,
-randomly per cycle. Run it twice and you get different results — the
-RNG seed is tied to the cycle position so the rhythm is deterministic
-within one play, but the pattern feels human.
+varying from cycle to cycle. The drop is decided by hashing each event's
+start time, so a given pattern loses the same hats on every run. It
+feels human, but it is reproducible — not random.
 
 You can also write ``hh?0.25`` to use a different drop probability —
 the default ``?`` is shorthand for ``?0.5``.
@@ -89,21 +92,26 @@ the default ``?`` is shorthand for ``?0.5``.
 Part D: Replicate with ``!N``
 =============================
 
-Postfix ``!N`` is like ``*N`` from tutorial 02 but expands the element
-into N **parent slots** instead of squeezing them into one:
+Postfix ``!N`` repeats an element N times. The parser reads it as a
+modifier on the element it follows, exactly like ``*N``, so the repeats
+land **inside that element's own slot**:
 
 .. code-block:: das
 
     let pat <- s("bd!3 sd")
     play(pat, 4.0)
 
-This expands to four equal slots ``bd bd bd sd`` — three kicks then a
-snare. Compare to ``bd*3 sd`` which packs three kicks into one slot
-followed by a snare in the second.
+``"bd!3 sd"`` is two slots: three kicks packed into the first half, one
+snare in the second. It produces the same haps as ``"bd*3 sd"`` — query
+both by hand and the timestamps match.
 
-The mental model: ``*N`` divides time, ``!N`` adds slots. Use ``*`` to
-make things faster within one slot, ``!`` to repeat the same element
-across the parent sequence.
+To give each repeat a slot of its own — four equal slots, three kicks
+then a snare — write the element out:
+
+.. code-block:: das
+
+    let pat <- s("bd bd bd sd")
+    play(pat, 4.0)
 
 Part E: Euclidean rhythms with ``(k,n)`` and ``(k,n,rot)``
 ==========================================================

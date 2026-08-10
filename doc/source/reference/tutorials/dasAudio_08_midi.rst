@@ -72,23 +72,29 @@ lifecycle:
 
 - ``midi_load_samples(media_path)`` — loads the sample banks from the
   media directory
-- ``midi_init()`` — starts the MIDI playback thread
+- ``midi_init()`` — starts the MIDI playback thread.  The audio system has
+  to be up first, so all of this runs inside ``with_audio_system()``;
+  calling it without one panics
 - ``midi_shutdown()`` — stops the thread and releases resources
 
 ``midi_play`` starts a named MIDI track.  The name is an arbitrary string
 that identifies the track for later control.  Multiple tracks can play
 simultaneously:
 
+.. das-doc: given let media_path = "{get_das_root()}/examples/media"
+
 .. code-block:: das
 
     require strudel/strudel_midi_player
 
-    midi_load_samples(media_path)
-    midi_init()
-    midi_play("music", "fur_elise.mid", [gain = 0.8, looping = true])
-    sleep(5000u)
-    midi_stop("music")
-    midi_shutdown()
+    with_audio_system() {
+        midi_load_samples(media_path)
+        midi_init()
+        midi_play("music", "fur_elise.mid", [gain = 0.8, looping = true])
+        sleep(5000u)
+        midi_stop("music")
+        midi_shutdown()
+    }
 
 Part C: Cross-fading
 ====================
@@ -96,6 +102,9 @@ Part C: Cross-fading
 Because tracks are named and independent, you can run two MIDI files at
 once and cross-fade between them.  ``midi_set_volume`` smoothly
 transitions a track's volume over a specified fade time in seconds:
+
+.. das-doc: given let fur_elise = "{media_path}/midi/fur_elise.mid"
+.. das-doc: given let bach_air = "{media_path}/midi/Bach_Air_on_G_string_BWV1068.mid"
 
 .. code-block:: das
 
@@ -113,8 +122,7 @@ transitions a track's volume over a specified fade time in seconds:
     midi_set_volume("track_b", 0.0, 3.0)
     sleep(5000u)
 
-    midi_stop()   // stop all tracks
-    midi_shutdown()
+    midi_stop()   // no name: stops every track and shuts the player thread down
 
 This pattern is common in games for transitioning between exploration and
 combat music without an audible cut.

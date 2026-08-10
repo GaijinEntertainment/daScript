@@ -209,6 +209,7 @@ with a seven-integer header in front. The :ref:`embedding <t00-embedding>` table
 determines. We map the file into memory and read each matrix as a view
 into it — no copies:
 
+.. das-doc: fragment
 .. code-block:: das
 
    array_view(bytes, 28, (length(bytes) - 28) / 4, type<float>) $(model : array<float>#) {
@@ -573,6 +574,7 @@ BOS drops, and ``<0xNN>`` pieces decode back to raw bytes.
 
 :ref:`Prefill <t00-prefill>` is a plain loop:
 
+.. das-doc: fragment
 .. code-block:: das
 
    for (position, token in range(length(tokens)), tokens) {

@@ -1,5 +1,7 @@
-The STRINGS_BOOST module extends string handling with splitting, joining,
-padding, character replacement, and edit distance computation.
+The STRINGS_BOOST module extends string handling with splitting (``split``,
+``split_by_chars``), joining (``join``), padding (``wide``), multi-substring
+replacement (``replace_multiple``), and edit distance (``levenshtein_distance``).
+It re-exports ``strings``, so the built-in string surface is available too.
 
 All functions and symbols are in "strings_boost" module, use require to get access to it.
 
@@ -13,16 +15,16 @@ Example:
 
     require daslib/strings_boost
 
-        [export]
-        def main() {
-            let parts = split("one,two,three", ",")
-            print("split: {parts}\n")
-            print("join: {join(parts, " | ")}\n")
-            print("[{wide("hello", 10)}]\n")
-            print("distance: {levenshtein_distance("kitten", "sitting")}\n")
-        }
-        // output:
-        // split: [[ one; two; three]]
-        // join: one | two | three
-        // [hello     ]
-        // distance: 3
+    [export]
+    def main() {
+        let parts = split("one,two,three", ",")
+        print("split: {parts}\n")
+        print("join: {join(parts, " | ")}\n")
+        print("[{wide("hello", 10)}]\n")
+        print("distance: {levenshtein_distance("kitten", "sitting")}\n")
+    }
+    // output:
+    // split: [ one, two, three]
+    // join: one | two | three
+    // [hello     ]
+    // distance: 3

@@ -13,6 +13,11 @@ STBIMAGE-03 — Image Transforms
 
 This tutorial covers resizing, flipping, cropping, and compositing images.
 
+The examples assume ``img`` holds a loaded image — see
+:ref:`tutorial_dasStbImage_loading_images`.
+
+.. das-doc: given var img : Image
+
 Resizing
 ========
 
@@ -62,8 +67,8 @@ the same ``bpc``.  Pixels outside the destination bounds are clipped:
 
 .. code-block:: das
 
-   var inscope canvas <- make_solid(64, 64, ...)
-   var inscope overlay <- make_solid(16, 16, ...)
+   var inscope canvas <- make_image(64, 64, 4)    // RGBA destination
+   var inscope overlay <- make_image(16, 16, 4)   // same channels and bpc
    canvas.blit(overlay, 8, 8)
 
 Creating Blank Canvases

@@ -50,6 +50,7 @@ be copied. ``lambda`` *is* copyable (a copy aliases the capture frame, the same 
 raw pointer copy aliases its target), but ``delete lam`` then requires ``unsafe``.
 Attempting to copy a non-copyable type produces:
 
+.. das-doc: skip
 .. code-block:: das
 
     // error: this type can't be copied, use move (<-) or clone (:=) instead
@@ -65,6 +66,7 @@ By default, the compiler automatically promotes ``=`` to ``<-`` when:
 
 This means you can often write ``=`` and the compiler will do the right thing:
 
+.. das-doc: given def get_data : array<int> { return <- [1, 2] }
 .. code-block:: das
 
     var a : array<int>
@@ -100,7 +102,7 @@ Use ``<-`` when:
 - You are initializing a variable from a function return value
 - You are passing ownership into a struct field or container
 
-::
+.. code-block:: das
 
     def make_data() : array<int> {
         var result : array<int>
@@ -255,6 +257,7 @@ Variable Initialization
 
 The three initialization forms correspond to the three operators:
 
+.. das-doc: given var expr : string
 .. code-block:: das
 
     var x = expr            // copy initialization
@@ -264,6 +267,7 @@ The three initialization forms correspond to the three operators:
 For local variable declarations, the compiler checks the type and reports an error if the
 chosen initialization mode is not supported:
 
+.. das-doc: fragment
 .. code-block:: das
 
     var a = get_array()     // error[30197] if relaxed_assign is false:
@@ -348,16 +352,21 @@ Multiple captures are separated by commas:
 
 .. code-block:: das
 
-    return @ capture(= a, <- arr, := table) () {
-        // a is copied, arr is moved, table is cloned
+    def make_multi(a : int) {
+        var arr : array<int>
+        var tab : table<string; int>
+        return @ capture(= a, <- arr, := tab) () {
+            // a is copied, arr is moved, tab is cloned
+        }
     }
 
 Generators also support captures:
 
 .. code-block:: das
 
-    var g <- generator<int> capture(= a) {
-        for (x in range(1, a)) {
+    var limit = 5
+    var g <- generator<int> capture(= limit) {
+        for (x in range(1, limit)) {
             yield x
         }
         return false
@@ -416,6 +425,7 @@ Custom Clone
 You can define a custom clone function for any type. If a custom clone exists, it is called
 by the ``:=`` operator regardless of whether the type is natively cloneable:
 
+.. das-doc: given def open_new_socket : int { return 42 }
 .. code-block:: das
 
     struct Connection {

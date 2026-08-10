@@ -70,6 +70,8 @@ INSERT/UPDATE bind code branches per field type at compile time.
 ``sqlite3_bind_null``. SELECT readers check
 ``sqlite3_column_type == SQLITE_NULL`` and wrap accordingly.
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     db |> insert(User(
@@ -143,11 +145,12 @@ steers users away from that footgun: use ``_.Col |> is_none()``
 (emits ``IS NULL``) or ``_.Col |> unwrap_or(d) == x`` (emits
 ``COALESCE`` then compare).
 
-Direct ``_.Col == none()`` in a predicate is intentionally not
-translated this chunk. A future revision may either lower it to
-``IS NULL`` automatically or raise a ``macro_error`` with a fix-it
-pointing to ``|> is_none()`` --- the leaning is toward the explicit
-diagnostic so the user has to confront three-valued logic head-on.
+Direct ``_.Col == none()`` in a predicate is refused outright: the
+macro raises ``error[50503]`` with a fix-it pointing to
+``|> is_none()`` (or ``is_some()`` for the negation). The explicit
+diagnostic is deliberate --- equality against ``none()`` would
+silently bind an empty placeholder, so the user has to confront
+three-valued logic head-on.
 
 ``_try_sql`` composes
 =====================

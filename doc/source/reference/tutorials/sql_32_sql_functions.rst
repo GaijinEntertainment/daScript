@@ -23,6 +23,8 @@ scalar would go.
 The contract
 ============
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     db |> register_function(name : string, fn : @@<...>;
@@ -85,6 +87,8 @@ A scoring formula, a string hasher, a 2-D distance: three real-shaped
 SQL helpers, all marked deterministic so SQLite is allowed to factor
 them out of inner loops or use them as the indexed expression in a
 ``CREATE INDEX``.
+
+.. das-doc: given var inscope db = open_sqlite(":memory:")
 
 .. code-block:: das
 
@@ -187,7 +191,7 @@ predicate or projection just like a built-in scalar.
     }
 
     [sql_function(name="event_id")]
-    def sql_event(tag : string) : int { ... }
+    def sql_event(tag : string) : int => length(tag)
 
 The annotation does two things at compile time:
 

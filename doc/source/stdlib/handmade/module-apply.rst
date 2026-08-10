@@ -15,23 +15,23 @@ Example:
 
     require daslib/apply
 
-        struct Foo {
-            a : int
-            b : float
-            c : string
-        }
+    struct Foo {
+        a : int
+        b : float
+        c : string
+    }
 
-        [export]
-        def main() {
-            var foo = Foo(a = 42, b = 3.14, c = "hello")
-            apply(foo) $(name, field) {
-                print("{name} = {field}\n")
-            }
+    [export]
+    def main() {
+        var foo = Foo(a = 42, b = 3.14, c = "hello")
+        apply(foo) $(name, field) {
+            print("{name} = {field}\n")
         }
-        // output:
-        // a = 42
-        // b = 3.14
-        // c = hello
+    }
+    // output:
+    // a = 42
+    // b = 3.14
+    // c = hello
 
 When the block has no function-escaping ``return``, it runs inline once per field — no helper function
 and no per-field block invoke — so it is cheap enough for hot paths like serialization. A block that

@@ -14,13 +14,13 @@ Example:
 
     require daslib/base64
 
-        [export]
-        def main() {
-            let encoded = base64_encode("Hello, daslang!")
-            print("encoded: {encoded}\n")
-            let decoded = base64_decode(encoded)
-            print("decoded: {decoded.text}\n")
-        }
-        // output:
-        // encoded: SGVsbG8sIGRhU2NyaXB0IQ==
-        // decoded: Hello, daslang!
+    [export]
+    def main() {
+        let encoded = base64_encode("Hello, daslang!")
+        print("encoded: {encoded}\n")
+        let decoded = base64_decode(encoded)
+        print("decoded: {decoded.text}\n")
+    }
+    // output:
+    // encoded: SGVsbG8sIGRhc2xhbmch
+    // decoded: Hello, daslang!

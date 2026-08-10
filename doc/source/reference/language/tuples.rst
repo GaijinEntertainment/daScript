@@ -10,8 +10,8 @@ A tuple type is declared with the ``tuple`` keyword followed by a list of elemen
 
 .. code-block:: das
 
-    tuple<int; float>               // unnamed elements
-    tuple<i:int; f:float>           // named elements
+    var unnamed : tuple<int; float>         // unnamed elements
+    var named   : tuple<i:int; f:float>     // named elements
 
 Tuple field names are part of the type. Two tuple declarations are the same only if
 they have the same number of elements, the same element types, **and the same
@@ -21,13 +21,27 @@ names — even when the element types match:
 
 .. code-block:: das
 
-    var a : tuple<int; float>
-    var b : tuple<i:int; f:float>
-    var c : tuple<x:int; y:float>
-    // a = b   // error: tuple<int;float> is not the same type as tuple<i:int;f:float>
-    // b = c   // error: tuple<i:int;f:float> is not the same type as tuple<x:int;y:float>
-    var d : tuple<i:int; f:float>
-    b = d      // ok — same names, same types
+    var ta : tuple<int; float>
+    var tb : tuple<i:int; f:float>
+    var tc : tuple<x:int; y:float>
+    var td : tuple<i:int; f:float>
+    tb = td    // ok — same names, same types
+
+Both mismatched assignments are rejected:
+
+.. das-doc: expect error[30915]
+.. code-block:: das
+
+    var lhs : tuple<int; float>
+    var rhs : tuple<i:int; f:float>
+    lhs = rhs   // error[30915]: tuple<int;float> is not the same type as tuple<i:int;f:float>
+
+.. das-doc: expect error[30915]
+.. code-block:: das
+
+    var lhs : tuple<i:int; f:float>
+    var rhs : tuple<x:int; y:float>
+    lhs = rhs   // error[30915]: tuple<i:int;f:float> is not the same type as tuple<x:int;y:float>
 
 The same rule applies to construction: a bare positional literal ``(1, 2.0)``
 produces an unnamed ``tuple<int;float>`` and is not accepted where a named
@@ -36,8 +50,12 @@ tuple directly:
 
 .. code-block:: das
 
-    var b : tuple<i:int; f:float> = (i = 1, f = 2.0)   // ok
-    // var b : tuple<i:int; f:float> = (1, 2.0)         // error: not the same type
+    var named_ok : tuple<i:int; f:float> = (i = 1, f = 2.0)   // ok
+
+.. das-doc: expect error[30344]
+.. code-block:: das
+
+    var named_bad : tuple<i:int; f:float> = (1, 2.0)   // error[30344]: not the same type
 
 Mixing named and positional fields in the same literal is **not** supported —
 either every field is named or none are.
@@ -68,8 +86,8 @@ overload, use the explicit named-field literal:
 
 .. code-block:: das
 
-    def overload_pick(x : tuple<int; float>) { return 1 }
-    def overload_pick(x : tuple<x:int; y:float>) { return 2 }
+    def overload_pick(hit : tuple<int; float>) { return 1 }
+    def overload_pick(hit : tuple<x:int; y:float>) { return 2 }
     let x = 1
     let y = 2.0
     overload_pick((x, y))          // returns 1: unnamed overload wins
@@ -78,12 +96,13 @@ overload, use the explicit named-field literal:
 A name mismatch fails compilation rather than silently constructing the
 unnamed tuple:
 
+.. das-doc: expect error[30341]
 .. code-block:: das
 
     let foo = 1
     let bar = 1.1
-    var arr : array<tuple<eid:int; distSq:float>>
-    // arr |> push((foo, bar))   // error: function_not_found
+    var hits : array<tuple<eid:int; distSq:float>>
+    hits |> push((foo, bar))   // error[30341]: no matching functions or generics
 
 Promotion does not fire when any element is not a bare variable reference, e.g.
 ``(a, a+1)`` stays unnamed.
@@ -92,16 +111,16 @@ Tuple elements can be accessed via nameless fields, i.e. _ followed by the 0 bas
 
 .. code-block:: das
 
-    a._0 = 1
-    a._1 = 2.0
+    ta._0 = 1
+    ta._1 = 2.0
 
 Named tuple elements can be accessed by name as well as via nameless field:
 
 .. code-block:: das
 
-    b.i = 1         // same as _0
-    b.f = 2.0       // same as _1
-    b._1 = 2.0      // _1 is also available
+    tb.i = 1         // same as _0
+    tb.f = 2.0       // same as _1
+    tb._1 = 2.0      // _1 is also available
 
 Tuples follow the same alignment rules as structures (see :ref:`Structures <structs_alignment>`).
 
@@ -118,20 +137,20 @@ It's the same as:
 
 .. code-block:: das
 
-    typedef Foo = tuple<a:int,b:float>
+    typedef Foo = tuple<a:int; b:float>
 
 Tuples can be constructed using the tuple constructor, for example:
 
 .. code-block:: das
 
-    var a = (1,2.0,"3")
-    var b = tuple(1, 2.0, "3")
+    var tup_a = (1,2.0,"3")
+    var tup_b = tuple(1, 2.0, "3")
 
 The ``=>`` operator creates a 2-element tuple from its left and right operands:
 
 .. code-block:: das
 
-    var c = "one" => 1   // same as tuple<string,int>("one", 1)
+    var pair = "one" => 1   // tuple<string;int>, same as tuple("one", 1)
 
 This works in any expression context, not just table literals.
 Table literals like ``{ "one"=>1, "two"=>2 }`` use ``=>`` to form key-value tuples
@@ -141,12 +160,16 @@ Tuple elements can be assigned names via tuple constructor:
 
 .. code-block:: das
 
-    var a = tuple<a:int,b:float,c:string>(a=1, b=2.0, c="3")
+    var named3 = tuple<a:int; b:float; c:string>(a=1, b=2.0, c="3")
 
-Both ``auto`` and a full type specification can be used to construct a tuple.
+A tuple constructor that spells out the element types accepts **named** arguments only —
+``tuple<a:int; b:float>(a=1, b=2.0)`` is fine, ``tuple<int; float>(1, 2.0)`` is a syntax error.
+Use the ``auto`` form ``tuple(1, 2.0)`` for positional construction.
 Array of tuples can be constructed using similar syntax, with a comma as a separator:
 
 .. code-block:: das
+
+    typedef Tup = tuple<a:int; b:float; c:string>
 
     let H : array<Tup> <- array<Tup>((a = 1, b = 2., c = "3"), (a = 4, b = 5., c = "6"))
 
@@ -154,16 +177,17 @@ Tuples can be expanded upon the variable declaration, for example:
 
 .. code-block:: das
 
-    var (a, b, c) = (1, 2.0, "3")
+    var (first, second, third) = (1, 2.0, "3")
 
 In this case only one variable is created, as well as for 'assume' expressions. I.e:
 
+.. das-doc: alt
 .. code-block:: das
 
-    var a`b`c = (1, 2.0, "3")
-    assume a  = a`b`c._0
-    assume b  = a`b`c._1
-    assume c  = a`b`c._2
+    var first`second`third = (1, 2.0, "3")
+    assume first  = first`second`third._0
+    assume second = first`second`third._1
+    assume third  = first`second`third._2
 
 Iterators and containers can be expanded in the for-loop in a similar way:
 
@@ -187,21 +211,20 @@ parameter tuple has ``T const?``:
 
 .. code-block:: das
 
+    struct Loc { line : int }
     struct Node { at : Loc }
-    var ats : array<tuple<string; Loc const?>>
 
     // Exact-match overload.
-    def takeng(a : array<tuple<string; Loc const?>>;
-               b : tuple<string; Loc const?>) { ... }
+    def takeng(hits : array<tuple<string; Loc const?>>; hit : tuple<string; Loc const?>) { pass }
 
     // Generic overload — TT is inferred from the array element type,
-    // so b must match tuple<string; Loc const?> as well.
-    def take(a : array<auto(TT)>; b : TT) { ... }
+    // so hit must match tuple<string; Loc const?> as well.
+    def take(hits : array<auto(TT)>; hit : TT) { pass }
 
-    def feed(var a : Node?&) {
-        take(ats,   ("test", unsafe(addr(a.at))))   // tuple<string; Loc?>
-        takeng(ats, ("test", unsafe(addr(a.at))))   // accepted for
-                                                    // tuple<string; Loc const?>
+    def feed(var node : Node?&; ats : array<tuple<string; Loc const?>>) {
+        take(ats,   ("test", unsafe(addr(node.at))))   // tuple<string; Loc?>
+        takeng(ats, ("test", unsafe(addr(node.at))))   // accepted for
+                                                       // tuple<string; Loc const?>
     }
 
 The widening is one-directional (``T?`` widens to ``T const?``, not the

@@ -34,6 +34,7 @@ starts with one of the three recognized prefixes (``./``, ``../``, ``%/``) and
 ends in ``.das`` or ``.das_project``. Anything else continues to resolve as a
 module name through the normal path. ``%`` expands to ``get_das_root()``.
 
+.. das-doc: fragment
 .. code-block:: das
 
     require ./helpers.das                     // relative to the current file
@@ -120,17 +121,20 @@ Native modules
 
 A native module is a separate Daslang file, with an optional ``module`` name:
 
+.. das-doc: file custom.das
 .. code-block:: das
 
-    module custom       // specifies module name
-    ...
-    def foo             // defines function in module
-    ...
+    module custom            // specifies module name
+
+    def public foo {         // defines function in module
+        ...
+    }
 
 If not specified, the module name defaults to that of the file name.
 
 Modules can be ``private`` or ``public``:
 
+.. das-doc: fragment
 .. code-block:: das
 
     module Foo private
@@ -143,6 +147,7 @@ The default publicity of functions, structures, and enumerations is that of the 
 
 Module can be made visible to all modules in the project via the ``!inscope`` modifier:
 
+.. das-doc: fragment
 .. code-block:: das
 
     module Foo !inscope
@@ -160,6 +165,7 @@ Shared modules
 Shared modules are modules that are shared between compilation of multiple contexts.
 Typically, modules are compiled anew for each context, but when the 'shared' keyword is specified, the module gets promoted to a builtin module:
 
+.. das-doc: fragment
 .. code-block:: das
 
     module Foo shared
@@ -191,6 +197,7 @@ functions in the module that calls them. Inside an instanced generic, the module
 being compiled` is therefore the **caller's** module — neither prefix pins a lookup to the
 module where the generic was written:
 
+.. das-doc: file b.das
 .. code-block:: das
 
     module b

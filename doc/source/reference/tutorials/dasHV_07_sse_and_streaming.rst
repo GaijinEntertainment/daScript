@@ -18,6 +18,9 @@ delivers the response body incrementally as chunks arrive.
 
 Prerequisites: :ref:`tutorial_dasHV_http_requests` and :ref:`tutorial_dasHV_http_server`.
 
+.. das-doc: given let base_url = "http://127.0.0.1:18086"
+.. das-doc: given var req : HttpRequest?
+
 What is SSE?
 ============
 

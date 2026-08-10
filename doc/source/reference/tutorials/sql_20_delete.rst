@@ -46,6 +46,10 @@ By-PK from a row
 
 Useful when you already have the row loaded (e.g. from a SELECT).
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string; Active : bool }
+.. das-doc: given [sql_table(name="Orders")] struct Order { @sql_primary_key Id : int; UserId : int; Total : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let n1 = db |> delete_(User(Id = 2, Name = "", Active = false))

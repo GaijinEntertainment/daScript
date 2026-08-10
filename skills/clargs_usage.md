@@ -12,7 +12,9 @@ renderer, and uniform behavior across every tool.
   flag is a real field with a real type (`string`, `int`, `bool`,
   `array<string>`, enum). The compiler enforces the schema.
 - `print_help` renders complete usage text — short flags, long flags,
-  doc strings, defaults — with no duplicated string templates.
+  doc strings, env-twin/repeat/mutex markers — with no duplicated string
+  templates. Field defaults are NOT rendered (`default_doc` is populated
+  by `[EnvConfig]` only).
 - Required flags, repeatable flags (`array<T>`), and enum validation
   all just work.
 

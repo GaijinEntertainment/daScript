@@ -115,6 +115,7 @@ Character Sets
 ``set()`` matches a single character from one or more ranges or
 individual characters:
 
+.. das-doc: fragment
 .. code-block:: das
 
    set('a'..'z', 'A'..'Z')         // letters
@@ -127,6 +128,7 @@ Multiple Rules and WS
 Grammars can have any number of rules.  ``WS`` is a built-in terminal
 that matches zero or more whitespace characters:
 
+.. das-doc: fragment
 .. code-block:: das
 
    parse(input) {

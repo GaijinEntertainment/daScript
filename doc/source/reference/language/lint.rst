@@ -11,6 +11,63 @@ Lint Tools
     single: Performance Lint
     single: Style Lint
 
+.. das-doc: given require strings
+.. das-doc: given require math
+.. das-doc: given require daslib/json_boost
+.. das-doc: given struct Box { value : int }
+.. das-doc: given struct Session { pos : int64 }
+.. das-doc: given struct SomeStruct { value : int64 }
+.. das-doc: given struct Foo { x : int }
+.. das-doc: given def compute() : int { return 0 }
+.. das-doc: given def report(ok : bool) { }
+.. das-doc: given def process(v : int) { }
+.. das-doc: given def make_thing() : array<int> { var r : array<int>; return <- r }
+.. das-doc: given def make_more() : array<int> { var r : array<int>; return <- r }
+.. das-doc: given def takes_block(blk : block<>) { invoke(blk) }
+.. das-doc: given var x : int
+.. das-doc: given var y : int
+.. das-doc: given var a : int
+.. das-doc: given var b : int
+.. das-doc: given var c : int
+.. das-doc: given var s : string
+.. das-doc: given var n : int64
+.. das-doc: given var arr : array<int>
+.. das-doc: given var src : array<int>
+.. das-doc: given var dst : array<int>
+.. das-doc: given var cond : bool
+.. das-doc: given var flag : bool
+.. das-doc: given var size : int
+.. das-doc: given var capacity : int
+.. das-doc: given var value : int
+.. das-doc: given var then_value : int
+.. das-doc: given var else_value : int
+.. das-doc: given var divisor : int
+.. das-doc: given var const_ptr : int?
+.. das-doc: given var name : string
+.. das-doc: given var lo : int
+.. das-doc: given var hi : int
+.. das-doc: given var xs : array<float>
+.. das-doc: given var ys : array<float>
+.. das-doc: given var uv : uint
+.. das-doc: given var p : int?
+.. das-doc: given var f : int
+.. das-doc: given var raw : void?
+.. das-doc: given var key : string
+.. das-doc: given var tab : table<string; int>
+.. das-doc: given var target : int
+.. das-doc: given var dx : int
+.. das-doc: given var dy : int
+.. das-doc: given var pending : array<float>
+.. das-doc: given var rest : array<float>
+.. das-doc: given var consumed : int64
+.. das-doc: given var HOP : int64
+.. das-doc: given var nbytes : int64
+.. das-doc: given var newSize : int64
+.. das-doc: given var jv : JsonValue?
+.. das-doc: given def emit_header(var w : StringBuilderWriter) { }
+.. das-doc: given def emit_body(var w : StringBuilderWriter) { }
+.. das-doc: given def emit_footer(var w : StringBuilderWriter) { }
+
 daslang provides three complementary lint passes that detect issues at compile time:
 
 - **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables and arguments, variables that can be ``let``, underscore naming, redundant reinterpret casts, 64-bit narrowing traps (error code ``50503``)
@@ -153,6 +210,7 @@ LINT001 — unreachable code
 Code after a ``return`` or ``panic()`` in the same block is unreachable and
 will never execute.
 
+.. das-doc: alt
 .. code-block:: das
 
     def foo() {
@@ -166,6 +224,7 @@ LINT002 — unused variable
 A declared variable is never read. Prefix the name with an underscore
 (``_x``) to suppress the warning, or remove the variable entirely.
 
+.. das-doc: alt
 .. code-block:: das
 
     def foo() {
@@ -178,6 +237,7 @@ LINT003 — variable can be ``let``
 
 A ``var`` variable is never mutated. Declare it with ``let`` instead.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -194,6 +254,7 @@ flagged, even when the callee never writes through it — a ``let`` argument
 would no longer match the ``var`` parameter and the build would break. The
 callee side of that situation is LINT014's report.
 
+.. das-doc: alt
 .. code-block:: das
 
     def probe(var a : float[4][4]) : string {   // never writes a — see LINT014
@@ -214,6 +275,7 @@ a ``_``-prefixed *argument* is never flagged (a parameter name is often
 constrained: intentionally unused, or dodging a reserved keyword / shadow such
 as ``_in``).
 
+.. das-doc: alt
 .. code-block:: das
 
     def foo() : int {
@@ -231,6 +293,7 @@ The rule skips casts that strip ``const`` or ``temporary`` modifiers (those
 serve a purpose) and casts between ``void?`` and typed pointers. It also
 skips generic instantiations and compiler-generated functions.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — x is already int?
@@ -250,6 +313,7 @@ LINT006 — division by zero (constant zero divisor)
 typo. Also covers the compound forms ``/=`` and ``%=``. Recognizes literal zero
 across ``int``, ``uint``, ``int64``, ``uint64``, ``float``, and ``double``.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -268,6 +332,7 @@ and the code is almost always a copy-paste typo. Triggers on: ``==``, ``!=``,
 ``<``, ``>``, ``<=``, ``>=``, ``-``, ``/``, ``%``, ``&&``, ``||``, ``&``,
 ``|``, ``^``, ``-=``, ``/=``, ``%=``.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — author meant `size == capacity` or similar
@@ -284,6 +349,7 @@ intentional.
 NaN check — daslang has no dedicated ``is_nan`` helper for scalar floats.
 Suppress LINT007 on the one line that needs it:
 
+.. das-doc: alt
 .. code-block:: das
 
     def is_nan(x : float) : bool {
@@ -306,6 +372,7 @@ LINT008 — both ternary branches equivalent
 
 ``cond ? x : x`` ignores ``cond`` and always produces ``x``. Copy-paste bug.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -321,6 +388,7 @@ LINT009 — ``then`` branch equivalent to ``else`` branch
 copy-pasted one branch and forgot to edit the other. Caught even when ``A``
 has side effects — the structural pattern is suspicious regardless of purity.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -352,6 +420,7 @@ overwritten by a later write with no intervening read, or it goes out of scope
 The variable being read elsewhere keeps LINT002 (unused variable) silent —
 this rule is for *partial* deadness within an otherwise-used local.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — re-init before any read
@@ -413,6 +482,7 @@ sources cap at ``uint32`` (``2^32 - 1``). LINT011 therefore never fires on
 ``double`` targets today — the rule is wired symmetrically so future broader
 sources stay covered.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — float can't represent 2^24 + 1 exactly
@@ -443,6 +513,7 @@ Arguments of **class methods** are exempt: their signature is dictated by the
 base class or interface, so an unused parameter there is structural rather
 than a mistake. LINT012 fires on free functions only.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — `b` is never used
@@ -468,16 +539,17 @@ The same check for the parameters of a block, lambda, or generator passed as
 a callback. Callbacks that ignore a parameter are common; suppress exactly as
 for LINT012.
 
+.. das-doc: alt
 .. code-block:: das
 
-    // Bad — the callback ignores its second parameter
-    tab |> get(key) $(found : bool; value : int) {  // LINT013 on value
-        report(found)
+    // Bad — the callback ignores its parameter
+    tab |> get(key) $(var value : int&) {           // LINT013 on value
+        report(true)
     }
 
     // Good
-    tab |> get(key) $(found : bool; _value : int) {
-        report(found)
+    tab |> get(key) $(var _value : int&) {
+        report(true)
     }
 
 LINT014 — mutable (``var``) argument is never written
@@ -502,6 +574,7 @@ which only ``var b`` provides. Slots that accept a const pointer
 is skipped — the leaf callee is flagged first; once its signature is fixed,
 the next lint run exposes the caller.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — b is only read
@@ -545,6 +618,7 @@ and unary, so a split binary ``a + b`` orphans as a valid unary statement.
 ``--`` mutate (real statements), and an operator that cannot begin a statement
 (``*``, ``|>``, …) raises a loud parse error instead.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — `+ b` and `+ c` become separate `+b` / `+c` statements, dropped
@@ -571,6 +645,7 @@ spelling is misleading.
 Use ordinary copy syntax for same-context storage, and make a cross-context
 copy explicit with ``clone_string`` in the receiving context:
 
+.. das-doc: fragment
 .. code-block:: das
 
     dst = src
@@ -604,6 +679,7 @@ string length, which carry an always-on guard. Either way the cast looks like
 it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
 64-bit the whole way through.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — wraps before the cast ever runs
@@ -633,6 +709,7 @@ overloads. An ``int(...)`` cast on the size or position argument of any of
 them is pure loss: above 2\ :sup:`31` it silently covers the wrong count while
 the overload would have taken the 64-bit value straight through.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — truncates for nbytes > 2GB
@@ -674,6 +751,7 @@ the per-file scan cannot see which instantiations elsewhere consume it. Tag it w
 ``LINT019`` instead; removal is only safe where the author knows no other compile
 reaches the line.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — PERF006 no longer fires here; the directive outlived its rule hit
@@ -692,6 +770,7 @@ starts. ``range64`` and ``urange64`` take the 64-bit value directly, and the
 loop variable then indexes arrays, fixed arrays and (unsafe) pointers as-is —
 ``TypeDecl::isIndexExt`` admits ``int64``/``uint64`` subscripts natively.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — n > 2^31 wraps before the loop starts
@@ -724,6 +803,7 @@ is computed and thrown away at every sink, truncating silently above
 ``length()`` instead of ``long_length()``), or lift the sinks to 64-bit
 (``range64``, the ``int64`` ``resize``/``reserve``/``erase`` overloads).
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — keep is 64-bit, yet every single use narrows
@@ -766,6 +846,7 @@ PERF001 — string ``+=`` in loop
 String concatenation with ``+=`` inside a loop creates O(n\ :sup:`2`) allocations.
 Each iteration allocates a new string of increasing length, copying all previous content.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — O(n^2)
@@ -788,6 +869,7 @@ PERF002 — ``character_at`` in loop with loop variable
 to validate the index. In a loop iterating over string indices with the loop
 variable as the index, this becomes O(n\ :sup:`2`) total.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — O(n^2)
@@ -810,6 +892,7 @@ check by scanning to the index. For accessing the first character, use
 ``first_character`` which is O(1). For bulk access in hot paths, consider
 ``peek_data`` for reads or ``modify_data`` for mutations.
 
+.. das-doc: alt
 .. code-block:: das
 
     let ch = character_at(s, 0)         // PERF003 — use first_character(s) instead
@@ -822,6 +905,7 @@ PERF004 — string interpolation reassignment in loop
 ``str += "..."``. Each iteration allocates a new string containing all previous
 content.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — O(n^2)
@@ -844,6 +928,7 @@ PERF005 — ``length(string)`` in while condition
 is not modified in the loop body, this is wasted work. Note that ``for`` loops
 do **not** have this problem because ``for`` computes its source expression once.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — strlen every iteration
@@ -872,6 +957,7 @@ Conditional pushes (inside ``if``/``else``) and loops with ``break``/``continue`
 are not flagged — the number of items is unpredictable, so ``reserve`` would be
 guesswork.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — may realloc each iteration
@@ -894,6 +980,7 @@ PERF007 — unnecessary ``string(das_string)`` in comparison
 ``das_string`` values via ``==`` and ``!=``. Wrapping in ``string()`` allocates
 a new string unnecessarily.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — unnecessary allocation
@@ -908,6 +995,7 @@ PERF008 — unnecessary ``get_ptr()`` for ``is``/``as``
 ``ExpressionPtr`` and ``TypeDeclPtr`` support ``is`` and ``as``
 type checks directly. Calling ``get_ptr()`` first is unnecessary.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — get_ptr is redundant
@@ -927,6 +1015,7 @@ The clone-init flavor — ``var x := src; return <- x`` (lowered to
 ``<- clone_to_move(...)``) — collapses to ``return clone_to_move(src)``, **not**
 ``return <- src`` (which would move/destroy the clone source).
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — redundant variable
@@ -949,6 +1038,7 @@ PERF010 — unnecessary ``get_ptr()`` for null comparison
 ``smart_ptr`` supports ``==`` and ``!=`` against ``null`` directly.
 Calling ``get_ptr()`` first is unnecessary overhead.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — get_ptr is redundant
@@ -963,6 +1053,7 @@ PERF011 — unnecessary ``get_ptr()`` for field access
 ``smart_ptr`` auto-dereferences for field access. Calling ``get_ptr()``
 first to access a field is unnecessary.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — get_ptr is redundant
@@ -979,6 +1070,7 @@ the ``strings`` module allocates a temporary string unnecessarily. Use
 ``peek(das_string)`` instead, which provides a zero-allocation read-only
 string reference.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — allocates a temporary string
@@ -1000,6 +1092,7 @@ the canonical inc/dec idiom. Applies to the six numeric workhorse scalars
 (``int2``, ``float3``, …) do **not** support ``++``/``--`` so they are
 skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1036,6 +1129,7 @@ Deliberately **not** flagged:
   *intersection* with different endpoints, distinct from the ``||``
   strict-inequality *complement* (``c < '0' || c > '9'``) which is flagged.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad
@@ -1056,6 +1150,7 @@ PERF015 — ternary min / max
 vec-friendly and the intent is clearer. All eight orientations of
 ``< / <= / > / >=`` × ``T==L,F==R`` / ``T==R,F==L`` are flagged.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1074,6 +1169,7 @@ signed numeric type. Only the four orientations that match ``abs`` are
 flagged; the negabs shape (``x < 0 ? x : -x``) is **not** — it is a
 different function.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1097,6 +1193,7 @@ idiomatic form. Six comparison ops are mapped to either ``empty(x)`` or
 Vector magnitude (``length(float3_var)`` from the math module) is **not**
 flagged — different semantics, no ``empty`` for vectors.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad
@@ -1124,6 +1221,7 @@ the existing ``find_expr_path`` chain walker. Every use of ``i`` in the body mus
 expression disqualifies the loop. Bare-variable sibling arrays indexed by
 the same ``i`` route the loop to PERF029 instead.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — i used only as arr[i]
@@ -1154,6 +1252,7 @@ cannot express those. Loops whose ``i`` never subscripts the ``range``
 source itself also stay silent — there the source is only a bound, and
 zipping would change which array limits the walk.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — xs and ys coupled through i
@@ -1183,6 +1282,7 @@ lowering, and generated moves are excluded — in particular the early-out
 relocation that splits ``var inscope x <- init`` into a hoisted declaration
 plus a generated move (the target is fresh and the ``finally`` releases it).
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — a's old array is dropped unreleased
@@ -1218,9 +1318,14 @@ observe the rule firing on it. The lint runner sets
 Dastest coverage in ``utils/lint/tests/perf019_int_cast_collapse.das``
 uses runtime operands; the constant case is covered by the CI lint gate.
 
+.. das-doc: alt
 .. code-block:: das
 
-    bitfield Mode { read; write; exec }
+    bitfield Mode {
+        read
+        write
+        exec
+    }
 
     // Bad
     var mask = int(Mode.read) | int(Mode.write)         // PERF019
@@ -1252,6 +1357,7 @@ trigger) combined with a strict ``arg._type.baseType`` equality check
 against the cast's target type. Const / reference / temporary qualifiers
 on the argument are ignored — only ``baseType`` matters.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — a is already int64
@@ -1304,6 +1410,7 @@ If the argument base types differ (e.g. ``cond ? string(intV) :
 string(int64V)``), the rule does NOT fire; the rewrite would need a
 manual widen on one branch and that is left to the author.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1349,6 +1456,7 @@ because those have no direct bulk equivalent.
 Compiler folds ``B |> push(s)``, ``B.push(s)``, and ``push(B, s)`` to the
 same call shape, so all three forms are detected by the same rule.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1365,6 +1473,7 @@ and generator sources do not have a bulk overload and are left unflagged.
 
 The same recommendation applies to ``push_clone``:
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1390,6 +1499,7 @@ calls ``clone_expression`` on every ``$e(...)`` substitution input. Pre-cloning
 into a local variable and then splicing the local is wasted work — the same
 substitution gets cloned a second time at apply-template time.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad
@@ -1414,6 +1524,7 @@ each substitution independently, so ``$e(E)`` repeated N times yields N
 independent clones — equivalent to one user-side clone repeated N times via
 ``$e(X)``:
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — three pre-clones for three splice slots
@@ -1453,6 +1564,7 @@ whose only uses are direct arguments at ``[clone(...)]`` positions — any other
 use (assignment, passing elsewhere, storing into a field) makes the pre-clone
 load-bearing and the lint stays silent.
 
+.. das-doc: fragment
 .. code-block:: das
 
     [clone(node)]
@@ -1476,6 +1588,7 @@ string builder's ``DebugDataWalker``. Wrapping an element in ``string(...)``
 allocates an intermediate string that the builder then copies — a wasted heap
 allocation per interpolation.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1499,6 +1612,7 @@ but with an extra note: they interpolate as **hex** by default
 (``"{42u}"`` → ``0x2a``), so dropping the cast changes the output. Use the
 ``:d`` format tag to keep decimal:
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — string() gives decimal "42"
@@ -1528,6 +1642,7 @@ declares a contract. They exist for code where an allocation, an environment
 lookup or a log line is a bug rather than a smell — a decode step, an audio
 callback, a frame loop.
 
+.. das-doc: fragment
 .. code-block:: das
 
     [hot_path]                          // all three contracts
@@ -1561,6 +1676,7 @@ read), and any builtin returning a freshly allocated string.
 reused is not an accident, and saying so at the buffer beats a suppression at
 every call site:
 
+.. das-doc: fragment
 .. code-block:: das
 
     struct Session {
@@ -1606,6 +1722,7 @@ STYLE001 — unnecessary ``<|`` pipe before block argument
 The ``<|`` pipe syntax is gen1 style and unnecessary in gen2. Use direct
 trailing block syntax instead.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — gen1 pipe style
@@ -1624,6 +1741,7 @@ STYLE002 — ``<|`` pipe before parameterless block
 When the block takes no parameters, both the ``<|`` pipe and ``$()`` are
 unnecessary. Use a direct trailing block.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — pipe and $() both unnecessary
@@ -1642,6 +1760,7 @@ STYLE003 — redundant ``$()`` on parameterless block
 When a block takes no parameters, the ``$()`` prefix is unnecessary even
 without a pipe. Use a bare trailing block.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — redundant $()
@@ -1667,6 +1786,7 @@ synthesized block and its inner terminator for both braceless ``if (c)
 return`` and postfix-desugared ``return X if (c)``, so a real
 user-written ``{...}`` is detectable as ``blk.at != inner.at``.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — braces around a single terminator
@@ -1692,6 +1812,7 @@ STYLE006 — ``string(__rtti)`` comparison should use ``is``
 Comparing ``string(expr.__rtti) == "ExprFoo"`` is verbose and fragile.
 Use the ``is`` operator instead, which is type-safe and cleaner.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — manual RTTI string comparison
@@ -1706,6 +1827,7 @@ STYLE010 — ``if (true)`` should be a bare block
 ``if (true)`` is always taken and adds unnecessary noise. Use a bare
 block (lexical scope) instead.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — always true
@@ -1728,6 +1850,7 @@ with initialization.
 The rule excludes ``var inscope`` (needs separate declaration for cleanup
 semantics), compiler-generated variables, and generic instantiations.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — split declaration and init
@@ -1762,6 +1885,7 @@ array-literal equivalent.
 The rule excludes ``var inscope``, compiler-generated variables, and
 generic instantiations (same exclusions as STYLE011).
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — two pushes after empty array declaration
@@ -1799,6 +1923,7 @@ Foo()``, ``var a = new Foo()``). A non-empty constructor, a factory call, or
 a single field assignment is not flagged. ``var inscope``, compiler-generated
 variables, and generic instantiations are excluded.
 
+.. das-doc: alt
 .. code-block:: das
 
     struct Foo { x : int; y : int }
@@ -1829,6 +1954,7 @@ The block before the file's first AST decl (the module-leading
 docstring, e.g. ``daslib/regex_boost.das`` lines 9–18) is always
 allowed. Suppress an individual block on its first line:
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — 5 contiguous //! lines on a public function
@@ -1867,6 +1993,7 @@ comment prose inside a ``def private`` body is dead weight. Trim to one
 line, or suppress with ``// nolint:STYLE015`` on the first line of the
 block.
 
+.. das-doc: alt
 .. code-block:: das
 
     def private bad() {
@@ -1890,6 +2017,7 @@ with ``||``. Two AST shapes are detected:
 * two adjacent ``if (a) { return X }`` statements in the same block
 * the ``if (a) { return X } else if (b) { return X }`` chain
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1915,6 +2043,7 @@ both forms:
 * ``if (cond) return b1 else return b2`` (b1 ≠ b2)
 * ``if (cond) return b1`` immediately followed by ``return b2`` (b1 ≠ b2)
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1937,6 +2066,7 @@ Comparing a bool to a boolean literal is redundant — the bool already IS
 the value. Drop the comparison. Both Yoda forms (``true == flag``) are
 detected.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad
@@ -1957,6 +2087,7 @@ directly. Both orientations (and the mirror form) are detected — the
 inner call must resolve to the math module's ``min`` / ``max``, not a
 user overload.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -1983,6 +2114,7 @@ instantiation chain (two levels deep for json_boost's
 ``from_JV`` / ``json_boost``. The result-type check uses ``expr._type``,
 which is robust under both pre- and post-instantiation argument shapes.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -2008,6 +2140,7 @@ receiver resolves to the same variable. Computed keys disqualify the
 chain — such runs fall through to :ref:`STYLE031 <style031>` instead
 (a table literal accepts computed keys, ``JV((...))`` does not).
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -2041,9 +2174,14 @@ an explicit ``ExprOp1("~", ExprField)`` or a single-bit-complement
 ``ExprConstBitfield``. A bare ``foo &= BfT.m`` (no ``~``) is *not* the
 bit-clear idiom; it would mask off every other bit, so it stays silent.
 
+.. das-doc: alt
 .. code-block:: das
 
-    bitfield Mode { read; write; exec }
+    bitfield Mode {
+        read
+        write
+        exec
+    }
 
     // Bad
     var f : Mode
@@ -2073,9 +2211,14 @@ under normal compile as ``ExprConstBitfield`` with a single-bit mask.
 Multi-bit masks (``Mode.read | Mode.write``) are left alone since the
 ``!= 0`` semantics differ from any single field read.
 
+.. das-doc: fragment
 .. code-block:: das
 
-    bitfield Mode { read; write; exec }
+    bitfield Mode {
+        read
+        write
+        exec
+    }
     struct Io { flags : Mode }
 
     // Bad
@@ -2097,6 +2240,7 @@ The check walks the wrapped subtree for inherently-unsafe leaves
 writes, calls flagged ``unsafeOperation``). When none are present, the wrap
 is flagged. Macro-generated subtrees are skipped by design.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — nothing inside needs unsafe
@@ -2113,6 +2257,7 @@ unsafe, the block scope is too broad. Narrow it to the expression form
 ``unsafe(<sub-expr>)`` wrapping just the operation that requires it. When two
 or more statements need unsafe the block is justified and stays silent.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — only the reinterpret needs unsafe
@@ -2133,6 +2278,7 @@ redundant — the outer wrap already covers it. Drop the inner block. Closure,
 lambda, and generator bodies are not "nested" for this rule: they execute in
 a separate context the outer wrap does not reach.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — inner unsafe is already covered
@@ -2162,6 +2308,7 @@ the variable (nested ``for`` / ``if`` filters allowed up to the rule's
 budget). ``var inscope``, compiler-generated variables, and generic
 instantiations are excluded.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — empty var then a push-only loop
@@ -2185,6 +2332,7 @@ Source inspection confirms the literal ``self->`` spelling before flagging —
 the post-inference AST cannot distinguish ``self->m()``, ``self.m()``, and
 bare ``m()``.
 
+.. das-doc: fragment
 .. code-block:: das
 
     class Widget {
@@ -2211,6 +2359,7 @@ an indirect dependency. Require those modules directly and drop ``X``. Skipped
 when ``X`` provides macros or an ``[init]`` (requiring it has a side effect
 beyond symbol visibility).
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — only Y's symbols are used; X just re-exports Y
@@ -2228,6 +2377,7 @@ re-exports) is referenced anywhere in the file. Remove it. Skipped when ``X``
 provides any macro or an ``[init]``, or only re-exports builtins used through
 it. Suppress a deliberate keep with ``// nolint:STYLE030``.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — nothing from strings is used
@@ -2255,6 +2405,7 @@ keys at compile time (error 30706), so the rewrite would not compile.
 ``table<string; JsonValue?>`` runs with constant keys are owned by
 STYLE021 (the ``JV((k1=..., k2=...))`` form is the stronger suggestion).
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad
@@ -2279,6 +2430,7 @@ An empty ``var w : array<T>`` immediately followed by a single
 an ``array<T>`` is just a verbose clone of ``src``. ``:=`` clones the whole
 array (each element, for ``push_clone_from``) in one step:
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad
@@ -2314,6 +2466,7 @@ expression (``concat`` lives in ``daslib/linq``, so the rewrite needs
 ``require daslib/linq``). Into an **already-live** array the run collapses to a
 single variadic call:
 
+.. das-doc: fragment
 .. code-block:: das
 
     require daslib/linq
@@ -2355,6 +2508,7 @@ STYLE034 — ``reinterpret<T?>(addr(x))`` collapses to ``addr<T?>(x)``
 ``addr<T?>(x)`` is pure sugar for ``reinterpret<T?>(addr(x))``, with one
 ``unsafe()`` covering both halves — the spelled-out form needs two gates:
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — two unsafe gates for one operation
@@ -2378,6 +2532,7 @@ them once it consumes them. A cast target that is already concrete has nothing
 to consume the contract, so it does nothing at all — ``void?`` is ``void?``
 regardless of ``-const``.
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — the -const strips nothing
@@ -2415,6 +2570,7 @@ Not counted: ``&&`` / ``||`` short-circuit operators, the null-safe chain
 operators ``??`` / ``?.`` / ``?[`` / ``?as``, ``static_if`` branches, and
 macro-generated control flow.
 
+.. das-doc: fragment
 .. code-block:: das
 
     // Bad — one function absorbing every case
@@ -2453,6 +2609,7 @@ default to 50 (ESLint ``max-lines-per-function``, SwiftLint warning), 60
 (golangci-lint ``funlen``, detekt ``LongMethod``) and 150 (Checkstyle
 ``MethodLength``).
 
+.. das-doc: alt
 .. code-block:: das
 
     // Bad — one function carrying a hundred lines of straight-line work

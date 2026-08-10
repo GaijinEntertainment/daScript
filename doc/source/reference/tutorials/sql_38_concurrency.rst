@@ -41,13 +41,15 @@ Each worker opens its own ``with_sqlite(...)``. The underlying
 file is shared; the handle is per-thread. WAL guarantees readers
 see a consistent snapshot while another thread writes:
 
+.. das-doc: given [sql_table(name="Counters")] struct Counter { @sql_primary_key Id : int; Tally : int }
+
 .. code-block:: das
 
-    def worker_read(path : string) {
+    def worker_read(path : string; worker : int) {
         with_sqlite(path) $(db) {
             // separate handle, separate prepared-statement cache
             let n = _sql(db |> select_from(type<Counter>) |> count)
-            to_log(LOG_INFO, "thread {get_thread_id()} sees n={n}")
+            to_log(LOG_INFO, "worker {worker} sees n={n}")
         }
     }
 

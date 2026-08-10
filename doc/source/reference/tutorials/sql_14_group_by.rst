@@ -52,13 +52,19 @@ body as ``<param>.<field>`` for any parameter name.
 Single-key grouping
 ===================
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string; City : string; Age : int; Salary : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+.. das-doc: given let min_age = 25
+.. das-doc: given let min_count = 1
+
 .. code-block:: das
 
     let by_city <- _sql(db |> select_from(type<User>)
                           |> _group_by(_.City)
                           |> _order_by(_._0)
                           |> _select((City = _._0, N = _._1 |> length)))
-    // SELECT "City", COUNT(*) FROM "Users" GROUP BY "City"
+    // SELECT "City", COUNT(*) AS "N" FROM "Users"
+    // GROUP BY "City" ORDER BY "City" ASC
 
 Multiple aggregates in one projection
 =====================================
@@ -102,7 +108,7 @@ inside ``_having`` translate the same way as inside ``_select``:
            |> _group_by(_.City)
            |> _having(_._1 |> length > 1)
            |> _select((City = _._0, N = _._1 |> length)))
-    // SELECT "City", COUNT(*) FROM "Users"
+    // SELECT "City", COUNT(*) AS "N" FROM "Users"
     // GROUP BY "City" HAVING COUNT(*) > ?
 
 Multi-key grouping
@@ -116,7 +122,7 @@ Pass a tuple to ``_group_by``. Each tuple field becomes its own
     _sql(db |> select_from(type<User>)
            |> _group_by((_.City, _.Age))
            |> _select((City = _._0._0, Age = _._0._1, N = _._1 |> length)))
-    // SELECT "City", "Age", COUNT(*) FROM "Users"
+    // SELECT "City", "Age", COUNT(*) AS "N" FROM "Users"
     // GROUP BY "City", "Age"
 
 Expression group keys
@@ -131,7 +137,7 @@ shared by the SELECT and the GROUP BY clause:
     _sql(db |> select_from(type<User>)
            |> _group_by(_.Age % 100)
            |> _select((K = _._0, N = _._1 |> length)))
-    // SELECT (("Age") % (100)), COUNT(*) FROM "Users"
+    // SELECT (("Age") % (100)) AS "K", COUNT(*) AS "N" FROM "Users"
     // GROUP BY (("Age") % (100))
 
 A computed key can sit alongside a plain field key in a multi-key
@@ -155,9 +161,9 @@ The chain mirrors SQL clause order one-for-one:
                              AvgSalary = _._1 |> select($(u : User) => u.Salary) |> average))
                          |> take(10))
 
-    // SELECT "City", COUNT(*), AVG("Salary") FROM "Users"
-    // WHERE "Age" >= ? GROUP BY "City" HAVING COUNT(*) >= ?
-    // ORDER BY "City" ASC LIMIT ?
+    // SELECT "City", COUNT(*) AS "N", AVG("Salary") AS "AvgSalary"
+    // FROM "Users" WHERE "Age" >= ? GROUP BY "City"
+    // HAVING COUNT(*) >= ? ORDER BY "City" ASC LIMIT ?
 
 .. seealso::
 

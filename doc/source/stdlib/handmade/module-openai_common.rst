@@ -27,8 +27,9 @@ Every consumer root MUST set ``options rtti`` — otherwise the ``@optional`` /
 
     options rtti
     require openai/openai_chat
+    require daslib/fio
 
-    let client = openai_client("https://api.openai.com/v1", get_env("OPENAI_API_KEY"))
+    let client = openai_client("https://api.openai.com/v1", get_env_variable("OPENAI_API_KEY"))
     print("{chat_text(client, "gpt-4o-mini", "Say hi in one sentence.")}\n")
 
 See :ref:`tutorial_dasOPENAI_first_chat` for a hands-on tutorial, or the rest of

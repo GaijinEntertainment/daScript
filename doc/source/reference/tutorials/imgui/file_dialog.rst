@@ -62,6 +62,7 @@ One module on top of the harness:
 Public API
 ==========
 
+.. das-doc: signatures
 .. code-block:: das
 
    enum FileDialogResult { none; confirmed; cancelled }

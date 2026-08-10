@@ -9,6 +9,7 @@ widget, drag horizontally, release. The value tracks pixel movement
 scaled by ``speed``. Same call shape spans scalar / vector / range and
 float / int — one mental model, ten widgets.
 
+.. das-doc: signatures
 .. code-block:: das
 
    drag_float(IDENT, (text = "..", speed = 0.01f, format = "%.3f",
@@ -37,11 +38,19 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require daslib/safe_addr
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_widgets_builtin`` — every ``drag_*`` rail.
 * ``imgui/imgui_boost_runtime`` — ``DragStateFloat`` / ``DragStateInt`` /
   ``DragStateFloat3`` / ``DragStateRangeFloat`` state structs.
+
+The caller-owned form at the end of this page also needs
+``daslib/safe_addr`` for ``safe_addr``.
 
 Speed and format
 ================

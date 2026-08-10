@@ -154,7 +154,12 @@ Using interop functions from daslang
 =======================================
 
 The interop functions look like regular functions in daslang — the
-"any type" argument accepts any value:
+"any type" argument accepts any value.  ``describe_type``,
+``struct_field_names``, ``call_site_info`` and ``make_particle`` are the
+interop functions registered above, so this script only compiles inside the
+tutorial host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -182,6 +187,7 @@ The interop functions look like regular functions in daslang — the
 
        // Call-site info reports this script's file and line
        print("called from: {call_site_info()}\n")
+   }
 
 
 Building and running

@@ -66,20 +66,20 @@ Example:
 .. code-block:: das
 
     require daslib/regex
-        require strings
+    require strings
 
-        [export]
-        def main() {
-            var re <- regex_compile("[0-9]+")
-            let m = regex_match(re, "123abc")
-            print("match length = {m}\n")
-            let text = "age 25, height 180"
-            regex_foreach(re, text) $(r) {
-                print("found: {slice(text, r.x, r.y)}\n")
-                return true
-            }
+    [export]
+    def main() {
+        var re <- regex_compile("[0-9]+")
+        let m = regex_match(re, "123abc")
+        print("match length = {m}\n")
+        let text = "age 25, height 180"
+        regex_foreach(re, text) $(r) {
+            print("found: {slice(text, r.x, r.y)}\n")
+            return true
         }
-        // output:
-        // match length = 3
-        // found: 25
-        // found: 180
+    }
+    // output:
+    // match length = 3
+    // found: 25
+    // found: 180

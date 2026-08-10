@@ -37,6 +37,9 @@ Part A: ``fast(N)``
 
 ``fast(N)`` repeats the pattern N times per cycle:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; seconds : float = 4.0; cps : double = 0.5lf) { }
+
 .. code-block:: das
 
     let pat <- note("c4 e4 g4 c5", "sine") |> sustain(0.4) |> fast(2.0lf)
@@ -82,10 +85,11 @@ stereo widening (tutorial 07 covers combinators).
 Part D: ``hurry(N)``
 ====================
 
-``hurry(N)`` speeds time up by N **and** multiplies the per-event
-playback ``speed`` by N. For sample-based sounds (drum hits,
-field-recordings), speed scales playback rate, which means pitch goes
-up by ``log2(N)`` octaves:
+``hurry(N)`` speeds time up by N **and** sets the per-event playback
+``speed`` to N — it is ``fast(N)`` followed by ``speed(N)``, so a
+``speed`` you set earlier in the chain is overwritten. For sample-based
+sounds (drum hits, field-recordings), speed scales playback rate, which
+means pitch goes up by ``log2(N)`` octaves:
 
 .. code-block:: das
 

@@ -19,6 +19,7 @@ Text to speech
 (``array<uint8>``, empty on error). Write them to a file to play later, or
 stream them onward — the byte format is whatever the server produced:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    require openai/openai_audio

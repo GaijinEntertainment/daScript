@@ -21,7 +21,7 @@ Server Class
 ============
 
 Every server extends ``HvWebServer`` and overrides ``onInit`` to register
-routes.  The four required WebSocket callbacks can be left empty:
+routes.  An HTTP-only server overrides nothing else:
 
 .. code-block:: das
 
@@ -36,12 +36,19 @@ routes.  The four required WebSocket callbacks can be left empty:
 Every handler receives the request and response by reference and must
 return an ``http_status`` value.
 
-WebSocket callbacks (``onWsOpen``, ``onWsClose``, ``onWsMessage``) and
-``onTick`` have empty defaults in the base class — override them only
-when you need WebSocket support.
+The WebSocket callbacks (``onWsOpen``, ``onWsClose``, ``onWsMessage``) and
+``onTick`` are declared ``abstract`` in the base class — they have no body.
+The native side checks for an override before calling one, so leaving them
+unimplemented is safe; add them when you need WebSocket support or periodic
+work.  ``onInit`` is the exception: it has an empty body you replace.
+
+The route snippets that follow are bodies of ``onInit`` — each one goes
+inside the class above.
 
 GET Route
 =========
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -54,6 +61,8 @@ Pass an optional status to override: ``TEXT_PLAIN(resp, text, http_status.BAD_RE
 
 POST Route
 ==========
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -69,6 +78,8 @@ All HTTP Methods
 
 Use ``PUT``, ``PATCH``, ``DELETE``, ``HEAD``, and ``ANY`` to register
 handlers for additional methods:
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -95,6 +106,8 @@ Path Parameters
 Use ``:name`` in the route to capture path segments.  Read them with
 ``get_param``:
 
+.. das-doc: member MyServer
+
 .. code-block:: das
 
    GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -103,6 +116,8 @@ Use ``:name`` in the route to capture path segments.  Read them with
    }
 
 Multiple path parameters work naturally:
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -115,7 +130,14 @@ Multiple path parameters work naturally:
 Query Parameters
 ================
 
-Iterate all query parameters with ``each_param``:
+Iterate all query parameters with ``each_param``.  This example joins them
+with ``join``, so it needs ``daslib/strings_boost``:
+
+.. code-block:: das
+
+   require daslib/strings_boost
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -133,6 +155,8 @@ Response Headers
 ================
 
 ``set_header`` on the response object adds custom headers:
+
+.. das-doc: member MyServer
 
 .. code-block:: das
 
@@ -154,8 +178,12 @@ string to ``JSON(resp, ...)``:
 
    require daslib/json_boost
 
+.. das-doc: member MyServer
+
+.. code-block:: das
+
    GET("/api/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let payload : tuple<message:string; count:int> = ("hello", 42)
+       let payload = (message = "hello", count = 42)
        return resp |> JSON(write_json(JV(payload)))
    }
 

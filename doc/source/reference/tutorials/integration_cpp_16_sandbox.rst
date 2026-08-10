@@ -88,7 +88,9 @@ Key policy flags:
 | ``threadlock_context``            | Adds context mutex for thread safety     |
 +-----------------------------------+------------------------------------------+
 
-When a policy is violated, compilation fails with error ``40207``.
+Each policy has its own diagnostic — ``no_unsafe`` reports
+``error[31012]: unsafe function <name>`` with the note "unsafe functions
+are prohibited by CodeOfPolicies".
 
 
 Custom FileAccess — module restrictions
@@ -184,10 +186,13 @@ Project file callbacks
    typedef module_info = tuple<string; string; string> const
    var DAS_PAK_ROOT = "./"
 
-   // REQUIRED — resolve every `require X` to a file path
+   // REQUIRED — resolve every `require X` to a file path.
+   // Returns (moduleName, fileName, importName).
    [export]
    def module_get(req, from : string) : module_info {
-       // return (moduleName, fileName, importName)
+       let rs <- split_by_chars(req, "./")
+       let mod_name = rs[length(rs) - 1]
+       return (mod_name, "{get_das_root()}/daslib/{mod_name}.das", "")
    }
 
    // Whitelist which modules can be loaded
@@ -232,6 +237,12 @@ Available callbacks:
 +-------------------------------+-----------------------------------------------+
 | ``include_get``               | Resolve ``include`` directives (optional)     |
 +-------------------------------+-----------------------------------------------+
+
+Only ``module_get`` is mandatory; every other callback is optional and
+falls back to "allow" when the project file does not export it.  The
+loader looks up a few more by name: ``with_module_unsafe``,
+``can_module_be_required``, ``is_same_file_name``, ``option_blocked``,
+``is_pod_in_scope_allowed`` and ``dyn_modules_folder``.
 
 ``DAS_PAK_ROOT`` is set by the runtime to the directory containing
 the ``.das_project`` file, useful for resolving relative paths.
@@ -297,7 +308,7 @@ Expected output::
 
    --- Unsafe script with no_unsafe ---
      Compilation FAILED (expected in sandbox demo):
-     error[40207]: unsafe function test
+     error[31012]: unsafe function test
      ...
 
    === Demo 3: Memory limits ===
@@ -327,7 +338,7 @@ Expected output::
    === Demo 6: .das_project blocks violations ===
    --- Unsafe script under .das_project ---
      Compilation FAILED (expected in sandbox demo):
-     error[40207]: unsafe function test
+     error[31012]: unsafe function test
      ...
 
    --- Blocked module under .das_project ---

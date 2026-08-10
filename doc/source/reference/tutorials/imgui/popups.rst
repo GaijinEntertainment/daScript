@@ -10,6 +10,7 @@ item**; ``popup_context_window`` attaches to the **enclosing window**.
 Both are ``stateless_finalize`` — ImGui owns open/close internally,
 the body runs only while the popup is visible.
 
+.. das-doc: signatures
 .. code-block:: das
 
    popup_context_item(IDENT, (str_id = "..",
@@ -49,6 +50,9 @@ right-click the button / empty space yourself:
 Requires
 ========
 
+.. das-doc: given var g_item_action : string = "(right-click the button)"
+.. das-doc: given var g_win_action : string = "(right-click empty area)"
+
 * ``imgui/imgui_containers_builtin`` — both popup containers.
 * ``imgui/imgui_widgets_builtin`` — ``button`` + ``menu_item`` for the
   target + menu rows.
@@ -67,8 +71,12 @@ popup:
    button(TARGET, (text = "Right-click me"))
    popup_context_item(CTX, (str_id = "target_ctx",
                             flags = ImGuiPopupFlags.MouseButtonRight)) {
-       if (menu_item(RENAME, (text = "Rename", shortcut = "F2"))) { ... }
-       if (menu_item(DELETE, (text = "Delete", shortcut = "Del"))) { ... }
+       if (menu_item(RENAME, (text = "Rename", shortcut = "F2"))) {
+           g_item_action = "Rename"
+       }
+       if (menu_item(DELETE, (text = "Delete", shortcut = "Del"))) {
+           g_item_action = "Delete"
+       }
    }
 
 The order matters — ``popup_context_item`` calls ``IsItemHovered`` /
@@ -90,16 +98,21 @@ and only empty space opens the window menu:
 
 .. code-block:: das
 
-   window(MAIN_WIN, (text = "...")) {
+   window(MAIN_WIN, (text = "popups", closable = false,
+                     flags = ImGuiWindowFlags.None)) {
        button(TARGET, (text = "Right-click me"))
        popup_context_item(ITEM_CTX, (str_id = "item_ctx",
                                      flags = ImGuiPopupFlags.MouseButtonRight)) {
-           if (menu_item(RENAME, (text = "Rename"))) { ... }
+           if (menu_item(RENAME, (text = "Rename", shortcut = "F2"))) {
+               g_item_action = "Rename"
+           }
        }
        popup_context_window(WIN_CTX, (str_id = "win_ctx",
                                       flags = ImGuiPopupFlags.MouseButtonRight |
                                               ImGuiPopupFlags.NoOpenOverItems)) {
-           if (menu_item(REFRESH, (text = "Refresh"))) { ... }
+           if (menu_item(REFRESH, (text = "Refresh", shortcut = "F5"))) {
+               g_win_action = "Refresh"
+           }
        }
    }
 

@@ -26,6 +26,8 @@ All request functions create a fresh connection per call — ideal for scripts,
 tools, and one-off requests. For persistent connections, custom timeouts, and
 authentication, see :ref:`tutorial_dasHV_http_requests_advanced`.
 
+.. das-doc: given let url = "http://example.com/api"
+
 GET Requests
 ============
 
@@ -68,6 +70,8 @@ PUT and PATCH
 PUT and PATCH follow the same signature as POST — a URL, a body,
 and optional headers and form-data tables:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
    PUT(url, "payload") <| $(resp) { ... }
@@ -83,6 +87,8 @@ DELETE and HEAD
 
 DELETE takes a URL and optional headers. HEAD is identical in
 signature to GET but returns only the response headers (no body):
+
+.. das-doc: signatures
 
 .. code-block:: das
 

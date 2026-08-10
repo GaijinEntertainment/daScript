@@ -11,7 +11,11 @@ Expression reification is used to generate AST expression trees in a convenient 
 It provides a collection of escaping sequences to allow for different types of expression substitutions.
 At the top level, reification is supported by multiple call macros, which are used to generate different AST objects.
 
-Reification is implemented in daslib/templates_boost.
+Reification is implemented in ``daslib/templates_boost`` — every example on this page
+assumes ``require daslib/templates_boost``. The examples that call
+``typeinfo ast_typedecl`` additionally need ``options rtti``. Code that builds AST at
+runtime, rather than inside the compilation pipeline, should also wrap the work in
+``ast_gc_guard()`` from ``daslib/ast``, or the nodes are reported as leaked at exit.
 
 --------------
 Simple example
@@ -20,6 +24,8 @@ Simple example
 Let's review the following example:
 
 .. code-block:: das
+
+    require daslib/templates_boost
 
     var foo = "foo"
     var fun <- qmacro_function("madd") <| $ ( a, b ) {
@@ -31,8 +37,8 @@ The output would be:
 
 .. code-block:: text
 
-    def public madd (  a:auto const;  b:auto const ) : auto {
-        return (foo * a) + b
+    def public madd(a:auto const; b:auto const) : auto {
+        return (foo * a) + b;
     }
 
 What happens here is that call to macro ``qmacro_function`` generates a new function named ``madd``.
@@ -60,7 +66,7 @@ prints:
 
 .. code-block:: text
 
-    (2+2)
+    (2 + 2)
 
 qmacro_block
 ^^^^^^^^^^^^
@@ -110,6 +116,8 @@ qmacro_type
 Consider the following example:
 
 .. code-block:: das
+
+    options rtti
 
     var foo = typeinfo ast_typedecl(type<int>)
     var typ = qmacro_type <| type<$t(foo)?>
@@ -170,8 +178,10 @@ prints:
 
 .. code-block:: text
 
-	let  bus:auto const = "busbus"
-	let  t:auto const = bus
+     {
+        let bus:auto const = "busbus";
+        let t:auto const = bus;
+    }
 
 ``$i`` works in every slot of a multi-name list — all iterator slots of a multi-source ``for``
 loop or comprehension, every name of a multi-name variable declaration, and shared-type block
@@ -216,7 +226,9 @@ prints:
 
 .. code-block:: text
 
-    foo.fieldname = 13
+     {
+        foo.fieldname = 13;
+    }
 
 $v(value)
 ^^^^^^^^^
@@ -235,7 +247,7 @@ prints:
 
 .. code-block:: text
 
-    (1,2f,"3")
+    tuple</* undefined */>(1,2f,"3")
 
 In the example above, a tuple is substituted with the expression that generates this tuple.
 
@@ -256,7 +268,9 @@ prints:
 
 .. code-block:: text
 
-    let foo:auto const = (2 + 2)
+     {
+        let foo:auto const = (2 + 2);
+    }
 
 $b(array-of-expr)
 ^^^^^^^^^^^^^^^^^
@@ -279,9 +293,13 @@ prints:
 
 .. code-block:: text
 
-    print(string_builder(0, "\n"))
-    print(string_builder(1, "\n"))
-    print(string_builder(2, "\n"))
+     {
+         {
+            print(string_builder(0, "\n"));
+            print(string_builder(1, "\n"));
+            print(string_builder(2, "\n"));
+        }
+    }
 
 $a(arguments)
 ^^^^^^^^^^^^^
@@ -320,8 +338,8 @@ prints:
 
 .. code-block:: text
 
-    def public show ( a:int const; var v1:int; var v2:float = 1.2f; b:int const ) : auto {
-        return a + b
+    def public show(a:int const; var v1:int; var v2:float = 1.2f; b:int const) : auto {
+        return a + b;
     }
 
 $t(type)
@@ -342,7 +360,9 @@ we create pointer to a subtype:
 
 .. code-block:: text
 
-    var a:int? -const
+     {
+        var a:int? -const;
+    }
 
 $c(call-name)
 ^^^^^^^^^^^^^

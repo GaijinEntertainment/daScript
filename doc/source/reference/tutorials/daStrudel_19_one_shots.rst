@@ -33,6 +33,9 @@ You can see the *stop* without listening: query the gated pattern and
 watch the onsets vanish past the window.  ``once`` keeps cycle 0;
 ``playFor(pat, n)`` keeps the first ``n`` cycles:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given require strudel/strudel_player public
+
 .. code-block:: das
 
     let phrase <- once(note("c5 e5 g5 c6", "triangle"))
@@ -80,6 +83,8 @@ Part D: Parametric SFX — a different sting per event
 Each one-shot is a fresh, independent track, so the pattern can vary per
 event.  Fire a higher sting as "events" intensify — pitch by impact,
 instrument by surface — all without a single audio file:
+
+.. das-doc: given let i = 0
 
 .. code-block:: das
 

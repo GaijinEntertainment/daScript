@@ -52,6 +52,11 @@ aborts the recording.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+
 One extra module on top of the baseline boost layer:
 
 * ``imgui/imgui_containers_builtin`` — defines every container macro
@@ -98,23 +103,29 @@ active-tab selection:
    tab_bar(MAIN_TABS, (text = "MainTabs", flags = ImGuiTabBarFlags.None)) {
        tab_item(GENERAL_TAB, (text = "General", closable = false,
                               flags = ImGuiTabItemFlags.None)) {
-           Text("Tabs share a window; only the active tab renders.")
+           text("Tabs share a window; only the active tab renders.")
            checkbox(WIRE, (text = "Wireframe"))
        }
-       tab_item(AUDIO_TAB, (text = "Audio", ...)) { ... }
-       tab_item(INFO_TAB,  (text = "Info",  ...)) { ... }
+       tab_item(AUDIO_TAB, (text = "Audio", closable = false,
+                            flags = ImGuiTabItemFlags.None)) {
+           checkbox(MUTE, (text = "Mute"))
+       }
    }
 
 Only the **active tab's block runs each frame** — widgets inside
 inactive tabs aren't in the registry that frame, so a snapshot taken
 while ``GENERAL_TAB`` is active won't list any ``AUDIO_TAB`` children.
 ``TabItemState.pending_open`` controls the closable-tab visibility
-(skip BeginTabItem entirely when ``open=false``), but it does NOT
-programmatically select the active tab — that's an ImGui internal
-state, set by clicking the tab header. Each ``tab_item`` registers its
-header's bbox, so a driver switches tabs the way a user does: an
+(skip BeginTabItem entirely when ``open=false``); selecting the active
+tab is a separate channel, ``pending_select``, driven by the
+``imgui_select`` live command (it hands ImGui
+``ImGuiTabItemFlags.SetSelected`` on the next frame and records
+``state.selected``). Each ``tab_item`` also registers its header's
+bbox, so a driver can instead switch tabs the way a user does: an
 ``imgui_click`` on the ``tab_item`` target (e.g.
 ``CONT_WIN/MAIN_TABS/AUDIO_TAB``) lands on the header and selects it.
+Prefer ``imgui_select`` when the tab may be scrolled out of the bar —
+``imgui_click`` needs a visible header to hit.
 
 popup
 =====
@@ -130,7 +141,7 @@ A popup renders only when explicitly opened. The state struct's
    }
    popup(OPTIONS_POPUP, (text = "OptionsPopup",
                          flags = ImGuiWindowFlags.None)) {
-       Text("Options")
+       text("Options")
        checkbox(OPT_VSYNC, (text = "VSync"))
        if (button(POPUP_CLOSE_BTN, (text = "Close"))) {
            OPTIONS_POPUP.pending_close = true
@@ -154,8 +165,8 @@ No manual gate:
 
    button(HOVER_BTN, (text = "Hover me"))
    item_tooltip(HOVER_TIP) {
-       Text("This text appears on hover.")
-       Text("Driven by BeginItemTooltip (auto-gated).")
+       text("This text appears on hover.")
+       text("Driven by BeginItemTooltip (auto-gated).")
    }
 
 For tooltips whose own gating logic differs from "previous item

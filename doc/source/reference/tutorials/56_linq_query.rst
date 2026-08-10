@@ -20,6 +20,40 @@ It assumes you have read :ref:`tutorial_linq` (the pipe-form linq surface and th
 ``_fold`` macro). The full clause grammar and per-source details live in the
 :ref:`linq_das` reference page.
 
+Sample data
+===========
+
+Every query on this page runs over the same two record types and three arrays:
+
+.. code-block:: das
+
+    struct Car {
+        name  : string
+        brand : string
+        price : int
+    }
+
+    struct BrandHQ {
+        brand   : string
+        country : string
+    }
+
+    let cars <- [Car(name = "i3",  brand = "bmw",  price = 100),
+                 Car(name = "m3",  brand = "bmw",  price = 250),
+                 Car(name = "a4",  brand = "audi", price = 200),
+                 Car(name = "a8",  brand = "audi", price = 400),
+                 Car(name = "rio", brand = "kia",  price = 50)]
+
+    let hqs <- [BrandHQ(brand = "bmw",  country = "DE"),
+                BrandHQ(brand = "audi", country = "DE"),
+                BrandHQ(brand = "kia",  country = "KR")]
+
+    // hqs2 adds a brand with no cars, for the outer group join below
+    let hqs2 <- [BrandHQ(brand = "bmw",   country = "DE"),
+                 BrandHQ(brand = "audi",  country = "DE"),
+                 BrandHQ(brand = "kia",   country = "KR"),
+                 BrandHQ(brand = "tesla", country = "US")]
+
 from / where / select
 =====================
 
@@ -74,7 +108,7 @@ down to ``GROUP BY`` + ``COUNT/SUM/AVG/...``.
                          select (brand = g.key,
                                  count = g |> length,
                                  total = g |> select($(u : Car) => u.price) |> sum) %%
-    // audi: count=2 total=600 ; kia: count=1 total=50 ; bmw: count=2 total=350
+    // bmw: count=2 total=350 ; audi: count=2 total=600 ; kia: count=1 total=50
 
 The continuation may itself filter / order the groups:
 
@@ -112,6 +146,10 @@ range variable.
 
 .. code-block:: das
 
+    let discounted <- %linq! from c in cars let net = c.price - 20
+                             where net > 100 select (n = c.name, p = net) %%
+    // i3 (80) and rio (30) fall out; m3 230, a4 180, a8 380
+
     let located <- %linq! from c in cars join h in hqs on c.brand equals h.brand
                           select (car = c.name, country = h.country) %%
 
@@ -134,9 +172,10 @@ cars, so it still appears with count 0.
                                 total = g |> select($(u : Car) => u.price) |> sum) %%
     // output (one row per HQ; tesla has n=0 total=0)
 
-It is array-source, select-terminal only (a pre-join ``where`` is allowed); over
-a SQL source the group join is in-memory only. See :ref:`linq_das_join` for the
-exact scope.
+It is array-source, select-terminal only (a pre-join ``where`` is allowed).
+``_group_join`` has no SQL push-down, so over a SQL source the query is
+rejected at compile time — write that aggregate in raw SQL instead. See
+:ref:`linq_das_join` for the exact scope.
 
 .. seealso::
 

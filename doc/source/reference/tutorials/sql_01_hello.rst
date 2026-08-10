@@ -23,6 +23,9 @@ Two requires::
     require daslib/sql
     require sqlite/sqlite_boost
 
+.. das-doc: given require daslib/sql
+.. das-doc: given require sqlite/sqlite_boost
+
 ``daslib/sql`` is the abstract layer — it re-exports ``Option<T>`` and
 ``Result<T, string>`` so user code only needs one import for those types.
 ``sqlite/sqlite_boost`` is the SQLite provider; it ships ``SqlRunner``,

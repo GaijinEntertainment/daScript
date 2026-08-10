@@ -39,6 +39,8 @@ uses that so it has no external file dependencies.
 End-to-end
 ==========
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     require daslib/sql

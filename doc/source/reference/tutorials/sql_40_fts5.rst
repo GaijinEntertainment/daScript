@@ -20,8 +20,8 @@ builds an inverted index over text columns and exposes
 relevance ranking + Boolean / phrase / prefix / NEAR query
 operators.
 
-API surface added in this chunk
-===============================
+API surface used here
+=====================
 
 * ``[sql_fts5(name = "...")]`` --- struct annotation: the type
   is materialized as a SQLite FTS5 virtual table.
@@ -34,12 +34,14 @@ API surface added in this chunk
   emits ``col MATCH ?``. Compile error on a non-FTS5 column,
   with a fix-it pointing at ``contains`` or ``[sql_fts5]``.
 
-The same ``text_match`` is also a Phase 0.4 ``daslib/fts5_query``
-predicate (full FTS5-grammar parser, in-memory matcher); user
-code gets in-memory and SQL-side matching from one call site.
+The same ``text_match`` is also a ``daslib/fts5_query`` predicate
+(full FTS5-grammar parser, in-memory matcher); user code gets
+in-memory and SQL-side matching from one call site.
 
 Declaring the virtual table
 ===========================
+
+.. das-doc: given var inscope db = open_sqlite(":memory:")
 
 .. code-block:: das
 
@@ -96,8 +98,8 @@ ascending BM25 score (lower = more relevant first):
                         |> _where(_.Body |> text_match("quick fox"))
                         |> _order_by(_.Rank))
     // emits:
-    //   SELECT "Body", rank FROM "docs_idx"
-    //   WHERE "Body" MATCH ? ORDER BY rank
+    //   SELECT "Id", "Body", rank FROM "docs_idx"
+    //   WHERE "Body" MATCH ? ORDER BY "Rank" ASC
 
 Typed predicate DELETE
 ======================
@@ -135,6 +137,8 @@ The translator refuses to silently emit ``MATCH`` against a
 non-FTS5 column --- it has no way to give useful behavior. The
 error message points at ``contains`` (LIKE-based substring) or
 adding ``[sql_fts5]``:
+
+.. das-doc: expect error[50503]
 
 .. code-block:: das
 
@@ -222,6 +226,8 @@ The portable trio --- ``starts_with`` / ``ends_with`` /
 the bound value via SQL ``ESCAPE '\'``. A user typing
 ``"50%"`` matches literal ``"50%"`` (not "50" + anything). User
 code never sees escape sequences:
+
+.. das-doc: given [sql_table(name="Items")] struct Item { @sql_primary_key Id : int; Code : string }
 
 .. code-block:: das
 

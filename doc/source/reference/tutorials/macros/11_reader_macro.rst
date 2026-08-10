@@ -80,7 +80,12 @@ This tutorial builds both patterns:
 The module file
 ===============
 
-``reader_macro_mod.das`` defines two reader macros.
+``reader_macro_mod.das`` defines three reader macros — the two below,
+plus the inline ``%sum!`` variant covered at the end of this page.
+
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/strings_boost
+.. das-doc: given require strings
 
 The ``accept()`` idiom
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -88,6 +93,7 @@ The ``accept()`` idiom
 Both macros share the same standard ``accept()`` implementation — the
 most common pattern in the standard library:
 
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override accept(prog : ProgramPtr; mod : Module?;
@@ -116,6 +122,7 @@ CsvReader — visit pattern
 value, and uses ``convert_to_expression()`` from ``daslib/ast_boost``
 to embed the resulting string array in the AST:
 
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override visit(prog : ProgramPtr; mod : Module?;
@@ -142,6 +149,7 @@ BasicReader — suffix pattern
 overrides ``suffix()`` instead of ``visit()``.  The method parses a
 tiny BASIC dialect and returns the equivalent daslang source code:
 
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override suffix(prog : ProgramPtr; mod : Module?;
@@ -202,6 +210,7 @@ The usage file
 
 **Section 1** — CSV reader (visit pattern):
 
+.. das-doc: fragment
 .. code-block:: das
 
    var data <- %csv~ Alice, 30, New York %%
@@ -227,6 +236,7 @@ values are parsed and embedded at compile time, not at runtime.
 
 **Section 2** — BASIC transpiler (suffix pattern):
 
+.. das-doc: fragment
 .. code-block:: das
 
    %basic~
@@ -240,6 +250,7 @@ This appears at **module level** (not inside a function).  The suffix
 generates a function ``basic_hello()`` that the rest of the file can
 call:
 
+.. das-doc: fragment
 .. code-block:: das
 
    [export]
@@ -284,9 +295,21 @@ Inline suffix (expression level)
 The ``suffix`` pattern above injects text at **module level** — ``%basic~ … %%`` generates a
 top-level function.  The same ``suffix`` hook can also rewrite **in expression position** when
 invoked with a ``!`` separator instead of ``~``.  ``InlineSumReader`` (``[reader_macro(name=sum)]``)
-demonstrates this — ``%sum! a, b, c %%`` rewrites to ``( a + b + c )``:
+demonstrates this — ``%sum! a, b, c %%`` rewrites to ``( a + b + c )``.
+It lives in the same module file:
 
+.. das-doc: file reader_macro_mod.das
 .. code-block:: das
+
+    options gen2
+    options no_aot
+
+    module reader_macro_mod
+
+    require daslib/ast
+    require strings
+    require daslib/ast_boost
+    require daslib/strings_boost
 
     [reader_macro(name=sum)]
     class InlineSumReader : AstReaderMacro {
@@ -317,6 +340,8 @@ demonstrates this — ``%sum! a, b, c %%`` rewrites to ``( a + b + c )``:
 Used inline, the macro is itself an expression:
 
 .. code-block:: das
+
+    require reader_macro_mod
 
     let total = %sum! 1, 2, 3, 4 %%   // ( 1 + 2 + 3 + 4 ) == 10
     let scaled = %sum! 10, 20 %% * 2  // ( 10 + 20 ) * 2 == 60

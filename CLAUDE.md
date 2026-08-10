@@ -97,6 +97,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/gc_migration.md` | Migrating external/archived code from `smart_ptr<T>` AST patterns to gc_node (in-tree migration is complete) |
 | `skills/version_update.md` | Bumping the daslang version number |
 | `skills/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` — the archive-vs-stay test, reference-update discipline, area-index notes, the `history/README.md` ledger |
+| `skills/doc_sweep.md` | Running the each-release authored-RST doc sweep, adding/editing `.. das-doc:` markers on a doc page, or extending `utils/doc-verify/` — rule 0, the page-literate model, the full marker vocabulary, authoring rules, regen traps |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |

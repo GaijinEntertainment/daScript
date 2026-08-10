@@ -9,6 +9,7 @@ click the track to jump, drag the handle to scrub. Same call shape spans
 scalar / vector / vertical and float / int — ten widgets, one mental
 model.
 
+.. das-doc: signatures
 .. code-block:: das
 
    slider_float(IDENT, (text = "..", format = "%.3f",
@@ -38,11 +39,19 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require daslib/safe_addr
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_widgets_builtin`` — every ``slider_*`` / ``vslider_*`` rail.
 * ``imgui/imgui_boost_runtime`` — ``SliderStateFloat`` / ``SliderStateInt`` /
   vector state structs.
+
+The caller-owned form at the end of this page also needs
+``daslib/safe_addr`` for ``safe_addr``.
 
 Bounds
 ======

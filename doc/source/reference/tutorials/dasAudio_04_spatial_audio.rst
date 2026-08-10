@@ -24,16 +24,20 @@ Listener Setup
 
 .. code-block:: das
 
-   // Listener at origin, facing forward (+Y), stationary
-   set_head_position(float3(0, 0, 0), float3(0, 1, 0), float3(0, 0, 0))
+   // Listener at origin, facing forward (-Y), stationary
+   set_head_position(float3(0, 0, 0), float3(0, -1, 0), float3(0, 0, 0))
 
-The coordinate system is left-handed: +X is right, +Y is forward, +Z is up.
+The coordinate system is left-handed: +X is right, -Y is forward, +Z is up.
+Set the listener explicitly before placing sources --- the engine starts with a
+head direction of +Y, which puts +X on the *left*.
 
 Playing 3D Sound
 ================
 
 ``play_3d_sound_loop_from_pcm`` places a looping sound at a 3D position with
 a specified attenuation model:
+
+.. das-doc: given def generate_click_burst() : array<float> { return <- [for (x in range(4)); 0.0] }
 
 .. code-block:: das
 
@@ -84,8 +88,8 @@ Four built-in attenuation models control how volume decreases with distance.
 ``linear_attenuation`` and ``quadratic_attenuation`` take a ``max_distance``
 parameter (distance at which volume reaches zero).
 ``inverse_distance_attenuation`` and ``inverse_square_attenuation`` take a
-``dmin`` reference distance (volume is 1.0 at that distance, rolling off
-beyond it):
+``dmin`` reference distance --- volume is 1.0 at the listener and 0.5 at
+``dmin``, rolling off from there:
 
 .. list-table::
    :header-rows: 1
@@ -96,22 +100,31 @@ beyond it):
      - Character
    * - ``inverse_distance_attenuation``
      - *dmin* / (*d* + *dmin*)
-     - Natural rolloff; full volume at *dmin*
+     - Natural rolloff; half volume at *dmin*
    * - ``linear_attenuation``
      - 1 - *d* / *max*
      - Straight line to silence at *max*
    * - ``quadratic_attenuation``
      - 1 - (*d* / *max*)\ :sup:`2`
-     - Faster than linear near *max*
+     - Louder than linear, then drops steeply near *max*
    * - ``inverse_square_attenuation``
      - *dmin*\ :sup:`2` / (*d*\ :sup:`2` + *dmin*\ :sup:`2`)
-     - Smooth near *dmin*, rapid falloff
+     - Half volume at *dmin*, then rapid falloff
 
 Example --- comparing all four at different distances:
 
 .. code-block:: das
 
    let max_dist = 30.0
+   let pos = float3(2, 0, 0)
+
+   // every play_*_from_pcm call MOVES its samples array, so each source
+   // needs its own copy
+   var samples_a <- generate_click_burst()
+   var samples_b <- clone(samples_a)
+   var samples_c <- clone(samples_a)
+   var samples_d <- clone(samples_a)
+
    let sid_inv  = play_3d_sound_loop_from_pcm(pos,
        inverse_distance_attenuation(max_dist), MA_SAMPLE_RATE, 1, samples_a)
    let sid_lin  = play_3d_sound_loop_from_pcm(pos,
@@ -127,8 +140,14 @@ HRTF
 HRTF (Head-Related Transfer Function) is enabled by default in the audio
 engine.  It applies binaural filtering so that sounds placed in 3D space are
 perceived at their correct spatial position when listening through
-headphones.  No additional setup is required --- all ``play_3d_sound_*``
-functions automatically benefit from HRTF processing.
+headphones.  No additional setup is required --- every ``play_3d_sound_*``
+call is a candidate for HRTF processing.
+
+The convolution is budgeted, though: the 32 3D channels closest to the
+listener get HRTF, and any beyond that fall back to simulated 3D ---
+constant-power panning plus distance attenuation, no convolution.
+``set_hrtf_budget(n)`` moves the line: 0 for all-simulated, a large number
+(say 999) for all-HRTF.
 
 Running the Tutorial
 ====================
@@ -137,8 +156,8 @@ Running the Tutorial
 
    daslang.exe tutorials/dasAudio/04_spatial_audio.das
 
-The tutorial places a clicking sound to the right, orbits it around the
-listener over 5 seconds, then demonstrates the four attenuation models at
+The tutorial places a clicking sound beside the listener, orbits it around
+the listener over 5 seconds, then demonstrates the four attenuation models at
 varying distances.  Use headphones for the best spatial experience.
 
 .. seealso::

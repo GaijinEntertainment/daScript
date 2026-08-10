@@ -39,6 +39,12 @@ teardown rather than shipping a clip where nothing happened.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+.. das-doc: given require imgui/imgui_docking_builtin
+
 Same backend + boost layer as :ref:`tutorial_layout`, but layout helpers are
 replaced by the docking module:
 
@@ -54,6 +60,7 @@ render nothing and ``dock_window`` panels behave like ordinary windows:
 
 .. code-block:: das
 
+   var io & = unsafe(GetIO())
    io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
 
 This goes in ``init()`` once per session.
@@ -67,17 +74,24 @@ ship a default arrangement via ``DockBuilder``:
 
 .. code-block:: das
 
-   DockBuilderRemoveNode(dock_id)                          // clear any prior state
-   DockBuilderAddDockSpaceNode(dock_id, flags)             // fresh dockspace root
-   DockBuilderSetNodeSize(dock_id, ImVec2(vp.Size.x, vp.Size.y))
-   var left_id, right_id : uint
-   DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.25f, left_id, right_id)
-   var top_id, bottom_id : uint
-   DockBuilderSplitNode(right_id, ImGuiDir.Up, 0.6f, top_id, bottom_id)
-   DockBuilderDockWindow("Explorer", left_id)
-   DockBuilderDockWindow("Source",   top_id)
-   DockBuilderDockWindow("Output",   bottom_id)
-   DockBuilderFinish(dock_id)
+   def setup_default_layout(dock_id : uint) {
+       DockBuilderRemoveNode(dock_id)                      // clear any prior state
+       DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
+       let vp = GetMainViewport()
+       DockBuilderSetNodeSize(dock_id, ImVec2(vp.Size.x, vp.Size.y))
+       var left_id, right_id : uint
+       DockBuilderSplitNode(dock_id, ImGuiDir.Left, 0.25f, left_id, right_id)
+       var top_id, bottom_id : uint
+       DockBuilderSplitNode(right_id, ImGuiDir.Up, 0.6f, top_id, bottom_id)
+       DockBuilderDockWindow("Explorer", left_id)
+       DockBuilderDockWindow("Source",   top_id)
+       DockBuilderDockWindow("Output",   bottom_id)
+       DockBuilderFinish(dock_id)
+   }
+
+Call it from inside the ``dockspace`` block with ``state.dock_id`` — the
+wrapper captures that id from ``DockSpaceOverViewport`` before the block
+runs.
 
 ``DockBuilderDockWindow`` matches by window *title string* — the same string
 you pass to ``dock_window(NAME, (text = "Explorer"))``. The boost macro
@@ -112,9 +126,13 @@ floating / moveable frame around the dockable area.
        dockspace_in_window(DS, (size = float2(0.0f, 0.0f),
                                 flags = ImGuiDockNodeFlags.None)) {
            dock_window(FILES, (text = "Files", closable = false,
-                               flags = ImGuiWindowFlags.None)) { ... }
+                               flags = ImGuiWindowFlags.None)) {
+               text("project tree")
+           }
            dock_window(OUTPUT, (text = "Output", closable = false,
-                                flags = ImGuiWindowFlags.None)) { ... }
+                                flags = ImGuiWindowFlags.None)) {
+               text("> ready.")
+           }
        }
    }
 

@@ -100,9 +100,9 @@ enabled:
 
 .. code-block:: das
 
-   mouse_trail(true)                // on
-   mouse_trail(true, 0.45f)         // 450ms fade
-   mouse_trail(false)               // off
+   mouse_trail(true)                // on, module defaults
+   mouse_trail(true, 0.45f)         // faster fade (alpha factor, default 0.96f)
+   mouse_trail(false)               // off — also clears the trail buffer
 
 The trail's value is mostly to make synth-cursor recordings parseable
 — without it, the cursor teleports between waypoints and the viewer

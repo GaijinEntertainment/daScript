@@ -36,6 +36,8 @@ Use ``try_open_sqlite`` when the path is user-supplied or otherwise
 unreliable. The strict ``open_sqlite`` / ``with_sqlite`` forms panic
 on the same failure:
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string }
+
 .. code-block:: das
 
     var open_result <- try_open_sqlite(":memory:")
@@ -90,7 +92,8 @@ helper used and the return type:
 
     // _try_sql(... |> _first())     : Result<T, string>
     // _try_sql(... |> _first_opt()) : Result<Option<T>, string>
-    // _try_sql(... |> count())      : Result<int64, string>
+    // _try_sql(... |> count())      : Result<int, string>
+    // _try_sql(... |> long_count()) : Result<int64, string>
 
     let res = _try_sql(db |> select_from(type<User>) |> _first())
     if (res |> is_ok) {

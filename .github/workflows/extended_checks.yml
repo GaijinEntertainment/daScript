@@ -281,6 +281,14 @@ jobs:
     - name: "Run tutorial dry-runs"
       run: cmake --build ./build --config Release --target dry_run_tutorials
 
+    - name: "Verify authored-doc code blocks (nightly only)"
+      # doc-verify compiles every das code block of the authored RST corpus
+      # (skills/doc_sweep.md). Nightly-only per policy: doc rot is not a
+      # per-PR gate. Skipped on windows: the checker spawns one daslang per
+      # page via popen and is exercised on the posix cells.
+      if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.target != 'windows'
+      run: $BIN/daslang ./utils/doc-verify/main.das -- --daslang $BIN/daslang
+
     - name: "Build standalone executables"
       run: |
         set -eux

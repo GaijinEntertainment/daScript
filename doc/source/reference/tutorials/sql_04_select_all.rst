@@ -39,6 +39,9 @@ Reading every row
 The minimal chain ``select_from(type<T>)`` reads every row of the table
 into ``array<T>``:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let cars <- _sql(db |> select_from(type<Car>))

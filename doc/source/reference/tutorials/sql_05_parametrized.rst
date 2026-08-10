@@ -24,6 +24,9 @@ name in the chain as either a **column reference** (``_.Field``) or a
 ``?`` placeholders and bound automatically --- you never type ``?`` or
 ``:name``:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let target = 3
@@ -62,7 +65,7 @@ variadic trailing args:
 
 The trailing args bind to ``?`` placeholders in declaration order.
 Mixed types are fine --- daslang's overload resolution dispatches to
-the right ``sqlite_bind`` for each arg:
+the right ``sql_bind_to_stmt`` for each arg:
 
 .. code-block:: das
 

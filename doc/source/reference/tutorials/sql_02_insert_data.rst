@@ -60,6 +60,8 @@ next to its type: ``sql_bind`` maps the value to a SQLite primitive,
 ``array<uint8>``, ``bool``, and enums) ship with pairs. To support a
 custom type, add your own pair — no registration required:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     def sql_bind(v : MyType) : string { return ... }
@@ -143,16 +145,18 @@ not eight:
 
 .. code-block:: das
 
-    db |> insert([
-        Car(Id=1, Name="Audi", Price=52642),
-        Car(Id=2, Name="Mercedes", Price=57127),
-        Car(Id=3, Name="Skoda", Price=9000),
-        Car(Id=4, Name="Volvo", Price=29000),
-        Car(Id=5, Name="Bentley", Price=350000),
-        Car(Id=6, Name="Citroen", Price=21000),
-        Car(Id=7, Name="Hummer", Price=41400),
-        Car(Id=8, Name="Volkswagen", Price=21600)
-    ])
+    with_sqlite("test.db") <| $(db) {
+        db |> insert([
+            Car(Id=1, Name="Audi", Price=52642),
+            Car(Id=2, Name="Mercedes", Price=57127),
+            Car(Id=3, Name="Skoda", Price=9000),
+            Car(Id=4, Name="Volvo", Price=29000),
+            Car(Id=5, Name="Bentley", Price=350000),
+            Car(Id=6, Name="Citroen", Price=21000),
+            Car(Id=7, Name="Hummer", Price=41400),
+            Car(Id=8, Name="Volkswagen", Price=21600)
+        ])
+    }
 
 All rows must agree on PK presence: the first row decides which
 ``INSERT`` shape to prepare. The transaction rolls back on any

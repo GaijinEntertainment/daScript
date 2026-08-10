@@ -89,7 +89,7 @@ def update() {
 
         // ---- Dotted flags ----
 
-        // SPEED.PUBLIC: emit the global `variable public` (not the default private)
+        // SPEED.PUBLIC: emit the global `var public` (not the default private)
         // so requiring modules can read SPEED.value. Path stays "SPEED" — flags
         // don't leak into the registry path.
 

@@ -21,6 +21,7 @@ Daslang provides three kinds of assignment:
 
 **Copy assignment** (``=``) performs a bitwise copy of the value:
 
+.. das-doc: given var a : int
 .. code-block:: das
 
     a = 10
@@ -32,9 +33,9 @@ Arrays, tables, and other container types cannot be copied — use move or clone
 
 .. code-block:: das
 
-    var b = new Foo()
-    var a : Foo?
-    a <- b              // a now points to the Foo instance, b is null
+    var src = new Foo()
+    var dst : Foo?
+    dst <- src          // dst now points to the Foo instance, src is null
 
 Move is the primary mechanism for transferring ownership of heavy types such as arrays and tables.
 Some handled types may be movable but not copyable.
@@ -43,8 +44,9 @@ Some handled types may be movable but not copyable.
 
 .. code-block:: das
 
-    var a : array<int>
-    a := b              // a is now a deep copy of b
+    var src : array<int>
+    var dst : array<int>
+    dst := src          // dst is now a deep copy of src
 
 Clone is syntactic sugar for calling the ``clone`` function.
 For POD types, clone falls back to a regular copy.
@@ -70,6 +72,9 @@ Daslang supports the standard arithmetic operators ``+``, ``-``, ``*``, ``/``, a
 (modulo). Compound assignment operators ``+=``, ``-=``, ``*=``, ``/=``, ``%=`` and
 increment/decrement operators ``++`` and ``--`` are also available:
 
+.. das-doc: alt
+.. das-doc: given var x : int
+.. das-doc: given var y : int
 .. code-block:: das
 
     a += 2          // equivalent to a = a + 2
@@ -89,6 +94,7 @@ Relational
 Relational operators compare two values and return a ``bool`` result:
 ``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``:
 
+.. das-doc: given var b : int
 .. code-block:: das
 
     if ( a == b ) { print("equal\n") }
@@ -135,6 +141,7 @@ Daslang supports C-like bitwise operators for integer types:
 
 Compound assignment forms: ``&=``, ``|=``, ``^=``, ``<<=``, ``>>=``, ``<<<=``, ``>>>=``:
 
+.. das-doc: given var value : int
 .. code-block:: das
 
     let flags = 0xFF & 0x0F     // 0x0F
@@ -152,7 +159,7 @@ Pipe operators pass a value as the first (right pipe) or last (left pipe) argume
 * ``|>`` — right pipe. ``x |> f(y)`` is equivalent to ``f(x, y)``
 * ``<|`` — left pipe. ``f(y) <| x`` is equivalent to ``f(y, x)``
 
-::
+.. code-block:: das
 
     def addX(a, b) {
         return a + b
@@ -168,7 +175,7 @@ Left pipe is commonly used to pass blocks and lambdas to functions:
         invoke(blk)
     }
 
-    doSomething{
+    doSomething() <| $() {
         print("hello\n")
     }
 
@@ -176,9 +183,12 @@ In gen2 syntax a block or lambda that immediately follows a function call is
 automatically piped as the last argument, so the explicit ``<|`` can be omitted.
 Parameterless blocks also do not need the ``$`` prefix:
 
+.. das-doc: given require strings
+.. das-doc: given var arr : array<int>
+.. das-doc: given def apply_twice(n : int; l : lambda<(a : int) : int>) : int { return invoke(l, invoke(l, n)) }
 .. code-block:: das
 
-    doSomething() {                      // same as doSomething{ ... }
+    doSomething() {                      // same as doSomething() <| $() { ... }
         print("hello\n")
     }
 
@@ -196,6 +206,7 @@ This shorthand — called **assumed pipe** — works with all three call forms:
 * **Dot-method calls** — ``obj.method()``
 * **Arrow-method calls** — ``obj->fn()``
 
+.. das-doc: given struct Callable { fn : lambda<(blk : block<() : int>) : int> }
 .. code-block:: das
 
     // dot-method call with assumed pipe
@@ -323,6 +334,9 @@ The ``?[`` operator provides null-safe indexing into tables:
 
 Both operators can be used on the left side of an assignment with ``??``:
 
+.. das-doc: given struct Foo { x : int }
+.. das-doc: given struct Bar { fooPtr : Foo? }
+.. das-doc: given var bar : Bar?
 .. code-block:: das
 
     var dummy = 0
@@ -404,6 +418,8 @@ Cast, Upcast, and Reinterpret
 
 **cast** performs a safe upcast from a derived structure type to a parent (base) type:
 
+.. das-doc: given struct Base { z : int }
+.. das-doc: given struct Derived : Base { w : int }
 .. code-block:: das
 
     var derived : Derived = Derived()
@@ -412,6 +428,7 @@ Cast, Upcast, and Reinterpret
 **upcast** performs an unsafe upcast from a base type to a derived type.
 This requires ``unsafe`` because the actual runtime type may not match:
 
+.. das-doc: given var base_ref : Base
 .. code-block:: das
 
     unsafe {
@@ -484,18 +501,25 @@ Dot Operator Bypass
 ^^^^^^^^^^^^^^^^^^^
 
 .. index::
-    pair: .. Operator; Operators
+    pair: . . Operator; Operators
 
 Smart pointers (``smart_ptr<T>``) are accessed the same way as regular pointers —
 using ``.`` for field access and ``?.`` for null-safe field access.
 
-The ``..`` operator bypasses any ``.`` operator overloading and accesses the
-underlying field directly.  This is useful when a handled type defines a custom
-``.`` operator but you need to reach the actual field:
+A doubled dot bypasses any ``.`` operator overloading (a property, see
+:ref:`Classes <classes>`) and accesses the underlying field directly.  This is
+useful when a type defines a custom ``.`` operator but you need to reach the
+actual field:
 
+.. das-doc: given struct Boxed { payload : int }
+.. das-doc: given var sp : Boxed?
 .. code-block:: das
 
-    sp..x = 42      // accesses field x directly, skipping any . overload
+    sp. .payload = 42   // accesses field payload directly, skipping any . overload
+
+The two dots must be **separated by a space**: ``..`` with no space is the
+:ref:`interval <expressions>` operator token, so ``sp..payload`` parses as
+``interval(sp, payload)``.
 
 ^^^^^^^^^^^^^^^^^^^
 Safe Index (?[)
@@ -521,6 +545,7 @@ Unsafe Expression
 
 Individual expressions can be marked as unsafe without wrapping an entire block:
 
+.. das-doc: alt
 .. code-block:: das
 
     let p = unsafe(addr(x))
@@ -620,20 +645,20 @@ Structures can be initialized by specifying field values:
 
 .. code-block:: das
 
-    struct Foo {
+    struct Point {
         x : int = 1
         y : int = 2
     }
 
-    let a = Foo(x = 13, y = 11)                     // x = 13, y = 11
-    let b = Foo(x = 13)                             // x = 13, y = 2 (default)
-    let c = unsafe(Foo(uninitialized x = 13))        // x = 13, y = 0 (uninitialized construction requires unsafe)
+    let a = Point(x = 13, y = 11)                   // x = 13, y = 11
+    let b = Point(x = 13)                           // x = 13, y = 2 (default)
+    let c = unsafe(Point(uninitialized x = 13))     // x = 13, y = 0 (uninitialized construction requires unsafe)
 
 Arrays of structures can be constructed inline:
 
 .. code-block:: das
 
-    var arr <- array struct<Foo>((x=11, y=22), (x=33), (y=44))
+    var arr <- array struct<Point>((x=11, y=22), (x=33), (y=44))
 
 Classes and handled (external) types can also be initialized using this syntax.
 Classes and handled types cannot use ``uninitialized``.
@@ -670,19 +695,19 @@ Variants are created by specifying exactly one field:
 
 .. code-block:: das
 
-    variant Foo {
+    variant Number {
         i : int
         f : float
     }
 
-    let x = Foo(i = 3)
-    let y = Foo(f = 4.0)
+    let ni = Number(i = 3)
+    let nf = Number(f = 4.0)
 
 Variants can also be declared as type aliases:
 
 .. code-block:: das
 
-    typedef Foo = variant<i:int; f:float>
+    typedef Number = variant<i:int; f:float>
 
 (see :ref:`Variants <variants>`).
 
@@ -717,15 +742,15 @@ The ``default`` expression creates a default-initialized value of a given type:
 
 .. code-block:: das
 
-    var a = default<Foo>            // all fields zeroed, then default initializer called
-    var b = unsafe(default<Foo> uninitialized)  // all fields zeroed, no initializer (uninitialized requires unsafe)
+    var a = default<Point>          // all fields zeroed, then default initializer called
+    var b = unsafe(default<Point> uninitialized)  // all fields zeroed, no initializer (uninitialized requires unsafe)
 
 The ``new`` operator allocates a value on the heap and returns a pointer:
 
 .. code-block:: das
 
-    var p = new Foo()               // Foo? pointer, default initialized
-    var q = new Foo(x = 13)         // with field initialization
+    var p = new Point()             // Point? pointer, default initialized
+    var q = new Point(x = 13)       // with field initialization
 
 ``new`` can also be combined with array and table literals to allocate them on the heap:
 
@@ -743,6 +768,7 @@ typeinfo
 The ``typeinfo`` expression provides compile-time type information. It is primarily
 used in generic functions to inspect argument types:
 
+.. das-doc: given var myStruct : Foo
 .. code-block:: das
 
     typeinfo typename(type<int>)        // returns "int" at compile time

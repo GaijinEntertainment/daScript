@@ -123,12 +123,23 @@ to functions that accept the interface type:
 
 .. code-block:: das
 
+    [implements(IDrawable)]
+    class Circle {
+        radius : float
+        def Circle(r : float) { radius = r }
+        def IDrawable`draw(x, y : int) {
+            print("Circle(r={radius}) at ({x},{y})\n")
+        }
+    }
+
     def draw_all(var objects : array<IDrawable?>) {
         for (obj in objects) {
             obj->draw(0, 0)
         }
     }
 
+    var circle = new Circle(3.0)
+    var sprite = new Sprite("tree")
     var drawables : array<IDrawable?>
     drawables |> push(circle as IDrawable)
     drawables |> push(sprite as IDrawable)
@@ -225,7 +236,11 @@ reports an error at compile time:
 
 .. code-block:: text
 
-    error[30111]: Foo does not implement IBar.method
+    error[30926]: can't finalize structure annotation [implements]
+    example.das:8:5
+    class Foo {
+         ^^^^
+    Foo does not implement IBar.method
 
 Methods with default implementations are optional — the proxy
 inherits the default from the interface class.  Only abstract

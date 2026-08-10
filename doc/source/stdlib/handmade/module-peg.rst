@@ -112,25 +112,25 @@ Example:
 
     require peg/peg
 
-        def parse_greeting(input : string;
-                           blk : block<(val : string; err : array<ParsingError>) : void>) {
-            parse(input) {
-                var greeting : string
-                rule("Hello, ", "{+letter}" as name, "!", EOF) {
-                    return name
-                }
-                var letter : void?
-                rule(set('a'..'z', 'A'..'Z')) {
-                    return null
-                }
+    def parse_greeting(input : string;
+                       blk : block<(val : string; err : array<ParsingError>) : void>) {
+        parse(input) {
+            var greeting : string
+            rule("Hello, ", "{+letter}" as name, "!", EOF) {
+                return name
+            }
+            var letter : void?
+            rule(set('a'..'z', 'A'..'Z')) {
+                return null
             }
         }
+    }
 
-        [export]
-        def main() {
-            parse_greeting("Hello, World!") $(val; err) {
-                print("name = {val}\n")
-            }
+    [export]
+    def main() {
+        parse_greeting("Hello, World!") $(val; err) {
+            print("name = {val}\n")
         }
-        // output:
-        // name = World
+    }
+    // output:
+    // name = World

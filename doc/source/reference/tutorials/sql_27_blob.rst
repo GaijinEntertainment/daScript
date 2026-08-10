@@ -106,7 +106,10 @@ Future: streaming BLOB I/O
 
 SQLite offers ``sqlite3_blob_open`` / ``sqlite3_blob_read`` /
 ``sqlite3_blob_write`` for incremental access without materializing
-the whole blob in daslang's heap. Likely shape:
+the whole blob in daslang's heap. Likely shape (not implemented ---
+sketch only):
+
+.. das-doc: fragment
 
 .. code-block:: das
 

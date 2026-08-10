@@ -48,6 +48,7 @@ It is the primary mechanism for inspecting types in generic functions.
 
 All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` argument:
 
+.. das-doc: given var my_variable : int
 .. code-block:: das
 
     typeinfo sizeof(type<float3>)       // 12
@@ -173,6 +174,7 @@ Instead of omitting the type name in a generic, it is possible to use an explici
 
 or
 
+.. das-doc: alt
 .. code-block:: das
 
     def fn(a: auto(some_name)): some_name {
@@ -181,6 +183,7 @@ or
 
 This is the same as:
 
+.. das-doc: alt
 .. code-block:: das
 
     def fn(a) {
@@ -195,11 +198,14 @@ This is very helpful if the function accepts numerous arguments, and some of the
         return a + b
     }
 
-This is not the same as:
+Naming the ``auto`` is what ties arguments together; a bare ``auto`` does not.
+``def fn(a, b: auto)`` is the very same generic as ``def fn(a, b)`` — declaring both is
+``error[30702]: generic function is already defined`` — and both accept mismatched types,
+failing only later, inside the body. Reuse a named alias instead:
 
 .. code-block:: das
 
-    def fn(a, b: auto) { // a and b are one type
+    def fn(a: auto(T); b: T) { // a and b have to be of the same type
         return a + b
     }
 
@@ -223,6 +229,7 @@ To get a clearer error, constrain the types directly in the signature:
 
 Usage of named ``auto`` with ``typeinfo``
 
+.. das-doc: alt
 .. code-block:: das
 
     def fn(a: auto(some)) {
@@ -233,6 +240,7 @@ Usage of named ``auto`` with ``typeinfo``
 
 You can also modify the type with delete syntax:
 
+.. das-doc: alt
 .. code-block:: das
 
     def fn(a: auto(some)) {
@@ -248,12 +256,14 @@ Generic function arguments, result, and inferred type aliases can be operated on
 
 ``const`` specifies, that constant and regular expressions will be matched:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo const )   // accepts Foo and Foo const
 
 ``==const`` specifies, that const of the expression has to match const of the argument:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo const ==const )   // accepts Foo const only
@@ -261,12 +271,14 @@ Generic function arguments, result, and inferred type aliases can be operated on
 
 ``-const`` will remove const from the matching type:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : array<auto -const> )  // matches any array, with non-const elements
 
 ``#`` specifies that only temporary types are accepted:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo# )    // accepts Foo# only
@@ -281,12 +293,14 @@ Generic function arguments, result, and inferred type aliases can be operated on
 
 ``&`` specifies that argument is passed by reference:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : auto& )           // accepts any type, passed by reference
 
 ``==&`` specifies that reference of the expression has to match reference of the argument:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : auto& ==& )   // accepts any type, passed by reference (for example variable i, even if its integer)
@@ -302,6 +316,7 @@ Generic function arguments, result, and inferred type aliases can be operated on
 
 ``[]`` specifies that the argument is a fixed-size array:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : auto[] )          // accepts a fixed-size array of any type and size
@@ -340,6 +355,7 @@ dimensions included:
 
 ``implicit`` specifies that both temporary and regular types can be matched, but the type will be treated as specified. ``implicit`` is _UNSAFE_:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo implicit )    // accepts Foo and Foo#, a will be treated as Foo
@@ -347,6 +363,7 @@ dimensions included:
 
 ``explicit`` specifies that LSP will not be applied, and only exact type match will be accepted:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo )             // accepts Foo and any type that is inherited from Foo directly or indirectly
@@ -357,6 +374,7 @@ options
 
 Multiple options can be specified as a function argument:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : int | float )   // accepts int or float
@@ -365,12 +383,14 @@ OR types always make the function generic.
 
 Generic options will be matched in the order listed:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Bar explicit | Foo )   // first will try to match exactly Bar, then anything else inherited from Foo
 
 ``|#`` shortcut matches previous type, with temporary flipped:
 
+.. das-doc: signatures
 .. code-block:: das
 
     def foo ( a : Foo |# )   // accepts Foo and Foo# in that order
@@ -482,11 +502,11 @@ Prefix       Resolution
 ===========  ===================================================================
 
 This distinction matters whenever a library generic should dispatch to
-user-provided overloads.  For example:
+user-provided overloads.  Given the library module ``serializer.das``:
 
+.. das-doc: file serializer.das
 .. code-block:: das
 
-    // --- module "serializer" ---
     module serializer
 
     [generic]
@@ -494,7 +514,11 @@ user-provided overloads.  For example:
         _::write(val)       // resolves in the caller's module
     }
 
-    // --- user code ---
+user code supplies the overload the generic dispatches to:
+
+.. das-doc: fresh
+.. code-block:: das
+
     require serializer
 
     struct Color { r : float; g : float; b : float }

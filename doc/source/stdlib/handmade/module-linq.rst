@@ -18,14 +18,14 @@ Example:
 
     require daslib/linq
 
-        [export]
-        def main() {
-            var src <- [iterator for (x in range(10)); x]
-            var evens <- where_(src, $(x : int) : bool { return x % 2 == 0; })
-            for (v in evens) {
-                print("{v} ")
-            }
-            print("\n")
+    [export]
+    def main() {
+        var src <- [iterator for (x in range(10)); x]
+        var evens <- where_(src, $(x : int) : bool { return x % 2 == 0; })
+        for (v in evens) {
+            print("{v} ")
         }
-        // output:
-        // 0 2 4 6 8
+        print("\n")
+    }
+    // output:
+    // 0 2 4 6 8

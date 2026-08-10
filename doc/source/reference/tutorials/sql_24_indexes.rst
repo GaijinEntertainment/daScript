@@ -25,6 +25,8 @@ Sibling-annotation shape
 Both annotations live in the **same** bracket pair, comma-separated,
 with ``[sql_table]`` first.
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     [sql_table(name = "Users"),
@@ -52,8 +54,8 @@ Argument                                        Meaning / default
 ==============================================  ===================================================
 
 ``[sql_table]`` validates every field name against the struct's
-fields at macro-expansion time. Misspellings produce a compile error
-listing the valid columns.
+fields at macro-expansion time. A misspelling fails the macro with
+``error[20800]`` naming the offending field and the struct.
 
 DDL emitted
 ===========
@@ -81,6 +83,8 @@ generated name ``uq_<table>_<column>``. It goes through
 ``_sql_create_indexes_sql`` instead of being embedded in SQLite-style
 column DDL, so the same annotation is enforced by SQLite, DuckDB, and
 PostgreSQL.
+
+.. das-doc: fragment
 
 .. code-block:: das
 

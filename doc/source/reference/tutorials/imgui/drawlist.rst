@@ -15,6 +15,11 @@ clip-rect rails are control-flow helpers, not registered ``[drawlist_prim]``
 entries — they shape what the primitives render but do not themselves
 create snapshot rows:
 
+.. das-doc: given let p0 = float2(16.0f, 16.0f)
+.. das-doc: given let p1 = float2(96.0f, 48.0f)
+.. das-doc: given let a = float2(16.0f, 16.0f)
+.. das-doc: given let b = float2(96.0f, 48.0f)
+
 .. code-block:: das
 
    with_window_drawlist() $(var dl) {
@@ -72,7 +77,7 @@ and to keep raw ``GetWindowDrawList`` calls off the boost surface.
 Primitives
 ==========
 
-Eight ``[drawlist_prim]``-tagged painters cover the geometric basics:
+Nine ``[drawlist_prim]``-tagged painters cover the geometric basics:
 
 * ``add_line(dl, a, b, col, thickness = 1.0f)``
 * ``add_rect(dl, a, b, col, rounding = 0.0f, flags = ImDrawFlags.None, thickness = 1.0f)``
@@ -82,6 +87,9 @@ Eight ``[drawlist_prim]``-tagged painters cover the geometric basics:
 * ``add_triangle(dl, a, b, c, col, thickness = 1.0f)``
 * ``add_triangle_filled(dl, a, b, c, col)``
 * ``add_text(dl, pos, col, text)``
+* ``add_text_clipped(dl, pos, col, text, clip_rect)`` — same glyph run with a
+  per-call CPU-side clip ``(xmin, ymin, xmax, ymax)``; rasterizes only the
+  glyphs that intersect it, and touches no clip stack.
 
 ``col`` is a packed ABGR ``uint`` — use ``rgba(r, g, b, a)`` to build one,
 or ``GetColorU32(ImGuiCol.*)`` for style-colour references. Positions are
@@ -160,6 +168,11 @@ submitted inside the block to the given screen-space rect. Set
 clip; ``false`` replaces it. See :download:`modules/dasImgui/examples/features/clip_rect.das
 <../../../../../modules/dasImgui/examples/features/clip_rect.das>`.
 
+To clip one drawlist only — leaving ImGui's widget hit-testing and the other
+drawlists alone — use ``with_drawlist_clip_rect(dl, min, max,
+intersect_with_current) { ... }`` from ``imgui_drawlist_builtin``: it pushes
+and pops on that drawlist's own clip stack.
+
 Path-key telemetry
 ==================
 
@@ -170,10 +183,17 @@ global is registered). Each primitive's body publishes a lightweight
 ``bbox`` — into the per-frame registry under that key. Playwright /
 mouse-cards can then target a specific call site by path:
 
+.. das-doc: given require dastest/testing_boost
+.. das-doc: given require imgui/imgui_playwright
+.. das-doc: given require daslib/json_boost
+.. das-doc: given var d : ImguiApp
+.. das-doc: given var t : T?
+
 .. code-block:: das
 
    var snap = wait_for_widget(d, "MY_WIN/<mod>:42:8", 15.0f)
-   t |> equal(find_widget(snap, "MY_WIN/<mod>:42:8")?["kind"] ?? "", "add_rect", ...)
+   t |> equal(find_widget(snap, "MY_WIN/<mod>:42:8")?["kind"] ?? "",
+              "add_rect", "the call site painted a rect")
 
 Because the synthesized key shifts on edits, tests typically enumerate
 drawlist entries by ``kind`` (``"add_rect"`` etc.) rather than hardcoding

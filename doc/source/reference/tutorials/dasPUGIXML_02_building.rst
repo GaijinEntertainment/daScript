@@ -23,8 +23,8 @@ frees it automatically:
 
    with_doc() <| $(doc) {
        var dnode = doc as xml_node
-       let root = append_child(dnode, "greeting")
-       set(root.text, "Hello!")
+       let greeting = append_child(dnode, "greeting")
+       set(greeting.text, "Hello!")
        print(to_string(doc))
    }
 
@@ -69,6 +69,11 @@ Attribute chaining
 
 ``attr()`` appends an attribute and returns the **parent node**,
 enabling fluent chaining:
+
+.. das-doc: given var config : xml_node
+.. das-doc: given var root : xml_node
+.. das-doc: given let names = fixed_array("Alice", "Bob", "Charlie")
+.. das-doc: given let scores = fixed_array(95, 87, 92)
 
 .. code-block:: das
 

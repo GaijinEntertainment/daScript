@@ -28,6 +28,9 @@ Before the combinator, here is the raw algorithm. ``bjorklund(3, 8)``
 returns a length-8 ``array<bool>`` with three ``true`` entries
 distributed evenly:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; seconds : float = 4.0; cps : double = 0.5lf) { }
+
 .. code-block:: das
 
     let r <- bjorklund(3, 8)
@@ -100,9 +103,11 @@ with different ``k`` and you have a polyrhythm:
 
 Both layers complete every cycle (``n = 8`` in both), but the **3
 onsets** of the kick and the **5 onsets** of the hat sit at different
-grid positions, so the perceived feel is polyrhythmic. Use mismatched
-``n`` values (e.g. ``(3, 8)`` against ``(2, 5)``) and the cycle length
-becomes ``lcm(8, 5) = 40`` — the patterns realign every 40 steps.
+grid positions, so the perceived feel is polyrhythmic. Mismatched ``n``
+values (e.g. ``(3, 8)`` against ``(2, 5)``) cross two grids — eighths
+against fifths — inside the same cycle. ``euclid`` always fits its ``n``
+steps into one cycle, so both layers restart together on every cycle
+boundary: the polyrhythm lives inside the cycle, not across cycles.
 
 Part E: ``euclidRot(pat, k, n, rot)`` — rotate the onsets
 =========================================================

@@ -32,9 +32,19 @@ Full source: :download:`add_module_option_mod.das <../../../../../tutorials/macr
 ``add_module_option(module, name, type)`` records an option name and its
 type on a module. It must run while the module's macros are being compiled,
 so it lives in a ``macro_function`` guarded by
-``is_compiling_macros_in_module``:
+``is_compiling_macros_in_module``.  Macro modules open with a ``module``
+declaration — without one the compiler rejects the file with *"module
+Module_Name is required"*:
 
+.. das-doc: file add_module_option_mod.das
 .. code-block:: das
+
+    options gen2
+
+    module add_module_option_mod
+
+    require daslib/ast
+    require daslib/ast_boost
 
     [_macro, macro_function]
     def register_options {
@@ -55,6 +65,7 @@ A ``[lint_macro]`` runs once per module compiled after this one. It reads
 the flag off the program options and, when set, prints a per-module note at
 compile time:
 
+.. das-doc: file add_module_option_mod.das
 .. code-block:: das
 
     [lint_macro]
@@ -64,7 +75,7 @@ compile time:
             if (!on) return false
             let cm = compiling_module()
             var nfun = 0
-            cm |> for_each_function("") $(var func : FunctionPtr) {
+            cm |> for_each_function("") $(var _func : FunctionPtr) {
                 nfun++
             }
             let name = empty(cm.name) ? "<main>" : string(cm.name)
@@ -89,9 +100,22 @@ The usage file
 
 Full source: :download:`19_add_module_option.das <../../../../../tutorials/macros/19_add_module_option.das>`
 
-.. literalinclude:: ../../../../../tutorials/macros/19_add_module_option.das
-   :language: das
-   :lines: 23-36
+.. code-block:: das
+
+    require add_module_option_mod
+    options trace_compile = true
+
+    def greet(name : string) {
+        print("Hello, {name}!\n")
+    }
+
+    def add(a, b : int) : int => a + b
+
+    [export]
+    def main() {
+        greet("world")
+        print("2 + 3 = {add(2, 3)}\n")
+    }
 
 The ``options trace_compile = true`` line is accepted only because
 ``add_module_option_mod`` registered the name — without the ``require``, the

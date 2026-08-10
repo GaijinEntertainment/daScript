@@ -107,6 +107,9 @@ Practical: paired acquire/release
 
 The classic use case: acquire a resource, immediately defer its release:
 
+.. das-doc: given def acquire_resource(name : string) { print("  acquired {name}\n") }
+.. das-doc: given def release_resource(name : string) { print("  released {name}\n") }
+
 .. code-block:: das
 
     acquire_resource("database")

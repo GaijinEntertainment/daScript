@@ -58,8 +58,14 @@ only runs while that tab is active:
                               flags = ImGuiTabItemFlags.None)) {
            checkbox(G_WIRE, (text = "Wireframe"))   // only registered while active
        }
-       tab_item(AUDIO_TAB, ...) { ... }
-       tab_item(INFO_TAB,  ...) { ... }
+       tab_item(AUDIO_TAB, (text = "Audio", closable = false,
+                            flags = ImGuiTabItemFlags.None)) {
+           slider_int(A_VOLUME, (text = "Volume"))
+       }
+       tab_item(INFO_TAB, (text = "Info", closable = false,
+                           flags = ImGuiTabItemFlags.None)) {
+           text("Tab metadata - read-only.")
+       }
    }
 
 A snapshot taken while ``AUDIO_TAB`` is active shows ``G_WIRE`` under
@@ -112,8 +118,10 @@ Sharing open state across two surfaces
 ======================================
 
 For the canonical "the same flag lives in a checkbox and a tab's X"
-case, use ``edit_tab_item`` against a caller-owned bool pointer:
+case, use ``edit_tab_item`` against a caller-owned bool pointer
+(``require daslib/safe_addr`` for the ``safe_addr`` form):
 
+.. das-doc: given require daslib/safe_addr
 .. code-block:: das
 
    var private DRAFT_TAB_OPEN : bool = true
@@ -121,9 +129,9 @@ case, use ``edit_tab_item`` against a caller-owned bool pointer:
    // Checkbox row mirrors the X-button flag.
    edit_checkbox(safe_addr(DRAFT_TAB_OPEN), (id = "TAB_VISIBLE",
                                               text = "Show Draft tab"))
-   // ...
-   edit_tab_item(safe_addr(DRAFT_TAB_OPEN), "Draft",
-                 ImGuiTabItemFlags.None) {
+   edit_tab_item(safe_addr(DRAFT_TAB_OPEN), (id = "DRAFT_TAB_EXT",
+                                              text = "Draft",
+                                              flags = ImGuiTabItemFlags.None)) {
        text("Draft body — same flag the checkbox flips")
    }
 
@@ -143,13 +151,18 @@ Bar-level chrome:
 * ``NoCloseWithMiddleMouseButton`` — disable the middle-mouse
   shortcut for closable tabs.
 * ``NoTooltip`` — suppress hover tooltips on tab headers.
-* ``FittingPolicyResizeDown`` / ``FittingPolicyScroll`` — what happens
-  when the strip doesn't fit horizontally.
+* ``DrawSelectedOverline`` — draw an overline on the selected tab.
+* ``FittingPolicyShrink`` / ``FittingPolicyScroll`` — what happens
+  when the strip doesn't fit horizontally (``FittingPolicyShrink`` is
+  the default; ``FittingPolicyMixed`` combines the two).
 
 Per-tab flags via ``ImGuiTabItemFlags``: ``UnsavedDocument`` (marks the
 header with a dot), ``SetSelected`` (a one-shot select-this-tab nudge),
-``NoCloseButton`` (closable=true but no X), ``Leading``/``Trailing``
-(pin to bar edges), ``NoReorder``.
+``Leading``/``Trailing`` (pin to bar edges), ``NoReorder``,
+``NoPushId``, ``NoTooltip``, ``NoCloseWithMiddleMouseButton``,
+``NoAssumedClosure``. There is no public "closable but no X" flag —
+ImGui's ``NoCloseButton`` is internal bookkeeping and is not bound; drop
+``closable`` instead.
 
 Standalone vs live
 ==================

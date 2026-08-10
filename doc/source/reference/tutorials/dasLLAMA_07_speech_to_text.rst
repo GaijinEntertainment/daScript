@@ -59,6 +59,7 @@ The one-shot form returns the full text; the block form yields each
 the raw token ids, and ``avg_logprob``, the mean per-token log-probability
 (closer to zero = more confident).
 
+.. das-doc: given var samples : array<float>
 .. code-block:: das
 
    var s <- create_session(m, "auto")   // "auto": whisper detects the language
@@ -82,11 +83,16 @@ the shape a live audio source drives — pair it with dasAudio's microphone
 capture (:ref:`tutorial_dasAudio_recording`). Models that transcribe whole
 clips at once say so with a loud panic, matching ``caps().streaming``.
 
+.. das-doc: given var chunk : array<float>
 .. code-block:: das
 
-   feed(m, s, chunk)                 // as audio arrives
-   drain(m, s) $(seg) { ... }        // complete windows only
-   flush(m, s) $(seg) { ... }        // the sub-30 s tail, at end of stream
+   feed(m, s, chunk)             // as audio arrives
+   drain(m, s) $(seg) {          // complete windows only
+       print("{seg.text}")
+   }
+   flush(m, s) $(seg) {          // the sub-30 s tail, at end of stream
+       print("{seg.text}")
+   }
 
 .. seealso::
 

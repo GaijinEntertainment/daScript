@@ -10,12 +10,14 @@ Lambdas are slower than blocks, but allow for more flexibility in lifetime and c
 The lambda type can be declared with a function-like syntax.
 The type is written as ``lambda`` followed by an optional type signature in angle brackets:
 
+.. das-doc: fragment
 .. code-block:: das
 
     lambda < (arg1:int; arg2:float&) : bool >
 
 The ``->`` operator can be used instead of ``:`` for the return type:
 
+.. das-doc: fragment
 .. code-block:: das
 
     lambda < (arg1:int; arg2:float&) -> bool >   // equivalent
@@ -105,6 +107,8 @@ Lambdas can be deleted, which causes finalizers to be called on all captured dat
 Because copies alias the same capture frame, ``delete`` requires ``unsafe`` —
 the caller is asserting no other live copy exists:
 
+.. das-doc: given var lam : lambda
+.. das-doc: alt
 .. code-block:: das
 
     unsafe { delete lam; }
@@ -173,6 +177,7 @@ Daslang will generated the following code:
 
 Capture structure:
 
+.. das-doc: fragment
 .. code-block:: das
 
     struct _lambda_thismodule_7_8_1 {
@@ -183,6 +188,7 @@ Capture structure:
 
 Body function:
 
+.. das-doc: fragment
 .. code-block:: das
 
     def _lambda_thismodule_7_8_1`function ( var __this:_lambda_thismodule_7_8_1; extra:int const ) : int {
@@ -193,22 +199,24 @@ Body function:
 
 Finalizer function:
 
+.. das-doc: fragment
 .. code-block:: das
 
     def _lambda_thismodule_7_8_1`finalizer ( var __this:_lambda_thismodule_7_8_1? explicit ) {
-        delete *this
+        delete *__this
         delete __this
     }
 
 Lambda creation is replaced with the ascend of the capture structure:
 
+.. das-doc: fragment
 .. code-block:: das
 
     let counter:lambda<(extra:int const):int> const <- new<lambda<(extra:int const):int>> (CNT = CNT)
 
 The C++ Lambda class contains single void pointer for the capture data:
 
-.. code-block:: das
+.. code-block:: cpp
 
     struct Lambda {
         ...

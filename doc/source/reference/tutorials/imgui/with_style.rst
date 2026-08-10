@@ -70,7 +70,7 @@ scope is restored:
 .. code-block:: das
 
    with_style((ImGuiCol.Text, ImVec4(1.0f, 0.95f, 0.30f, 1.0f))) {
-       Text("Yellow text inherited from outer scope.")
+       text("Yellow text inherited from outer scope.")
        with_style((ImGuiCol.Button, ImVec4(0.20f, 0.45f, 0.85f, 1.0f)),
                   (ImGuiStyleVar.FrameRounding, 4.0f)) {
            // Yellow text + blue button + 4-radius rounding all active.

@@ -14,10 +14,11 @@ Macro Tutorial 18: ``with_`` — locked binding of container slots
 ergonomics problem: rebinding a struct field across an array or table
 element. The naive form is rejected by daslang's typer:
 
+.. das-doc: expect error[31019]
 .. code-block:: das
 
    var arr = [A(f1 = 1, f2 = 2)]
-   var a : A& = arr[0]    // error[31300]: local reference to non-local expression is unsafe
+   var a : A& = arr[0]    // error[31019]: local reference to non-local expression is unsafe
    a.f1 = 99
 
 Between binding ``a`` and writing through it, code could push/resize/erase
@@ -28,11 +29,17 @@ Between binding ``a`` and writing through it, code could push/resize/erase
    push/erase/resize/clear inside the body panic at runtime instead of
    silently corrupting memory.
 
-The single-arg form is a 1:1 replacement for the rejected pattern above:
+The single-arg form is a 1:1 replacement for the rejected pattern above.
+``A`` is the element struct every snippet on this page uses:
 
 .. code-block:: das
 
    require daslib/with_boost
+
+   struct A {
+       f1 : int
+       f2 : int
+   }
 
    var arr = [A(f1 = 1, f2 = 2)]
    with_(arr[0]) {
@@ -145,25 +152,30 @@ message before exit for nicer logging, NOT to recover-and-continue.
 Section 6 — Refused container shapes
 =====================================
 
-``with_`` is intentionally narrow:
+``with_`` is intentionally narrow. Two shapes are refused at
+macro-expansion time, with the macro-error code ``50503`` and a message
+naming the failing arg:
 
 * **Non-``ExprAt`` containers** (plain locals, struct fields on locals,
   function-call results, array literals) are refused. The macro needs
-  to ref-bind the container to a local, and only ExprVar-rooted
-  lvalue chains (variables, ``obj.field``, ``arr[i]``) have stable
-  addressable storage outside the expression. Use built-in ``with`` for
-  locals; for literal-or-call containers, hoist to a ``var`` first.
+  to ref-bind the container to a local, and only chains rooted in a
+  variable and reached through **field hops only** — ``arr``,
+  ``obj.field``, ``obj.a.b`` — have stable addressable storage outside
+  the expression. Index hops are not followed: ``with_(outer[i].inner[j])``
+  is refused too, because locking ``inner`` would leave ``outer`` free to
+  reallocate from inside the body. Use built-in ``with`` for locals; for
+  literal-or-call containers, hoist to a ``var`` first.
 
 * **More than one table-keyed arg** is refused per the rehash hazard
   noted above.
 
-* **Bodies that ``return`` a value** are refused at typecheck time —
-  the synthesized invoke target declares a ``: void`` block return.
-  ``with_`` is for in-place mutation; compute values via a local:
-  ``var v : T; with_(arr[0]) { v = _.f }``.
+A third shape is rejected later, by the typer:
 
-All refusals fire at macro-expansion time with the macro-error code
-``50503`` and a message describing the failing arg.
+* **Bodies that ``return`` a value** — the synthesized invoke target
+  declares a ``: void`` block return, so the ``return`` reports
+  ``error[31402]: not expecting a return value``. ``with_`` is for
+  in-place mutation; compute values via a local:
+  ``var v : T; with_(arr[0]) { v = _.f }``.
 
 
 Running the tutorial
@@ -181,6 +193,10 @@ Expected output::
    section 5: ints = [ 1, 222, 3]
    section 6: tab[k].f1 = 777
    section 7: see comment for the lock-panic shape
+
+The labels are the source file's own section numbering, which counts the
+"why ``with_`` exists" preamble as section 1 — so its section *N* is this
+page's Section *N-1*.
 
 
 .. seealso::

@@ -8,10 +8,11 @@ module jobque_boost shared public
 //! Job queue macro helpers.
 //!
 //! Provides ``new_job``, ``new_thread``, ``with_job_que``,
-//! ``with_job_status``, ``channel_next``, ``channel_push``, and
+//! ``with_job_status``, channel capture helpers
+//! (``capture_jobque_channel``/``release_capture_jobque_channel``), and
 //! other convenience wrappers that capture lambda closures and
 //! correctly manage context cloning for multi-threaded execution.
-//! Extends the built-in ``jobque`` module.
+//! Extends the built-in ``jobque`` module, which it re-exports.
 
 require jobque public
 require math

@@ -47,6 +47,7 @@ Publicity
 
 Type aliases can be ``public`` or ``private``:
 
+.. das-doc: alt
 .. code-block:: das
 
     typedef public  Vec3 = float3       // visible to other modules
@@ -77,6 +78,7 @@ Instead of writing a ``typedef`` for a tuple, you can use the ``tuple`` keyword 
 
 This is equivalent to:
 
+.. das-doc: alt
 .. code-block:: das
 
     typedef Vertex = tuple<position:float3; normal:float3; uv:float2>
@@ -99,6 +101,7 @@ Variants support a similar shorthand:
 
 This is equivalent to:
 
+.. das-doc: alt
 .. code-block:: das
 
     typedef Value = variant<i:int; f:float; s:string>
@@ -121,6 +124,7 @@ Bitfields also support the shorthand syntax:
 
 This is equivalent to:
 
+.. das-doc: alt
 .. code-block:: das
 
     typedef Permissions = bitfield<read; write; execute>

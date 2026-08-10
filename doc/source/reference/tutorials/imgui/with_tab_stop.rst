@@ -4,9 +4,11 @@
 With tab stop
 #######################
 
-ImGui's ``PushTabStop`` / ``PopTabStop`` pair lets you control which widgets
-participate in TAB / Shift+TAB focus cycling. The boost layer wraps it as a
-stateless scope wrapper:
+ImGui's ``NoTabStop`` item flag controls which widgets participate in TAB /
+Shift+TAB focus cycling. The boost layer wraps the
+``PushItemFlag(ImGuiItemFlags.NoTabStop, !tab_stop)`` / ``PopItemFlag`` pair
+as a stateless scope wrapper (ImGui obsoleted the ``PushTabStop`` /
+``PopTabStop`` shorthand in 1.91):
 
 .. code-block:: das
 
@@ -34,8 +36,10 @@ Walkthrough
 Requires
 ========
 
-Same baseline as the other ``with_*`` wrappers — already in
-``imgui/imgui_scope_builtin`` (re-exported by ``imgui/imgui_boost_v2``).
+Same baseline as the other ``with_*`` wrappers, plus an explicit
+``require imgui/imgui_scope_builtin`` — ``imgui/imgui_boost_v2`` re-exports
+only ``imgui``, ``imgui/imgui_lint`` and ``imgui/imgui_boost_runtime``, so the
+scope wrappers need their own ``require``.
 
 Behaviour
 =========

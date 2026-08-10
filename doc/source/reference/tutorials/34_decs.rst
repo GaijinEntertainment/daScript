@@ -64,6 +64,8 @@ Component names in the block signature match component names on entities:
 
 Query a specific entity by passing its ``EntityId``:
 
+.. das-doc: given var eid : EntityId
+
 .. code-block:: das
 
     query(eid) $(tag : string; val : int) {
@@ -318,6 +320,9 @@ Utility functions
 ``is_alive`` checks whether an ``EntityId`` still refers to a living entity.
 It returns ``false`` for ``INVALID_ENTITY_ID``, deleted entities, and stale
 generation IDs after slot recycling:
+
+.. das-doc: given var hero : EntityId
+.. das-doc: given var deleted_eid : EntityId
 
 .. code-block:: das
 

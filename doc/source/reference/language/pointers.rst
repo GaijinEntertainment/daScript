@@ -29,6 +29,7 @@ Type           Description
 
 Pointer types are declared by appending ``?`` to any type:
 
+.. das-doc: given struct Point { x, y : float }
 .. code-block:: das
 
     var p : int?               // pointer to int — null by default
@@ -71,12 +72,12 @@ addr
 
 ``addr(x)`` returns a pointer to an existing variable.  **Requires unsafe.**
 
-::
+.. code-block:: das
 
-    var x = 42
+    var n = 42
     unsafe {
-        var p = addr(x)   // p is int?
-        *p = 100           // modifies x
+        var pn = addr(n)   // pn is int?
+        *pn = 100          // modifies n
     }
 
 The pointer is valid only while the variable is alive — using it after
@@ -93,8 +94,8 @@ local or global variable (not a field of a temporary):
 
     require daslib/safe_addr
     var a = 13
-    var p = safe_addr(a)   // p is int?# (temporary pointer)
-    print("{*p}\n")
+    var sp = safe_addr(a)   // sp is int?# (temporary pointer)
+    print("{*sp}\n")
 
 Temporary pointers cannot be stored in containers or returned from functions.
 
@@ -157,8 +158,14 @@ Safe navigation ``?.``
 
 .. code-block:: das
 
-    p?.x         // returns x if p is non-null, null otherwise
-    a?.b?.c      // chains — short-circuits on first null
+    struct Segment {
+        head : Point?
+    }
+
+    var seg : Segment?
+
+    seg?.head          // returns head if seg is non-null, null otherwise
+    seg?.head?.x       // chains — short-circuits on first null
 
 Safe navigation results are themselves nullable, so combine with ``??``
 for a concrete fallback:
@@ -170,17 +177,21 @@ for a concrete fallback:
 Null coalescing ``??``
 ^^^^^^^^^^^^^^^^^^^^^^
 
-``??`` provides a default value when the left side is null:
+``??`` dereferences the pointer on the left, and falls back to the value on
+the right when that pointer is null.  The default is therefore a value of the
+**pointee** type — not another pointer — and so is the result:
 
 .. code-block:: das
 
-    let x = p ?? default_value
+    var origin = Point(x = 0.0, y = 0.0)
+    let pos = p ?? origin     // Point; origin if p is null
 
-For a pointer with an integer/scalar pointee, coalesce the pointer itself:
+The same holds for a pointer with an integer or other scalar pointee:
 
 .. code-block:: das
 
-    let x = p ?? 0    // 0 if p is null
+    var pi : int?
+    let count = pi ?? 0    // int; 0 if pi is null
 
 .. _pointer_delete:
 
@@ -190,11 +201,11 @@ Deletion
 
 ``delete`` frees heap memory and sets the pointer to null.  **Requires unsafe.**
 
-::
+.. code-block:: das
 
-    var p = new Point()
+    var dp = new Point()
     unsafe {
-        delete p       // frees memory, p becomes null
+        delete dp       // frees memory, dp becomes null
     }
 
 Prefer ``var inscope`` for automatic cleanup — it adds a ``finally`` block
@@ -233,11 +244,15 @@ Indexing
 Increment and addition
 ^^^^^^^^^^^^^^^^^^^^^^
 
-::
+.. das-doc: alt
+.. code-block:: das
 
+    var data <- [10, 20, 30, 40, 50]
     unsafe {
-        ++ p         // advance pointer by one element
-        p += 3       // advance by three elements
+        var p = addr(data[0])
+        ++ p              // advance pointer by one element
+        p += 3            // advance by three elements
+        print("{*p}\n")   // 50
     }
 
 .. warning::
@@ -300,11 +315,11 @@ to a typed pointer before dereferencing:
 .. code-block:: das
 
     unsafe {
-        var x = 123
-        var px = addr(x)
-        var vp : void? = reinterpret<void?>(px)     // erase type
-        var px2 = reinterpret<int?>(vp)             // restore type
-        print("{*px2}\n")                          // 123
+        var raw = 123
+        var praw = addr(raw)
+        var vraw : void? = reinterpret<void?>(praw)   // erase type
+        var praw2 = reinterpret<int?>(vraw)           // restore type
+        print("{*praw2}\n")                           // 123
     }
 
 .. _pointer_intptr:
@@ -344,9 +359,10 @@ Can also cast between pointer types:
 .. code-block:: das
 
     unsafe {
-        var p : int? = addr(x)
-        var vp = reinterpret<void?>(p)    // to void?
-        var p2 = reinterpret<int?>(vp)    // back to int?
+        var i = 7
+        var ip : int? = addr(i)
+        var ivp = reinterpret<void?>(ip)    // to void?
+        var ip2 = reinterpret<int?>(ivp)    // back to int?
     }
 
 .. _pointer_typeinfo:
@@ -362,7 +378,11 @@ Several ``typeinfo`` queries test pointer properties at compile time:
     typeinfo is_pointer(p)       // true if p is a pointer type
     typeinfo is_smart_ptr(p)     // true if p is a smart_ptr<T>
     typeinfo is_void_pointer(p)  // true if p is void?
-    typeinfo can_delete_ptr(p)   // true if delete is valid for p
+    typeinfo can_delete(p)       // true if delete is valid for p
+
+``can_delete_ptr`` asks the same question of a **pointee** type rather than of
+a pointer, so it is written against the dereferenced value —
+``typeinfo can_delete_ptr(*p)`` is true exactly when ``delete p`` is legal.
 
 .. _pointer_summary:
 

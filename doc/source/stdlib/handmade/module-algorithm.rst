@@ -23,17 +23,17 @@ Example:
 
     require daslib/algorithm
 
-        [export]
-        def main() {
-            var arr <- [3, 1, 4, 1, 5, 9, 2, 6, 5]
-            sort_unique(arr)
-            print("sort_unique: {arr}\n")
-            print("has 4: {binary_search(arr, 4)}\n")
-            print("has 7: {binary_search(arr, 7)}\n")
-            print("lower_bound(4): {lower_bound(arr, 4)}\n")
-            print("upper_bound(4): {upper_bound(arr, 4)}\n")
-            let er = equal_range(arr, 5)
-            print("equal_range(5): {er}\n")
-            print("min index: {min_element(arr)}\n")
-            print("is_sorted: {is_sorted(arr)}\n")
-        }
+    [export]
+    def main() {
+        var arr <- [3, 1, 4, 1, 5, 9, 2, 6, 5]
+        sort_unique(arr)
+        print("sort_unique: {arr}\n")
+        print("has 4: {binary_search(arr, 4)}\n")
+        print("has 7: {binary_search(arr, 7)}\n")
+        print("lower_bound(4): {lower_bound(arr, 4)}\n")
+        print("upper_bound(4): {upper_bound(arr, 4)}\n")
+        let er = equal_range(arr, 5)
+        print("equal_range(5): {er}\n")
+        print("min index: {min_element(arr)}\n")
+        print("is_sorted: {is_sorted(arr)}\n")
+    }

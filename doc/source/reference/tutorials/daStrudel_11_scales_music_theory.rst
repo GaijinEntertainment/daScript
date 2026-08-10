@@ -21,6 +21,8 @@ Part A: ``scale_pattern`` — degrees against a scale
 ``n(notation) |> scale(scale_def) |> sound(sound)``.  The same
 ``"0 2 4 6"`` against C major and C minor is a one-line A/B test:
 
+.. das-doc: given require strudel/strudel public
+
 .. code-block:: das
 
     let pat <- stack([

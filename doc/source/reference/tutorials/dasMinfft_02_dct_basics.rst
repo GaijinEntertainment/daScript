@@ -64,11 +64,13 @@ small. This is the essence of lossy coding:
 
 .. code-block:: das
 
-   for (k in range(keep, n)) {
+   let keep = 4
+   var trunc := coeff                       // work on a copy of the coefficients
+   for (k in range(keep, length(trunc))) {
        trunc[k] = 0.0f
    }
    idct(trunc, back, plan)
-   // keep 8/32 coefficients -> max error ~0.16
+   // on the companion's 32-sample signal: keep 8/32 coefficients -> max error ~0.16
 
 .. seealso::
 

@@ -1,7 +1,8 @@
 The JOBQUE module provides low-level job queue and threading primitives.
-It includes thread-safe channels for inter-thread communication, lock boxes
-for shared data access, job status tracking, and fine-grained thread
-management. For higher-level job abstractions, see ``jobque_boost``.
+It includes thread-safe ``Channel`` and ``Stream`` types for inter-thread
+communication, ``LockBox`` for shared data access, ``Atomic32`` / ``Atomic64``
+counters, ``JobStatus`` tracking, and fine-grained thread management. For
+higher-level job abstractions, see ``jobque_boost``.
 
 See :ref:`tutorial_jobque` for a hands-on tutorial.
 
@@ -17,18 +18,18 @@ Example:
 
     require jobque
 
-        [export]
-        def main() {
-            with_atomic32() $(counter) {
-                counter |> set(10)
-                print("value = {counter |> get}\n")
-                let after_inc = counter |> inc
-                print("after inc = {after_inc}\n")
-                let after_dec = counter |> dec
-                print("after dec = {after_dec}\n")
-            }
+    [export]
+    def main() {
+        with_atomic32() $(counter) {
+            counter |> set(10)
+            print("value = {counter |> get}\n")
+            let after_inc = counter |> inc
+            print("after inc = {after_inc}\n")
+            let after_dec = counter |> dec
+            print("after dec = {after_dec}\n")
         }
-        // output:
-        // value = 10
-        // after inc = 11
-        // after dec = 10
+    }
+    // output:
+    // value = 10
+    // after inc = 11
+    // after dec = 10

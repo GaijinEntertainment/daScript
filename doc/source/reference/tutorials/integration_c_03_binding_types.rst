@@ -47,7 +47,9 @@ non-zero means the enum's underlying storage is ``int64``; zero (the
 common case) means ``int``. The example above passes ``1``, so ``Color``
 is int64-backed — pass ``0`` for the usual ``int`` storage.
 
-In daslang:
+In daslang, once the script has ``require tutorial_c_03``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -71,7 +73,9 @@ and each field's offset and mangled type:
    das_structure_add_field(st, mod, lib, "y", "y", offsetof(Point2D, y), "f");
    das_module_bind_structure(mod, st);
 
-In daslang:
+In daslang, once the script has ``require tutorial_c_03``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

@@ -38,6 +38,14 @@ actually landed (see *Driving from outside* below).
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+.. das-doc: given var PAYLOAD_VALUE : int = 42
+.. das-doc: given var RECEIVED : int = 0
+.. das-doc: given var app : ImguiApp
+
 Same backend + boost layer as the other container tutorials, plus the
 ``drag_drop_source`` / ``drag_drop_target`` macros from
 ``imgui/imgui_containers_builtin`` (which is already required by the
@@ -58,7 +66,7 @@ implicitly binds it to the previously submitted item:
                               uint64(typeinfo sizeof(PAYLOAD_VALUE)),
                               ImGuiCond.Once)
        }
-       Text("Dragging: {PAYLOAD_VALUE}")
+       text("Dragging: {PAYLOAD_VALUE}")
    }
 
 The body runs **only while the drag is active** — after the user has
@@ -70,7 +78,7 @@ pressed the mouse on ``SOURCE_BTN`` and dragged past ImGui's
   against; ``data`` is a raw pointer with caller-controlled lifetime
   (ImGui copies it into its internal buffer on each call, so a stack
   pointer is fine inside the body).
-* Any rendering call (``Text``, ``Image``, etc.) draws the drag preview
+* Any rendering call (``text``, ``image``, etc.) draws the drag preview
   tooltip that follows the cursor.
 
 Target side

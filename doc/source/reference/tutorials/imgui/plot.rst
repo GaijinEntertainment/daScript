@@ -9,6 +9,7 @@ per-frame ``array<float>`` and copy it synchronously; two
 **lambda-form** widgets call back once per sample, skipping the
 backing array entirely.
 
+.. das-doc: signatures
 .. code-block:: das
 
    plot_lines(IDENT, "title", values, scale_min, scale_max, size)
@@ -37,6 +38,10 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given var samples : array<float>
+.. das-doc: given var avg_ms : float = 0.0f
+.. das-doc: given def sample_at(idx : int) : float => 0.0f
 
 Already in the baseline boost layer:
 

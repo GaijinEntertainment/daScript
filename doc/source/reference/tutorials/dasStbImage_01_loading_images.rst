@@ -98,6 +98,7 @@ exist:
 
 .. code-block:: das
 
+   let path = "photo.png"
    print("HDR: {is_hdr(path)}, 16-bit: {is_16_bit(path)}\n")
 
 .. seealso::

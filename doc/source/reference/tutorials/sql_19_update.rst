@@ -45,11 +45,14 @@ site. RETURNING is macro-only; there is no plain
 By-PK whole-row replace
 =======================
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string; Email : string; Active : bool; LastSeen : int64 }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let n1 = db |> update(User(Id = 1, Name = "alice", Email = "alice@new.com",
                                 Active = true, LastSeen = 100l))
-    // UPDATE "Users" SET "Name"=?, "Email"=?, "Active"=?, "LastSeen"=?
+    // UPDATE "Users" SET "Name" = ?, "Email" = ?, "Active" = ?, "LastSeen" = ?
     //   WHERE "Id" = ?
 
 A non-matching PK returns 0 rows-affected. Not an error.

@@ -240,7 +240,11 @@ name string, returning ``nullptr`` if not found.
 Using both modules from daslang
 ==================================
 
-Scripts ``require`` each module independently:
+Scripts ``require`` each module independently.  Both ``math_types`` and
+``math_utils`` are C++ modules registered by ``10_custom_modules.cpp``,
+so this snippet compiles only inside this tutorial's host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -261,6 +265,7 @@ Scripts ``require`` each module independently:
 
        let mid = lerp(a, make_vec2(1.0, 0.0), 0.5)
        print("mid = ({mid.x}, {mid.y})\n")
+   }
 
 
 Building and running

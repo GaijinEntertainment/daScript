@@ -44,6 +44,8 @@ trigger that failed to open or close the popup would abort the recording.
 Requires
 ========
 
+.. das-doc: given var in_region : bool = false
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_containers_builtin`` — ``popup_window``, ``open_popup``,
@@ -109,8 +111,10 @@ exactly that loop.
 State
 =====
 
-``PopupWindowState`` is empty — ImGui owns the open lifecycle by
-``str_id`` and the boost wrapper just brackets the body. The state
+``PopupWindowState`` carries no live fields — just an unused placeholder
+bool that keeps the struct non-empty for ``[container]`` auto-emit. ImGui
+owns the open lifecycle by ``str_id`` and the boost wrapper just brackets
+the body. The state
 global is what the registry walks to find the widget by IDENT; the
 snapshot reports ``kind="popup_window"`` for every registered instance
 regardless of whether the popup is currently visible.

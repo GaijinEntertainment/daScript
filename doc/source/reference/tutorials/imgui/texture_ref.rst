@@ -11,19 +11,25 @@ texture, and pass that texture through an ``ImTextureRef``:
 
 .. code-block:: das
 
+   var private g_tex : uint = 0u          // GL texture name
+   let PICTURE_PATH = "{get_das_root()}/modules/dasImgui/doc/source/_static/icons/cube.png"
+
    // 1. decode a PNG to RGBA pixels (dasStbImage)
    var img : Image
-   img->load(path, 4)
+   let (loaded, err) = img->load(PICTURE_PATH, 4)   // 4 channels => RGBA
    // 2. upload to a GL texture
    glGenTextures(1, safe_addr(g_tex))
    glBindTexture(GL_TEXTURE_2D, g_tex)
    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), img.width, img.height, 0,
                 GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(img.bytes[0])))
    // 3. wrap the GL texture name in an ImTextureRef
-   var ref : ImTextureRef
-   ref._TexID = uint64(g_tex)
-   // 4. draw it
-   image(TR_PIC, (user_texture_id = ref, size = float2(w, h), ...))
+   unsafe {
+       var ref : ImTextureRef
+       ref._TexID = uint64(g_tex)
+       // 4. draw it
+       image(TR_PIC, (user_texture_id = ref,
+                      size = float2(float(img.width), float(img.height))))
+   }
 
 ``_TexID`` is the **user slot** of ``ImTextureRef`` (an ``ImTextureID`` == the GL
 texture name here). With ``_TexData`` left null, the backend treats it as a
@@ -58,9 +64,11 @@ Behaviour
 The picture is decoded + uploaded **once** in ``init`` (the GL context is live
 after ``live_imgui_init``), and the texture name is kept in a module global.
 Each frame ``image()`` draws it twice through a freshly built ``ImTextureRef`` —
-once plain, once tinted + bordered — to show the same texture reused while
-``tint_col`` / ``border_col`` vary per call. The texture is freed with
-``glDeleteTextures`` on shutdown.
+once plain, once tinted — to show the same texture reused while ``tint_col``
+varies per call. (``border_col`` is echoed into ``ImageState`` for snapshot
+assertions only; ImGui's ``Image()`` takes no per-call border, it comes from the
+``ImGuiCol_Border`` style.) The texture is freed with ``glDeleteTextures`` on
+shutdown.
 
 Migration note
 ==============

@@ -19,6 +19,7 @@ Classifying Text
 ``ModerationRequest`` takes a model and an array of input strings;
 ``moderations`` returns one verdict per input in ``response.results``:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    require openai/openai_moderations

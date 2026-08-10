@@ -23,6 +23,12 @@ This tutorial builds a ``once()`` macro that executes a block only on
 the first call.  Each call site gets its own auto-generated global
 boolean flag:
 
+.. das-doc: given require tag_function_macro_mod
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var call : ExprCallFunc?
+.. das-doc: given let flag_name = "once_flag"
+.. das-doc: given var stmts : array<ExpressionPtr>
 .. code-block:: das
 
    for (i in range(5)) {
@@ -100,7 +106,16 @@ The module has two parts: the tagged function and the macro class.
 Part 1 — The tagged function
 -----------------------------
 
+.. das-doc: file tag_function_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module tag_function_macro_mod public
+
+   require daslib/ast
+   require daslib/ast_boost
+   require daslib/templates_boost
 
    [tag_function(once_tag)]
    def public once(blk : block) {
@@ -121,6 +136,7 @@ original body is never executed.
 Part 2 — The macro class
 --------------------------
 
+.. das-doc: file tag_function_macro_mod.das
 .. code-block:: das
 
    [tag_function_macro(tag="once_tag")]
@@ -128,6 +144,7 @@ Part 2 — The macro class
        def override transform(var call : ExprCallFunc?;
                               var errors : das_string) : ExpressionPtr {
            // ... rewrite every call to once()
+           return default<ExpressionPtr>
        }
    }
 
@@ -150,6 +167,7 @@ It proceeds in four steps.
 Step 1 — Generate a unique flag name
 -------------------------------------
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    let flag_name = make_unique_private_name("__once_flag", call.at)
@@ -163,6 +181,7 @@ same function are completely independent.
 Step 2 — Create the global flag
 ---------------------------------
 
+.. das-doc: fragment
 .. code-block:: das
 
    if (!compiling_module() |> add_global_private_var(flag_name, call.at) <| quote(false)) {
@@ -181,6 +200,7 @@ the function returns ``false`` and we report an error.
 Step 3 — Extract the block body
 ---------------------------------
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var block_clone = clone_expression(call.arguments[0])
@@ -204,6 +224,7 @@ expects ``array<ExpressionPtr>``, not an ``ExprBlock`` directly.
 Step 4 — Build the replacement
 --------------------------------
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var replacement = qmacro_block() {
@@ -232,8 +253,10 @@ The final expansion of:
        print("hello\n")
    }
 
-is:
+is (names starting with ``__`` are reserved in hand-written source — only a
+macro can introduce one):
 
+.. das-doc: skip
 .. code-block:: das
 
    if (!__once_flag_12_5) {

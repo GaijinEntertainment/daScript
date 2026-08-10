@@ -17,22 +17,22 @@ Example:
 
     require daslib/contracts
 
-        [!expect_dim(a)]
-        def process(a) {
-            return "scalar"
-        }
+    [expect_any_numeric(a)]
+    def process(a) {
+        return "scalar"
+    }
 
-        [expect_dim(a)]
-        def process(a) {
-            return "array"
-        }
+    [expect_any_array(a)]
+    def process(a) {
+        return "array"
+    }
 
-        [export]
-        def main() {
-            var arr : int[3]
-            print("{process(42)}\n")
-            print("{process(arr)}\n")
-        }
-        // output:
-        // scalar
-        // array
+    [export]
+    def main() {
+        var arr : int[3]
+        print("{process(42)}\n")
+        print("{process(arr)}\n")
+    }
+    // output:
+    // scalar
+    // array

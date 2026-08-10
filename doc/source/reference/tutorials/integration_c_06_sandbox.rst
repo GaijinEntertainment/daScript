@@ -154,7 +154,13 @@ module_get — path resolution
 When a ``.das_project`` is active, the built-in ``daslib/`` resolution
 logic is **completely bypassed** — ``module_get`` is the sole path
 resolver.  It must handle ``daslib/X`` paths as well as relative module
-paths:
+paths.  The project file declares the ``module_info`` typedef itself and
+requires ``strings`` plus ``daslib/strings_boost`` for ``split_by_chars``
+and ``join``:
+
+.. das-doc: given require strings
+.. das-doc: given require daslib/strings_boost
+.. das-doc: given typedef module_info = tuple<string; string; string> const
 
 .. code-block:: das
 

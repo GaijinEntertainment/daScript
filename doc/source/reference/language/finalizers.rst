@@ -79,6 +79,7 @@ and then calling the native memory finalizer on the result:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def finalize ( var __this:Foo?& explicit -const ) {
@@ -98,6 +99,7 @@ Static arrays call ``finalize_dim`` generically, which finalizes all its values:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def builtin`finalize_dim ( var a:Foo aka TT[5] explicit ) {
@@ -115,13 +117,14 @@ Dynamic arrays call ``finalize`` generically, which finalizes all its values:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def builtin`finalize ( var a:array<Foo aka TT> explicit ) {
         for ( aV in a ) {
             _::finalize(aV)
         }
-        __builtin_array_free(a,4,__context__)
+        __builtin_array_free(a,4,__context__,__lineinfo__)
     }
 
 Tables call ``finalize`` generically, which finalizes all its values, but not its keys:
@@ -133,13 +136,14 @@ Tables call ``finalize`` generically, which finalizes all its values, but not it
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def builtin`finalize ( var a:table<string aka TK;Foo aka TV> explicit ) {
         for ( aV in values(a) ) {
             _::finalize(aV)
         }
-        __builtin_table_free(a,8,4,__context__)
+        __builtin_table_free(a,8,4,__context__,__lineinfo__)
     }
 
 Custom finalizers are generated for structures. A field annotated ``@do_not_delete`` is skipped
@@ -158,6 +162,7 @@ entirely — no ``finalize`` call is generated for it, and nothing it owns is fr
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def finalize ( var __this:Goo explicit ) {
@@ -177,6 +182,7 @@ Tuples behave similarly to structures. There is no way to ignore individual fiel
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def finalize ( var __this:tuple<Foo;int> explicit -const ) {
@@ -193,12 +199,13 @@ Variants behave similarly to tuples. Only the currently active variant is finali
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
     def finalize ( var __this:variant<f:Foo;i:int;ai:array<int>> explicit -const ) {
         if ( __this is f ) {
             _::finalize(__this.f)
-        } else if (__this is ai) {
+        } elif ( __this is ai ) {
             __::builtin`finalize(__this.ai)
         }
         memzero(__this)

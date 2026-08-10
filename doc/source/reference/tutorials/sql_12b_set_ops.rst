@@ -33,6 +33,10 @@ the sources have different schemas.
 Distinct tags from either table
 ===============================
 
+.. das-doc: given [sql_table(name="Customers")] struct Customer { @sql_primary_key Id : int; Tier : int }
+.. das-doc: given [sql_table(name="Prospects")] struct Prospect { @sql_primary_key Id : int; Tier : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let all_tiers <- _sql((db |> select_from(type<Customer>) |> _select(_.Tier))
@@ -44,8 +48,8 @@ Tags present in both tables
 
 .. code-block:: das
 
-    let shared <- _sql((db |> select_from(type<Customer>) |> _select(_.Tier))
-                       |> intersect(db |> select_from(type<Prospect>) |> _select(_.Tier)))
+    let shared_tiers <- _sql((db |> select_from(type<Customer>) |> _select(_.Tier))
+                             |> intersect(db |> select_from(type<Prospect>) |> _select(_.Tier)))
 
 Tags present only on the LHS
 ============================

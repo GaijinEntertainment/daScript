@@ -8,6 +8,7 @@ Child windows
 a sub-window that can be sized, bordered, scrolled, and addressed in the
 registry hierarchy. The wrapper's signature:
 
+.. das-doc: signatures
 .. code-block:: das
 
    child(IDENT, (text = "...",
@@ -45,6 +46,11 @@ not over the child, wheel not attributed) would abort the recording.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_containers_builtin`` — defines ``child``,
@@ -71,8 +77,9 @@ child_flags vs window_flags
 
 ``ImGuiChildFlags`` (the third arg) is child-specific:
 
-* ``Border`` — draw a one-pixel border around the region.
-* ``AutoResizeX`` / ``AutoResizeY`` — height/width tracks content extent.
+* ``Borders`` — draw a one-pixel border around the region.
+* ``ResizeX`` / ``ResizeY`` — user-draggable resize grip on that axis.
+* ``AutoResizeX`` / ``AutoResizeY`` — width/height tracks content extent.
 * ``AlwaysAutoResize`` — combine both axes and re-measure every frame.
 * ``FrameStyle`` — frame-style chrome (like input groups). Implies a
   background and rounded corners drawn from the active style.
@@ -145,7 +152,7 @@ Horizontal scroll
 
    child(SCROLL_C, (text = "scroll_c",
                    size = float2(720.0f, 90.0f),
-                   child_flags = ImGuiChildFlags.Border,
+                   child_flags = ImGuiChildFlags.Borders,
                    window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
        text(LONG_LINE, (text = "very wide content: lorem ipsum..."))
    }

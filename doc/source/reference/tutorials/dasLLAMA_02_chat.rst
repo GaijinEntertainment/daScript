@@ -25,6 +25,7 @@ embedded template, falling back to the arch registry — and creates the
 session. ``add_user`` queues a message; ``respond`` renders the turn, prefills
 it, and streams the reply until a stop token or the ``max_new`` budget.
 
+.. das-doc: given var m = Model()
 .. code-block:: das
 
    var chat = create_chat(m, "You are a helpful, friendly assistant.")

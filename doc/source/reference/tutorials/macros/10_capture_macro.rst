@@ -86,10 +86,21 @@ The module file
    ``audit_on_finalize``
 3. ``CaptureAuditMacro`` — the capture macro class (three hooks)
 
+.. das-doc: given require daslib/ast_boost
+
 The tag annotation
 ~~~~~~~~~~~~~~~~~~
 
+.. das-doc: file capture_macro_mod.das
 .. code-block:: das
+
+   options gen2
+   options no_aot
+
+   module capture_macro_mod
+
+   require daslib/ast
+   require daslib/ast_boost
 
    [structure_macro(name=audited)]
    class AuditedAnnotation : AstStructureAnnotation {
@@ -129,6 +140,7 @@ captureExpression
 When an ``[audited]`` variable is captured, the macro wraps the
 capture expression in a call to ``audit_on_capture(value, "name")``:
 
+.. das-doc: member AstCaptureMacro
 .. code-block:: das
 
    def override captureExpression(prog : Program?; mod : Module?;
@@ -155,6 +167,7 @@ captureFunction
 For each ``[audited]`` field in the lambda struct, the macro appends
 a print call to the function body's ``finalList``:
 
+.. das-doc: member AstCaptureMacro
 .. code-block:: das
 
    def override captureFunction(prog : Program?; mod : Module?;
@@ -183,6 +196,7 @@ a print call to the finalizer function's body — code that runs once
 on **destruction**, after the user-written ``finally {}`` block but
 before the compiler-generated ``delete *__this``:
 
+.. das-doc: member AstCaptureMacro
 .. code-block:: das
 
    def override releaseFunction(prog : Program?; mod : Module?;

@@ -18,29 +18,29 @@ Example:
 
     require daslib/coroutines
 
-        [coroutine]
-        def fibonacci() : int {
-            var a = 0
-            var b = 1
-            while (true) {
-                yield a
-                let next = a + b
-                a = b
-                b = next
-            }
+    [coroutine]
+    def fibonacci() : int {
+        var a = 0
+        var b = 1
+        while (true) {
+            yield a
+            let next = a + b
+            a = b
+            b = next
         }
+    }
 
-        [export]
-        def main() {
-            var count = 0
-            for (n in fibonacci()) {
-                print("{n} ")
-                count ++
-                if (count >= 10) {
-                    break
-                }
+    [export]
+    def main() {
+        var count = 0
+        for (n in fibonacci()) {
+            print("{n} ")
+            count ++
+            if (count >= 10) {
+                break
             }
-            print("\n")
         }
-        // output:
-        // 0 1 1 2 3 5 8 13 21 34
+        print("\n")
+    }
+    // output:
+    // 0 1 1 2 3 5 8 13 21 34

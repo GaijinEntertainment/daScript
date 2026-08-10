@@ -52,7 +52,7 @@ the matching global at module scope:
 .. code-block:: das
 
    // emitted automatically — no manual declaration
-   @live variable private SAVE_BTN : ClickState = ClickState()
+   var private @live SAVE_BTN : ClickState = ClickState()
 
 That's why there's no ``var SAVE_BTN`` at the top of the file. The
 state struct is owned by daslang — visible to ``grep``, walkable via
@@ -67,7 +67,9 @@ Once emitted, the global behaves like any other daslang global —
 
 .. code-block:: das
 
-   if (button(SAVE_BTN, (text = "Save"))) { ... }
+   if (button(SAVE_BTN, (text = "Save"))) {
+       // clicked this frame — same information as SAVE_BTN.clicked
+   }
    text("SAVE_BTN.click_count = {SAVE_BTN.click_count}")
 
 Two distinct value channels are available:
@@ -90,8 +92,8 @@ telemetry path uses only the bare identifier (``STATE_WIN/SPEED``,
 never ``STATE_WIN/SPEED.PUBLIC``) — flags never leak into the path or
 the ImGui hash.
 
-* ``SPEED.PUBLIC`` — emit as ``variable public`` instead of the default
-  ``variable private``. Sibling modules requiring this one can then
+* ``SPEED.PUBLIC`` — emit as ``var public`` instead of the default
+  ``var private``. Sibling modules requiring this one can then
   read ``SPEED.value`` directly.
 * ``VOLUME.NOTLIVE`` — skip the ``@live`` annotation on the emitted
   global. Useful when you change the slider bounds and want the
@@ -109,7 +111,7 @@ text_show — the app-driven mirror
 
 ``text_show`` is the read-only counterpart to ``text_input`` —
 ``state.value`` is what the widget renders, and the value can be
-written by the app (``STATUS_TEXT.value := "..."``) **or** by an
+written by the app (``STATUS_TEXT.value = "..."``) **or** by an
 external driver (``imgui_force_set`` with a string value). Either way the
 snapshot exposes the current value under the standard
 ``payload.value`` field, so integration tests can assert on computed
@@ -119,13 +121,14 @@ status strings the same way they assert slider values:
 
    text_show(STATUS_TEXT)
    if (button(BUMP_STATUS, (text = "bump status"))) {
-       STATUS_TEXT.value := "saved at frame {get_uptime()}"
+       STATUS_TEXT.value = "saved at frame {get_uptime()}"
    }
 
-The ``:=`` clones the new string into the current context's heap —
-required because ``daslang-live``'s HTTP handler runs in a different
-context than the GLFW main loop. Plain ``=`` would assign a pointer
-that becomes invalid the moment the request returns.
+Plain ``=`` is right here: the interpolated string is freshly built on
+the app's own heap, in the same context that renders the frame. The
+external path never touches this assignment —
+``imgui_force_set`` hands the JSON string to the widget dispatcher,
+which stores it on the state struct for the next frame to render.
 
 Standalone vs live
 ==================

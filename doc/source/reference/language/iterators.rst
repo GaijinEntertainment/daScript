@@ -8,6 +8,7 @@ Iterators are objects that traverse a sequence without exposing the details of t
 
 The iterator type is written as ``iterator`` followed by the element type in angle brackets:
 
+.. das-doc: fragment
 .. code-block:: das
 
     iterator<int>           // iterates over integers
@@ -26,6 +27,8 @@ Iterators can be created via the ``each`` function from a range, static array, o
 
 The most straightforward way to traverse an iterator is with a ``for`` loop:
 
+.. das-doc: given var it : iterator<int>
+.. das-doc: alt
 .. code-block:: das
 
     for ( x in it ) {             // iterates over contents of 'it'
@@ -152,6 +155,7 @@ The ``empty`` function checks if an iterator is null or already sequenced out:
 
 More complicated iteration patterns may require the ``next`` function:
 
+.. das-doc: alt
 .. code-block:: das
 
     var x : int
@@ -207,16 +211,16 @@ next implementation details
 
 The function ``next`` is implemented as follows:
 
+.. das-doc: alt
 .. code-block:: das
 
-    def next ( var it:iterator<auto(TT)>; var value : TT& ) : bool {
+    def next(var it : iterator<auto(TT)>; var value : TT&) : bool {
         static_if (!typeinfo can_copy(type<TT>)) {
-            concept_assert(false, "requires type
-             which can be copied")
+            concept_assert(false, "requires type which can be copied")
         } static_elif (typeinfo is_ref_value(type<TT>)) {
-            var pValue : TT - & ?
+            var pValue : TT -&?
             unsafe {
-                if ( _builtin_iterator_iterate(it, addr(pValue)) ) {
+                if (_builtin_iterator_iterate(it, addr(pValue))) {
                     value = *pValue
                     return true
                 } else {

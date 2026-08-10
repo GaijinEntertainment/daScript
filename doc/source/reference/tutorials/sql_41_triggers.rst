@@ -38,6 +38,9 @@ A common use case: stamp ``UpdatedAt`` and write an audit-log
 row whenever an ``Articles`` row changes. Two triggers, one for
 INSERT and one for UPDATE:
 
+.. das-doc: given [sql_table(name="Articles")] struct Article { @sql_primary_key Id : int; Title : string; UpdatedAt : int64 }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     db |> exec(
@@ -91,20 +94,40 @@ side effect outside the DB, commit and queue the work in your
 application code on the path that wrote the row --- don't try
 to do it from a trigger.
 
-Trigger recursion (gotcha)
-==========================
+Trigger cascades (gotcha)
+=========================
 
-SQLite's default is ``PRAGMA recursive_triggers = OFF`` --- a write
-performed inside a trigger body does **not** fire other triggers on
-the same table. The audit-log example above relies on that default:
-the ``AFTER INSERT`` trigger updates ``Articles`` (to stamp
-``UpdatedAt``), and that nested update is intentionally swallowed
-so the ``AFTER UPDATE`` trigger does not also write a row.
+``PRAGMA recursive_triggers`` (OFF by default) controls one thing
+only: whether a trigger may re-enter **itself**. It does *not* stop
+a trigger body from firing a **different** trigger on the same
+table. The two triggers above cascade: the ``AFTER INSERT`` trigger
+updates ``Articles`` to stamp ``UpdatedAt``, that nested UPDATE
+fires ``articles_audit_update``, and every INSERT therefore lands
+**two** audit rows --- the nested ``UPDATE`` row first, then the
+``INSERT`` row.
 
-If you opt into ``PRAGMA recursive_triggers = ON`` you must design
-the trigger body so it doesn't re-touch the source table, or filter
-the recursive case explicitly --- otherwise the audit log doubles
-(or loops) on every write.
+Filter the cascade in the trigger itself. A ``WHEN`` clause that
+only fires on a real content change makes each statement write
+exactly one audit row, while ``UpdatedAt`` still gets stamped on
+both paths:
+
+.. code-block:: das
+
+    db |> exec(
+        "CREATE TRIGGER articles_audit_update
+         AFTER UPDATE ON \"Articles\"
+         WHEN OLD.\"Title\" IS NOT NEW.\"Title\"
+         BEGIN
+            UPDATE \"Articles\" SET \"UpdatedAt\" = strftime('%s', 'now')
+                WHERE \"Id\" = NEW.\"Id\";
+            INSERT INTO \"AuditLog\" (\"Op\", \"ArticleId\", \"AtUnix\")
+                VALUES ('UPDATE', NEW.\"Id\", strftime('%s', 'now'));
+         END")
+
+The trigger's own stamping UPDATE does not re-fire it --- that
+*is* self-recursion, which the default ``recursive_triggers = OFF``
+suppresses. Turning the pragma ON removes that last guard too, so a
+self-touching trigger body then needs its own ``WHEN`` filter.
 
 .. seealso::
 

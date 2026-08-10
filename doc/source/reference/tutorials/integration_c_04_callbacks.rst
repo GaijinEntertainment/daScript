@@ -53,7 +53,10 @@ Calling a function pointer
        return ret;
    }
 
-From daslang, pass a function pointer with ``@@``:
+From daslang, once the script has ``require tutorial_c_04``, pass a function
+pointer with ``@@``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -94,6 +97,8 @@ must be the lambda itself** (its capture block):
 
 From daslang:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
    var counter = 0
@@ -126,7 +131,9 @@ include the block itself**:
        return ret;
    }
 
-From daslang:
+From daslang (``counter`` is the same captured local as above):
+
+.. das-doc: fragment
 
 .. code-block:: das
 

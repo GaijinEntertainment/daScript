@@ -8,6 +8,7 @@ Modal popups
 parent window, absorbs every click outside the modal, and routes ESC to
 the close path. The wrapper's signature:
 
+.. das-doc: signatures
 .. code-block:: das
 
    popup_modal(IDENT, (text = "title",
@@ -40,6 +41,8 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given var CONFIRM_RESULT : string = "(no answer yet)"
 
 Already in the baseline boost layer:
 

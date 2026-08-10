@@ -101,9 +101,12 @@ is fully sorted, but the ``k``-th position is correctly the ``k``-th-smallest:
 
 Both accept a custom comparator block — same shape as ``sort``:
 
+.. das-doc: given struct PricePoint { item_id, price : int }
+
 .. code-block:: das
 
-    var c <- [PricePoint(item_id=1, price=50), PricePoint(item_id=2, price=20), ...]
+    var c <- [PricePoint(item_id=1, price=50), PricePoint(item_id=2, price=20),
+              PricePoint(item_id=3, price=80), PricePoint(item_id=4, price=10)]
     sort_boost::partial_sort(c, 2) $(x, y : PricePoint) : bool {
         return x.price < y.price
     }
@@ -178,7 +181,8 @@ without writing a full comparator block:
         name : string
         age  : int
     }
-    let people <- [Person(name = "Alice", age = 30), Person(name = "Bob", age = 25), ...]
+    let people <- [Person(name = "Alice", age = 30), Person(name = "Bob", age = 25),
+                   Person(name = "Carol", age = 35), Person(name = "Dave", age = 22)]
     let youngest3 <- top_n_by(people, 3, @@(p : Person -&) => p.age)
     // sorted ascending by age
 
@@ -196,8 +200,12 @@ should be sorted first for full deduplication:
     print("{a}\n")  // [1, 2, 3, 5]
 
     var b <- [3, 1, 3, 1]
-    var c <- unique(b)
+    var c <- algorithm::unique(b)
     print("{c}\n")  // [3, 1, 3, 1] — no adjacent dups removed
+
+``daslib/linq`` declares ``unique`` and ``reverse`` too, so a program that
+requires both modules must qualify the call — ``algorithm::unique``,
+``algorithm::reverse`` — or the compiler reports two matching candidates.
 
 Array manipulation
 ==================
@@ -206,7 +214,7 @@ Array manipulation
 
     // reverse — in place
     var a <- [1, 2, 3, 4, 5]
-    reverse(a)          // [5, 4, 3, 2, 1]
+    algorithm::reverse(a)   // [5, 4, 3, 2, 1]
 
     // combine — concatenate into a new array
     var both <- combine([1, 2], [3, 4])  // [1, 2, 3, 4]
@@ -251,8 +259,9 @@ Tables with no value type serve as sets. The module provides:
     var diff  <- difference(a, b)             // {1, 2}
     var sdiff <- symmetric_difference(a, b)   // {1, 2, 5, 6}
 
+    var sub <- { 2, 3 }
     print("identical: {identical(a, a)}\n")   // true
-    print("is_subset({2, 3}, a): {is_subset({2, 3}, a)}\n") // true
+    print("is_subset(sub, a): {is_subset(sub, a)}\n") // true
 
 Topological sort
 ================
@@ -273,7 +282,7 @@ have an ``id`` field and a ``before`` table listing which ids must come first:
         id=0
     )]
     var sorted <- topological_sort(nodes)
-    // sorted: [0, 1, 2]
+    // sorted holds the nodes themselves, in dependency order — ids 0, 1, 2
 
 If the graph contains a cycle, ``topological_sort`` calls ``panic``.
 
@@ -288,7 +297,7 @@ Most functions (``reverse``, ``fill``, ``lower_bound``, ``binary_search``,
 
     var a = fixed_array<int>(5, 3, 1, 4, 2)
     print("min: {min_element(a)}\n")    // 2 (value 1)
-    reverse(a)                          // [2, 4, 1, 3, 5]
+    algorithm::reverse(a)               // [2, 4, 1, 3, 5]
 
 .. seealso::
 

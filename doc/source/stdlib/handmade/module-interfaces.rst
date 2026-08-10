@@ -7,7 +7,7 @@ dispatch without class inheritance.
 
 - Interface inheritance (``class IChild : IParent``)
 - Default method implementations (non-abstract methods)
-- Compile-time completeness checking (error 30111 on missing methods)
+- Compile-time completeness checking (error 30926 on missing methods)
 - ``is``/``as``/``?as`` operators via the ``InterfaceAsIs`` variant macro
 - Const-only interfaces — when all methods are ``def const``, ``as``/``?as``/``is`` work on const pointers
 

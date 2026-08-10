@@ -176,6 +176,12 @@ Register annotations in the module constructor:
 Using from daslang
 ====================
 
+``[log_calls]`` and ``[add_field]`` are registered by
+``15_custom_annotations.cpp``, so this script compiles only inside this
+tutorial's C++ host (module ``tutorial_15_cpp``):
+
+.. das-doc: fragment
+
 .. code-block:: das
 
    options gen2

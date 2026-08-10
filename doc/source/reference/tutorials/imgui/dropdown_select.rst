@@ -10,6 +10,7 @@ rows. ``combo_getter`` serves a procedural list from a lambda;
 ``selectable_label`` lets the caller own the selected-flag (so you
 can wire it through a list_box for single-select):
 
+.. das-doc: signatures
 .. code-block:: das
 
    combo(IDENT, (text = "..", items <- ["A", "B", ...]))                       // dropdown, items array
@@ -32,6 +33,8 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given let FONTS = fixed_array("Serif", "Sans", "Mono", "Cursive")
 
 Already in the baseline boost layer:
 

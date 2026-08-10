@@ -52,8 +52,10 @@ Walkthrough
 Requires
 ========
 
-Baseline boost layer (``imgui/imgui_boost_v2`` re-exports
-``imgui/imgui_containers_builtin``). No extra modules.
+Baseline boost layer, no extra modules — ``main_menu_bar`` / ``menu_bar``
+/ ``menu`` come from ``imgui/imgui_containers_builtin``, and
+``menu_item`` / ``menu_label`` / ``separator`` from
+``imgui/imgui_widgets_builtin``.
 
 main_menu_bar vs menu_bar
 =========================

@@ -30,11 +30,13 @@ The contract
 
 Three typed ``value`` overloads cover the common shapes:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
-    set_pragma(db; name; value : string)    // 'WAL', 'NORMAL', 'utf8'
-    set_pragma(db; name; value : int64)     // 5000, 50000, 4096
-    set_pragma(db; name; value : bool)      // ON / OFF
+    def set_pragma(db : SqlRunner; name : string; value : string) : void  // 'WAL', 'NORMAL', 'utf8'
+    def set_pragma(db : SqlRunner; name : string; value : int64) : void   // 5000, 50000, 4096
+    def set_pragma(db : SqlRunner; name : string; value : bool) : void    // ON / OFF
 
 Each has a ``try_set_pragma`` sibling returning ``SqlError`` for
 non-panic recovery. PRAGMA values can't be bound with ``?`` ---
@@ -45,6 +47,8 @@ user input), so this is fine.
 
 Reading PRAGMAs back uses the typed ``query_scalar`` rail
 (:ref:`tut 13 <tutorial_sql_aggregates>`):
+
+.. das-doc: given var inscope db = open_sqlite(":memory:")
 
 .. code-block:: das
 

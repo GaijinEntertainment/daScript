@@ -10,20 +10,27 @@ Table
 
 Tables are associative containers implemented as a set of key/value pairs:
 
+.. das-doc: given var tab : table<string; int>
+.. das-doc: given struct Bag { tab : table<string; int> }
+.. das-doc: given var bag : Bag
+.. das-doc: given var tab1 : table<string; int>
+.. das-doc: given var tab2 : table<string; int>
 .. code-block:: das
 
-    var tab: table<string,int>
-    unsafe {
-        tab["10"] = 10
-        tab["20"] = 20
-        tab["some"] = 10
-        tab["some"] = 20  // replaces the value for 'some' key
-    }
+    var tab : table<string; int>
+    tab["10"] = 10
+    tab["20"] = 20
+    tab["some"] = 10
+    tab["some"] = 20  // replaces the value for 'some' key
+
+Indexing a table is safe by default — it does not require an ``unsafe`` section (see
+``unsafe_table_lookup`` below for the policy that changes this).
 
 Daslang containers store unboxed values, so table lookups via the index operator (``tab[key]``) can
 cause undefined behavior when the **same table** is referenced more than once in the **same expression**.
 Consider the following example:
 
+.. das-doc: expect error[30250]
 .. code-block:: das
 
     tab["1"] = tab["2"]               // ERROR: potential table lookup collision
@@ -31,32 +38,40 @@ Consider the following example:
 What happens is the table may get resized after either ``tab["1"]`` or ``tab["2"]`` if the key is missing
 (similar to C++ STL hash_map), invalidating the reference returned by the other lookup.
 
-The compiler detects this and reports a ``table_lookup_collision`` lint error. The check catches any
-expression where the same table appears in two or more index operations that keep the result as a
-reference (assignments, moves, clones). Value lookups (where the result is immediately copied out)
-are safe and not flagged.
+The compiler detects this and reports ``error[30250]: potential table lookup collision``. The check
+catches any expression where the same table appears in two or more index operations that keep the
+result as a reference (assignments, moves, clones). Value lookups (where the result is immediately
+copied out) are safe and not flagged. Setting ``CodeOfPolicies::temp_table_lint_warning`` downgrades
+the error to a compiler-log warning.
 
 Other dangerous patterns include:
 
+.. das-doc: expect error[30250]
 .. code-block:: das
 
-    tab[1] := tab[2]                  // ERROR: clone between two lookups
-    tab[1] <- tab[2]                  // ERROR: move between two lookups
-    foo.tab[1] = foo.tab[2]          // ERROR: same table via field access
+    tab["1"] := tab["2"]              // ERROR: clone between two lookups
+    tab["1"] <- tab["2"]              // ERROR: move between two lookups
+    bag.tab["1"] = bag.tab["2"]       // ERROR: same table via field access
 
 A single ``tab[key]`` in an expression is always safe. Multiple lookups of **different** tables in the
 same expression are also safe:
 
 .. code-block:: das
 
-    tab1[1] = tab2[2]                 // OK: different tables
+    tab1["1"] = tab2["2"]             // OK: different tables
 
 It is possible to make **all** table lookups unsafe (requiring an ``unsafe`` block) via ``CodeOfPolicies``
 or the following option:
 
+.. das-doc: alt
 .. code-block:: das
 
     options unsafe_table_lookup        // makes every tab[key] require unsafe
+
+    var scores : table<string; int>
+    unsafe {
+        scores["one"] = 1              // now requires unsafe
+    }
 
 Safe navigation of the table is safe, since it does not create missing keys:
 
@@ -114,14 +129,22 @@ Tables cannot be assigned, only cloned or moved.
 
 .. code-block:: das
 
-    def clone_table(var a, b: table<string, int>) {
+    def clone_table(var a, b : table<string; int>) {
         a := b      // a is now a deep copy of b
         clone(a, b) // same as above
-        a = b       // error
     }
 
-    def move_table(var a, b: table<string, int>) {
+    def move_table(var a, b : table<string; int>) {
         a <- b  // a now points to the same data as b, and b is empty
+    }
+
+Plain assignment is rejected:
+
+.. das-doc: expect error[30950]
+.. code-block:: das
+
+    def assign_table(var a, b : table<string; int>) {
+        a = b       // error[30950]: this type can't be copied
     }
 
 A table literal can also be move-assigned to an existing variable:
@@ -151,14 +174,14 @@ This is syntax sugar for:
 
 .. code-block:: das
 
-    let tab : table<string,int> <- to_table_move(fixed_array<tuple<string,int>>(("one",1),("two",2)))
+    let tab : table<string; int> <- to_table_move(fixed_array<tuple<string; int>>(("one",1),("two",2)))
 
 Alternative syntax is:
 
 .. code-block:: das
 
     let tab <- table("one"=>1, "two"=>2)
-    let tab <- table<string,int>("one"=>1, "two"=>2)
+    let tab <- table<string; int>("one"=>1, "two"=>2)
 
 A table that holds no associative data can also be declared:
 

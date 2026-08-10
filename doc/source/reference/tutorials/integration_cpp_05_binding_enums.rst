@@ -129,8 +129,10 @@ the enum lives in a deeply nested namespace), you can construct an
    pEnum->addIEx("Error",   "Severity::Error",    3, LineInfo());
    addEnumeration(pEnum);
 
-You still need ``DAS_BASE_BIND_ENUM`` (or at least ``DAS_BIND_ENUM_CAST``)
-for the ``typeFactory<>`` so that ``addExtern`` can match the type.
+You still need ``DAS_BASE_BIND_ENUM`` (or the factory-only
+``DAS_BASE_BIND_ENUM_GEN``) for the ``typeFactory<>`` so that ``addExtern``
+can match the type.  ``DAS_BIND_ENUM_CAST`` is not a substitute — it only
+defines the ``cast<>`` specialization, not the factory.
 
 
 Binding functions that use enums
@@ -159,7 +161,11 @@ and return values automatically — no special treatment is required:
 Using bound enums in daslang
 ==============================
 
-Enum values are accessed with dot syntax — ``EnumName.Value``:
+Enum values are accessed with dot syntax — ``EnumName.Value``.  ``Direction``,
+``Severity`` and the helper functions come from the C++ module, so this script
+only compiles inside the tutorial host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -181,6 +187,7 @@ Enum values are accessed with dot syntax — ``EnumName.Value``:
 
        // Boolean result from enum logic
        print("Warning is severe? {is_severe(Severity.Warning)}\n")
+   }
 
 
 Name collision warning

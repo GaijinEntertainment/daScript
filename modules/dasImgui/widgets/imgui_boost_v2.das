@@ -669,7 +669,7 @@ class WidgetCallMacro : AstCallMacro {
                                   var indexExpr : ExpressionPtr) : ExpressionPtr {
         let tableVar = find_variable(mod, bareName)
         if (tableVar == null) {
-            let msg = "{kind_name}({bareName}[k]): table global '{bareName}' is not declared at module scope. Declare it as:  variable private {bareName} : table<int; {state_type_name}>  (or table<string; ...> for string keys)."
+            let msg = "{kind_name}({bareName}[k]): table global '{bareName}' is not declared at module scope. Declare it as:  var private {bareName} : table<int; {state_type_name}>  (or table<string; ...> for string keys)."
             macro_error(prog, expr.at, msg)
             return <- default<ExpressionPtr>
         }

@@ -48,6 +48,7 @@ literal braces in grammar strings must be escaped with a backslash:
 The Grammar (Simplified)
 ========================
 
+.. das-doc: fragment
 .. code-block:: das
 
    def parse_json(input : string;
@@ -102,6 +103,7 @@ Tuple Return Types
 
 Key-value pairs use ``tuple<string; JsonValue?>`` as the return type:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var mapping : tuple<string; JsonValue?>
@@ -117,6 +119,8 @@ Verification
 The tutorial verifies its output matches ``daslib/json``'s built-in
 parser:
 
+.. das-doc: given def parse_json(input : string; blk : block<(var val : JsonValue?# implicit; err : array<ParsingError>) : void>) {}
+.. das-doc: given let test_input = "[1, \"hello\", true, null]"
 .. code-block:: das
 
    var discard_error : string

@@ -28,28 +28,28 @@ Example:
 
     require math
 
-        [export]
-        def main() {
-            print("sin(PI/2) = {sin(PI / 2.0)}\n")
-            print("cos(0)    = {cos(0.0)}\n")
-            print("sqrt(16)  = {sqrt(16.0)}\n")
-            print("abs(-5)   = {abs(-5)}\n")
-            print("clamp(15, 0, 10) = {clamp(15, 0, 10)}\n")
-            print("min(3, 7) = {min(3, 7)}\n")
-            print("max(3, 7) = {max(3, 7)}\n")
-            print("tanh(1) = {tanh(1.0)}\n")
-            print("log10(1000) = {log10(1000.0)}\n")
-            let v = float3(1, 0, 0)
-            print("length = {length(v)}\n")
-        }
-        // output:
-        // sin(PI/2) = 1
-        // cos(0)    = 1
-        // sqrt(16)  = 4
-        // abs(-5)   = 5
-        // clamp(15, 0, 10) = 10
-        // min(3, 7) = 3
-        // max(3, 7) = 7
-        // tanh(1) = 0.7615942
-        // log10(1000) = 3
-        // length = 1
+    [export]
+    def main() {
+        print("sin(PI/2) = {sin(PI / 2.0)}\n")
+        print("cos(0)    = {cos(0.0)}\n")
+        print("sqrt(16)  = {sqrt(16.0)}\n")
+        print("abs(-5)   = {abs(-5)}\n")
+        print("clamp(15, 0, 10) = {clamp(15, 0, 10)}\n")
+        print("min(3, 7) = {min(3, 7)}\n")
+        print("max(3, 7) = {max(3, 7)}\n")
+        print("tanh(1) = {tanh(1.0)}\n")
+        print("log10(1000) = {log10(1000.0)}\n")
+        let v = float3(1, 0, 0)
+        print("length = {length(v)}\n")
+    }
+    // output:
+    // sin(PI/2) = 1
+    // cos(0)    = 1
+    // sqrt(16)  = 4
+    // abs(-5)   = 5
+    // clamp(15, 0, 10) = 10
+    // min(3, 7) = 3
+    // max(3, 7) = 7
+    // tanh(1) = 0.7615942
+    // log10(1000) = 3
+    // length = 1

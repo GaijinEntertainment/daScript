@@ -57,6 +57,9 @@ Captured-variable equality
 The simplest pattern --- a free variable on one side, a column ref on
 the other:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let target = 3

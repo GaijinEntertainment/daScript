@@ -39,9 +39,10 @@ Walkthrough
 Requires
 ========
 
-``with_log`` is in ``imgui/imgui_scope_builtin`` (re-exported by
-``imgui/imgui_boost_v2``). ``GetClipboardText`` and ``LogRenderedText`` are in
-the carve-out of raw calls the lint allows.
+``with_log`` is in ``imgui/imgui_scope_builtin`` — require it explicitly,
+the way the companion does; the baseline boost layer does not pull it in.
+``GetClipboardText`` and ``LogRenderedText`` are in the carve-out of raw
+calls the lint allows.
 
 Behaviour
 =========

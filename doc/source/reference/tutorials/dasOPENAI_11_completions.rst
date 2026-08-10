@@ -21,6 +21,7 @@ The completions() Call
 On success, ``response.choices`` holds the generated text and ``finish_reason``,
 and ``response.usage`` the token accounting:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    require openai/openai_completions

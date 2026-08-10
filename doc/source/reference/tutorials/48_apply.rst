@@ -121,7 +121,7 @@ Tuples
     // _0 = 42
     // _1 = hello
 
-    let point : tuple<x : float; y : float> = (1.0, 2.0)
+    let point = (x = 1.0, y = 2.0)
     apply(point) $(name, field) {
         print("  {name} = {field}\n")
     }
@@ -205,6 +205,9 @@ for each field.  ``RttiValue`` is a variant with alternatives
 ``tBool``, ``tInt``, ``tFloat``, ``tString``, etc.
 
 .. code-block:: das
+
+    let record = DbRecord(name = "Alice", email = "alice@example.com",
+                          id = 42, age = 30)
 
     apply(record) $(name : string; field; annotations) {
         var column_name = name

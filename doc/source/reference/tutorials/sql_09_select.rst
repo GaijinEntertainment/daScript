@@ -31,6 +31,9 @@ No ``_select`` --- the macro emits ``SELECT`` of every column declared
 in the ``[sql_table]`` struct, in declaration order, and materializes
 each row as the source struct:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let cars <- _sql(db |> select_from(type<Car>))
@@ -68,10 +71,9 @@ name no longer matters at the use site:
         to_log(LOG_INFO, "  {p.Name} (price={p.Price})\n")
     }
 
-The recordNames live on the result tuple's ``TypeDecl.argNames``;
-``build_row_builder`` constructs that ``recordType`` explicitly because
-the ``ExprMakeTuple``'s own recordNames vector isn't bound to daslang
-yet.
+The chosen names live on the result tuple's ``TypeDecl.argNames`` ---
+``build_row_builder`` sets that record type when it builds the row
+reader.
 
 Renaming via named tuple
 ========================
@@ -84,7 +86,7 @@ match the domain language better than the SQL column names do:
 
     let renamed <- _sql(db |> select_from(type<Car>)
                           |> _select((Identifier=_.Id, Label=_.Name)))
-    // emits:  SELECT "Id", "Name" FROM "Cars"
+    // emits:  SELECT "Id" AS "Identifier", "Name" AS "Label" FROM "Cars"
     // result: array<tuple<Identifier:int;Label:string>>
 
     for (r in renamed) {
@@ -97,14 +99,16 @@ Computed columns
 A named-tuple value can be any computed expression over the row's
 columns, not just a bare column reference. It is rendered into the
 ``SELECT`` list by the same translator that powers ``_where``
-predicates, so anything legal in a predicate works as a column. Result
-fields map by position, so no SQL alias is emitted:
+predicates, so anything legal in a predicate works as a column. The
+macro adds an ``AS "<name>"`` alias whenever the chosen name differs
+from the source column name, and a computed column always gets one.
+The row reader still maps result fields by position:
 
 .. code-block:: das
 
     let bonuses <- _sql(db |> select_from(type<Car>)
                           |> _select((Name=_.Name, Bonus=_.Price / 10)))
-    // emits:  SELECT "Name", ("Price") / (?) FROM "Cars"
+    // emits:  SELECT "Name", ("Price") / (?) AS "Bonus" FROM "Cars"
     // result: array<tuple<Name:string;Bonus:int>>
 
 A computed column composes with a computed ``_where`` --- the predicate

@@ -25,6 +25,11 @@ data is a row-major array of ``rows*cols`` floats. ``idct(dct(x))`` scales by
 .. code-block:: das
 
    var plan = make_dct_plan_2d(8, 8)
+
+   var blk : array<float>
+   blk |> resize(8 * 8)         // one 8x8 block, row-major
+   var coeff, back : array<float>
+
    dct(blk, coeff, plan)        // forward
    idct(coeff, back, plan)      // inverse; back[i] / 256.0f recovers blk[i]
 
@@ -40,7 +45,11 @@ quant table weights each frequency.
 The pipeline
 ============
 
-Forward DCT, quantize against the JPEG luminance table, dequantize, inverse DCT:
+Forward DCT, quantize against the JPEG luminance table, dequantize, inverse DCT
+— the two lines at the heart of the per-coefficient loop (``u``/``v`` are the
+coefficient's row/column frequency, ``i / 8`` and ``i % 8``):
+
+.. das-doc: fragment
 
 .. code-block:: das
 

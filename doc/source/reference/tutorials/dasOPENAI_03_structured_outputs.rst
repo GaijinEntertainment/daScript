@@ -20,6 +20,7 @@ Requesting JSON
 ``json_object_format()`` returns the ``response_format`` value for JSON mode.
 Assign it to the request:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    var req = ChatCompletionRequest(model = "gpt-4o-mini",

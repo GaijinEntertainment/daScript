@@ -22,6 +22,21 @@ covered in :ref:`tutorial_macro_call_macro`.
 
 The macro transforms this into:
 
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given let x = 2
+.. das-doc: given let y = 42
+.. das-doc: given let a = 1
+.. das-doc: given let b = 2
+.. das-doc: given var cond : ExpressionPtr
+.. das-doc: given var cond_type : TypeDeclPtr
+.. das-doc: given var call_block : ExpressionPtr
+.. das-doc: given var list : array<ExpressionPtr>
+.. das-doc: given var blk : ExprBlock?
+.. das-doc: given var tupl : ExprMakeTuple?
+.. das-doc: given var is_default = false
+.. das-doc: given var any_default = false
+.. das-doc: given let arg_name = "__when_arg__"
 .. code-block:: das
 
    let result = invoke($(arg : int const) {
@@ -77,6 +92,7 @@ fully error-checked until after the macro transforms them.
 
 ``canVisitArgument`` lets you decide per-argument:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    def override canVisitArgument(expr : ExprCallMacro?;
@@ -100,6 +116,7 @@ Deferring return-type inference
 the enclosing function can be finalized while this macro call is still
 unexpanded:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    def override canFoldReturnResult(
@@ -118,17 +135,18 @@ Building the statement list
 The core of the macro iterates over the block's statements.  Each statement
 is an ``ExprMakeTuple`` (the ``=>`` operator creates tuples):
 
+.. das-doc: fragment
 .. code-block:: das
 
    for (stmt, idx in blk.list, count()) {
        let tupl = stmt as ExprMakeTuple
        assume cond_value = tupl.values[0]
-       let is_default = (cond_value is ExprVar)
-                      && (cond_value as ExprVar).name == "_"
+       let is_default = (cond_value is ExprVar) && (cond_value as ExprVar).name == "_"
 
 For each case, we build either a conditional return or an unconditional
 return using ``qmacro_block``:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    if (is_default) {
@@ -155,6 +173,7 @@ Assembling the block
 After building the statement list, we need a typed block argument.
 ``clone_type`` copies the condition's inferred type, and we adjust flags:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    var cond_type = clone_type(cond._type)
@@ -163,12 +182,11 @@ After building the statement list, we need a typed block argument.
 
 Then we assemble the block and mark its argument as shadowable:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
-   var call_block = qmacro(
-       $($i(arg_name) : $t(cond_type)){ $b(list); })
-   ((call_block as ExprMakeBlock)._block as ExprBlock)
-       .arguments[0].flags.can_shadow = true
+   var call_block = qmacro($($i(arg_name) : $t(cond_type)){ $b(list); })
+   ((call_block as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
 
 * **``$t(type)``** — injects a ``TypeDecl?`` into the reified AST
 * **``$b(list)``** — injects an ``array<ExpressionPtr>`` as the block body
@@ -177,6 +195,7 @@ Then we assemble the block and mark its argument as shadowable:
 
 The final result is an ``invoke`` call:
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    return qmacro(invoke($e(call_block), $e(cond)))
@@ -190,6 +209,7 @@ return on some code paths — the compiler would reject it.  The macro
 solves this by automatically generating a default that returns the type's
 default value (``""`` for strings, ``0`` for ints, etc.):
 
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    if (!any_default) {

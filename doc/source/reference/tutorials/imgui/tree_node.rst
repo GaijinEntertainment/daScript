@@ -8,6 +8,7 @@ Tree node
 ``TreeNodeEx``: branch headers that fold-and-expand with an auto-paired
 ``TreePop``. The wrapper's signature:
 
+.. das-doc: signatures
 .. code-block:: das
 
    tree_node(IDENT, (text = "...",
@@ -118,9 +119,10 @@ The third arg's bitfield. Most useful:
 * ``OpenOnArrow`` — only the chevron click toggles; clicking the label
   itself doesn't expand. Pair with a Selectable-row pattern.
 * ``OpenOnDoubleClick`` — single click selects, double click toggles.
-* ``Leaf`` — render the row without a chevron. The body is required to
-  not exist (or be empty); use ``tree_node_ex`` (the [widget] leaf form)
-  for nodes that should be selectable rows without children. See
+* ``Leaf`` — render the row without a chevron; ImGui reports it as
+  always-open, so a container body would run every frame. A leaf has no
+  children, so leave the body empty — or use ``tree_node_ex`` (the
+  [widget] leaf form) for nodes that should be selectable rows. See
   ``modules/dasImgui/examples/features/tree_node_ex.das``.
 * ``Bullet`` — bullet point instead of chevron. Pair with ``Leaf``.
 * ``Framed`` — solid background under the header strip.

@@ -1153,6 +1153,11 @@ namespace das {
             if ( efun->policyBased || efun->invoke || efun->captureString ) return;
             if ( efun->mayQueueTempString ) return;     // the callee's own body could flush the parked temp while still reading it
             if ( !efun->builtIn && !efun->knownSideEffects ) return;    // uncomputed das function - its flags cannot be trusted
+            // a string-returning callee that is not itself always-fresh may PASSTHROUGH an
+            // argument into its result (trim/rtrim/replace return the input, trim even an
+            // interior pointer into it) - a queued temp laundered through the return outlives
+            // the call, so no argument of such a call may become a queue site
+            if ( expr->type && expr->type->isString() && !efun->tempStringResult ) return;
             for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
                 auto & arg = expr->arguments[ai];
                 bool eligible = arg->rtti_isStringBuilder() || isWrapperCall(arg)
@@ -1196,9 +1201,11 @@ namespace das {
 
     // counts references to one variable inside a statement, and how many are SAFE:
     // a safe reference is a plain read that is the DIRECT argument of a non-capturing,
-    // non-invoke, non-policy call - what a nested call returns is a different value, so
-    // only the immediate consumer of the reference matters. any reference inside a block
-    // literal, and any other shape (return, store, addr, operator operand), stays unsafe
+    // non-invoke, non-policy call whose result cannot alias the argument - a call is only
+    // alias-free when it returns a non-string, or is itself [temp_string_result] (always
+    // fresh); passthrough callees (trim/rtrim/replace) return the input, so a use there
+    // extends the value's live range past the call. any reference inside a block literal,
+    // and any other shape (return, store, addr, operator operand), stays unsafe
     class VarUseClassifier : public Visitor {
     public:
         VarUseClassifier ( Variable * v ) : var(v) {}
@@ -1229,6 +1236,7 @@ namespace das {
             if ( !f || f->captureString || f->invoke || f->policyBased ) return;
             if ( f->mayQueueTempString ) return;    // its body could flush the parked temp mid-read
             if ( !f->builtIn && !f->knownSideEffects ) return;  // uncomputed das function - flags untrusted
+            if ( call->type && call->type->isString() && !f->tempStringResult ) return; // passthrough may alias the arg into the result
             auto barg = peelR2V(arg);
             if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
         }

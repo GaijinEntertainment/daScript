@@ -39,6 +39,10 @@ and an ``array<float>`` of samples.  Each chunk can be any size; the audio
 engine buffers them internally.  Maintain phase continuity between chunks
 to avoid clicks at chunk boundaries:
 
+.. das-doc: given let chunk_duration = 0.1
+.. das-doc: given let chunk_samples = MA_SAMPLE_RATE / 10
+.. das-doc: given let num_chunks = 30
+
 .. code-block:: das
 
     var phase = 0.0
@@ -59,6 +63,8 @@ The tutorial demonstrates streaming with a sine wave that sweeps from
 220 Hz to 880 Hz over 3 seconds.  The frequency is interpolated across
 30 chunks of 100 ms each, and phase is accumulated so the waveform
 remains continuous:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

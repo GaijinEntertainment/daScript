@@ -30,9 +30,20 @@ An instance is just a class that inherits from the template:
 The template
 ============
 
+Templates live in a module that the instances require, so the file opens
+with a ``module`` declaration.  ``require daslib/typemacro_boost public``
+re-exports the annotation, so instance files get it from this one require.
+
 Full source: :download:`template_struct_instance_mod.das <../../../../../tutorials/macros/template_struct_instance_mod.das>`
 
+.. das-doc: file template_struct_instance_mod.das
 .. code-block:: das
+
+    options gen2
+
+    module template_struct_instance_mod shared public
+
+    require daslib/typemacro_boost public
 
     [ |> template_struct_instance]
     class template public TopKeeperT {
@@ -82,6 +93,8 @@ Full source: :download:`20_template_struct_instance.das <../../../../../tutorial
 
 .. code-block:: das
 
+    require template_struct_instance_mod
+
     class FloatTop : TopKeeperT {       // 1. type parameter
         typedef KT = float
     }
@@ -114,7 +127,16 @@ The fourth pattern parameterizes a **free-function call**. The template calls
 a function by name; ``@template_call`` marks that name as rebindable — the
 field name is what the body spells, the init is where the call goes:
 
+.. das-doc: file template_struct_instance_mod.das
 .. code-block:: das
+
+    def public dot_i(a, b : int) : int {
+        return a * b
+    }
+
+    def public dot_i_scaled(a, b : int) : int {
+        return a * b * 100
+    }
 
     [ |> template_struct_instance]
     class template public MixT {
@@ -125,6 +147,10 @@ field name is what the body spells, the init is where the call goes:
             acc += dot_i(a, b)
         }
     }
+
+One instance keeps the default target, the other redirects it:
+
+.. code-block:: das
 
     class MixPlain : MixT {         // dot_i calls stay on the real dot_i
     }
@@ -153,6 +179,7 @@ the whole class for that one field is what templates exist to avoid.
 ``@template_gate`` names a bool ``@template_constant``; the field exists only
 in stamps where that constant is true:
 
+.. das-doc: file template_struct_instance_mod.das
 .. code-block:: das
 
     [ |> template_struct_instance]
@@ -171,6 +198,10 @@ in stamps where that constant is true:
             n++
         }
     }
+
+The two instances differ by that one axis:
+
+.. code-block:: das
 
     class PlainSum : SumT {
     }

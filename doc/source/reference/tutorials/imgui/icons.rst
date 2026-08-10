@@ -107,6 +107,7 @@ exist for custom chrome:
    glyph, grouped by category, with its name.
 
    Regenerate the catalog images after adding a glyph:
-   ``daslang -project_root . utils/make_icon_doc.das``.
+   ``daslang -project_root . modules/dasImgui/utils/make_icon_doc.das``
+   (runs from the repo root, and must run windowed — it drives a real ImGui frame).
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

@@ -81,6 +81,7 @@ not_set()
 ``not_set()`` matches any character **not** in the given set.  It is the
 complement of ``set()``:
 
+.. das-doc: fragment
 .. code-block:: das
 
    not_set('\n', '\r')     // any character except newlines

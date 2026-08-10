@@ -36,8 +36,25 @@ The simplest way to compile daslang at runtime is ``compile``, which
 takes a module name, source text, and ``CodeOfPolicies``.  The callback
 receives ``(ok : bool, program : smart_ptr<Program>, issues : string)``.
 
+``src`` is the child program, held as an ordinary string.  This one exports
+a single function:
+
+.. das-doc: alt
+
+.. code-block:: das
+
+    options gen2
+
+    [export]
+    def hello() {
+        print("  hello from compiled code!\n")
+    }
+
 Always set ``cop.threadlock_context = true`` — this is required for
 ``invoke_in_context`` to work:
+
+.. das-doc: given var src = ""
+.. das-doc: given var context : smart_ptr<Context>
 
 .. code-block:: das
 
@@ -104,6 +121,8 @@ Virtual file system
 You can compile code that does not exist on disk by injecting virtual
 files into the ``FileAccess`` object with ``set_file_source``.  This is
 useful for code generation, REPLs, and eval-like tools:
+
+.. das-doc: given var generated_code = ""
 
 .. code-block:: das
 
@@ -229,13 +248,17 @@ Compilation and simulation can fail.  Always check the ``ok`` / ``sok``
 flags.  Runtime errors in the child context can be caught with
 ``try``/``recover``:
 
+.. das-doc: given var bad_src = ""
+
 .. code-block:: das
 
     // 1) Compilation error
-    compile("bad", bad_src, cop) $(ok, program, issues) {
-        if (!ok) {
-            print("compile error: {issues}\n")
-            return
+    using() $(var cop : CodeOfPolicies) {
+        compile("bad", bad_src, cop) $(ok, program, issues) {
+            if (!ok) {
+                print("compile error: {issues}\n")
+                return
+            }
         }
     }
 

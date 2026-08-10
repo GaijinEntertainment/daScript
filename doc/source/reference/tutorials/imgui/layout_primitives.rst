@@ -57,15 +57,20 @@ silently dropped out of the layout would abort the recording.
 Requires
 ========
 
-Baseline boost layer (``imgui/imgui_boost_v2`` re-exports
-``imgui/imgui_layout_builtin``). No extra modules.
+Baseline boost layer. All four rails live in
+``imgui/imgui_widgets_builtin`` alongside the ordinary widgets — no extra
+modules. (``imgui/imgui_layout_builtin`` is a different rail: the
+``split_h`` / ``split_v`` / ``dock_left`` helpers of
+:ref:`tutorial_layout`.)
 
 When to reach for each
 ======================
 
 ``same_line`` is the workhorse — every multi-column row, every label-then-input
-pattern uses it. Pass an explicit ``offset`` if the next widget needs a
-column-aligned position; default packs against the previous item.
+pattern uses it. Pass an explicit ``offset_from_start_x`` if the next widget
+needs a column-aligned position; the default (``0.0f``) packs against the
+previous item. A second ``spacing`` argument overrides the horizontal gap
+(negative = the style's ``ItemSpacing.x``).
 
 ``spacing`` is a minimal 1-line gap — cheaper to read than ``dummy`` when
 you just want breathing room between sections. Stack three of them if you
@@ -84,8 +89,10 @@ width.
 Snapshot shape
 ==============
 
-Each layout marker registers an entry under its ident with kind
-``"empty_marker"``:
+Each layout marker registers an entry under its ident, with ``kind`` set
+to the rail that fired — ``"same_line"``, ``"spacing"``, ``"new_line"``,
+``"dummy"`` (``EmptyMarkerState`` is the state struct behind all four,
+not the reported kind):
 
 .. code-block:: bash
 
