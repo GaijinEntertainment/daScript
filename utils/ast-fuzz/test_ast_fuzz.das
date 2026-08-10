@@ -50,6 +50,16 @@ def test_ast_verify_clean_on_valid_code(t : T?) {
 }
 
 [test]
+def test_ast_verify_skips_late_extern_stubs(t : T?) {
+    // a dasbind stub body is never inferred (InferTypes::canVisitFunction skips
+    // stub=true), so its unresolved int() must not trip the post-infer verify
+    var out : string
+    let ec = run([BIN, "--ast-verify", "utils/ast-fuzz/selftest/late_extern_stub.das"], out, 60.0)
+    t |> equal(ec, 0)
+    t |> success(find(out, "AST verify") < 0, "reported on a stub body\n{out}")
+}
+
+[test]
 def test_every_visitor_deref_has_a_repair(t : T?) {
     var out : string
     let ec = run([BIN, "utils/ast-fuzz/gen_invariants.das"], out, 180.0)
