@@ -1397,7 +1397,7 @@ namespace das {
         }
         return false;
     }
-    void InferTypes::expandTupleName(const string &name, const LineInfo &varAt) {
+    void InferTypes::expandTupleName(const string &name, const LineInfo &varAt, bool canShadow) {
         // split name which consits of multiple names separated by ` into parts
         vector<string> parts;
         size_t pos = 0;
@@ -1409,6 +1409,52 @@ namespace das {
             } else {
                 parts.push_back(name.substr(pos, npos - pos));
                 pos = npos + 1;
+            }
+        }
+        // a destructured name binds like a `let` declaration - enforce the same shadowing rules
+        if (!canShadow && !program->policies.allow_local_variable_shadowing) {
+            for (size_t i = 0; i != parts.size(); ++i) {
+                for (size_t j = i + 1; j != parts.size(); ++j) {
+                    if (parts[i] == parts[j]) {
+                        error("can't destructure into " + parts[i] + " twice in one pattern", "", "",
+                              varAt, CompilationError::already_declared_local_variable);
+                    }
+                }
+            }
+            for (auto &part : parts) {
+                for (auto &al : assume) {
+                    if (al.expr->alias == part) {
+                        error("can't destructure into " + part + ", name already taken by alias", "", "",
+                              varAt, CompilationError::already_declared_local_variable);
+                    }
+                }
+                if (func) {
+                    for (auto &fna : func->arguments) {
+                        if (fna->name == part) {
+                            error("can't destructure into " + part + ", name is shadowed by function argument " + fna->name + ": " + describeType(fna->type) + " at line " + to_string(fna->at.line), "", "",
+                                  varAt, CompilationError::already_declared_local_variable);
+                        }
+                    }
+                }
+                for (auto &blk : blocks) {
+                    for (auto &bna : blk->arguments) {
+                        if (bna->name == part) {
+                            error("can't destructure into " + part + ", name is shadowed by block argument " + bna->name + ": " + describeType(bna->type) + " at line " + to_string(bna->at.line), "", "",
+                                  varAt, CompilationError::already_declared_local_variable);
+                        }
+                    }
+                }
+                for (auto &lv : local) {
+                    if (lv->name == part) {
+                        error("can't destructure into " + part + ", name is shadowed by local variable " + lv->name + ": " + describeType(lv->type) + " at line " + to_string(lv->at.line), "", "",
+                              varAt, CompilationError::already_declared_local_variable);
+                        break;
+                    }
+                }
+                if (auto eW = hasMatchingWith(part)) {
+                    error("can't destructure into " + part + ", name is shadowed by with expression at line " + to_string(eW->at.line), "", "",
+                          varAt, CompilationError::already_declared_local_variable);
+                }
             }
         }
         int partIndex = 0;

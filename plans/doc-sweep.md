@@ -135,26 +135,31 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
 
 RULED by Boris 2026-08-11 — all follow-up work AFTER the sweep PR:
 
-- 🐞 FIX (bug, no discussion): tuple destructuring bypasses the shadowing check —
+- ✅ FIXED (bbatkin/original-operators): tuple destructuring bypasses the shadowing check —
   `let x = 1; let x = 2` is error[30704], but `let (ok, a) = p1(); let (ok, b) = p2()`
-  compiles and SILENTLY rebinds `ok`. Failing test first; sweep in-tree .das for repeated
-  destructure names to size breakage; several doc pages with repeated `let (ok, err)`
-  narratives will need a coordinated pass.
-- 🐞 FIX (bug, "historical reasons" — double-check then fix): a class whose NAME matches a
-  class in a required module fails its own generated-method resolution —
-  `class MacroMacro : ...` in a module requiring daslib/ast_boost →
-  `error[30810] function not found _::MacroMacro'__finalize` (ambiguous with
-  ast_boost::MacroMacro's). Generated class-method calls should pin to the defining
-  module, not `_::` open resolution (the `_::` convention is for clone/finalize OVERLOAD
-  dispatch, not a class's own generated members). Also unblocks doc excerpts of required
-  modules.
+  compiled and SILENTLY rebound `ok`. Now `expandTupleName` enforces the same shadowing
+  rules as `let` (aliases, locals, function/block arguments, with-scopes, duplicate names
+  in one pattern; respects `can_shadow` and the allow_local_variable_shadowing policy).
+  Test: tests/typer_errors/failed_tuple_destructure_shadowing.das. In-tree fallout: zero
+  (full suite green); doc corpus fallout: zero (doc-verify 402/0 — its renamer already
+  isolates page-level redeclares).
+- ✅ FIXED (bbatkin/original-operators): a class whose NAME matches a class in a required
+  module failed its own generated-method resolution (`error[30810] function not found
+  _::X'__finalize`, ambiguous with the required module's twin). makeClassFinalize now pins
+  the generated finalizer address to the defining module (`__::`). NAMED RESIDUAL: template
+  classes stay on open `_::` — their stamped instances infer in the consumer module while
+  the stamped finalizer may live elsewhere, so a strict pin can't see it
+  (tests/typemacro/test_template_structure_class caught this); a TEMPLATE class name
+  colliding with a required module's class keeps the old ambiguity error. Test:
+  tests/language/class_name_collision.das.
 - ✅ AS-DESIGNED (not a hole): init-move from a smart-pointer value (`var b <- f(p)`)
   needing no unsafe while the statement form fires 31021. Rationale (Boris): the
   statement-form unsafe exists because move-ASSIGN overwrites whatever live smart pointer
   `b` held; an init has nothing to overwrite. Only 3-4 residual smart_ptr classes remain.
-- 🔍 INVESTIGATE: `..` field-bypass surface syntax must STAY writable (needed in generic
-  code, not only macro-built AST). Docs now teach the reachable `sp. .x` spelling; explore
-  whether the lexer/grammar can be made to parse `sp..x` directly (DOTDOT currently wins).
+- ✅ RESOLVED (bbatkin/original-operators): `sp..x` stays the interval (Boris: the more
+  elegant use). Instead the `!` original-operator family landed — `a!.x` is the primary
+  bypass spelling (plus `!?.` `![` `!?[` `!??` `!is` `!as` `!?as`, closing the variant/
+  coalescing promotion-shadow hole); `sp. .x` remains valid.
 - Re-confirmed open #3678 tail: `let s = match (...)` still yields the misleading
   `error[30231]` instead of the return-match hint.
 - Historical note: tables.rst TAUGHT `unsafe { tab[k] = v }` — the likely origin of the
@@ -264,4 +269,6 @@ RULED by Boris 2026-08-11 — all follow-up work AFTER the sweep PR:
 - (2026-08-10) Confirmed doc bugs pre-scan: 53_clargs.rst (whole-page parse_args drift +
   invalid enum one-liner), classes.rst:275 (gen1), embedding/cpp_api.rst:188 (born-wrong
   ManagedVectorAnnotation<int32_t> + plain addAnnotation; correct:
-  addVectorAnnotation<vector<int32_t>>(this, lib, "IntVector")).
+  addVectorAnnotation<vector<int32_t>>(this, lib, "IntVector")). The first two fixed in
+  the sweep PR; the cpp_api.rst one is a `cpp` block (outside doc-verify's das gate) and
+  slipped the fan-out — ✅ FIXED on bbatkin/original-operators (user report honored).

@@ -2229,7 +2229,11 @@ namespace das {
     FunctionPtr makeClassFinalize ( Structure * baseClass ) {
         // add __finalize field
         auto fname = baseClass->name + "'__finalize";
-        ExpressionPtr finit = new ExprAddr(baseClass->at, "_::" + fname);
+        // the generated finalizer lives in the class's own module - pin the lookup there
+        // ("__::"), so a same-named class in a required module can't make it ambiguous.
+        // template classes stay on open "_::": their stamped instances infer in the consumer
+        // module while the stamped finalizer may live elsewhere, so a strict pin can't see it
+        ExpressionPtr finit = new ExprAddr(baseClass->at, (baseClass->isTemplate ? "_::" : "__::") + fname);
         if ( baseClass->parent ) {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
             fd->init = new ExprCast(baseClass->at, finit, new TypeDecl(Type::autoinfer));

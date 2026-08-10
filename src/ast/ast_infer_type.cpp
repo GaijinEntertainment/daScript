@@ -5264,7 +5264,7 @@ namespace das {
                     error("for loop iterator variable " + pVar->name + " is not a tuple", "", "",
                           expr->at, CompilationError::invalid_for_iterator_tuple);
                 } else {
-                    expandTupleName(pVar->name, pVar->at);
+                    expandTupleName(pVar->name, pVar->at, pVar->can_shadow);
                 }
             }
             ++idx;
@@ -5748,7 +5748,7 @@ namespace das {
                     error("expansion of " + var->name + " should be tuple", "", "",
                           var->at, CompilationError::invalid_local_tuple_expansion);
                 }
-                expandTupleName(var->name, var->at);
+                expandTupleName(var->name, var->at, var->can_shadow);
             }
         }
         return Visitor::visit(expr);

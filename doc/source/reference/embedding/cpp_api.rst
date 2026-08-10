@@ -180,13 +180,19 @@ Use case: passing handles through daslang without exposing internals.
 ``ManagedVectorAnnotation``
 ---------------------------
 
-Exposes ``std::vector<T>`` with automatic ``push``, ``pop``, ``clear``,
-``resize``, ``length``, and iteration support:
+Exposes ``std::vector<T>`` with ``push``, ``pop``, ``clear``, ``resize``,
+``erase``, ``length``, indexing, and iteration support.  Register it with
+``addVectorAnnotation`` — the template parameter is the *vector* type, not the
+element type:
 
 .. code-block:: cpp
 
-   addAnnotation(new ManagedVectorAnnotation<int32_t>(
-       "IntVector", lib));
+   addVectorAnnotation<vector<int32_t>>(this, lib, "IntVector");
+
+Plain ``addAnnotation(new ManagedVectorAnnotation<...>(...))`` is not enough:
+it registers the type but none of the container functions.
+``addVectorAnnotation`` registers the annotation *and* the ``push``/``pop``/
+``resize``/``each`` function set for the element type.
 
 
 ``ManagedValueAnnotation``

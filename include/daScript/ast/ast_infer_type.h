@@ -561,7 +561,7 @@ namespace das {
         bool canRelaxAssign(Expression *init) const;
         virtual ExpressionPtr visitLetInit(ExprLet *expr, const VariablePtr &var, Expression *init) override;
 
-        void expandTupleName(const string &name, const LineInfo &varAt);
+        void expandTupleName(const string &name, const LineInfo &varAt, bool canShadow = false);
 
         virtual ExpressionPtr visit(ExprLet *expr) override;
         // ExprCallMacro
