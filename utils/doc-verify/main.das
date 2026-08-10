@@ -695,6 +695,35 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
     seg.stmts |> clear()
 }
 
+// true when the marker fully consumed the block (fresh falls through — it needs segment state)
+def handle_marker(blk : RstBlock; var em : EmittedPage; hoists : array<string>; givens : array<string>; out_base : string; pages_dir : string) : bool {
+    if (blk.marker == "skip" || blk.marker == "signatures" || blk.marker == "fragment") {
+        em.skipped++
+        if (blk.marker == "fragment") {
+            em.fragments++
+        }
+        return true
+    }
+    if (blk.marker == "expect") {
+        em.expects |> push_clone(blk)
+        return true
+    }
+    if (blk.marker == "alt") {
+        em.checked++
+        emit_alt_block(blk, hoists, givens, out_base, em.files)
+        return true
+    }
+    if (blk.marker == "file") {
+        // multi-file literate page: the block IS a sibling module ("put this in
+        // helpers.das") — write it next to the synthetic page so the page's own
+        // bare `require helpers` resolves same-dir; compiled transitively
+        em.checked++
+        fwrite(path_join(pages_dir, base_name(blk.marker_arg)), join(blk.body, "\n") + "\n")
+        return true
+    }
+    return false
+}
+
 def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     var em = EmittedPage()
     var hoists : array<string>
@@ -711,22 +740,7 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     var seg_no = 0
     let out_base = path_join(path_join(cfg.out, "pages"), stem(page.path) + "_doc")
     for (blk in page.blocks) {
-        if (blk.marker == "skip" || blk.marker == "signatures" || blk.marker == "fragment") {
-            em.skipped++
-            if (blk.marker == "fragment") {
-                em.fragments++
-            }
-            continue
-        }
-        if (blk.marker == "expect") {
-            em.expects |> push_clone(blk)
-            continue
-        }
-        if (blk.marker == "alt") {
-            em.checked++
-            emit_alt_block(blk, hoists, page.givens, out_base, em.files)
-            continue
-        }
+        continue if (handle_marker(blk, em, hoists, page.givens, out_base, path_join(cfg.out, "pages")))
         if (blk.marker == "fresh") {
             let fname = seg_no == 0 ? out_base + ".das" : "{out_base}__{seg_no + 1}.das"
             flush_segment(seg, hoists, page.givens, fname, em.files)
