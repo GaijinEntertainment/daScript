@@ -44,6 +44,8 @@ trigger that failed to open or close the popup would abort the recording.
 Requires
 ========
 
+.. das-doc: given var in_region : bool = false
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_containers_builtin`` — ``popup_window``, ``open_popup``,

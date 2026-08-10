@@ -33,6 +33,9 @@ moved nothing aborts the recording at teardown.
 Requires
 ========
 
+.. das-doc: given require imgui/imgui_scope_builtin
+.. das-doc: given let LIPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+
 Same backend + boost layer as :ref:`tutorial_widgets_tour`, with two extra
 modules pulled in:
 
@@ -64,13 +67,18 @@ The panel composes three helpers, nested:
 
 .. code-block:: das
 
-   window(LAYOUT_WIN, (text = "IDE layout", ...)) {
+   window(LAYOUT_WIN, (text = "IDE layout", closable = false,
+                       flags = ImGuiWindowFlags.None)) {
        dock_left(SIDEBAR, (init = 200.0f, bounds = (80.0f, 320.0f))) {
-           // sidebar contents
+           text("Sidebar")
        }
        split_v(SPLIT_VERT, (init = 0.65f, bounds = (0.1f, 0.9f)),
-           ${ split_h(SPLIT_MAIN, ...) { ... } },
-           ${ /* bottom pane */ })
+               ${
+                   split_h(SPLIT_MAIN, (init = 0.4f, bounds = (0.1f, 0.9f)),
+                           ${ text("Files") },
+                           ${ text("Editor") })
+               },
+               ${ text("Output") })
    }
 
 ``dock_left`` carves a fixed-width column off the left edge. Its
@@ -127,10 +135,10 @@ no state — they read like inline scopes:
 
    // Indent / Unindent — nest content under a heading.
    with_indent(0.0f) {       // 0.0f defers to style IndentSpacing
-       Text("Bullet child")
+       text("Bullet child")
    }
    with_indent(40.0f) {      // explicit pixel offset
-       Text("Hard-indented")
+       text("Hard-indented")
    }
 
    // PushItemWidth / PopItemWidth — scope a widget-width override.
@@ -142,8 +150,12 @@ no state — they read like inline scopes:
    }
 
    // PushTextWrapPos / PopTextWrapPos — scope where long text wraps.
-   with_text_wrap_pos(0.0f) { TextUnformatted(LIPSUM) }   // window right edge
-   with_text_wrap_pos(200.0f) { TextUnformatted(LIPSUM) } // wrap at 200 px
+   with_text_wrap_pos(0.0f) {          // window right edge
+       text_unformatted(WRAP_EDGE, (text = LIPSUM))
+   }
+   with_text_wrap_pos(200.0f) {        // wrap at 200 px
+       text_unformatted(WRAP_200, (text = LIPSUM))
+   }
 
 Feature demos: ``modules/dasImgui/examples/features/with_indent.das``,
 ``modules/dasImgui/examples/features/with_item_width.das``,

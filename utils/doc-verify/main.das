@@ -405,19 +405,34 @@ def replace_ident(line : string; base : string; alias_name : string) : string {
     var out = ""
     let blen = length(base)
     peek_data(line) $(arr) {
-        // a match inside a string literal is text, not code — "\n" must not become
-        // "\n__2" when `n` aliases; interpolated refs then bind the original name,
-        // which still exists, so the page keeps compiling either way
+        // string-literal TEXT is not code — "\n" must not become "\n__2" when `n`
+        // aliases — but an unescaped {…} interpolation region inside a string IS
+        // code and must rename with the rest of the line
         var in_str : array<bool>
         in_str |> resize(length(arr))
         var q = false
+        var depth = 0
         for (i in range(length(arr))) {
             let c = int(arr[i])
-            if (c == '"' && (i == 0 || int(arr[i - 1]) != '\\')) {
-                q = !q
+            let esc = i > 0 && int(arr[i - 1]) == '\\'
+            if (!q) {
+                if (c == '"' && !esc) {
+                    q = true
+                    in_str[i] = true
+                } else {
+                    in_str[i] = false
+                }
+            } elif (depth == 0 && c == '"' && !esc) {
+                q = false
+                in_str[i] = true
+            } elif (c == '{' && !esc) {
+                depth++
+                in_str[i] = true
+            } elif (c == '}' && !esc && depth > 0) {
+                depth--
                 in_str[i] = true
             } else {
-                in_str[i] = q
+                in_str[i] = depth == 0
             }
         }
         out = build_string() $(var writer) {
@@ -688,15 +703,18 @@ def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : strin
 }
 
 def append_stmts(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : string) {
+    // statement lines declare page-wide regardless of indentation: daslang bans
+    // shadowing even in nested scopes, so an indented re-declaration must rename,
+    // and the alias persisting page-wide is the model the corpus is authored
+    // against (a page that needs a name back after a nested binding uses `alt`
+    // or renames the local — see the plan ledger)
     seg.stmts |> push("    " + tag)
     for (l in chunk.lines) {
         if (trim(l) == ELIDE) {
             seg.stmts |> push(slice(l, 0, leading_spaces(l)) + "    pass")
             continue
         }
-        // indented lines sit inside nested scopes (lambda/if bodies) — their locals
-        // must not claim names page-wide; only top-level narrative statements flow
-        let r = rename_line_ex(ren, l, leading_spaces(l) == 0)
+        let r = rename_line_ex(ren, l, true)
         seg.stmts |> push(empty(trim(r)) ? "" : "    " + r)
     }
     seg.stmts |> push("")

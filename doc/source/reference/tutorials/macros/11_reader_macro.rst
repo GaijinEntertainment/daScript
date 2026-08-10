@@ -83,13 +83,17 @@ The module file
 ``reader_macro_mod.das`` defines three reader macros — the two below,
 plus the inline ``%sum!`` variant covered at the end of this page.
 
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/strings_boost
+.. das-doc: given require strings
+
 The ``accept()`` idiom
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Both macros share the same standard ``accept()`` implementation — the
 most common pattern in the standard library:
 
-.. das-doc: fragment
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override accept(prog : ProgramPtr; mod : Module?;
@@ -118,7 +122,7 @@ CsvReader — visit pattern
 value, and uses ``convert_to_expression()`` from ``daslib/ast_boost``
 to embed the resulting string array in the AST:
 
-.. das-doc: fragment
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override visit(prog : ProgramPtr; mod : Module?;
@@ -145,7 +149,7 @@ BasicReader — suffix pattern
 overrides ``suffix()`` instead of ``visit()``.  The method parses a
 tiny BASIC dialect and returns the equivalent daslang source code:
 
-.. das-doc: fragment
+.. das-doc: member AstReaderMacro
 .. code-block:: das
 
    def override suffix(prog : ProgramPtr; mod : Module?;

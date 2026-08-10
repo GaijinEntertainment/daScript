@@ -136,7 +136,7 @@ enum_value_strings — returning an array
 ``typeinfo enum_value_strings(type<E>)`` returns a fixed-size array of
 enum value names:
 
-.. das-doc: fragment
+.. das-doc: file typeinfo_macro_mod.das
 .. code-block:: das
 
     [typeinfo_macro(name="enum_value_strings")]
@@ -186,7 +186,7 @@ has_non_static_method — returning a bool with subtrait
 has a non-static method with the given name.  The method name is passed
 via the ``subtrait`` parameter:
 
-.. das-doc: fragment
+.. das-doc: file typeinfo_macro_mod.das
 .. code-block:: das
 
     [typeinfo_macro(name="has_non_static_method")]
@@ -265,7 +265,6 @@ reflection is involved.
 Section 2: enum_value_strings
 -----------------------------
 
-.. das-doc: fragment
 .. code-block:: das
 
     enum Color {
@@ -289,7 +288,6 @@ bind the result — fixed-size arrays are value types.
 Section 3: has_non_static_method
 --------------------------------
 
-.. das-doc: fragment
 .. code-block:: das
 
     class Animal {

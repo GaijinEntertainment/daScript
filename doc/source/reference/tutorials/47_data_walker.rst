@@ -32,8 +32,9 @@ Minimal walker — scalar types
 ==============================
 
 A ``DapiDataWalker`` subclass overrides only the callbacks you need.
-All 87 methods default to no-ops, so a minimal walker that prints
-integers, floats, strings, and booleans is very small:
+All 110 methods carry a default — the twelve ``canVisit*`` filters return
+``true``, every other callback does nothing — so a minimal walker that
+prints integers, floats, strings, and booleans is very small:
 
 .. literalinclude:: ../../../../tutorials/language/47_data_walker.das
    :language: das
@@ -41,6 +42,8 @@ integers, floats, strings, and booleans is very small:
 
 To walk a value, create the walker, wrap it with ``make_data_walker``,
 then call ``walk_data`` with a pointer and ``TypeInfo``:
+
+.. das-doc: given class ScalarPrinter : DapiDataWalker {}
 
 .. code-block:: das
 
@@ -135,6 +138,12 @@ with key/value pairs:
     class ContainerPrinter : DapiDataWalker {
         indent : int = 0
 
+        def pad() {
+            for (_ in range(indent)) {
+                print("  ")
+            }
+        }
+
         def override beforeArrayData(ps : void?; stride : uint;
                 count : uint64; ti : TypeInfo) : void {
             self->pad()
@@ -157,9 +166,9 @@ with key/value pairs:
         // ... afterTable, beforeTableKey, afterTableKey, etc.
     }
 
-Note that ``count``, ``index``, and ``pa.size`` are ``uint`` values
-which print as hexadecimal by default — cast to ``int`` for decimal
-output.
+``count``, ``index``, and ``pa.size`` are unsigned (``uint64``), and
+unsigned values print as hexadecimal — cast to ``int64`` (or ``int``,
+when the value is known to be small) for decimal output.
 
 
 Tuples and variants
@@ -174,6 +183,14 @@ alternative.  ``beforeTupleEntry`` receives the element index,
     typedef Result = variant<ok : int; err : string>
 
     class TupleVariantPrinter : DapiDataWalker {
+        indent : int = 0
+
+        def pad() {
+            for (_ in range(indent)) {
+                print("  ")
+            }
+        }
+
         def override beforeTupleEntry(ps : void?; ti : TypeInfo;
                 pv : void?; idx : int; last : bool) : void {
             self->pad()
@@ -247,6 +264,23 @@ for efficiency — no intermediate string concatenation:
         @do_not_delete writer : StringBuilderWriter?
         indent : int = 0
         needComma : array<bool>
+
+        def comma() {
+            if (!empty(needComma) && needComma[length(needComma) - 1]) {
+                *writer |> write(",")
+            }
+        }
+
+        def nl() {
+            *writer |> write("\n")
+            for (_ in range(indent)) {
+                *writer |> write("  ")
+            }
+        }
+
+        def pushComma() {
+            needComma |> push(false)
+        }
 
         // --- structures ---
         def override beforeStructure(ps : void?; si : StructInfo) : void {
