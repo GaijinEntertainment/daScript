@@ -39,8 +39,10 @@ The tuner is the detector, so the human never has to be. For a box with existing
    Release ALWAYS mints (`--quick` is the sole inherit path, for later session iteration).
    The mint refuses a noisy box (probe cv over the gate — quiet it and re-run; nothing was
    written), self-validates (a heavy subset re-races and the winners must reproduce), and runs the
-   e2e confirm for divergent GEMM crowns (every platform; zen4-verified) — set
-   `DASLLAMA_CONFIRM_MODEL=<full path to a q8 gguf>` or such crowns pin the per-ISA fallback.
+   e2e confirm for divergent GEMM crowns (every platform; zen4-verified). The confirm model
+   auto-resolves from the models dir (the preferred carrier, else the largest present q8 gguf;
+   `DASLLAMA_CONFIRM_MODEL=<full path>` overrides) — the fallback pins only on a box with no
+   q8 model at all, which the standard fetch order makes unreachable.
    The previous sidecar snapshots to `.bak`, the DIFF prints, and the mint archives to
    `~/.tune-history/<box>/` (failures too, marked). **Review the DIFF**: uniform time shift =
    box state; scattered past-floor flips = one of the mints was noisy; same-direction twin

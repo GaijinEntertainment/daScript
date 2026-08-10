@@ -324,7 +324,8 @@ struct public HarnessEnv {
     models_dir : string = ""
 
     @clarg_path
-    @clarg_doc = "Model used by the tuner's confirm gate. Must be a FULL path, not a bare filename."
+    @clarg_default_doc = "auto-resolved from the models dir"
+    @clarg_doc = "Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir — the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all."
     confirm_model : string = ""
 
     @clarg_doc = "Override the batched-dispatch chunk count in the 1-core GEMM probe."
@@ -646,6 +647,17 @@ let public g_env_bench = env_config(type<BenchmarkEnv>)
 let public g_env_prof = env_config(type<ProfilingEnv>)
 let public g_env_test = env_config(type<TestEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
+
+//! The ONE models-dir resolution (DASLLAMA_MODELS_DIR, else the primary rig's dir) with the
+//! trailing separator guaranteed — callers concat "{models_dir_resolved()}{file}", and a
+//! slashless override would silently skip every catalog file.
+def public models_dir_resolved() : string {
+    let env = g_env_harness.models_dir
+    if (empty(env)) {
+        return "/Users/borisbatkin/Work/llama.cpp/models/"
+    }
+    return ends_with(env, "/") || ends_with(env, "\\") ? env : "{env}/"
+}
 
 // ===== dynamic-name reads (the ONE sanctioned escape hatch) =====
 // For names known only at runtime: the bench repro-line forwarder, lever env names from data,

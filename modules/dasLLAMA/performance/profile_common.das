@@ -32,13 +32,7 @@ def public prof_log_name() : string {
 
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (the x64/handoff boxes).
 def models_dir() : string {
-    let env = g_env_harness.models_dir
-    if (empty(env)) {
-        return "/Users/borisbatkin/Work/llama.cpp/models/"
-    }
-    // callers concat "{models_dir()}{file}" — guarantee the separator so a slashless override
-    // (DASLLAMA_MODELS_DIR=/models) doesn't silently skip every catalog file
-    return ends_with(env, "/") || ends_with(env, "\\") ? env : "{env}/"
+    return models_dir_resolved()   // ONE resolution, in dasllama_env — the tuner's confirm ladder shares it
 }
 
 // Short box tag baked into the JSON/TSV filenames (profile_llm_<box>.json). Override with DASLLAMA_BOX.
