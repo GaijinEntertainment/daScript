@@ -36,46 +36,8 @@ namespace das {
         return false;
     }
 
-#define VERIFY_GENERATED    0
 #define LOG_GENERATED       0
 
-    struct CheckLineInfoVisitor : Visitor {
-        virtual void preVisitExpression ( Expression * expr ) override {
-            Visitor::preVisitExpression(expr);
-            if ( expr->rtti_isFakeContext() || expr->rtti_isFakeLineInfo() ) return;
-            DAS_ASSERT(expr->at.column && expr->at.line);
-        }
-        virtual void preVisit ( Structure * var ) override {
-            Visitor::preVisit(var);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
-            Visitor::preVisitStructureField(var,decl,last);
-            DAS_ASSERT(decl.at.column && decl.at.line);
-        }
-        virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(expr,var,last);
-            DAS_ASSERT(var->at.column && var->at.line);
-            DAS_ASSERT(expr->atInit.line);
-        }
-        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
-            Visitor::preVisitGlobalLet(var);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisit ( Function * fn ) override {
-            Visitor::preVisit(fn);
-            DAS_ASSERT(fn->at.column && fn->at.line);
-            DAS_ASSERT(fn->atDecl.column && fn->atDecl.line);
-        }
-        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitArgument(fn, var, lastArg);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitBlockArgument(block, var, lastArg);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-    };
 
     // A generated body is written for a source construct - the structure being finalized,
     // the lambda being closed over - so every node in it reports at that construct. The
@@ -91,10 +53,6 @@ namespace das {
         (void)expr;
 #if LOG_GENERATED
         LOG(LogLevel::trace) << "VERIFY:\n" << *expr << "\n";
-#endif
-#if VERIFY_GENERATED
-        CheckLineInfoVisitor vis;
-        expr->visit(vis);
 #endif
     }
 
