@@ -420,7 +420,7 @@ def document_module_ast(_root : string) {
         group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|make_file_access)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),
-        group_by_regex("Expression generation", mod, %regex~(force_generated|get_expression_annotation|make_type_info_structure)%%),
+        group_by_regex("Expression generation", mod, %regex~(force_generated|get_expression_annotation|make_type_info_structure|stamp_missing_at)%%),
         group_by_regex("Adapter generation", mod, %regex~make_.*%%),
         group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader|add_module_option)%%),
         group_by_regex("Adding objects to objects", mod, %regex~add_.*%%),

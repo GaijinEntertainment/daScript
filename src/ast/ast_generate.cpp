@@ -797,6 +797,9 @@ namespace das {
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const safe_var_set & capt, const vector<CaptureEntry> & capture,
                                             const LineInfo & at, const LineInfo & captureAt, Program * thisProgram ) {
+        // captureAt is the explicit capture(...) clause; a lambda or comprehension without
+        // one has no such location, so its captures report at the construct that captures
+        const LineInfo & capAt = captureAt.fileInfo ? captureAt : at;
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
@@ -821,12 +824,12 @@ namespace das {
                 mode = it->mode;
             }
             if ( isCaptureAsRef(cV) || mode==CaptureMode::capture_by_reference ) {
-                auto varV = new ExprVar(captureAt, cV->name);
+                auto varV = new ExprVar(capAt, cV->name);
                 varV->generated = true;     // capture machinery; captureAt is zero-width for implicit captures
-                auto addrV = new ExprRef2Ptr(captureAt, varV);
+                auto addrV = new ExprRef2Ptr(capAt, varV);
                 addrV->generated = true;
                 addrV->alwaysSafe = true;
-                auto mV = new MakeFieldDecl(captureAt, cV->name, addrV, false, false);
+                auto mV = new MakeFieldDecl(capAt, cV->name, addrV, false, false);
                 ms->push_back(mV);
             } else {
                 bool moveS = false;
@@ -837,9 +840,9 @@ namespace das {
                     case CaptureMode::capture_any:          moveS = !cV->type->canCopy(); break;
                     default: ;
                 }
-                auto varV = new ExprVar(captureAt, cV->name);
+                auto varV = new ExprVar(capAt, cV->name);
                 varV->generated = true;     // capture machinery; captureAt is zero-width for implicit captures
-                auto mV = new MakeFieldDecl(captureAt, cV->name, varV, moveS, cloneS);
+                auto mV = new MakeFieldDecl(capAt, cV->name, varV, moveS, cloneS);
                 ms->push_back(mV);
             }
             auto & lexpr = ms->back();

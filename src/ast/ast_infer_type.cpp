@@ -2760,13 +2760,13 @@ namespace das {
                         auto eaddr = static_cast<ExprAddr*>(expr->subexpr);
                         if (!eaddr->func) {
                             reportAstChanged();
-                            return new ExprConstBool(false);
+                            return new ExprConstBool(expr->at, false);
                         } else if (!eaddr->func->builtIn) {
                             error("builtin_function_exists of non-builtin function @@" + describeFunction(eaddr->func), "", "",
                                   expr->at, CompilationError::invalid_typeinfo_function);
                         } else {
                             reportAstChanged();
-                            return new ExprConstBool(true);
+                            return new ExprConstBool(expr->at, true);
                         }
                     } else {
                         error("unsupported mangled name subexpression ", expr->subexpr->__rtti, "",
@@ -2784,7 +2784,7 @@ namespace das {
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
-                        return new ExprConstBool(mod != nullptr);
+                        return new ExprConstBool(expr->at, mod != nullptr);
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);
@@ -2793,13 +2793,13 @@ namespace das {
             } else if (expr->trait == "builtin_annotation_exists") {
                 if (expr->typeexpr->isAlias()) {
                     reportAstChanged();
-                    return new ExprConstBool(false);
+                    return new ExprConstBool(expr->at, false);
                 } else if (!expr->typeexpr->isHandle()) {
                     error("builtin_function_exists requires annotation type", "", "",
                           expr->at, CompilationError::invalid_typeinfo_annotation);
                 } else {
                     reportAstChanged();
-                    return new ExprConstBool(true);
+                    return new ExprConstBool(expr->at, true);
                 }
             } else {
                 auto mtis = program->findTypeInfoMacro(expr->trait);
