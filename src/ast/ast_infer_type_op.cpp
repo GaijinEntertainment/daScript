@@ -356,7 +356,11 @@ namespace das {
                     atGet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
                     auto opRight = new ExprOp2(expr->at, opName, atGet, expr->right);
                     opRight->type = new TypeDecl(*expr->right->type);
-                    if (auto atSet = inferGenericOperator3("[]=", eat->at, eat->subexpr, eat->index, opRight)) {
+                    // the get half already owns subexpr and index; the set half needs its
+                    // own copies, or both operators share one subtree and every later pass
+                    // edits it twice
+                    if (auto atSet = inferGenericOperator3("[]=", eat->at, eat->subexpr->clone(),
+                                                           eat->index->clone(), opRight)) {
                         atSet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
                         removeR2v(atSet);
                         return atSet;
