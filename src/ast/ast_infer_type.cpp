@@ -4616,8 +4616,10 @@ namespace das {
             expr->block = block;
             block->hasReturn = true;
             if (expr->subexpr) {
-                if (!expr->subexpr->type)
+                if (!expr->subexpr->type) {
+                    reportUnresolvedReturnValue(expr);
                     return Visitor::visit(expr);
+                }
                 if (!block->returnType->ref) {
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 } else {
@@ -4658,8 +4660,10 @@ namespace das {
             // infer
             func->hasReturn = true;
             if (expr->subexpr) {
-                if (!expr->subexpr->type)
+                if (!expr->subexpr->type) {
+                    reportUnresolvedReturnValue(expr);
                     return Visitor::visit(expr);
+                }
                 if (!func->result->ref) {
                     if (!expr->moveSemantics) {
                         expr->subexpr = Expression::autoDereference(expr->subexpr);
