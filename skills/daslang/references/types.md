@@ -157,8 +157,12 @@ var named : tuple<i:int; f:float> = (i = 1, f = 2.0)
 named.i = 5                            // named access; named._1 also works
 let pair = "one" => 1                  // '=>' builds a 2-tuple, in any context
 var (x, y, z) = (1, 2.0, "3")          // destructuring declaration
+let (_, _, third) = (1, 2.0, "3")      // `_` discards a position; it can repeat
 for ((p, q) in arr) { ... }            // destructuring iteration
 ```
+
+Each destructured name binds like a `let` declaration — reusing a name that already exists in
+scope (or repeating one within a pattern) is an error; only the `_` discard repeats freely.
 
 Field names are part of the type: `tuple<int;float>` and `tuple<i:int;f:float>` are different
 types and do not assign to each other. A positional literal whose elements are *all* bare

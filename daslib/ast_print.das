@@ -450,7 +450,7 @@ class PrintVisitor : AstVisitor {
 // is
     def override preVisitExprIsType(expr : ExprIs?; typeDecl : TypeDeclPtr) {
         //! Prints the is-type check expression.
-        write(*writer, "{expr.no_promotion ? "!is" : "is"} type<{describe([decl=typeDecl,extra=false,contracts=true])}>");
+        write(*writer, " {expr.no_promotion ? "!is" : "is"} type<{describe([decl=typeDecl,extra=false,contracts=true])}>");
     }
 // op2
     def override preVisitExprOp2(expr : ExprOp2?) {
@@ -822,7 +822,7 @@ class PrintVisitor : AstVisitor {
 // swizzle
     def override visitExprSwizzle(var expr : ExprSwizzle?) : ExpressionPtr {
         //! Prints a vector swizzle access (e.g. .xyz).
-        write(*writer, ".");
+        write(*writer, expr.fieldFlags.no_promotion ? "!." : ".");
         let f2name = fixed_array<string>("x", "y", "z", "w");
         for (fch in expr.fields) {
             let f = int(fch);

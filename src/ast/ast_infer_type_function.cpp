@@ -92,9 +92,14 @@ namespace das {
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
         MatchingFunctions result;
+        // "__::" means THIS module exactly - but foreach on a module name also walks that
+        // module's public dependencies, so without this filter a `require X public` twin
+        // still makes the lookup ambiguous (the generated class-finalizer pin relies on it)
+        const bool strictThisModule = (moduleName == "__");
         auto inWhichModule = getSearchModule(moduleName);
         auto hFuncName = hash64z(funcName.c_str());
         program->library.foreach ([&](Module *mod) -> bool {
+                if ( strictThisModule && mod != inWhichModule ) return true;
                 auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList ) {
                     // Hoist module-level visibility — pFn->module == mod for non-generic fns (set in addFunction).

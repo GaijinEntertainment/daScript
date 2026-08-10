@@ -228,3 +228,83 @@ def beta() {
             (make_struct_field
               name: (identifier)
               value: (identifier))))))))
+
+================================================================================
+Raw (original) operator family
+================================================================================
+
+def probe {
+    let x = g!.a
+    let y = pg!?.a
+    let z = arr![1]
+    let w = arr!?[2]
+    let q = vif !is i
+    let r = vif !as i
+    let s = vif !?as i
+    let t = pq !?? d
+    let m = obj!.method(1)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (field_expression
+            object: (identifier)
+            field: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (safe_field_expression
+            object: (identifier)
+            field: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (bypass_index_expression
+            object: (identifier)
+            index: (integer_literal))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (safe_index_expression
+            object: (identifier)
+            index: (integer_literal))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (is_expression
+            value: (identifier)
+            type: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (as_expression
+            value: (identifier)
+            type: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (as_expression
+            value: (identifier)
+            type: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (null_coalescing_expression
+            value: (identifier)
+            default: (identifier))))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (method_call_expression
+            object: (identifier)
+            method: (identifier)
+            (argument_list
+              (integer_literal))))))))

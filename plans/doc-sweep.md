@@ -138,20 +138,29 @@ RULED by Boris 2026-08-11 — all follow-up work AFTER the sweep PR:
 - ✅ FIXED (bbatkin/original-operators): tuple destructuring bypasses the shadowing check —
   `let x = 1; let x = 2` is error[30704], but `let (ok, a) = p1(); let (ok, b) = p2()`
   compiled and SILENTLY rebound `ok`. Now `expandTupleName` enforces the same shadowing
-  rules as `let` (aliases, locals, function/block arguments, with-scopes, duplicate names
-  in one pattern; respects `can_shadow` and the allow_local_variable_shadowing policy).
-  Test: tests/typer_errors/failed_tuple_destructure_shadowing.das. In-tree fallout: zero
-  (full suite green); doc corpus fallout: zero (doc-verify 402/0 — its renamer already
-  isolates page-level redeclares).
+  rules as `let`: alias collisions (incl. within-pattern repeats) are same-scope
+  REPLACEMENT and check unconditionally, mirroring the siblings; locals/arguments/with
+  gate on `can_shadow` + the allow_local_variable_shadowing policy; the for-loop form
+  reports 30708 like plain iterator shadowing. Boris-ruled `_` is the DISCARD in
+  destructuring: binds nothing, repeats freely (destructuring forces a name per position,
+  unlike plain `let _`, which stays strict). Tests:
+  tests/typer_errors/failed_tuple_destructure_shadowing.das +
+  failed_tuple_destructure_alias_under_shadow_policy.das +
+  tests/language/tuple_destructure_discard.das. In-tree fallout: two tutorials (fixed);
+  doc corpus: doc-verify's renamer now leaves destructure `_` verbatim.
 - ✅ FIXED (bbatkin/original-operators): a class whose NAME matches a class in a required
   module failed its own generated-method resolution (`error[30810] function not found
   _::X'__finalize`, ambiguous with the required module's twin). makeClassFinalize now pins
-  the generated finalizer address to the defining module (`__::`). NAMED RESIDUAL: template
-  classes stay on open `_::` — their stamped instances infer in the consumer module while
-  the stamped finalizer may live elsewhere, so a strict pin can't see it
-  (tests/typemacro/test_template_structure_class caught this); a TEMPLATE class name
-  colliding with a required module's class keeps the old ambiguity error. Test:
-  tests/language/class_name_collision.das.
+  the generated finalizer address to the defining module (`__::`), and findFuncAddr enforces
+  `__::` strictly — module-name-filtered foreach also walks the named module's PUBLIC
+  dependencies, so without the filter a `require X public` twin stayed ambiguous (the
+  /code-review round caught that half; `require dastest/testing_boost public` is the
+  standard test-file shape). NAMED RESIDUAL: template classes stay on open `_::` — their
+  stamped instances infer in the consumer module while the stamped finalizer may live
+  elsewhere, so a strict pin can't see it (tests/typemacro/test_template_structure_class
+  caught this); a TEMPLATE class name colliding with a required module's class keeps the
+  old ambiguity error. Tests: tests/language/class_name_collision.das +
+  class_name_collision_public.das.
 - ✅ AS-DESIGNED (not a hole): init-move from a smart-pointer value (`var b <- f(p)`)
   needing no unsafe while the statement form fires 31021. Rationale (Boris): the
   statement-form unsafe exists because move-ASSIGN overwrites whatever live smart pointer

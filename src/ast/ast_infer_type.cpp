@@ -3910,21 +3910,7 @@ namespace das {
             return Visitor::visit(expr);
         if (!expr->no_promotion) {
             // implement variant macros
-            ExpressionPtr substitute = nullptr;
-            auto modMacro = [&](Module *mod) -> bool {
-                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                    for (const auto &pm : mod->variantMacros) {
-                        if ((substitute = pm->visitAs(program, thisModule, expr))) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            };
-            Module::foreach (modMacro);
-            if (!substitute)
-                program->library.foreach (modMacro, "*");
-            if (substitute) {
+            if (auto substitute = runVariantMacros([&](const auto & pm){ return pm->visitAs(program, thisModule, expr); })) {
                 reportAstChanged();
                 return substitute;
             }
@@ -3959,21 +3945,7 @@ namespace das {
             return Visitor::visit(expr);
         if (!expr->no_promotion) {
             // implement variant macros
-            ExpressionPtr substitute = nullptr;
-            auto modMacro = [&](Module *mod) -> bool {
-                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                    for (const auto &pm : mod->variantMacros) {
-                        if ((substitute = pm->visitSafeAs(program, thisModule, expr))) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            };
-            Module::foreach (modMacro);
-            if (!substitute)
-                program->library.foreach (modMacro, "*");
-            if (substitute) {
+            if (auto substitute = runVariantMacros([&](const auto & pm){ return pm->visitSafeAs(program, thisModule, expr); })) {
                 reportAstChanged();
                 return substitute;
             }
@@ -4024,21 +3996,7 @@ namespace das {
             return Visitor::visit(expr);
         if (!expr->no_promotion) {
             // implement variant macros
-            ExpressionPtr substitute = nullptr;
-            auto modMacro = [&](Module *mod) -> bool {
-                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
-                    for (const auto &pm : mod->variantMacros) {
-                        if ((substitute = pm->visitIs(program, thisModule, expr))) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            };
-            Module::foreach (modMacro);
-            if (!substitute)
-                program->library.foreach (modMacro, "*");
-            if (substitute) {
+            if (auto substitute = runVariantMacros([&](const auto & pm){ return pm->visitIs(program, thisModule, expr); })) {
                 reportAstChanged();
                 return substitute;
             }
@@ -4243,7 +4201,9 @@ namespace das {
         } else {
             if (valT->isVectorType()) {
                 reportAstChanged();
-                return new ExprSwizzle(expr->at, expr->value, expr->name);
+                auto swz = new ExprSwizzle(expr->at, expr->value, expr->name);
+                swz->no_promotion = expr->no_promotion; // v!.xyz must keep printing (and re-parsing) as the raw form
+                return swz;
             } else if (valT->isBitfield()) {
                 expr->value = Expression::autoDereference(expr->value);
                 valT = expr->value->type;
@@ -5264,7 +5224,9 @@ namespace das {
                     error("for loop iterator variable " + pVar->name + " is not a tuple", "", "",
                           expr->at, CompilationError::invalid_for_iterator_tuple);
                 } else {
-                    expandTupleName(pVar->name, pVar->at, pVar->can_shadow);
+                    // the for-loop sibling checks two screens up report iterator shadowing
+                    // as already_declared_variable - keep the destructured form on the same code
+                    expandTupleName(pVar->name, pVar->at, pVar->can_shadow, CompilationError::already_declared_variable);
                 }
             }
             ++idx;

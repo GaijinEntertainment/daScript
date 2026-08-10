@@ -5765,8 +5765,17 @@
             }
           },
           {
-            "type": "STRING",
-            "value": "??"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "??"
+              },
+              {
+                "type": "STRING",
+                "value": "!??"
+              }
+            ]
           },
           {
             "type": "FIELD",
@@ -5852,8 +5861,17 @@
             }
           },
           {
-            "type": "STRING",
-            "value": "is"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "is"
+              },
+              {
+                "type": "STRING",
+                "value": "!is"
+              }
+            ]
           },
           {
             "type": "FIELD",
@@ -5923,6 +5941,14 @@
                 {
                   "type": "STRING",
                   "value": "?as"
+                },
+                {
+                  "type": "STRING",
+                  "value": "!as"
+                },
+                {
+                  "type": "STRING",
+                  "value": "!?as"
                 }
               ]
             }
@@ -6027,49 +6053,88 @@
       "type": "PREC_LEFT",
       "value": 20,
       "content": {
-        "type": "SEQ",
+        "type": "CHOICE",
         "members": [
           {
-            "type": "FIELD",
-            "name": "object",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_expression"
-            }
-          },
-          {
-            "type": "STRING",
-            "value": "."
-          },
-          {
-            "type": "FIELD",
-            "name": "field",
-            "content": {
-              "type": "CHOICE",
-              "members": [
-                {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "FIELD",
+                "name": "object",
+                "content": {
                   "type": "SYMBOL",
-                  "name": "identifier"
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "quote_expression"
-                },
-                {
-                  "type": "SEQ",
+                  "name": "_expression"
+                }
+              },
+              {
+                "type": "STRING",
+                "value": "."
+              },
+              {
+                "type": "FIELD",
+                "name": "field",
+                "content": {
+                  "type": "CHOICE",
                   "members": [
-                    {
-                      "type": "STRING",
-                      "value": "."
-                    },
                     {
                       "type": "SYMBOL",
                       "name": "identifier"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "quote_expression"
+                    },
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "."
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "identifier"
+                        }
+                      ]
                     }
                   ]
                 }
-              ]
-            }
+              }
+            ]
+          },
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "FIELD",
+                "name": "object",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_expression"
+                }
+              },
+              {
+                "type": "STRING",
+                "value": "!."
+              },
+              {
+                "type": "FIELD",
+                "name": "field",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "identifier"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "quote_expression"
+                    }
+                  ]
+                }
+              }
+            ]
           }
         ]
       }
@@ -6107,6 +6172,10 @@
                     "value": "?."
                   }
                 ]
+              },
+              {
+                "type": "STRING",
+                "value": "!?."
               }
             ]
           },
@@ -6169,8 +6238,30 @@
             }
           },
           {
-            "type": "STRING",
-            "value": "?["
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "?["
+              },
+              {
+                "type": "STRING",
+                "value": "!?["
+              },
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "."
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "?["
+                  }
+                ]
+              }
+            ]
           },
           {
             "type": "FIELD",
@@ -6202,12 +6293,26 @@
             }
           },
           {
-            "type": "STRING",
-            "value": "."
-          },
-          {
-            "type": "STRING",
-            "value": "["
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "."
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "["
+                  }
+                ]
+              },
+              {
+                "type": "STRING",
+                "value": "!["
+              }
+            ]
           },
           {
             "type": "FIELD",
@@ -6531,8 +6636,17 @@
             }
           },
           {
-            "type": "STRING",
-            "value": "."
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "."
+              },
+              {
+                "type": "STRING",
+                "value": "!."
+              }
+            ]
           },
           {
             "type": "FIELD",

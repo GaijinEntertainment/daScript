@@ -2233,6 +2233,20 @@ expr_field_no_bracket
         delete $method_name;
         $$ = pInvoke;
     }
+    |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
+        delete $method_name;
+        $$ = pInvoke;
+    }
+    |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' expr_list[arguments] ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
+        auto callArgs = sequenceToList($arguments);
+        pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
+        delete $method_name;
+        $$ = pInvoke;
+    }
     |   expr_no_bracket[left] '.'[loc] NAME[method_name] '(' '[' make_struct_fields[list] ']' ')' {
         auto nc = new ExprNamedCall(tokAt(scanner,@method_name),*$method_name);
         nc->methodCall = true;

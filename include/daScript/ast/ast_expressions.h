@@ -359,6 +359,7 @@ namespace das
                 bool        r2v : 1;
                 bool        r2cr : 1;
                 bool        write : 1;
+                bool        no_promotion : 1;
             };
             uint32_t fieldFlags = 0;
         };

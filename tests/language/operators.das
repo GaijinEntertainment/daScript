@@ -197,6 +197,10 @@ def operator ?[] (_a : array<float>; _i : int) : float? {
     return null
 }
 
+def operator [] =(var _a : array<float>; _i : int; _v : float) {
+    pass    // a lying setter: swallows the write
+}
+
 struct Qoo {
     v : int
 }
@@ -245,6 +249,15 @@ def test_raw_operators(t : T?) {
         t |> equal(-1.0, xs?[1] ?? -1.0)             // the ?[] overload yields null
         t |> equal(2.0, xs!?[1] ?? -1.0)
         t |> equal(-1.0, xs!?[9] ?? -1.0)            // raw safe-index still bounds-checks
+    }
+    t |> run("![ bypasses the write path too") @(t : T?) {
+        var ws <- [1.0, 2.0, 3.0]
+        ws[1] = 55.0                                 // the lying []= swallows the write
+        t |> equal(2.0, ws![1])
+        ws![1] = 55.0                                // raw write reaches the real element
+        t |> equal(55.0, ws![1])
+        ws![1] += 1.0                                // raw compound write too
+        t |> equal(56.0, ws![1])
     }
     t |> run("!?? reaches builtin pointer coalescing") @(t : T?) {
         var q = Qoo(v = 13)

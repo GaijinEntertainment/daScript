@@ -419,7 +419,7 @@ def update_paren(ctx : FormatterCtx; index : int; var paren_counter : ParenCount
     if (ctx |> eq(index, "[")) {
         paren_counter.square++;
     }
-    if (ctx |> eq(index, "?[")) {
+    if (ctx |> eq(index, "?[", "![", "!?[")) {
         paren_counter.square++;
     }
     if (ctx |> eq(index, "]")) {
@@ -911,7 +911,7 @@ def remove_space_before(var ctx : FormatterCtx; i) {
 }
 
 
-let tokens_before_unary <- fixed_array("(", "[", "?[", "\{", "auto", "int", "float", "int16", "int32", "int8", ";", ",",
+let tokens_before_unary <- fixed_array("(", "[", "?[", "![", "!?[", "\{", "auto", "int", "float", "int16", "int32", "int8", ";", ",",
     "if", "elif", "while", "switch", "return", "yield", "in", "=", "!"
     );
 

@@ -1728,7 +1728,7 @@ namespace das {
     void SerializeVisitor::preVisit ( ExprNullCoalescing * expr ) {
         ser.dtag(HASH_TAG("ExprNullCoalescing"));
         serializePtr2Ref(expr);
-        ser << expr->defaultValue;
+        ser << expr->defaultValue << expr->no_promotion;
     }
 
     void SerializeVisitor::preVisit ( ExprDelete * expr ) {
@@ -1994,7 +1994,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprIs * expr ) {
         serializeBase(expr);
-        ser << expr->subexpr << expr->typeexpr;
+        ser << expr->subexpr << expr->typeexpr << expr->no_promotion;
     }
 
     void SerializeVisitor::preVisit ( ExprAscend * expr ) {

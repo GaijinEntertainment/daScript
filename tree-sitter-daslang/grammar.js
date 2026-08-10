@@ -954,7 +954,7 @@ module.exports = grammar({
 
     null_coalescing_expression: $ => prec.right(PREC.COALESCE, seq(
       field('value', $._expression),
-      '??',
+      choice('??', '!??'),  // !?? — raw (original) coalescing, bypasses operator ?? overloads
       field('default', $._expression),
     )),
 
@@ -974,7 +974,7 @@ module.exports = grammar({
 
     is_expression: $ => prec.left(PREC.IS_AS, seq(
       field('value', $._expression),
-      'is',
+      choice('is', '!is'),  // !is — raw (original) check, bypasses operator is overloads
       field('type', choice(
         seq('type', '<', $._type, '>'),
         $.basic_type,
@@ -984,7 +984,7 @@ module.exports = grammar({
 
     as_expression: $ => prec.left(PREC.IS_AS, seq(
       field('value', $._expression),
-      field('operator', choice('as', '?as')),
+      field('operator', choice('as', '?as', '!as', '!?as')),  // ! forms — raw (original) variant access
       field('type', choice(
         seq('type', '<', $._type, '>'),
         $.basic_type,
@@ -1003,19 +1003,26 @@ module.exports = grammar({
 
     // ---- Access expressions ----
 
-    field_expression: $ => prec.left(PREC.DOT, seq(
-      field('object', $._expression),
-      '.',
-      field('field', choice(
-        $.identifier,
-        $.quote_expression,
-        seq('.', $.identifier),  // a . . b — double-dot bypass for property overloads
-      )),
+    field_expression: $ => prec.left(PREC.DOT, choice(
+      seq(
+        field('object', $._expression),
+        '.',
+        field('field', choice(
+          $.identifier,
+          $.quote_expression,
+          seq('.', $.identifier),  // a . . b — double-dot bypass for property overloads
+        )),
+      ),
+      seq(
+        field('object', $._expression),
+        '!.',  // a!.b — raw (original) field access, bypasses operator . overloads
+        field('field', choice($.identifier, $.quote_expression)),
+      ),
     )),
 
     safe_field_expression: $ => prec.left(PREC.DOT, seq(
       field('object', $._expression),
-      choice('?.', seq('.', '?.')),  // a?.field or a . ?. field (bypass safe navigation)
+      choice('?.', seq('.', '?.'), '!?.'),  // a?.field, a . ?. field, or raw a!?.field
       field('field', $.identifier),
     )),
 
@@ -1028,16 +1035,15 @@ module.exports = grammar({
 
     safe_index_expression: $ => prec.left(PREC.INDEX, seq(
       field('object', $._expression),
-      '?[',
+      choice('?[', '!?[', seq('.', '?[')),  // a?[i], raw a!?[i], or legacy a.?[i]
       field('index', $._expression),
       ']',
     )),
 
-    // arr.[ind] — bypass index (direct access, no operator overloading)
+    // arr.[ind] / arr![ind] — bypass index (direct access, no operator overloading)
     bypass_index_expression: $ => prec.left(PREC.INDEX, seq(
       field('object', $._expression),
-      '.',
-      '[',
+      choice(seq('.', '['), '!['),
       field('index', $._expression),
       ']',
     )),
@@ -1085,7 +1091,7 @@ module.exports = grammar({
     // UFCS: obj.method(args) — also handles obj.field (already in field_expression)
     method_call_expression: $ => prec.left(PREC.CALL, seq(
       field('object', $._expression),
-      '.',
+      choice('.', '!.'),  // obj!.method() — raw dispatch, bypasses operator . overloads
       field('method', choice($.identifier, $.basic_type)),
       '(',
       optional($.argument_list),

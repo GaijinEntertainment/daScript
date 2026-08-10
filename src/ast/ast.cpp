@@ -1946,6 +1946,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->mask = mask;
         cexpr->value = value->clone();
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 

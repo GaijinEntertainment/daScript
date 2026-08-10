@@ -1006,7 +1006,7 @@ namespace das {
         }
     // swizzle
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
-            ss << ".";
+            ss << (expr->no_promotion ? "!." : ".");
             if ( printRef && expr->r2v ) ss << "@";
             if ( printRef && expr->r2cr ) ss << "$";
             if ( printRef && expr->write ) ss << "#";

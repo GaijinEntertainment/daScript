@@ -124,7 +124,7 @@ namespace das {
     TypeDeclPtr makeExprSwizzleFieldFlags() {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "ExprSwizzleFieldFlags";
-        ft->argNames = { "r2v", "r2cr", "write" };
+        ft->argNames = { "r2v", "r2cr", "write", "no_promotion" };
         return ft;
     }
 

@@ -1,11 +1,13 @@
 options gen2
 
-expect 30704 : 5
+expect 30704 : 4
+expect 30708 : 1
 
 // Tuple destructuring binds names like `let` declarations, so it follows the same
 // shadowing rules. Before the check, a repeated name silently rebound (the newest
 // assume alias won in ExprVar resolution) with no diagnostic - while plain
-// `let x` twice was error[30704].
+// `let x` twice was error[30704]. The for-loop form reports 30708, matching the
+// plain for-iterator shadowing diagnostics beside it.
 
 def p1() : tuple<bool; int> {
     return (true, 1)
@@ -36,7 +38,7 @@ def rebind_over_argument(ok : int) {
 def rebind_in_for_loop {
     let k = 13
     var pairs : array<tuple<int; string>>
-    for ((k, v) in pairs) { // 30704: k is an existing local
+    for ((k, v) in pairs) { // 30708: k is an existing local (for-loop code, like plain iterators)
         print("{k} {v}\n")
     }
 }

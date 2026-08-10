@@ -875,6 +875,14 @@
         "required": true,
         "types": [
           {
+            "type": "!?as",
+            "named": false
+          },
+          {
+            "type": "!as",
+            "named": false
+          },
+          {
             "type": "?as",
             "named": false
           },
@@ -4572,7 +4580,39 @@
     "named": false
   },
   {
+    "type": "!.",
+    "named": false
+  },
+  {
     "type": "!=",
+    "named": false
+  },
+  {
+    "type": "!?.",
+    "named": false
+  },
+  {
+    "type": "!??",
+    "named": false
+  },
+  {
+    "type": "!?[",
+    "named": false
+  },
+  {
+    "type": "!?as",
+    "named": false
+  },
+  {
+    "type": "![",
+    "named": false
+  },
+  {
+    "type": "!as",
+    "named": false
+  },
+  {
+    "type": "!is",
     "named": false
   },
   {
