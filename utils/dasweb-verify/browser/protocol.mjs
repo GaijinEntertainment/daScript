@@ -98,6 +98,10 @@ export function artifactUrlFrom(src, siteUrl) {
 
 export const KINDS = new Set(['graphics', 'console', 'audio']);
 
+function badRegex(pattern) {
+    try { new RegExp(pattern); return ''; } catch (e) { return String(e.message || e); }
+}
+
 // Merge a sample's row over the table defaults. Fails closed twice over: an
 // unlisted sample is an error (so a newly deployed sample cannot skip
 // verification), and so is a row the runner would not know how to execute.
@@ -110,8 +114,27 @@ export function resolveSpec(table, name) {
     if (!KINDS.has(spec.kind)) {
         return { ok: false, error: `unknown kind "${spec.kind}"` };
     }
-    if (spec.kind === 'console' && !spec.stdout) {
-        return { ok: false, error: 'console sample needs a "stdout" pattern' };
+    if (spec.kind === 'console') {
+        if (!spec.stdout) {
+            return { ok: false, error: 'console sample needs a "stdout" pattern' };
+        }
+        // Patterns compile here so a typo fails this row alone: verdict() runs
+        // outside the per-sample try/catch, and a throw there aborts the whole run.
+        const err = badRegex(spec.stdout);
+        if (err) {
+            return { ok: false, error: `stdout pattern /${spec.stdout}/ does not compile: ${err}` };
+        }
+    }
+    if (spec.ignore !== undefined) {
+        if (!Array.isArray(spec.ignore)) {
+            return { ok: false, error: 'ignore must be an array of patterns' };
+        }
+        for (const p of spec.ignore) {
+            const err = badRegex(p);
+            if (err) {
+                return { ok: false, error: `ignore pattern /${p}/ does not compile: ${err}` };
+            }
+        }
     }
     if (!Array.isArray(spec.modes) || spec.modes.length === 0) {
         return { ok: false, error: 'no modes listed' };

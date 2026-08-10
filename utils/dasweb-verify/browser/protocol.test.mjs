@@ -91,6 +91,22 @@ test('resolveSpec rejects rows the runner could not execute', () => {
         { defaults: { ...TABLE.defaults, build_budget_ms: 0 }, samples: { A: { modes: ['interpreter'] } } }, 'A').ok, true);
 });
 
+test('resolveSpec rejects patterns that would throw at verdict time', () => {
+    // verdict() runs outside the per-sample try/catch, so a pattern that does not
+    // compile must fail its own row here instead of aborting the whole run there.
+    const bad = P.resolveSpec({ defaults: TABLE.defaults, samples: { A: { ignore: ['('] } } }, 'A');
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /ignore pattern/);
+    assert.equal(P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { ignore: 'not-a-list' } } }, 'A').ok, false);
+    const stdout = P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { kind: 'console', stdout: '[' } } }, 'A');
+    assert.equal(stdout.ok, false);
+    assert.match(stdout.error, /stdout pattern/);
+    assert.equal(P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { ignore: ['^fine$'] } } }, 'A').ok, true);
+});
+
 test('artifactUrlFrom takes only a real cross-origin page artifact', () => {
     assert.equal(
         P.artifactUrlFrom('https://run.daslang.io/b/abc/sample.html', 'https://daslang.io'),
