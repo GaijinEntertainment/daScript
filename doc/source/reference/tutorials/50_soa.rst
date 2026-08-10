@@ -14,8 +14,8 @@ Structure-of-Arrays (SOA)
 This tutorial covers ``daslib/soa`` — a compile-time macro that transforms
 regular structs into a Structure-of-Arrays layout.  The ``[soa]`` annotation
 generates parallel arrays for every field, plus all the container operations
-you need (push, erase, pop, clear, resize, reserve, swap, from_array,
-to_array).
+you need (indexing, length, push, push_clone, emplace, erase, pop, clear,
+resize, reserve, capacity, swap, from_array, to_array).
 
 Prerequisites: familiarity with structs and arrays.
 
@@ -130,12 +130,12 @@ all work the same as on regular arrays:
         print("\n=== container operations ===\n")
         var soa : Particle`SOA
 
-        // push — move semantics
+        // push — clones the value into the column arrays
         soa |> push <| Particle(pos = float3(1.0), life = 10.0)
         soa |> push <| Particle(pos = float3(2.0), life = 20.0)
         soa |> push <| Particle(pos = float3(3.0), life = 30.0)
 
-        // push_clone — copy from a const value
+        // push_clone — same, spelled explicitly
         let p = Particle(pos = float3(4.0), life = 40.0)
         soa |> push_clone(p)
 
@@ -213,7 +213,10 @@ any sorting algorithm:
 Bulk conversion — from_array, to_array
 ========================================
 
-Convert between AOS (``array<T>``) and SOA (``T`SOA``) layouts:
+Convert between AOS (``array<T>``) and SOA (``T`SOA``) layouts.
+``from_array`` **appends** — it reserves and pushes into the existing
+columns, so call it on a fresh (or cleared) container unless you mean to
+concatenate.  ``to_array`` builds a new ``array<T>``:
 
 .. code-block:: das
 
@@ -300,8 +303,10 @@ SOA works well for game entity tables with mixed field types:
             id = 2, name = "mage",    health = 60.0,  alive = true)
         entities |> push <| GameEntity(
             id = 3, name = "archer",  health = 80.0,  alive = true)
+        entities |> push <| GameEntity(
+            id = 4, name = "thief",   health = 50.0,  alive = true)
 
-        // Apply damage
+        // Apply damage — the thief drops to -5 and dies
         for (it in entities) {
             it.health -= 55.0
             if (it.health <= 0.0) {

@@ -127,6 +127,19 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
 
 ## Engine/daslib finds from the fan-out (Boris decision)
 
+- 🐞 LANGUAGE WART (macros-page agent): a class whose NAME matches a class in a required
+  module fails its own generated-method resolution — `class MacroMacro : ...` in a module
+  requiring daslib/ast_boost → `error[30810] function not found _::MacroMacro'__finalize`
+  (ambiguous with ast_boost::MacroMacro's). Blocks doc pages from recompiling excerpts of
+  modules they require; fixing it makes those fragments checkable.
+- Re-confirmed open #3678 tail: `let s = match (...)` still yields the misleading
+  `error[30231] argument of format string can't be auto` instead of the return-match hint.
+- 🐞 COMPILER HOLE #2 (unsafe.rst agent): an INIT-move from a smart-pointer value
+  (`var b <- f(p)`) compiles clean while the statement form (`b <- f(p)`) correctly
+  fires error[31021] — ExprMove::visit checks only the statement path
+  (ast_infer_type_op.cpp:688-693); the init form is exactly as lifetime-opaque.
+- Historical note: tables.rst TAUGHT `unsafe { tab[k] = v }` — the likely origin of the
+  `unsafe(tab[k])` residue CLAUDE.md warns about; now fixed to state the default.
 - 🐞 COMPILER HOLE (probe-verified by the stbimage agent): tuple destructuring bypasses
   the shadowing check — `let x = 1; let x = 2` is error[30704], but
   `let (ok, a) = p1(); let (ok, b) = p2()` compiles and SILENTLY rebinds `ok`, no
@@ -207,6 +220,20 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
   but assigned to `velocity`; misleading for named-arg callers.
 - dasHV family-level doc gap: the STREAM/HttpResponseWriter streaming rail and SERVE_FILE
   are documented on no RST page (page 07 covers buffered SSE only).
+
+- daspkg: `resolve(sdk_version, ...)` hook's first parameter is DEAD — both production
+  call sites (utils/daspkg/commands.das:404,:853) pass "". Doc now says "reserved; daspkg
+  passes an empty string today"; if it's a bug, fix daspkg and revert the doc line.
+- dasLiveHost stale-comment cluster (report-only, fix as a batch): main.cpp:440 "lockbox
+  dispatch" (none exists), :839 contradicted by find_live_port_in_argv; live_commands.das:12,
+  :44; live_api.das:16-28 endpoint list omissions; live_api_builtins.das:20;
+  live_watch_boost.das:11-12; dasLiveHost.cpp:326 `live_collect_string_gc` is byte-identical
+  to live_collect_gc (name promises a string-only collect it does not do).
+- Checker-rule idea (numbered agent): flag an `// output:` block whose chunk contains no
+  `print` — caught three false output claims on one page.
+- More stale companion comments: tutorials/language/50_soa.das:98 (push CLONES, not moves)
+  + :8/:20; 52_option_and_result.das:29,:70; daslib/option.das:29 (no mutators),
+  daslib/result.das:30-33,:184,:236; daslib/delegate.das:16-21.
 
 ## Regen traps (Boris decision)
 

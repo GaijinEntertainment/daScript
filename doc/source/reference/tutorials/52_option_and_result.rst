@@ -237,9 +237,10 @@ Non-copyable payloads
 
 ``Option<T>`` and ``Result<T, E>`` work for any payload type, including
 non-copyable ones such as ``array<T>``, ``table<K;V>``, and lambdas. The
-constructors and combinators dispatch internally on
-``static_if (typeinfo can_copy(...))`` and clone (or move) on the non-copyable
-branch — call sites look identical to the workhorse-type case.
+cloning constructors (``some`` / ``ok`` / ``err``) and most combinators
+dispatch internally on ``static_if (typeinfo can_copy(...))`` and clone on
+the non-copyable branch; the ``move_`` constructors always move. Either
+way, call sites look identical to the workhorse-type case.
 
 .. code-block:: das
 
@@ -255,8 +256,8 @@ empty:
 .. code-block:: das
 
     var src <- [1, 2, 3]
-    let o = move_some(src)          // src is now []
-    // o |> unwrap == [1, 2, 3]
+    var o = move_some(src)          // src is now []
+    var got <- o |> move_unwrap     // got is [1, 2, 3]
 
 ``Result`` provides the same pair on each side: ``ok`` / ``err`` clone, while
 ``move_ok`` / ``move_err`` move:
@@ -264,13 +265,19 @@ empty:
 .. code-block:: das
 
     var payload <- [4, 5, 6]
-    let r = move_ok(payload, type<string>)   // payload is now []
-    // r |> unwrap == [4, 5, 6]
+    var r = move_ok(payload, type<string>)   // payload is now []
+    var back <- r |> move_unwrap             // back is [4, 5, 6]
+
+Extraction has the same pair. ``unwrap`` **clones** the payload out, which
+for an ``array<T>`` or ``table<K;V>`` is a deep copy; ``move_unwrap`` (and
+``move_unwrap_err`` on the error side) moves it out instead, leaving the
+option / result empty. Reach for the ``move_`` form whenever the payload is
+non-copyable and you do not need the container afterwards.
 
 For workhorse types (``int``, ``float``, ``bool``, ``string``, …) ``move_some`` /
-``move_ok`` / ``move_err`` are equivalent to their non-``move`` siblings —
-prefer the plain form for readability and use the move-variants only when
-you genuinely want to drain a non-copyable source.
+``move_ok`` / ``move_err`` / ``move_unwrap`` are equivalent to their
+non-``move`` siblings — prefer the plain form for readability and use the
+move-variants only when you genuinely want to drain a non-copyable source.
 
 
 API reference at a glance
@@ -300,7 +307,9 @@ Option<T>
 +-------------------------------+-------------------------------------------------+
 | ``or_else(o, f)``             | Lazy fallback on ``none``                       |
 +-------------------------------+-------------------------------------------------+
-| ``unwrap(o)``                 | Value or panic                                  |
+| ``unwrap(o)``                 | Value or panic (clones the payload)             |
++-------------------------------+-------------------------------------------------+
+| ``move_unwrap(o)``            | Value or panic, moved out of the option         |
 +-------------------------------+-------------------------------------------------+
 | ``unwrap_or(o, d)``           | Value or eager default                          |
 +-------------------------------+-------------------------------------------------+
@@ -316,7 +325,7 @@ Option<T>
 +-------------------------------+-------------------------------------------------+
 | ``zip(a, b)``                 | Pair two options; some iff both some            |
 +-------------------------------+-------------------------------------------------+
-| ``o ?? d``                    | Unwrap-or-default operator                      |
+| ``o ?? d``                    | Value, or the given fallback ``d``              |
 +-------------------------------+-------------------------------------------------+
 | ``a == b``                    | Structural equality                             |
 +-------------------------------+-------------------------------------------------+
@@ -349,7 +358,9 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``or_else(r, f)``               | Monadic recovery on err                         |
 +---------------------------------+-------------------------------------------------+
-| ``unwrap(r)``                   | Ok value or panic                               |
+| ``unwrap(r)``                   | Ok value or panic (clones the payload)          |
++---------------------------------+-------------------------------------------------+
+| ``move_unwrap(r)``              | Ok value or panic, moved out of the result      |
 +---------------------------------+-------------------------------------------------+
 | ``unwrap_or(r, d)``             | Ok value or eager default                       |
 +---------------------------------+-------------------------------------------------+
@@ -357,7 +368,9 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``unwrap_or_default(r)``        | Ok value or ``default<T>``                      |
 +---------------------------------+-------------------------------------------------+
-| ``unwrap_err(r)``               | Err value or panic                              |
+| ``unwrap_err(r)``               | Err value or panic (clones the payload)         |
++---------------------------------+-------------------------------------------------+
+| ``move_unwrap_err(r)``          | Err value or panic, moved out of the result     |
 +---------------------------------+-------------------------------------------------+
 | ``expect_value(r, msg)``        | Ok value or panic with custom message           |
 +---------------------------------+-------------------------------------------------+
@@ -369,7 +382,7 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | ``err_to_option(r)``            | Discard value; ``Option<E>``                    |
 +---------------------------------+-------------------------------------------------+
-| ``r ?? d``                      | Unwrap-or-default operator                      |
+| ``r ?? d``                      | Ok value, or the given fallback ``d``           |
 +---------------------------------+-------------------------------------------------+
 | ``a == b``                      | Structural equality                             |
 +---------------------------------+-------------------------------------------------+

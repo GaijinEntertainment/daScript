@@ -628,16 +628,16 @@ Endpoints
        response is a JSON array of per-entry results in input order.
        Continue-on-error: malformed entries surface ``{"error":...}``
        in their slot.
+   * - GET
+     - ``/``
+     - JSON help with all endpoints and curl examples.  There is no
+       catch-all route --- any other path returns 404.
 
 While a compilation error is active, ``/pause``, ``/unpause``,
 ``/command`` and ``/commands`` return 503 with
 ``{"error":…,"hint":"POST /reload to retry"}``.  ``/reload``,
 ``/reload/full``, ``/reset``, ``/shutdown``, ``/status`` and ``/error``
 stay reachable.
-   * - GET
-     - ``/``
-     - JSON help with all endpoints and curl examples.  There is no
-       catch-all route --- any other path returns 404.
 
 curl examples
 ^^^^^^^^^^^^^
