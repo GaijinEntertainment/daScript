@@ -91,6 +91,22 @@ test('resolveSpec rejects rows the runner could not execute', () => {
         { defaults: { ...TABLE.defaults, build_budget_ms: 0 }, samples: { A: { modes: ['interpreter'] } } }, 'A').ok, true);
 });
 
+test('resolveSpec rejects patterns that would throw at verdict time', () => {
+    // verdict() runs outside the per-sample try/catch, so a pattern that does not
+    // compile must fail its own row here instead of aborting the whole run there.
+    const bad = P.resolveSpec({ defaults: TABLE.defaults, samples: { A: { ignore: ['('] } } }, 'A');
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /ignore pattern/);
+    assert.equal(P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { ignore: 'not-a-list' } } }, 'A').ok, false);
+    const stdout = P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { kind: 'console', stdout: '[' } } }, 'A');
+    assert.equal(stdout.ok, false);
+    assert.match(stdout.error, /stdout pattern/);
+    assert.equal(P.resolveSpec(
+        { defaults: TABLE.defaults, samples: { A: { ignore: ['^fine$'] } } }, 'A').ok, true);
+});
+
 test('artifactUrlFrom takes only a real cross-origin page artifact', () => {
     assert.equal(
         P.artifactUrlFrom('https://run.daslang.io/b/abc/sample.html', 'https://daslang.io'),
@@ -167,6 +183,19 @@ test('verdict: a page error fails the row', () => {
     const v = P.verdict(spec, { rafs: 60, draws: 60, lines: [], pageErrors: ['TypeError: x is not a function'] });
     assert.equal(v.status, 'FAIL');
     assert.match(v.detail, /page error/);
+});
+
+test('verdict: the ignore list covers page errors too', () => {
+    // Emscripten's blocking-on-main-thread advisory arrives as console.error while
+    // the sample runs fine — a threaded sample's row ignores it by pattern.
+    const spec = { ...P.resolveSpec(TABLE, 'Gfx').spec, ignore: ['^Blocking on the main thread is very dangerous'] };
+    const alive = { rafs: 60, draws: 60, lines: [] };
+    const ignored = P.verdict(spec, { ...alive, pageErrors: [
+        'Blocking on the main thread is very dangerous, see https://emscripten.org/docs/porting/pthreads.html#blocking-on-the-main-browser-thread',
+    ] });
+    assert.equal(ignored.status, 'PASS');
+    const other = P.verdict(spec, { ...alive, pageErrors: ['TypeError: x is not a function'] });
+    assert.equal(other.status, 'FAIL');
 });
 
 test('driftWarnings reports both directions and never fails', () => {
