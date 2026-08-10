@@ -191,8 +191,6 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |
 | `DASLLAMA_BASE_PYTHON` | path | unset | Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range. |
 | `NEMO_PY` | path | unset | Python interpreter of the NeMo oracle venv, for canary/parakeet baselines. |
-| `HF_HOME` | path | unset | Huggingface cache root (the standard hub variable) — where fetch_models locates downloaded checkpoints. |
-| `HOME` | path | unset | POSIX home — the HF_HOME fallback ({HOME}/.cache/huggingface/hub) in fetch_models. |
 | `ONNX_PY` | path | unset | Python interpreter of the ONNX oracle venv, for parakeet baselines. |
 | `OS` | text | set by Windows | Read to detect Windows (Windows_NT); set by the OS, not by dasLLAMA. |
 | `PROCESSOR_ARCHITECTURE` | text | set by Windows | Read for the CPU architecture on Windows; set by the OS, not by dasLLAMA. |
