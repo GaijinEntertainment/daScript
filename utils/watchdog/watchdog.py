@@ -168,6 +168,33 @@ def windows_balloon(title: str, message: str, error: bool = False) -> None:
         pass
 
 
+def notify(title: str, message: str, error: bool = False) -> None:
+    """Best-effort desktop notification: Windows balloon, macOS Notification Center via
+    osascript, Linux notify-send. A no-op where none of those exist — same never-fatal
+    contract as the tray."""
+    if IS_WINDOWS:
+        windows_balloon(title, message, error)
+        return
+    if sys.platform == "darwin":
+        # The strings land inside double quotes in AppleScript source; a raw newline would
+        # end the -e one-liner, so fold multi-line balloon bodies onto one line.
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"')
+        safe_message = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " — ")
+        script = f'display notification "{safe_message}" with title "{safe_title}"'
+        command = ["osascript", "-e", script]
+    elif shutil.which("notify-send"):
+        urgency = "critical" if error else "normal"
+        command = ["notify-send", "-u", urgency, "-a", "watchdog", title, message]
+    else:
+        return
+    try:
+        helper = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return
+    # Reap the short-lived helper so it never sits as a POSIX zombie between notifications.
+    threading.Thread(target=helper.wait, name="notify-reaper", daemon=True).start()
+
+
 class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
     _fields_ = [
         ("cb", wt.DWORD),
@@ -721,7 +748,8 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
     # scale. Use a system truetype at real size; fall back to a bare glyphless square.
     from PIL import ImageFont
     font = None
-    for candidate in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
+    for candidate in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf",
+                      "Arial Bold.ttf", "Helvetica.ttc"):
         try:
             font = ImageFont.truetype(candidate, 42)
             break
@@ -730,6 +758,47 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
     if font is not None:
         draw.text((size / 2, size / 2 - 2), initial, fill=(255, 255, 255, 255),
                   anchor="mm", font=font)
+    return image
+
+
+# Status badge geometry from the design spec (forge project, consumers/dasllama-mark),
+# in 64-unit space: a transparent "moat" circle knocks the base image out behind the badge
+# so it reads on any taskbar shade, then the badge draws in the bottom-right corner.
+# Shapes differ per state on purpose — color-blind users get geometry, not just hue.
+TRAY_MOAT = (49.0, 49.0, 16.5)  # cx, cy, r
+TRAY_BADGES = {
+    "amber": ("triangle", (242, 183, 61, 255)),  # working: booting / minting kernels
+    "red": ("square", (217, 109, 79, 255)),      # trouble: unhealthy / crash-backoff
+}
+
+
+def badge_tray_image(base, state: str):
+    """A copy of `base` wearing the status badge for `state`; None for unknown states.
+    The plain base IS the serving state — a badge is always a signal, never decoration."""
+    spec = TRAY_BADGES.get(state)
+    if spec is None:
+        return None
+    from PIL import Image, ImageChops, ImageDraw
+    shape, color = spec
+    image = base.convert("RGBA")
+    if image is base:
+        image = base.copy()
+    u = min(image.size) / 64.0
+    cx, cy, r = TRAY_MOAT
+    moat = Image.new("L", image.size, 255)
+    ImageDraw.Draw(moat).ellipse(
+        [(cx - r) * u, (cy - r) * u, (cx + r) * u, (cy + r) * u], fill=0
+    )
+    image.putalpha(ImageChops.multiply(image.getchannel("A"), moat))
+    draw = ImageDraw.Draw(image)
+    if shape == "triangle":
+        draw.polygon(
+            [(49.0 * u, 35.5 * u), (62.5 * u, 59.2 * u), (35.5 * u, 59.2 * u)], fill=color
+        )
+    else:
+        draw.rounded_rectangle(
+            [37.5 * u, 37.5 * u, 60.5 * u, 60.5 * u], radius=1.5 * u, fill=color
+        )
     return image
 
 
@@ -750,16 +819,18 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
-def tray_status() -> str:
-    """One line of truth for the tooltip and the menu's status row, read from the same STATE
-    the control plugin sees. Counters only, no prediction — same rule as the tune fold."""
+def tray_state() -> tuple[str, str]:
+    """(status line, coarse icon state) from the same STATE the control plugin sees. The
+    status line is one line of truth for the tooltip and the menu's status row — counters
+    only, no prediction, same rule as the tune fold. Coarse states: "amber" = working,
+    "red" = trouble, "base" = serving (the plain mark)."""
     s = read_state()
     if not s.get("child_pid"):
         delay = float(s.get("restart_delay") or 0.0)
         code = s.get("child_exit_code")
         if delay > 0:
-            return f"restarting in {delay:.0f}s (exit {code})"
-        return "stopped"
+            return f"restarting in {delay:.0f}s (exit {code})", "red"
+        return "stopped", "red"
     tune = s.get("tune") or {}
     if isinstance(tune, dict) and tune.get("total"):
         done, total = tune.get("done", 0), tune.get("total", 0)
@@ -767,17 +838,22 @@ def tray_status() -> str:
         rounds = int(tune.get("rounds") or 0)
         detail = f" — {kernel} {tune.get('round', 0)}/{rounds}" if kernel and rounds else \
              (f" — {kernel}" if kernel else "")
-        return f"minting kernels {done}/{total}{detail}"
+        return f"minting kernels {done}/{total}{detail}", "amber"
     healthy = s.get("healthy")
     if healthy is True:
         since = float(s.get("serving_since") or 0.0)
         up = time.time() - since if since else 0.0
         hours, mins = int(up // 3600), int(up % 3600 // 60)
-        return f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        line = f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        return line, "base"
     stage = s.get("stage")
     if healthy is False:
-        return f"unhealthy ({stage})" if stage else "unhealthy"
-    return f"booting ({stage})" if stage else "booting"
+        return (f"unhealthy ({stage})" if stage else "unhealthy"), "red"
+    return (f"booting ({stage})" if stage else "booting"), "amber"
+
+
+def tray_status() -> str:
+    return tray_state()[0]
 
 
 def tray_tick(icon, name: str) -> None:
@@ -785,25 +861,36 @@ def tray_tick(icon, name: str) -> None:
     writes only on change so the shell isn't spammed with NOTIFYICONDATA updates."""
     if icon is None:
         return
-    title = f"{name} — {tray_status()}"
+    # AppKit objects serve only the process's main thread, and on macOS the supervision loop
+    # is NOT that thread (run_with_darwin_tray). The menu's status row is a callable the
+    # runloop re-evaluates on open, so live state stays visible without the tooltip write.
+    if sys.platform == "darwin":
+        return
+    status, coarse = tray_state()
+    title = f"{name} — {status}"
     if getattr(icon, "_das_last_title", None) != title:
         try:
             icon.title = title
             icon._das_last_title = title
         except Exception:  # noqa: BLE001 - a dead tray must not touch supervision
             pass
+    states = getattr(icon, "_das_states", None)
+    if states and getattr(icon, "_das_last_state", None) != coarse:
+        image = states.get(coarse)
+        if image is not None:
+            try:
+                icon.icon = image
+                icon._das_last_state = coarse
+            except Exception:  # noqa: BLE001
+                pass
 
 
-def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
-    """Optional system-tray icon: a live status line (tooltip + first menu row), an "Open"
-    item enabled only while the service is actually healthy, and "Shutdown" routed into the
-    same stopping Event the signal handlers set. Never fatal — a desktop nicety must not
-    take supervision down. macOS needs the tray on the main thread (AppKit runloop), which
-    conflicts with the supervision loop owning it; not wired yet."""
+def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
+    """Build the tray icon without running its loop: a live status line (tooltip + first menu
+    row), an "Open" item enabled only while the service is actually healthy, and "Shutdown"
+    routed into the same stopping Event the signal handlers set. Never fatal — a desktop
+    nicety must not take supervision down. Returns None when the tray is off or cannot exist."""
     if not args.tray:
-        return None
-    if sys.platform == "darwin":
-        emit(logger, "tray_unavailable", reason="macOS tray needs the main-thread runloop; not wired yet")
         return None
     try:
         import pystray
@@ -839,17 +926,40 @@ def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threa
         ))
     items.append(pystray.MenuItem("Shutdown", on_shutdown))
     try:
+        image = load_tray_image(SCRIPT_DIR, args.cwd, args.name)
         icon = pystray.Icon(
             args.name,
-            load_tray_image(SCRIPT_DIR, args.cwd, args.name),
+            image,
             title=f"{args.name} — booting",
             menu=pystray.Menu(*items),
         )
-        icon.run_detached()
+        # Pre-composited status variants; tray_tick swaps between them as the coarse
+        # state moves. Composited at runtime so every deployment's icon (or even the
+        # generated placeholder) gets status for free — no per-state asset shipping.
+        icon._das_states = {
+            "base": image,
+            "amber": badge_tray_image(image, "amber"),
+            "red": badge_tray_image(image, "red"),
+        }
     except Exception as exc:  # noqa: BLE001 - no tray host, headless X, broken backend
         emit(logger, "tray_unavailable", reason=repr(exc))
         return None
-    emit(logger, "tray_started", url=url or "")
+    icon._das_url = url or ""
+    return icon
+
+
+def start_tray(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
+    """Detached tray for platforms whose backend tolerates a background loop (Windows, Linux).
+    macOS goes through run_with_darwin_tray instead — AppKit serves only the main thread."""
+    icon = build_tray_icon(args, logger, stopping)
+    if icon is None:
+        return None
+    try:
+        icon.run_detached()
+    except Exception as exc:  # noqa: BLE001
+        emit(logger, "tray_unavailable", reason=repr(exc))
+        return None
+    emit(logger, "tray_started", url=icon._das_url)
     return icon
 
 
@@ -860,6 +970,49 @@ def stop_tray(icon, logger: logging.Logger) -> None:
         icon.stop()
     except Exception as exc:  # noqa: BLE001 - teardown must not mask the real exit path
         emit(logger, "tray_stop_failed", reason=repr(exc))
+
+
+def run_with_darwin_tray(
+    args: argparse.Namespace,
+    logger: logging.Logger,
+    stopping: threading.Event,
+    command: list[str],
+    child_exe_name: str,
+    dump_type: int | None,
+) -> int:
+    """macOS inversion: AppKit serves only the process's main thread, so supervision moves to
+    a worker and the tray runloop keeps main. Supervision ending — tray Shutdown, child exit 0,
+    crash-out — stops the icon, which returns icon.run() and lets main exit with the worker's
+    code. While the runloop owns main, Ctrl-C is serviced only when it yields to Python, so
+    the tray's Shutdown item is the reliable stop on macOS."""
+    icon = build_tray_icon(args, logger, stopping)
+    if icon is None:
+        return supervise(args, logger, stopping, None, command, child_exe_name, dump_type)
+    result = [2]
+
+    def worker() -> None:
+        try:
+            result[0] = supervise(args, logger, stopping, icon, command, child_exe_name, dump_type)
+        finally:
+            stop_tray(icon, logger)
+
+    thread = threading.Thread(target=worker, name="supervision")
+
+    def setup(icon_) -> None:
+        icon_.visible = True
+        emit(logger, "tray_started", url=icon._das_url, main_thread=True)
+        thread.start()
+
+    try:
+        icon.run(setup=setup)
+    except Exception as exc:  # noqa: BLE001 - ssh session with no WindowServer, broken backend
+        emit(logger, "tray_unavailable", reason=repr(exc))
+        # pystray runs setup on its own thread concurrently with the loop, so supervision may
+        # already be live even though the loop died; only a never-started run falls back here.
+        if not thread.is_alive():
+            return supervise(args, logger, stopping, None, command, child_exe_name, dump_type)
+    thread.join()
+    return result[0]
 
 
 def load_config(script_dir: Path) -> dict[str, object]:
@@ -1061,7 +1214,7 @@ def main() -> int:
                 dump_dir=str(args.dump_dir),
                 error=str(error),
             )
-            windows_balloon(
+            notify(
                 f"{args.name} dump setup failed",
                 f"Run the LocalDumps install from an elevated terminal: {error}",
                 True,
@@ -1098,7 +1251,7 @@ def main() -> int:
             reason=reason,
         )
         if args.require_dumps:
-            windows_balloon(
+            notify(
                 f"{args.name} watchdog not started",
                 f"WER normal minidumps are {reason}; run --install-local-dumps elevated",
                 True,
@@ -1124,17 +1277,38 @@ def main() -> int:
     args.pid_file.parent.mkdir(parents=True, exist_ok=True)
     args.pid_file.write_text(str(os.getpid()), encoding="ascii")
     stopping = threading.Event()
-    child: subprocess.Popen[str] | None = None
 
     def stop_handler(_signum, _frame) -> None:
         stopping.set()
 
     signal.signal(signal.SIGINT, stop_handler)
     signal.signal(signal.SIGTERM, stop_handler)
+    if args.tray and sys.platform == "darwin":
+        return run_with_darwin_tray(args, logger, stopping, command, child_exe_name, dump_type)
     tray_icon = start_tray(args, logger, stopping)
+    try:
+        return supervise(args, logger, stopping, tray_icon, command, child_exe_name, dump_type)
+    finally:
+        stop_tray(tray_icon, logger)
+
+
+def supervise(
+    args: argparse.Namespace,
+    logger: logging.Logger,
+    stopping: threading.Event,
+    tray_icon,
+    command: list[str],
+    child_exe_name: str,
+    dump_type: int | None,
+) -> int:
+    """The supervision loop proper: spawn, stream, health-poll, classify exits, restart with
+    backoff. Runs on the main thread everywhere except macOS-with-tray, where
+    run_with_darwin_tray gives main to AppKit and runs this on a worker. The caller that
+    started the tray owns stopping it."""
     failures = 0
     recovery_pending = False
     stop_file = args.stop_file
+    child: subprocess.Popen[str] | None = None
     child_env = os.environ.copy()
     if stop_file is not None:
         child_env[args.stop_env] = str(stop_file)
@@ -1164,7 +1338,7 @@ def main() -> int:
                 )
             except OSError as error:
                 emit(logger, "spawn_failed", error=str(error))
-                windows_balloon(f"{args.name} watchdog", f"Could not start child: {error}", True)
+                notify(f"{args.name} watchdog", f"Could not start child: {error}", True)
                 return 2
 
             emit(logger, "child_started", pid=child.pid)
@@ -1234,13 +1408,13 @@ def main() -> int:
                              ok=True, healthy_for_s=round(now - last_health_change))
                         next_heartbeat = now + HEALTH_HEARTBEAT_SECONDS
                     if healthy and recovery_pending:
-                        windows_balloon(f"{args.name} recovered", f"Server is healthy (pid {child.pid})")
+                        notify(f"{args.name} recovered", f"Server is healthy (pid {child.pid})")
                         emit(logger, "recovered", pid=child.pid)
                         recovery_pending = False
                     next_health = now + max(args.health_interval, 1.0)
                 elif (args.no_health and recovery_pending and
                       time.time() - started_at >= min(args.stable_seconds, 10.0)):
-                    windows_balloon(f"{args.name} recovered", f"Process is running (pid {child.pid})")
+                    notify(f"{args.name} recovered", f"Process is running (pid {child.pid})")
                     emit(logger, "recovered", pid=child.pid)
                     recovery_pending = False
                 tray_tick(tray_icon, args.name)
@@ -1263,6 +1437,19 @@ def main() -> int:
                     tune_restart_seen.is_set()):
                 emit(logger, "tune_bootstrap_complete")
                 failures = 0
+                continue
+            if args.program is None and return_code == TUNE_RESTART_EXIT:
+                # Exit 3 WITHOUT the restart marker: the tuner aborted before writing winners
+                # (llvm_tune's noise gate found the box too loud to trust measurements). Not a
+                # crash — no bundle, no balloon — but backoff still applies: an immediate
+                # relaunch on a still-noisy box just aborts again.
+                failures = 0 if uptime >= args.stable_seconds else failures + 1
+                delay = min(2.0 ** min(failures, 6), args.max_restart_delay)
+                emit(logger, "tune_incomplete", uptime_seconds=uptime,
+                     restart_delay_seconds=delay)
+                set_state(restart_delay=delay, healthy=None)
+                tray_tick(tray_icon, args.name)
+                stopping.wait(delay)
                 continue
             if return_code == CONFIG_RESTART_EXIT:
                 emit(logger, "config_restart_relaunch")
@@ -1304,7 +1491,7 @@ def main() -> int:
                     emit(logger, "crash_bundle", path=str(bundle_path))
                 except OSError as error:
                     emit(logger, "crash_bundle_failed", error=str(error))
-            windows_balloon(
+            notify(
                 f"{args.name} crashed",
                 f"Exit {return_code}; restarting in {delay:.0f}s"
                 + (f"\nDump: {dump_path}" if dump_path is not None else "\nNo minidump produced")
@@ -1333,7 +1520,6 @@ def main() -> int:
                 stop_file.unlink()
             except OSError:
                 pass
-        stop_tray(tray_icon, logger)
         emit(logger, "watchdog_stopped")
 
     return 0
