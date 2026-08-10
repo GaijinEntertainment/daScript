@@ -200,7 +200,10 @@ namespace das
         }
         uint32_t base, sh;
         if ( em < ((127u - 14u) << 23) ) {      // subnormal half
-            sh = 126u - (em >> 23) + 13u + 1u;
+            // m = base >> (126 - e): base is 1.f << 23, and a half subnormal is m * 2^-24.
+            // The old +13+1 double-counted the 23->10 mantissa reduction, so every
+            // subnormal shifted out to zero - and sh reached 38, making 1u << (sh-1) UB.
+            sh = 126u - (em >> 23);
             base = (em & 0x7fffffu) | 0x800000u;
         } else {                                // normal half
             sh = 13u;
