@@ -43,6 +43,31 @@ dying on the first. That repair is not a nicety: the verifier walks with the sam
 visitor the compiler uses, and `Expr*::visit` dereferences children unguarded, so
 reporting without repairing gives you the diagnostic AND the segfault.
 
+### Two invariants your built AST must satisfy
+
+Both are checked by default, over every non-builtin module, and the whole tree is
+expected to be clean — a report is a bug in whatever built the node, not noise to
+suppress.
+
+**Every node carries a location.** `at` is the source construct the node stands
+for: the expression being rewritten, the matched node a synthesized constant came
+from, the call a default argument was inserted into. A node without one makes
+every later diagnostic, profile row and debug-info entry over it point at nothing.
+So pass `at` at construction — `new ExprConstInt(at = expr.at, value = 0)`, never
+`new ExprConstInt(value = 0)` — and thread an `at` parameter through helpers that
+build nodes rather than defaulting it to `LineInfo()`.
+
+For a subtree you did not build node-by-node — a `$v()` conversion, anything from
+`convert_to_expression`, a clone whose source came from a C++ binding — use
+`stamp_missing_at(expr, at)`: it fills only the empty locations and leaves the
+rest, so setting the root's `at` alone is never enough.
+
+**A node has exactly one parent.** Inserting the same pointer in two places makes
+every later pass edit it twice. Use `clone_expression` / `clone_type` for the
+second use; the verifier reports the alias and unshares what it can.
+`options _ast_verify_unique = false` turns the check off for a module that shares
+nodes on purpose.
+
 Two things it will not do for you. It is a denylist of shapes that CRASH — a
 shape the compiler tolerates, or legitimately produces, is deliberately not
 flagged, so silence is not proof your tree is right. And a macro that re-breaks
