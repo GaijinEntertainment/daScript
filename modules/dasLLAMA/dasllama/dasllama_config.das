@@ -38,7 +38,6 @@ struct public DlimCpuConfig {
 //! `cls` are here so every walk-shaping switch is in the identity (the old tag missed them).
 struct public DlimVulkanConfig {
     coopmat_mode : int
-    expert_q8n : bool
     vram_mb : int64
     moe_layers : int64
     moe_stream : int64
@@ -146,7 +145,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
 //! The vulkan flavor's identity tag, from the RESOLVED section (the old tag folded raw env
 //! strings, so "auto" hid device-derived byte differences).
 def public dlim_vulkan_tag(v : DlimVulkanConfig) : string {
-    return ("vulkan|m{v.coopmat_mode}{v.expert_q8n ? "n" : ""} b{v.vram_mb}"
+    return ("vulkan|m{v.coopmat_mode} b{v.vram_mb}"
         + " l{v.moe_layers} s{v.moe_stream}"
         + " r{v.dn ? 1 : 0}{v.attn ? 1 : 0}{v.dnd ? 1 : 0}{v.shexp ? 1 : 0}{v.qkv ? 1 : 0}{v.cls ? 1 : 0}"
         + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.trim ? " T" : ""}")

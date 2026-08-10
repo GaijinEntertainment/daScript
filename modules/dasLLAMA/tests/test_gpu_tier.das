@@ -19,6 +19,7 @@ var private g_reserve_blocks = 0l
 var private g_token_pos = -1l
 var private g_token_cnt = -1l
 var private g_prepared = false
+var private g_prepared_kv16 = false
 
 def private d_reserve(fmt : int; cap_blocks : int64) : bool {
     g_reserve_fmt = fmt
@@ -30,8 +31,9 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
 [unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)]
-def private d_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool) : bool {
+def private d_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool {
     g_prepared = true
+    g_prepared_kv16 = kv16
     return true
 }
 
@@ -57,13 +59,13 @@ def private d_token(x : array<float>; cossin : array<float>; pos, cnt : int64; v
 def private d_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {}
 
 [unused_argument(l, kp, vp, npos)]
-def private d_sync(l : int64; kp : float const?; vp : float const?; npos : int64) {}
+def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
 
 [unused_argument(l, pos, kp, vp)]
-def private d_read(l, pos : int64; kp : float?; vp : float?) {}
+def private d_read(l, pos : int64; kp : uint8?; vp : uint8?) {}
 
 [unused_argument(l, kp, vp, npos)]
-def private d_read_bulk(l : int64; kp : float?; vp : float?; npos : int64) {}
+def private d_read_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {}
 
 def private arm_on() : bool => true
 
@@ -91,8 +93,9 @@ def test_gpu_tier_contract(t : T?) {
         var wq : array<uint8>
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
-        t |> success(rdec_prepare(2l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false))
+        t |> success(rdec_prepare(2l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true))
         t |> success(g_prepared, "prepare double must have run")
+        t |> success(g_prepared_kv16, "kv16 must forward to the double")
         var x : array<float>
         var cs : array<float>
         var logits : array<float>

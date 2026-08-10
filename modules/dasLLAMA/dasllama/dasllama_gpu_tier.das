@@ -116,22 +116,22 @@ var g_moe_gpu_attn_route = true        // runtime routing gate over the attentio
 // symbol. reserve/place fill the arenas; prepare/norms/set_layer/set_cls build it; token runs one forward.
 typedef RdecReserveFn = function<(fmt : int; cap_blocks : int64) : bool>
 typedef RdecPlaceFn = function<(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64>
-typedef RdecPrepareFn = function<(n_layers : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool) : bool>
+typedef RdecPrepareFn = function<(n_layers : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool) : bool>
 typedef RdecNormsFn = function<(norms : array<float>) : void>
 typedef RdecSetLayerFn = function<(l : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int) : void>
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int) : void>
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
-typedef RdecSyncKvFn = function<(l : int64; kp : float const?; vp : float const?; npos : int64) : void>
-typedef RdecReadKvFn = function<(l : int64; pos : int64; kp : float?; vp : float?) : void>
-typedef RdecReadKvBulkFn = function<(l : int64; kp : float?; vp : float?; npos : int64) : void>
+typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
+typedef RdecReadKvFn = function<(l : int64; pos : int64; kp : uint8?; vp : uint8?) : void>
+typedef RdecReadKvBulkFn = function<(l : int64; kp : uint8?; vp : uint8?; npos : int64) : void>
 
 [unused_argument(fmt, cap_blocks)]
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 [unused_argument(wq, ws, n, rows, fmt)]
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
-[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)]
-def private rdec_unset_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool) : bool => false
+[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16)]
+def private rdec_unset_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool => false
 [unused_argument(norms)]
 def private rdec_unset_norms(norms : array<float>) {}
 [unused_argument(l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
@@ -147,11 +147,11 @@ def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>;
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
 [unused_argument(l, kp, vp, npos)]
-def private rdec_unset_sync(l : int64; kp : float const?; vp : float const?; npos : int64) {}
+def private rdec_unset_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
 [unused_argument(l, pos, kp, vp)]
-def private rdec_unset_read(l, pos : int64; kp : float?; vp : float?) {}
+def private rdec_unset_read(l, pos : int64; kp : uint8?; vp : uint8?) {}
 [unused_argument(l, kp, vp, npos)]
-def private rdec_unset_read_bulk(l : int64; kp : float?; vp : float?; npos : int64) {
+def private rdec_unset_read_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
     panic("dasLLAMA: resident KV bulk readback hit without an installed GPU driver")
 }
 
@@ -191,15 +191,15 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
-def public rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool) : bool => invoke(g_rdec_prepare, n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)
+def public rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool => invoke(g_rdec_prepare, n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16)
 def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
 def public rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) { invoke(g_rdec_set_layer, l, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int) { invoke(g_rdec_set_cls, cls_block, cls_fmt) }
 def public rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, pos, cnt, logits) }
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, npos, logits) }
-def public rdec_sync_kv(l : int64; kp : float const?; vp : float const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
-def public rdec_read_kv(l, pos : int64; kp : float?; vp : float?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
-def public rdec_read_kv_bulk(l : int64; kp : float?; vp : float?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
+def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
+def public rdec_read_kv(l, pos : int64; kp : uint8?; vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
+def public rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
 
 //! Install the GPU MoE tier (a GPU backend calls this at [init] when its device probe passes).
 def public install_moe_gpu_tier(ffn : MoeGpuFfnFn; upload : MoeGpuUploadFn; cls : MoeGpuClsFn; dense : MoeGpuDenseFn; drop : MoeGpuDropFn; dn : MoeGpuDnFn; attn : MoeGpuAttnFn) {
@@ -817,16 +817,6 @@ def public set_moe_gpu_binding_cap(f : function<() : int64>) {
 
 def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
 
-def private moe_gpu_no_q8n : bool => false
-var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
-
-//! The tier asks the loader to gather q8 EXPERT stacks as gguf-native q8n blocks (fmt 6, the
-//! cm2 decode-in-load layout, no scale plane). Registered beside the budget hooks; the probe
-//! may create the device — it must answer before the first gather.
-def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
-    g_moe_gpu_expert_q8n = f
-}
-
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
 
@@ -905,7 +895,6 @@ def public set_moe_gpu_bake_tag(f : function<() : string>) {
 
 def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
 
-def public moe_gpu_expert_q8n() : bool => invoke(g_moe_gpu_expert_q8n)
 
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.
 def public moe_gpu_plane_bytes(n, rows : int64; fmt : int) : int64 => invoke(g_moe_gpu_plane_bytes_fn, n, rows, fmt)
@@ -979,8 +968,8 @@ def public moe_gpu_upload_stack(wq : array<uint8> | #; ws : array<uint8> | #; wo
     if (!g_moe_gpu_installed) {
         return false
     }
-    // empty planes hand the tier null: q8n stacks carry no scale plane, and the slice replay's
-    // refusal-boundary serve is empty on purpose (the tier refuses on arithmetic, no bytes read)
+    // empty planes hand the tier null: the slice replay's refusal-boundary serve is empty on
+    // purpose (the tier refuses on arithmetic, no bytes read)
     var wqp : uint8 const?
     if (!empty(wq)) {
         wqp = unsafe(addr<uint8 const?>(wq[0]))
@@ -1180,9 +1169,6 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes
-    }
-    if (g_moe_gpu_expert_q8n == null) {
-        g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
     }
     if (g_moe_gpu_dry_bake == null) {
         g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake

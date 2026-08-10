@@ -33,28 +33,76 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
+// mode 4 feeds the dense q8 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
+// keeps its q8 chain — the format pick is decoupled)
+def private pf_f16_feed(f : int) : bool => f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
-// BatchArgs push. fmt picks the class: 6 = cm2 twin, kq = the kq tile family, else the q8
-// router (whose variant moves with wlen — the last window is shorter).
+// BatchArgs push. fmt picks the class: fmt-0 in mode 4 = the cm2 l/m tiles, kq = the kq tile
+// family, else the q8 router (whose variant moves with wlen — the last window is shorter).
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64) {
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt))
-    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-    if (fmt == 6) {
-        let key = idx * 8 + 7
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
-            verify(ensure_q8n_batch_cm2_cls(), "vk prefill: the cm2 batch class rail must engage")
-            g_rd.pf_cls_gemm[key] = set_q8n_batch_cm2_cls(
-                fixed_array(wq, g_rd.pf_meta[idx].buf, ab, yb),
-                fixed_array(wqn, BATCH_META_BYTES, an, yn),
-                fixed_array(0u, 0u, abit, ybit))
+    let cm2l = fmt == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+    // cm2 tile + split picks (pure in d/wlen/n/sm_count) — computed once, fed to fill AND enc
+    var nsplit = 1l
+    var ksplit = 0l
+    var cm2_tc = 0l
+    if (cm2l) {
+        cm2_tc = batch_tile_edges(fmt, d, wlen, true).tc
+        let sp = cm2_split_k(d, wlen, n, cm2_tc)
+        nsplit = sp.nsplit
+        ksplit = sp.ksplit
+    }
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l, nsplit))
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
+    if (cm2l) {
+        // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
+        let split = nsplit > 1l
+        if (split) {
+            verify(nsplit * wlen * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: split-k planes exceed the scratch bound")
         }
-        enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        let yob = split ? g_rd.pf_splitk : yb
+        let yon = split ? g_rd.pf_splitk_bytes : yn
+        let yog = split ? VHZ_SK : ybit
+        let ml = cm2_tc == 256l
+        let key = idx * 16 + (ml ? (split ? 9 : 8) : (split ? 11 : 10))
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            if (ml) {
+                verify(ensure_q8_batch_cm2l_cls(), "vk prefill: the cm2 l-tile class rail must engage")
+                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2l_cls(
+                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
+                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
+                    fixed_array(0u, 0u, 0u, abit, yog))
+            } else {
+                verify(ensure_q8_batch_cm2m_cls(), "vk prefill: the cm2 m-tile class rail must engage")
+                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2m_cls(
+                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
+                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
+                    fixed_array(0u, 0u, 0u, abit, yog))
+            }
+        }
+        if (ml) {
+            enc_q8_batch_cm2l_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        } else {
+            enc_q8_batch_cm2m_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        }
+        if (split) {
+            let rkey = idx * 16 + 12
+            if (!key_exists(g_rd.pf_cls_gemm, rkey)) {
+                verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
+                g_rd.pf_cls_gemm[rkey] = set_splitk_reduce_cls(
+                    fixed_array(g_rd.pf_splitk, yb),
+                    fixed_array(g_rd.pf_splitk_bytes, yn),
+                    fixed_array(VHZ_SK, ybit))
+            }
+            var pcr = SkRedArgs(nelem = uint(wlen * d), k = uint(nsplit))
+            enc_splitk_reduce_cls(raw, h, g_rd.pf_cls_gemm[rkey], pcr, (wlen * d + 1_023l) / 1_024l)
+        }
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
-        let key = idx * 8 + 6
+        let key = idx * 16 + 6
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
             g_rd.pf_cls_gemm[key] = kq_batch_cls_set_for(fmt, q40cm,
@@ -65,7 +113,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         kq_batch_cls_enc_for(fmt, q40cm, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     } else {
         let v = q8_batch_cls_variant(q8_batch_tile_for(d, wlen), q8_batch_aligned(d, wlen))
-        let key = idx * 8 + v
+        let key = idx * 16 + v
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(q8_batch_cls_ensure(v), "vk prefill: the q8 batch class rail must engage")
             g_rd.pf_cls_gemm[key] = q8_batch_cls_set(v,
@@ -78,6 +126,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
+[cold_path]   // once per residency — buffers, sets, fa arming
 def private pf_setup {
     if (g_rd.pf_ready) {
         return
@@ -107,11 +156,11 @@ def private pf_setup {
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
-    // fmt-6 feeds f16 rows; kq consumers take the Q8_K quant/act forms (per-256 scales)
+    // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any6 = false
     var anykq = kq_sb(g_rd.cls_fmt_marker)
     for (L in g_rd.layers) {
-        any6 = any6 || L.fq == 6 || L.fo == 6 || L.f1 == 6 || L.f2 == 6
+        any6 = any6 || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
         anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2)
     }
     if (any6) {
@@ -119,30 +168,53 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
+    // cm2 split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
+    if (any6 && g_gpu.coopmat_mode == 4) {
+        var skb = 262_144l * int64(g_gpu.sm_count)
+        let fsk = cm2_splitk_env()
+        if (fsk > 1l) {
+            skb = max(skb, np * wide * fsk * 4l)
+        }
+        skb = min(skb, vk_max_storage_range())
+        if (skb > 0l) {
+            g_rd.pf_splitk = make_device_buf(skb)
+            g_rd.pf_splitk_bytes = skb
+        }
+    }
     let nsets = int(g_rd.n_layers * PF_ROLES + 2l)   // + prologue, final quantize of the last row
     g_rd.pf_sets |> resize(nsets)
     g_rd.pf_meta |> resize(nsets)
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
-    let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
+    let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
-    // the non-GEMM roles ride the class rail: their sets are per-class, params ride push
-    let fa128s = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
-    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()
-        && (fa128s ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())
+    let kv16 = g_rd.kv16
+    // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths
+    g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+        && (g_rd.head_size == 64l || g_rd.head_size == 128l))
+    let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
+    verify(ensure_cls_dn_rq() && ensure_cls_ar()
+        && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
+        && (fa128s ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+            : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!g_rd.pf_facm2
+            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
+    if (g_rd.pf_facm2) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed (hs {g_rd.head_size}, native f16 mirrors)\n")
+    }
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
-        let qkv6 = L.fq == 6
-        let wo6 = L.fo == 6
-        let gu6 = L.f1 == 6
-        let dn6 = L.f2 == 6
-        // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
+        let qkv6 = pf_f16_feed(L.fq)
+        let wo6 = pf_f16_feed(L.fo)
+        let gu6 = pf_f16_feed(L.f1)
+        let dn6 = pf_f16_feed(L.f2)
+        // 0 quant_xb: pf_xb -> pf_xq/pf_xs (f16-fed: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 0] = (qkv6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
@@ -154,18 +226,25 @@ def private pf_setup {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
             let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
             let rsizes = fixed_array(np * qd * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
-            g_rd.pf_sets[b + 4] = set_rope_kv_b_cls(rbufs, rsizes,
-                fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS))
+            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS)
+            g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
+                : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         }
-        // 5 attn (class: q, Kmir, Vmir, out) — the h128 coopmat twin when it serves this model
-        {
+        // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
+        if (g_rd.pf_facm2) {
+            g_rd.pf_sets[b + 5] = set_fa_cm2_cls(
+                fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
+                fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l),
+                fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT))
+        } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l)
             let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
-            g_rd.pf_sets[b + 5] = (fa128s ? set_da_attn_b_h128_cls(abufs5, asizes5, agbits5)
-                : set_da_attn_b_cls(abufs5, asizes5, agbits5))
+            g_rd.pf_sets[b + 5] = (fa128s
+                ? (kv16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
+                : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5)))
         }
-        // 6 quant_at: pf_attn -> pf_aq/pf_as (fmt 6: f16 convert -> pf_af)
+        // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_attn, g_rd.pf_af),
                 fixed_array(np * qd * 4l, np * qd * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
@@ -176,14 +255,14 @@ def private pf_setup {
         g_rd.pf_sets[b + 8] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
-        // 9 quant_xb2: pf_xb -> pf_xq (fmt 6: f16 convert -> pf_xf)
+        // 9 quant_xb2: pf_xb -> pf_xq (f16-fed: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 9] = (gu6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
             : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
-        // 12 actrq (class: gate, up, quants out, scales out; fmt 6: actf16 -> pf_hf)
+        // 12 actrq (class: gate, up, quants out, scales out; f16-fed: actf16 -> pf_hf)
         g_rd.pf_sets[b + 12] = (dn6
             ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
                 fixed_array(np * hid * 4l, np * hid * 4l, np * hid * 2l),
@@ -216,6 +295,7 @@ def private pf_setup {
 
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
+[hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_prefill before prepare/set_cls")
     pf_setup()
@@ -249,7 +329,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             var h : VkHaz
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-            let fa128 = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
+            let fa128 = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
             let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
             let hs = g_rd.head_size
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
@@ -257,12 +337,12 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             pfq_ts(raw)
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
-                // fmt-6 (cm2) roles: f32->f16 convert feeds the decode-in-load twin; the fill's fmt
-                // must match the dispatched pipe's tile rule, so both key off the same group flag
-                let fq6 = g_rd.layers[l].fq == 6
-                let fo6 = g_rd.layers[l].fo == 6
-                let gu6 = g_rd.layers[l].f1 == 6
-                let dn6 = g_rd.layers[l].f2 == 6
+                // f16-fed roles (fmt-6, and fmt-0 under mode 4's l-tile): f32->f16 convert feeds
+                // the decode-in-load GEMM; the fill's tile rule keys off the same group flag
+                let fq6 = pf_f16_feed(g_rd.layers[l].fq)
+                let fo6 = pf_f16_feed(g_rd.layers[l].fo)
+                let gu6 = pf_f16_feed(g_rd.layers[l].f1)
+                let dn6 = pf_f16_feed(g_rd.layers[l].f2)
                 // kq consumers take the Q8_K quant/act forms (the arm declines mixed groups)
                 let fqk = kq_sb(g_rd.layers[l].fq)
                 let fok = kq_sb(g_rd.layers[l].fo)
@@ -307,15 +387,40 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
                     layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0), voff = uint(wlen * kvd))
-                enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
-                pfq_ts(raw)
-                var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
-                    hs = uint(hs), kv_mul = uint(g_rd.kv_mul), kbase = uint(mirb), vbase = uint(mirb),
-                    w0 = uint(w0), scale = g_rd.scale)
-                if (fa128) {
-                    enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                if (g_rd.kv16) {
+                    enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 } else {
-                    enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                    enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+                }
+                pfq_ts(raw)
+                if (g_rd.pf_facm2) {
+                    // the cm2 fa tile reads the f16 mirrors directly
+                    var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), kv_mul = uint(g_rd.kv_mul), kvbase = uint(mirb),
+                        scale = g_rd.scale)
+                    let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
+                    if (hs == 64l) {
+                        enc_fa_cm2_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                    } else {
+                        enc_fa_cm2_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                    }
+                } else {
+                    var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
+                        hs = uint(hs), kv_mul = uint(g_rd.kv_mul), kbase = uint(mirb), vbase = uint(mirb),
+                        w0 = uint(w0), scale = g_rd.scale)
+                    if (fa128) {
+                        if (g_rd.kv16) {
+                            enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        } else {
+                            enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        }
+                    } else {
+                        if (g_rd.kv16) {
+                            enc_da_attn_b_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        } else {
+                            enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        }
+                    }
                 }
                 pfq_ts(raw)
                 if (fo6) {
@@ -400,14 +505,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
             }
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")
+                to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
             pfq_end(raw)
             vk_check(vkEndCommandBuffer(raw), null)
             let t_record = get_time_usec(tp0) - t_prep
             submit_wait(raw)
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")
+                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
             w0 += wlen
         }
@@ -431,9 +536,9 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             tot += pfq_us(2u) + pfq_us(nq) + pfq_us(nq + 1u)
             // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
             if (g_rd.qk_norm) {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             } else {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
         }
     }
@@ -490,7 +595,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch — one activation image")
+    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
@@ -535,12 +640,13 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 }
 
 // single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
-// 0 at map_off = 4. Returns the dispatch workgroup count.
-def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int) : uint {
-    let te = batch_tile_edges(fmt, d, npos)
+// 0 at map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched
+// class's tile rule (batch_tile_edges); `nsplit` stacks split-k planes onto the same map.
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l) : uint {
+    let te = batch_tile_edges(fmt, d, npos, cm2l)
     let wtiles = (d + te.td - 1l) / te.td
     let rtiles = (npos + te.tc - 1l) / te.tc
-    let total = rtiles * wtiles
+    let total = rtiles * wtiles * nsplit
     assert((4l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch schedule exceeds capacity")
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
@@ -599,7 +705,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = fmt_unit(fmt)   // q8 AND q8n take 32-block Q8_0 activations
+    let unit = fmt_unit(fmt)   // q8 takes 32-block Q8_0 activations
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
@@ -634,31 +740,6 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
 }
 
 // ===== prefill batch dispatch (the FFN's batched-GEMM arm) =====
-
-// cm2 batch state: the two f16 planes (2 bytes per element — 2x the q8 image caps bound the
-// same chunk rows) and the dequant/act convert sets. Mode 4 + fmt-6 stacks only.
-def private ensure_cm2_batch {
-    if (g_gpu.cm2_batch_ready) {
-        return
-    }
-    ensure_batch_state()
-    verify(ensure_cls_xf16() && ensure_actf16_cls(), "vk cm2 batch: the class rails must engage on a live device")
-    g_gpu.batch_xf_dev = make_device_buf(2l * BATCH_XQ_BYTES)
-    g_gpu.batch_hf_dev = make_device_buf(2l * BATCH_HQ_BYTES)
-    // dequant (class: quant words, scales, f16 out)
-    g_gpu.batch_xf_set = set_cls_xf16(
-        fixed_array(g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_xf_dev),
-        fixed_array(BATCH_XQ_BYTES, BATCH_XS_BYTES, 2l * BATCH_XQ_BYTES),
-        fixed_array(VHB_ACT, VHB_ACT, VHB_XF))
-    // act-f16 (class: gate, up, f16 hidden out)
-    g_gpu.batch_hf_set = set_actf16_cls(
-        fixed_array(g_gpu.batch_y1_dev, g_gpu.batch_y2_dev, g_gpu.batch_hf_dev),
-        fixed_array(BATCH_Y_BYTES, BATCH_Y_BYTES, 2l * BATCH_HQ_BYTES),
-        fixed_array(VHB_Y1, VHB_Y2, VHB_HF))
-    g_gpu.resident_bytes += 2l * BATCH_XQ_BYTES + 2l * BATCH_HQ_BYTES
-    g_gpu.cm2_batch_ready = true
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 prefill chain engaged (decode-in-load, f16 activations)\n")
-}
 
 // the fused act+requant class sets (both forms — the mid-step form follows the down stack)
 def private ensure_batch_acts_cls {
@@ -808,50 +889,38 @@ def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, 
 }
 
 // one stack batch tile on the class rail: the class picked by the stack's format (q8 rides the
-// tile router; kq formats and the cm2 twin are fixed), a per-(stack, variant) cached set over
-// the planes ensure_batch_set recorded, BatchArgs push. n/d must MATCH the fill's values.
+// tile router; kq formats are fixed), a per-(stack, variant) cached set over the planes
+// ensure_batch_set recorded, BatchArgs push. n/d must MATCH the fill's values.
 def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg : uint; n, d : int64) {
     unsafe {
         var st & = g_gpu.stacks[si]
         let fmt = st.fmt
         // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
-        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin, 7 = the cm2 twin
+        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
         if (fmt == int(KqFmt.q8)) {
             v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
-        } elif (fmt == int(KqFmt.q8n)) {
-            v = 7
         } elif (q40cm) {
             v = 5
         }
         if ((st.batch_cls_ready & (1u << uint(v))) == 0u) {
-            if (fmt == int(KqFmt.q8n)) {
-                verify(ensure_q8n_batch_cm2_cls(), "vk batch: the cm2 batch class rail must engage")
-                st.batch_cls_sets[v] = set_q8n_batch_cm2_cls(
-                    fixed_array(st.wqbuf, st.batch_meta_dev, st.batch_xq, st.batch_y),
-                    fixed_array(st.wqbytes, BATCH_META_BYTES, st.batch_xq_bytes, st.batch_y_bytes),
-                    fixed_array(0u, VHB_META, st.batch_xbit, st.batch_ybit))
+            let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
+            let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
+            let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
+            if (fmt == int(KqFmt.q8)) {
+                verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
+                st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
+            } elif (q40cm || kq_sb(fmt)) {
+                verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
+                st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
             } else {
-                let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
-                let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
-                let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
-                if (fmt == int(KqFmt.q8)) {
-                    verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
-                    st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-                } elif (q40cm || kq_sb(fmt)) {
-                    verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
-                    st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
-                } else {
-                    panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
-                }
+                panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
             }
             st.batch_cls_ready |= 1u << uint(v)
         }
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(st.batch_map_off))
         if (fmt == int(KqFmt.q8)) {
             q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.q8n)) {
-            enc_q8n_batch_cm2_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } elif (q40cm || kq_sb(fmt)) {
             kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } else {
@@ -893,24 +962,16 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
         cmd_copy_whole(raw, g_gpu.comb_stage.buf, g_gpu.comb_w_dev, comb_wi_bytes)
         cmd_copy_range(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, 0l, comb_wi_bytes)
     }
-    if (g_gpu.stacks[s1].fmt == int(KqFmt.q8n)) {   // the cm2 chain: dequant feed, twin GEMMs, f16 mid-step
-        var pcx = RqArgs(inbase = 0u, nblk = uint(axq_bytes / 4l))
-        enc_cls_xf16(raw, h, g_gpu.batch_xf_set, pcx, (axq_bytes / 4l + 255l) / 256l)
-    }
     stack_batch_enc(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc(raw, h, s3, nwg_gu, n, nfe)
     // the mid-step form follows the DOWN stack — its GEMM is the consumer of the hidden plane
     var pca = ActArgs(nelem = uint(rows * nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(mid_nblk))
-    if (g_gpu.stacks[s2].fmt == int(KqFmt.q8n)) {
-        enc_actf16_cls(raw, h, g_gpu.batch_hf_set, pca, (rows * nfe / 4l + 255l) / 256l)
+    let dkq = g_gpu.stacks[s2].fmt != 0
+    let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
+    if (dkq) {
+        enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
     } else {
-        let dkq = g_gpu.stacks[s2].fmt != 0
-        let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
-            enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-        } else {
-            enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-        }
+        enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
     }
     stack_batch_enc(raw, h, s2, nwg_dn, nfe, n)
     if (comb_npos > 0u) {
@@ -939,27 +1000,14 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !vk_fmt_b32(f1)
     assert(!vk_fmt_b32(f3) == kq_in,
-        "dasLLAMA vulkan tier: gate/up form mismatch — they share one activation image")
+        "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     let xunit_mid = fmt_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
-    if (f1 == 6 || f2 == 6) {
-        ensure_cm2_batch()   // any twin in the chain needs the f16 planes + convert sets
-    }
-    // a q8n gate/up pair loads the dequantized f16 plane as B; a q8n down loads the f16 hidden
-    if (f1 == 6) {
-        ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xf_dev, g_gpu.batch_xs_dev, 2l * BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_XF, VHB_Y1)
-        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xf_dev, g_gpu.batch_xs_dev, 2l * BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_XF, VHB_Y2)
-    } else {
-        ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
-    }
-    if (f2 == 6) {
-        ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.batch_hf_dev, g_gpu.hs_dev, 2l * BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HF, VHB_Y1)
-    } else {
-        ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
-    }
+    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
     let comb = npos > 0l
     var comb_k = 0l
     if (comb) {
@@ -1498,7 +1546,7 @@ def private copy_stream_group(si, g : int; sync : bool) {
         let sk = g * 3 + k
         let psi = k == 0 ? slot.s1 : (k == 1 ? slot.s3 : slot.s2)
         cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hwq.buf, g_gpu.stacks[psi].wqbuf, g_gpu.stream_stacks[sk].wqbytes)
-        if (g_gpu.stream_stacks[sk].wsbytes > 0l) {   // q8n mirrors carry no scale plane
+        if (g_gpu.stream_stacks[sk].wsbytes > 0l) {
             cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hws.buf, g_gpu.stacks[psi].wsbuf, g_gpu.stream_stacks[sk].wsbytes)
         }
     }

@@ -23,7 +23,7 @@ doesn't-fit-in-VRAM tier — the heat-pinned expert cache splitting one layer's 
 CPU and GPU is a measured win (26B on the 8 GB 3060 Ti) and has no whole-graph equivalent.
 Resident (fits) and cooperative (doesn't fit) are complementary Vulkan modes, not rivals.
 
-## The gap list (from INVENTORY.md's Metal↔Vulkan parity map)
+## The gap list (from the 2026-07-29 census's Metal↔Vulkan parity map — archived as history/dasLLAMA/INVENTORY.md)
 
 Ordered roughly by user-visible value; re-rank against zen2 measurements before starting.
 
@@ -42,9 +42,10 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
    recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
    dn state on g_rd).
-3. **KV codecs on device** — Vulkan's mirror is f32-only; Metal carries f16/f32/q8_0/tq4
-   through every attention and rope-store kernel. Port the codec seams (the CPU truth is
-   `dasllama_convert`'s KV codec functions; the Metal kernels are the device reference).
+3. **KV codecs on device** — Vulkan's mirror serves f16 (the armed default) and f32 through
+   the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
+   codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant
+   kernels are the device reference).
 4. **Real batched decode** — the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
@@ -85,33 +86,33 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    They diverged at birth (vulkan's grid folds any integer literal, metal's only "1"); one
    owner ends that, and (b) rides on the hoisted core.
 
-11. **cm2 prefill GEMM across formats — close the llama.cpp prefill gap (NEXT ARC, ruled
-   2026-08-06).** Walkthrough evidence (zen2, RTX 5060 Ti, class-kernel branch vs llama.cpp
-   b9860 Vulkan, tinyllama-1.1B Q8, pp512/tg128 x5): decode tg 291.6 vs 294.7 = **99% —
-   parity**; prefill pp 7242 vs 20900 = **34.6% — 2.9x behind**. Their prefill runs
-   NV_coopmat2 matrix-core GEMMs; ours ran the default mode-3 mul_mm hand-staged L-tile.
-   The stack below is NOT the gap: dasSpirv emits SPV_KHR_cooperative_matrix AND
-   SPV_NV_cooperative_matrix2 (tensor addressing, workgroup-scope tiles, `[spirv_decode]`
-   decode-in-load), dasVulkan enables both extensions, and the tier detects
-   `has_coopmat`/`has_coopmat2`. What is missing, in order:
-   (a) the cm2 decode-in-load GEMM exists ONLY for fmt-6 q8n stacks (mode 4, an experiment
-   arm with its own xf16/actf16/f16cvt side chain) — generalize it to the formats serving
-   actually uses (q8, k4/k5/k6, q40);
-   (b) tile-shape quality/tuning — per-device shapes like llama.cpp's, fold into the tune
-   rail (item 7 composes);
-   (c) mode selection defaults — `has_coopmat2` should pick the cm2 path by itself instead
-   of the `DASLLAMA_COOPMAT` env force.
-   PROBE RESULT (same box/model/shapes, DASLLAMA_COOPMAT=cm2): pp512 5917 ± 125 — our cm2
-   arm loses to our own mm tile (7242) and sits at 28% of llama.cpp's cm2 (20900). The gap
-   is KERNEL QUALITY, not coverage — (b) is the arc's center, (a) rides it. Also: mode 4
-   drags decode onto the q8n GEMV chain and costs 14% tg (291.6 -> 250.7) — the prefill-GEMM
-   mode must decouple from the decode-GEMV format pick.
-   Methodology for the arc (Boris, 2026-08-06): benchmark per CAPABILITY TIER, not just
-   flagship-vs-flagship — force both sides down the ladder and compare like-for-like
-   (pretend the 5060 Ti is a 3060: no coopmat2, then no coopmat). Ours: DASLLAMA_COOPMAT=
-   sdot4|f16|int8|mm|cm2. Theirs: INVESTIGATE llama.cpp's switches — ggml-vulkan has
-   GGML_VK_DISABLE_COOPMAT / GGML_VK_DISABLE_COOPMAT2-style envs (verify names/behavior on
-   their current master); if they hold, every tier gets an apples-to-apples baseline.
+11. **cm2 prefill GEMM — close the llama.cpp prefill gap (ACTIVE ARC, ruled 2026-08-06).**
+   Origin evidence (zen2, RTX 5060 Ti, class-kernel branch vs llama.cpp b9860 Vulkan,
+   tinyllama-1.1B Q8, pp512/tg128 x5): decode tg 291.6 vs 294.7 = **99% — parity**; prefill
+   pp 7242 (mm) vs 20900 = 34.6%, and the old fmt-6 cm2 arm sat at 5917 ± 125 = 28% — the
+   gap was KERNEL QUALITY, not coverage.
+   DONE in-arc: the l-geometry re-cut on NATIVE fmt-0 two-plane q8 (decode METHOD reads the
+   scale plane — the class-method `[spirv_decode]` form), the fast/edge clamp split, the
+   m tile + split-k + llama.cpp's occupancy selection (`cm2_tile_cols`/`cm2_split_k`,
+   `shaderSMCount` via VK_NV_shader_sm_builtins), the decode/prefill format decouple (mode 4
+   serves decode on the unchanged q8 GEMV chain — the 14% tg drag is gone), and the fmt-6
+   q8n side stack DELETED end-to-end (KqFmt.q8n, the gather, the xf16/actf16 side chain's
+   q8n arms, kernels, probe surface, tier tests). The no-split cm2 arms keep LITERAL loop
+   bounds — branch-derived k0/k1/ybase in the hot tensor loop measured -27% pp even with
+   no-op values.
+   STILL OPEN in this item:
+   (a) K-quant generalization — extend decode-in-load to k4/k5/k6/q40 (llama.cpp's
+   fetch_scales/store_scales shared-mem staging is the model);
+   (b) per-device tile tuning — fold the l/m/split picks into the tune rail (item 7);
+   (c) mode selection defaults — `has_coopmat2` should pick cm2 by itself instead of the
+   `DASLLAMA_COOPMAT` env force (gate: cm2 must first beat mm on the serving models);
+   (d) decode_vector (`VK_NV_cooperative_matrix_decode_vector`, V=4 f16vec4 decode) —
+   DRIVER-BLOCKED on this box (610.74 lacks the extension; probe 2026-08-07); revisit on a
+   driver that exposes it. Emit-time arm only, never SPIR-V patching.
+   Methodology (Boris, 2026-08-06): benchmark per CAPABILITY TIER, like-for-like — ours:
+   DASLLAMA_COOPMAT=sdot4|f16|int8|mm|cm2 (+ DASLLAMA_CM2_TILE/DASLLAMA_CM2_SPLITK as A/B
+   instruments); theirs: GGML_VK_DISABLE_COOPMAT / _COOPMAT2 / _COOPMAT2_DECODE_VECTOR
+   (verified in their device-init walk).
 
 12. **Arena slabs — the 4 GiB storage-range ceiling (LANDED in-arc 2026-08-06; was the
    PR gate — the MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far

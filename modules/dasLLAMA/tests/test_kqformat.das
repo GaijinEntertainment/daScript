@@ -3,8 +3,8 @@ options _comment_hygiene = true
 
 // Pins the K-quant format taxonomy (dasllama_kqformat): enum int values, the stride truth
 // against LITERAL byte counts (not read back through the table), the predicates, and the
-// one enum<->kernel-id bridge — so the two-id-space footgun ("6 means Q6_K in one space and
-// q8n in the other") can never silently return.
+// one enum<->kernel-id bridge — so the two-id-space footgun ("6 means Q6_K in the kernel-id
+// space and KqFmt value 6 in the enum") can never silently return.
 
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
@@ -19,7 +19,6 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.k6), 3)
         t |> equal(int(KqFmt.q40), 4)
         t |> equal(int(KqFmt.q51), 5)
-        t |> equal(int(KqFmt.q8n), 6)
     }
 }
 
@@ -32,7 +31,6 @@ def test_kqfmt_predicates(t : T?) {
         t |> success(kq_sb(KqFmt.k6), "k6 is superblock")
         t |> success(kq_sb(KqFmt.q40), "q40 is superblock")
         t |> success(!kq_sb(KqFmt.q51), "q51 rides per-32 planes")
-        t |> success(!kq_sb(KqFmt.q8n), "q8n is a device tag")
     }
 }
 
@@ -89,7 +87,6 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.q40), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
-        t |> equal(kq_elems(KqFmt.q8n), 32l)
     }
     t |> run("stream/repack region codes are pinned") @(t : T?) {
         t |> equal(kq_stream_code(KqFmt.q8), 0)

@@ -228,6 +228,31 @@ def public ensure_cooperative_matrix2(var m : SpirvModule) {
     m.type_pool |> insert("cap_cm2", 1u)
 }
 
+// The three OPT-IN cm2 capability bits (each also a VkPhysicalDeviceCooperativeMatrix2FeaturesNV
+// feature the device must enable): reductions (OpCooperativeMatrixReduceNV), per-element ops
+// (OpCooperativeMatrixPerElementOpNV), and conversions (use-changing OpFConvert, e.g. f32 ACC tile
+// -> f16 A tile — glslang's lowering of coopmat<f16,...,A>(acc)). Each rides the base cm2 set.
+def public ensure_coopmat_reductions(var m : SpirvModule) {
+    ensure_cooperative_matrix2(m)
+    return if ((m.type_pool?["cap_cm2_reduce"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixReductionsNV))
+    m.type_pool |> insert("cap_cm2_reduce", 1u)
+}
+
+def public ensure_coopmat_per_element(var m : SpirvModule) {
+    ensure_cooperative_matrix2(m)
+    return if ((m.type_pool?["cap_cm2_elem"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixPerElementOperationsNV))
+    m.type_pool |> insert("cap_cm2_elem", 1u)
+}
+
+def public ensure_coopmat_conversions(var m : SpirvModule) {
+    ensure_cooperative_matrix2(m)
+    return if ((m.type_pool?["cap_cm2_convert"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixConversionsNV))
+    m.type_pool |> insert("cap_cm2_convert", 1u)
+}
+
 // OpTypeTensorLayoutNV — the cm2 address-mapping object type: `dim` dimensions, `clamp` out-of-bounds
 // mode (SpvTensorClampMode: 0 = Undefined for the aligned fast path, 1 = Constant zero-fill for
 // guarded edges). Both operands are <id>s of uint constants, like the coopmat type's. Deduped.

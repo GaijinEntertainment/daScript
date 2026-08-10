@@ -148,6 +148,9 @@ struct EmitCtx {
     member_syms   : array<VariablePtr>          // the synthetic Variables (rooted here for gc_node)
     invoke_fields : table<uint64>               // intptr(ExprField) of a self-method invoke's method-field read — visitExprField skips these (the invoke arm consumes them structurally)
     invoke_targets : table<uint64; uint64>      // intptr(ExprInvoke) -> intptr(devirtualized Function), resolved at discovery
+    decode_methods : table<uint64; FunctionPtr> // intptr(ExprField of coopmatLoadTensorDecode's self.<method> argument) -> the devirtualized decode Function, resolved at discovery
+    callback_funcs : table<uint64; CallbackFn>  // intptr(Function) -> registered [spirv_combine] / [spirv_per_element] function (referenced via @@ from coopmatReduce / coopmatPerElement)
+    callback_order : array<uint64>              // callback_funcs keys in stable emission order (first-reference order)
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -175,6 +178,10 @@ struct CallTemp {
 // with the rigid (PhysicalStorageBuffer block pointer, uint[2], uint[2]) signature and referenced by
 // id as OpCooperativeMatrixLoadTensorNV's DecodeFunc operand. Ids pre-allocate at registration so the
 // load arm can reference the not-yet-emitted body (bodies follow the user functions).
+// The CLASS-METHOD form ([spirv_decode] on a kernel-class method, referenced as `self.<method>`)
+// carries a leading self that exists only at das level: the emitted signature is the same rigid
+// 3-param shape, and the body's member reads resolve through member_vars like any method body —
+// that member access (a scale plane, @workgroup staging) is the form's whole point.
 struct DecodeFn {
     fn      : Function const?
     fn_id   : uint          // OpFunction result id (0 when !valid)
@@ -182,6 +189,21 @@ struct DecodeFn {
     ret_type : uint         // the tile component type (f16 / f32 / s8)
     block_type : uint       // the std430-packed Block struct the PSB pointer points at
     block_ptr_type : uint   // OpTypePointer PhysicalStorageBuffer <block_type>
+    has_self : bool         // class-method form: arguments[0] is the das-level self, params shift by one
+    valid   : bool
+}
+
+// A cm2 reduce-combine ([spirv_combine]) or per-element ([spirv_per_element]) function: emitted as a
+// real OpFunction over BY-VALUE scalars — combine is (T, T) -> T, per-element is (row : uint,
+// col : uint, elem : T, extras...) -> T, with T the tile component type (f32 / f16) — and referenced
+// by id as OpCooperativeMatrixReduceNV's CombineFunc / OpCooperativeMatrixPerElementOpNV's Func
+// operand. No self/method form: everything a body needs arrives through the parameters.
+struct CallbackFn {
+    fn      : Function const?
+    fn_id   : uint          // OpFunction result id (0 when !valid)
+    type_id : uint          // OpTypeFunction id
+    ret_type : uint         // the tile component type (f16 / f32)
+    per_element : bool      // false = reduce combine
     valid   : bool
 }
 
@@ -2156,6 +2178,13 @@ def private const_uint_value(e : ExpressionPtr) : tuple<ok : bool; value : uint>
     if (cu != null) return (ok = true, value = cu.value)
     let ci = e ?as ExprConstInt
     if (ci != null && ci.value >= 0) return (ok = true, value = uint(ci.value))
+    // a module-scope `let X = <literal>` reference (COOPMAT_REDUCE_ROW and friends): fold through
+    // the initializer — cross-module consts arrive as ExprVar, not as a folded literal
+    let ev = e ?as ExprVar
+    if (ev != null && ev.variable != null && ev.variable.init != null
+            && ev.variable._type != null && ev.variable._type.flags.constant) {
+        return const_uint_value(ev.variable.init)
+    }
     return (ok = false, value = 0u)
 }
 
@@ -3387,6 +3416,15 @@ class SpirvEmit : AstVisitor {
         let lv = r2v != null ? r2v.subexpr : arg
         return value_of(lv)
     }
+    // A `@@fn` callback argument (coopmatReduce / coopmatPerElement): peel a defensive
+    // ExprRef2Value, then take the referenced function (null = not a function reference).
+    def callback_fn_arg(arg : ExpressionPtr) : Function const? {
+        let r2v = arg ?as ExprRef2Value
+        let da = r2v != null ? r2v.subexpr : arg
+        let fa = da ?as ExprAddr
+        if (fa == null) return null
+        return fa.func
+    }
     // Resolve a coopmat Load/Store buffer operand (an @ssbo OR @workgroup array global) + an element index
     // to the OpAccessChain pointer at buf[idx] -- the Pointer operand coopMat Load/Store wants. An @ssbo is
     // a Block struct wrapping a runtime array (member 0, then the element index); a @workgroup shared array
@@ -4399,14 +4437,16 @@ class SpirvEmit : AstVisitor {
     def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
         suppress_bounds_arg = (expr.name == ".[]" && length(expr.arguments) > 3 &&
             (arg == expr.arguments[2] || arg == expr.arguments[3]))
-        // the trailing @@decode argument of coopmatLoadTensorDecode is read STRUCTURALLY by the cm2
-        // load arm (registered as a DecodeFunc operand) — it never lowers to a value, so the @@
-        // fail-closed guard must not fire on it. Set ONLY when the argument actually is an ExprAddr
-        // (a non-@@ trailing arg gets the arm's own clean error, and the flag can never leak onto an
-        // unrelated later @@). Generic stub -> match the ORIGIN name. Assigned per argument, like
-        // suppress_bounds_arg above, so it also self-clears on the next visited argument.
+        // a @@callback argument (coopmatLoadTensorDecode's trailing @@decode, coopmatReduce's
+        // trailing @@combine, coopmatPerElement's third-position @@fn) is read STRUCTURALLY by its
+        // arm (registered and passed as a function-id operand) — it never lowers to a value, so the
+        // @@ fail-closed guard must not fire on it. Set ONLY when the argument actually is an
+        // ExprAddr in the callback POSITION of one of those calls (elsewhere it gets the arm's own
+        // clean error, and the flag can never leak onto an unrelated later @@). Generic stub ->
+        // match the ORIGIN name. Assigned per argument, like suppress_bounds_arg above, so it also
+        // self-clears on the next visited argument.
         suppress_fn_addr = false
-        if (last && expr.func != null) {
+        if (expr.func != null) {
             let r2v = arg ?as ExprRef2Value
             let da = r2v != null ? r2v.subexpr : arg
             if (da is ExprAddr) {
@@ -4414,7 +4454,10 @@ class SpirvEmit : AstVisitor {
                 while (co.fromGeneric != null) {
                     co = co.fromGeneric
                 }
-                if ("{co.name}" == "coopmatLoadTensorDecode") {
+                let cn = "{co.name}"
+                if (last && (cn == "coopmatLoadTensorDecode" || cn == "coopmatReduce")) {
+                    suppress_fn_addr = true
+                } elif (cn == "coopmatPerElement" && length(expr.arguments) > 2 && arg == expr.arguments[2]) {
                     suppress_fn_addr = true
                 }
             }
@@ -4759,9 +4802,13 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
-        // coopmatConvert(dst_f32_acc, src_f16_acc): componentwise OpFConvert over the tile — the
-        // f16-accumulate path's widening before an f32 store (llama.cpp's cast-then-coopMatStore)
-        if (name == "coopmatConvert") {
+        // coopmatConvert(dst, src): componentwise OpFConvert over the tile. Same use: the
+        // f16-accumulate path's widening before an f32 store (llama.cpp's cast-then-coopMatStore).
+        // A USE-CHANGING pair of different widths (f32 accumulator -> f16 A — the flash-attention
+        // Q / P re-use) is the SAME single OpFConvert under the cm2 conversions capability
+        // (glslang's lowering of coopmat<f16,...,A>(acc)); a same-width use change would be
+        // OpCooperativeMatrixConvertNV, which nothing needs yet — rejected with the width check.
+        if (origin_name == "coopmatConvert") {
             if (ctx.stage != ShaderStage.Compute) {
                 errs |> push("coopmatConvert is only valid in a compute shader")
                 return expr
@@ -4772,10 +4819,13 @@ class SpirvEmit : AstVisitor {
             }
             let di = coopmat_info(expr.arguments[0]._type)
             let si = coopmat_info(expr.arguments[1]._type)
-            if (!di.ok || !si.ok || !di.is_float || !si.is_float || di.comp_width != 32u || si.comp_width != 16u
-                    || di.use != si.use || di.rows != si.rows || di.cols != si.cols) {
-                errs |> push("coopmatConvert expects (f32 accumulator dst, f16 accumulator src) of one tile shape")
+            if (!di.ok || !si.ok || !di.is_float || !si.is_float || di.comp_width == si.comp_width
+                    || di.rows != si.rows || di.cols != si.cols || di.scope != si.scope) {
+                errs |> push("coopmatConvert expects two float coopmat locals of one shape and different component widths")
                 return expr
+            }
+            if (di.use != si.use) {
+                ensure_coopmat_conversions(bm)
             }
             let dst = coop_local_ptr(expr.arguments[0])
             let vs = coop_local_val(expr.arguments[1])
@@ -4891,16 +4941,28 @@ class SpirvEmit : AstVisitor {
                 let da0 = expr.arguments[8]
                 let r2v = da0 ?as ExprRef2Value
                 let da = r2v != null ? r2v.subexpr : da0
+                var dfn : Function const?
                 let fa = da ?as ExprAddr
-                if (fa == null || fa.func == null) {
-                    errs |> push("coopmatLoadTensorDecode: the last argument must be @@<decode function>")
+                if (fa != null && fa.func != null) {
+                    dfn = fa.func
+                } else {
+                    // `self.<method>` — the class-method form: discovery resolved the field through
+                    // the concrete class's dispatch table (SpirvMethodScan), giving the decode body
+                    // member access (scale planes, @workgroup staging)
+                    let mf = da ?as ExprField
+                    if (mf != null) {
+                        dfn = ctx.decode_methods?[intptr(mf)] ?? null
+                    }
+                }
+                if (dfn == null) {
+                    errs |> push("coopmatLoadTensorDecode: the last argument must be @@<decode function> or self.<decode method>")
                     return expr
                 }
-                if (!function_has_annotation(fa.func, "spirv_decode")) {
-                    errs |> push("coopmatLoadTensorDecode: '{fa.func.name}' must be annotated [spirv_decode]")
+                if (!function_has_annotation(dfn, "spirv_decode")) {
+                    errs |> push("coopmatLoadTensorDecode: '{dfn.name}' must be annotated [spirv_decode]")
                     return expr
                 }
-                let fid = register_decode_func(bm, *ctx, fa.func, errs)
+                let fid = register_decode_func(bm, *ctx, dfn, errs)
                 if (fid == 0u) return expr
                 ta_mask = uint(SpvTensorAddressingOperands.DecodeFunc)
                 ta_extra = fid
@@ -5024,6 +5086,256 @@ class SpirvEmit : AstVisitor {
             emit(bm, SEC_FUNCS, SpvOp.IAdd, ut, inext, iv, const_uint(bm, 1u))
             emit(bm, SEC_FUNCS, SpvOp.Branch, hdr)
             emit(bm, SEC_FUNCS, SpvOp.Label, merge)
+            return expr
+        }
+        // coopmatReduce(dst, src, mask, @@fn): OpCooperativeMatrixReduceNV — combine src's elements
+        // along rows / columns with a [spirv_combine] callback; the reduced value broadcasts across
+        // dst. The REDUCED axis may resize (row reduce: dst columns free — llama.cpp's smear-reduce
+        // Br x Bc -> Br x HSV; column reduce: dst rows free); the kept axis must carry over.
+        if (origin_name == "coopmatReduce") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatReduce is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 4) {
+                errs |> push("coopmatReduce expects (dst, src, mask, @@combine)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || !di.is_float || !si.is_float || di.comp_width != si.comp_width
+                    || di.scope != si.scope || di.use != si.use) {
+                errs |> push("coopmatReduce: dst and src must be float coopmat locals of one component type and use")
+                return expr
+            }
+            let mk = const_uint_value(expr.arguments[2])
+            if (!mk.ok || mk.value == 0u || (mk.value & ~3u) != 0u) {
+                errs |> push("coopmatReduce: mask must be a constant COOPMAT_REDUCE_ROW / COOPMAT_REDUCE_COLUMN combination")
+                return expr
+            }
+            if ((mk.value & 3u) == 1u && di.rows != si.rows) {
+                errs |> push("coopmatReduce: a row reduce keeps src's row count (columns may resize)")
+                return expr
+            }
+            if ((mk.value & 3u) == 2u && di.cols != si.cols) {
+                errs |> push("coopmatReduce: a column reduce keeps src's column count (rows may resize)")
+                return expr
+            }
+            let cfn = callback_fn_arg(expr.arguments[3])
+            if (cfn == null) {
+                errs |> push("coopmatReduce: the last argument must be @@<combine function>")
+                return expr
+            }
+            if (!function_has_annotation(cfn, "spirv_combine")) {
+                errs |> push("coopmatReduce: '{cfn.name}' must be annotated [spirv_combine]")
+                return expr
+            }
+            if ((cfn.result.baseType == Type.tFloat16 ? 16u : 32u) != di.comp_width) {
+                errs |> push("coopmatReduce: '{cfn.name}' operates on a different scalar type than the tile's component")
+                return expr
+            }
+            let fid = register_callback_func(bm, *ctx, cfn, false, errs)
+            if (fid == 0u) return expr
+            ensure_coopmat_reductions(bm)
+            let dst = coop_local_ptr(expr.arguments[0])
+            let vs = coop_local_val(expr.arguments[1])
+            if (dst.id == 0u || dst.pty == 0u || vs == 0u) {
+                errs |> push("coopmatReduce: dst and src must be coopmat locals")
+                return expr
+            }
+            let res = alloc_id(bm)
+            var rops <- [dst.pty, res, vs, mk.value, fid]
+            emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixReduceNV, rops)
+            delete rops
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        // coopmatPerElement(dst, src, @@fn, extras...): OpCooperativeMatrixPerElementOpNV —
+        // dst[r,c] = fn(r, c, src[r,c], extras...) with a [spirv_per_element] callback. A coopmat
+        // extra must match src's shape and arrives as its (r,c) component; a scalar extra arrives
+        // as-is. dst and src are the same tile type (dst may alias src).
+        if (origin_name == "coopmatPerElement") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatPerElement is only valid in a compute shader")
+                return expr
+            }
+            let argc = length(expr.arguments)
+            if (argc < 3 || argc > 7) {
+                errs |> push("coopmatPerElement expects (dst, src, @@fn, ...up to 4 extras)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || !di.is_float || di.comp_width != si.comp_width || di.rows != si.rows
+                    || di.cols != si.cols || di.use != si.use || di.scope != si.scope || di.is_float != si.is_float) {
+                errs |> push("coopmatPerElement: dst and src must be float coopmat locals of one tile type")
+                return expr
+            }
+            let cfn = callback_fn_arg(expr.arguments[2])
+            if (cfn == null) {
+                errs |> push("coopmatPerElement: the third argument must be @@<per-element function>")
+                return expr
+            }
+            if (!function_has_annotation(cfn, "spirv_per_element")) {
+                errs |> push("coopmatPerElement: '{cfn.name}' must be annotated [spirv_per_element]")
+                return expr
+            }
+            if ((cfn.result.baseType == Type.tFloat16 ? 16u : 32u) != di.comp_width) {
+                errs |> push("coopmatPerElement: '{cfn.name}' operates on a different scalar type than the tile's component")
+                return expr
+            }
+            let nex = argc - 3
+            if (length(cfn.arguments) != 3 + nex) {
+                errs |> push("coopmatPerElement: '{cfn.name}' takes {length(cfn.arguments) - 3} extra parameter(s), the call passes {nex}")
+                return expr
+            }
+            // resolve the extras before allocating anything: a coopmat extra passes its VALUE and its
+            // callback parameter is the component scalar; a scalar extra must match the parameter type
+            var exids : uint[4]
+            for (i in range(nex)) {
+                let ea = expr.arguments[3 + i]
+                let pt = cfn.arguments[3 + i]._type
+                let ei = coopmat_info(ea._type)
+                if (ei.ok) {
+                    if (ei.rows != di.rows || ei.cols != di.cols || ei.scope != di.scope) {
+                        errs |> push("coopmatPerElement: coopmat extra {i + 1} must match the tile shape")
+                        return expr
+                    }
+                    let want = ei.comp_width == 16u ? Type.tFloat16 : Type.tFloat
+                    if (!ei.is_float || pt == null || pt.baseType != want) {
+                        errs |> push("coopmatPerElement: '{cfn.name}' parameter {4 + i} must be the float component of coopmat extra {i + 1}")
+                        return expr
+                    }
+                    exids[i] = coop_local_val(ea)
+                } else {
+                    if (pt == null || ea._type == null || pt.baseType != ea._type.baseType) {
+                        errs |> push("coopmatPerElement: extra {i + 1} does not match '{cfn.name}' parameter {4 + i}")
+                        return expr
+                    }
+                    exids[i] = value_of(ea)
+                }
+                if (exids[i] == 0u) return expr
+            }
+            let fid = register_callback_func(bm, *ctx, cfn, true, errs)
+            if (fid == 0u) return expr
+            ensure_coopmat_per_element(bm)
+            let dst = coop_local_ptr(expr.arguments[0])
+            let vs = coop_local_val(expr.arguments[1])
+            if (dst.id == 0u || dst.pty == 0u || vs == 0u) {
+                errs |> push("coopmatPerElement: dst and src must be coopmat locals")
+                return expr
+            }
+            let res = alloc_id(bm)
+            var pops <- [dst.pty, res, vs, fid]
+            pops |> reserve(4 + nex)
+            for (i in range(nex)) {
+                pops |> push(exids[i])
+            }
+            emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixPerElementOpNV, pops)
+            delete pops
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        // coopmatAdd / coopmatSub / coopmatMulElem(dst, a, b): componentwise tile arithmetic — the
+        // KHR coopmat extension extends the scalar float opcodes to whole tiles (llama.cpp's
+        // `eM*L + rowsum` online-softmax algebra). All three the same tile type; dst may alias.
+        if (origin_name == "coopmatAdd" || origin_name == "coopmatSub" || origin_name == "coopmatMulElem") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{origin_name} is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 3) {
+                errs |> push("{origin_name} expects (dst, a, b)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let ai = coopmat_info(expr.arguments[1]._type)
+            let bi = coopmat_info(expr.arguments[2]._type)
+            if (!di.ok || !ai.ok || !bi.ok || !di.is_float
+                    || di.comp_width != ai.comp_width || di.comp_width != bi.comp_width
+                    || di.rows != ai.rows || di.rows != bi.rows || di.cols != ai.cols || di.cols != bi.cols
+                    || di.use != ai.use || di.use != bi.use || di.scope != ai.scope || di.scope != bi.scope) {
+                errs |> push("{origin_name}: all three arguments must be float coopmat locals of one tile type")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            let va = coop_local_val(expr.arguments[1])
+            let vb = coop_local_val(expr.arguments[2])
+            if (dst.id == 0u || dst.pty == 0u || va == 0u || vb == 0u) {
+                errs |> push("{origin_name}: could not resolve a coopmat local")
+                return expr
+            }
+            let op = origin_name == "coopmatAdd" ? SpvOp.FAdd : (origin_name == "coopmatSub" ? SpvOp.FSub : SpvOp.FMul)
+            let res = alloc_id(bm)
+            emit(bm, SEC_FUNCS, op, dst.pty, res, va, vb)
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        // coopmatCopy(dst, src): dst = src — a plain tile-value Load/Store (das assignment does not
+        // move coopmat locals; the markers are empty phantom structs).
+        if (origin_name == "coopmatCopy") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatCopy is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 2) {
+                errs |> push("coopmatCopy expects (dst, src)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || di.comp_width != si.comp_width || di.is_float != si.is_float
+                    || di.rows != si.rows || di.cols != si.cols || di.use != si.use || di.scope != si.scope) {
+                errs |> push("coopmatCopy: dst and src must be coopmat locals of one tile type")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            let vs = coop_local_val(expr.arguments[1])
+            if (dst.id == 0u || dst.pty == 0u || vs == 0u) {
+                errs |> push("coopmatCopy: could not resolve a coopmat local")
+                return expr
+            }
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, vs)
+            return expr
+        }
+        // coopmatScale(mat, s): mat *= s — OpMatrixTimesScalar, extended to coopmat tiles.
+        // coopmatFill(mat, v): every element = v — OpCompositeConstruct from a single scalar.
+        // The f32 scalar converts down for an f16 tile, like coopmatClamp's bounds.
+        if (origin_name == "coopmatScale" || origin_name == "coopmatFill") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("{origin_name} is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 2) {
+                errs |> push("{origin_name} expects (mat, {origin_name == "coopmatScale" ? "s" : "v"})")
+                return expr
+            }
+            let ci = coopmat_info(expr.arguments[0]._type)
+            if (!ci.ok || !ci.is_float) {
+                errs |> push("{origin_name}: the first argument must be a float coopmat local")
+                return expr
+            }
+            let dst = coop_local_ptr(expr.arguments[0])
+            if (dst.id == 0u || dst.pty == 0u) {
+                errs |> push("{origin_name}: could not resolve the coopmat local")
+                return expr
+            }
+            let s32 = value_of(expr.arguments[1])
+            if (s32 == 0u) return expr
+            var sv = s32
+            if (ci.comp_width != 32u) {
+                sv = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.FConvert, type_float(bm, ci.comp_width), sv, s32)
+            }
+            let res = alloc_id(bm)
+            if (origin_name == "coopmatScale") {
+                let cur = alloc_id(bm)
+                emit(bm, SEC_FUNCS, SpvOp.Load, dst.pty, cur, dst.id)
+                emit(bm, SEC_FUNCS, SpvOp.MatrixTimesScalar, dst.pty, res, cur, sv)
+            } else {
+                emit(bm, SEC_FUNCS, SpvOp.CompositeConstruct, dst.pty, res, sv)
+            }
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
             return expr
         }
         // barrier(): control + shared-memory barrier (OpControlBarrier at Workgroup execution+memory
@@ -6475,9 +6787,11 @@ def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool
     while (forigin.fromGeneric != null) {
         forigin = forigin.fromGeneric
     }
-    // a [spirv_decode] function is emitted by the cm2 DECODE rail (PSB block pointer + uint[2]
-    // coordinate params), never as a plain user function — the das-typed signature would register wrong
-    if (function_has_annotation(forigin, "spirv_decode")) return false
+    // a [spirv_decode] / [spirv_combine] / [spirv_per_element] function is emitted by its cm2
+    // callback rail (rigid by-value signature), never as a plain user function — the das-typed
+    // signature would register wrong
+    if (function_has_annotation(forigin, "spirv_decode") || function_has_annotation(forigin, "spirv_combine")
+            || function_has_annotation(forigin, "spirv_per_element")) return false
     let mn = "{forigin._module.name}"
     return !(mn == "builtin" || mn == "math" || mn == "math_bits" || mn == "spirv_builtins" || mn == "shader_lingua_franca")
 }
@@ -6590,11 +6904,23 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
         errors |> push("decode function '{f.name}': result must be float16, float, or int8 (the tile's component type)")
         df.valid = false
     }
-    if (length(f.arguments) != 3) {
+    // the class-method form carries a das-level-only leading self (kernel-class frontend); the
+    // emitted signature is the rigid 3-param shape either way, so validation just shifts by one
+    df.has_self = length(f.arguments) == 4 && "{f.arguments[0].name}" == "self"
+    if (length(f.arguments) == 4 && !df.has_self) {
+        errors |> push("decode function '{f.name}': a 4-parameter decode must be a class method (leading self)")
+        df.valid = false
+    }
+    if (df.has_self && ctx.kernel_class == null) {
+        errors |> push("decode function '{f.name}': the class-method form requires a class kernel ([spirv_kernel] on a method)")
+        df.valid = false
+    }
+    if (length(f.arguments) != 3 && length(f.arguments) != 4) {
         errors |> push("decode function '{f.name}': signature must be (block : <struct>; blockCoord, coordInBlock : uint2)")
         df.valid = false
     } else {
-        let a0 = f.arguments[0]._type
+        let ab = df.has_self ? 1 : 0
+        let a0 = f.arguments[ab]._type
         if (a0 == null || a0.baseType != Type.tStructure || a0.structType == null) {
             errors |> push("decode function '{f.name}': the first parameter must be the block struct")
             df.valid = false
@@ -6607,10 +6933,10 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
                 df.block_ptr_type = type_pointer(m, SpvStorageClass.PhysicalStorageBuffer, blk.type_id)
             }
         }
-        for (i in range(1, 3)) {
+        for (i in range(ab + 1, ab + 3)) {
             let at = f.arguments[i]._type
             if (at == null || at.baseType != Type.tUInt2) {
-                errors |> push("decode function '{f.name}': parameter {i + 1} must be uint2 (the tensor coordinates)")
+                errors |> push("decode function '{f.name}': parameter {i - ab + 1} must be uint2 (the tensor coordinates)")
                 df.valid = false
             }
         }
@@ -6634,11 +6960,18 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
 // (LocalVar.storage + e2align carry that through ptr_of/value_of).
 def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : DecodeFn; var errors : array<string>) {
     let f = unsafe(reinterpret<FunctionPtr>(df.fn))   // read-only emission; strip pointee const
+    // the class-method form: the leading self exists only at das level — bind it as the body's
+    // self_arg so member reads resolve through member_vars, and shift the emitted params by one
+    let ab = df.has_self ? 1 : 0
+    let saved_self = ctx.self_arg
+    if (df.has_self) {
+        ctx.self_arg = intptr(f.arguments[0])
+    }
     emit(m, SEC_FUNCS, SpvOp.Function, df.ret_type, df.fn_id, 0u, df.type_id)
     let p0 = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.FunctionParameter, df.block_ptr_type, p0)
     emit(m, SEC_DECOR, SpvOp.Decorate, p0, uint(SpvDecoration.Aliased))
-    ctx.local_vars |> insert(intptr(f.arguments[0]), LocalVar(ptr_id = p0, value_type = df.block_type,
+    ctx.local_vars |> insert(intptr(f.arguments[ab]), LocalVar(ptr_id = p0, value_type = df.block_type,
         is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
     let arr2 = type_array(m, type_uint(m), 2)
     var coord_pids : uint[2]
@@ -6661,7 +6994,7 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
         emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e1, coord_pids[i - 1], 1u)
         let vid = alloc_id(m)
         emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, uv2, vid, e0, e1)
-        ctx.locals |> insert(intptr(f.arguments[i]), vid)
+        ctx.locals |> insert(intptr(f.arguments[ab + i]), vid)
     }
     ctx.terminated = false
     collect_locals(m, ctx, f.body, errors)
@@ -6669,6 +7002,104 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     drive_emit(m, ctx, f, errors)
     if (!ctx.terminated) {
         errors |> push("decode function '{f.name}': not every control-flow path returns a value")
+        emit(m, SEC_FUNCS, SpvOp.Unreachable)
+    }
+    emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+    ctx.self_arg = saved_self
+}
+
+// The by-value scalar types a callback parameter may carry: uint / int / float / float16.
+// Returns the SPIR-V type id (0 = not a supported scalar).
+def private callback_param_type(var m : SpirvModule; t : TypeDecl?) : uint {
+    if (t == null) return 0u
+    if (t.baseType == Type.tUInt) return type_uint(m)
+    if (t.baseType == Type.tInt) return type_int(m, 32u, 1u)
+    if (t.baseType == Type.tFloat) return type_float(m, 32u)
+    if (t.baseType == Type.tFloat16) return type_float(m, 16u)
+    return 0u
+}
+
+// Validate + register a reduce-combine or per-element callback (first reference wins; later calls
+// reuse the id). See CallbackFn for the two rigid by-value shapes. The component-type-vs-tile match
+// is checked at the CALL arm (the same function may serve any tile of its scalar type).
+def private register_callback_func(var m : SpirvModule; var ctx : EmitCtx; f : Function const?; per_element : bool; var errors : array<string>) : uint {
+    if (key_exists(ctx.callback_funcs, intptr(f))) {
+        let ex = ctx.callback_funcs?[intptr(f)] ?? CallbackFn()
+        return ex.valid ? ex.fn_id : 0u
+    }
+    var cf = CallbackFn(fn = f, per_element = per_element, valid = true)
+    let kind = per_element ? "per-element" : "combine"
+    let rbt = f.result.baseType
+    if (rbt == Type.tFloat16) {
+        cf.ret_type = type_float(m, 16u)
+    } elif (rbt == Type.tFloat) {
+        cf.ret_type = type_float(m, 32u)
+    } else {
+        errors |> push("{kind} function '{f.name}': result must be float or float16 (the tile component type)")
+        cf.valid = false
+    }
+    let na = length(f.arguments)
+    if (na > 0 && "{f.arguments[0].name}" == "self") {
+        errors |> push("{kind} function '{f.name}': must be a plain module-level function, not a class method - pass what the body needs as extra operands")
+        cf.valid = false
+    } elif (per_element) {
+        if (na < 3 || na > 7) {
+            errors |> push("per-element function '{f.name}': signature must be (row, col : uint; elem : <component>; ...extras) with up to 4 extras")
+            cf.valid = false
+        } else {
+            for (i in range(2)) {
+                if (f.arguments[i]._type == null || f.arguments[i]._type.baseType != Type.tUInt) {
+                    errors |> push("per-element function '{f.name}': parameters 1-2 are the uint element coordinates")
+                    cf.valid = false
+                }
+            }
+            if (cf.valid && (f.arguments[2]._type == null || f.arguments[2]._type.baseType != rbt)) {
+                errors |> push("per-element function '{f.name}': parameter 3 (the element) must match the result type")
+                cf.valid = false
+            }
+            for (i in range(3, na)) {
+                if (cf.valid && callback_param_type(m, f.arguments[i]._type) == 0u) {
+                    errors |> push("per-element function '{f.name}': extra parameters must be uint / int / float / float16 scalars")
+                    cf.valid = false
+                }
+            }
+        }
+    } else {
+        if (na != 2 || f.arguments[0]._type == null || f.arguments[1]._type == null
+                || f.arguments[0]._type.baseType != rbt || f.arguments[1]._type.baseType != rbt) {
+            errors |> push("combine function '{f.name}': signature must be (a, b : <component>) : <component>")
+            cf.valid = false
+        }
+    }
+    if (cf.valid) {
+        cf.fn_id = alloc_id(m)
+        var ps <- [for (i in range(na)); callback_param_type(m, f.arguments[i]._type)]
+        cf.type_id = type_function(m, cf.ret_type, ps)
+        delete ps
+    }
+    ctx.callback_funcs |> insert(intptr(f), cf)
+    ctx.callback_order |> push(intptr(f))
+    return cf.valid ? cf.fn_id : 0u
+}
+
+// Emit one registered callback: every parameter is a by-value OpFunctionParameter bound straight
+// into ctx.locals as an SSA value (the bodies only read them), then the das body via the normal walk.
+def private emit_callback_function(var m : SpirvModule; var ctx : EmitCtx; cf : CallbackFn; var errors : array<string>) {
+    let f = unsafe(reinterpret<FunctionPtr>(cf.fn))   // read-only emission; strip pointee const
+    emit(m, SEC_FUNCS, SpvOp.Function, cf.ret_type, cf.fn_id, 0u, cf.type_id)
+    for (i in range(length(f.arguments))) {
+        let pid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.FunctionParameter, callback_param_type(m, f.arguments[i]._type), pid)
+        ctx.locals |> insert(intptr(f.arguments[i]), pid)
+    }
+    let id_label = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Label, id_label)
+    ctx.terminated = false
+    collect_locals(m, ctx, f.body, errors)
+    alloc_call_temps(m, ctx, f, errors)
+    drive_emit(m, ctx, f, errors)
+    if (!ctx.terminated) {
+        errors |> push("{cf.per_element ? "per-element" : "combine"} function '{f.name}': not every control-flow path returns a value")
         emit(m, SEC_FUNCS, SpvOp.Unreachable)
     }
     emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
@@ -6722,7 +7153,41 @@ class private SpirvMethodScan : AstVisitor {
     @do_not_delete ctx : EmitCtx?
     self_arg : uint64            // the SCANNED function's self argument
     found : array<FunctionPtr>   // methods invoked from this body, in discovery order
+    found_decode : array<FunctionPtr>   // [spirv_decode] methods referenced as `self.<method>`, in discovery order
     errs : array<string>
+    // the decode-method reference (coopmatLoadTensorDecode(..., self.<method>)): resolve the field
+    // through the dispatch table now and suppress its structural read — the load arm passes the
+    // function by ID (the DecodeFunc operand), no value is ever produced
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        if (expr.func == null || length(expr.arguments) != 9) return
+        var co = expr.func
+        while (co.fromGeneric != null) {
+            co = co.fromGeneric
+        }
+        if ("{co.name}" != "coopmatLoadTensorDecode") return
+        let da0 = expr.arguments[8]
+        let r2v = da0 ?as ExprRef2Value
+        let da = r2v != null ? r2v.subexpr : da0
+        let fld = da ?as ExprField
+        // fld == null is the @@fn form — consumed whole by the load arm
+        if (fld == null || key_exists(ctx.decode_methods, intptr(fld))) return
+        var be = fld.value
+        let br2v = be ?as ExprRef2Value
+        if (br2v != null) {
+            be = br2v.subexpr
+        }
+        let bv = be ?as ExprVar
+        if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != self_arg) return
+        var lerr : array<string>
+        var mfn = resolve_kernel_method(ctx, "{fld.name}", lerr)
+        errs |> push_from(lerr)
+        delete lerr
+        if (mfn == null) return
+        ctx.decode_methods |> insert(intptr(fld), mfn)
+        ctx.invoke_fields |> insert(intptr(fld))
+        ctx.invoke_fields |> insert(intptr(da0))
+        found_decode |> push(mfn)
+    }
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
         if (key_exists(ctx.invoke_targets, intptr(expr))) return
         let fld = invoke_self_method_field(self_arg, expr)
@@ -6765,8 +7230,30 @@ def private discover_kernel_methods(var m : SpirvModule; var ctx : EmitCtx; body
     }
     errors |> push_from(sc.errs)
     var found <- sc.found
+    var found_decode <- sc.found_decode
     unsafe {
         delete sc
+    }
+    // a decode method is emitted by the decode rail, never as a user function — but its free
+    // callees and any module globals it touches classify exactly like a method's (its MEMBER
+    // reads need nothing: classify_kernel_members registered every member up front)
+    for (dfn in found_decode) {
+        collect_dependencies(dfn) $(vfun, vvar) {
+            for (v in vvar) {
+                if (!key_exists(ctx.globals, intptr(v))) {
+                    classify_global(m, ctx, v, stage, reflection, errors)
+                }
+            }
+            for (uffn in vfun) {
+                if (is_user_shader_func(uffn, entry)) {
+                    register_user_func(m, ctx, uffn, errors)
+                }
+            }
+        }
+    }
+    found_decode |> clear()   // borrowed AST pointers — release the buffer only
+    unsafe {
+        delete found_decode
     }
     for (mfn in found) {
         let key = intptr(mfn)
@@ -7155,6 +7642,13 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
         let df = ctx.decode_funcs?[key] ?? DecodeFn()
         if (df.valid) {
             emit_decode_function(m, ctx, df, errors)
+        }
+    }
+    // cm2 combine / per-element callbacks (registered by the coopmatReduce / coopmatPerElement arms)
+    for (key in ctx.callback_order) {
+        let cf = ctx.callback_funcs?[key] ?? CallbackFn()
+        if (cf.valid) {
+            emit_callback_function(m, ctx, cf, errors)
         }
     }
 

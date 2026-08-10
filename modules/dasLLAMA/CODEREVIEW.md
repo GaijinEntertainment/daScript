@@ -478,9 +478,23 @@ size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer t
 wrong; past the range every read is undefined, not slow.
 
 **A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
-kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
-panics without Metal). Kernel-unit green does not cover driver wiring, and the two
-activation-quant classes ride different enc paths — one model class cannot witness the other's.
+kq model, with `--kv` matching the armed mirror codec** — the vulkan arm is `DASLLAMA_GPU=1`
+(never `--ngl`, which is the Metal arm and panics without Metal). The driver declines
+codec-mismatched sessions silently, so a mismatched parity run compares CPU against CPU and
+proves nothing; the run's log must show `resident driver armed`. Kernel-unit green does not
+cover driver wiring, and the two activation-quant classes ride different enc paths — one
+model class cannot witness the other's.
+
+**A kernel that reads or writes the K/V mirrors is stamped from a `[|> template_struct_instance]`
+codec template (`typedef KT`) with both f32 and f16 instances, and an f16 instance's mirror
+stores clamp to the f16 finite range.** A single-codec mirror kernel is legal only when a
+codec-templated sibling serves the other codec and its arming gate keys on the mirror codec
+(`kv16`); otherwise a one-codec kernel, or an f16 store without the clamp, is a defect.
+
+**Every resident override gates sessions on the armed mirror codec and on the flat
+(non-paged) cache before touching the mirror.** Mirror bytes move only between same-codec
+session rows and mirror rows; an override that byte-copies across codecs corrupts the host
+authority and is a defect.
 
 **A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
 `*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does

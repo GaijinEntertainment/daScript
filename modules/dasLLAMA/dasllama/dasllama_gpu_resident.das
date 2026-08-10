@@ -222,18 +222,6 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
     layout_gather_stack_kq(t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
-def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     mr, kgroup, wbias : int64; var wq : array<uint8>) {
-    var no_ws : array<uint8>
-    if (vk_bake_slice(t, 6, woff, n, rows, wq, no_ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    layout_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-}
-
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
@@ -334,16 +322,13 @@ def private dense_shexp_uploadable(t : Model; l : int64) : bool {
 }
 
 
-// Gather one stack through its format's reader (q8 planes, q8n interleaved blocks, or native kq
-// planes) and hand it to the tier's upload hook with the format tag.
+// Gather one stack through its format's reader (q8 planes or native kq planes) and hand it to
+// the tier's upload hook with the format tag.
 def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                   mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>;
                                   stream : bool = false) : bool {
     if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-        ws |> resize(0)   // no scale plane — the tier takes an EMPTY ws for fmt 6
     } else {
         let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
@@ -455,6 +440,7 @@ var private g_rdec_active = false       // this loaded model runs the resident d
 var private g_rdec_cnt = 0l             // cached positions in the device KV mirror (built as we decode)
 var private g_rdec_cap = 0l             // mirror context the driver armed at (<= model ctx when VRAM-capped)
 var private g_rdec_gen = 0l             // mirror ownership generation (bumped per resident prefill)
+var private g_rdec_kvdt = KVDtype.f16   // the ARMED mirror codec — sessions must match to be served
 var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed)
 
 //! Allow/forbid the whole-prefill resident override. A multi-stream scheduler (dasllama-server)
@@ -466,13 +452,11 @@ def set_resident_prefill_allowed(allowed : bool) {
 
 // Bulk-hydrate the session's host KV from the device mirror rows [0, g_rdec_cnt) — the rail that
 // keeps host KV authoritative at rest after device-resident prefills/decodes.
+[cold_path]   // the continuation/steal/drop rail, not the steady-state token path
 def private rdec_hydrate_host(t : Model; var s : Session) {
     let c = t.config
     for (l in range64(c.n_layers)) {
-        unsafe {
-            rdec_read_kv_bulk(l, reinterpret<float?>(kv_layer_kbase(s, l, c.seq_len)),
-                reinterpret<float?>(kv_layer_vbase(s, l, c.seq_len)), g_rdec_cnt)
-        }
+        rdec_read_kv_bulk(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), g_rdec_cnt)
     }
     s.rdec_hydrated = true
     to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({g_rdec_cnt} positions x {c.n_layers} layers)\n")
@@ -493,10 +477,7 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64) : int64 {
     var wq : array<uint8>
     var ws : array<uint8>
-    if (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, rows, mr, kgroup, wbias, wq)
-        // no scale plane — the tier takes an EMPTY ws for fmt 6
-    } elif (f == KqFmt.q8) {
+    if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, rows, mr, kgroup, wbias, wq, ws)
     } else {
         let kmr = kq_active_mr(t, f)
@@ -512,40 +493,24 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
 }
 
 def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
-    rows * (n / (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
+    rows * (n / (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
 
 // row-length servability twin of the tier's arena_rows_ok (this module is backend-agnostic)
 def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
-    n % (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
+    n % (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
 
-// a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock, 2 = the cm2 f16 feed
-def private rdec_quant_class(f : KqFmt) : int => f == KqFmt.q8n ? 2 : (kq_sb(f) ? 1 : 0)
+// a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
+def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0
 
-// cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
-// Promotion is per activation-group: members sharing one B-side image must agree on its form,
-// so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
 def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
-    var fq = fmt_at(t.wq_fmt, l)
-    var fk = fmt_at(t.wk_fmt, l)
-    var fv = fmt_at(t.wv_fmt, l)
-    if (fq == KqFmt.q8 && fk == KqFmt.q8 && fv == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        fq = KqFmt.q8n
-        fk = KqFmt.q8n
-        fv = KqFmt.q8n
-    }
-    var f1 = fmt_at(t.w1_fmt, l)
-    var f3 = fmt_at(t.w3_fmt, l)
-    if (f1 == KqFmt.q8 && f3 == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        f1 = KqFmt.q8n
-        f3 = KqFmt.q8n
-    }
-    return (fq = fq, fk = fk, fv = fv, fo = moe_gpu_expert_fmt(fmt_at(t.wo_fmt, l)),
-            f1 = f1, f3 = f3, f2 = moe_gpu_expert_fmt(fmt_at(t.w2_fmt, l)))
+    return (fq = fmt_at(t.wq_fmt, l), fk = fmt_at(t.wk_fmt, l), fv = fmt_at(t.wv_fmt, l),
+            fo = fmt_at(t.wo_fmt, l), f1 = fmt_at(t.w1_fmt, l), f3 = fmt_at(t.w3_fmt, l),
+            f2 = fmt_at(t.w2_fmt, l))
 }
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
-def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
+def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed() || t.quant != QuantMode.q8 || t.config.n_expert > 0l) {
@@ -577,7 +542,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
         return false
     }
     let neox = c.rope_neox
-    let cls_fmt = moe_gpu_expert_fmt(c.shared_weights ? t.emb_fmt : t.wcls_fmt)
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     // reject non-uniform per-layer geometry (the recorder assumes fixed dims across layers)
     for (l in range64(c.n_layers)) {
         if (layer_hidden(t, l) != hid0 || layer_head_size(c, l) != hs || layer_kv_dim(c, l) != kvd
@@ -628,7 +593,8 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     let kg = repacked ? active_q8_kgroup() : 4l
     let wb = repacked ? active_q8_wbias() : 0l
     if (!rdec_prepare(c.n_layers, dim, qd, kvd, hs, c.n_heads, hid0, c.vocab_size, seq_cap, neox,
-                      c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm)) {
+                      c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
+                      rkdt == KVDtype.f16)) {
         return false
     }
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
@@ -689,10 +655,12 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     g_rdec_active = true
     g_rdec_cnt = 0l
     g_rdec_cap = seq_cap
+    g_rdec_kvdt = rkdt
+    let kvname = rkdt == KVDtype.f16 ? "f16" : "f32"
     // prefill + decode select together — the device prefill fills the mirror the decode reads
     select_prefill_override("vulkan")
     select_decode_override("vulkan")
-    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}, device prefill + decode)\n")
+    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}, kv {kvname}, device prefill + decode)\n")
     return true
 }
 
@@ -704,12 +672,17 @@ def private rdec_rope_row(t : Model; pos, hs, half : int64; var dst : array<floa
     build_rope_row_packed(dst, base, pos, hs, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
 }
 
-//! The resident whole-stack decode override (registered as "vulkan"): embeds the token, builds this
-//! position's rope row, runs the whole forward on device, produces s.logits. Decode-from-scratch
-//! for now — the mirror builds as positions arrive (prefix-KV sync is a follow-up).
+// per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
+var private @scratch g_rdec_x : array<float>
+var private @scratch g_rdec_cossin : array<float>
+var private @scratch g_rdec_tmp : array<float>
+
+// the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
+[hot_path]   // per token
 def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
-    // continuity guard: a gap in the mirror means an earlier position took the CPU path — decline too
-    if (!g_rdec_active || pos > g_rdec_cnt) {
+    // mirror-gap, codec, and pool guards — hydration byte-copies mirror rows, so codecs must match
+    if (!g_rdec_active || pos > g_rdec_cnt
+            || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
         return false
     }
     // ownership guard: the single mirror holds ONE session's rows (superseded => host has ours)
@@ -727,36 +700,31 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     let c = t.config
     let dim = c.dim
     let hs = layer_head_size(c, 0l)
-    var x : array<float>
-    x |> resize(dim)
+    g_rdec_x |> resize(dim)
     unsafe {
-        embed_row(t, token, addr(x[0]))
+        embed_row(t, token, addr(g_rdec_x[0]))
     }
     if (c.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(x[0])), c.embed_scale, dim)
+        scale_inplace(unsafe(addr(g_rdec_x[0])), c.embed_scale, dim)
     }
     // this position's rope row: cos[half] then sin[half]
     let half = hs / 2l
-    var cossin : array<float>
-    cossin |> resize(hs)
-    rdec_rope_row(t, pos, hs, half, cossin, 0l)
+    g_rdec_cossin |> resize(hs)
+    rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
     let cnt = pos + 1l
-    rdec_token(x, cossin, pos, cnt, s.logits)
-    delete x
-    delete cossin
+    rdec_token(g_rdec_x, g_rdec_cossin, pos, cnt, s.logits)
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
     s.rdec_hydrated = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
     return true
 }
 
-// The "vulkan" whole-prefill override (PrefillOverrideFn): one-submit device prefill via the
-// resident driver. The mirror gets the rows; host KV is hydrated back on demand (continuation,
-// cap exhaustion) so the CPU rails always take over from a valid host authority.
+// the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
+[hot_path]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
-    // gates: armed + embedder-allowed + the hydratable flat-f32 shape (else device would hold the only KV copy)
+    // armed + embedder-allowed + a flat cache in the ARMED mirror codec (mismatch falls to the CPU rails)
     if (!g_rdec_active || !g_resident_prefill_allowed
-            || s.kv_dtype_k != KVDtype.f32 || s.kv_dtype_v != KVDtype.f32 || s.kv_pool != null) {
+            || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
         return false
     }
     if (start_pos != 0l) {
@@ -773,13 +741,12 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     let c = t.config
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
-    var cb : array<float>
-    cb |> resize(npos * hs)
+    g_rdec_tmp |> resize(npos * hs)   // the rope-row batch borrows the scratch row
+    var cb & = g_rdec_tmp
     for (p in range64(npos)) {
         rdec_rope_row(t, p, hs, half, cb, p * hs)
     }
     rdec_prefill(s.x_b, cb, npos, s.logits)
-    delete cb
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
     g_rdec_gen ++
     s.rdec_gen = g_rdec_gen
@@ -788,9 +755,8 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return true
 }
 
-//! Resident batch-decode override: processes each session SEQUENTIALLY through the single-session
-//! decode chain (resync its f32 KV into the mirror, decode, write K/V back, scatter logits).
-//! Correct multi-stream decode; declines to CPU for non-f32 KV or paged sessions.
+// the resident batch-decode override — each session SEQUENTIALLY through the single-session chain (sync KV in, decode, write K/V back)
+[hot_path]   // per batch-decode step (every session's token)
 def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (!g_rdec_active) {
         return false
@@ -800,50 +766,44 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
     let kvd = layer_kv_dim(c, 0l)
-    // require the shape the mirror sync can handle: flat f32 cache
+    // flat cache in the armed codec, every row within the mirror cap (sync has no bounds check past it)
     for (i in range64(nrows)) {
         var s = sessions[i]
-        if (s.kv_dtype_k != KVDtype.f32 || s.kv_dtype_v != KVDtype.f32 || s.kv_pool != null) {
+        if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null
+                || ws.positions[i] + 1l > g_rdec_cap) {
             return false
         }
     }
     if (dasllama_noisy()) {
-        to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")
+        to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
     }
-    var x : array<float>
-    x |> resize(dim)
-    var cossin : array<float>
-    cossin |> resize(hs)
-    var tmp : array<float>
-    tmp |> resize(c.vocab_size)
+    g_rdec_x |> resize(dim)
+    g_rdec_cossin |> resize(hs)
+    g_rdec_tmp |> resize(c.vocab_size)
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = ws.positions[i]
-        // resync this session's KV history [0, pos) into the mirror
+        // resync this session's KV history [0, pos) into the mirror (same codec — byte rows)
         for (l in range64(c.n_layers)) {
-            unsafe {
-                rdec_sync_kv(l, reinterpret<float const?>(kv_layer_kbase(s, l, c.seq_len)),
-                    reinterpret<float const?>(kv_layer_vbase(s, l, c.seq_len)), pos)
-            }
+            rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
         }
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
         for (k in range64(dim)) {
-            x[int(k)] = ws.scr.x_b[i * dim + k]
+            g_rdec_x[int(k)] = ws.scr.x_b[i * dim + k]
         }
-        rdec_rope_row(t, pos, hs, half, cossin, 0l)
-        rdec_token(x, cossin, pos, pos + 1l, tmp)
+        rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
+        rdec_token(g_rdec_x, g_rdec_cossin, pos, pos + 1l, g_rdec_tmp)
         // write the new token's K/V back to this session's cache at pos, then scatter logits
+        let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
+        let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
         for (l in range64(c.n_layers)) {
             unsafe {
-                rdec_read_kv(l, pos, reinterpret<float?>(kv_layer_kbase(s, l, c.seq_len)) + pos * kvd,
-                    reinterpret<float?>(kv_layer_vbase(s, l, c.seq_len)) + pos * kvd)
+                rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
+                    kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
             }
         }
-        copy_floats(tmp, 0l, s.logits, 0l, c.vocab_size)
+        copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
     }
-    delete x
-    delete cossin
-    delete tmp
     batch_decode_override_logits_done()
     return true
 }
@@ -867,6 +827,7 @@ struct GpuModelMarks {
     rdec_active : bool
     rdec_cnt : int64
     rdec_cap : int64
+    rdec_kvdt : KVDtype
 }
 
 //! Move the INSTALLED per-model tier state out into `st`; the globals read as no-model after.
@@ -875,6 +836,7 @@ def moe_gpu_model_marks_save(var st : GpuModelMarks) {
     st.rdec_active = g_rdec_active
     st.rdec_cnt = g_rdec_cnt
     st.rdec_cap = g_rdec_cap
+    st.rdec_kvdt = g_rdec_kvdt
     g_rdec_active = false
     g_rdec_cnt = 0l
     g_rdec_cap = 0l
@@ -886,6 +848,7 @@ def moe_gpu_model_marks_restore(var st : GpuModelMarks) {
     g_rdec_active = st.rdec_active
     g_rdec_cnt = st.rdec_cnt
     g_rdec_cap = st.rdec_cap
+    g_rdec_kvdt = st.rdec_kvdt
     st.rdec_active = false
     st.rdec_cnt = 0l
     st.rdec_cap = 0l
@@ -899,7 +862,10 @@ def moe_gpu_resident_active() : bool => g_rdec_active
 //! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model``
 //! — the drop destroys the mirror, and an unhydrated owner's rows exist nowhere else.
 def moe_gpu_hydrate_session(t : Model; var s : Session) {
-    if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated) {
+    // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
+    // session must never receive them (the gen match alone is ambiguous at generation 0)
+    if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated
+            && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null) {
         rdec_hydrate_host(t, s)
     }
 }
@@ -990,14 +956,17 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // Any decline (shape, fit, placement) falls through to the per-op rails unchanged.
     if (moe_gpu_resident_installed() && gpu_want_auto() && t.config.n_expert == 0l) {
         var seq_cap = t.config.seq_len
-        // each side of the f32 KV mirror binds as ONE SSBO range — the device's max binding
+        // the mirror codec: f16 rows by default (native fa feed, ~2x plannable ctx);
+        // DASLLAMA_VK_KV32=1 arms f32 mirrors instead (A/B; then only f32 sessions serve)
+        let rkdt = g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
+        // each side of the KV mirror binds as ONE SSBO range — the device's max binding
         // range caps the armable ctx (past it every mirror read is undefined, not slow)
         let bcap = moe_gpu_binding_cap()
-        let mrow = t.config.n_layers * layer_kv_dim(t.config, 0l) * 4l
+        let mrow = t.config.n_layers * kv_row_bytes(rkdt, layer_kv_dim(t.config, 0l))
         if (bcap > 0l && mrow > 0l) {
             seq_cap = min(seq_cap, bcap / mrow)
         }
-        var plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
+        var plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
             // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
@@ -1005,11 +974,11 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 - plan.scratch_bytes, 0l)) / (plan.kv_bytes / seq_cap)
             if (fit_ctx >= rdec_min_ctx()) {
                 seq_cap = fit_ctx
-                plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
+                plan = resident_plan(t, seq_cap, rkdt, rkdt)
             }
         }
         if (plan.fits) {
-            if (resident_upload(t, seq_cap)) {
+            if (resident_upload(t, seq_cap, rkdt)) {
                 return
             }
         } elif (!empty(plan.reason)) {
@@ -1315,13 +1284,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
+        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
             got++
         }
         if (got < 3) {
@@ -1355,13 +1324,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
         if (got < 3) {

@@ -22,14 +22,16 @@ require daslib/strings_boost
 
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
+//! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
 def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
-                    neox : bool; eps, scale : float; qk_norm : bool) : bool {
+                    neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool) : bool {
     if (!vk_moe_init()) {
         return false
     }
+    let esz = kv16 ? 2l : 4l
     // each mirror side binds as ONE SSBO range: past maxStorageBufferRange (or the shaders' uint
     // word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
-    if (n_layers * seq_cap * kv_dim * 4l > vk_max_storage_range()
+    if (n_layers * seq_cap * kv_dim * esz > vk_max_storage_range()
             || n_layers * seq_cap * kv_dim > 4_294_967_295l) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_layers} x {seq_cap} x {kv_dim}) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
         return false
@@ -43,17 +45,22 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     if (g_gpu.dry) {
         return true   // guards above ARE the plan decision; everything below is device state
     }
-    // The driver is all-or-nothing across prefill AND decode: when the device workgroup cap
-    // declines prefill's batched attention (the largest footprint; ensure_ declines by name via
-    // vkd_wg_fits), residency declines WITH it, pre-upload. Dry-plan gap: followup_vulkan.
-    if (!(g_gpu.has_coopmat && head_size == 128l && vk_fa_on() ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the batched-attention class rail declined on this device — resident driver declines, the per-op rails serve\n")
+    // all-or-nothing: pre-flight the SAME prefill-attention pick pf_setup will make (fa tile,
+    // h128 twin, or the chunked pair) so a declined kernel declines residency PRE-upload
+    let will_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+        && (head_size == 64l || head_size == 128l))
+    if (!(will_facm2
+            ? (head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls())
+            : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
+                ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+                : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls())))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the prefill-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
                  hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,
-                 qk_norm = qk_norm)
+                 qk_norm = qk_norm, kv16 = kv16, kv_esz = esz)
     var r & = unsafe(*g_rd)
     let wide = max(max(qd, hidden), dim)
     r.x_dev = make_device_buf(dim * 4l)
@@ -69,8 +76,8 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     r.up_dev = make_device_buf(hidden * 4l)
     r.ffnout_dev = make_device_buf(dim * 4l)
     r.xb2_dev = make_device_buf(dim * 4l)
-    r.k_mirror = make_device_buf(n_layers * seq_cap * kv_dim * 4l)
-    r.v_mirror = make_device_buf(n_layers * seq_cap * kv_dim * 4l)
+    r.k_mirror = make_device_buf(n_layers * seq_cap * kv_dim * esz)
+    r.v_mirror = make_device_buf(n_layers * seq_cap * kv_dim * esz)
     // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final (dim each), then under qk_norm the
     // per-head rows [rms_q[l], rms_k[l]] x L (head_size each) appended past the fixed layout,
     // then the eps/ascale pair the fused ar+requant reads (its binding 4 is the scale output)
@@ -141,9 +148,12 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         // every role rides the class rail: params in push, per-token words in the shared TokMeta;
         // kq consumers take the Q8_K quant/act forms (per-256 scales)
         let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)
+        let kv16 = g_rd.kv16
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
-            && ensure_rope_kv_cls() && ensure_da_attn_cls()
-            && (!g_rd.qk_norm || (ensure_qk_rms_cls() && ensure_qkn_rope_cls()))
+            && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
+            && (kv16 ? ensure_da_attn_f16_cls() : ensure_da_attn_cls())
+            && (!g_rd.qk_norm || (ensure_qk_rms_cls()
+                && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
             && gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo)
             && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
@@ -172,28 +182,29 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
                 fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
         }
-        let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
+        let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * g_rd.kv_esz
         if (g_rd.qk_norm) {
             // per-head q/k rmsnorm (class): q rows, k rows (kv_dev — kbase=qd rides the push), norms
             L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
                 fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, g_rd.norms_bytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
             // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta
-            L.s_qkn_rope = set_qkn_rope_cls(
-                fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.norms_dev, g_rd.tok_meta.buf),
-                fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, g_rd.norms_bytes, 16l),
-                fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u))
+            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.norms_dev, g_rd.tok_meta.buf)
+            let qrsizes = fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, g_rd.norms_bytes, 16l)
+            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
+            L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
+                : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
         // rope+store (class): per-token mirror row rides TokMeta
-        L.s_rope = set_rope_kv_cls(
-            fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.tok_meta.buf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, 16l),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u))
+        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.tok_meta.buf)
+        let rsizes = fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, 16l)
+        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
+        L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
-        L.s_attn = set_da_attn_cls(
-            fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf),
-            fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l),
-            fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u))
+        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf)
+        let asizes = fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l)
+        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u)
+        L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
             fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
@@ -285,6 +296,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
 
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
 // per-token state is only x/cos (in-cmd copies) and the rope/attn position words (host-visible)
+[cold_path]   // once per epoch (set replacement re-records); the rerecord A/B leg is opt-in
 def private rd_record_token {
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -316,6 +328,7 @@ def private rd_x_quants_b32 : bool {
 
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
 // The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
+[cold_path]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token {
     let dim = g_rd.dim
     let qd = g_rd.qd
@@ -388,7 +401,11 @@ def private rd_encode_token {
                     neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = mirbase,
                     qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
                     eps = g_rd.eps)
-                enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, g_rd.n_heads + kvd / hs)
+                if (g_rd.kv16) {
+                    enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, g_rd.n_heads + kvd / hs)
+                } else {
+                    enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, g_rd.n_heads + kvd / hs)
+                }
                 pfq_ts(raw)
             } else {
                 if (g_rd.qk_norm) {
@@ -402,12 +419,20 @@ def private rd_encode_token {
                 var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l),
                     layerbase = mirbase)
-                enc_rope_kv_cls(raw, h, L.s_rope, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
+                if (g_rd.kv16) {
+                    enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
+                } else {
+                    enc_rope_kv_cls(raw, h, L.s_rope, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
+                }
                 pfq_ts(raw)
             }
             var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(g_rd.kv_mul),
                 kbase = mirbase, vbase = mirbase, scale = g_rd.scale)
-            enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
+            if (g_rd.kv16) {
+                enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
+            } else {
+                enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
+            }
             pfq_ts(raw)
             if (kq_sb(L.fo)) {
                 enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
@@ -482,6 +507,7 @@ def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
     return <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
 }
 
+[cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample {
     // the fuse gate must MATCH rd_encode_token's or the aggregation walks the wrong shape
     let fuse = vk_fuse_on() && rd_x_quants_b32()
@@ -535,6 +561,7 @@ def private rdq_sample {
 //! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
 //! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one; K/V
 //! for `pos` store into the mirror. Recorded once — a step is two memcpys + position words + one submit.
+[hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
 def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded) {
@@ -556,31 +583,34 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     }
 }
 
-//! Batch-decode support: upload one layer's f32 KV history ([npos x kvd] each) into the shared
-//! mirror at layer `l`, positions [0, npos). Resyncs a session's cache before its decode step.
-def vk_rdec_sync_kv(l : int64; kp : float const?; vp : float const?; npos : int64) {
+//! Batch-decode support: upload one layer's KV history ([npos x kvd] codec rows) into the shared
+//! mirror at layer `l`, positions [0, npos). The session codec matches the mirror codec (the arm
+//! gate), so the rows byte-copy.
+[hot_path]   // per layer per batch-decode row
+def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {
     assert(g_rd != null, "vk_rdec_sync_kv before prepare")
-    let kvd = g_rd.kv_dim
-    let base = (l * g_rd.seq_cap) * kvd * 4l
+    let rowb = g_rd.kv_dim * g_rd.kv_esz
+    let base = (l * g_rd.seq_cap) * rowb
     unsafe {
-        upload_region_at(g_rd.k_mirror, base, reinterpret<uint8 const?>(kp), npos * kvd * 4l)
-        upload_region_at(g_rd.v_mirror, base, reinterpret<uint8 const?>(vp), npos * kvd * 4l)
+        upload_region_at(g_rd.k_mirror, base, kp, npos * rowb)
+        upload_region_at(g_rd.v_mirror, base, vp, npos * rowb)
     }
 }
 
-//! Bulk hydration: read layer `l`'s mirror rows [0, npos) into the caller's f32 cache (kp/vp,
-//! [npos x kvd] each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative rail —
-//! makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
-def vk_rdec_read_kv_bulk(l : int64; kp : float?; vp : float?; npos : int64) {
+//! Bulk hydration: read layer `l`'s mirror rows [0, npos) into the caller's cache (kp/vp,
+//! [npos x kvd] codec rows each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative
+//! rail — makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
+[hot_path]   // the hydration rail — per layer, KV_READBACK_ROWS rows per submit
+def vk_rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
     assert(g_rd != null, "vk_rdec_read_kv_bulk before prepare")
     verify(vk_moe_init())
-    let kvd = g_rd.kv_dim
+    let rowb = g_rd.kv_dim * g_rd.kv_esz
     var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
     while (p0 < npos) {
         let rows = min(KV_READBACK_ROWS, npos - p0)
-        let bytes = rows * kvd * 4l
-        let off = ((l * g_rd.seq_cap) + p0) * kvd * 4l
+        let bytes = rows * rowb
+        let off = ((l * g_rd.seq_cap) + p0) * rowb
         unsafe {
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -588,8 +618,8 @@ def vk_rdec_read_kv_bulk(l : int64; kp : float?; vp : float?; npos : int64) {
             cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
             vk_check(vkEndCommandBuffer(raw), null)
             submit_wait(raw)
-            memcpy(reinterpret<void?>(kp + p0 * kvd), g_rd.kv_readback.mapped, bytes)
-            memcpy(reinterpret<void?>(vp + p0 * kvd), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
+            memcpy(reinterpret<void?>(kp + p0 * rowb), g_rd.kv_readback.mapped, bytes)
+            memcpy(reinterpret<void?>(vp + p0 * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
         }
         p0 += rows
     }
@@ -597,22 +627,23 @@ def vk_rdec_read_kv_bulk(l : int64; kp : float?; vp : float?; npos : int64) {
 }
 
 //! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
-//! caller's f32 cache row (kp/vp, kvd each). Keeps the CPU cache current after a GPU decode step.
-def vk_rdec_read_kv(l, pos : int64; kp : float?; vp : float?) {
+//! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
+[hot_path]   // per layer per batch-decode row
+def vk_rdec_read_kv(l, pos : int64; kp : uint8?; vp : uint8?) {
     assert(g_rd != null, "vk_rdec_read_kv before prepare")
-    let kvd = g_rd.kv_dim
-    let off = ((l * g_rd.seq_cap) + pos) * kvd * 4l
+    let rowb = g_rd.kv_dim * g_rd.kv_esz
+    let off = ((l * g_rd.seq_cap) + pos) * rowb
     verify(vk_moe_init())
     unsafe {
         var raw = alloc_transient_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        cmd_copy_range(raw, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, kvd * 4l)
-        cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, kvd * 4l, kvd * 4l)
+        cmd_copy_range(raw, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, rowb)
+        cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, rowb, rowb)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
-        memcpy(reinterpret<void?>(kp), g_rd.kv_readback.mapped, kvd * 4l)
-        memcpy(reinterpret<void?>(vp), reinterpret<float?>(g_rd.kv_readback.mapped) + kvd, kvd * 4l)
+        memcpy(reinterpret<void?>(kp), g_rd.kv_readback.mapped, rowb)
+        memcpy(reinterpret<void?>(vp), reinterpret<uint8?>(g_rd.kv_readback.mapped) + rowb, rowb)
         free_transient_cmd(raw)
     }
 }
@@ -845,7 +876,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
         var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
-        // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
+        // the requant form follows the DOWN stack
         let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
         verify((dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
             "vk decode: the class rails must engage on a live device")
@@ -881,7 +912,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
         var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
         gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
         gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
-        // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
+        // the requant form follows the DOWN stack
         let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
         var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
             nblk = uint(nrows * nfe / (dkq ? 256l : 32l)))
@@ -916,7 +947,7 @@ def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : in
     // gate/up share one activation image (same xqp below) so forms must agree; down's is its own
     let kq_in = !vk_fmt_b32(f1)
     assert(!vk_fmt_b32(f3) == kq_in,
-        "dasLLAMA vulkan tier: gate/up form mismatch — they share one activation image")
+        "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     ensure_gemv_scratch(s1)
     ensure_gemv_scratch(s3)
@@ -1100,7 +1131,7 @@ def private heat_record_slice(raw : VkCommandBuffer; src_si, dst_si : int; e, sl
     let rbs = g_gpu.stream_stacks[src_si].wsbytes / rows_src
     cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hwq.buf, e * rpe * rbq,
         g_gpu.stacks[dst_si].wqbuf, slot * rpe * rbq, rpe * rbq)
-    if (rbs > 0l) {   // q8n mirrors carry no scale plane
+    if (rbs > 0l) {
         cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hws.buf, e * rpe * rbs,
             g_gpu.stacks[dst_si].wsbuf, slot * rpe * rbs, rpe * rbs)
     }
@@ -1204,7 +1235,6 @@ def private ensure_cls(si : int; woff, n, d : int64) {
         return
     }
     ensure_gemv_scratch(si)
-    // fmt_unit, not `fmt != 0`: a q8n cls plane (fmt 6, retagged on q8n boxes) counts 32-blocks
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     let rel = woff - g_gpu.stacks[si].base
     assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned classifier plane offset")

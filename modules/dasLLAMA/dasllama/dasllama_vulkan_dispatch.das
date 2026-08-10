@@ -110,6 +110,10 @@ class VkDispatch : AstStructureAnnotation {
             errors := "[vk_dispatch] {base}: family= without kernel= - a family instance must name its [spirv_kernel] method"
             return false
         }
+        // census/override display name: the vk_dispatch name= ("<base>_spv"), not the blob
+        // global's mangled default — templated instances drop [spirv_kernel] name=, and a
+        // backticked "{Class}`run`spirv" makes the SPV-override filename unusable
+        let disp_name = "{base}_spv"
         let mname = "{compiling_module().name}"
         let bkey = "{mname}`{base}"
         let fkey = "{mname}`{family}"
@@ -321,7 +325,7 @@ class VkDispatch : AstStructureAnnotation {
             cp.arguments |> emplace_new <| mk_gvar(at, blob)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
-            cp.arguments |> emplace_new <| new ExprConstString(at = at, value := blob)
+            cp.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
             var pm = new ExprCall(at = at, name := "vkd_pipe_made")
             pm.arguments |> emplace_new <| mk_gvar(at, gname)
             pm.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
@@ -353,7 +357,7 @@ class VkDispatch : AstStructureAnnotation {
         // or not, so a never-dispatched class kernel warns like the module-global kernels do
         {
             var cs = new ExprCall(at = at, name := "vkd_census_seed")
-            cs.arguments |> emplace_new <| new ExprConstString(at = at, value := blob)
+            cs.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             var body <- array<ExpressionPtr>(cs)

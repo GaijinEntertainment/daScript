@@ -9,6 +9,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
+require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -255,28 +256,6 @@ class Q8kRequant {
             for [unroll] (r in range(8)) {
                 pack_word(b, uint(r), lane, vals[r], id)
             }
-        }
-    }
-}
-
-// Q8_0 words -> f16 rows (the cm2 chain's activation feed; one word = 4 quants per thread)
-[vk_dispatch(name = "cls_xf16", grid = "wgs", params = "wgs : int64")]
-class Q8Xf16 {
-    @ssbo @binding = 0 xqw : array<uint>
-    @ssbo @binding = 1 axs : array<float>     // one scale per 8 words (a 32-quant block)
-    @ssbo @binding = 2 outh : array<float16>
-    @push_constant pa : RqArgs                // nblk carries the WORD count here
-
-    [spirv_kernel(local_size_x = 256, name = "cls_xf16_spv")]
-    def run {
-        let w = gl_GlobalInvocationID.x
-        if (w < pa.nblk) {
-            let v = int(xqw[w])
-            let s = axs[w / 8u]
-            outh[w * 4u] = float16(float((v << 24) >> 24) * s)
-            outh[w * 4u + 1u] = float16(float((v << 16) >> 24) * s)
-            outh[w * 4u + 2u] = float16(float((v << 8) >> 24) * s)
-            outh[w * 4u + 3u] = float16(float(v >> 24) * s)
         }
     }
 }
@@ -1144,12 +1123,15 @@ struct AtAttnArgs {
 }
 
 // the flash Q-tile core (AtAttn and DaAttnB share it; the h128 coopmat twin does not): staged
-// K/V tiles at stride 257, per-row online softmax. Leaves bring their own out plane + push args,
-// so the methods take every varying scalar as a param (the shipped fa_* signatures)
-class AtAttnBase {
+// K/V tiles at stride 257, per-row online softmax. KT is the K/V plane element type (staging and
+// compute stay f32 — the f16 arm converts on load). The template also carries the mirror-window
+// kernel (DaAttnB's run); AtAttn authors its own run over the same core. Leaves bring their own
+// out plane + push args, so the methods take every varying scalar as a param
+[ |> template_struct_instance]
+class template AtAttnTileT {
     @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
-    @ssbo @binding = 1 kpanel : array<float>   // the K plane (panel or mirror — kbase offsets)
-    @ssbo @binding = 2 vpanel : array<float>   // the V plane (raw rows or mirror — vbase offsets)
+    @ssbo @binding = 1 kpanel : array<KT>      // the K plane (panel or mirror — kbase offsets)
+    @ssbo @binding = 2 vpanel : array<KT>      // the V plane (raw rows or mirror — vbase offsets)
     @workgroup fq : float[2048]    // the tile's 8 q rows
     @workgroup fkv : float[8224]   // one 32-row K/V stage, stride 257 (bank-spread)
     @workgroup fp : float[256]     // the 8x32 score/probability tile
@@ -1177,7 +1159,7 @@ class AtAttnBase {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? kpanel[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -1187,7 +1169,7 @@ class AtAttnBase {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? vpanel[vbase + kr * kvd + kvh * hs + i % hs] : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -1231,116 +1213,11 @@ class AtAttnBase {
             fal[tid] = alpha
         }
     }
-}
 
-// batched causal attention (prefill), flash-style Q tile: one wg per (head, 8-query tile);
-// lane c owns dims c + 32*jj. V = the raw v rows; the epilogue gates through the out plane
-[vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
-class AtAttn : AtAttnBase {
-    @ssbo @binding = 3 outp : array<float>   // attention out (gated models read the gate stash here)
-    @push_constant pa : AtAttnArgs
-
-    [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
-    def run {
-        let qtiles = (pa.rows + 7u) / 8u
-        let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
-        let tid = gl_LocalInvocationID.x
-        let r = tid / 32u
-        let c = tid % 32u
-        let kvh = h / pa.kv_mul
-        load_q(q0, pa.rows, pa.qd, h, pa.hs)
-        var o0 = 0.0
-        var o1 = 0.0
-        var o2 = 0.0
-        var o3 = 0.0
-        var o4 = 0.0
-        var o5 = 0.0
-        var o6 = 0.0
-        var o7 = 0.0
-        barrier()
-        let gq = pa.w0 + q0 + r
-        let kend = pa.w0 + min(q0 + 8u, pa.rows)   // causal bound (exclusive) of the tile's last row
-        var k0 = 0u
-        while (k0 < kend) {
-            load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
-            barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, pa.scale)
-            barrier()
-            softmax_update()
-            barrier()
-            let av = fal[r]
-            o0 *= av
-            o1 *= av
-            o2 *= av
-            o3 *= av
-            if (pa.dpl > 4u) {
-                o4 *= av
-                o5 *= av
-                o6 *= av
-                o7 *= av
-            }
-            load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs)
-            barrier()
-            var c2 = 0u
-            while (c2 < 32u) {
-                let pw = fp[r * 32u + c2]
-                let vb = c2 * 257u + c
-                o0 += pw * fkv[vb]
-                o1 += pw * fkv[vb + 32u]
-                o2 += pw * fkv[vb + 64u]
-                o3 += pw * fkv[vb + 96u]
-                if (pa.dpl > 4u) {
-                    o4 += pw * fkv[vb + 128u]
-                    o5 += pw * fkv[vb + 160u]
-                    o6 += pw * fkv[vb + 192u]
-                    o7 += pw * fkv[vb + 224u]
-                }
-                c2++
-            }
-            barrier()
-            k0 += 32u
-        }
-        if (q0 + r < pa.rows) {
-            let inv = 1.0 / fl[r]
-            let ob = (q0 + r) * pa.qd + h * pa.hs + c
-            let gated = pa.flags & 1u
-            var jj = 0u
-            while (jj < pa.dpl) {
-                var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
-                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
-                if (gated != 0u) {
-                    let g = outp[ob + jj * 32u]
-                    v = v / (1.0 + exp(-g))
-                }
-                outp[ob + jj * 32u] = v
-                jj++
-            }
-        }
-    }
-}
-
-struct DaAttnBArgs {
-    npos : uint     // window query rows
-    nh : uint
-    kvd : uint
-    hs : uint
-    kv_mul : uint
-    kbase : uint    // word offsets into the K / V mirror planes
-    vbase : uint
-    w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
-    scale : float
-}
-
-// batched causal attention over the decode mirrors, flash-style Q tile: K/V read at kbase/vbase,
-// out = plain rows (no gating); dpl-guarded accumulators serve hs 32..256. Reduce order differs
-// from the row kernel so the parity bar there is IDS; vs the shipped da_attn_b it is bit-exact
-[vk_dispatch(name = "da_attn_b_cls", grid = "wgs", params = "wgs : int64")]
-class DaAttnB : AtAttnBase {
-    @ssbo @binding = 3 outp : array<float>   // attention out rows
-    @push_constant pa : DaAttnBArgs
-
-    [spirv_kernel(local_size_x = 256, name = "da_attn_b_cls_spv")]
+    // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
+    // mirrors, K/V read at kbase/vbase, out = plain rows (no gating); dpl-guarded accumulators
+    // serve hs 32..256. pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
+    [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
         let dpl = pa.hs / 32u
@@ -1424,14 +1301,335 @@ class DaAttnB : AtAttnBase {
     }
 }
 
+// batched causal attention (prefill), flash-style Q tile: one wg per (head, 8-query tile);
+// lane c owns dims c + 32*jj. V = the raw v rows; the epilogue gates through the out plane
+[vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
+class AtAttn : AtAttnTileT {
+    typedef KT = float
+    @ssbo @binding = 3 outp : array<float>   // attention out (gated models read the gate stash here)
+    @push_constant pa : AtAttnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
+    def override run {
+        let qtiles = (pa.rows + 7u) / 8u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let tid = gl_LocalInvocationID.x
+        let r = tid / 32u
+        let c = tid % 32u
+        let kvh = h / pa.kv_mul
+        load_q(q0, pa.rows, pa.qd, h, pa.hs)
+        var o0 = 0.0
+        var o1 = 0.0
+        var o2 = 0.0
+        var o3 = 0.0
+        var o4 = 0.0
+        var o5 = 0.0
+        var o6 = 0.0
+        var o7 = 0.0
+        barrier()
+        let gq = pa.w0 + q0 + r
+        let kend = pa.w0 + min(q0 + 8u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var k0 = 0u
+        while (k0 < kend) {
+            load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
+            barrier()
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, pa.scale)
+            barrier()
+            softmax_update()
+            barrier()
+            let av = fal[r]
+            o0 *= av
+            o1 *= av
+            o2 *= av
+            o3 *= av
+            if (pa.dpl > 4u) {
+                o4 *= av
+                o5 *= av
+                o6 *= av
+                o7 *= av
+            }
+            load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs)
+            barrier()
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw = fp[r * 32u + c2]
+                let vb = c2 * 257u + c
+                o0 += pw * fkv[vb]
+                o1 += pw * fkv[vb + 32u]
+                o2 += pw * fkv[vb + 64u]
+                o3 += pw * fkv[vb + 96u]
+                if (pa.dpl > 4u) {
+                    o4 += pw * fkv[vb + 128u]
+                    o5 += pw * fkv[vb + 160u]
+                    o6 += pw * fkv[vb + 192u]
+                    o7 += pw * fkv[vb + 224u]
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + r < pa.rows) {
+            let inv = 1.0 / fl[r]
+            let ob = (q0 + r) * pa.qd + h * pa.hs + c
+            let gated = pa.flags & 1u
+            var jj = 0u
+            while (jj < pa.dpl) {
+                var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
+                if (gated != 0u) {
+                    let g = outp[ob + jj * 32u]
+                    v = v / (1.0 + exp(-g))
+                }
+                outp[ob + jj * 32u] = v
+                jj++
+            }
+        }
+    }
+}
+
+// ===== cm2 flash attention (llama.cpp's flash_attn_cm2 shape: Br=Bc=64, online softmax on
+// whole-workgroup tiles). One wg per (head, 64-query tile); Q loads as an f32 accumulator and
+// use-converts to f16 A; K^T loads through the transpose view from the f16 K shadow; the causal
+// mask computes on the fly in a per-element callback (no mask buffer); softmax state, the P
+// conversion, and the O rescale ride the reduce/per-element/componentwise rails. =====
+
+[spirv_combine]
+def facm2_max(a, b : float) : float => max(a, b)
+
+[spirv_combine, unused_argument(b)]
+def facm2_smear(a, b : float) : float => a
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_exp(r, c : uint; v : float) : float => exp(v)
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_pick(r, c : uint; v, o : float) : float => max(v, o)
+
+// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free, llama.cpp's
+// choice); padding rows keep their causal window so no row is all -inf (rowsum stays positive)
+[spirv_per_element]
+def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c > qbase + r ? -1.7e38 : v
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
+
+struct FaCm2Args {
+    rows : uint     // window query rows
+    w0 : uint       // window base (queries attend positions [0, w0 + row])
+    qd : uint       // q/o row stride (n_heads * hs)
+    kvd : uint      // k/v row stride (n_kv * hs)
+    kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
+    kvbase : uint   // element base of this layer's plane in the K/V shadow mirrors
+    scale : float
+}
+
+// hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
+// duplication tolerated until the kernel-reification arc.
+[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64 {
+    @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
+    @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
+    @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
+    @ssbo @binding = 3 outp : array<float>       // attention out plane (rows x qd)
+    @push_constant pa : FaCm2Args
+
+    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h64_cls_spv")]
+    def run {
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlq, pa.qd, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x64
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 64u, 64u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x64
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x64
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x64
+        var o : coopmatWgAcc_f32_64x64
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x64
+            var kt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x64
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x64
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)                        // P = e^(S - M), in place
+            var em : coopmatWgAcc_f32_64x64
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)                      // eM = e^(Mold - M)
+            var pf : coopmatWgA_f16_64x64
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x64
+            var one : coopmatWgB_f16_64x64
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)                         // rowsum by ones-matrix multiply
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)                                // L = eM*L + rowsum
+            var emd : coopmatWgAcc_f32_64x64
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u)
+            o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
+            j += 64u
+        }
+        var ld : coopmatWgAcc_f32_64x64
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
+        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+    }
+}
+
+// hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (llama.cpp's hsk>=256 cut — K^T/V/softmax
+// state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
+// WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
+// resident plan learning the f16 shadow cost (see the pf_facm2 gate)
+[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128 {
+    @ssbo @binding = 0 qpanel : array<float>
+    @ssbo @binding = 1 kh : array<float16>
+    @ssbo @binding = 2 vh : array<float16>
+    @ssbo @binding = 3 outp : array<float>
+    @push_constant pa : FaCm2Args
+
+    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h128_cls_spv")]
+    def run {
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlq, pa.qd, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x128
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 128u, 128u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x128
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x32
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x32
+        var o : coopmatWgAcc_f32_64x128
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x32
+            var kt : coopmatWgB_f16_128x32
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x32
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x32
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)
+            var em : coopmatWgAcc_f32_64x32
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)
+            var pf : coopmatWgA_f16_64x32
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x32
+            var one : coopmatWgB_f16_32x32
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)
+            var emd : coopmatWgAcc_f32_64x128
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_32x128
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u)
+            o = coopmatMulAdd(pf, vt, o)
+            j += 32u
+        }
+        var ld : coopmatWgAcc_f32_64x128
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)
+        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+    }
+}
+
+struct DaAttnBArgs {
+    npos : uint     // window query rows
+    nh : uint
+    kvd : uint
+    hs : uint
+    kv_mul : uint
+    kbase : uint    // word offsets into the K / V mirror planes
+    vbase : uint
+    w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
+    scale : float
+}
+
+// batched causal attention over the decode mirrors (the template's run): K/V read at kbase/vbase,
+// out = plain rows (no gating). Reduce order differs from the row kernel so the parity bar there
+// is IDS; vs the shipped da_attn_b it is bit-exact
+[vk_dispatch(name = "da_attn_b_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnB : AtAttnTileT {
+    typedef KT = float
+    @ssbo @binding = 3 outp : array<float>   // attention out rows
+    @push_constant pa : DaAttnBArgs
+}
+
+// f16-mirror twin — convert-on-load, staging/compute stay f32
+[vk_dispatch(name = "da_attn_b_f16_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBF16 : AtAttnTileT {
+    typedef KT = float16
+    @ssbo @binding = 3 outp : array<float>   // attention out rows
+    @push_constant pa : DaAttnBArgs
+}
+
 // hs=128 flash-attention twin of DaAttnB (coopmat devices): QK^T on f16 MMAs (hoisted q frags),
 // shuffle-reduced online softmax, register-tiled PV over the f16 V tile. Same args contract
-// (hs unread — baked 128); parity bar vs DaAttnB is IDS, vs the shipped kernel bit-exact
-[vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
-class DaAttnBH128 {
+// (hs unread — baked 128); parity bar vs DaAttnB is IDS, vs the shipped kernel bit-exact.
+// KT is the K/V plane element type — the f16 arm's float()-then-pack roundtrip is lossless
+[ |> template_struct_instance]
+class template DaAttnBH128T {
     @ssbo @binding = 0 qpanel : array<float>   // roped q rows
-    @ssbo @binding = 1 kpanel : array<float>   // the K mirror plane (kbase offsets)
-    @ssbo @binding = 2 vpanel : array<float>   // the V mirror plane (vbase offsets)
+    @ssbo @binding = 1 kpanel : array<KT>      // the K mirror plane (kbase offsets)
+    @ssbo @binding = 2 vpanel : array<KT>      // the V mirror plane (vbase offsets)
     @ssbo @binding = 3 outp : array<float>     // attention out rows
     @push_constant pa : DaAttnBArgs
     @workgroup fbq : uint[2048]    // the 32-row q tile, f16 pairs
@@ -1441,7 +1639,7 @@ class DaAttnBH128 {
     @workgroup fbl : float[32]
     @workgroup fba : float[32]
 
-    [spirv_kernel(local_size_x = 128, name = "da_attn_b_h128_cls_spv")]
+    [spirv_kernel(local_size_x = 128)]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * 128u
         let qtiles = (pa.npos + 31u) / 32u
@@ -1504,7 +1702,7 @@ class DaAttnBH128 {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.kbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(kpanel[src], kpanel[src + 1u]))
+                    fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1567,7 +1765,7 @@ class DaAttnBH128 {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.vbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(vpanel[src], vpanel[src + 1u]))
+                    fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1614,6 +1812,17 @@ class DaAttnBH128 {
     }
 }
 
+[vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBH128 : DaAttnBH128T {
+    typedef KT = float
+}
+
+// f16-mirror twin — the tiles were f16 all along, only the plane loads change
+[vk_dispatch(name = "da_attn_b_h128_f16_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBH128F16 : DaAttnBH128T {
+    typedef KT = float16
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
@@ -1625,13 +1834,13 @@ struct DaAttnArgs {
     scale : float   // the KV count to attend rides tok[0].cnt
 }
 
-// decode attention (one query row): one wg per head, GQA, f32 K/V mirror. Online softmax over
-// 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
-[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
-class DaAttn {
+// decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
+// over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
+[ |> template_struct_instance]
+class template DaAttnT {
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
-    @ssbo @binding = 1 kmir : array<float>   // the K mirror plane
-    @ssbo @binding = 2 vmir : array<float>   // the V mirror plane
+    @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
+    @ssbo @binding = 2 vmir : array<KT>      // the V mirror plane
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
     @push_constant pa : DaAttnArgs
@@ -1640,7 +1849,7 @@ class DaAttn {
     @workgroup part : float[64]    // per-subgroup partials
     @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
 
-    [spirv_kernel(local_size_x = 256, name = "da_attn_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
         let cnt = tok[0u].cnt
@@ -1670,7 +1879,7 @@ class DaAttn {
                 var sv = 0.0
                 var d = 0u
                 while (d < hs) {
-                    sv += qrow[d] * kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d]
+                    sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                     d++
                 }
                 s = sv * pa.scale
@@ -1715,7 +1924,7 @@ class DaAttn {
             if (tid < npart * hs) {
                 var jj = g
                 while (jj < clen) {
-                    acc += sc[jj] * vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c]
+                    acc += sc[jj] * float(vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                     jj += npart
                 }
             }
@@ -1738,12 +1947,24 @@ class DaAttn {
     }
 }
 
+[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttn : DaAttnT {
+    typedef KT = float
+}
+
+// f16-mirror twin — convert-on-load, compute stays f32
+[vk_dispatch(name = "da_attn_f16_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttnF16 : DaAttnT {
+    typedef KT = float16
+}
+
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
 
 struct BatchArgs {
     n : uint         // reduction dim
     d : uint         // output cols
     map_off : uint   // the per-wg map's word offset in sched (region records sit at 0)
+    ksplit : uint    // cm2 split-k: 256-aligned k chunk per partial plane; 0 = no split
 }
 
 // 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
@@ -3010,40 +3231,132 @@ class KqQ40CmF16 : MoeCmBase {
     }
 }
 
-// ===== the cm2 (NV_cooperative_matrix2) prefill twin =====
+// ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
 
-struct VkBlockQ8N {
-    d : float16
-    qs : uint16[16]
+struct VkQ8Blk {
+    qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
 }
 
-[spirv_decode, unused_argument(bc)]
-def private decode_q8n_cls(blk : VkBlockQ8N; bc, cib : uint2) : float16 {
-    let s = uint(blk.qs[int((cib.y & 30u) >> 1u)])
-    let sh = 24 - int(cib.y & 1u) * 8
-    let q = (int(s) << sh) >> 24
-    return blk.d * float16(float(q))
-}
-
-// mode 4, fmt-6 q8n stacks: 34B blocks decoded IN-LOAD, wg-scope tensor tiles, f16 activations;
-// layout dims bound every access — edge tiles clamp, no guard code. Bindings 1/4 unused (sparse)
-[vk_dispatch(name = "q8n_batch_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class Q8nCm2Batch : MoeCmBase {
-    @ssbo @binding = 0 wqn : array<VkBlockQ8N>   // the 34B q8n weight blocks
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane (the twin's B side)
+// llama.cpp's cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
+// 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
+// METHOD reads the separate scale plane by block index — the reason the class-method decode form
+// exists. Binding 4 unused (sparse)
+[vk_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2LBatch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
 
-    [spirv_kernel(local_size_x = 256, name = "q8n_batch_cm2_cls_spv")]
-    def run {
+    [spirv_decode]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let w = blk.qs[int(cib.y >> 2u)]
+        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
         let cnt = reg.z
-        let tix = reg.w
-        let ttiles = (cnt + 127u) / 128u
-        let xt = tix % ttiles             // token 128-tile (fastest)
-        let wt = tix / ttiles             // weight 64-tile
-        // A: the region's [d x n] q8n plane — block addressing, decode-in-load
+        let ttiles = (cnt + 255u) / 256u
+        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
+        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
+        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles             // token 256-tile (fastest)
+        let wt = tix / ttiles             // weight 128-tile
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        // FAST PATH — every access of this tile provably in bounds and K a whole number of
+        // BK steps: unclamped (clamp-Undefined) layouts, and the B/out strides masked to a
+        // multiple of 8 f16 (identity here — pa.n and pa.d are 32-multiples — but the mask makes
+        // the alignment PROVABLE to the driver's address analysis, llama.cpp's stride &= ~7)
+        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            // the no-split arm keeps LITERAL loop bounds and store base: the k0/k1/ybase form
+            // in this hot loop measured -27% pp on the 5060 Ti even when the values were 0/pa.n/0
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x256
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere. A: the region's [d x n] q8 plane, block
+        // addressing; layout coords are region-local, so the decode method's scale index is
+        // wg_blk0 + bc.x * nbb + bc.y off the staged base
         var tla : tensorLayout2DPad
         tensorLayoutCreate(tla)
         tensorLayoutSetBlockSize(tla, 1u, 32u)
@@ -3055,37 +3368,264 @@ class Q8nCm2Batch : MoeCmBase {
         tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
         tensorLayoutSetStride(tlb, pa.n, 1u)
         // out: token-major y through the transpose view. MUST be the clamp-Constant layout type:
-        // only clamped layouts DISCARD out-of-bounds stores — an Undefined-clamp store from a
-        // partial token tile stomps the neighboring region's rows
+        // only clamped layouts DISCARD out-of-bounds stores from a partial tile
         var tlo : tensorLayout2DPad
         tensorLayoutCreate(tlo)
         tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
         tensorLayoutSetStride(tlo, pa.d, 1u)
+        // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail.
+        // The hint is honored: a manual 4x expansion A/Bed dead even (2719 +- 20 vs 2749 +- 12
+        // on the 3B row), so the loop form stays. Same literal-bound specialization as the
+        // fast path — the no-split arm never reads k0/k1/ybase
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
+    }
+}
+
+// the m-tile sibling (llama.cpp's cm2 quant "m": BN=128, same A / BK / thread count) — picked by
+// cm2_tile_cols when the l grid underfills the SMs; body mirrors Q8Cm2LBatch at 128-token width
+[vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2MBatch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+
+    [spirv_decode]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let w = blk.qs[int(cib.y >> 2u)]
+        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 127u) / 128u
+        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
+        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
+        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles             // token 128-tile (fastest)
+        let wt = tix / ttiles             // weight 128-tile
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
         var tv : tensorView2Dt
         tensorViewCreate(tv)
-        var a : coopmatWgA_f16_64x16
-        var b0 : coopmatWgB_f16_16x64
-        var b1 : coopmatWgB_f16_16x64
-        var acc0 : coopmatWgAcc_f16_64x64
-        var acc1 : coopmatWgAcc_f16_64x64
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x128
+        var acc : coopmatWgAcc_f16_128x128
         let t0 = row0 + xt * 128u
-        var k = 0u
-        while (k < pa.n) {
-            coopmatLoadTensorDecode(a, wqn, wblk0, tla, wt * 64u, 64u, k, 16u, @@decode_q8n_cls)
-            coopmatLoadTensor(b0, xf16, 0u, tlb, t0, 64u, k, 16u, tv)
-            coopmatLoadTensor(b1, xf16, 0u, tlb, t0 + 64u, 64u, k, 16u, tv)
-            acc0 = coopmatMulAdd(a, b0, acc0)
-            acc1 = coopmatMulAdd(a, b1, acc1)
-            k += 16u
+        let m0 = wt * 128u
+        // FAST PATH — see Q8Cm2LBatch; identical rule at the m width, same literal-bound
+        // no-split specialization (the k0/k1/ybase form in the hot loop measured -27% pp)
+        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x128
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
+            return
         }
-        coopmatClamp(acc0, -65504.0, 65504.0)
-        coopmatClamp(acc1, -65504.0, 65504.0)
-        var accw0 : coopmatWgAcc_f32_64x64
-        coopmatConvert(accw0, acc0)
-        coopmatStoreTensor(accw0, y, 0u, tlo, t0, 64u, wt * 64u, 64u, tv)
-        var accw1 : coopmatWgAcc_f32_64x64
-        coopmatConvert(accw1, acc1)
-        coopmatStoreTensor(accw1, y, 0u, tlo, t0 + 64u, 64u, wt * 64u, 64u, tv)
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 32u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x128
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+    }
+}
+
+// ===== the split-k reduce (sums the cm2 partial planes into y) =====
+
+struct SkRedArgs {
+    nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
+    k : uint       // planes
+}
+
+// 4 floats per thread, like the elementwise family
+[vk_dispatch(name = "splitk_reduce_cls", grid = "wgs", params = "wgs : int64")]
+class SplitKReduce {
+    @ssbo @binding = 0 part : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @push_constant pa : SkRedArgs
+
+    [spirv_kernel(local_size_x = 256, name = "splitk_reduce_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            var s0 = 0.0
+            var s1 = 0.0
+            var s2 = 0.0
+            var s3 = 0.0
+            var p = 0u
+            while (p < pa.k) {
+                let b = p * pa.nelem + e
+                s0 += part[b]
+                s1 += part[b + 1u]
+                s2 += part[b + 2u]
+                s3 += part[b + 3u]
+                p++
+            }
+            y[e] = s0
+            y[e + 1u] = s1
+            y[e + 2u] = s2
+            y[e + 3u] = s3
+        }
     }
 }
 
@@ -3150,19 +3690,21 @@ struct RopeKvArgs {
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
 }
 
-// fused rope + KV-row store (decode, one token), f32 mirror: one thread per rotation pair,
-// each owning 2 distinct K + 2 V slots
-[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStore {
+// fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
+// 2 distinct K + 2 V slots. KT is the mirror element type; f16 stores clamp +-65504 (the
+// metal CLAMP16 contract — an inf in the mirror poisons attention)
+[ |> template_struct_instance]
+class template RopeKvStoreT {
     @ssbo @binding = 0 qrows : array<float>    // q, roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 2 kmir : array<float>     // the K mirror plane
-    @ssbo @binding = 3 vmir : array<float>     // the V mirror plane
+    @ssbo @binding = 2 kmir : array<KT>        // the K mirror plane
+    @ssbo @binding = 3 vmir : array<KT>        // the V mirror plane
     @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : RopeKvArgs
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "rope_kv_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npairs) {
@@ -3179,12 +3721,19 @@ class RopeKvStore {
                 let kb = pa.qd + h * pa.hs
                 let a0 = kvsrc[kb + e0]
                 let a1 = kvsrc[kb + e1]
-                kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
-                kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
                 // v is not roped — copy the same two elements raw into the V plane
                 let vb = pa.qd + pa.kvd + h * pa.hs
-                vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
-                vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                static_if (CLAMP16) {
+                    kmir[mrow + h * pa.hs + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
+                    kmir[mrow + h * pa.hs + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e0] = float16(clamp(kvsrc[vb + e0], -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e1] = float16(clamp(kvsrc[vb + e1], -65504.0, 65504.0))
+                } else {
+                    kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
+                    kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
+                    vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
+                    vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                }
             } else {
                 let qb = h * pa.hs
                 let a0 = qrows[qb + e0]
@@ -3194,6 +3743,18 @@ class RopeKvStore {
             }
         }
     }
+}
+
+[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStore : RopeKvStoreT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "rope_kv_f16_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreF16 : RopeKvStoreT {
+    typedef KT = float16
 }
 
 struct RopeKvBArgs {
@@ -3211,17 +3772,18 @@ struct RopeKvBArgs {
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
-// buffer into the mirrors at absolute positions
-[vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStoreB {
+// buffer into the mirrors at absolute positions. KT/CLAMP16 as in RopeKvStoreT
+[ |> template_struct_instance]
+class template RopeKvStoreBT {
     @ssbo @binding = 0 qrows : array<float>    // q rows, roped in place
     @ssbo @binding = 1 kvrows : array<float>   // k rows at 0, v rows at voff
-    @ssbo @binding = 2 kmir : array<float>
-    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 2 kmir : array<KT>
+    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>   // per-position cos row then sin row (hs floats each)
     @push_constant pa : RopeKvBArgs
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "rope_kv_b_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npos * pa.ppp) {
@@ -3242,11 +3804,18 @@ class RopeKvStoreB {
                 let a0 = kvrows[kb + e0]
                 let a1 = kvrows[kb + e1]
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                kmir[mo + e0] = a0 * fcr - a1 * fci
-                kmir[mo + e1] = a0 * fci + a1 * fcr
                 let vb = pa.voff + p * pa.kvd + h * pa.hs
-                vmir[mo + e0] = kvrows[vb + e0]
-                vmir[mo + e1] = kvrows[vb + e1]
+                static_if (CLAMP16) {
+                    kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
+                    kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
+                    vmir[mo + e0] = float16(clamp(kvrows[vb + e0], -65504.0, 65504.0))
+                    vmir[mo + e1] = float16(clamp(kvrows[vb + e1], -65504.0, 65504.0))
+                } else {
+                    kmir[mo + e0] = a0 * fcr - a1 * fci
+                    kmir[mo + e1] = a0 * fci + a1 * fcr
+                    vmir[mo + e0] = kvrows[vb + e0]
+                    vmir[mo + e1] = kvrows[vb + e1]
+                }
             } else {
                 let qb = p * pa.qd + h * pa.hs
                 let a0 = qrows[qb + e0]
@@ -3256,6 +3825,18 @@ class RopeKvStoreB {
             }
         }
     }
+}
+
+[vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreB : RopeKvStoreBT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "rope_kv_b_f16_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreBF16 : RopeKvStoreBT {
+    typedef KT = float16
 }
 
 struct QknRopeArgs {
@@ -3272,21 +3853,22 @@ struct QknRopeArgs {
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
-// reduce + rotation order, so bit-identical to the split pair
-[vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
-class QknRopeKv : RmsWgBase {
+// reduce + rotation order, so bit-identical to the split pair. KT/CLAMP16 as in RopeKvStoreT
+[ |> template_struct_instance]
+class template QknRopeKvT : RmsWgBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 2 kmir : array<float>
-    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 2 kmir : array<KT>
+    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
     @ssbo @binding = 6 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : QknRopeArgs
     @workgroup row : float[256]                // this head's normed q or k row (hs <= 256)
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "qkn_rope_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let wid = gl_WorkGroupID.x
         let is_k = wid >= pa.nh
@@ -3315,8 +3897,13 @@ class QknRopeKv : RmsWgBase {
             let r1 = a0 * fci + a1 * fcr
             if (is_k) {
                 let mrow = pa.layerbase + tok[0u].pos * pa.kvd
-                kmir[mrow + h * pa.hs + e0] = r0
-                kmir[mrow + h * pa.hs + e1] = r1
+                static_if (CLAMP16) {
+                    kmir[mrow + h * pa.hs + e0] = float16(clamp(r0, -65504.0, 65504.0))
+                    kmir[mrow + h * pa.hs + e1] = float16(clamp(r1, -65504.0, 65504.0))
+                } else {
+                    kmir[mrow + h * pa.hs + e0] = r0
+                    kmir[mrow + h * pa.hs + e1] = r1
+                }
             } else {
                 qrows[h * pa.hs + e0] = r0
                 qrows[h * pa.hs + e1] = r1
@@ -3325,9 +3912,25 @@ class QknRopeKv : RmsWgBase {
         // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
-            vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+            static_if (CLAMP16) {
+                vmir[mrow + h * pa.hs + tid] = float16(clamp(kvsrc[pa.qd + pa.kvd + h * pa.hs + tid], -65504.0, 65504.0))
+            } else {
+                vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+            }
         }
     }
+}
+
+[vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
+class QknRopeKv : QknRopeKvT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "qkn_rope_f16_cls", grid = "wgs", params = "wgs : int64")]
+class QknRopeKvF16 : QknRopeKvT {
+    typedef KT = float16
 }
 
 // ===== the region-GEMV push params (every decode GEMV shares the shape) =====
@@ -3379,60 +3982,6 @@ class Q8Gemv {
                     if (lane % 2u == 0u) {
                         acc += float(idot) * float(wsh[wb0 + b]) * axs[xb0 + b]
                     }
-                }
-                bi0 += bpp
-            }
-            let total = subgroupAdd(acc)
-            if (subgroupElect()) {
-                y[pa.ybase + rg] = total
-            }
-        }
-    }
-}
-
-// q8n_moe_groupn's class twin: the region skeleton on the 34B blocks — 17 u16 per block, u16-pair
-// loads combined to words, 8 lanes per block, d broadcast-read from u16[0]. No binding-1 scale
-// plane (scales are inline), so the class layout carries the GAP — sparse bindings by design.
-[vk_dispatch(name = "q8n_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Q8nGemv {
-    @ssbo @binding = 0 wq16 : array<uint16>    // the 34B blocks as u16 words ([d][16 quant pairs])
-    @ssbo @binding = 2 regions : array<uint>
-    @ssbo @binding = 3 xqw : array<uint>
-    @ssbo @binding = 4 axs : array<float>
-    @ssbo @binding = 5 y : array<float>
-    @push_constant pa : GemvArgs
-
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8n_gemv_cls_spv")]
-    def run {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
-            let nb = pa.n / 32u
-            let wb0 = regions[r * 2u] + row * nb
-            let xb0 = regions[r * 2u + 1u]
-            let lane = gl_SubgroupInvocationID
-            let my_word = lane % 8u
-            let my_boff = lane / 8u
-            let bpp = gl_SubgroupSize / 8u
-            var acc = 0.0
-            var bi0 = 0u
-            while (bi0 < nb) {
-                let b = bi0 + my_boff
-                var idot = 0
-                var dbits = 0u
-                if (b < nb) {
-                    let base = (wb0 + b) * 17u
-                    let lo = uint(wq16[base + 1u + my_word * 2u])
-                    let hi = uint(wq16[base + 2u + my_word * 2u])
-                    idot = sdot4(lo | (hi << 16u), xqw[(xb0 + b) * 8u + my_word])
-                    dbits = uint(wq16[base])
-                }
-                idot += subgroupShuffleXor(idot, 1u)
-                idot += subgroupShuffleXor(idot, 2u)
-                idot += subgroupShuffleXor(idot, 4u)
-                if (my_word == 0u && b < nb) {
-                    acc += float(idot) * unpackHalf2x16(dbits).x * axs[xb0 + b]
                 }
                 bi0 += bpp
             }
@@ -3637,8 +4186,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 }
 
 // ===== format-dispatched class-GEMV rail =====
-// The drivers' 5-way format pick as ensure/set/enc: every decode GEMV class
-// shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.
+// The drivers' format pick as ensure/set/enc: every decode GEMV class
+// shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs.
 
 def gemv_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.q8)) {
@@ -3651,8 +4200,6 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_k6_cls()
     } elif (fmt == int(KqFmt.q40)) {
         return ensure_kq_gemv_q40_cls()
-    } elif (fmt == int(KqFmt.q8n)) {
-        return ensure_q8n_gemv_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -3663,11 +4210,6 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_q8_gemv_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
         return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves all four
-    } elif (fmt == int(KqFmt.q8n)) {
-        // q8n has no scale plane — slot 1 drops out
-        return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
-            fixed_array(sizes[0], sizes[2], sizes[3], sizes[4], sizes[5]),
-            fixed_array(gbits[0], gbits[2], gbits[3], gbits[4], gbits[5]))
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return VkDescriptorSet()
@@ -3684,8 +4226,6 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q40)) {
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q8n)) {
-        enc_q8n_gemv_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }

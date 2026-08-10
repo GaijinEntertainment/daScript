@@ -424,6 +424,27 @@ struct coopmatWgAcc_f16_64x64 {}
 struct coopmatWgAcc_f32_64x16 {}
 struct coopmatWgAcc_f32_64x32 {}
 struct coopmatWgAcc_f32_64x64 {}
+// the l-tile GEMM shapes (llama.cpp's cm2 quant "l" geometry: BM=128, BN=256, BK=64)
+struct coopmatWgA_f16_128x64 {}
+struct coopmatWgB_f16_64x256 {}
+struct coopmatWgAcc_f16_128x256 {}
+struct coopmatWgAcc_f32_128x256 {}
+// the m-tile siblings (llama.cpp's cm2 quant "m": BN=128, same A / BK)
+struct coopmatWgB_f16_64x128 {}
+struct coopmatWgAcc_f16_128x128 {}
+struct coopmatWgAcc_f32_128x128 {}
+
+// flash-attention tiles (Br=64, head sizes 64 / 128): Q & O accumulators, Qf16/P as A, K^T/V/One
+// as B. h64 runs Bc=64; h128 runs Bc=32 (llama.cpp's big-head cut — the 64-wide KV tile set
+// spills the wg staging budget next to the 64x128 O accumulator).
+struct coopmatWgA_f16_64x32 {}
+struct coopmatWgA_f16_64x64 {}
+struct coopmatWgA_f16_64x128 {}
+struct coopmatWgB_f16_32x32 {}
+struct coopmatWgB_f16_32x128 {}
+struct coopmatWgB_f16_64x64 {}
+struct coopmatWgB_f16_128x32 {}
+struct coopmatWgAcc_f32_64x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
 struct coopmatWgB_s8_32x16 {}
@@ -446,6 +467,26 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c :
 def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f16_128x256) : coopmatWgAcc_f16_128x256 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f32_128x256) : coopmatWgAcc_f32_128x256 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_128x128) : coopmatWgAcc_f32_128x128 { return c }
+// flash-attention shapes: S = Qf16 @ K^T (hsk 64 / 128), O += P @ V (hsv 64 / 128), rowsum = P @ One
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
+// the h128 Bc=32 trio: S = Qf16 @ K^T, rowsum = P @ One, O += P @ V
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x128; b : coopmatWgB_f16_128x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
 [unused_argument(a, b), sideeffects]
@@ -506,3 +547,58 @@ def public coopmatConvert(var dst : coopmatWgAcc_f32_64x16; src : coopmatWgAcc_f
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x32; src : coopmatWgAcc_f16_64x32) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f16_64x64) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_128x256; src : coopmatWgAcc_f16_128x256) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_128x128; src : coopmatWgAcc_f16_128x128) : void {}
+// The generic form covers every other float width/use conversion pair (validated at emission): a
+// same-use width change is a plain componentwise convert; a USE-changing pair (f32 accumulator ->
+// f16 A, the flash-attention Q/P path) additionally requires the conversions device feature.
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst; src) : void {}
+
+// ===== cm2 reductions / per-element ops (flash attention: online softmax) =====
+// coopmatReduce(dst, src, mask, @@fn): OpCooperativeMatrixReduceNV — combine `src`'s elements along
+// rows (COOPMAT_REDUCE_ROW), columns (COOPMAT_REDUCE_COLUMN), or both, with a [spirv_combine]
+// function ((T, T) -> T, T = the component type); the reduced value is broadcast across the result.
+// A ROW reduce may RESIZE columns (dst cols free — llama.cpp's smear-reduce Br x Bc -> Br x HSV),
+// and symmetrically a COLUMN reduce may resize rows. `mask` is a compile-time constant.
+let public COOPMAT_REDUCE_ROW = 1u
+let public COOPMAT_REDUCE_COLUMN = 2u
+[unused_argument(dst, src, mask, fn), sideeffects]
+def public coopmatReduce(var dst; src; mask : uint; fn) : void {}
+
+// coopmatPerElement(dst, src, @@fn, extras...): OpCooperativeMatrixPerElementOpNV — dst[r,c] =
+// fn(r, c, src[r,c], extras...) with a [spirv_per_element] function. A coopmat extra must match
+// src's shape and arrives as its (r,c) component; a scalar extra arrives as-is. dst and src are
+// the same tile type (dst may alias src).
+[unused_argument(dst, src, fn), sideeffects]
+def public coopmatPerElement(var dst; src; fn) : void {}
+[unused_argument(dst, src, fn, e0), sideeffects]
+def public coopmatPerElement(var dst; src; fn; e0) : void {}
+[unused_argument(dst, src, fn, e0, e1), sideeffects]
+def public coopmatPerElement(var dst; src; fn; e0, e1) : void {}
+[unused_argument(dst, src, fn, e0, e1, e2), sideeffects]
+def public coopmatPerElement(var dst; src; fn; e0, e1, e2) : void {}
+[unused_argument(dst, src, fn, e0, e1, e2, e3), sideeffects]
+def public coopmatPerElement(var dst; src; fn; e0, e1, e2, e3) : void {}
+
+// ===== componentwise coopmat arithmetic (SPV_KHR_cooperative_matrix extends the scalar opcodes) =====
+// dst = a OP b, all three the same float tile type (dst may alias a or b). coopmatMulElem is the
+// COMPONENTWISE (Hadamard) product — matrix multiply stays coopmatMulAdd.
+[unused_argument(dst, a, b), sideeffects]
+def public coopmatAdd(var dst; a; b) : void {}
+[unused_argument(dst, a, b), sideeffects]
+def public coopmatSub(var dst; a; b) : void {}
+[unused_argument(dst, a, b), sideeffects]
+def public coopmatMulElem(var dst; a; b) : void {}
+// mat *= s (OpMatrixTimesScalar; s converts to the component width)
+[unused_argument(mat, s), sideeffects]
+def public coopmatScale(var mat; s : float) : void {}
+// dst = src, same tile type (plain das assignment does not move coopmat locals — the markers are
+// empty phantom structs; llama.cpp's `Mold = M` snapshot before the online-softmax max update)
+[unused_argument(dst, src), sideeffects]
+def public coopmatCopy(var dst; src) : void {}
+// every element of `mat` = v (a `var` tile declaration zero-fills; this is the non-zero fill)
+[unused_argument(mat, v), sideeffects]
+def public coopmatFill(var mat; v : float) : void {}

@@ -12,6 +12,13 @@ CMake-based build, supported on Windows / Linux / macOS / iOS / Android / WASM (
 
 Full reference (per-platform generator commands, build flags, AOT debugging, exit code meanings, runtime crash diagnostics): **`skills/build_and_debug.md`**.
 
+**Build all of your own modules.** A session runs its tree's binary with shared_modules built
+from THAT tree — never `-load_module` another checkout's build. A module compiled against
+different daScript headers can load cleanly, pass tests, and still be subtly wrong: ABI drift
+surfaces as behavior or performance skew, not necessarily a crash — and it poisons every
+measurement made through it. External-module repos (dasVulkan etc.) get a detached worktree
+under `<tree>/modules/<name>` with `_build` configured `-DDASLANG_DIR=<tree>`.
+
 ## Workspace Hygiene
 
 Clean up files created for diagnostics, staging, and one-off tests before handing work back. This

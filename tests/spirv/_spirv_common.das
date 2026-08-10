@@ -2232,6 +2232,114 @@ def public coopmat2_words : array<uint> {
     return clone_to_move(coopmat2_spv)
 }
 
+// ===== The cm2 flash-attention fixture: llama.cpp's flash_attn_cm2 inner loop at Br=Bc=64,
+// HSK=64, HSV=128 — online softmax over KV tiles. Exercises every reduce/per-element rail shape:
+// row reduce (same-shape rowmax + the COLUMN-RESIZING smear 64x64 -> 64x128), per-element with no
+// extras (exp), a MATRIX extra (running max), and scalar extras (on-the-fly causal mask), the
+// use-changing OpFConvert (f32 accumulator -> f16 A for Q and P), componentwise tile add/sub/mul,
+// OpMatrixTimesScalar (Q pre-scale), scalar fill (One / -inf), and the tile copy (Mold = M). =====
+var @ssbo @binding = 0 fa_q : array<float>
+var @ssbo @binding = 1 fa_k : array<float16>
+var @ssbo @binding = 2 fa_v : array<float16>
+var @ssbo @binding = 3 fa_o : array<float>
+var @ssbo @binding = 4 fa_meta : array<uint>
+
+[spirv_combine]
+def fa_max(a, b : float) : float => max(a, b)
+
+[spirv_combine, unused_argument(b)]
+def fa_smear(a, b : float) : float => a
+
+[spirv_per_element, unused_argument(r, c)]
+def fa_exp(r, c : uint; v : float) : float => exp(v)
+
+[spirv_per_element, unused_argument(r, c)]
+def fa_pick_max(r, c : uint; v, o : float) : float => max(v, o)
+
+[spirv_per_element]
+def fa_mask(r, c : uint; v : float; rbase, cbase : uint) : float => cbase + c > rbase + r ? -1.7e38 : v
+
+[spirv_per_element, unused_argument(r, c)]
+def fa_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
+
+[compute_shader(local_size_x=128, name="coopmat2fa_spv"), marker(no_coverage)]
+def coopmat2fa_kernel {
+    let n = fa_meta[0u]
+    let kv = fa_meta[1u]
+    let ti = gl_WorkGroupID.x
+    var tlq : tensorLayout2DPad
+    tensorLayoutCreate(tlq)
+    tensorLayoutSetDimension(tlq, n, 64u)
+    tensorLayoutSetStride(tlq, 64u, 1u)
+    var tlk : tensorLayout2DPad
+    tensorLayoutCreate(tlk)
+    tensorLayoutSetDimension(tlk, kv, 64u)
+    tensorLayoutSetStride(tlk, 64u, 1u)
+    var tlv : tensorLayout2DPad
+    tensorLayoutCreate(tlv)
+    tensorLayoutSetDimension(tlv, kv, 128u)
+    tensorLayoutSetStride(tlv, 128u, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, n, 128u)
+    tensorLayoutSetStride(tlo, 128u, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    // Q: an f32 ACC tensor load, pre-scaled, then use-converted to the f16 A the MMA wants
+    var q : coopmatWgAcc_f32_64x64
+    coopmatLoadTensor(q, fa_q, 0u, tlq, ti * 64u, 64u, 0u, 64u)
+    coopmatScale(q, 0.125)
+    var qf : coopmatWgA_f16_64x64
+    coopmatConvert(qf, q)
+    // online-softmax state: running max starts at -FLT_MAX-ish, running sum and O at zero
+    var mrow : coopmatWgAcc_f32_64x64
+    coopmatFill(mrow, -1.7e38)
+    var lrow : coopmatWgAcc_f32_64x64
+    var o : coopmatWgAcc_f32_64x128
+    var j = 0u
+    while (j < kv) {
+        var s : coopmatWgAcc_f32_64x64
+        var kt : coopmatWgB_f16_64x64
+        coopmatLoadTensor(kt, fa_k, 0u, tlk, j, 64u, 0u, 64u, tv)
+        s = coopmatMulAdd(qf, kt, s)
+        coopmatPerElement(s, s, @@fa_mask, ti * 64u, j)
+        var rmax : coopmatWgAcc_f32_64x64
+        coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@fa_max)
+        var mold : coopmatWgAcc_f32_64x64
+        coopmatCopy(mold, mrow)
+        coopmatPerElement(mrow, rmax, @@fa_pick_max, mold)
+        coopmatSub(s, s, mrow)
+        coopmatPerElement(s, s, @@fa_exp)                       // P = e^(S - M), in place
+        var em : coopmatWgAcc_f32_64x64
+        coopmatSub(em, mold, mrow)
+        coopmatPerElement(em, em, @@fa_exp)                     // eM = e^(Mold - M)
+        var pa : coopmatWgA_f16_64x64
+        coopmatConvert(pa, s)
+        var rsum : coopmatWgAcc_f32_64x64
+        var one : coopmatWgB_f16_64x64
+        coopmatFill(one, 1.0)
+        rsum = coopmatMulAdd(pa, one, rsum)                     // rowsum by ones-matrix multiply
+        coopmatMulElem(lrow, em, lrow)
+        coopmatAdd(lrow, lrow, rsum)                            // L = eM*L + rowsum
+        var emd : coopmatWgAcc_f32_64x128
+        coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@fa_smear)  // smear eM across HSV columns
+        coopmatMulElem(o, emd, o)
+        var vt : coopmatWgB_f16_64x128
+        coopmatLoadTensor(vt, fa_v, 0u, tlv, j, 64u, 0u, 128u)
+        o = coopmatMulAdd(pa, vt, o)                            // O = eMdiag*O + P @ V
+        j += 64u
+    }
+    var ld : coopmatWgAcc_f32_64x128
+    coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@fa_smear)
+    coopmatPerElement(ld, ld, @@fa_recip)
+    coopmatMulElem(o, ld, o)                                    // O /= L
+    coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 128u)
+}
+
+def public coopmat2fa_words : array<uint> {
+    return clone_to_move(coopmat2fa_spv)
+}
+
 // The cm2 fixture adds the tensor-addressing type/builder opcodes, the tensor-addressed coopmat
 // load/store, OpCooperativeMatrixLengthKHR, and OpPhi (coopmatClamp's hand-emitted element loop is
 // the emitter's ONLY OpPhi — das loops lower through Function-storage locals). The decode function's
@@ -2259,6 +2367,21 @@ def public coopmat2_emitter_opcodes : table<uint> {
         SpvOp.ShiftRightArithmetic,
         SpvOp.ShiftRightLogical,
         SpvOp.ConstantFalse
+    ]) {
+        s |> insert(uint(op))
+    }
+    return <- s
+}
+
+// The flash-attention fixture adds the two cm2 callback opcodes (reduce with a combine function,
+// per-element with extras) and the tile OpMatrixTimesScalar; everything else it emits (componentwise
+// F-arithmetic, CompositeConstruct fills, FConvert) rides opcodes earlier fixtures already declare.
+def public coopmat2fa_emitter_opcodes : table<uint> {
+    var s <- coopmat2_emitter_opcodes()
+    for (op in [
+        SpvOp.CooperativeMatrixReduceNV,
+        SpvOp.CooperativeMatrixPerElementOpNV,
+        SpvOp.MatrixTimesScalar
     ]) {
         s |> insert(uint(op))
     }

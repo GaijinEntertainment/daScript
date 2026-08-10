@@ -289,6 +289,12 @@ that both emitters read class members. Current entries:
   opportunity, not a correctness gap.
 - **Grid-literal validation: Vulkan rejects non-int64 ceil-div grid params at macro apply;
   the metal lens still carries that silent infer trap.** Pending metal-side fix.
+- **cm2 decode-in-load (and its class-method decode form) is Vulkan-only by hardware.**
+  `[spirv_decode]` — including the method form, where a das-level self is erased from the
+  rigid 3-param signature so the decode body reads class members (a separate scale plane,
+  push constants, @workgroup staging) — lowers SPV_NV_cooperative_matrix2 tensor loads.
+  Metal-4 tensors have no decode-callback analogue; the Metal quant GEMMs stage dequant
+  through threadgroup memory instead. Deliberate, target-specific — not a pending port.
 
 ## Top risks
 

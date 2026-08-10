@@ -10,8 +10,7 @@ module dasllama_kqformat shared public
 // across a module seam (CODEREVIEW.md rule 11).
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes;
-//! q8n = q8 as gguf-native 34B interleaved blocks (ONE plane, the cm2 GPU-tier tag, never disk).
+//! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes.
 enum KqFmt : uint8 {
     q8
     k4
@@ -19,7 +18,6 @@ enum KqFmt : uint8 {
     k6
     q40
     q51
-    q8n
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
@@ -31,7 +29,7 @@ def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 |
 def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)
 
 //! KqFmt -> the kernel/IR format id space (4/5/6/40) — the ONE bridge between the enum and the
-//! int ids the generated kernels take as runtime params. q8/q51/q8n are not kq superblock
+//! int ids the generated kernels take as runtime params. q8/q51 are not kq superblock
 //! formats and panic.
 def kq_schema_id(f : KqFmt) : int {
     if (f == KqFmt.k4) {
@@ -65,7 +63,7 @@ let Q51_SB = 4l     // q5_1 scale plane PER 32-BLOCK: f16 d + f16 m
 
 //! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
-//! q8/q8n panic (their planes are byte-per-elem / 34B-block forms, not stride-walked here).
+//! q8 panics (its planes are byte-per-elem, not stride-walked here).
 def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.k4 || f == KqFmt.q40) {
         return K4_QSB
@@ -101,21 +99,17 @@ def kq_ssb(f : KqFmt) : int64 {
     return 0l
 }
 
-//! Weights per stride unit: the kq lattice strides per 256-weight superblock; q8/q51/q8n per
+//! Weights per stride unit: the kq lattice strides per 256-weight superblock; q8/q51 per
 //! 32-weight block.
 def kq_elems(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
 
 //! The loader's stream/repack region tag for a format (stream_repack_one / push_repack codes).
-//! q8n has no stream form (a GPU-tier tag, never disk) and panics.
 def kq_stream_code(f : KqFmt) : int {
     if (f == KqFmt.q8) {
         return 0
     }
     if (f == KqFmt.q51) {
         return 2
-    }
-    if (f == KqFmt.q8n) {
-        panic("kq_stream_code: q8n is a device tag, never a stream region")
     }
     return kq_schema_id(f)
 }

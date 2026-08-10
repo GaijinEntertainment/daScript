@@ -25,7 +25,7 @@ def private add_set(var dst : table<uint>; var words : array<uint>) {
 }
 
 [test]
-def test_opcode_census(t : T?) {
+def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-fixture list; splitting hides the census roster
     t |> run("emitter opcode census == declared set (all fixtures)") <| @(t : T?) {
         var present : table<uint>
         add_set(present, square_words())
@@ -102,7 +102,8 @@ def test_opcode_census(t : T?) {
         add_set(present, coopmat_i8_words())
         add_set(present, coopmat_sm_words())
         add_set(present, coopmat2_words())
-        var declared <- coopmat2_emitter_opcodes()
+        add_set(present, coopmat2fa_words())
+        var declared <- coopmat2fa_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }
