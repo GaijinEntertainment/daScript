@@ -80,10 +80,12 @@ struct PageSource {
 }
 
 def leading_spaces(s : string) : int {
+    // tabs count as indentation too — a tab-indented block line must not read as
+    // column 0, or the whole block silently drops from extraction
     var n = 0
     peek_data(s) $(arr) {
         for (c in arr) {
-            break if (int(c) != ' ')
+            break if (int(c) != ' ' && int(c) != '\t')
             n++
         }
     }
@@ -172,7 +174,7 @@ def dedent(var body : array<string>) {
 // ===== chunking =====
 
 let DECL_STARTERS = [
-    "def ", "struct ", "class ", "enum ", "variant ", "typedef ", "bitfield "
+    "def ", "struct ", "class ", "enum ", "variant ", "typedef ", "bitfield ", "tuple "
 ]
 
 def is_decl_start(line : string) : bool {
@@ -274,7 +276,7 @@ def take_ident(s : string) : string {
     return slice(s, 0, n)
 }
 
-let TYPE_KEYWORDS = ["class ", "struct ", "enum ", "variant ", "bitfield "]
+let TYPE_KEYWORDS = ["class ", "struct ", "enum ", "variant ", "bitfield ", "tuple ", "typedef "]
 let TYPE_MODIFIERS = ["private ", "public ", "sealed ", "abstract ", "shared "]
 
 def type_decl_name(line : string) : string {
@@ -408,11 +410,17 @@ def apply_renames(ren : Renamer; line : string) : string {
 }
 
 def rename_line(var ren : Renamer; line : string) : string {
-    let tname = type_decl_name(line)
-    if (!empty(tname)) {
-        declare(ren, [tname])
-    } else {
-        declare(ren, var_decl_names(line))
+    return rename_line_ex(ren, line, true)
+}
+
+def rename_line_ex(var ren : Renamer; line : string; declare_ok : bool) : string {
+    if (declare_ok) {
+        let tname = type_decl_name(line)
+        if (!empty(tname)) {
+            declare(ren, [tname])
+        } else {
+            declare(ren, var_decl_names(line))
+        }
     }
     return apply_renames(ren, line)
 }
@@ -525,6 +533,15 @@ def companion_preamble(rst_path : string; root : string; pages_dir : string) : a
     if (length(base) > 2 && is_number(first_character(base))) {
         cands |> push(path_join(root, path_join("tutorials/language", base + ".das")))
     }
+    // some families keep companions under the page's own basename, or in a module tree
+    let gpath = to_generic_path(rst_path)
+    if (find(gpath, "/tutorials/imgui/") >= 0) {
+        cands |> push(path_join(root, path_join("modules/dasImgui/examples/tutorial", base + ".das")))
+    }
+    if (us > 0 && !is_number(first_character(base))) {
+        let fam2 = slice(base, 0, us)
+        cands |> push(path_join(root, path_join("tutorials", path_join(fam2, base + ".das"))))
+    }
     for (c in cands) {
         continue if (!fexist(c))
         for (ln in split(fread(c), "\n")) {
@@ -564,6 +581,10 @@ def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : strin
                 declare(ren, [dname])
             } else {
                 ren.def_headers |> insert(hdr)
+                // claim generation 1 so the FIRST duplicate already aliases to __2
+                if ((ren.counts?[dname] ?? 0) == 0) {
+                    declare(ren, [dname])
+                }
             }
             break
         }
@@ -612,7 +633,9 @@ def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : strin
     dc.lines |> push(tag)
     for (l in chunk.lines) {
         continue if (trim(l) == ELIDE)
-        dc.lines |> push(rename_line(ren, l))
+        // indented lines inside a decl body are function-local — they get alias
+        // APPLICATION but must not claim their names page-wide
+        dc.lines |> push(rename_line_ex(ren, l, leading_spaces(l) == 0))
     }
     seg.decls |> emplace(dc)
 }
@@ -667,7 +690,10 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
     out |> push("")
     var given_stmts : array<string>
     for (g in givens) {
-        continue if (g |> starts_with("module "))
+        continue if ((g |> starts_with("module ")) || key_exists(seen, g))
+        if (is_hoist(g)) {
+            seen |> insert(g)
+        }
         if (is_decl_start(g) || is_hoist(g) || is_global_decl(g)) {
             // var/let givens become globals: page-wide context (a finalizer counter,
             // a db handle) that block parameters may legally shadow. `inscope` is
@@ -693,6 +719,29 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
     // frees the strings — leaving every alias in hoists/require tables dangling
     seg.decls |> clear()
     seg.stmts |> clear()
+}
+
+// `member <Class>`: the block's statements live inside a method of the named class — wrap
+// them in a helper method of a synthesized subclass so unqualified calls resolve against
+// the class surface (HvWebServer routes, adapters, ...)
+def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock) {
+    var body := blk.body
+    mark_elisions(body)
+    var dc = DeclChunk(name = "_doc_member_{blk.rst_line}", lines <- [
+        "// --- member block at rst:{blk.rst_line}",
+        "class _doc_member_{blk.rst_line} : {blk.marker_arg} \{",
+        "    def _doc_body_{blk.rst_line}() \{"
+    ])
+    for (l in body) {
+        if (trim(l) == ELIDE) {
+            dc.lines |> push("        pass")
+            continue
+        }
+        let r = rename_line(ren, l)
+        dc.lines |> push(empty(trim(r)) ? "" : "        " + r)
+    }
+    dc.lines |> push_from(["    \}", "\}"])
+    seg.decls |> emplace(dc)
 }
 
 // true when the marker fully consumed the block (fresh falls through — it needs segment state)
@@ -741,6 +790,11 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     let out_base = path_join(path_join(cfg.out, "pages"), stem(page.path) + "_doc")
     for (blk in page.blocks) {
         continue if (handle_marker(blk, em, hoists, page.givens, out_base, path_join(cfg.out, "pages")))
+        if (blk.marker == "member") {
+            em.checked++
+            append_member_block(seg, ren, blk)
+            continue
+        }
         if (blk.marker == "fresh") {
             let fname = seg_no == 0 ? out_base + ".das" : "{out_base}__{seg_no + 1}.das"
             flush_segment(seg, hoists, page.givens, fname, em.files)
