@@ -121,7 +121,7 @@ Debug
 
         print("hello\n")       // ok
         print("{13}\n")        // ok, integer is interpolated into the string
-        // print(13)           // error: print expects a string
+        // print(13)           // error[30341] no matching functions or generics: print(int const)
 
 ---------------------
 Panic
@@ -195,20 +195,25 @@ Resize & Reserve
 
 .. das:function:: resize(var arr : array<T>; new_size : int)
 
-    Resizes the array to ``new_size`` elements.  New elements are zero-initialized.
+    Resizes the array to ``new_size`` elements.  New elements are zero-initialized, and
+    shrinking finalizes the elements that are dropped.  When the element type carries
+    field initializers, ``resize`` forwards to ``resize_and_init`` so that new elements
+    get ``default<T>`` rather than zeroes.  ``new_size`` may also be ``int64``.
 
-.. das:function:: resize_and_init(var arr : array<T>; new_size : int)
+.. das:function:: resize_and_init(var arr : array<T>; new_size : int [; init_value : T])
 
-    Resizes the array and default-initializes all new elements using the element type's
-    default constructor.
+    Resizes the array and initializes all new elements — with ``default<T>``, or with
+    ``init_value`` when one is given.
 
 .. das:function:: resize_no_init(var arr : array<T>; new_size : int)
 
-    Resizes without initializing new elements. Only valid for POD/raw element types.
+    Resizes without initializing new elements. Only valid for raw element types
+    (anything else is a ``can't resize_no_init non-raw array`` contract error).
 
 .. das:function:: reserve(var arr : array<T>; capacity : int)
 
     Pre-allocates memory for at least ``capacity`` elements without changing the array length.
+    Also defined for ``table<K;V>``.
 
 ^^^^^^^^^^^^^^^^
 Push & Emplace
@@ -270,7 +275,8 @@ Remove & Erase
 
 .. das:function:: pop(var arr : array<T>)
 
-    Removes the last element of the array.
+    Removes the last element of the array.  Panics on an empty array
+    (``resizing array to negative size``).
 
 ^^^^^^^^^^^^^^^^
 Access & Search
@@ -447,7 +453,8 @@ Iterator Operations
 
     Creates an iterator over all values of an enumeration type.
 
-    .. note:: Deprecated — use the built-in enumeration iteration instead.
+    .. note:: Deprecated — use regular iteration, or ``each`` from ``daslib/enum_trait``
+       (see :ref:`Enumerations <enumerations>`).
 
 .. das:function:: next(var it : iterator<T>; var value : T&) : bool
 
@@ -576,11 +583,13 @@ Memory Mapping
 
 .. das:function:: map_to_array(data : void?; len : int; blk)
 
-    Maps raw memory to a temporary mutable array view.  This is an **unsafe** operation.
+    Maps raw memory to a temporary mutable array view.  ``len`` is the size in **bytes**;
+    the element count is ``len / sizeof(T)``.  This is an **unsafe** operation.
 
 .. das:function:: map_to_ro_array(data : void?; len : int; blk)
 
-    Maps raw memory to a temporary read-only array view.  This is an **unsafe** operation.
+    Maps raw memory to a temporary read-only array view.  ``len`` is the size in **bytes**.
+    This is an **unsafe** operation.
 
 ---------------------
 Vector Construction

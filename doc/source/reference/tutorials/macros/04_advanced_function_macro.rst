@@ -77,6 +77,14 @@ wrapper can call it without triggering ``transform()`` again:
 **A private global cache variable:**
 
 .. das-doc: given require advanced_function_macro_mod
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var fn : FunctionPtr
+.. das-doc: given var astChanged = false
+.. das-doc: given let cacheName = "cache"
+.. das-doc: given let originalCopyName = "original"
+.. das-doc: given var callArgs : array<ExpressionPtr>
+.. das-doc: given var keyExpr : ExpressionPtr
 
 .. das-doc: skip
 .. code-block:: das
@@ -173,7 +181,7 @@ generate duplicate functions and hit an infinite loop.
 Mark as processed and trigger restart
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        // Mark as processed and trigger inference restart
@@ -218,7 +226,7 @@ unannotated copy.
 Step 2 — create the cache variable
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var retType = clone_type(fn.result)
@@ -240,7 +248,7 @@ value types.  ``clone_type(cacheType)`` is required because
 Step 4 — hash key computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var hashExprs : array<ExpressionPtr>
@@ -265,7 +273,7 @@ lexical scope for the intermediate variable inside the loop.
 Step 6 — assemble the wrapper body
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
        var bodyExprs : array<ExpressionPtr>
@@ -315,7 +323,7 @@ in the annotation arguments — ``transform()`` reads it on the next pass.
 transform() — call-site redirection
 --------------------------------------
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    def override transform(var call : ExprCallFunc?;
@@ -348,7 +356,6 @@ the call goes through unchanged.
 Usage file: ``04_advanced_function_macro.das``
 ===============================================
 
-.. das-doc: alt
 .. code-block:: das
 
    options gen2

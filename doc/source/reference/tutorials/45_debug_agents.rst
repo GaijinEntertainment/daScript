@@ -61,6 +61,7 @@ of the program that stays resident:
         print("  has 'counter' = {has_debug_agent_context("counter")}\n")
         fork_debug_agent_context(@@install_counter)
         print("  has 'counter' = {has_debug_agent_context("counter")}\n")
+    }
     // output:
     //   has 'counter' = false
     //   has 'counter' = true
@@ -75,11 +76,12 @@ output to stdout is suppressed.  If it returns ``false``, output
 proceeds normally.
 
 This is how profiling tools, IDE log panels, and custom loggers
-intercept program output:
+intercept program output.  The counter the agent bumps is a module-level
+``var log_intercept_count : int = 0``:
+
+.. das-doc: given var log_intercept_count : int = 0
 
 .. code-block:: das
-
-    var log_intercept_count : int = 0
 
     class LogAgent : DapiDebugAgent {
         def override onLog(context : Context?; at : LineInfo const?;
@@ -129,11 +131,12 @@ agent's copy of module-level variables — not the caller's.
 The ``[pinvoke]`` annotation is required — it enables the context
 mutex needed for cross-context invocation.
 
-To return values, pass a pointer to a result variable:
+To return values, pass a pointer to a result variable.  The counter here
+is a module-level ``var agent_counter : int = 0``:
+
+.. das-doc: given var agent_counter : int = 0
 
 .. code-block:: das
-
-    var agent_counter : int = 0
 
     [export, pinvoke]
     def agent_increment() {
@@ -159,6 +162,7 @@ To return values, pass a pointer to a result variable:
         }
         print("  agent_counter (in agent) = {result}\n")
         print("  agent_counter (local)    = {agent_counter}\n")
+    }
     // output:
     //   agent_counter (in agent) = 3
     //   agent_counter (local)    = 0
@@ -228,12 +232,14 @@ debuggers show custom watch variables and application diagnostics:
                 report_context_state(ctx, "Diagnostics", "collection_count",
                     unsafe(addr(tinfo)), unsafe(addr(collection_count)))
             }
+        }
         def override onVariable(var ctx : Context; category, name : string;
                                 info : TypeInfo; data : void?) : void {
             unsafe {
                 let value = sprint_data(data, addr(info), print_flags.singleLine)
                 print("  {category}: {name} = {value}\n")
             }
+        }
     }
 
     // Trigger collection
@@ -263,6 +269,8 @@ Auto-start module pattern
 In modules, agents are installed automatically via a ``[_macro]``
 function.  Four guards ensure safe, single installation:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
     [_macro]
@@ -291,11 +299,12 @@ A common pattern is to create a plain ``DapiDebugAgent`` (no
 overrides) just to own a named context.  Module-level variables
 in that context become shared state accessible via
 ``invoke_in_context``.  This is the foundation of the
-``[apply_in_context]`` pattern (Tutorial 46):
+``[apply_in_context]`` pattern (Tutorial 46).  The shared state is a
+module-level ``var shared_data : int = 0``:
+
+.. das-doc: given var shared_data : int = 0
 
 .. code-block:: das
-
-    var shared_data : int = 0
 
     [export, pinvoke]
     def add_data(amount : int) {
@@ -309,9 +318,12 @@ in that context become shared state accessible via
         }
     }
 
+    [unused_argument(ctx)]
     def install_data_host(ctx : Context) {
         install_new_debug_agent(new DapiDebugAgent(), "data_host")
     }
+
+    fork_debug_agent_context(@@install_data_host)
 
     // Multiple calls accumulate in the agent's copy
     unsafe {

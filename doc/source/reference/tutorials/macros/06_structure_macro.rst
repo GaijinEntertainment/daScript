@@ -37,6 +37,11 @@ the compilation pipeline:
 +---------------------+----------------------------------------------+
 
 .. das-doc: given require structure_macro_mod
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var st : StructurePtr
+.. das-doc: given var version = 1
+.. das-doc: given var astChanged = false
 
 This tutorial builds a ``[serializable]`` annotation that:
 
@@ -155,7 +160,7 @@ the error message stored in ``errors``.
 Step 2 — Add a field
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstStructureAnnotation
 .. code-block:: das
 
    st |> add_structure_field("_version",
@@ -173,7 +178,7 @@ type and default value.
 Step 3 — Generate a stub describe function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstStructureAnnotation
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
@@ -246,7 +251,7 @@ and check for it here — if present, the work is already done.
 Step 2 — Find the stub function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstStructureAnnotation
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
@@ -303,7 +308,7 @@ the function where ``obj`` is a parameter.
 Step 5 — Mark as patched and trigger re-inference
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstStructureAnnotation
 .. code-block:: das
 
    for (ann in st.annotations) {

@@ -33,6 +33,11 @@ pipeline:
 |                     | resolved, useful for diagnostics.            |
 +---------------------+----------------------------------------------+
 
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var blk : ExprBlock?
+.. das-doc: given let lbl = "setup"
+
 This tutorial builds a ``[traced(tag="X")]`` annotation that:
 
 1. Prepends an enter-message and appends an exit-message (via
@@ -42,7 +47,6 @@ This tutorial builds a ``[traced(tag="X")]`` annotation that:
    statement count (``finish``).
 
 
-.. das-doc: fragment
 .. code-block:: das
 
    run_block() $ [traced(tag="setup")] {
@@ -162,7 +166,7 @@ we check ``is tString`` and cast with ``as tString``.  Returning
 Step 2 — Prepend enter-print
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstBlockAnnotation
 .. code-block:: das
 
    var enterExpr = qmacro(print($v(">> {lbl}\n")))
@@ -179,7 +183,7 @@ value baked in) as a constant expression in the generated code.
 Step 3 — Append exit-print to ``finalList``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: fragment
+.. das-doc: member AstBlockAnnotation
 .. code-block:: das
 
    var exitExpr = qmacro(print($v("<< {lbl}\n")))
@@ -200,7 +204,7 @@ the exit message prints even if the block has an early return.
 Inside ``finish()``
 -------------------
 
-.. das-doc: fragment
+.. das-doc: member AstBlockAnnotation
 .. code-block:: das
 
    def override finish(var blk : ExprBlock?; var group : ModuleGroup;

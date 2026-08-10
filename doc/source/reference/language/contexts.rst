@@ -44,10 +44,10 @@ It is initialized in the following order:
     3. All specifically ordered functions tagged with ``[init]`` are called in the order they appear after topological sort.
 
 The topological sort order for the init functions is specified in the init annotation.
-Both ``before`` and ``after`` name a *pass*, and say where that pass sits relative to this function:
+Both ``before`` and ``after`` name a pass, and say where that pass sits relative to this function:
     * ``tag`` attribute puts the function into the named pass
-    * ``before`` attribute names a pass that runs **before** this function, i.e. the function is scheduled after every function of that pass
-    * ``after`` attribute names a pass that runs **after** this function, i.e. the function is scheduled before every function of that pass
+    * ``before`` attribute names a pass that runs **before** this function, so the function is scheduled after every function of that pass
+    * ``after`` attribute names a pass that runs **after** this function, so the function is scheduled before every function of that pass
 
 Consider the following example:
 

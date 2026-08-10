@@ -127,6 +127,15 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
 
 ## Engine/daslib finds from the fan-out (Boris decision)
 
+- 🐞 COMPILER HOLE (probe-verified by the stbimage agent): tuple destructuring bypasses
+  the shadowing check — `let x = 1; let x = 2` is error[30704], but
+  `let (ok, a) = p1(); let (ok, b) = p2()` compiles and SILENTLY rebinds `ok`, no
+  diagnostic. Closing the hole will red several doc pages with repeated `let (ok, err)`
+  narratives — coordinate the fix with a doc pass.
+- modules/dasStbImage/src/dasRaster.cpp:346 — the comment above rast_blend_pixel states a
+  `+128` blend formula the code three lines below contradicts (exact /255 via
+  `(x + 1 + (x>>8)) >> 8`); page 05's wrong formula was copied from it — fix together.
+
 - strudel `!N` is implemented as `fast(n)` (`strudel_mini.das:267-272`) with the comment
   "approximation since patterns aren't copyable" — lambdas ARE copyable now, so the
   justification is stale; docs (page 03) now describe actual behaviour. If the engine gets
@@ -160,6 +169,14 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
   when ALL errors sit in a required module (peg agent: block likely lacks context).
 - `wrap <prefix>` marker idea (peg agent): synthesize a `def f(input; blk) { parse(input) {` shell
   around macro-DSL excerpts so grammar rules compile instead of going fragment.
+- dasLLAMA report-only finds: tutorials/dasLLAMA/04_sessions_and_memory.das:56 hardcodes
+  4 bytes/KV-entry (2× under the f16 default — its two prints disagree);
+  modules/dasLLAMA/dasllama/dasllama.das:3-8 facade arch roll-call omits GLM-4-MoE and
+  Mistral-3 (page 01 copies it verbatim); tutorials/dasLLAMA/07_speech_to_text.das:21-26
+  ASR family list missing gemma4a/canary/qwen3omni.
+- Marker-idiom note for skills/doc_sweep.md: when a name is declared inside a `with_...()`
+  block and a follow-up snippet uses it at top level, `alt` (fresh renamer seeded only by
+  givens) is THE idiom — a page-wide given cannot carry the name past the re-declaration.
 - Stale companion comments: tutorials/dasPEG/06_debugging.das:76-77 (commit does NOT gate
   error emission — probe-disproved, RST fixed); tutorials/sql/41-triggers.das:84 (wrong
   audit-row count), :24/:104 (wrong module path + tutorial number);

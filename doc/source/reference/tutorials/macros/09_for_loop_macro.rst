@@ -42,7 +42,7 @@ built-in functions:
 This tutorial builds a for-loop macro that supports a much more natural
 tuple-destructuring syntax:
 
-.. das-doc: fragment
+.. das-doc: alt
 .. code-block:: das
 
    for ((k,v) in tab) {       // rewrites to keys/values automatically

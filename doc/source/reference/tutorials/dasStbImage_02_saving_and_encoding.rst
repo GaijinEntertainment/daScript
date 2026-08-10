@@ -22,7 +22,8 @@ Saving to File
 ==============
 
 ``Image.save(path, quality)`` saves to file.  The format is determined by
-the file extension (``.png``, ``.bmp``, ``.tga``, ``.jpg``, ``.hdr``).
+the file extension (``.png``, ``.bmp``, ``.tga``, ``.jpg``/``.jpeg``,
+``.hdr``).
 The quality parameter only matters for JPEG (1–100, default 90):
 
 .. code-block:: das

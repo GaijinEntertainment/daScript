@@ -156,7 +156,6 @@ Indexed-form note
 The ``text(IDENT[i], (text = ...))`` form requires you to declare the
 table at module scope:
 
-.. das-doc: fragment
 .. code-block:: das
 
    var private LOG_LINE : table<int; NarrativeState>

@@ -53,10 +53,11 @@ The blend formula per color channel is::
 
    out = (alpha * color + (255 - alpha) * dest) / 255
 
-The division by 255 is exact — the implementation uses the integer identity
-``(x + 1 + (x >> 8)) >> 8``, not a shift by 8.  Source pixels with
-``alpha == 0`` are skipped, so the destination keeps its value there.
-The alpha channel of the destination is updated as
+The code divides by 255 with the integer trick ``(x + 1 + (x >> 8)) >> 8``,
+which gives the same answer as ``x / 255`` over the whole byte range — so a
+fully opaque source pixel lands on the exact color you passed in.  Source
+pixels with ``alpha == 0`` are skipped, and the destination keeps its value
+there.  The alpha channel of the destination becomes
 ``min(dest_alpha + src_alpha, 255)``.
 
 This is the fundamental building block for software text rendering:

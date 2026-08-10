@@ -210,7 +210,7 @@ field without changing the daslang field name:
 
    enum Priority {
        low
-       normal
+       medium
        high
    }
 
@@ -219,6 +219,12 @@ field without changing the daslang field name:
        @enum_as_int level : Priority
        name : string
    }
+
+Here ``_type`` is written as ``<type>``, and ``level`` as the integer
+``2`` rather than ``high``.  A third annotation, ``@unescape``, decodes
+backslash escape sequences in a ``string`` field before writing it, so a
+``\n`` in the value becomes a real newline in the XML text.  XML special
+characters (``&``, ``<``, ``>``) are still escaped either way.
 
 The low-level ``XML()`` builder
 ===============================

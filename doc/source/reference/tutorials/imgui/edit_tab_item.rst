@@ -10,7 +10,6 @@ of ``tab_item`` (which owns visibility internally). The canonical
 menu toggle, ``imgui_force_set``) drives the same flag the tab's X-close
 button writes.
 
-.. das-doc: fragment
 .. code-block:: das
 
    var private g_tab_open : bool = true

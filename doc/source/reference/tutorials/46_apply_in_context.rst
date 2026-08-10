@@ -31,11 +31,12 @@ Setting up a named context
 
 First, create a debug agent context to host shared state.
 A plain ``DapiDebugAgent`` with no overrides is sufficient —
-the agent exists solely to own a named context:
+the agent exists solely to own a named context.  The state it hosts is a
+module-level ``var counter : int = 0``:
+
+.. das-doc: given var counter : int = 0
 
 .. code-block:: das
-
-    var counter : int = 0
 
     [unused_argument(ctx)]
     def install_service(ctx : Context) {
@@ -97,9 +98,10 @@ copy stays at zero.
 Argument constraints
 =====================
 
-Arguments that cross context boundaries must use types that
-can be safely marshalled.  Reference-type arguments must be
-marked ``implicit``:
+Arguments that cross context boundaries must use types that can be safely
+marshalled.  A reference-type argument has to be spelled either ``implicit``
+or temporary (``#``); anything else is rejected with "argument <name> needs
+to be temporary or implicit":
 
 - ``string implicit`` — strings are reference types in daslang
 - ``var x : int& implicit`` — explicit reference parameters
@@ -120,13 +122,13 @@ Value types (``int``, ``float``, ``bool``) work without annotation:
 
     set_counter_name("my_counter")
     // output:
-    //   counter named 'my_counter', value = 12
+    //   counter named 'my_counter', value = 13
 
     var val = 0
     read_counter(val)
     print("  read_counter() -> val = {val}\n")
     // output:
-    //   read_counter() -> val = 12
+    //   read_counter() -> val = 13
 
 
 A cache service
@@ -134,11 +136,12 @@ A cache service
 
 A practical use case: a shared cache backed by a table that lives
 in the agent context.  Any module or context can call put / get / has
-without worrying about which context they're in:
+without worrying about which context they're in.  The table is a
+module-level ``var cache : table<string; int>``:
+
+.. das-doc: given var cache : table<string; int>
 
 .. code-block:: das
-
-    var cache : table<string; int>
 
     [unused_argument(ctx)]
     def install_cache(ctx : Context) {
@@ -227,19 +230,21 @@ three parts:
 
 For a function with a return value, the expansion is similar to:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
     def get_counter() : int {
-        verify(has_debug_agent_context("counter_service"))
-        var __res__ : int
         unsafe {
-            invoke_in_context(
-                get_debug_agent_context("counter_service"),
-                "counter_service`get_counter",
-                addr(__res__)
-            )
+            verify(has_debug_agent_context("counter_service"),
+                   "debug agent is not installed")
+            verify(addr(get_debug_agent_context("counter_service")) != addr(this_context()),
+                   "agent context mismatch")
+            let __res__ : int
+            invoke_in_context(get_debug_agent_context("counter_service"),
+                              @@CONTEXT`get_counter, unsafe(addr(__res__)))
+            return __res__
         }
-        return __res__
     }
 
 The annotation adds ``[pinvoke]`` to the generated context

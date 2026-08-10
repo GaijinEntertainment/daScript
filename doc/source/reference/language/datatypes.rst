@@ -7,6 +7,7 @@ Values and Data Types
 Daslang is a strong, statically typed language.  All variables have a type.
 Daslang's basic POD (plain old data) data types are:
 
+.. das-doc: skip
 .. code-block:: das
 
     int, uint, float, bool, double, int64, uint64
@@ -17,6 +18,7 @@ All PODs are represented with machine register/word. All PODs are passed to func
 
 Daslang's storage types are:
 
+.. das-doc: skip
 .. code-block:: das
 
     int8, uint8, int16, uint16 - 8/16-bits signed and unsigned integers
@@ -25,6 +27,7 @@ They have no arithmetic of their own, but can be used as a storage type within s
 
 Daslang's 16/8-bit vector lattice extends the storage tier with packed small-element vectors:
 
+.. das-doc: skip
 .. code-block:: das
 
     float16                                       - IEEE-754 binary16 scalar (`half` is an alias)
@@ -73,6 +76,7 @@ two namespaces never mix in one mask.
 
 Daslang's other types are:
 
+.. das-doc: skip
 .. code-block:: das
 
     string, das_string, struct, pointers, references, block, lambda, function pointer,
@@ -210,6 +214,7 @@ Where promotion applies
 Promotion is **not** a general "the compiler already knows the target type" rule.
 It fires in a fixed set of contexts, and nowhere else:
 
+.. das-doc: given variant V { arm : float; other : int }
 .. code-block:: das
 
     var a : float = 1                 // local var init
@@ -230,28 +235,33 @@ Function-call arguments, function-parameter default values, and ``ExprMove``
 (``<-``) are intentionally **not** promoted, even though the target type is
 plainly visible in each case:
 
+.. das-doc: expect error[30341]
 .. code-block:: das
 
     def take_f(a : float) {}
-    take_f(1)              // error[30341]: no matching functions or generics:
-                           //     take_f(int const)
+    def f(a : float = 1) {}    // error[30161]: function argument default value
+                               //     type mismatch; 'float const' vs 'int const'
 
-    def f(a : float = 1) {}
-    // error[30161]: function argument default value type mismatch
-    //     'float const' vs 'int const'
-
-    var m : float ; m <- 1 // error[30941]: can only move compatible type;
-                           //     float& -const = int const
+    take_f(1)                  // error[30341]: no matching functions or generics:
+                               //     take_f(int const)
+    var m : float ; m <- 1     // error[30941]: can only move compatible type;
+                               //     float& -const = int const
 
 Spell the literal in the target type instead: ``take_f(1.0f)`` (or
 ``take_f(float(1))``), and ``def f(a : float = 1.0f)``.
 
 Only *integer* literals promote. A float literal never promotes to ``double``:
 
+.. das-doc: expect error[30344]
 .. code-block:: das
 
     var d : double = 1.0   // error[30344]: local variable d initialization
                            //     type mismatch; double -const = float const
+
+Spell the double literal instead:
+
+.. code-block:: das
+
     var d : double = 1.0lf // ok — double literal
 
 Accepted target types: ``int8`` / ``int16`` / ``int`` / ``int64``,
@@ -267,14 +277,15 @@ target's exact range. A value that doesn't fit raises a single
 ``error[30515] exceeds_constant_range`` and **no** downstream type-mismatch
 error:
 
+.. das-doc: expect error[30515]
 .. code-block:: das
 
-    var d : uint8 = 256
+    var too_big : uint8 = 256
     // error[30515]: constant value 256 does not fit in uint8
     //     expected range [0..255]
 
-    var d : int8 = -129               // out of range
-    var d : uint8 = -1                // negative literal, unsigned target
+    var too_small : int8 = -129       // out of range
+    var negative : uint8 = -1         // negative literal, unsigned target
 
 Float and double — precision is a lint warning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -485,7 +496,8 @@ Pointers are types that 'reference' (point to) some other data, but can be null 
 In order to work with actual value, one need to dereference it using the dereference or safe navigation operators.
 Dereferencing will panic if a null pointer is passed to it.
 Pointers can be created using the new operator, or with the C++ environment.
-::
+
+.. code-block:: das
 
     def twice(var a: int&) {
         a = a + a
@@ -522,6 +534,9 @@ as handled types from the C++ side.
 
 Smart pointers in AST code:
 
+.. das-doc: given class DocVisitor : AstVisitor {}
+.. das-doc: given var visitor : DocVisitor?
+.. das-doc: given var program : ProgramPtr
 .. code-block:: das
 
     require daslib/ast
@@ -538,19 +553,23 @@ Smart pointers in AST code:
 The key properties of smart pointers:
 
 * They maintain a reference count and automatically release the object when the count reaches zero
-* They can be moved but not copied via ``<-``
+* They can be moved with ``<-``, but never copied with ``=``
 * Dereferencing works the same as regular pointers (``*ptr`` and ``ptr.field``)
-* Moving from a smart pointer value requires ``unsafe`` unless the value is a ``new`` expression
+* Move-**assignment** into a variable that is already live requires ``unsafe``
+  (``error[31029]``); move-**initialization** of a fresh ``var inscope`` does not
 
 Because ``strict_smart_pointers`` is enabled by default, smart pointer variables must be
-declared with ``inscope`` to ensure automatic cleanup:
+declared with ``inscope`` to ensure automatic cleanup — a plain ``var`` raises
+``error[31018] requires var inscope to be safe``:
 
 .. code-block:: das
 
-    var inscope a <- some_function()          // create — safe, no unsafe needed
-    var inscope b <- a                        // move — safe, a becomes null
+    require daslib/ast
+
+    var inscope a <- make_file_access("")     // create — safe, no unsafe needed
+    var inscope b <- a                        // move-initialize — safe, a becomes null
     unsafe {
-        var inscope c <- some_function()      // move from function result — unsafe
+        b <- a                                // move-assign into a live variable — unsafe
     }
 
 Ownership transfer functions

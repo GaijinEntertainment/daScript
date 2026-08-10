@@ -89,7 +89,6 @@ selectable — multi-toggle rows
 Each ``selectable`` owns its own ``ToggleState`` — rows toggle
 independently, which falls out as multi-select naturally:
 
-.. das-doc: fragment
 .. code-block:: das
 
    var private TAG : table<int; ToggleState>
@@ -112,7 +111,6 @@ For one-of-N, switch to ``selectable_label`` with a **caller-owned**
 frame + scroller). The list_box's ``state.value`` holds the chosen
 index; the loop tags each row's ``selected`` from it:
 
-.. das-doc: fragment
 .. code-block:: das
 
    var private SHIRT_ROW : table<int; ClickState>

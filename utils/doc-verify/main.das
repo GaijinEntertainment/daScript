@@ -361,6 +361,18 @@ def var_decl_names(line : string) : array<string> {
     } else {
         return <- names
     }
+    // tuple destructure: `let (ok, err) = ...` — names live inside the parens
+    if (t |> starts_with("(")) {
+        let close = find(t, ')')
+        return <- names if (close < 0)
+        for (piece in split(slice(t, 1, close), ",")) {
+            let name = take_ident(trim(piece))
+            if (!empty(name)) {
+                names |> push(name)
+            }
+        }
+        return <- names
+    }
     // truncate at the first initializer/type delimiter — only the name list splits on commas
     var cut = length(t)
     for (d in [find(t, ':'), find(t, '='), find(t, '<'), find(t, '&')]) {
@@ -393,6 +405,21 @@ def replace_ident(line : string; base : string; alias_name : string) : string {
     var out = ""
     let blen = length(base)
     peek_data(line) $(arr) {
+        // a match inside a string literal is text, not code — "\n" must not become
+        // "\n__2" when `n` aliases; interpolated refs then bind the original name,
+        // which still exists, so the page keeps compiling either way
+        var in_str : array<bool>
+        in_str |> resize(length(arr))
+        var q = false
+        for (i in range(length(arr))) {
+            let c = int(arr[i])
+            if (c == '"' && (i == 0 || int(arr[i - 1]) != '\\')) {
+                q = !q
+                in_str[i] = true
+            } else {
+                in_str[i] = q
+            }
+        }
         out = build_string() $(var writer) {
             var start = 0
             while (true) {
@@ -405,7 +432,7 @@ def replace_ident(line : string; base : string; alias_name : string) : string {
                 let after_pos = pos + blen
                 let after_ok = after_pos >= length(arr) || !is_ident_char(int(arr[after_pos]))
                 writer |> write(slice(line, start, pos))
-                writer |> write((before_ok && after_ok) ? alias_name : base)
+                writer |> write((before_ok && after_ok && !in_str[pos]) ? alias_name : base)
                 start = after_pos
             }
         }
@@ -667,7 +694,9 @@ def append_stmts(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : stri
             seg.stmts |> push(slice(l, 0, leading_spaces(l)) + "    pass")
             continue
         }
-        let r = rename_line(ren, l)
+        // indented lines sit inside nested scopes (lambda/if bodies) — their locals
+        // must not claim names page-wide; only top-level narrative statements flow
+        let r = rename_line_ex(ren, l, leading_spaces(l) == 0)
         seg.stmts |> push(empty(trim(r)) ? "" : "    " + r)
     }
     seg.stmts |> push("")
