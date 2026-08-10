@@ -761,6 +761,47 @@ def load_tray_image(script_dir: Path, cwd: Path, name: str):
     return image
 
 
+# Status badge geometry from the design spec (forge project, consumers/dasllama-mark),
+# in 64-unit space: a transparent "moat" circle knocks the base image out behind the badge
+# so it reads on any taskbar shade, then the badge draws in the bottom-right corner.
+# Shapes differ per state on purpose — color-blind users get geometry, not just hue.
+TRAY_MOAT = (49.0, 49.0, 16.5)  # cx, cy, r
+TRAY_BADGES = {
+    "amber": ("triangle", (242, 183, 61, 255)),  # working: booting / minting kernels
+    "red": ("square", (217, 109, 79, 255)),      # trouble: unhealthy / crash-backoff
+}
+
+
+def badge_tray_image(base, state: str):
+    """A copy of `base` wearing the status badge for `state`; None for unknown states.
+    The plain base IS the serving state — a badge is always a signal, never decoration."""
+    spec = TRAY_BADGES.get(state)
+    if spec is None:
+        return None
+    from PIL import Image, ImageChops, ImageDraw
+    shape, color = spec
+    image = base.convert("RGBA")
+    if image is base:
+        image = base.copy()
+    u = min(image.size) / 64.0
+    cx, cy, r = TRAY_MOAT
+    moat = Image.new("L", image.size, 255)
+    ImageDraw.Draw(moat).ellipse(
+        [(cx - r) * u, (cy - r) * u, (cx + r) * u, (cy + r) * u], fill=0
+    )
+    image.putalpha(ImageChops.multiply(image.getchannel("A"), moat))
+    draw = ImageDraw.Draw(image)
+    if shape == "triangle":
+        draw.polygon(
+            [(49.0 * u, 35.5 * u), (62.5 * u, 59.2 * u), (35.5 * u, 59.2 * u)], fill=color
+        )
+    else:
+        draw.rounded_rectangle(
+            [37.5 * u, 37.5 * u, 60.5 * u, 60.5 * u], radius=1.5 * u, fill=color
+        )
+    return image
+
+
 def pid_alive(pid: int) -> bool:
     """Best-effort liveness for the single-instance guard. On Windows os.kill(pid, 0)
     TERMINATES the target (TerminateProcess with exit code 0), so probe through the same
@@ -778,16 +819,18 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
-def tray_status() -> str:
-    """One line of truth for the tooltip and the menu's status row, read from the same STATE
-    the control plugin sees. Counters only, no prediction — same rule as the tune fold."""
+def tray_state() -> tuple[str, str]:
+    """(status line, coarse icon state) from the same STATE the control plugin sees. The
+    status line is one line of truth for the tooltip and the menu's status row — counters
+    only, no prediction, same rule as the tune fold. Coarse states: "amber" = working,
+    "red" = trouble, "base" = serving (the plain mark)."""
     s = read_state()
     if not s.get("child_pid"):
         delay = float(s.get("restart_delay") or 0.0)
         code = s.get("child_exit_code")
         if delay > 0:
-            return f"restarting in {delay:.0f}s (exit {code})"
-        return "stopped"
+            return f"restarting in {delay:.0f}s (exit {code})", "red"
+        return "stopped", "red"
     tune = s.get("tune") or {}
     if isinstance(tune, dict) and tune.get("total"):
         done, total = tune.get("done", 0), tune.get("total", 0)
@@ -795,17 +838,22 @@ def tray_status() -> str:
         rounds = int(tune.get("rounds") or 0)
         detail = f" — {kernel} {tune.get('round', 0)}/{rounds}" if kernel and rounds else \
              (f" — {kernel}" if kernel else "")
-        return f"minting kernels {done}/{total}{detail}"
+        return f"minting kernels {done}/{total}{detail}", "amber"
     healthy = s.get("healthy")
     if healthy is True:
         since = float(s.get("serving_since") or 0.0)
         up = time.time() - since if since else 0.0
         hours, mins = int(up // 3600), int(up % 3600 // 60)
-        return f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        line = f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        return line, "base"
     stage = s.get("stage")
     if healthy is False:
-        return f"unhealthy ({stage})" if stage else "unhealthy"
-    return f"booting ({stage})" if stage else "booting"
+        return (f"unhealthy ({stage})" if stage else "unhealthy"), "red"
+    return (f"booting ({stage})" if stage else "booting"), "amber"
+
+
+def tray_status() -> str:
+    return tray_state()[0]
 
 
 def tray_tick(icon, name: str) -> None:
@@ -818,13 +866,23 @@ def tray_tick(icon, name: str) -> None:
     # runloop re-evaluates on open, so live state stays visible without the tooltip write.
     if sys.platform == "darwin":
         return
-    title = f"{name} — {tray_status()}"
+    status, coarse = tray_state()
+    title = f"{name} — {status}"
     if getattr(icon, "_das_last_title", None) != title:
         try:
             icon.title = title
             icon._das_last_title = title
         except Exception:  # noqa: BLE001 - a dead tray must not touch supervision
             pass
+    states = getattr(icon, "_das_states", None)
+    if states and getattr(icon, "_das_last_state", None) != coarse:
+        image = states.get(coarse)
+        if image is not None:
+            try:
+                icon.icon = image
+                icon._das_last_state = coarse
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
@@ -868,12 +926,21 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
         ))
     items.append(pystray.MenuItem("Shutdown", on_shutdown))
     try:
+        image = load_tray_image(SCRIPT_DIR, args.cwd, args.name)
         icon = pystray.Icon(
             args.name,
-            load_tray_image(SCRIPT_DIR, args.cwd, args.name),
+            image,
             title=f"{args.name} — booting",
             menu=pystray.Menu(*items),
         )
+        # Pre-composited status variants; tray_tick swaps between them as the coarse
+        # state moves. Composited at runtime so every deployment's icon (or even the
+        # generated placeholder) gets status for free — no per-state asset shipping.
+        icon._das_states = {
+            "base": image,
+            "amber": badge_tray_image(image, "amber"),
+            "red": badge_tray_image(image, "red"),
+        }
     except Exception as exc:  # noqa: BLE001 - no tray host, headless X, broken backend
         emit(logger, "tray_unavailable", reason=repr(exc))
         return None
