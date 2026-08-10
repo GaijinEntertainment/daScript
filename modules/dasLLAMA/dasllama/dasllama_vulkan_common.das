@@ -422,7 +422,7 @@ struct GpuState {
     // the resident driver's weight arenas, one per format present (see the arena section). Separate
     // from `stacks` on purpose: the two tiers never co-arm on one model, and the arena has no
     // per-plane descriptor set to cap.
-    arenas : table<int; ArenaFmt>
+    @scratch arenas : table<int; ArenaFmt>
     // residual-stream state (lazy — the add+rms kernel's buffers and its one descriptor set)
     ar_x_dev : uint64
     ar_a_dev : uint64
@@ -471,7 +471,7 @@ struct GpuState {
     ffn_pend_bytes : int64
     qkv_cmds : table<int64; QkvCmd>   // q plane offset -> the layer's decode q/k/v group
     dev_mem : table<uint64; uint64>   // device buffer -> its VkDeviceMemory (rollback destroy needs it)
-    dev_mapped : table<uint64; uint64>   // ReBAR: device buffer -> persistent CPU mapping (uploads write direct)
+    @scratch dev_mapped : table<uint64; uint64>   // ReBAR: device buffer -> persistent CPU mapping (uploads write direct)
     rebar_type : int = -1         // DL|HV|HC memory type on the full-VRAM heap (-1 = staging path only)
     has_memprio : bool            // device enabled VK_EXT_memory_priority — allocations chain priority 1.0
     host_mem : table<uint64; uint64>  // host-visible buffer -> memory: every make_host_buf result except
@@ -602,6 +602,7 @@ def find_host_mem(type_bits : uint; cached : bool) : uint {
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
+[cold_path]   // buffer creation — setup, not steady state
 def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false; soft : bool = false) : HostBuf {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
@@ -624,7 +625,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
         if (!soft) {
             panic("dasLLAMA vulkan tier: pinned host alloc failed ({ares}, {bytes} bytes, type {mai.memoryTypeIndex})")
         }
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: pinned mirror alloc declined ({ares}, {bytes} bytes, type {mai.memoryTypeIndex}) — streamed walk stops here\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: pinned mirror alloc declined ({ares}, {bytes} bytes, type {mai.memoryTypeIndex}) - streamed walk stops here\n")
         unsafe {
             vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
         }
@@ -640,6 +641,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     return HostBuf(buf = b._vk, mem = m._vk, mapped = mapped, bytes = bytes)
 }
 
+[cold_path]   // buffer creation — setup, not steady state
 def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
@@ -854,6 +856,7 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     return int(sp.shaderSMCount)
 }
 
+[cold_path]   // one-time device bring-up; steady-state cost is the two guard checks
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -864,7 +867,7 @@ def vk_moe_init : bool {
     if (g_vk_dry_want) {
         // DlimVulkanConfig numbers feed the SAME arithmetic — a dry bake cannot drift from live
         if (g_vk_dry_cfg.subgroup_size < 32) {
-            to_log(LOG_ERROR, "dasLLAMA vulkan tier: config subgroupSize {g_vk_dry_cfg.subgroup_size} < 32 — bake declined\n")
+            to_log(LOG_ERROR, "dasLLAMA vulkan tier: config subgroupSize {g_vk_dry_cfg.subgroup_size} < 32 - bake declined\n")
             g_init_failed = true
             return false
         }
@@ -891,7 +894,7 @@ def vk_moe_init : bool {
     g_gpu.phys = select_physical_device(g_gpu.instance)
     if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
             || !integer_dot_product_supported(g_gpu.phys)) {
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks 8/16-bit SSBO storage, compute subgroup ops, or shaderIntegerDotProduct — tier disabled\n")
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks 8/16-bit SSBO storage, compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
         return false
     }
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
@@ -953,7 +956,7 @@ def vk_moe_init : bool {
     let sg = subgroup_properties(g_gpu.phys).subgroupSize
     if (sg < 32u) {
         // the gid-mapped quant kernels reduce with xor masks up to 16 (q8k amax spans 32 lanes)
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: subgroupSize {sg} < 32 — tier disabled\n")
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: subgroupSize {sg} < 32 - tier disabled\n")
         return false
     }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
@@ -968,7 +971,7 @@ def vk_moe_init : bool {
         // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
         let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - DESKTOP_RESERVE)
         if (vram_override && g_gpu.weight_budget > cliff) {
-            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff - WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
@@ -986,7 +989,7 @@ def vk_moe_init : bool {
             }
         }
         if (g_gpu.rebar_type >= 0) {
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active — uploads write direct to VRAM (DASLLAMA_VK_REBAR=0 restores staging)\n")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active - uploads write direct to VRAM (DASLLAMA_VK_REBAR=0 restores staging)\n")
         }
     }
     var pci : CommandPoolCreateInfo
@@ -1007,7 +1010,7 @@ def vk_moe_init : bool {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
         set_moe_gpu_attn_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row tile; those layers stay on the CPU rail\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row tile; those layers stay on the CPU rail\n")
     }
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
@@ -1028,11 +1031,12 @@ def vk_moe_init : bool {
 // ===== upload (loader hook — moe_gpu_upload_resident gathers, we just stage) =====
 
 def staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
-    var regions : array<BufferCopy>
-    let rc = BufferCopy(srcOffset = 0ul, dstOffset = uint64(dst_off), size = uint64(bytes))
-    regions |> push(rc)
+    var region = VkBufferCopy(srcOffset = 0ul, dstOffset = uint64(dst_off), size = uint64(bytes))
     run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
-        cmd_copy_buffer(cmd, nonowning_buf(g_gpu.staging.buf), nonowning_buf(dst), regions)
+        unsafe {
+            vkCmdCopyBuffer(boost_value_to_vk(cmd), reinterpret<VkBuffer>(g_gpu.staging.buf),
+                reinterpret<VkBuffer>(dst), 1u, addr(region))
+        }
     }
 }
 
@@ -1073,6 +1077,7 @@ def vk_upload_report(direct : bool) {
 }
 
 // one more chunk on the descriptor-pool chain (fixed size — see DESC_POOL_CHUNK)
+[cold_path]   // pool growth — amortized to nothing once warm
 def desc_pool_grow {
     var dpci : DescriptorPoolCreateInfo
     dpci.maxSets = uint(DESC_POOL_CHUNK)
@@ -1156,7 +1161,7 @@ def ensure_gemv_scratch(si : int) {
 def vk_import_declined(why : string) {
     if (!g_vk_import_declined_said) {
         g_vk_import_declined_said = true
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: mapped-image import declined ({why}) — pinned mirror copies\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: mapped-image import declined ({why}) - pinned mirror copies\n")
     }
 }
 
@@ -1284,7 +1289,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
                     g_gpu.stream_stacks |> emplace(ss)
                     if (!g_vk_import_said) {
                         g_vk_import_said = true
-                        to_log(LOG_INFO, "dasLLAMA vulkan tier: stream mirrors IMPORT the mapped image (external_memory_host) — zero pinned copies\n")
+                        to_log(LOG_INFO, "dasLLAMA vulkan tier: stream mirrors IMPORT the mapped image (external_memory_host) - zero pinned copies\n")
                     }
                     return true
                 }
@@ -1352,7 +1357,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
         return false
     }
     if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this stack stays on the CPU
-        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined - row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
         return false
     }
     if (stream) {
@@ -1364,7 +1369,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
         return false
     }
     if (verdict == 2) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks — remaining layers stay on the CPU\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks - remaining layers stay on the CPU\n")
         return false
     }
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -1555,7 +1560,7 @@ def find_stream_group(w0 : int64; fmt : int) : int {
 def find_stack(w0 : int64; fmt : int; who : string) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
-        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) — stale route mark, or a model swapped in without moe_gpu_drop_model()")
+        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) - stale route mark, or a model swapped in without moe_gpu_drop_model()")
     }
     return i
 }
@@ -1721,7 +1726,7 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
             return -1l
         }
         if (need > a.slab_cap) {
-            to_log(LOG_WARNING, "dasLLAMA vulkan arena: a single {need}-block tensor exceeds the {a.slab_cap}-block slab cap (fmt {fmt}) — unservable on this device\n")
+            to_log(LOG_WARNING, "dasLLAMA vulkan arena: a single {need}-block tensor exceeds the {a.slab_cap}-block slab cap (fmt {fmt}) - unservable on this device\n")
             return -1l
         }
         // a tensor never straddles slabs: walk to one with room (reload replays existing slabs),
@@ -1763,7 +1768,7 @@ def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64
         return -1l
     }
     if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined - row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
         return -1l
     }
     return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)
@@ -1906,7 +1911,7 @@ struct RDec {
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
-    pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant
+    @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
 }
 
@@ -2094,8 +2099,8 @@ struct VkHaz {
 // per-binding region bits at build — hz_dispatch composes the two into vhz_dep masks.
 
 var g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, write-bindings)
-var g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
-var g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
+var @scratch g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
+var @scratch g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
@@ -2162,13 +2167,19 @@ def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
     if (uint(wg_bytes) <= g_gpu.max_wg_bytes) {
         return true
     }
-    if (!key_exists(g_wg_declined, kname)) {
-        g_wg_declined |> insert(kname)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B — kernel declined\n")
-    }
+    vkd_wg_decline(wg_bytes, kname)
     return false
 }
 
+[cold_path]   // once per declined kernel name
+def private vkd_wg_decline(wg_bytes : int; kname : string) {
+    if (!key_exists(g_wg_declined, kname)) {
+        g_wg_declined |> insert(kname)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B - kernel declined\n")
+    }
+}
+
+[cold_path]   // family layout creation — once per class family
 def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
     var dslci : DescriptorSetLayoutCreateInfo
     dslci.pBindings |> reserve(length(bindings))
@@ -2196,6 +2207,7 @@ def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
 
 // write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
 // builder's engine; generic over the class's binding count, i-th entry -> i-th declared binding)
+[cold_path]   // descriptor-set creation — setup, not the dispatch path
 def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) {
     assert(length(bufs) == length(c.bindings), "vkd_set: buffer count != the class's binding count")
     var writes : array<WriteDescriptorSet>
@@ -2250,6 +2262,7 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
+[cold_path]   // pipeline creation — once per kernel
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
@@ -2345,7 +2358,7 @@ def public vk_kernel_coverage_report {
     for (name in names) {
         if (cov[name] == 0l) {
             dead++
-            to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
+            to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
         }
     }
     to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} seeded kernels\n")
@@ -2388,26 +2401,29 @@ def vk_fuse_on : bool {
     return g_vk_fuse != 0
 }
 
+[cold_path]   // DASLLAMA_VK_HAZARD_TRACE reporting leg
+def private vhz_trace_log(disp : int; rmask, wmask : uint; transfer : bool) {
+    to_log(LOG_INFO, "vhz {disp} r={rmask} w={wmask} t={transfer ? 1 : 0}\n")
+}
+
 // the per-node gate: barrier iff this node's declared masks conflict with the pending set
 def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer : bool = false) {
     h.disp++
     if (vhz_trace()) {
-        to_log(LOG_INFO, "vhz {h.disp} r={rmask} w={wmask} t={transfer ? 1 : 0}\n")
+        vhz_trace_log(h.disp, rmask, wmask, transfer)
     }
     var bar = (rmask & h.w) != 0u || (wmask & h.w) != 0u || (wmask & h.r) != 0u
     if (vhz_paranoid() && (h.w != 0u || h.r != 0u)) {
         bar = true
     }
     if (bar) {
-        var mb : MemoryBarrier
+        var mb = VkMemoryBarrier()
         mb.srcAccessMask.shader_write = h.pend_compute
         mb.srcAccessMask.transfer_write = h.pend_transfer
         mb.dstAccessMask.shader_read = true
         mb.dstAccessMask.shader_write = true
         mb.dstAccessMask.transfer_read = true
         mb.dstAccessMask.transfer_write = true
-        var mbs : array<MemoryBarrier>
-        mbs |> emplace(mb)
         var sstage : VkPipelineStageFlags
         sstage.compute_shader = h.pend_compute
         sstage.transfer = h.pend_transfer
@@ -2415,9 +2431,9 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
         dstage.compute_shader = true
         dstage.transfer = true
         let dflags : VkDependencyFlags
-        let no_bufb : array<BufferMemoryBarrier>
-        let no_imgb : array<ImageMemoryBarrier>
-        cmd_pipeline_barrier(vk_value_to_boost(raw), sstage, dstage, dflags, mbs, no_bufb, no_imgb)
+        unsafe {
+            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, addr(mb), 0u, null, 0u, null)
+        }
         h.w = 0u
         h.r = 0u
         h.pend_compute = false
@@ -2541,7 +2557,7 @@ def ensure_ffn_state {
 
 def ensure_dn_state {
     if (!g_gpu.dn_shared_ok) {
-        panic("dasLLAMA vulkan tier: deltanet dispatch reached a device whose shared-memory cap declined the chain — route gating failed")
+        panic("dasLLAMA vulkan tier: deltanet dispatch reached a device whose shared-memory cap declined the chain - route gating failed")
     }
     if (g_gpu.dn_ready) {
         return
@@ -2634,15 +2650,17 @@ def par_memcpy(dst : void?; src : void?; bytes : int64) {
 }
 
 def cmd_copy_whole(raw : VkCommandBuffer; src, dst : uint64; bytes : int64) {
-    var regions : array<BufferCopy>
-    regions |> push(BufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(bytes)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(src), nonowning_buf(dst), regions)
+    var region = VkBufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(bytes))
+    unsafe {
+        vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
+    }
 }
 
 def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : uint64; dst_off : int64; bytes : int64) {
-    var regions : array<BufferCopy>
-    regions |> push(BufferCopy(srcOffset = uint64(src_off), dstOffset = uint64(dst_off), size = uint64(bytes)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(src), nonowning_buf(dst), regions)
+    var region = VkBufferCopy(srcOffset = uint64(src_off), dstOffset = uint64(dst_off), size = uint64(bytes))
+    unsafe {
+        vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
+    }
 }
 
 // host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer

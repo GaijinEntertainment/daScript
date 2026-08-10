@@ -126,6 +126,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
+[cold_path]   // once per residency — buffers, sets, fa arming
 def private pf_setup {
     if (g_rd.pf_ready) {
         return
@@ -188,8 +189,7 @@ def private pf_setup {
     let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
-    // the cm2 fa tiles read f16 K/V — with f16 mirrors they bind the planes directly (no shadows,
-    // no cvt); an f32 mirror keeps the chunked/h128 paths
+    // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths
     g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
         && (g_rd.head_size == 64l || g_rd.head_size == 128l))
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
@@ -294,6 +294,7 @@ def private pf_setup {
 
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
+[hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_prefill before prepare/set_cls")
     pf_setup()
@@ -503,14 +504,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
             }
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")
+                to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
             pfq_end(raw)
             vk_check(vkEndCommandBuffer(raw), null)
             let t_record = get_time_usec(tp0) - t_prep
             submit_wait(raw)
             if (vk_prof()) {
-                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")
+                to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
             w0 += wlen
         }
@@ -534,9 +535,9 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             tot += pfq_us(2u) + pfq_us(nq) + pfq_us(nq + 1u)
             // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
             if (g_rd.qk_norm) {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} qkn {int(role[4])} rope_kv {int(role[5])} attn {int(role[6])} rq_a {int(role[7])} wo {int(role[8])} ar1 {int(role[9])} rq_f {int(role[10])} gate {int(role[11])} up {int(role[12])} act {int(role[13])} down {int(role[14])} ar2 {int(role[15])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             } else {
-                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")
+                to_log(LOG_INFO, "vk_rdpf gpu prologue {int(pfq_us(2u))} rq_x {int(role[0])} q {int(role[1])} k {int(role[2])} v {int(role[3])} rope_kv {int(role[4])} attn {int(role[5])} rq_a {int(role[6])} wo {int(role[7])} ar1 {int(role[8])} rq_f {int(role[9])} gate {int(role[10])} up {int(role[11])} act {int(role[12])} down {int(role[13])} ar2 {int(role[14])} fin_rq {int(pfq_us(nq))} cls {int(pfq_us(nq + 1u))} total {int(tot)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
         }
     }
@@ -593,7 +594,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch — one activation image")
+    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
@@ -998,7 +999,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !vk_fmt_b32(f1)
     assert(!vk_fmt_b32(f3) == kq_in,
-        "dasLLAMA vulkan tier: gate/up form mismatch — they share one activation image")
+        "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     let xunit_mid = fmt_unit(f2)
     ensure_batch_state()

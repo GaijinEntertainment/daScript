@@ -452,6 +452,7 @@ def set_resident_prefill_allowed(allowed : bool) {
 
 // Bulk-hydrate the session's host KV from the device mirror rows [0, g_rdec_cnt) — the rail that
 // keeps host KV authoritative at rest after device-resident prefills/decodes.
+[cold_path]   // the continuation/steal/drop rail, not the steady-state token path
 def private rdec_hydrate_host(t : Model; var s : Session) {
     let c = t.config
     for (l in range64(c.n_layers)) {
@@ -671,12 +672,15 @@ def private rdec_rope_row(t : Model; pos, hs, half : int64; var dst : array<floa
     build_rope_row_packed(dst, base, pos, hs, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
 }
 
-//! The resident whole-stack decode override (registered as "vulkan"): embeds the token, builds this
-//! position's rope row, runs the whole forward on device, produces s.logits. Decode-from-scratch
-//! for now — the mirror builds as positions arrive (prefix-KV sync is a follow-up).
+// per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
+var private @scratch g_rdec_x : array<float>
+var private @scratch g_rdec_cossin : array<float>
+var private @scratch g_rdec_tmp : array<float>
+
+// the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
+[hot_path]   // per token
 def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
-    // continuity guard: a gap in the mirror means an earlier position took the CPU path — decline too;
-    // codec guard: hydration byte-copies mirror rows into the session cache, so codecs must match
+    // mirror-gap, codec, and pool guards — hydration byte-copies mirror rows, so codecs must match
     if (!g_rdec_active || pos > g_rdec_cnt
             || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
         return false
@@ -696,35 +700,29 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     let c = t.config
     let dim = c.dim
     let hs = layer_head_size(c, 0l)
-    var x : array<float>
-    x |> resize(dim)
+    g_rdec_x |> resize(dim)
     unsafe {
-        embed_row(t, token, addr(x[0]))
+        embed_row(t, token, addr(g_rdec_x[0]))
     }
     if (c.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(x[0])), c.embed_scale, dim)
+        scale_inplace(unsafe(addr(g_rdec_x[0])), c.embed_scale, dim)
     }
     // this position's rope row: cos[half] then sin[half]
     let half = hs / 2l
-    var cossin : array<float>
-    cossin |> resize(hs)
-    rdec_rope_row(t, pos, hs, half, cossin, 0l)
+    g_rdec_cossin |> resize(hs)
+    rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
     let cnt = pos + 1l
-    rdec_token(x, cossin, pos, cnt, s.logits)
-    delete x
-    delete cossin
+    rdec_token(g_rdec_x, g_rdec_cossin, pos, cnt, s.logits)
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
     s.rdec_hydrated = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
     return true
 }
 
-// The "vulkan" whole-prefill override (PrefillOverrideFn): one-submit device prefill via the
-// resident driver. The mirror gets the rows; host KV is hydrated back on demand (continuation,
-// cap exhaustion) so the CPU rails always take over from a valid host authority.
+// the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
+[hot_path]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
-    // gates: armed + embedder-allowed + a flat cache in the ARMED mirror codec (rows byte-copy;
-    // a codec-mismatched or paged session falls to the CPU rails)
+    // armed + embedder-allowed + a flat cache in the ARMED mirror codec (mismatch falls to the CPU rails)
     if (!g_rdec_active || !g_resident_prefill_allowed
             || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
         return false
@@ -743,13 +741,12 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     let c = t.config
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
-    var cb : array<float>
-    cb |> resize(npos * hs)
+    g_rdec_tmp |> resize(npos * hs)   // the rope-row batch borrows the scratch row
+    var cb & = g_rdec_tmp
     for (p in range64(npos)) {
         rdec_rope_row(t, p, hs, half, cb, p * hs)
     }
     rdec_prefill(s.x_b, cb, npos, s.logits)
-    delete cb
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
     g_rdec_gen ++
     s.rdec_gen = g_rdec_gen
@@ -758,9 +755,8 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return true
 }
 
-//! Resident batch-decode override: processes each session SEQUENTIALLY through the single-session
-//! decode chain (resync its KV into the mirror, decode, write K/V back, scatter logits).
-//! Correct multi-stream decode; declines to CPU for codec-mismatched or paged sessions.
+// the resident batch-decode override — each session SEQUENTIALLY through the single-session chain (sync KV in, decode, write K/V back)
+[hot_path]   // per batch-decode step (every session's token)
 def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     if (!g_rdec_active) {
         return false
@@ -778,14 +774,11 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         }
     }
     if (dasllama_noisy()) {
-        to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")
+        to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
     }
-    var x : array<float>
-    x |> resize(dim)
-    var cossin : array<float>
-    cossin |> resize(hs)
-    var tmp : array<float>
-    tmp |> resize(c.vocab_size)
+    g_rdec_x |> resize(dim)
+    g_rdec_cossin |> resize(hs)
+    g_rdec_tmp |> resize(c.vocab_size)
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = ws.positions[i]
@@ -795,10 +788,10 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         }
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
         for (k in range64(dim)) {
-            x[int(k)] = ws.scr.x_b[i * dim + k]
+            g_rdec_x[int(k)] = ws.scr.x_b[i * dim + k]
         }
-        rdec_rope_row(t, pos, hs, half, cossin, 0l)
-        rdec_token(x, cossin, pos, pos + 1l, tmp)
+        rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
+        rdec_token(g_rdec_x, g_rdec_cossin, pos, pos + 1l, g_rdec_tmp)
         // write the new token's K/V back to this session's cache at pos, then scatter logits
         let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
         let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
@@ -808,11 +801,8 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
                     kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
             }
         }
-        copy_floats(tmp, 0l, s.logits, 0l, c.vocab_size)
+        copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
     }
-    delete x
-    delete cossin
-    delete tmp
     batch_decode_override_logits_done()
     return true
 }

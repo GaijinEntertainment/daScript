@@ -51,7 +51,7 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     if (!(g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
             ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
             : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the batched-attention class rail declined on this device — resident driver declines, the per-op rails serve\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the batched-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
@@ -293,6 +293,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
 
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
 // per-token state is only x/cos (in-cmd copies) and the rope/attn position words (host-visible)
+[cold_path]   // once per epoch (set replacement re-records); the rerecord A/B leg is opt-in
 def private rd_record_token {
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -324,6 +325,7 @@ def private rd_x_quants_b32 : bool {
 
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
 // The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
+[cold_path]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token {
     let dim = g_rd.dim
     let qd = g_rd.qd
@@ -502,6 +504,7 @@ def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
     return <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
 }
 
+[cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample {
     // the fuse gate must MATCH rd_encode_token's or the aggregation walks the wrong shape
     let fuse = vk_fuse_on() && rd_x_quants_b32()
@@ -555,6 +558,7 @@ def private rdq_sample {
 //! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
 //! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one; K/V
 //! for `pos` store into the mirror. Recorded once — a step is two memcpys + position words + one submit.
+[hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
 def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded) {
@@ -576,10 +580,10 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     }
 }
 
-//! Batch-decode support: upload one layer's KV history ([npos x kvd] each, the mirror codec's
-//! rows) into the shared mirror at layer `l`, positions [0, npos). Resyncs a session's cache
-//! before its decode step — the session codec matches the mirror codec (the arm gate), so the
-//! rows byte-copy.
+//! Batch-decode support: upload one layer's KV history ([npos x kvd] codec rows) into the shared
+//! mirror at layer `l`, positions [0, npos). The session codec matches the mirror codec (the arm
+//! gate), so the rows byte-copy.
+[hot_path]   // per layer per batch-decode row
 def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {
     assert(g_rd != null, "vk_rdec_sync_kv before prepare")
     let rowb = g_rd.kv_dim * g_rd.kv_esz
@@ -593,6 +597,7 @@ def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int6
 //! Bulk hydration: read layer `l`'s mirror rows [0, npos) into the caller's cache (kp/vp,
 //! [npos x kvd] codec rows each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative
 //! rail — makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
+[hot_path]   // the hydration rail — per layer, KV_READBACK_ROWS rows per submit
 def vk_rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
     assert(g_rd != null, "vk_rdec_read_kv_bulk before prepare")
     verify(vk_moe_init())
@@ -620,6 +625,7 @@ def vk_rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
 
 //! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
 //! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
+[hot_path]   // per layer per batch-decode row
 def vk_rdec_read_kv(l, pos : int64; kp : uint8?; vp : uint8?) {
     assert(g_rd != null, "vk_rdec_read_kv before prepare")
     let rowb = g_rd.kv_dim * g_rd.kv_esz
@@ -938,7 +944,7 @@ def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : in
     // gate/up share one activation image (same xqp below) so forms must agree; down's is its own
     let kq_in = !vk_fmt_b32(f1)
     assert(!vk_fmt_b32(f3) == kq_in,
-        "dasLLAMA vulkan tier: gate/up form mismatch — they share one activation image")
+        "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     ensure_gemv_scratch(s1)
     ensure_gemv_scratch(s3)
