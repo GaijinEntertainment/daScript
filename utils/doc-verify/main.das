@@ -379,13 +379,14 @@ def var_decl_names(line : string) : array<string> {
     } else {
         return <- names
     }
-    // tuple destructure: `let (ok, err) = ...` — names live inside the parens
+    // tuple destructure: `let (ok, err) = ...` — names live inside the parens.
+    // `_` is the discard (binds nothing, repeats freely) — never register or rename it
     if (t |> starts_with("(")) {
         let close = find(t, ')')
         return <- names if (close < 0)
         for (piece in split(slice(t, 1, close), ",")) {
             let name = take_ident(trim(piece))
-            if (!empty(name)) {
+            if (!empty(name) && name != "_") {
                 names |> push(name)
             }
         }

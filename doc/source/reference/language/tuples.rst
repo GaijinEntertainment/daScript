@@ -189,7 +189,19 @@ In this case only one variable is created, as well as for 'assume' expressions. 
     assume second = first`second`third._1
     assume third  = first`second`third._2
 
-Iterators and containers can be expanded in the for-loop in a similar way:
+Each destructured name binds like a ``let`` declaration: reusing a name that is
+already an alias, local, argument, or an earlier destructured name is
+``error[30704]``, the same rule plain ``let`` follows. The one exception is
+``_``, the discard — it binds nothing, so it can repeat freely, within one
+pattern and across patterns:
+
+.. code-block:: das
+
+    let (_, _, only_third) = (1, 2.0, "3")
+    assert(only_third == "3")
+
+Iterators and containers can be expanded in the for-loop in a similar way
+(the ``_`` discard works here too):
 
 .. code-block:: das
 

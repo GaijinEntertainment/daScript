@@ -496,30 +496,62 @@ covers both halves, where the spelled-out form needs two:
 The target type must be a pointer — ``addr<int>(x)`` is a compile error
 (it is always a typo for ``addr<int?>(x)``).
 
-^^^^^^^^^^^^^^^^^^^
-Dot Operator Bypass
-^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Original Operator Access (!)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
+    pair: !. Operator; Operators
     pair: . . Operator; Operators
 
 Smart pointers (``smart_ptr<T>``) are accessed the same way as regular pointers —
 using ``.`` for field access and ``?.`` for null-safe field access.
 
-A doubled dot bypasses any ``.`` operator overloading (a property, see
-:ref:`Classes <classes>`) and accesses the underlying field directly.  This is
-useful when a type defines a custom ``.`` operator but you need to reach the
-actual field:
+Placing ``!`` in front of an overloadable access or test operator gives the
+**original** operator, never the overload.  ``a!.x`` bypasses any ``.`` operator
+overloading (a property, see :ref:`Classes <classes>`) and accesses the
+underlying field directly.  This is useful when a type defines a custom ``.``
+operator but you need to reach the actual field:
 
 .. das-doc: given struct Boxed { payload : int }
 .. das-doc: given var sp : Boxed?
 .. code-block:: das
 
-    sp. .payload = 42   // accesses field payload directly, skipping any . overload
+    sp!.payload = 42    // accesses field payload directly, skipping any . overload
 
-The two dots must be **separated by a space**: ``..`` with no space is the
+The whole family follows the same rule.  Each spelling is the overloadable
+operator with ``!`` in front, and yields the built-in behavior even when a
+matching overload (or a variant macro) exists:
+
++--------------+---------------------------------------------------+
+| Raw spelling | Original operation                                |
++==============+===================================================+
+| ``a!.x``     | field access (skips ``operator .``)               |
++--------------+---------------------------------------------------+
+| ``a!?.x``    | null-safe field access (skips ``operator ?.``)    |
++--------------+---------------------------------------------------+
+| ``a![i]``    | indexing (skips ``operator []``)                  |
++--------------+---------------------------------------------------+
+| ``a!?[i]``   | null-safe indexing (skips ``operator ?[]``)       |
++--------------+---------------------------------------------------+
+| ``a !?? b``  | pointer null-coalescing (skips ``operator ??``)   |
++--------------+---------------------------------------------------+
+| ``a !is x``  | variant / type check (skips ``operator is``)      |
++--------------+---------------------------------------------------+
+| ``a !as x``  | variant access (skips ``operator as``)            |
++--------------+---------------------------------------------------+
+| ``a !?as x`` | safe variant access (skips ``operator ?as``)      |
++--------------+---------------------------------------------------+
+
+Generated and generic code uses these forms to guarantee the language's own
+semantics no matter what overloads a user module brings into scope.
+
+The older dot-prefixed spellings remain valid and equivalent: ``a. .x``
+(the two dots must be separated by a space — ``..`` with no space is the
 :ref:`interval <expressions>` operator token, so ``sp..payload`` parses as
-``interval(sp, payload)``.
+``interval(sp, payload)``), ``a.?.x``, ``a.[i]``, and ``a.?[i]``.  The variant
+and coalescing operators have no dot-prefixed form — ``!`` is the only bypass
+spelling there.
 
 ^^^^^^^^^^^^^^^^^^^
 Safe Index (?[)

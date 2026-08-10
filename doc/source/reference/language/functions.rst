@@ -841,10 +841,10 @@ For example, here's how you could overload the dot . operator for a custom struc
         a: string
     }
     def operator.(t: Goo, name: string) : string {
-        return "{name} = {t . . a}"
+        return "{name} = {t!.a}"
     }
     def operator. length(t: Goo) : int {
-        return length(t . . a)
+        return length(t!.a)
     }
 
 In this example, we define a struct called Goo with a string field called a.
@@ -867,7 +867,12 @@ The overloaded operator. function is called and returns the string "a = hello".
 We also access the length property of the Goo object using the dot . operator.
 The overloaded operator. length function is called and returns the length of the a field of the Goo object (5 in this case).
 
-The . . syntax is used to access the fields of a structure or a class while bypassing overloaded operations.
+The ``!.`` syntax accesses the fields of a structure or a class while bypassing overloaded
+operations — the operator bodies above use it to reach the real field without recursing into
+themselves.  Every overloadable access operator has such a raw form (``!.``, ``!?.``, ``![``,
+``!?[``, ``!??``, ``!is``, ``!as``, ``!?as``); see
+:ref:`Original Operator Access <expressions>`.  The legacy spelling ``t . .a`` (dot,
+space, dot) is equivalent to ``t!.a`` and remains valid.
 
 ---------------------------------------------
 Overloading accessors

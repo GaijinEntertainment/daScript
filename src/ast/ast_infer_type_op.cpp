@@ -347,6 +347,7 @@ namespace das {
                 if ( !eat->subexpr->type || eat->subexpr->type->isExprType() ) {
                     return nullptr;
                 }
+                if ( eat->no_promotion ) return nullptr;    // a![i] op= v - the write path bypasses too
                 auto complexName = "[]" + expr->name;
                 if (auto atComplex = inferGenericOperator3(complexName, eat->at, eat->subexpr, eat->index, expr->right)) {
                     atComplex->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
@@ -643,7 +644,7 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprMove *expr) {
         if (expr->right->type && !expr->right->type->isAutoOrAlias() && expr->left->rtti_isAt()) {
             ExprAt *eat = (ExprAt *)(expr->left);
-            if (eat->subexpr->type && !eat->subexpr->type->isExprType()) {
+            if (!eat->no_promotion && eat->subexpr->type && !eat->subexpr->type->isExprType()) {    // a![i] <- v - the write path bypasses too
                 // lets find []<- operator
                 if (auto opAtMove = inferGenericOperator3("[]<-", expr->at, eat->subexpr, eat->index, expr->right)) {
                     opAtMove->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
@@ -868,6 +869,7 @@ namespace das {
                 }
             } else if (expr->left->rtti_isAt()) {
                 ExprAt *eat = (ExprAt *)(expr->left);
+                if ( eat->no_promotion ) return nullptr;    // a![i] = v - the write path bypasses too
                 // lets find []= operator
                 auto opName = "[]" + expr->name;
                 if (auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right)) {

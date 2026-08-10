@@ -43,7 +43,7 @@ def describeValue(v : Value) : string {
 }
 
 [export]
-def main {
+def main { // nolint:STYLE038 — tutorial walkthrough: one linear story by design
 
     // === Part 1: Tuples ===
 
@@ -80,8 +80,8 @@ def main {
 
     // Mixed expressions never promote — element must be a bare variable.
     var raw : array<tuple<int; int>>
-    let a = 1
-    raw |> push((a, a + 1))      // stays unnamed; reachable via _0/_1
+    let n = 1
+    raw |> push((n, n + 1))      // stays unnamed; reachable via _0/_1
     print("raw[0] = ({raw[0]._0}, {raw[0]._1})\n")
 
     // Promotion is fallback-only: if an unnamed overload also matches, it wins.
@@ -116,6 +116,11 @@ def main {
     // Destructuring works with named tuples too
     let (px, py) = Point2D(x = 5.0, y = 6.0)
     print("destructured point: px={px}, py={py}\n")
+
+    // `_` discards a position — it binds nothing, so it can repeat,
+    // and each destructured name must otherwise be new in its scope.
+    let (_, _, third) = tuple(1, 2.0, "third")
+    print("third = \"{third}\"\n")
 
     // --- Destructuring in for loops ---
     var pairs <- [(1, "one"), (2, "two"), (3, "three")]

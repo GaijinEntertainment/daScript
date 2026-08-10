@@ -1313,6 +1313,7 @@ namespace das {
         auto cexpr = clonePtr<ExprNullCoalescing>(expr);
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 
@@ -1574,6 +1575,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->typeexpr = new TypeDecl(*typeexpr);
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 
@@ -1944,6 +1946,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->mask = mask;
         cexpr->value = value->clone();
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 

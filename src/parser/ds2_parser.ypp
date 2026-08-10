@@ -324,6 +324,14 @@
 %token  QQ                  "??"
 %token  QDOT                "?."
 %token  QBRA                "?["
+%token  NOTDOT              "!."
+%token  NOTQDOT             "!?."
+%token  NOTBRA              "!["
+%token  NOTQBRA             "!?["
+%token  NOTQQ               "!??"
+%token  NOTIS               "!is"
+%token  NOTAS               "!as"
+%token  NOTQAS              "!?as"
 %token  LPIPE               "<|"
 %token  RPIPE               "|>"
 %token  CLONEEQU            ":="
@@ -575,13 +583,13 @@
 %left       SHL SHR ROTL ROTR
 %left       '-' '+'
 %left       '*' '/' '%'
-%right      QQ
+%right      QQ NOTQQ
 %right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left       DAS_IS DAS_AS
+%left       DAS_IS DAS_AS NOTIS NOTAS NOTQAS
 %left       LPIPE RPIPE LLPIPE
 %left       POST_INC POST_DEC RARROW DEREF
-%left       '.'
-%nonassoc  '[' ']' '(' ')' QDOT QBRA
+%left       '.' NOTDOT
+%nonassoc  '[' ']' '(' ')' QDOT QBRA NOTQDOT NOTBRA NOTQBRA
 %nonassoc   '$' '@' DOUBLE_AT
 %nonassoc   COLCOL
 
@@ -2207,6 +2215,10 @@ expr_field_no_bracket
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, *$name, true);
         delete $name;
     }
+    |   expr_no_bracket[subexpr] NOTDOT[loc] NAME[name]     {
+        $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, *$name, true);
+        delete $name;
+    }
     |   expr_no_bracket[left] '.'[loc] NAME[method_name] '(' ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
@@ -2215,6 +2227,20 @@ expr_field_no_bracket
     }
     |   expr_no_bracket[left] '.'[loc] NAME[method_name] '(' expr_list[arguments] ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
+        auto callArgs = sequenceToList($arguments);
+        pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
+        delete $method_name;
+        $$ = pInvoke;
+    }
+    |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
+        delete $method_name;
+        $$ = pInvoke;
+    }
+    |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' expr_list[arguments] ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -2394,10 +2420,13 @@ expr_no_bracket
     }
     |   expr_no_bracket[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), $subexpr, $index); }
     |   expr_no_bracket[subexpr] '.' '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), $subexpr, $index, true); }
+    |   expr_no_bracket[subexpr] NOTBRA[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), $subexpr, $index, true); }
     |   expr_no_bracket[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), $subexpr, $index); }
     |   expr_no_bracket[subexpr] '.' QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), $subexpr, $index, true); }
+    |   expr_no_bracket[subexpr] NOTQBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), $subexpr, $index, true); }
     |   expr_no_bracket[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, *$name); delete $name; }
     |   expr_no_bracket[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
+    |   expr_no_bracket[subexpr] NOTQDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   expr_call[call] { $$ = $call; }
     |   '*'[loc] expr_no_bracket[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
@@ -2413,6 +2442,11 @@ expr_no_bracket
     }
     |   expr_generator[gen]                        { $$ = $gen; }
     |   expr_no_bracket[subexpr] QQ[loc] expr_no_bracket[dval]           { $$ = new ExprNullCoalescing(tokAt(scanner,@loc),$subexpr,$dval); }
+    |   expr_no_bracket[subexpr] NOTQQ[loc] expr_no_bracket[dval]           {
+        auto nc = new ExprNullCoalescing(tokAt(scanner,@loc),$subexpr,$dval);
+        nc->no_promotion = true;
+        $$ = nc;
+    }
     |   expr_no_bracket[subexpr] '?'[loc] expr_no_bracket[left] ':' expr_no_bracket[right] {
             $$ = new ExprOp3(tokAt(scanner,@loc),"?",$subexpr,$left,$right);
         }
@@ -2428,6 +2462,24 @@ expr_no_bracket
         $$ = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
         delete $vname;
     }
+    |   expr_no_bracket[subexpr] NOTIS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } {
+        auto isx = new ExprIs(tokAt(scanner,@loc),$subexpr,$decl);
+        isx->no_promotion = true;
+        $$ = isx;
+    }
+    |   expr_no_bracket[subexpr] NOTIS[loc] basic_type_declaration[decl] {
+        auto vdecl = new TypeDecl($decl);
+        vdecl->at = tokAt(scanner,@decl);
+        auto isx = new ExprIs(tokAt(scanner,@loc),$subexpr,vdecl);
+        isx->no_promotion = true;
+        $$ = isx;
+    }
+    |   expr_no_bracket[subexpr] NOTIS[loc] NAME[vname] {
+        auto isv = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
+        isv->no_promotion = true;
+        $$ = isv;
+        delete $vname;
+    }
     |   expr_no_bracket[subexpr] DAS_AS[loc] NAME[vname] {
         $$ = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
         delete $vname;
@@ -2440,6 +2492,24 @@ expr_no_bracket
     |   expr_no_bracket[subexpr] DAS_AS[loc] basic_type_declaration[decl] {
         $$ = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,das_to_string($decl));
     }
+    |   expr_no_bracket[subexpr] NOTAS[loc] NAME[vname] {
+        auto asv = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
+        asv->no_promotion = true;
+        $$ = asv;
+        delete $vname;
+    }
+    |   expr_no_bracket[subexpr] NOTAS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+        auto vname = $decl->describe();
+        auto asv = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,vname);
+        asv->no_promotion = true;
+        $$ = asv;
+        delete $decl;
+    }
+    |   expr_no_bracket[subexpr] NOTAS[loc] basic_type_declaration[decl] {
+        auto asv = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,das_to_string($decl));
+        asv->no_promotion = true;
+        $$ = asv;
+    }
     |   expr_no_bracket[subexpr] '?' DAS_AS[loc] NAME[vname] {
         $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
         delete $vname;
@@ -2451,6 +2521,24 @@ expr_no_bracket
     }
     |   expr_no_bracket[subexpr] '?' DAS_AS[loc] basic_type_declaration[decl] {
         $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,das_to_string($decl));
+    }
+    |   expr_no_bracket[subexpr] NOTQAS[loc] NAME[vname] {
+        auto asv = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
+        asv->no_promotion = true;
+        $$ = asv;
+        delete $vname;
+    }
+    |   expr_no_bracket[subexpr] NOTQAS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+        auto vname = $decl->describe();
+        auto asv = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,vname);
+        asv->no_promotion = true;
+        $$ = asv;
+        delete $decl;
+    }
+    |   expr_no_bracket[subexpr] NOTQAS[loc] basic_type_declaration[decl] {
+        auto asv = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,das_to_string($decl));
+        asv->no_promotion = true;
+        $$ = asv;
     }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
     |   expr_type_decl[subexpr]                 { $$ = $subexpr; }
@@ -2534,7 +2622,15 @@ expr_mtag_no_bracket
         auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   expr_no_bracket[subexpr] NOTDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     |   expr_no_bracket[subexpr] '.' QDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr_no_bracket[subexpr] NOTQDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
         auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
@@ -2542,12 +2638,27 @@ expr_mtag_no_bracket
         auto cfield = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   expr_no_bracket[subexpr] NOTAS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
+        cfield->no_promotion = true;
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     |   expr_no_bracket[subexpr] '?' DAS_AS[loc] MTAG_F[cname] '(' expr[name] ')' {
         auto cfield = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   expr_no_bracket[subexpr] NOTQAS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
+        cfield->no_promotion = true;
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     |   expr_no_bracket[subexpr] DAS_IS[loc] MTAG_F[cname] '(' expr[name] ')' {
         auto cfield = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr_no_bracket[subexpr] NOTIS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
+        cfield->no_promotion = true;
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
     |   DOUBLE_AT[loc] MTAG_C[cname] '(' expr[subexpr] ')' {

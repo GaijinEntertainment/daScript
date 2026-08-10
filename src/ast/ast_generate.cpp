@@ -255,9 +255,9 @@ namespace das {
     }
 
     /* a->b(args) is short for invoke(a.b, cast<auto> deref(a), args)  */
-    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b, bool no_promo ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
-        auto pAt = new ExprField(at, a, b);
+        auto pAt = new ExprField(at, a, b, no_promo);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
         auto pTypeAuto = new ExprTypeDecl(at, new TypeDecl(Type::autoinfer));
@@ -1860,15 +1860,16 @@ namespace das {
             svi->arguments.push_back(vi);
             cb->list.push_back(svi);
             auto lv = new ExprVar(at, "dest");
-            auto lf = new ExprField(at, lv, argn);
+            auto lf = new ExprField(at, lv, argn, true);    // raw: generated code must reach the real variant, not an overload
             lf->alwaysSafe = true;
             auto rv = new ExprVar(at, "src");
-            auto rf = new ExprField(at, rv, argn);
+            auto rf = new ExprField(at, rv, argn, true);
             rf->alwaysSafe = true;
             auto cl = new ExprClone(at, lf, rf);
             cb->list.push_back(cl);
             auto av = new ExprVar(at, "src");
             auto isv = new ExprIsVariant(at, av, argn);
+            isv->no_promotion = true;
             auto thisIf = new ExprIfThenElse(at, isv, cb, nullptr);
             if ( lastIf ) {
                 lastIf->if_false = thisIf;
@@ -1910,7 +1911,7 @@ namespace das {
                     && variantType->argTypes[argi]->firstType->constant ) continue;
                 const string & argn = variantType->argNames[argi];
                 auto lv = new ExprVar(at, "__this");
-                auto lf = new ExprField(at, lv, argn);
+                auto lf = new ExprField(at, lv, argn, true);    // raw: generated code must reach the real variant, not an overload
                 lf->alwaysSafe = true;
                 auto cl = new ExprDelete(at, lf);
                 cl->alwaysSafe = true;
@@ -1919,6 +1920,7 @@ namespace das {
                 cb->list.push_back(cl);
                 auto av = new ExprVar(at, "__this");
                 auto isv = new ExprIsVariant(at, av, argn);
+                isv->no_promotion = true;
                 auto thisIf = new ExprIfThenElse(at, isv, cb, nullptr);
                 if ( lastIf ) {
                     lastIf->if_false = thisIf;
@@ -2229,7 +2231,11 @@ namespace das {
     FunctionPtr makeClassFinalize ( Structure * baseClass ) {
         // add __finalize field
         auto fname = baseClass->name + "'__finalize";
-        ExpressionPtr finit = new ExprAddr(baseClass->at, "_::" + fname);
+        // the generated finalizer lives in the class's own module - pin the lookup there
+        // ("__::"), so a same-named class in a required module can't make it ambiguous.
+        // template classes stay on open "_::": their stamped instances infer in the consumer
+        // module while the stamped finalizer may live elsewhere, so a strict pin can't see it
+        ExpressionPtr finit = new ExprAddr(baseClass->at, (baseClass->isTemplate ? "_::" : "__::") + fname);
         if ( baseClass->parent ) {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
             fd->init = new ExprCast(baseClass->at, finit, new TypeDecl(Type::autoinfer));

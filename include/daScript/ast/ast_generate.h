@@ -132,7 +132,7 @@ namespace das {
         a->b(args) is short for invoke(a.b, a, args)
      */
     struct ExprInvoke;
-    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b, bool no_promo = false );
 
     /*
         this is short for invoke(type<callStruct>.b, a, args)

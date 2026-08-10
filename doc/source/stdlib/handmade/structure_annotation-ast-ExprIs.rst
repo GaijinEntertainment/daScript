@@ -7,3 +7,4 @@ Expression flags
 Expression print flags
 Subexpression being checked
 Type being checked against
+If true, the original operator applies - user overloads are not consulted (the `!is` raw form)

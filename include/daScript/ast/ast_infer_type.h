@@ -130,6 +130,27 @@ namespace das {
         // within current context
         TypeDeclPtr findAlias(const string &name, bool *constUnderDim = nullptr) const;
 
+        // run every visible module's variant macros through visitFn (visitIs/visitAs/visitSafeAs)
+        // until one substitutes - the shared dispatch of the three variant-expression visitors
+        template <typename FN>
+        ExpressionPtr runVariantMacros ( FN && visitFn ) {
+            ExpressionPtr substitute = nullptr;
+            auto modMacro = [&](Module *mod) -> bool {
+                if (thisModule->isVisibleDirectly(mod) && mod != thisModule) {
+                    for (const auto &pm : mod->variantMacros) {
+                        if ((substitute = visitFn(pm))) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            Module::foreach (modMacro);
+            if (!substitute)
+                program->library.foreach (modMacro, "*");
+            return substitute;
+        }
+
         // infer alias type
         TypeDeclPtr inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr = nullptr, AliasMap *aliases = nullptr, OptionsMap *options = nullptr, bool autoToAlias = false) const;
 
@@ -561,7 +582,8 @@ namespace das {
         bool canRelaxAssign(Expression *init) const;
         virtual ExpressionPtr visitLetInit(ExprLet *expr, const VariablePtr &var, Expression *init) override;
 
-        void expandTupleName(const string &name, const LineInfo &varAt);
+        void expandTupleName(const string &name, const LineInfo &varAt, bool canShadow = false,
+            CompilationError shadowError = CompilationError::already_declared_local_variable);
 
         virtual ExpressionPtr visit(ExprLet *expr) override;
         // ExprCallMacro
