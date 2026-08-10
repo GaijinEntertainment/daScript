@@ -973,6 +973,18 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         report(at, "{what} has an unresolved func after inference")
     }
 
+    // A node with no location makes every later diagnostic over it point at nothing. No
+    // kind is exempt: a value from a C++ binding gets the call site stamped by infer.
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        if (expr == null || expr.at.fileInfo != null) {
+            return
+        }
+        report(expr.at, "{expr.__rtti} has no source location (at is unset)")
+        if (current_fn != null) {
+            expr.at = current_fn.at
+        }
+    }
+
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         need_typed(expr, "ExprVar '{expr.name}'", expr.at)
         return expr
