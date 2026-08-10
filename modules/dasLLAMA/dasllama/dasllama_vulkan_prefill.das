@@ -187,7 +187,7 @@ def private pf_setup {
     }
     let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
     let normbytes = g_rd.norms_bytes
-    // cm2 fa is hs=64-only: the h128 arm runs ~14x slow at ANY KV tile width (see FaCm2H128)
+    // hs=64-only until resident_plan accounts the f16 shadow bytes (FaCm2H128 has the numbers)
     g_rd.pf_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.head_size == 64l
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()

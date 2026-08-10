@@ -1443,9 +1443,9 @@ class FaCm2H64 {
 }
 
 // hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (llama.cpp's hsk>=256 cut — K^T/V/softmax
-// state at 32 columns, KV loop steps 32). Oracle-exact but NOT serving: it runs ~14x slow, same
-// as the Bc=64 shape did, while llama.cpp's h128 64x64 is fast on this driver — the divergence is
-// module/pipeline-level, not tile geometry (see the pf_facm2 gate)
+// state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
+// WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
+// resident plan learning the f16 shadow cost (see the pf_facm2 gate)
 [vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128 {
     @ssbo @binding = 0 qpanel : array<float>
