@@ -445,6 +445,7 @@ struct EmittedPage {
     fragments : int
     expects : array<RstBlock>
     require_lines : array<string>
+    file_written : table<string>    // sibling modules minted by `file` markers this page
     companion_backed : bool
 }
 
@@ -541,6 +542,13 @@ def companion_preamble(rst_path : string; root : string; pages_dir : string) : a
     if (us > 0 && !is_number(first_character(base))) {
         let fam2 = slice(base, 0, us)
         cands |> push(path_join(root, path_join("tutorials", path_join(fam2, base + ".das"))))
+    }
+    // subdir families (tutorials/macros/NN_x.rst): the RST's own directory names the
+    // companion family — this is what lets usage blocks compile against the REAL
+    // sibling macro modules via the companion's rewritten requires
+    let parent = base_name(dir_name(rst_path))
+    if (parent != "tutorials") {
+        cands |> push(path_join(root, path_join("tutorials", path_join(parent, base + ".das"))))
     }
     for (c in cands) {
         continue if (!fexist(c))
@@ -788,13 +796,56 @@ def handle_marker(blk : RstBlock; var em : EmittedPage; hoists : array<string>; 
     }
     if (blk.marker == "file") {
         // multi-file literate page: the block IS a sibling module ("put this in
-        // helpers.das") — write it next to the synthetic page so the page's own
-        // bare `require helpers` resolves same-dir; compiled transitively
+        // helpers.das") — written next to the synthetic page so the page's own
+        // bare `require helpers` resolves same-dir; compiled transitively.
+        // Repeated `file` markers with the same name APPEND (a literate tangle),
+        // and whole-line `...` elisions are dropped like any decl-body elision
         em.checked++
-        fwrite(path_join(pages_dir, base_name(blk.marker_arg)), join(blk.body, "\n") + "\n")
+        let fname = base_name(blk.marker_arg)
+        var body := blk.body
+        mark_elisions(body)
+        let content = build_string() $(var writer) {
+            for (l in body) {
+                continue if (trim(l) == ELIDE)
+                writer |> write(l)
+                writer |> write("\n")
+            }
+        }
+        let fpath = path_join(pages_dir, fname)
+        if (key_exists(em.file_written, fname)) {
+            fwrite(fpath, fread(fpath) + content)
+        } else {
+            em.file_written |> insert(fname)
+            fwrite(fpath, content)
+        }
         return true
     }
     return false
+}
+
+// a module the page mints via a `file` marker shadows the companion's require of the
+// real one — both would declare the same module name; the page's text wins
+def add_companion_hoists(var hoists : array<string>; comp : array<string>; page : PageSource) {
+    var minted : table<string>
+    for (blk in page.blocks) {
+        if (blk.marker == "file" && !empty(blk.marker_arg)) {
+            let s = stem(base_name(blk.marker_arg))
+            if (!key_exists(minted, s)) {
+                minted |> insert(s)
+            }
+        }
+    }
+    for (c in comp) {
+        let t = strip_comment(c)
+        if (t |> starts_with("require ")) {
+            var target = trim(slice(t, length("require ")))
+            if (target |> ends_with(" public")) {
+                target = trim(trim_suffix(target, " public"))
+            }
+            continue if (key_exists(minted, stem(base_name(target))))
+        }
+        hoists |> push(c)
+    }
 }
 
 def emit_page(page : PageSource; cfg : Config) : EmittedPage {
@@ -802,7 +853,7 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     var hoists : array<string>
     let comp <- companion_preamble(page.path, cfg.root, path_join(cfg.out, "pages"))
     em.companion_backed = !empty(comp)
-    hoists |> push_from(comp)
+    add_companion_hoists(hoists, comp, page)
     if (!em.companion_backed && (base_name(page.path) |> starts_with("dasAudio_"))) {
         hoists |> push("require audio/audio_boost")
         hoists |> push("require math")
@@ -962,14 +1013,15 @@ def probe_target(req : string) : string {
     return t
 }
 
-def run_probes(require_lines : table<string; bool>; cfg : Config) : array<string> {
+def run_probes(require_lines : table<string; bool>; file_mods : table<string>; cfg : Config) : array<string> {
     var failures : array<string>
     let probe_dir = path_join(cfg.out, "probes")
     mkdir_rec(probe_dir)
     var probed : table<string; bool>   // target -> from_companion (OR-ed)
     for (req, from_companion in keys(require_lines), values(require_lines)) {
         let target = probe_target(req)
-        continue if (empty(target))
+        // a module minted by a `file` marker exists only beside its synthetic page
+        continue if (empty(target) || key_exists(file_mods, target))
         let prev = probed?[target] ?? false
         probed[target] = prev || from_companion
     }
@@ -1036,6 +1088,7 @@ def main() : int {   // nolint:STYLE037 — flat CLI driver: probe gate, page lo
 
     // pass 1: parse+emit everything, collecting the corpus require set for rule 0
     var require_origin : table<string; bool>   // require line -> seen-from-companion
+    var file_mods : table<string>              // modules minted by `file` markers
     for (p in pages) {
         if (cfg.verbose) {
             to_log(LOG_INFO, "  emit {p}\n")
@@ -1047,10 +1100,16 @@ def main() : int {   // nolint:STYLE037 — flat CLI driver: probe gate, page lo
             let prev = require_origin?[r] ?? false
             require_origin[r] = prev || em.companion_backed
         }
+        for (f in keys(em.file_written)) {
+            let s = stem(f)
+            if (!key_exists(file_mods, s)) {
+                file_mods |> insert(s)
+            }
+        }
     }
 
     if (!cfg.no_probes) {
-        let failures <- run_probes(require_origin, cfg)
+        let failures <- run_probes(require_origin, file_mods, cfg)
         var fatal = false
         for (f in failures) {
             to_log(LOG_ERROR, "rule-0 probe failed: {f}\n")
@@ -1064,6 +1123,7 @@ def main() : int {   // nolint:STYLE037 — flat CLI driver: probe gate, page lo
 
     // pass 2: verdicts
     var sweep = SweepReport(total_pages = length(pages))
+    sweep.pages |> reserve(length(pages))
     for (i, p in count(), pages) {
         var rep <- report_page(p, cfg)
         if (rep.status == "green") {
