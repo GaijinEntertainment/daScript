@@ -9,6 +9,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
+require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -396,32 +397,6 @@ class F16Cvt {
             outh[e + 1u] = float16(src[e + 1u])
             outh[e + 2u] = float16(src[e + 2u])
             outh[e + 3u] = float16(src[e + 3u])
-        }
-    }
-}
-
-struct FaCvtArgs {
-    base : uint    // element base of the window (w0 * kvd)
-    nelem : uint   // window element count (rows * kvd; kvd is 32-aligned so 4-wide is exact)
-}
-
-// windowed f32 -> f16 at a base offset: the flash-attention K/V shadow append — each window
-// converts only its new rows, so the f16 planes accumulate alongside the f32 originals
-[vk_dispatch(name = "fa_kvcvt_cls", grid = "wgs", params = "wgs : int64")]
-class FaKvCvt {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outh : array<float16>
-    @push_constant pa : FaCvtArgs
-
-    [spirv_kernel(local_size_x = 256, name = "fa_kvcvt_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            let s = pa.base + e
-            outh[s] = float16(src[s])
-            outh[s + 1u] = float16(src[s + 1u])
-            outh[s + 2u] = float16(src[s + 2u])
-            outh[s + 3u] = float16(src[s + 3u])
         }
     }
 }
@@ -1148,12 +1123,15 @@ struct AtAttnArgs {
 }
 
 // the flash Q-tile core (AtAttn and DaAttnB share it; the h128 coopmat twin does not): staged
-// K/V tiles at stride 257, per-row online softmax. Leaves bring their own out plane + push args,
-// so the methods take every varying scalar as a param (the shipped fa_* signatures)
-class AtAttnBase {
+// K/V tiles at stride 257, per-row online softmax. KT is the K/V plane element type (staging and
+// compute stay f32 — the f16 arm converts on load). The template also carries the mirror-window
+// kernel (DaAttnB's run); AtAttn authors its own run over the same core. Leaves bring their own
+// out plane + push args, so the methods take every varying scalar as a param
+[ |> template_struct_instance]
+class template AtAttnTileT {
     @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
-    @ssbo @binding = 1 kpanel : array<float>   // the K plane (panel or mirror — kbase offsets)
-    @ssbo @binding = 2 vpanel : array<float>   // the V plane (raw rows or mirror — vbase offsets)
+    @ssbo @binding = 1 kpanel : array<KT>      // the K plane (panel or mirror — kbase offsets)
+    @ssbo @binding = 2 vpanel : array<KT>      // the V plane (raw rows or mirror — vbase offsets)
     @workgroup fq : float[2048]    // the tile's 8 q rows
     @workgroup fkv : float[8224]   // one 32-row K/V stage, stride 257 (bank-spread)
     @workgroup fp : float[256]     // the 8x32 score/probability tile
@@ -1181,7 +1159,7 @@ class AtAttnBase {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? kpanel[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0
             i += 256u
         }
     }
@@ -1191,7 +1169,7 @@ class AtAttnBase {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? vpanel[vbase + kr * kvd + kvh * hs + i % hs] : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0
             i += 256u
         }
     }
@@ -1235,17 +1213,104 @@ class AtAttnBase {
             fal[tid] = alpha
         }
     }
+
+    // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
+    // mirrors, K/V read at kbase/vbase, out = plain rows (no gating); dpl-guarded accumulators
+    // serve hs 32..256. pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
+    [spirv_kernel(local_size_x = 256)]
+    def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qd = pa.nh * pa.hs
+        let dpl = pa.hs / 32u
+        let qtiles = (pa.npos + 7u) / 8u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let tid = gl_LocalInvocationID.x
+        let r = tid / 32u
+        let c = tid % 32u
+        let kvh = h / pa.kv_mul
+        load_q(q0, pa.npos, qd, h, pa.hs)
+        var o0 = 0.0
+        var o1 = 0.0
+        var o2 = 0.0
+        var o3 = 0.0
+        var o4 = 0.0
+        var o5 = 0.0
+        var o6 = 0.0
+        var o7 = 0.0
+        barrier()
+        let gq = pa.w0 + q0 + r
+        let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
+        var k0 = 0u
+        while (k0 < kend) {
+            load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
+            barrier()
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.scale)
+            barrier()
+            softmax_update()
+            barrier()
+            let av = fal[r]
+            o0 *= av
+            if (dpl > 1u) {
+                o1 *= av
+            }
+            if (dpl > 2u) {
+                o2 *= av
+                o3 *= av
+            }
+            if (dpl > 4u) {
+                o4 *= av
+                o5 *= av
+                o6 *= av
+                o7 *= av
+            }
+            load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs)
+            barrier()
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw = fp[r * 32u + c2]
+                let vb = c2 * 257u + c
+                o0 += pw * fkv[vb]
+                if (dpl > 1u) {
+                    o1 += pw * fkv[vb + 32u]
+                }
+                if (dpl > 2u) {
+                    o2 += pw * fkv[vb + 64u]
+                    o3 += pw * fkv[vb + 96u]
+                }
+                if (dpl > 4u) {
+                    o4 += pw * fkv[vb + 128u]
+                    o5 += pw * fkv[vb + 160u]
+                    o6 += pw * fkv[vb + 192u]
+                    o7 += pw * fkv[vb + 224u]
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + r < pa.npos) {
+            let inv = 1.0 / fl[r]
+            let ob = (q0 + r) * qd + h * pa.hs + c
+            var jj = 0u
+            while (jj < dpl) {
+                outp[ob + jj * 32u] = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
+                jj++
+            }
+        }
+    }
 }
 
 // batched causal attention (prefill), flash-style Q tile: one wg per (head, 8-query tile);
 // lane c owns dims c + 32*jj. V = the raw v rows; the epilogue gates through the out plane
 [vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
-class AtAttn : AtAttnBase {
+class AtAttn : AtAttnTileT {
+    typedef KT = float
     @ssbo @binding = 3 outp : array<float>   // attention out (gated models read the gate stash here)
     @push_constant pa : AtAttnArgs
 
     [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
-    def run {
+    def override run {
         let qtiles = (pa.rows + 7u) / 8u
         let h = gl_WorkGroupID.x / qtiles
         let q0 = (gl_WorkGroupID.x % qtiles) * 8u
@@ -1538,106 +1603,33 @@ struct DaAttnBArgs {
     scale : float
 }
 
-// batched causal attention over the decode mirrors, flash-style Q tile: K/V read at kbase/vbase,
-// out = plain rows (no gating); dpl-guarded accumulators serve hs 32..256. Reduce order differs
-// from the row kernel so the parity bar there is IDS; vs the shipped da_attn_b it is bit-exact
+// batched causal attention over the decode mirrors (the template's run): K/V read at kbase/vbase,
+// out = plain rows (no gating). Reduce order differs from the row kernel so the parity bar there
+// is IDS; vs the shipped da_attn_b it is bit-exact
 [vk_dispatch(name = "da_attn_b_cls", grid = "wgs", params = "wgs : int64")]
-class DaAttnB : AtAttnBase {
+class DaAttnB : AtAttnTileT {
+    typedef KT = float
     @ssbo @binding = 3 outp : array<float>   // attention out rows
     @push_constant pa : DaAttnBArgs
+}
 
-    [spirv_kernel(local_size_x = 256, name = "da_attn_b_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
-        let qd = pa.nh * pa.hs
-        let dpl = pa.hs / 32u
-        let qtiles = (pa.npos + 7u) / 8u
-        let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
-        let tid = gl_LocalInvocationID.x
-        let r = tid / 32u
-        let c = tid % 32u
-        let kvh = h / pa.kv_mul
-        load_q(q0, pa.npos, qd, h, pa.hs)
-        var o0 = 0.0
-        var o1 = 0.0
-        var o2 = 0.0
-        var o3 = 0.0
-        var o4 = 0.0
-        var o5 = 0.0
-        var o6 = 0.0
-        var o7 = 0.0
-        barrier()
-        let gq = pa.w0 + q0 + r
-        let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
-        var k0 = 0u
-        while (k0 < kend) {
-            load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
-            barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.scale)
-            barrier()
-            softmax_update()
-            barrier()
-            let av = fal[r]
-            o0 *= av
-            if (dpl > 1u) {
-                o1 *= av
-            }
-            if (dpl > 2u) {
-                o2 *= av
-                o3 *= av
-            }
-            if (dpl > 4u) {
-                o4 *= av
-                o5 *= av
-                o6 *= av
-                o7 *= av
-            }
-            load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs)
-            barrier()
-            var c2 = 0u
-            while (c2 < 32u) {
-                let pw = fp[r * 32u + c2]
-                let vb = c2 * 257u + c
-                o0 += pw * fkv[vb]
-                if (dpl > 1u) {
-                    o1 += pw * fkv[vb + 32u]
-                }
-                if (dpl > 2u) {
-                    o2 += pw * fkv[vb + 64u]
-                    o3 += pw * fkv[vb + 96u]
-                }
-                if (dpl > 4u) {
-                    o4 += pw * fkv[vb + 128u]
-                    o5 += pw * fkv[vb + 160u]
-                    o6 += pw * fkv[vb + 192u]
-                    o7 += pw * fkv[vb + 224u]
-                }
-                c2++
-            }
-            barrier()
-            k0 += 32u
-        }
-        if (q0 + r < pa.npos) {
-            let inv = 1.0 / fl[r]
-            let ob = (q0 + r) * qd + h * pa.hs + c
-            var jj = 0u
-            while (jj < dpl) {
-                outp[ob + jj * 32u] = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
-                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
-                jj++
-            }
-        }
-    }
+// f16-mirror twin — convert-on-load, staging/compute stay f32
+[vk_dispatch(name = "da_attn_b_f16_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBF16 : AtAttnTileT {
+    typedef KT = float16
+    @ssbo @binding = 3 outp : array<float>   // attention out rows
+    @push_constant pa : DaAttnBArgs
 }
 
 // hs=128 flash-attention twin of DaAttnB (coopmat devices): QK^T on f16 MMAs (hoisted q frags),
 // shuffle-reduced online softmax, register-tiled PV over the f16 V tile. Same args contract
-// (hs unread — baked 128); parity bar vs DaAttnB is IDS, vs the shipped kernel bit-exact
-[vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
-class DaAttnBH128 {
+// (hs unread — baked 128); parity bar vs DaAttnB is IDS, vs the shipped kernel bit-exact.
+// KT is the K/V plane element type — the f16 arm's float()-then-pack roundtrip is lossless
+[ |> template_struct_instance]
+class template DaAttnBH128T {
     @ssbo @binding = 0 qpanel : array<float>   // roped q rows
-    @ssbo @binding = 1 kpanel : array<float>   // the K mirror plane (kbase offsets)
-    @ssbo @binding = 2 vpanel : array<float>   // the V mirror plane (vbase offsets)
+    @ssbo @binding = 1 kpanel : array<KT>      // the K mirror plane (kbase offsets)
+    @ssbo @binding = 2 vpanel : array<KT>      // the V mirror plane (vbase offsets)
     @ssbo @binding = 3 outp : array<float>     // attention out rows
     @push_constant pa : DaAttnBArgs
     @workgroup fbq : uint[2048]    // the 32-row q tile, f16 pairs
@@ -1647,7 +1639,7 @@ class DaAttnBH128 {
     @workgroup fbl : float[32]
     @workgroup fba : float[32]
 
-    [spirv_kernel(local_size_x = 128, name = "da_attn_b_h128_cls_spv")]
+    [spirv_kernel(local_size_x = 128)]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * 128u
         let qtiles = (pa.npos + 31u) / 32u
@@ -1710,7 +1702,7 @@ class DaAttnBH128 {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.kbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(kpanel[src], kpanel[src + 1u]))
+                    fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1773,7 +1765,7 @@ class DaAttnBH128 {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.vbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(vpanel[src], vpanel[src + 1u]))
+                    fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1820,6 +1812,17 @@ class DaAttnBH128 {
     }
 }
 
+[vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBH128 : DaAttnBH128T {
+    typedef KT = float
+}
+
+// f16-mirror twin — the tiles were f16 all along, only the plane loads change
+[vk_dispatch(name = "da_attn_b_h128_f16_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBH128F16 : DaAttnBH128T {
+    typedef KT = float16
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
@@ -1831,13 +1834,13 @@ struct DaAttnArgs {
     scale : float   // the KV count to attend rides tok[0].cnt
 }
 
-// decode attention (one query row): one wg per head, GQA, f32 K/V mirror. Online softmax over
-// 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
-[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
-class DaAttn {
+// decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
+// over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
+[ |> template_struct_instance]
+class template DaAttnT {
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
-    @ssbo @binding = 1 kmir : array<float>   // the K mirror plane
-    @ssbo @binding = 2 vmir : array<float>   // the V mirror plane
+    @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
+    @ssbo @binding = 2 vmir : array<KT>      // the V mirror plane
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
     @push_constant pa : DaAttnArgs
@@ -1846,7 +1849,7 @@ class DaAttn {
     @workgroup part : float[64]    // per-subgroup partials
     @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
 
-    [spirv_kernel(local_size_x = 256, name = "da_attn_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
         let cnt = tok[0u].cnt
@@ -1876,7 +1879,7 @@ class DaAttn {
                 var sv = 0.0
                 var d = 0u
                 while (d < hs) {
-                    sv += qrow[d] * kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d]
+                    sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])
                     d++
                 }
                 s = sv * pa.scale
@@ -1921,7 +1924,7 @@ class DaAttn {
             if (tid < npart * hs) {
                 var jj = g
                 while (jj < clen) {
-                    acc += sc[jj] * vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c]
+                    acc += sc[jj] * float(vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c])
                     jj += npart
                 }
             }
@@ -1942,6 +1945,17 @@ class DaAttn {
             y[h * hs + tid] = tot * linv
         }
     }
+}
+
+[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttn : DaAttnT {
+    typedef KT = float
+}
+
+// f16-mirror twin — convert-on-load, compute stays f32
+[vk_dispatch(name = "da_attn_f16_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttnF16 : DaAttnT {
+    typedef KT = float16
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
@@ -3676,19 +3690,21 @@ struct RopeKvArgs {
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
 }
 
-// fused rope + KV-row store (decode, one token), f32 mirror: one thread per rotation pair,
-// each owning 2 distinct K + 2 V slots
-[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStore {
+// fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
+// 2 distinct K + 2 V slots. KT is the mirror element type; f16 stores clamp +-65504 (the
+// metal CLAMP16 contract — an inf in the mirror poisons attention)
+[ |> template_struct_instance]
+class template RopeKvStoreT {
     @ssbo @binding = 0 qrows : array<float>    // q, roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 2 kmir : array<float>     // the K mirror plane
-    @ssbo @binding = 3 vmir : array<float>     // the V mirror plane
+    @ssbo @binding = 2 kmir : array<KT>        // the K mirror plane
+    @ssbo @binding = 3 vmir : array<KT>        // the V mirror plane
     @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : RopeKvArgs
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "rope_kv_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npairs) {
@@ -3705,12 +3721,19 @@ class RopeKvStore {
                 let kb = pa.qd + h * pa.hs
                 let a0 = kvsrc[kb + e0]
                 let a1 = kvsrc[kb + e1]
-                kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
-                kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
                 // v is not roped — copy the same two elements raw into the V plane
                 let vb = pa.qd + pa.kvd + h * pa.hs
-                vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
-                vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                static_if (CLAMP16) {
+                    kmir[mrow + h * pa.hs + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
+                    kmir[mrow + h * pa.hs + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e0] = float16(clamp(kvsrc[vb + e0], -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e1] = float16(clamp(kvsrc[vb + e1], -65504.0, 65504.0))
+                } else {
+                    kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
+                    kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
+                    vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
+                    vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                }
             } else {
                 let qb = h * pa.hs
                 let a0 = qrows[qb + e0]
@@ -3720,6 +3743,18 @@ class RopeKvStore {
             }
         }
     }
+}
+
+[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStore : RopeKvStoreT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "rope_kv_f16_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreF16 : RopeKvStoreT {
+    typedef KT = float16
 }
 
 struct RopeKvBArgs {
@@ -3737,17 +3772,18 @@ struct RopeKvBArgs {
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
-// buffer into the mirrors at absolute positions
-[vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStoreB {
+// buffer into the mirrors at absolute positions. KT/CLAMP16 as in RopeKvStoreT
+[ |> template_struct_instance]
+class template RopeKvStoreBT {
     @ssbo @binding = 0 qrows : array<float>    // q rows, roped in place
     @ssbo @binding = 1 kvrows : array<float>   // k rows at 0, v rows at voff
-    @ssbo @binding = 2 kmir : array<float>
-    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 2 kmir : array<KT>
+    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>   // per-position cos row then sin row (hs floats each)
     @push_constant pa : RopeKvBArgs
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "rope_kv_b_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npos * pa.ppp) {
@@ -3768,11 +3804,18 @@ class RopeKvStoreB {
                 let a0 = kvrows[kb + e0]
                 let a1 = kvrows[kb + e1]
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                kmir[mo + e0] = a0 * fcr - a1 * fci
-                kmir[mo + e1] = a0 * fci + a1 * fcr
                 let vb = pa.voff + p * pa.kvd + h * pa.hs
-                vmir[mo + e0] = kvrows[vb + e0]
-                vmir[mo + e1] = kvrows[vb + e1]
+                static_if (CLAMP16) {
+                    kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
+                    kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
+                    vmir[mo + e0] = float16(clamp(kvrows[vb + e0], -65504.0, 65504.0))
+                    vmir[mo + e1] = float16(clamp(kvrows[vb + e1], -65504.0, 65504.0))
+                } else {
+                    kmir[mo + e0] = a0 * fcr - a1 * fci
+                    kmir[mo + e1] = a0 * fci + a1 * fcr
+                    vmir[mo + e0] = kvrows[vb + e0]
+                    vmir[mo + e1] = kvrows[vb + e1]
+                }
             } else {
                 let qb = p * pa.qd + h * pa.hs
                 let a0 = qrows[qb + e0]
@@ -3782,6 +3825,18 @@ class RopeKvStoreB {
             }
         }
     }
+}
+
+[vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreB : RopeKvStoreBT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "rope_kv_b_f16_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreBF16 : RopeKvStoreBT {
+    typedef KT = float16
 }
 
 struct QknRopeArgs {
@@ -3798,21 +3853,22 @@ struct QknRopeArgs {
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
-// reduce + rotation order, so bit-identical to the split pair
-[vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
-class QknRopeKv : RmsWgBase {
+// reduce + rotation order, so bit-identical to the split pair. KT/CLAMP16 as in RopeKvStoreT
+[ |> template_struct_instance]
+class template QknRopeKvT : RmsWgBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 2 kmir : array<float>
-    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 2 kmir : array<KT>
+    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
     @ssbo @binding = 6 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : QknRopeArgs
     @workgroup row : float[256]                // this head's normed q or k row (hs <= 256)
+    @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256, name = "qkn_rope_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let wid = gl_WorkGroupID.x
         let is_k = wid >= pa.nh
@@ -3841,8 +3897,13 @@ class QknRopeKv : RmsWgBase {
             let r1 = a0 * fci + a1 * fcr
             if (is_k) {
                 let mrow = pa.layerbase + tok[0u].pos * pa.kvd
-                kmir[mrow + h * pa.hs + e0] = r0
-                kmir[mrow + h * pa.hs + e1] = r1
+                static_if (CLAMP16) {
+                    kmir[mrow + h * pa.hs + e0] = float16(clamp(r0, -65504.0, 65504.0))
+                    kmir[mrow + h * pa.hs + e1] = float16(clamp(r1, -65504.0, 65504.0))
+                } else {
+                    kmir[mrow + h * pa.hs + e0] = r0
+                    kmir[mrow + h * pa.hs + e1] = r1
+                }
             } else {
                 qrows[h * pa.hs + e0] = r0
                 qrows[h * pa.hs + e1] = r1
@@ -3851,9 +3912,25 @@ class QknRopeKv : RmsWgBase {
         // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
-            vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+            static_if (CLAMP16) {
+                vmir[mrow + h * pa.hs + tid] = float16(clamp(kvsrc[pa.qd + pa.kvd + h * pa.hs + tid], -65504.0, 65504.0))
+            } else {
+                vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+            }
         }
     }
+}
+
+[vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
+class QknRopeKv : QknRopeKvT {
+    typedef KT = float
+    override CLAMP16 = false
+}
+
+// f16-mirror twin — clamped stores
+[vk_dispatch(name = "qkn_rope_f16_cls", grid = "wgs", params = "wgs : int64")]
+class QknRopeKvF16 : QknRopeKvT {
+    typedef KT = float16
 }
 
 // ===== the region-GEMV push params (every decode GEMV shares the shape) =====

@@ -9,6 +9,7 @@ require daslib/clargs
 require math
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_layout  // convert_model_to_metal_blob — the blob-flavor transform
+require dasllama/dasllama_tokenizer   // load_tokenizer_auto — the GEN_TEXT eyeball line
 require dasllama/dasllama_env
 
 // dasLLAMA parity harness — the dasLLAMA side of the token-for-token oracle check.
@@ -86,6 +87,7 @@ def main : int {
         set_metal_mode(MetalMode.required)
     }
     var t <- load_gguf(cfg.model, cfg.quant)
+    t.tok <- load_tokenizer_auto(cfg.model)   // load_gguf skips the tokenizer; GEN_TEXT needs it
     if (cfg.ngl != 0 && !convert_model_to_metal_blob(t)) {   // the Metal drivers serve blob-form models only
         panic("dasLLAMA parity: metal-blob transform declined - cannot serve --ngl on this load")
     }
@@ -119,6 +121,14 @@ def main : int {
             }
         }
         print("{line}\n")
+        // the eyeball rail: id streams diff, text tells a near-tie synonym flip from garbage
+        var gen : array<int64>
+        gen |> reserve(count)
+        for (i in range(count)) {
+            gen |> push(ids[echo + i])
+        }
+        print("GEN_TEXT: {replace(decode_(t, gen), "\n", "\\n")}\n")
+        delete gen
         if (count < n_gen) {
             print("NOTE: generate stopped early ({count}/{n_gen}) - emitted BOS\n")
         }

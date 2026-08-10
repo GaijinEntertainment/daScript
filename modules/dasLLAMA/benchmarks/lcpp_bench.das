@@ -683,7 +683,7 @@ def main() : int {
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }
-        var s <- make_run_state(c)
+        var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
             if (ab) {
@@ -702,7 +702,7 @@ def main() : int {
                     var total_us = 0l
                     var rep_gen = 0l
                     for (pi in range(length(toks))) {
-                        var rs <- make_run_state(c)
+                        var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         let t0 = ref_time_ticks()
@@ -743,7 +743,7 @@ def main() : int {
                     // untimed bucket window for THIS arm — the prefill lands BEFORE the reset, so
                     // the report is pure decode (or pure draft+verify on the on arm). Running it
                     // per arm is the point: the off/on bucket delta is what attributes the draft.
-                    var ps <- make_run_state(c)
+                    var ps <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                     let pl0 = long_length(toks[0])
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()

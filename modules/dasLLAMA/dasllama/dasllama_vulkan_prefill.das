@@ -185,28 +185,26 @@ def private pf_setup {
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
-    let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
+    let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
-    // hs=64-only until resident_plan accounts the f16 shadow bytes (FaCm2H128 has the numbers)
-    g_rd.pf_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.head_size == 64l
+    let kv16 = g_rd.kv16
+    // the cm2 fa tiles read f16 K/V — with f16 mirrors they bind the planes directly (no shadows,
+    // no cvt); an f32 mirror keeps the chunked/h128 paths
+    g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+        && (g_rd.head_size == 64l || g_rd.head_size == 128l))
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
-    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()
-        && (fa128s ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())
-        && (!g_rd.pf_facm2 || (ensure_fa_kvcvt_cls()
-            && (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls())))
+    verify(ensure_cls_dn_rq() && ensure_cls_ar()
+        && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
+        && (fa128s ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+            : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!g_rd.pf_facm2
+            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
-        g_rd.kh_mirror = make_device_buf(mirbytes / 2l)
-        g_rd.vh_mirror = make_device_buf(mirbytes / 2l)
-        // one cvt set pair serves every layer — the window's element base rides the push
-        g_rd.pf_facvt_k_set = set_fa_kvcvt_cls(fixed_array(g_rd.k_mirror, g_rd.kh_mirror),
-            fixed_array(mirbytes, mirbytes / 2l), fixed_array(VHZ_MIR, VHZ_MIRH))
-        g_rd.pf_facvt_v_set = set_fa_kvcvt_cls(fixed_array(g_rd.v_mirror, g_rd.vh_mirror),
-            fixed_array(mirbytes, mirbytes / 2l), fixed_array(VHZ_MIR, VHZ_MIRH))
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed (hs {g_rd.head_size})\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed (hs {g_rd.head_size}, native f16 mirrors)\n")
     }
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -227,21 +225,23 @@ def private pf_setup {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
             let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
             let rsizes = fixed_array(np * qd * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
-            g_rd.pf_sets[b + 4] = set_rope_kv_b_cls(rbufs, rsizes,
-                fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS))
+            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS)
+            g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
+                : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         }
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
         if (g_rd.pf_facm2) {
             g_rd.pf_sets[b + 5] = set_fa_cm2_cls(
-                fixed_array(g_rd.pf_q, g_rd.kh_mirror, g_rd.vh_mirror, g_rd.pf_attn),
-                fixed_array(np * qd * 4l, mirbytes / 2l, mirbytes / 2l, np * qd * 4l),
-                fixed_array(VHZ_Q, VHZ_MIRH, VHZ_MIRH, VHZ_ATT))
+                fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
+                fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l),
+                fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT))
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l)
             let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
-            g_rd.pf_sets[b + 5] = (fa128s ? set_da_attn_b_h128_cls(abufs5, asizes5, agbits5)
-                : set_da_attn_b_cls(abufs5, asizes5, agbits5))
+            g_rd.pf_sets[b + 5] = (fa128s
+                ? (kv16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
+                : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5)))
         }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
@@ -385,14 +385,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
                     layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0), voff = uint(wlen * kvd))
-                enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+                if (g_rd.kv16) {
+                    enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+                } else {
+                    enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+                }
                 pfq_ts(raw)
                 if (g_rd.pf_facm2) {
-                    // append this window's rows to the f16 mirror shadows, then the cm2 fa tile
-                    var pcv = FaCvtArgs(base = uint(mirb + w0 * kvd), nelem = uint(wlen * kvd))
-                    let cvtwgs = (wlen * kvd / 4l + 255l) / 256l
-                    enc_fa_kvcvt_cls(raw, h, g_rd.pf_facvt_k_set, pcv, cvtwgs)
-                    enc_fa_kvcvt_cls(raw, h, g_rd.pf_facvt_v_set, pcv, cvtwgs)
+                    // the cm2 fa tile reads the f16 mirrors directly
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = uint(g_rd.kv_mul), kvbase = uint(mirb),
                         scale = g_rd.scale)
@@ -407,9 +407,17 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                         hs = uint(hs), kv_mul = uint(g_rd.kv_mul), kbase = uint(mirb), vbase = uint(mirb),
                         w0 = uint(w0), scale = g_rd.scale)
                     if (fa128) {
-                        enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        if (g_rd.kv16) {
+                            enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        } else {
+                            enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        }
                     } else {
-                        enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        if (g_rd.kv16) {
+                            enc_da_attn_b_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        } else {
+                            enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        }
                     }
                 }
                 pfq_ts(raw)

@@ -1854,6 +1854,8 @@ struct RDec {
     ready : bool
     n_layers, dim, qd, kv_dim, head_size, n_heads, kv_mul, hidden, vocab, seq_cap : int64
     neox : bool
+    kv16 : bool                   // the mirror codec: f16 rows (the default) vs f32; sessions must match
+    kv_esz : int64                // mirror element bytes (2 or 4)
     qk_norm : bool                // per-head q/k rmsnorm role armed (norms buffer carries the rows)
     norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
@@ -1869,7 +1871,7 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] f32
+    k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] elements of the kv16 codec
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
@@ -1898,12 +1900,9 @@ struct RDec {
     pf_xf, pf_af, pf_hf : uint64  // cm2 (fmt-6) f16 twin feeds: xb rows, attn rows, hidden rows
     pf_splitk : uint64            // cm2 split-k f32 partial planes (SplitKReduce input)
     pf_splitk_bytes : int64
-    // cm2 flash attention (armed by pf_setup when the device carries the fa trio and hs is 64/128):
-    // f16 mirror shadows fed per window by fa_kvcvt, one cvt set pair (bases ride the push)
+    // cm2 flash attention (armed by pf_setup when the device carries the fa trio and the mirror
+    // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
-    kh_mirror, vh_mirror : uint64   // [n_layers x seq_cap x kv_dim] f16
-    pf_facvt_k_set : VkDescriptorSet
-    pf_facvt_v_set : VkDescriptorSet
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -2047,7 +2046,6 @@ let VHZ_GATE = 0x800u     // ffn gate plane
 let VHZ_UP = 0x1000u      // ffn up plane
 let VHZ_HQ = 0x2000u      // requantized hidden hq+hs
 let VHZ_FFO = 0x4000u     // ffn down out
-let VHZ_MIRH = 0x8000u    // f16 k/v mirror shadows (the cm2 flash-attention feed)
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
