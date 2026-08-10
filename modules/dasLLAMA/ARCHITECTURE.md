@@ -323,7 +323,11 @@ bake selects its own backend and winners, so the string differs even where the t
 (the tag registry is filled by each family's `[init]`, so a process that never required whisper has
 no way to know a whisper image is current). A process that cannot recompute an identity has no
 standing to call it dead — the orchestrator of a sweep least of all, since its cells measure through
-an exe carrying its own baked winners.
+an exe carrying its own baked winners. The one owner carve-out is the batch lifecycle: the board
+rigs own the model dirs for a whole run, so `dlim_wipe` (verdict-blind, `dasllama_image.das`)
+clears them behind the exe gate at batch start and after each model's last cell, with every image
+re-baked from its gguf on demand. Judging stays forbidden; owning the directory for the batch is
+what licenses deletion without judgment.
 
 ### 2.2 Kernel SHAPE is compile-time; only DATA is runtime
 
@@ -403,8 +407,9 @@ a number is self-describing rather than a bare figure in a table.
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against
 its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). llama.cpp never runs,
-the store is never written, and the child runs `--frozen` so a missing image panics instead of
-minting. A second harness would produce numbers that cannot be compared to any of this, which is
+the store is never written, and the timed child runs `--frozen` — a prepare pass bakes and warms
+each cell's image first (the batch starts wiped), so the cell itself never converts. A second
+harness would produce numbers that cannot be compared to any of this, which is
 why writing one is a review defect.
 
 **The tune stamp gates the comparison.** A manifest older than the binary fails every cell, and

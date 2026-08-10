@@ -63,11 +63,19 @@ do not use, so the two disagree about every `.dlim` identity.
 pre-bake lands on the same winners the exe carries. Export it for the bake, leave it out of the
 sweep.
 
+**Image lifecycle: both rigs own the model dirs for the whole batch.** The batch starts by
+deleting every `.dlim`; a model's images bake when its first cell needs them (rig 3's cv
+warm-retry absorbs the cold map, the oracle's prepare pass bakes before the timed cell) and are
+deleted after its last cell. Peak disk is one model's lanes, never the catalog's — a standing
+two-lane working set once filled a 460 GB box to 97% and killed a bake mid-sweep. Re-profiling
+pays a re-bake per model; a fresh box pays nothing extra, which is the case rented hardware
+cares about.
+
 ## Rig 2 — the oracle (the published board)
 
 Re-measures this box's stored rows and gates each against its recorded mean. llama.cpp never
-runs, the store is never written, artifacts are frozen (a missing `.dlim` panics rather than
-minting).
+runs, the store is never written, and the timed cell never mints — a prepare pass bakes and
+warms each cell's image first, and `tune_sha` carries the pin-set proof.
 
 ```sh
 DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal

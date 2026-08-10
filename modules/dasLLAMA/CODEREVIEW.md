@@ -51,8 +51,8 @@ model gate. A test that silently vanishes on one platform is a defect.
 under `DASLLAMA_PARITY_FULL=1` — a final pre-PR gate, never the iteration loop. Check what a
 test loads before launching it.
 
-**Every moved or extracted function or data transform ships a test for the bit itself** — feed
-the function, check the bytes. "The model still runs" is not a test for a move. A
+**Every new, moved, or extracted function or data transform ships a test for the bit itself** —
+feed the function, check the bytes. "The model still runs" is not a test for a move. A
 platform-fixed predicate has no bytes to feed — test its observable (the argv it gates, the
 mode it selects) on the platform the test runs on.
 
@@ -342,9 +342,15 @@ profile, the knobs, and the flavor a file was baked for, and a mismatch declines
 that reinterprets a mismatched image, or widens an identity so that more files match, is a defect.
 
 **A bake reaps only its own lane.** An identity's (quant, tag) pair is its lane; a save may drop
-that lane's dead siblings plus BROKEN/version-stale images in any lane, and nothing else. Code
-that reaps an image whose identity it cannot recompute — another flavor's, another family's, or
-any image seen from a sweep orchestrator — is a defect. See `ARCHITECTURE.md` §2.1.
+that lane's dead siblings plus BROKEN/version-stale images in any lane, and nothing else. See
+`ARCHITECTURE.md` §2.1.
+
+**Only a process that can recompute an image's identity may judge it dead — with one owner
+carve-out.** Reaping an image whose identity the code cannot recompute — another flavor's,
+another family's — is a defect, except `dlim_wipe` called from `gen_bench_records.das`: the
+board rigs own the model dirs for the whole batch (wipe behind the exe gate at start, delete
+after a model's last cell), so they delete without judging. Any other `dlim_wipe` caller is a
+defect. See `ARCHITECTURE.md` §2.1.
 
 **An image carries only what its flavor uses.** A plane the target platform or config never reads
 is not written — the mint decides that, not the load. A flavor takes its own file through
@@ -356,10 +362,12 @@ planes alongside its own is a defect.
 ## Documentation
 
 **A change to user-facing API checks every tutorial and document that touches it.** User-facing
-means anything a consumer outside this repo calls or types: exported facade functions, CLI
-flags, environment knobs, file formats, and their defaults. The check covers the tutorial
-`.das` sources, their `.rst` pages, and the module documentation; a tutorial or doc that still
-shows the old call, flag, or default is a defect of the change, not of the docs.
+means anything a consumer outside this repo calls or types — exported facade functions, CLI
+flags, environment knobs, file formats, and their defaults — plus the in-repo rig and tool CLI
+surface, whose runbooks are `BRINGUP.md`, `PROFILE.md`, `METHODOLOGY.md`, and `ARCHITECTURE.md`.
+The check covers the tutorial `.das` sources, their `.rst` pages, and the module documentation;
+a tutorial or doc that still shows the old call, flag, or default is a defect of the change,
+not of the docs.
 
 **A changed default is restated everywhere the old default was stated.** Every docstring, help
 string, and doc line that named the old value names the new one in the same diff.

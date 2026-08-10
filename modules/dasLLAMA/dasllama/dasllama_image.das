@@ -295,6 +295,31 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
     return r
 }
 
+//! The batch-lifecycle sink: delete EVERY image beside `gguf_path` (one model file, or a whole
+//! directory), regardless of verdict or lane — for rigs that own the model dirs for a whole
+//! batch. A direct dir scan on purpose: the wipe ignores identities, peeking would be waste.
+def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
+    var r = (removed = 0, freed = 0l)
+    var st : FStat
+    if (!stat(gguf_path, st)) {
+        return r
+    }
+    let dirp = st.is_dir ? gguf_path : dir_name(gguf_path)
+    // image names are "<carrier>.<identity>.dlim" — requiring the dot keeps the reach exact
+    // (wiping "foo.gguf" must not take "foo.gguf2"'s images)
+    let base = st.is_dir ? "" : "{base_name(gguf_path)}."
+    dir(dirp) $(name : string) {
+        return if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base))))
+        let full = path_join(dirp, name)
+        let sz = int64(stat(full).size)
+        if (remove(full)) {
+            r.removed++
+            r.freed += sz
+        }
+    }
+    return r
+}
+
 def pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page

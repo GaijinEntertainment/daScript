@@ -46,10 +46,12 @@ The tuner is the detector, so the human never has to be. For a box with existing
    box state; scattered past-floor flips = one of the mints was noisy; same-direction twin
    flips = an estimator change.
    Measured on the M1 (2026-08-02): 886 s total — 72 s build, 732 s paranoid tune, 73 s rebuild.
-3. **Pre-bake images** (section 4), then **run the oracle set — LLM and audio — plus one big
-   known-good model on CPU** (sections 5's oracle mode). Human + AI review of the board;
-   anything out of the ordinary = stop and discuss. A FAIL after a re-mint is either a real
-   regression or a generation change — the crossgen gate names which.
+3. **Run the oracle set — LLM and audio — plus one big known-good model on CPU** (section 5's
+   oracle mode). The board owns its image lifecycle (wipe at start, bake per cell, delete after
+   each model — `PROFILE.md`), so no pre-bake step precedes it; section 4 stays for converter
+   workflows. Human + AI review of the board; anything out of the ordinary = stop and discuss.
+   A FAIL after a re-mint is either a real regression or a generation change — the crossgen
+   gate names which.
 
    **Any dasLLAMA source edit between here and the sweep invalidates the exe** — it bakes both
    the sources and the tune winners, so the rig refuses a stale one and prints the rebuild line.
@@ -107,7 +109,8 @@ not going through `daspkg release`:
 DAS_TUNE_MODE=tune bin/daslang modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo> [-- --tune-paranoid]
 ```
 
-Order: build → mint → pre-bake → sweep.
+Order: build → mint → sweep (the board bakes its own images; pre-bake is for §4 converter
+workflows).
 
 ## 1. daslang
 
@@ -190,11 +193,12 @@ different bytes — fix it (usually the box's ffmpeg decoded hp0 differently: co
 `hp0x2.wav` from a manifest-clean box), never waive it. `--libri` adds the 25-clip LibriSpeech
 set (Parakeet-v3 dictation stats; ~350 MB one-time fetch).
 
-## 4. Pre-bake the images
+## 4. Pre-bake the images (converter workflows — the board sweeps bake their own)
 
-Sweeps run on pre-baked `.dlim` images — the converter streams the transcode (far lower peak
-memory than an in-load conversion), and every das cell then maps instead of converting, which
-removes the cold-map variance the tripwire otherwise fights. Bake AFTER the first tuned run
+The board rigs wipe, bake, and delete images themselves (`PROFILE.md`, image lifecycle) — this
+section is for CONVERTER workflows: parity probes, by-hand image work, serving a model outside
+a sweep. The converter streams the transcode (far lower peak memory than an in-load
+conversion), and a das consumer then maps instead of converting. Bake AFTER the first tuned run
 exists (image identity is box- and knob-specific; the converter applies the box profile itself):
 
 **Bake the CATALOG, not the directory.** `for m in <models-dir>/*.gguf` bakes every file
@@ -283,8 +287,9 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
 
 - GATE 1 — llama.cpp never re-measures: no ref runs, ref binaries not even required.
 - GATE 2 — one das pass per row. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
-- GATE 3 — frozen artifacts: the child runs `lcpp_bench --frozen` (a missing `.dlim` panics
-  instead of minting), step-zero GC is skipped, and the store is never written.
+- GATE 3 — the timed cell is frozen: the batch starts with the lifecycle wipe, a prepare pass
+  bakes each cell's image, and the timed child runs `lcpp_bench --frozen` (it never converts);
+  the store is never written.
 - Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
   board. `-o substr` narrows to one model; ASR legs are excluded (their das cells are CPU-path).
 - A FAIL auto-triggers ONE solo re-run of that cell after `--oracle-retry-settle` seconds

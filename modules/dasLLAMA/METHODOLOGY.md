@@ -55,8 +55,8 @@ A box without an accelerated tier simply shows fewer categories.
   calls per clip in one amortized process and the per-clip bests sum. Load is excluded on
   every side, as everywhere.
 
-Model load is excluded everywhere. Sweeps run on pre-baked model images so first-load
-conversion cost cannot leak into a cold cell; a >3% coefficient of variation on a das cell
+Model load is excluded everywhere. Sweeps run on images the batch bakes itself (the lifecycle
+wipe/bake/delete in `PROFILE.md`) so first-load conversion cost cannot leak into a timed cell; a >3% coefficient of variation on a das cell
 triggers one warm re-run (page-cache churn from the previous process is the usual cause), and a
 cell that stays noisy is kept with its dispersion visible, not smoothed.
 
@@ -155,5 +155,5 @@ configurations still in active development. Measured rows are annotated, not del
 
 `modules/dasLLAMA/BRINGUP.md` is the box checklist: build, models, reference
 engines (scripted, pinned commits, locked venvs), corpus fetch with manifest verification,
-pre-bake, sweep. The sweep writes a per-box record store after every cell; the site renders
+sweep (the board bakes and deletes its own images). The sweep writes a per-box record store after every cell; the site renders
 from the merged stores. Every tool narrates its progress on stdout as it runs.
