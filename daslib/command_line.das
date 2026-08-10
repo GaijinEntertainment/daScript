@@ -7,6 +7,7 @@ module command_line shared public
 //! when a script or standalone executable needs to spawn daslang subprocesses.
 
 require strings
+require fio_core
 
 //! Returns the path to the daslang interpreter executable, derived from
 //! ``argv[0]``. When running interpreted (``daslang.exe script.das``),
@@ -37,5 +38,6 @@ def get_das_exe() : string {
     if (get_platform_name() == "windows") {
         result = replace(result, "/", "\\")
     }
+    if (!fexist(result)) return args[0]
     return result
 }
