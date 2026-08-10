@@ -355,16 +355,17 @@ def qm_tmp_args : array<VariablePtr> {
 }
 
 
-def qm_make_zero_const(call_name : string) : Expression? {
-    //! Create a zero-value ExprConst for the range first component.
+def qm_make_zero_const(call_name : string; at : LineInfo) : Expression? {
+    //! Create a zero-value ExprConst for the range first component, reporting at the
+    //! call it stands in for.
     //! range → 0, urange → 0u, range64 → 0l, urange64 → 0ul.
     if (call_name == "range") {
-        return new ExprConstInt(value = 0)
+        return new ExprConstInt(value = 0, at = at)
     } elif (call_name == "urange") {
-        return new ExprConstUInt(value = 0u)
+        return new ExprConstUInt(value = 0u, at = at)
     } elif (call_name == "range64") {
-        return new ExprConstInt64(value = 0l)
-    } elif (call_name == "urange64") return new ExprConstUInt64(value = 0ul)
+        return new ExprConstInt64(value = 0l, at = at)
+    } elif (call_name == "urange64") return new ExprConstUInt64(value = 0ul, at = at)
     return null
 }
 
@@ -955,15 +956,15 @@ def private qm_const_value_guard(at : LineInfo; cast_var : string; actual_var : 
 def private generate_synth_component(comp_rtti : string; synth_var : string; cast_var : string; field_name : string; var body : array<Expression?>&; at : LineInfo) {
     //! Synthesize a ``var synth = new ExprConstXxx(value = cast_var.value.field)`` so that the component can be fed through generate_match for tag handling.
     if (comp_rtti == "ExprConstInt") {
-        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstInt(value = $i(cast_var).value.$f(field_name)); })
+        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstInt(value = $i(cast_var).value.$f(field_name), at = $i(cast_var).at); })
     } elif (comp_rtti == "ExprConstUInt") {
-        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstUInt(value = $i(cast_var).value.$f(field_name)); })
+        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstUInt(value = $i(cast_var).value.$f(field_name), at = $i(cast_var).at); })
     } elif (comp_rtti == "ExprConstFloat") {
-        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstFloat(value = $i(cast_var).value.$f(field_name)); })
+        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstFloat(value = $i(cast_var).value.$f(field_name), at = $i(cast_var).at); })
     } elif (comp_rtti == "ExprConstInt64") {
-        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstInt64(value = $i(cast_var).value.$f(field_name)); })
+        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstInt64(value = $i(cast_var).value.$f(field_name), at = $i(cast_var).at); })
     } elif (comp_rtti == "ExprConstUInt64") {
-        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstUInt64(value = $i(cast_var).value.$f(field_name)); })
+        body |> push <| qmacro_expr(${ var $i(synth_var) = new ExprConstUInt64(value = $i(cast_var).value.$f(field_name), at = $i(cast_var).at); })
     }
 }
 
@@ -1495,7 +1496,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         full_body |> push <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, 0); })
                         full_body |> push <| qmacro_expr(${ $i(child_var) = clone_expression($i(cast_var).arguments[$i(phys_full)]); })
                         var one_body : array<Expression?>
-                        one_body |> push <| qmacro_expr(${ $i(child_var) = qm_make_zero_const($v(call_name)); })
+                        one_body |> push <| qmacro_expr(${ $i(child_var) = qm_make_zero_const($v(call_name), $i(cast_var).at); })
                         // if (is_one_val) { child = zero } else { child = actual[0] }
                         var one_blk = new ExprBlock(at = at)
                         for (s in one_body) { one_blk.list |> emplace(s); }

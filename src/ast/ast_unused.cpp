@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_generate.h"
 
 namespace das {
 
@@ -945,6 +946,9 @@ namespace das {
                             if ( !expr->isGlobalVariable() || expr->variable->type->isConst() ) {
                                 reportFolding();
                                 auto cle = expr->variable->init->clone();
+                                // a C++-registered constant has no location, so the value
+                                // folded into this use reports where it was read
+                                stampMissingAt(cle, expr->at);
                                 if ( !cle->type ) {
                                     cle->type = new TypeDecl(*expr->variable->init->type);
                                 }

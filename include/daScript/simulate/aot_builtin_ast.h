@@ -540,6 +540,7 @@ namespace das {
     DAS_CC_API void for_each_generic ( Module * mod, const TBlock<void,Function *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_global ( Module * mod, const TBlock<void,Variable *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_gc_typedecl ( Module * mod, const TBlock<void,TypeDecl *> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void stampMissingAt ( const ExpressionPtr & expr, const LineInfo & at );
     DAS_CC_API void for_each_gc_expression ( Module * mod, const TBlock<void,Expression *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );

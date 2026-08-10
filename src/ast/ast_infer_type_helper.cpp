@@ -1186,7 +1186,11 @@ namespace das {
                     !var->block) {
                     if (variable->init->rtti_isConstant()) {
                         variable->access_fold = true;
-                        return variable->init->clone();
+                        auto folded = variable->init->clone();
+                        // a C++-registered constant has no location of its own, so the folded
+                        // value reports where it was used
+                        stampMissingAt(folded, expr->at);
+                        return folded;
                     } else if (constExprFolding.count(variable) == 0) {
                         // a const global's init EXPRESSION only folds in place when infer-time
                         // folding is on; under lint/IDE profiles (no_optimizations) it stays an

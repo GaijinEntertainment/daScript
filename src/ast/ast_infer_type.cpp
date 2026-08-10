@@ -621,7 +621,11 @@ namespace das {
             auto ivar = static_cast<ExprVar*>(var->init);
             if (ivar->isGlobalVariable() && ivar->variable->init && ivar->variable->init->rtti_isConstant()) {
                 reportAstChanged();
-                return ivar->variable->init->clone();
+                auto folded = ivar->variable->init->clone();
+                // the folded constant reports where it was read, since a C++-registered
+                // constant has no location of its own
+                stampMissingAt(folded, ivar->at);
+                return folded;
             }
         }
         if (disableInit && !var->init->rtti_isConstant()) {

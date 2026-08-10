@@ -874,7 +874,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
     panic("can't find name of enum value {eval} in {describe(info)}") if (name == "")
     return new ExprConstEnumeration(
         enumType := unsafe(reinterpret<Enumeration?>(info.enumType)),
-        value := name)
+        value := name, at = at)
 }
 
 def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {

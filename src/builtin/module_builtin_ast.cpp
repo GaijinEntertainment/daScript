@@ -1463,6 +1463,9 @@ namespace das {
             SideEffects::none, "ast_das_to_string")
                 ->args({"type","context","at"})->setTempStringResult();
         // clone
+        addExtern<DAS_BIND_FUN(stampMissingAt)>(*this, lib,  "stamp_missing_at",
+            SideEffects::modifyArgument, "stampMissingAt")
+                ->args({"expression","at"});
         addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
             SideEffects::none, "clone_expression")
                 ->arg("expression");

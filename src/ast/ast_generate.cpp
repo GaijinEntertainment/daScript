@@ -77,6 +77,16 @@ namespace das {
         }
     };
 
+    // A generated body is written for a source construct - the structure being finalized,
+    // the lambda being closed over - so every node in it reports at that construct. The
+    // generators set it on the function and the outer block; this fills in the rest, so a
+    // later diagnostic or profile row over generated code still points at real source.
+    void verifyGenerated ( const FunctionPtr & fn ) {
+        if ( !fn ) return;
+        stampMissingAt(fn->body, fn->at);
+        verifyGenerated(ExpressionPtr(fn->body));
+    }
+
     void verifyGenerated ( ExpressionPtr expr ) {
         (void)expr;
 #if LOG_GENERATED
@@ -391,7 +401,7 @@ namespace das {
             block->list.push_back(returnDecl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -431,7 +441,7 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -519,7 +529,7 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -591,7 +601,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(pFunc);
         }
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -652,7 +662,7 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         // wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -675,7 +685,7 @@ namespace das {
             cA->marked_used = true;
             pFunc->arguments.push_back(cA);
         }
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -752,7 +762,7 @@ namespace das {
             }
             return true;
         },"*");
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -1769,7 +1779,7 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1814,7 +1824,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1879,7 +1889,7 @@ namespace das {
         }
         if (topIf) block->list.push_back(topIf);
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1940,7 +1950,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1981,7 +1991,7 @@ namespace das {
         cl->arguments.push_back(rv);
         block->list.push_back(cl);
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -2107,6 +2117,26 @@ namespace das {
         return enc.enclosure;
     }
 
+    // A subtree materialized from a declaration that has no location of its own - a default
+    // argument of a C++ binding, say - reports at the site it was inserted into, so every
+    // later diagnostic, profile row and debug-info entry over it points at real source.
+    class StampMissingAtVisitor : public Visitor {
+    public:
+        StampMissingAtVisitor ( const LineInfo & a ) : at(a) {}
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( !expr->at.fileInfo ) expr->at = at;   // no file means no location, whatever line it carries
+        }
+        LineInfo at;
+    };
+
+    void stampMissingAt ( const ExpressionPtr & expr, const LineInfo & at ) {
+        if ( !expr || !at.fileInfo ) return;
+        StampMissingAtVisitor vis(at);
+        expr->visit(vis);
+    }
+
     void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit, bool isConstant ) {
         // first argument is this
         auto argT = new TypeDecl(baseClass);
@@ -2138,7 +2168,7 @@ namespace das {
         func->isClassMethod = true;
         func->classParent = baseClass;
         DAS_ASSERT(func->classParent);
-        verifyGenerated(func->body);
+        verifyGenerated(func);
     }
 
     FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method ) {
@@ -2201,7 +2231,7 @@ namespace das {
         block->list.push_back(returnDecl);
         // and done
         func->body = block;
-        verifyGenerated(func->body);
+        verifyGenerated(func);
         return func;
     }
 
@@ -2277,7 +2307,7 @@ namespace das {
         edel->alwaysSafe = true;
         block->list.push_back(edel);
         // and done
-        verifyGenerated(func->body);
+        verifyGenerated(func);
         return func;
     }
 
