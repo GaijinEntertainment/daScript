@@ -15,8 +15,12 @@ require math
 require daslib/defer
 
 
+// !is and !as are deliberately NOT templates: template matching has no word boundary, so
+// they would steal the prefix of `!is_unary`-style unary-not expressions. They format fine
+// as `!` + keyword. `!?as` IS a template - `!?as<letter>` cannot appear in valid source, and
+// without it the `?` gets spaced apart (`! ?as`), breaking the token
 let sorted_tokens_source <- fixed_array("<<<=", ">>>=", "!?as",
-    "<<=", ">>=", "&&=", "||=", "^^=", "<<<", ">>>", "!?.", "!?[", "!??", "!is", "!as",
+    "<<=", ">>=", "&&=", "||=", "^^=", "<<<", ">>>", "!?.", "!?[", "!??",
     "::", "+=", "-=", "/=", "*=", "%=", "|=", "&=", "^=", "<<", ">>", "++", "--", "<=", ">=", "==",
     "!=", "->", "<-", "??", "?.", "?[", "<|", "|>", ":=", "=>", "@@", "&&", "||", "^^",
     "%%", "!.", "!["
@@ -225,7 +229,7 @@ def push_token(var ctx : FormatterCtx; from_char_idx, to_char_idx, space_count, 
 }
 
 
-def parse_token(var ctx : FormatterCtx) {
+def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat token-class dispatch; splitting would hide the shape
     ctx |> skip_spaces()
     if (ctx.eof) {
         ctx.tokens |> push(ctx.tokens[0])
@@ -583,7 +587,7 @@ def have_formatter_token(ctx : FormatterCtx; command : string) {
 }
 
 
-def mark_token_context(var ctx : FormatterCtx) {
+def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat per-token-kind context classifier; splitting would hide the shape
     // don't format  require / expect / label
     for (i in range(0, length(ctx.tokens) - 1)) {
         if (ctx |> new_line_before(i) && (ctx |> eq(i, "require") || ctx |> eq(i, "expect") || ctx |> eq(i, "label") || ctx |> eq(i, "include"))) {

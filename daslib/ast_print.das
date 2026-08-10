@@ -1115,7 +1115,7 @@ def add(a, b : int) {
 }
 
 [sideeffects, export, no_lint]
-def allExpr(arg : int) {
+def allExpr(arg : int) { // nolint:STYLE038 — coverage fixture: one of every expression node, flat by design
     //! Exercises all expression types for AST pretty-printer coverage.
     // ExprStringBuilder
     var sb = "arg = {arg}\n";
@@ -1131,7 +1131,7 @@ def allExpr(arg : int) {
     add(1, 2);
     // ExprNullCoalescing
     var exprAt <- pFoo1 ?? Foo(a = 1);
-    exprAt <- Foo(a = 2);
+    exprAt <- Foo(a = 2); // nolint:PERF030 — the move-assign shape itself is the printer coverage
     // ExprAt
     pFoo1.b[0] = pFoo2;
     // ExprSafeAt

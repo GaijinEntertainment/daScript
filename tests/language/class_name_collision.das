@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-require _finalize_collision_helper // nolint:STYLE030 — the name collision with its Doppel IS the test
+require _finalize_collision_helper
 
 // A class with the same name as a class in a required module. The generated
 // __finalize field init must pin to this module's Doppel'__finalize - the old
