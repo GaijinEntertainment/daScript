@@ -18,8 +18,6 @@ require strings
 require math
 require llvm/daslib/llvm_code public
 require llvm/daslib/llvm_jit_cli
-require daslib/option
-require daslib/result
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -63,7 +61,7 @@ def tune_mode() : string {
 //! The jit codegen tier this process resolved: `--jit-opt-level` CLI over `policies.jit_opt_level`.
 //! Compile-time — lets policy defaults key off the tier (winners are raced under O3 codegen,
 //! so an O0 run cannot represent them and must not block on the tuner to mint them).
-def public jit_cli_opt_level : int {
+def jit_cli_opt_level() : int {
     let r <- parse_args(type<JitCliOptions>)
     let cli = r |> unwrap_or_default
     return cli.opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)

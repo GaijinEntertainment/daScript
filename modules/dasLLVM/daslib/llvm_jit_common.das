@@ -944,7 +944,10 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
 
 // Offline AOT: emit a native object only, no linker step (jit_emit_object path).
 // use_host_cpu=false (default) targets a generic CPU so the .o is portable; true bakes host features.
+def public jit_sec(us : int) : double => double(us) / 1000000.0lf
+
 def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host_cpu : bool = false) {
+    // Codegen level 3 deliberate: shipped artifacts, no cache guard (ARCHITECTURE.md 1.2)
     with_default_target_machine(3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
@@ -966,12 +969,15 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         var phase_tm = ref_time_ticks()
-        LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        if (failed != 0) {
+            panic("write_dll: LLVMTargetMachineEmitToFile failed for {file}")
+        }
         let t_emit = get_time_usec(phase_tm)
         phase_tm = ref_time_ticks()
         let ok = create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "{linker_string}", true, link_whole_lib, debug_info)
         if (log_time) {
-            to_log(LOG_INFO, "LLVM JIT time: emit-obj {double(t_emit) / 1000000.0lf} link {double(get_time_usec(phase_tm)) / 1000000.0lf}\n")
+            to_log(LOG_INFO, "LLVM JIT time: emit-obj {jit_sec(t_emit)} link {jit_sec(get_time_usec(phase_tm))}\n")
         }
         if (!ok) {
             panic("write_dll: link failed for {out_path}")
@@ -980,9 +986,9 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
 }
 
 def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; use_host_cpu : bool; debug_info : bool = false) {
-    // Standalone exe: generic (redistributable) by default, but a local-use build carrying
-    // tuner-generated kernels targets the current box (use_host_cpu) so its host-specific IR
-    // (e.g. AVX2) can be legalized — the generic target aborts codegen on it otherwise.
+    // Standalone exe: generic (redistributable) by default; use_host_cpu targets the box so
+    // tuner-generated host-specific IR legalizes (the generic target aborts codegen on it).
+    // Codegen level 3 deliberate: shipped artifacts, no cache guard (ARCHITECTURE.md 1.2)
     with_default_target_machine(3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)

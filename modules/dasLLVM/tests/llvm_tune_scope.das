@@ -187,6 +187,14 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(!(l11 |> has("FAKE TUNER")))
     t |> success(l11 |> has("RESULT 6"))
 
+    // 12. DAS_TUNE_POLICY overrides the O0 default in the other direction too: env auto beats
+    //     the injected fallback — the tuner runs and the tuned tier serves
+    remove(autoSidecar)
+    var l12 : array<string>
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -jit \"{autoClient}\" -- --jit-opt-level=0", l12), 0)
+    t |> success(l12 |> has("FAKE TUNER ->"))
+    t |> success(l12 |> has("RESULT 7"))
+
     remove(sidecar)
     remove(autoSidecar)
     remove(aotOut)
@@ -204,4 +212,5 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     delete l9b
     delete l10
     delete l11
+    delete l12
 }

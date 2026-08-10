@@ -287,7 +287,28 @@ def reset_jit_globals_after_failure() {
     reset_codegen_accumulators()
 }
 
-def private jit_sec(us : int) : double => double(us) / 1000000.0lf
+// always-on summary (a silent multi-second jit is indistinguishable from a hang) + the
+// log_compile_time per-phase breakdown; both artifact paths report through here
+def private jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_level : int; tier_known : bool;
+                           log_time : bool; totalTime : int64;
+                           t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize : int) {
+    var tuneStamped = 0
+    for (fn in funcs) {
+        for (ann in fn.annotations) {
+            if (ann.annotation.name == "llvm_code" && find_arg(ann.arguments, "tune_suffix") is tString) {
+                tuneStamped++
+                break
+            }
+        }
+    }
+    let tuneTail = tuneStamped > 0 ? " incl {tuneStamped} tune-stamped" : ""
+    let tierTail = tier_known ? ", O{opt_level}" : ""
+    let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
+    to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompiled ? "codegen" : "cache"}{tierTail})\n")
+    if (log_time) {
+        to_log(LOG_INFO, "LLVM JIT time: hash {jit_sec(t_hash)} init {jit_sec(t_init)} declare {jit_sec(t_declare)} probe {jit_sec(t_probe)} irgen {jit_sec(t_irgen)} optimize {jit_sec(t_opt)} emit+link {jit_sec(t_emit)} install {jit_sec(t_install)} finalize {jit_sec(t_finalize)}\n")
+    }
+}
 
 //! Run the full JIT backend for an already-compiled & simulated program: collect the functions to
 //! JIT (honoring [jit]/[no_jit] and jit_all), content-address the DLL, generate and optimize IR,
@@ -430,14 +451,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // expects and those functions interpret at load (as Program::linkCppAot skips them).
     if (!empty(funcs) || emit_aot_object) {
         let totalTime = ref_time_ticks()
-        // Content-address the DLL: distinct (AST + codegen version + opt flags) → distinct files, same
-        // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
-        // jit_output_path or an exe keeps the user's path.
-        var dll_hash_basename : string
-        if (use_dll && config_out_path |> empty()) {
-            dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info, target_triple)
-            output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
-        }
         // the front end's log_compile_time option extends into the backend: per-phase wall below
         let log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
         var phase_tm = ref_time_ticks()
@@ -447,10 +460,21 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         var t_opt = 0
         var t_emit = 0
         var t_install = 0
+        // Content-address the DLL: distinct (AST + codegen version + opt flags) → distinct files, same
+        // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
+        // jit_output_path or an exe keeps the user's path.
+        var dll_hash_basename : string
+        if (use_dll && config_out_path |> empty()) {
+            dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info, target_triple)
+            output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
+        }
+        // the first aot-hash per function lands here (cached after) — cheap-looking cache hits hide in it
+        let t_hash = get_time_usec(phase_tm)
+        phase_tm = ref_time_ticks()
         // Pass target_triple so init_jit can pin the module data layout
-            // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
-            // sizes baked into GEP folding from the very first IR instruction).
-            init_jit(opt_level |> uint, target_triple, use_host_cpu)
+        // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
+        // sizes baked into GEP folding from the very first IR instruction).
+        init_jit(opt_level |> uint, target_triple, use_host_cpu)
         let t_init = get_time_usec(phase_tm)
 
         // "Debug Info Version" gates all !dbg metadata (absent -> silently stripped);
@@ -557,8 +581,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             t_irgen = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
             optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
-            t_opt = get_time_usec(phase_tm)
-            phase_tm = ref_time_ticks()
             if (dump_ir) {
                 // Let's remove unused attributes before we print IR.
                 var pmo = LLVMCreatePassBuilderOptions()
@@ -582,6 +604,9 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 reset_jit_globals_after_failure()
                 panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
             }
+            // optimize covers the passes plus the opt-in IR dump and the post-opt verify
+            t_opt = get_time_usec(phase_tm)
+            phase_tm = ref_time_ticks()
             if (compile_only) {
                 to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
             } elif (emit_aot_object) {
@@ -625,6 +650,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             unsafe {
                 delete g_str2v
             }
+            jit_log_report(funcs, true, opt_level, true, log_jit_time, totalTime,
+                t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, 0, 0)
             return true
         }
         if (use_dll) {
@@ -659,22 +686,12 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         set_jit_state(*ctx, result.dll, result.ee, result.ctx)
         let t_finalize = get_time_usec(phase_tm)
 
-        // always-on: a silent multi-second jit is indistinguishable from a hang (or from tune)
-        var tuneStamped = 0
-        for (fn in funcs) {
-            for (ann in fn.annotations) {
-                if (ann.annotation.name == "llvm_code" && find_arg(ann.arguments, "tune_suffix") is tString) {
-                    tuneStamped++
-                    break
-                }
-            }
-        }
-        let tuneTail = tuneStamped > 0 ? " incl {tuneStamped} tune-stamped" : ""
-        let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
-        to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompile_prog ? "codegen" : "cache"}, O{opt_level})\n")
-        if (log_jit_time) {
-            to_log(LOG_INFO, "LLVM JIT time: init {jit_sec(t_init)} declare {jit_sec(t_declare)} probe {jit_sec(t_probe)} irgen {jit_sec(t_irgen)} optimize {jit_sec(t_opt)} emit+link {jit_sec(t_emit)} install {jit_sec(t_install)} finalize {jit_sec(t_finalize)}\n")
-        }
+        // a pinned jit_output_path cache probe compares function hashes only (not opt level),
+        // so the tier label is asserted only when this run built the DLL or the content-addressed
+        // name (which folds opt_level) matched
+        let tier_known = recompile_prog || !empty(dll_hash_basename)
+        jit_log_report(funcs, recompile_prog, opt_level, tier_known, log_jit_time, totalTime,
+            t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize)
     }
     return true
 }

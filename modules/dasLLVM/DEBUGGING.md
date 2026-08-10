@@ -19,8 +19,9 @@ instrument anything, compile in anything, and emit any metadata we want.
     through that PDB with **function name + .das file:line** — `SymFromAddr` +
     `SymGetLineFromAddr64` were always called, they were just starved of data.
   - flag folds into the DLL cache hash; default path is byte-identical, no PDB.
-- **`--jit-opt-level=0..3`** — IR pass pipeline honors it. (Codegen-side target
-  machine in `write_dll` is still pinned at 3 — see roadmap.)
+- **`--jit-opt-level=0..3`** — IR pass pipeline honors it, and the DLL path's
+  codegen-side target machine follows it too (`write_dll` `codegen_opt_level`);
+  `write_exe` / AOT-object emission deliberately stay at 3 (shipped artifacts).
 - **`--jit-stack`** (`emit_prologue`) — logical daslang stack frame per generated
   function/block, the Prologue path that makes `Context::getStackWalk()` meaningful
   under JIT.
@@ -81,8 +82,6 @@ where the primary structures lie; the shadow buffer is the witness that doesn't.
   inlined stack instead of the outermost frame only.
 - **Block/lambda subprograms**: nested `make_block_function` visitors share the
   parent DIBuilder but emit no DISubprogram yet — block bodies have no line info.
-- **O0 all the way down**: `write_dll` pins the codegen-side target machine at
-  level 3; plumb the flag so `--jit-opt-level=0 --jit-debug` is a true debug build.
 - **Debug artifacts coexisting**: the stale-artifact GC keeps only the current
   hash-basename, so toggling `--jit-debug` relinks every time. Keep both flavors.
 
