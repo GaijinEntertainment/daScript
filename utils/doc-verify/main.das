@@ -256,6 +256,7 @@ def chunks_of(body : array<string>) : array<Chunk> {   // nolint:STYLE037 — fl
 struct Renamer {
     counts : table<string; int>
     aliases : table<string; string>
+    def_headers : table<string>   // exact-duplicate def headers rename; overloads keep the name
 }
 
 def is_ident_char(c : int) : bool {
@@ -277,22 +278,57 @@ let TYPE_KEYWORDS = ["class ", "struct ", "enum ", "variant ", "bitfield "]
 let TYPE_MODIFIERS = ["private ", "public ", "sealed ", "abstract ", "shared "]
 
 def type_decl_name(line : string) : string {
+    var mods : string
+    return type_decl_name_mods(line, mods)
+}
+
+def type_decl_name_mods(line : string; var mods : string&) : string {
+    mods = ""
     for (kw in TYPE_KEYWORDS) {
         continue if (!(line |> starts_with(kw)))
         var rest = trim(slice(line, length(kw)))
         var again = true
+        var mod_list : array<string>
         while (again) {
             again = false
             for (m in TYPE_MODIFIERS) {
                 if (rest |> starts_with(m)) {
+                    mod_list |> push(m)
                     rest = trim(slice(rest, length(m)))
                     again = true
                 }
             }
         }
+        mods = join(mod_list, "")
         return take_ident(rest)
     }
     return ""
+}
+
+// the def name for duplicate-header renaming; "" for operators and non-def lines
+def def_decl_name(line : string) : string {
+    return "" if (!(line |> starts_with("def ")))
+    var rest = trim(slice(line, length("def ")))
+    for (m in ["private ", "public ", "static ", "abstract ", "const "]) {
+        if (rest |> starts_with(m)) {
+            rest = trim(slice(rest, length(m)))
+        }
+    }
+    let name = take_ident(rest)
+    return name == "operator" ? "" : name
+}
+
+def def_header_key(line : string) : string {
+    var cut = length(line)
+    let b = find(line, "\{")
+    if (b >= 0) {
+        cut = min(cut, b)
+    }
+    let a = find(line, "=>")
+    if (a >= 0) {
+        cut = min(cut, a)
+    }
+    return trim(slice(line, 0, cut))
 }
 
 def var_decl_names(line : string) : array<string> {
@@ -385,6 +421,7 @@ def rename_line(var ren : Renamer; line : string) : string {
 
 struct DeclChunk {
     name : string
+    mods : string   // modifier words of the header; a differing set is a new example, not a merge
     lines : array<string>
 }
 
@@ -397,9 +434,36 @@ struct EmittedPage {
     files : array<string>
     checked : int
     skipped : int
+    fragments : int
     expects : array<RstBlock>
     require_lines : array<string>
     companion_backed : bool
+}
+
+def emit_alt_block(blk : RstBlock; hoists : array<string>; givens : array<string>; out_base : string; var files : array<string>) {
+    // `alt` compiles the block as its own program (hoists + givens + this block only) —
+    // the way to show an alternative spelling of a member the page program already has
+    var aseg = Segment()
+    var aren = Renamer()
+    seed_renamer(aren, givens)
+    var body := blk.body
+    mark_elisions(body)
+    var ahoists := hoists
+    let tag = "// --- alt block at rst:{blk.rst_line}"
+    for (chunk in chunks_of(body)) {
+        if (chunk.kind == "hoist") {
+            for (h in chunk.lines) {
+                let t = trim(h)
+                continue if (t == ELIDE)
+                ahoists |> push(t)
+            }
+        } elif (chunk.kind == "decl") {
+            append_decl(aseg, aren, chunk, tag)
+        } else {
+            append_stmts(aseg, aren, chunk, tag)
+        }
+    }
+    flush_segment(aseg, ahoists, givens, "{out_base}__alt_{blk.rst_line}.das", files)
 }
 
 def strip_comment(line : string) : string {
@@ -443,6 +507,20 @@ def companion_preamble(rst_path : string; root : string; pages_dir : string) : a
         if (t2 > 0) {
             cands |> push(path_join(fam_dir, slice(tail, 0, t2) + "-" + slice(tail, t2 + 1) + ".das"))
         }
+        // number-prefix fallback: the slug can differ entirely (sql_01_hello.rst
+        // vs tutorials/sql/01-version.das) — any companion sharing the number wins
+        var dig = 0
+        peek_data(tail) $(arr) {
+            for (c in arr) {
+                break if (!is_number(int(c)))
+                dig++
+            }
+        }
+        if (dig > 0) {
+            var globbed : array<string>
+            expand_glob(path_join(fam_dir, slice(tail, 0, dig) + "*.das"), globbed)
+            cands |> push_from(globbed)
+        }
     }
     if (length(base) > 2 && is_number(first_character(base))) {
         cands |> push(path_join(root, path_join("tutorials/language", base + ".das")))
@@ -474,16 +552,32 @@ def mark_elisions(var body : array<string>) {
 
 def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : string) {
     let header = chunk.lines[0]
-    let tname = type_decl_name(header)
+    var mods : string
+    let tname = type_decl_name_mods(header, mods)
+    // exact-duplicate def header = narrative re-declaration -> rename; overloads keep the name
+    if (empty(tname)) {
+        for (l in chunk.lines) {
+            let dname = def_decl_name(l)
+            continue if (empty(dname))
+            let hdr = def_header_key(l)
+            if (key_exists(ren.def_headers, hdr)) {
+                declare(ren, [dname])
+            } else {
+                ren.def_headers |> insert(hdr)
+            }
+            break
+        }
+    }
     var merge_idx = -1
     if (!empty(tname) && (ren.counts?[tname] ?? 0) > 0) {
-        // merge only when the body opens with an elision — "previous members here"
+        // merge only when the body opens with an elision — "previous members here" —
+        // AND the modifier set matches (a `sealed` re-declaration is a new example)
         for (i in range(1, length(chunk.lines))) {
             let t = trim(chunk.lines[i])
             continue if (empty(t))
             if (t == ELIDE) {
                 for (di in range(length(seg.decls))) {
-                    if (seg.decls[di].name == tname) {
+                    if (seg.decls[di].name == tname && seg.decls[di].mods == mods) {
                         merge_idx = di
                     }
                 }
@@ -514,7 +608,7 @@ def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : strin
         }
         return
     }
-    var dc = DeclChunk(name = tname)
+    var dc = DeclChunk(name = tname, mods = mods)
     dc.lines |> push(tag)
     for (l in chunk.lines) {
         continue if (trim(l) == ELIDE)
@@ -536,21 +630,49 @@ def append_stmts(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : stri
     seg.stmts |> push("")
 }
 
-def flush_segment(var seg : Segment; hoists : array<string>; givens : array<string>; out_base : string; seg_no : int; var files : array<string>) {
+def is_global_decl(line : string) : bool {
+    return (line |> starts_with("var ")) || (line |> starts_with("let "))
+}
+
+def seed_renamer(var ren : Renamer; givens : array<string>) {
+    for (g in givens) {
+        let tname = type_decl_name(g)
+        if (!empty(tname)) {
+            declare(ren, [tname])
+        } else {
+            declare(ren, var_decl_names(g))
+        }
+    }
+}
+
+def flush_segment(var seg : Segment; hoists : array<string>; givens : array<string>; fname : string; var files : array<string>) {
     return if (empty(seg.decls) && empty(seg.stmts))
     var out : array<string>
     out |> reserve(length(hoists) + length(seg.stmts) + 16)
+    // a `module X` line (hoisted from a block or given) must be the first declaration
     var seen : table<string>
-    for (h in hoists) {
-        continue if (key_exists(seen, h))
-        seen |> insert(h)
-        out |> push(h)
+    for (g in givens) {
+        if ((g |> starts_with("module ")) && !key_exists(seen, g)) {
+            seen |> insert(g)
+            out |> push(g)
+        }
+    }
+    for (hpass in range(2)) {
+        for (h in hoists) {
+            continue if ((h |> starts_with("module ")) != (hpass == 0) || key_exists(seen, h))
+            seen |> insert(h)
+            out |> push(h)
+        }
     }
     out |> push("")
     var given_stmts : array<string>
     for (g in givens) {
-        if (is_decl_start(g) || is_hoist(g)) {
-            out |> push(g)
+        continue if (g |> starts_with("module "))
+        if (is_decl_start(g) || is_hoist(g) || is_global_decl(g)) {
+            // var/let givens become globals: page-wide context (a finalizer counter,
+            // a db handle) that block parameters may legally shadow. `inscope` is
+            // statement-only grammar — drop it on the way to module scope
+            out |> push(replace(g, " inscope ", " "))
         } else {
             given_stmts |> push("    " + g)
         }
@@ -564,7 +686,6 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
         out |> push_from(given_stmts, seg.stmts)
         out |> push("\}")
     }
-    let fname = seg_no == 0 ? "{out_base}.das" : "{out_base}__{seg_no + 1}.das"
     fwrite(fname, join(out, "\n") + "\n")
     files |> push(fname)
     // clear, NOT delete: these arrays hold borrowed string pointers (rename_line
@@ -586,23 +707,35 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     }
     var seg = Segment()
     var ren = Renamer()
+    seed_renamer(ren, page.givens)
     var seg_no = 0
     let out_base = path_join(path_join(cfg.out, "pages"), stem(page.path) + "_doc")
     for (blk in page.blocks) {
-        if (blk.marker == "skip" || blk.marker == "signatures") {
+        if (blk.marker == "skip" || blk.marker == "signatures" || blk.marker == "fragment") {
             em.skipped++
+            if (blk.marker == "fragment") {
+                em.fragments++
+            }
             continue
         }
         if (blk.marker == "expect") {
             em.expects |> push_clone(blk)
             continue
         }
+        if (blk.marker == "alt") {
+            em.checked++
+            emit_alt_block(blk, hoists, page.givens, out_base, em.files)
+            continue
+        }
         if (blk.marker == "fresh") {
-            flush_segment(seg, hoists, page.givens, out_base, seg_no, em.files)
+            let fname = seg_no == 0 ? out_base + ".das" : "{out_base}__{seg_no + 1}.das"
+            flush_segment(seg, hoists, page.givens, fname, em.files)
             seg_no++
             // clear, not delete: key strings may alias page lines (identity slices)
             ren.counts |> clear()
             ren.aliases |> clear()
+            ren.def_headers |> clear()
+            seed_renamer(ren, page.givens)
         }
         em.checked++
         var body := blk.body
@@ -625,7 +758,8 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
             }
         }
     }
-    flush_segment(seg, hoists, page.givens, out_base, seg_no, em.files)
+    let last_fname = seg_no == 0 ? out_base + ".das" : "{out_base}__{seg_no + 1}.das"
+    flush_segment(seg, hoists, page.givens, last_fname, em.files)
     for (h in hoists) {
         if (h |> starts_with("require ")) {
             em.require_lines |> push(h)
@@ -659,6 +793,7 @@ struct PageReport {
     das_blocks : int
     checked : int
     skipped : int
+    fragments : int
     expect_checked : int
     companion_backed : bool
     errors : array<string>
@@ -774,6 +909,7 @@ def report_page(page_path : string; cfg : Config) : PageReport {
     var em <- emit_page(page, cfg)
     rep.checked = em.checked
     rep.skipped = em.skipped
+    rep.fragments = em.fragments
     rep.companion_backed = em.companion_backed
     rep.status = "green"
     for (f in em.files) {
@@ -783,8 +919,16 @@ def report_page(page_path : string; cfg : Config) : PageReport {
             rep.errors |> push_from(first_lines(out, 24))
         }
     }
-    if (rep.status == "green" && !empty(em.files)) {
-        check_expects(em, cfg, em.files[0], rep)
+    // expects append to the main page program, not an alt program
+    var expect_base = ""
+    for (f in em.files) {
+        if (find(f, "__alt_") < 0) {
+            expect_base = f
+            break
+        }
+    }
+    if (rep.status == "green" && !empty(expect_base)) {
+        check_expects(em, cfg, expect_base, rep)
     }
     return <- rep
 }
