@@ -188,9 +188,11 @@ def notify(title: str, message: str, error: bool = False) -> None:
     else:
         return
     try:
-        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        helper = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
-        pass
+        return
+    # Reap the short-lived helper so it never sits as a POSIX zombie between notifications.
+    threading.Thread(target=helper.wait, name="notify-reaper", daemon=True).start()
 
 
 class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
