@@ -17,6 +17,7 @@ require daslib/clargs
 require strings
 require math
 require llvm/daslib/llvm_code public
+require llvm/daslib/llvm_jit_cli
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -55,6 +56,15 @@ require llvm/daslib/llvm_code public
 def tune_mode() : string {
     let m = get_env_variable("DAS_TUNE_MODE")
     return empty(m) ? "normal" : m
+}
+
+//! The jit codegen tier this process resolved: `--jit-opt-level` CLI over `policies.jit_opt_level`.
+//! Compile-time — lets policy defaults key off the tier (winners are raced under O3 codegen,
+//! so an O0 run cannot represent them and must not block on the tuner to mint them).
+def jit_cli_opt_level() : int {
+    let r <- parse_args(type<JitCliOptions>)
+    let cli = r |> unwrap_or_default
+    return cli.opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)
 }
 
     //! True when this compile must stay stamp-free: `policies.tune_frozen` (the cross-box
@@ -1908,7 +1918,9 @@ class private TuneDefaultPolicy : AstPassMacro {
             // standalone build: no policy, but the artifact self-reports its stamps
             emit_status_init(errs)
         } else {
-            ok = apply_tune_policy(main_fn, "auto", errs)
+            // O0 cannot represent winners raced under O3 - default fallback (DAS_TUNE_POLICY wins)
+            let flavor = jit_cli_opt_level() == 0 ? "fallback" : "auto"
+            ok = apply_tune_policy(main_fn, flavor, errs)
         }
         if (!ok || !empty(errs)) {
     // macro_error mid-infer-pass is dropped by the retry loop — print + panic actually stops it

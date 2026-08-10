@@ -363,8 +363,9 @@ planes alongside its own is a defect.
 
 **A change to user-facing API checks every tutorial and document that touches it.** User-facing
 means anything a consumer outside this repo calls or types — exported facade functions, CLI
-flags, environment knobs, file formats, and their defaults — plus the in-repo rig and tool CLI
-surface, whose runbooks are `BRINGUP.md`, `PROFILE.md`, `METHODOLOGY.md`, and `ARCHITECTURE.md`.
+flags, environment knobs, file formats, and their defaults — plus the in-repo rig and tool
+surface: its flags, its inputs, and any output another tool parses (console-only diagnostics
+are out of scope); the runbooks are `BRINGUP.md`, `PROFILE.md`, `METHODOLOGY.md`, and `ARCHITECTURE.md`.
 The check covers the tutorial `.das` sources, their `.rst` pages, and the module documentation;
 a tutorial or doc that still shows the old call, flag, or default is a defect of the change,
 not of the docs.
