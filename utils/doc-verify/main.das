@@ -282,7 +282,7 @@ def take_ident(s : string) : string {
 }
 
 let TYPE_KEYWORDS = ["class ", "struct ", "enum ", "variant ", "bitfield ", "tuple ", "typedef "]
-let TYPE_MODIFIERS = ["private ", "public ", "sealed ", "abstract ", "shared "]
+let TYPE_MODIFIERS = ["private ", "public ", "sealed ", "abstract ", "shared ", "distinct "]
 
 def type_decl_name(line : string) : string {
     var mods : string
@@ -310,6 +310,19 @@ def type_decl_name_mods(line : string; var mods : string&) : string {
         return take_ident(rest)
     }
     return ""
+}
+
+// a def with an untyped parameter segment is a GENERIC — contract annotations then
+// participate in overload resolution, so annotated same-header generics are distinct
+def def_is_generic(line : string) : bool {
+    let open = find(line, '(')
+    return false if (open < 0)
+    let close = find(line, ')')
+    return false if (close <= open + 1)
+    for (seg in split(slice(line, open + 1, close), ";")) {
+        return true if (find(seg, ':') < 0)
+    }
+    return false
 }
 
 // the def name for duplicate-header renaming; "" for operators and non-def lines
@@ -644,27 +657,40 @@ def mark_elisions(var body : array<string>) {
     }
 }
 
+// duplicate exact def headers rename; overloads keep the name. For GENERICS the
+// annotations join the identity (contracts participate in overload resolution),
+// so annotated same-header generics are distinct, not duplicates
+def register_def_header(var ren : Renamer; chunk : Chunk) {
+    var ann_parts : array<string>
+    for (l in chunk.lines) {
+        let t = trim(l)
+        if ((t |> starts_with("[")) || (t |> starts_with("@"))) {
+            ann_parts |> push(t)
+            continue
+        }
+        let dname = def_decl_name(l)
+        continue if (empty(dname))
+        let hdr = (def_is_generic(l) ? join(ann_parts, "") : "") + def_header_key(l)
+        if (key_exists(ren.def_headers, hdr)) {
+            declare(ren, [dname])
+        } else {
+            ren.def_headers |> insert(hdr)
+            // claim generation 1 so the FIRST duplicate already aliases to __2
+            if ((ren.counts?[dname] ?? 0) == 0) {
+                declare(ren, [dname])
+            }
+        }
+        break
+    }
+}
+
 def append_decl(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : string) {
     let header = chunk.lines[0]
     var mods : string
     let tname = type_decl_name_mods(header, mods)
     // exact-duplicate def header = narrative re-declaration -> rename; overloads keep the name
     if (empty(tname)) {
-        for (l in chunk.lines) {
-            let dname = def_decl_name(l)
-            continue if (empty(dname))
-            let hdr = def_header_key(l)
-            if (key_exists(ren.def_headers, hdr)) {
-                declare(ren, [dname])
-            } else {
-                ren.def_headers |> insert(hdr)
-                // claim generation 1 so the FIRST duplicate already aliases to __2
-                if ((ren.counts?[dname] ?? 0) == 0) {
-                    declare(ren, [dname])
-                }
-            }
-            break
-        }
+        register_def_header(ren, chunk)
     }
     var merge_idx = -1
     if (!empty(tname) && (ren.counts?[tname] ?? 0) > 0) {
