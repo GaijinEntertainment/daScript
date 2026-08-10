@@ -4,6 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.c
 options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
 options _function_length = 0   // same
 options _ascii_strings = false   // the bench report is human-facing: the markdown/console rows print the mean +- sd with a real plus-minus sign
+options log_compile_time = true   // front-end compile wall + the jit backend's per-phase breakdown (llvm_jit_run reads the same option)
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)

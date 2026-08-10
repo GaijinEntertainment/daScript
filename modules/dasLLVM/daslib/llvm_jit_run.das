@@ -35,7 +35,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4bul   // block annotationData resolved via jit_ad_by_sid instead of a baked glob (0x4a: shuffle: native aarch64 tbl1 arm + lattice >> lowering)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4cul   // write_dll's target machine follows --jit-opt-level (was pinned 3) - non-O3 DLL codegen changed (0x4b: block annotationData via jit_ad_by_sid)
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -287,6 +287,8 @@ def reset_jit_globals_after_failure() {
     reset_codegen_accumulators()
 }
 
+def private jit_sec(us : int) : double => double(us) / 1000000.0lf
+
 //! Run the full JIT backend for an already-compiled & simulated program: collect the functions to
 //! JIT (honoring [jit]/[no_jit] and jit_all), content-address the DLL, generate and optimize IR,
 //! and emit a .dll / .exe / .wasm per the program's jit policies. Returns true.
@@ -436,10 +438,20 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info, target_triple)
             output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
         }
+        // the front end's log_compile_time option extends into the backend: per-phase wall below
+        let log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
+        var phase_tm = ref_time_ticks()
+        var t_declare = 0
+        var t_probe = 0
+        var t_irgen = 0
+        var t_opt = 0
+        var t_emit = 0
+        var t_install = 0
         // Pass target_triple so init_jit can pin the module data layout
             // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
             // sizes baked into GEP folding from the very first IR instruction).
             init_jit(opt_level |> uint, target_triple, use_host_cpu)
+        let t_init = get_time_usec(phase_tm)
 
         // "Debug Info Version" gates all !dbg metadata (absent -> silently stripped);
         // "CodeView" flips COFF debug emission from DWARF to CodeView so lld-link
@@ -474,6 +486,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         unsafe {
             delete fake_visitor
         }
+        t_declare = get_time_usec(phase_tm) - t_init
+        phase_tm = ref_time_ticks()
         var g_dynamic_lib_handle : DLLHandle? = null;
         var recompile_prog = true
         if (use_dll) {
@@ -488,6 +502,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 to_log(LOG_INFO, "LLVM JIT: DLL cache hit {output_path}.dll\n")
             }
         }
+        t_probe = get_time_usec(phase_tm)
+        phase_tm = ref_time_ticks()
         var jit_has_externals = false
         if (recompile_prog) {
             for (fun in funcs) {
@@ -538,7 +554,11 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }
+            t_irgen = get_time_usec(phase_tm)
+            phase_tm = ref_time_ticks()
             optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
+            t_opt = get_time_usec(phase_tm)
+            phase_tm = ref_time_ticks()
             if (dump_ir) {
                 // Let's remove unused attributes before we print IR.
                 var pmo = LLVMCreatePassBuilderOptions()
@@ -577,7 +597,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info)
             } elif (use_dll) {
                 mkdir_rec(dir_name(output_path))
-                write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info)
+                write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, opt_level |> uint)
 
                 // Open just stored DLL, so we can keep working.
                 g_dynamic_lib_handle.reset()
@@ -591,6 +611,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 }
             }
         }
+        t_emit = get_time_usec(phase_tm)
+        phase_tm = ref_time_ticks()
         // Object emission is done; no live engine needed. finalize_jit teardown is skipped on
         // this early return, so dispose the engine init_jit created (owns g_mod) + the context
         // here, else LeakSanitizer flags MCJIT::createJIT.
@@ -627,16 +649,32 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 }
             }
         }
+        t_install = get_time_usec(phase_tm)
+        phase_tm = ref_time_ticks()
         // compile-only takes the exe-style teardown: dispose the engine/context outright,
         // never RunStaticConstructors on (or install from) a module that may target a
         // foreign arch.
         var result = finalize_jit(use_dll, gen_exe || compile_only, g_dynamic_lib_handle)
 
         set_jit_state(*ctx, result.dll, result.ee, result.ctx)
+        let t_finalize = get_time_usec(phase_tm)
 
         // always-on: a silent multi-second jit is indistinguishable from a hang (or from tune)
+        var tuneStamped = 0
+        for (fn in funcs) {
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == "llvm_code" && find_arg(ann.arguments, "tune_suffix") is tString) {
+                    tuneStamped++
+                    break
+                }
+            }
+        }
+        let tuneTail = tuneStamped > 0 ? " incl {tuneStamped} tune-stamped" : ""
         let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
-        to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec{recompile_prog ? " (codegen)" : " (cache)"}\n")
+        to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompile_prog ? "codegen" : "cache"}, O{opt_level})\n")
+        if (log_jit_time) {
+            to_log(LOG_INFO, "LLVM JIT time: init {jit_sec(t_init)} declare {jit_sec(t_declare)} probe {jit_sec(t_probe)} irgen {jit_sec(t_irgen)} optimize {jit_sec(t_opt)} emit+link {jit_sec(t_emit)} install {jit_sec(t_install)} finalize {jit_sec(t_finalize)}\n")
+        }
     }
     return true
 }

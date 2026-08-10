@@ -959,14 +959,20 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
 // @out_path - folder + file name, without extension. @path_to_dascript_lib - required on Windows,
 // no effect on Linux. @path_to_linker - linker override; Windows-MSVC defaults to lld-link (link.exe
 // flavor) from the LLVM package, c++/clang elsewhere.
-def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool = false) {
+def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool = false; log_time : bool = false; codegen_opt_level : uint = 3u) {
     // JIT DLL cache: emitted artifact only ever runs on this host.
-    with_default_target_machine(3u, true) $(targetMachine : LLVMTargetMachineRef) {
+    with_default_target_machine(codegen_opt_level, true) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        var phase_tm = ref_time_ticks()
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        let t_emit = get_time_usec(phase_tm)
+        phase_tm = ref_time_ticks()
         let ok = create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "{linker_string}", true, link_whole_lib, debug_info)
+        if (log_time) {
+            to_log(LOG_INFO, "LLVM JIT time: emit-obj {double(t_emit) / 1000000.0lf} link {double(get_time_usec(phase_tm)) / 1000000.0lf}\n")
+        }
         if (!ok) {
             panic("write_dll: link failed for {out_path}")
         }

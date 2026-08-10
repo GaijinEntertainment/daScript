@@ -50,7 +50,7 @@ def private has(lines : array<string>; needle : string) : bool {
 }
 
 [test]
-def test_llvm_tune_scope_policy(t : T?) {
+def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered policy-flavor arms over shared child-spawn state; no arm stands alone
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
 
@@ -178,6 +178,15 @@ def test_llvm_tune_scope_policy(t : T?) {
     t |> success(!(l10 |> has("FAKE TUNER")))
     t |> success(l10 |> has("RESULT 6"))
 
+    // 11. --jit-opt-level=0 flips the injected DEFAULT to fallback (winners are raced under
+    //     O3 codegen — an O0 run must not block on the tuner to mint them): no tuning,
+    //     fallback stamps, same RESULT 6 as the env kill switch
+    remove(autoSidecar)
+    var l11 : array<string>
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -jit \"{autoClient}\" -- --jit-opt-level=0", l11), 0)
+    t |> success(!(l11 |> has("FAKE TUNER")))
+    t |> success(l11 |> has("RESULT 6"))
+
     remove(sidecar)
     remove(autoSidecar)
     remove(aotOut)
@@ -194,4 +203,5 @@ def test_llvm_tune_scope_policy(t : T?) {
     delete l9
     delete l9b
     delete l10
+    delete l11
 }
