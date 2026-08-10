@@ -169,6 +169,19 @@ test('verdict: a page error fails the row', () => {
     assert.match(v.detail, /page error/);
 });
 
+test('verdict: the ignore list covers page errors too', () => {
+    // Emscripten's blocking-on-main-thread advisory arrives as console.error while
+    // the sample runs fine — a threaded sample's row ignores it by pattern.
+    const spec = { ...P.resolveSpec(TABLE, 'Gfx').spec, ignore: ['^Blocking on the main thread is very dangerous'] };
+    const alive = { rafs: 60, draws: 60, lines: [] };
+    const ignored = P.verdict(spec, { ...alive, pageErrors: [
+        'Blocking on the main thread is very dangerous, see https://emscripten.org/docs/porting/pthreads.html#blocking-on-the-main-browser-thread',
+    ] });
+    assert.equal(ignored.status, 'PASS');
+    const other = P.verdict(spec, { ...alive, pageErrors: ['TypeError: x is not a function'] });
+    assert.equal(other.status, 'FAIL');
+});
+
 test('driftWarnings reports both directions and never fails', () => {
     const rows = P.driftWarnings(['a', 'b'], ['b', 'c']);
     assert.deepEqual(rows.map((r) => `${r.name}:${r.status}`), ['a:WARN', 'c:WARN']);

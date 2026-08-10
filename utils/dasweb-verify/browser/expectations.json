@@ -34,7 +34,10 @@
     "Game: Pac-Man (3D, arrow keys + space)": {},
     "ImGui: Fourier Series (epicycles)": {},
     "Path Tracer Lab (jobque + threads + GPU)": { "budget_ms": 120000, "min_rafs": 10, "min_draws": 3 },
-    "Physarum Lab (threads + audio)": { "budget_ms": 90000, "min_rafs": 15, "min_draws": 5 },
+    "Physarum Lab (threads + audio)": {
+      "budget_ms": 90000, "min_rafs": 15, "min_draws": 5,
+      "ignore": ["^Blocking on the main thread is very dangerous"]
+    },
 
     "Audio: sine beep": { "kind": "audio" },
     "Audio: strudel synth arpeggio": { "kind": "audio" },
