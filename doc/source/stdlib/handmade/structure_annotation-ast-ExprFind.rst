@@ -9,4 +9,5 @@ Name of the find expression
 Arguments of the find expression
 Whether the arguments failed to infer types
 Whether the last argument was attached via trailing pipe
+Type substituted for the alias while a generic instantiates; only set during inference
 Location of the enclosure where the find is used

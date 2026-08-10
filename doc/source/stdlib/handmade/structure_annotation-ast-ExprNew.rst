@@ -9,6 +9,7 @@ Name of the new expression
 List of arguments passed to the constructor
 Whether any arguments failed to infer their types
 Whether the last argument was attached via trailing pipe
+Type substituted for the alias while a generic instantiates; only set during inference
 Location of the expression in source code
 Pointer to the constructor function being called, if resolved
 Stack top at the point of call, if temporary variable allocation is needed

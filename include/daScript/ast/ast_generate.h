@@ -16,6 +16,7 @@ namespace das {
 
     // make sure generated code contains line information etc
     void verifyGenerated ( ExpressionPtr expr );
+    void verifyGenerated ( const FunctionPtr & fn );
 
     // make sure fake context and fake line info are pre-assigned
     void assignDefaultArguments ( Function * func );
@@ -30,6 +31,7 @@ namespace das {
 
     // gives combined region for all subexpressions
     DAS_CC_API LineInfo encloseAt ( ExpressionPtr expr );
+    DAS_CC_API void stampMissingAt ( const ExpressionPtr & expr, const LineInfo & at );
 
     // replaces all occurrences of block argument name
     void renameBlockArgument ( ExprBlock * block, const string & name, const string & newName );

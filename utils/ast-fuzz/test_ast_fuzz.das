@@ -42,6 +42,26 @@ def test_verifier_drops_a_null_vector_entry(t : T?) {
 }
 
 [test]
+def test_verifier_reports_an_aliased_type(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/ast-fuzz/selftest/alias.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "TypeDecl int const is aliased") >= 0,
+        "did not report the aliased type\n{out}")
+}
+
+// expr.type is not walked by the visitor, so this alias is only visible to the type
+// tree recorded from preVisitExpression
+[test]
+def test_verifier_reports_an_aliased_expression_type(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/ast-fuzz/selftest/alias_type.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "TypeDecl int (ExprConstInt.type) is aliased") >= 0,
+        "did not report the aliased expression type\n{out}")
+}
+
+[test]
 def test_ast_verify_clean_on_valid_code(t : T?) {
     var out : string
     let ec = run([BIN, "--ast-verify", "utils/ast-fuzz/selftest/cli_victim.das"], out, 60.0)

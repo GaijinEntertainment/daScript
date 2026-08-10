@@ -36,55 +36,23 @@ namespace das {
         return false;
     }
 
-#define VERIFY_GENERATED    0
 #define LOG_GENERATED       0
 
-    struct CheckLineInfoVisitor : Visitor {
-        virtual void preVisitExpression ( Expression * expr ) override {
-            Visitor::preVisitExpression(expr);
-            if ( expr->rtti_isFakeContext() || expr->rtti_isFakeLineInfo() ) return;
-            DAS_ASSERT(expr->at.column && expr->at.line);
-        }
-        virtual void preVisit ( Structure * var ) override {
-            Visitor::preVisit(var);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
-            Visitor::preVisitStructureField(var,decl,last);
-            DAS_ASSERT(decl.at.column && decl.at.line);
-        }
-        virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(expr,var,last);
-            DAS_ASSERT(var->at.column && var->at.line);
-            DAS_ASSERT(expr->atInit.line);
-        }
-        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
-            Visitor::preVisitGlobalLet(var);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisit ( Function * fn ) override {
-            Visitor::preVisit(fn);
-            DAS_ASSERT(fn->at.column && fn->at.line);
-            DAS_ASSERT(fn->atDecl.column && fn->atDecl.line);
-        }
-        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitArgument(fn, var, lastArg);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-            Visitor::preVisitBlockArgument(block, var, lastArg);
-            DAS_ASSERT(var->at.column && var->at.line);
-        }
-    };
+
+    // A generated body is written for a source construct - the structure being finalized,
+    // the lambda being closed over - so every node in it reports at that construct. The
+    // generators set it on the function and the outer block; this fills in the rest, so a
+    // later diagnostic or profile row over generated code still points at real source.
+    void verifyGenerated ( const FunctionPtr & fn ) {
+        if ( !fn ) return;
+        stampMissingAt(fn->body, fn->at);
+        verifyGenerated(ExpressionPtr(fn->body));
+    }
 
     void verifyGenerated ( ExpressionPtr expr ) {
         (void)expr;
 #if LOG_GENERATED
         LOG(LogLevel::trace) << "VERIFY:\n" << *expr << "\n";
-#endif
-#if VERIFY_GENERATED
-        CheckLineInfoVisitor vis;
-        expr->visit(vis);
 #endif
     }
 
@@ -391,7 +359,7 @@ namespace das {
             block->list.push_back(returnDecl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -431,7 +399,7 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -519,7 +487,7 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -591,7 +559,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(pFunc);
         }
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -652,7 +620,7 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         // wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -675,7 +643,7 @@ namespace das {
             cA->marked_used = true;
             pFunc->arguments.push_back(cA);
         }
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -752,7 +720,7 @@ namespace das {
             }
             return true;
         },"*");
-        verifyGenerated(pFunc->body);
+        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -829,6 +797,9 @@ namespace das {
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const safe_var_set & capt, const vector<CaptureEntry> & capture,
                                             const LineInfo & at, const LineInfo & captureAt, Program * thisProgram ) {
+        // captureAt is the explicit capture(...) clause; a lambda or comprehension without
+        // one has no such location, so its captures report at the construct that captures
+        const LineInfo & capAt = captureAt.fileInfo ? captureAt : at;
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
@@ -853,12 +824,12 @@ namespace das {
                 mode = it->mode;
             }
             if ( isCaptureAsRef(cV) || mode==CaptureMode::capture_by_reference ) {
-                auto varV = new ExprVar(captureAt, cV->name);
+                auto varV = new ExprVar(capAt, cV->name);
                 varV->generated = true;     // capture machinery; captureAt is zero-width for implicit captures
-                auto addrV = new ExprRef2Ptr(captureAt, varV);
+                auto addrV = new ExprRef2Ptr(capAt, varV);
                 addrV->generated = true;
                 addrV->alwaysSafe = true;
-                auto mV = new MakeFieldDecl(captureAt, cV->name, addrV, false, false);
+                auto mV = new MakeFieldDecl(capAt, cV->name, addrV, false, false);
                 ms->push_back(mV);
             } else {
                 bool moveS = false;
@@ -869,9 +840,9 @@ namespace das {
                     case CaptureMode::capture_any:          moveS = !cV->type->canCopy(); break;
                     default: ;
                 }
-                auto varV = new ExprVar(captureAt, cV->name);
+                auto varV = new ExprVar(capAt, cV->name);
                 varV->generated = true;     // capture machinery; captureAt is zero-width for implicit captures
-                auto mV = new MakeFieldDecl(captureAt, cV->name, varV, moveS, cloneS);
+                auto mV = new MakeFieldDecl(capAt, cV->name, varV, moveS, cloneS);
                 ms->push_back(mV);
             }
             auto & lexpr = ms->back();
@@ -1769,7 +1740,7 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1814,7 +1785,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1880,7 +1851,7 @@ namespace das {
         }
         if (topIf) block->list.push_back(topIf);
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1942,7 +1913,7 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -1983,7 +1954,7 @@ namespace das {
         cl->arguments.push_back(rv);
         block->list.push_back(cl);
         fn->body = block;
-        verifyGenerated(fn->body);
+        verifyGenerated(fn);
         return fn;
     }
 
@@ -2109,6 +2080,26 @@ namespace das {
         return enc.enclosure;
     }
 
+    // A subtree materialized from a declaration that has no location of its own - a default
+    // argument of a C++ binding, say - reports at the site it was inserted into, so every
+    // later diagnostic, profile row and debug-info entry over it points at real source.
+    class StampMissingAtVisitor : public Visitor {
+    public:
+        StampMissingAtVisitor ( const LineInfo & a ) : at(a) {}
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( !expr->at.fileInfo ) expr->at = at;   // no file means no location, whatever line it carries
+        }
+        LineInfo at;
+    };
+
+    void stampMissingAt ( const ExpressionPtr & expr, const LineInfo & at ) {
+        if ( !expr || !at.fileInfo ) return;
+        StampMissingAtVisitor vis(at);
+        expr->visit(vis);
+    }
+
     void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit, bool isConstant ) {
         // first argument is this
         auto argT = new TypeDecl(baseClass);
@@ -2140,7 +2131,7 @@ namespace das {
         func->isClassMethod = true;
         func->classParent = baseClass;
         DAS_ASSERT(func->classParent);
-        verifyGenerated(func->body);
+        verifyGenerated(func);
     }
 
     FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method ) {
@@ -2203,7 +2194,7 @@ namespace das {
         block->list.push_back(returnDecl);
         // and done
         func->body = block;
-        verifyGenerated(func->body);
+        verifyGenerated(func);
         return func;
     }
 
@@ -2283,7 +2274,7 @@ namespace das {
         edel->alwaysSafe = true;
         block->list.push_back(edel);
         // and done
-        verifyGenerated(func->body);
+        verifyGenerated(func);
         return func;
     }
 

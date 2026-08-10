@@ -289,3 +289,26 @@ diagnostic at the offending node: `daslang --ast-verify prog.das`, or from insid
 it reports so the scan finishes. It only knows shapes that crash the compiler, so silence is not
 proof; and a macro that re-breaks the same node every pass never converges — apply such a change
 once.
+
+It also enforces two invariants on anything a macro builds, and both are on by default:
+
+**Every node carries `at`** — the location of the source construct it stands for. Without one,
+every later diagnostic, profile row and debug entry over that node points at nothing. Pass it at
+construction, and thread an `at` through helpers that build nodes instead of defaulting it:
+
+```das
+var lit = new ExprConstInt(at = expr.at, value = 0)   // not new ExprConstInt(value = 0)
+```
+
+For a subtree you did not build node-by-node — a `$v()` value conversion, a clone whose source
+came from a native binding — `stamp_missing_at(subtree, at)` fills only the empty locations:
+
+```das
+var inner = new ExprOp2(op := "+",
+    left = new ExprConstInt(value = 20),
+    right = new ExprConstInt(value = 22))
+stamp_missing_at(inner, expr.at)                      // setting inner.at alone leaves the leaves blank
+```
+
+**A node has exactly one parent.** Inserting the same pointer twice makes every later pass edit it
+twice; use `clone_expression` / `clone_type` for the second use.

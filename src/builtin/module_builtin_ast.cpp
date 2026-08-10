@@ -503,6 +503,28 @@ namespace das {
         });
     }
 
+    // the gc chain is snapshot first, because the callback allocates (report strings, error
+    // nodes) and an allocation during compile links a fresh node into this very root
+    template <typename TT>
+    void for_each_gc_node_of_tag ( Module * mod, uint16_t tag, const TBlock<void,TT *> & block, Context * context, LineInfoArg * at ) {
+        if ( !mod ) context->throw_error_at(at, "expecting module");
+        vector<TT *> nodes;
+        for ( auto node = mod->module_gc_root->gc_first; node; node = node->gc_next ) {
+            if ( node->gc_type_tag() == tag ) nodes.push_back(static_cast<TT *>(node));
+        }
+        for ( auto node : nodes ) {
+            das_invoke<void>::invoke<TT *>(context,at,block,node);
+        }
+    }
+
+    void for_each_gc_typedecl ( Module * mod, const TBlock<void,TypeDecl *> & block, Context * context, LineInfoArg * at ) {
+        for_each_gc_node_of_tag<TypeDecl>(mod, GC_TAG_TYPEDECL, block, context, at);
+    }
+
+    void for_each_gc_expression ( Module * mod, const TBlock<void,Expression *> & block, Context * context, LineInfoArg * at ) {
+        for_each_gc_node_of_tag<Expression>(mod, GC_TAG_EXPRESSION, block, context, at);
+    }
+
     void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at ) {
         for (auto [k, v]: ordered(mod->annotationData)) {
             das_invoke<void>::invoke<uint64_t, uint64_t>(context,at,block,k, v);
@@ -1441,6 +1463,9 @@ namespace das {
             SideEffects::none, "ast_das_to_string")
                 ->args({"type","context","at"})->setTempStringResult();
         // clone
+        addExtern<DAS_BIND_FUN(stampMissingAt)>(*this, lib,  "stamp_missing_at",
+            SideEffects::modifyArgument, "stampMissingAt")
+                ->args({"expression","at"});
         addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
             SideEffects::none, "clone_expression")
                 ->arg("expression");
@@ -1535,6 +1560,12 @@ namespace das {
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_global)>(*this, lib,  "for_each_global",
             SideEffects::modifyExternal, "for_each_global")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_gc_typedecl)>(*this, lib,  "for_each_gc_typedecl",
+            SideEffects::modifyExternal, "for_each_gc_typedecl")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_gc_expression)>(*this, lib,  "for_each_gc_expression",
+            SideEffects::modifyExternal, "for_each_gc_expression")
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_annotation_ordered)>(*this, lib,  "for_each_annotation_ordered",
             SideEffects::modifyExternal, "for_each_annotation_ordered")

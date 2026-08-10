@@ -137,6 +137,19 @@ namespace das {
         }
     }
 
+    bool VisitorAdapter::canVisitQuoteSubexpression(ExprQuote *expr) {
+        if ( auto fnCanVisit = get_canVisitQuoteSubexpression(classPtr) ) {
+            bool result = false;
+            runMacroFunction(context, "canVisitQuoteSubexpression", [&]() {
+                result = invoke_canVisitQuoteSubexpression(context,fnCanVisit,classPtr,expr);
+            });
+            return result;
+        } else {
+            // absent method means base Visitor behavior, which is NOT to descend into a quote body
+            return false;
+        }
+    }
+
     bool VisitorAdapter::canVisitWithAliasSubexpression(ExprAssume *expr) {
         if ( auto fnCanVisit = get_canVisitWithAliasSubexpression(classPtr) ) {
             bool result = true;
@@ -2344,6 +2357,10 @@ namespace das {
         module->postInferMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
+    void addModulePostCompileMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->postCompileMacros.push_back(unique_ptr<PassMacro>(newM));
+    }
+
     void addModuleLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
         module->lintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
@@ -2685,6 +2702,9 @@ namespace das {
                 ->args({"module","annotation","context"});
         addExtern<DAS_BIND_FUN(addModulePostInferMacro)>(*this, lib,  "add_post_infer_macro",
             SideEffects::modifyExternal, "addModulePostInferMacro")
+                ->args({"module","annotation","context"});
+        addExtern<DAS_BIND_FUN(addModulePostCompileMacro)>(*this, lib,  "add_post_compile_macro",
+            SideEffects::modifyExternal, "addModulePostCompileMacro")
                 ->args({"module","annotation","context"});
         addExtern<DAS_BIND_FUN(addModuleLintMacro)>(*this, lib,  "add_lint_macro",
             SideEffects::modifyExternal, "addModuleLintMacro")

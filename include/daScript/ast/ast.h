@@ -1260,6 +1260,7 @@ namespace das
         vector<unique_ptr<PassMacro>>               preInferMacros;     // run before (re-)inference, on a possibly dirty tree
         vector<unique_ptr<PassMacro>>               postInferMacros;    // run once inference is done, before lint / folding / codegen
         vector<unique_ptr<PassMacro>>               lintMacros;         // lint macros (assume read-only)
+        vector<unique_ptr<PassMacro>>               postCompileMacros;  // run once the module is compiled and its gc root collected
         vector<unique_ptr<PassMacro>>               globalLintMacros;   // lint macros which work everywhere
         vector<unique_ptr<VariantMacro>>            variantMacros;      //  X is Y, X as Y expression handler
         vector<unique_ptr<ForLoopMacro>>            forLoopMacros;      // for loop macros (for every for loop)
@@ -1537,7 +1538,6 @@ namespace das
         bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
         bool        tune_frozen = false;                // never apply per-box [tune] stamps to this compile (cross-box artifacts: -aot generation, AST serialization)
         bool        paranoid_validation = false;        // todo
-        bool        validate_ast = false;               // validate AST after compilation (uniqueness, etc.)
         bool        cross_platform = false;             // aot supports platform independent mode
         string      aot_result;                         // Path where to store cpp-result of aot
     // End aot config
@@ -1755,7 +1755,6 @@ namespace das
         bool optimizationCSE(int32_t round);
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
-        void validateAst();
         bool inScopePodAnalysis(TextWriter & logs);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);

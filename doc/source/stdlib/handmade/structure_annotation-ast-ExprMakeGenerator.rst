@@ -9,6 +9,7 @@ Name of the AOT functor (if applicable)
 Arguments passed to the generator
 Whether arguments failed to infer
 Whether the last argument was attached via trailing pipe
+Type substituted for the alias while a generic instantiates; only set during inference
 Location of the enclosure
 Iterator type, i.e. type of values produced by the generated iterator
 List of captured variables

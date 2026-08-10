@@ -493,6 +493,12 @@ class SetupPostInferMacro : SetupAnyAnnotation {
     override annotation_function_call : string = "add_new_post_infer_macro"
 }
 
+class SetupPostCompileMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a post-compile macro: runs once the module is
+    //! compiled and its gc root collected, so every node it still owns is a live one.
+    override annotation_function_call : string = "add_new_post_compile_macro"
+}
+
 class SetupLintMacro : SetupAnyAnnotation {
     //! Registers annotated structure as a lint macro.
     override annotation_function_call : string = "add_new_lint_macro"
@@ -868,7 +874,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
     panic("can't find name of enum value {eval} in {describe(info)}") if (name == "")
     return new ExprConstEnumeration(
         enumType := unsafe(reinterpret<Enumeration?>(info.enumType)),
-        value := name)
+        value := name, at = at)
 }
 
 def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
@@ -1151,6 +1157,7 @@ def private setup {
         add_new_structure_annotation("optimization_macro", new SetupOptimizationMacro())
         add_new_structure_annotation("pre_infer_macro", new SetupPreInferMacro())
         add_new_structure_annotation("post_infer_macro", new SetupPostInferMacro())
+        add_new_structure_annotation("post_compile_macro", new SetupPostCompileMacro())
         add_new_structure_annotation("lint_macro", new SetupLintMacro())
         add_new_structure_annotation("global_lint_macro", new SetupGlobalLintMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())

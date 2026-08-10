@@ -1,0 +1,1 @@
+Fills the source location of every node in the expression subtree that has none, leaving the ones that already carry a location untouched. For macro code that builds or substitutes a subtree standing in for a source construct.

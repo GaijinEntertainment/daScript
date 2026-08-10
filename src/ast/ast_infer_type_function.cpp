@@ -540,6 +540,7 @@ namespace das {
         vector<ExpressionPtr> padded;
         for (int ai = p; ai != k; ++ai) {
             auto newArg = winner->arguments[ai]->init->clone();
+            stampMissingAt(newArg, expr->at);
             if (!newArg->type) {
                 // recursive resolve - same as the append-default path below
                 inInfer.push_back(winner);
@@ -794,6 +795,7 @@ namespace das {
                 continue;
             }
             auto def = pFn->arguments[s]->init->clone();
+            stampMissingAt(def, expr->at);
             if (!def->type) { // resolve a not-yet-inferred default, same as tryPipedCallPadding
                 inInfer.push_back(pFn);
                 def = def->visit(*this);
@@ -1232,6 +1234,7 @@ namespace das {
                 } else {
                     DAS_ASSERTF(fnArg->init, "somehow matched function, which does not match. can only skip defaults");
                     newCallArguments.push_back(fnArg->init->clone());
+                    stampMissingAt(newCallArguments.back(), expr->at);
                 }
                 fnArgIndex++;
             }
@@ -1243,6 +1246,7 @@ namespace das {
             auto &fnArg = pFn->arguments[fnArgIndex];
             DAS_ASSERTF(fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
             newCallArguments.push_back(fnArg->init->clone());
+            stampMissingAt(newCallArguments.back(), expr->at);
             fnArgIndex++;
         }
         return newCallArguments;
@@ -1807,6 +1811,7 @@ namespace das {
             // append default arguments
             for (size_t iT = expr->arguments.size(), iTs = funcC->arguments.size(); iT != iTs; ++iT) {
                 auto newArg = funcC->arguments[iT]->init->clone();
+                stampMissingAt(newArg, expr->at);
                 if (!newArg->type) {
                     // recursive resolve???
                     inInfer.push_back(funcC);

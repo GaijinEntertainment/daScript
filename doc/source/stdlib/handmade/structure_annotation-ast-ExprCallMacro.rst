@@ -9,6 +9,7 @@ Name of the macro being called
 List of argument expressions
 If the arguments failed to infer their types
 Whether the last argument was attached via trailing pipe
+Type substituted for the alias while a generic instantiates; only set during inference
 Location of the expression in source code
 The function this macro call appears in.
 Call macro, if resolved

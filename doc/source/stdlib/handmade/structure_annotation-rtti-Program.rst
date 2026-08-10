@@ -5,6 +5,7 @@ total number of functions in the program
 total number of variables in the program
 compilation errors and exceptions
 size of the global string heap
+whether a visitor walks builtin functions too
 initial semantic hash with dependencies
 program flags
 program options

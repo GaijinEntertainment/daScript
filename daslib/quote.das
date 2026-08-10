@@ -206,8 +206,8 @@ def private get_dst_type(src_tp : TypeDecl?) {
 }
 
 
-def private create_string_expr(name) {
-    return new ExprConstString(value := name);
+def private create_string_expr(name; at : LineInfo) {
+    return new ExprConstString(value := name, at = at);
 }
 
 def private fix_path_spelling(p : string) : string {
@@ -288,14 +288,14 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
 
 def private find_module_expr(name, at) {
      return new ExprCall(at = at, name := "get_module",
-                            arguments := array<Expression?>(create_string_expr(name)))
+                            arguments := array<Expression?>(create_string_expr(name, at)))
 }
 
 def private get_find_in_module_expr(fn_name; module_name; obj_name; at) {
      return new ExprCall(at = at, name := fn_name,
          arguments := array<Expression?>(
             find_module_expr(module_name, at),
-            create_string_expr(obj_name)
+            create_string_expr(obj_name, at)
          )
      )
 }
@@ -381,7 +381,7 @@ def private convert_pointer_expr(mod; data; info; at) : Expression? {
         }
         if (!empty(aliasName)) {
             return new ExprCall(at = at, name := "make_alias_type_decl",
-                arguments := array<Expression?>(create_string_expr(aliasName)));
+                arguments := array<Expression?>(create_string_expr(aliasName, at)));
         }
     }
     var final_type = clone_type(info.firstType);
@@ -433,7 +433,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     } elif (tstr == "rtti_core::Module") {
          assume cur_mod = unsafe(reinterpret<Module?>(data));
          return find_module_expr(cur_mod.name, at);
-    } elif (tstr == "$::das_string") return create_string_expr(*unsafe(reinterpret<das_string?>(data)));
+    } elif (tstr == "$::das_string") return create_string_expr(*unsafe(reinterpret<das_string?>(data)), at);
     // Convert pointers
     if (info.baseType == Type.tPointer) return convert_pointer_expr(mod, data, info, at);
     // Convert structures
@@ -455,7 +455,7 @@ def convert_quote_to_expression(var arg_expr : Expression?; at : LineInfo) : Exp
     assume annotation = mod |> module_find_type_annotation(arg_expr.__rtti);
     var tp = new TypeDecl(baseType = Type.tHandle, annotation = annotation);
     tp.flags.smartPtr = true;
-    return new ExprAscend(subexpr = convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr)), tp, at));
+    return new ExprAscend(subexpr = convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr)), tp, at), at = at);
 }
 
 class QuoteConverter : AstVisitor {

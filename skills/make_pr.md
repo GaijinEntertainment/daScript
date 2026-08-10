@@ -160,6 +160,27 @@ Skip this step for PRs that only touch tests, fixtures, or generated files.
 
 See `skills/detect_dupe.md` for the full workflow including B1 baseline / CI gate modes.
 
+## 1.6. AST verify — mandatory when the diff touches macros or AST building
+
+If the diff touches `daslib/*.das` macro code, a `[*_macro]` class, `utils/`
+macro tooling, or the compiler's AST generation / inference (`src/ast/*.cpp`),
+the tree must still verify clean:
+
+```bash
+# the files you changed, plus anything that requires them
+<daslang> --ast-verify -compile-only <changed .das files>
+# broader, when you touched daslib or src/ast: only an `AST verify` line is a failure
+find daslib tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \
+  | xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only
+```
+
+Expect **zero** `AST verify` lines — the tree is clean tree-wide, so any report is
+a bug in whatever built the node, not a pre-existing wart. The two invariants (a
+node carries the location of the construct it stands for; a node has exactly one
+parent) and the repair tools are in `skills/das_macros.md`. The full nightly sweep
+is not a PR gate (`skills/preflight.md`), which is exactly why this local run
+matters.
+
 ## 1.7. Workaround audit — read every changed file for hacks
 
 Before the functional gates, **read the whole diff** and ask of every change: *is this compensating for something that should already work?* A workaround is always more total work than asking — it spreads, gets copied, calcifies into fake-API, and later needs an audit to unwind. Catch it at PR time, in your own diff.
@@ -400,6 +421,7 @@ created it.
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
+| AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |

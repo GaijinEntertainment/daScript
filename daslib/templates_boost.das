@@ -242,6 +242,8 @@ class private TemplateVisitor : AstVisitor {
         }
         if (in_r2v_direct_var == 0 && key_exists(rules.var2expr, vn)) {
             var rexpr = clone_expression(unsafe(rules.var2expr[vn]))
+            // the whole subtree stands at the splice site, not just its root
+            stamp_missing_at(rexpr, expr.at)
             rexpr.at = expr.at
             return rexpr
         }
@@ -255,6 +257,7 @@ class private TemplateVisitor : AstVisitor {
             let vn = string(vvar.name)
             if (key_exists(rules.var2expr, vn)) {
                 var rexpr = clone_expression(unsafe(rules.var2expr[vn]))
+                stamp_missing_at(rexpr, expr.at)
                 rexpr.at = expr.at
                 return rexpr
             }
@@ -472,6 +475,10 @@ def move_unquote_block(var expr : Expression?&) : ExprBlock? {
 def make_expression_block(var exprs : array<Expression?>) : ExprBlock? {
     //! Create ExprBlock and move all expressions from expr to the list of the block.
     var blk = new ExprBlock(uninitialized)
+    // the block stands for the statements it holds, so it reports at the first of them
+    if (!empty(exprs) && exprs[0] != null) {
+        blk.at = exprs[0].at
+    }
     for (e in exprs) {
         blk.list |> emplace_new <| clone_to_move(e)
     }
@@ -481,6 +488,9 @@ def make_expression_block(var exprs : array<Expression?>) : ExprBlock? {
 def make_expression_block(var exprs : dasvector`ptr`Expression) : ExprBlock? {
     //! Create ExprBlock and move all expressions from expr to the list of the block.
     var blk = new ExprBlock(uninitialized)
+    if (!empty(exprs) && exprs[0] != null) {
+        blk.at = exprs[0].at
+    }
     for (e in exprs) {
         blk.list |> emplace_new <| clone_expression(e)
     }
@@ -885,7 +895,7 @@ class private QRulesVisitor : AstVisitor {
                 ))
         }
     }
-    def override visitExprTag(var expr : ExprTag?) : Expression? {
+    def override visitExprTag(var expr : ExprTag?) : Expression? { // nolint:STYLE037 nolint:STYLE038 - one arm per tag spelling, a dispatch ladder
         //! Visits tag expression and processes variable/expression/argument/call tags.
         var new_tag_name = ""
         if (expr.name == "c") {
@@ -1346,7 +1356,7 @@ class private AstQMethodMacro : AstQNamedClassMacro {
     override apply_call = "apply_qmacro_method"
 }
 
-def public apply_qmacro_template_class(instance_name : string; var template_type : TypeDecl?; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
+def public apply_qmacro_template_class(instance_name : string; var template_type : TypeDecl?; blk : block<(var rules : Template) : void>) : TypeDeclPtr { // nolint:STYLE038 - one linear reification pass, its phases share the instance state
     //! Implementation details for the expression reification. This is a template class instantiation reification.
     var mod = compiling_module()
     var template_structure = template_type.structType

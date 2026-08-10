@@ -89,6 +89,65 @@ def private is_enum_type(bt : Type) : bool {
         || bt == Type.tEnumeration16 || bt == Type.tEnumeration64)
 }
 
+// TypeDecl::dimConst sentinel (ast_typedecl.h); TypeDecl::visit walks fixedDimExpr for it
+let private DIM_CONST = -2
+
+// A node reached twice has two parents, which breaks the unique-ownership rule every
+// clone_* call exists to keep. Both verifier passes record into one node set: the
+// infer-time one to report the alias, the gc-root one to know what it reached.
+typedef private DupReport = block<(msg : string; at : LineInfo) : void>
+
+// false when the node was already recorded, i.e. a walk must not descend into it again
+def private note_node(var seen : table<void?>; node : void?; what : string; at : LineInfo;
+                      report : DupReport) : bool {
+    if (!key_exists(seen, node)) {
+        seen |> insert(node)
+        return true
+    }
+    invoke(report, "{what} is aliased - reachable from two parents (missing clone)", at)
+    return false
+}
+
+// The walk descends into firstType / secondType / argTypes itself, so those reach
+// preVisitTypeDecl; only a slot it never enters - an expression's inferred type, or one
+// of the type fields the expression visits skip - has to be recorded as a whole tree.
+def private note_type_tree(var seen : table<void?>; var typ : TypeDeclPtr; what : string;
+                           report : DupReport) : void {
+    if (typ == null
+            || !note_node(seen, typ, "TypeDecl {describe(typ)} ({what})", typ.at, report)) {
+        return
+    }
+    note_type_tree(seen, typ.firstType, "{what}.firstType", report)
+    note_type_tree(seen, typ.secondType, "{what}.secondType", report)
+    for (i in range(length(typ.argTypes))) {
+        note_type_tree(seen, typ.argTypes[i], "{what}.argTypes[{i}]", report)
+    }
+    note_type_payload(seen, typ, what, report)
+}
+
+// TypeDecl::visit walks the payload only for a typeDecl / typeMacro node, and
+// fixedDimExpr only for a dimConst array - the rest stay unvisited
+def private note_type_payload(var seen : table<void?>; var typ : TypeDeclPtr; what : string;
+                              report : DupReport) : void {
+    if (typ.baseType != Type.typeDecl && typ.baseType != Type.typeMacro) {
+        for (i in range(length(typ.typeMacroExpr))) {
+            note_expr_node(seen, typ.typeMacroExpr[i], "{what}.typeMacroExpr[{i}]", report)
+        }
+    }
+    if (typ.baseType == Type.tFixedArray && typ.fixedDim != DIM_CONST) {
+        note_expr_node(seen, typ.fixedDimExpr, "{what}.fixedDimExpr", report)
+    }
+}
+
+def private note_expr_node(var seen : table<void?>; var expr : ExpressionPtr; what : string;
+                           report : DupReport) : void {
+    if (expr == null
+            || !note_node(seen, expr, "{expr.__rtti} ({what})", expr.at, report)) {
+        return
+    }
+    note_type_tree(seen, expr._type, "{what}.type", report)
+}
+
 
 
 
@@ -96,12 +155,16 @@ class private AstVerifyVisitor : AstVisitor {
     error_count : int = 0
     @do_not_delete current_fn : Function?
     @do_not_delete fn_stack : array<Function?>
-    seen_nodes : table<uint64; bool>
-    check_unique : bool = false
+    seen : table<void?>
+    aliased_types : table<void?>
+    check_unique : bool = true
+    // slots the walk never reaches on its own (an expression's inferred type, a macro
+    // payload) are visited from here, which needs the adapter the walk runs on
+    @do_not_delete adapter : VisitorAdapter?
     // A node reachable from itself makes every walk — inference, codegen, ours —
     // recurse until the stack dies, so the cycle is cut, not only reported.
-    path : table<uint64; bool>
-    tpath : table<uint64; bool>
+    path : table<void?>
+    tpath : table<void?>
     // `return` inside a closure block returns from the BLOCK, not the function, so
     // its null subexpr says nothing about the function's result type
     closure_depth : int = 0
@@ -116,6 +179,38 @@ class private AstVerifyVisitor : AstVisitor {
         error_count++
         to_log(LOG_ERROR, "AST verify: {msg} at {describe(at)}\n")
         compiling_program() |> macro_error(at, "AST verify: {msg}")
+    }
+
+    def track_node(node : void?; what : string; at : LineInfo) : bool {
+        return note_node(seen, node, what, at) $(msg, msg_at) {
+            report(msg_at, msg)
+        }
+    }
+
+    def track_type_tree(var typ : TypeDeclPtr; what : string) : void {
+        if (!check_unique) {
+            return
+        }
+        note_type_tree(seen, typ, what) $(msg, msg_at) {
+            report(msg_at, msg)
+        }
+    }
+
+    def track_type_payload(var typ : TypeDeclPtr; what : string) : void {
+        if (!check_unique) {
+            return
+        }
+        note_type_payload(seen, typ, what) $(msg, msg_at) {
+            report(msg_at, msg)
+        }
+    }
+
+    // a slot the walk skips still has to be walked, or every node under it reads as
+    // unreachable; visiting it through the adapter covers its children too
+    def walk(var expr : ExpressionPtr) : void {
+        if (expr != null && adapter != null) {
+            visit(expr, adapter)
+        }
     }
 
     def verify_elements(var list : dasvector`ptr`Expression; at : LineInfo; what : string) : void {
@@ -141,7 +236,7 @@ class private AstVerifyVisitor : AstVisitor {
     }
 
     def cut_type_cycle(var slot : TypeDeclPtr&; what : string; at : LineInfo) : void {
-        if (slot == null || !key_exists(tpath, intptr(slot))) {
+        if (slot == null || !key_exists(tpath, slot)) {
             return
         }
         report(at, "{what} points at its own ancestor - a cycle")
@@ -215,20 +310,17 @@ class private AstVerifyVisitor : AstVisitor {
             report(expr.at, "{expr.__rtti} is marked constexpression but has no type")
             expr.flags.constexpression = false
         }
-        let key = intptr(expr)
-        path |> insert(key, true)
-        if (!check_unique) {
+        // ExprConst dispatches preVisit twice (base, then derived) — not an alias
+        let revisit = key_exists(path, expr)
+        path |> insert(expr)
+        if (!check_unique || revisit || !track_node(expr, "node {expr.__rtti}", expr.at)) {
             return
         }
-        if (key_exists(seen_nodes, key)) {
-            report(expr.at, "node {expr.__rtti} is aliased - reachable from two parents (missing clone_expression)")
-            return
-        }
-        seen_nodes |> insert(key, true)
+        track_type_tree(expr._type, "{expr.__rtti}.type")
     }
 
     def leave(var expr : ExpressionPtr) : ExpressionPtr {
-        path |> erase(intptr(expr))
+        path |> erase(expr)
         return expr
     }
 
@@ -237,7 +329,7 @@ class private AstVerifyVisitor : AstVisitor {
     }
 
     def is_ancestor(slot : ExpressionPtr) : bool {
-        return slot != null && key_exists(path, intptr(slot))
+        return slot != null && key_exists(path, slot)
     }
 
     // Variable / MakeStruct entries are dereferenced by the visitor itself before any
@@ -296,14 +388,27 @@ class private AstVerifyVisitor : AstVisitor {
 
     def override preVisitTypeDecl(var typ : TypeDeclPtr) : void {
         if (typ != null) {
-            tpath |> insert(intptr(typ), true)
+            tpath |> insert(typ)
+            if (check_unique) {
+                if (!track_node(typ, "TypeDecl {describe(typ)}", typ.at)) {
+                    aliased_types |> insert(typ)
+                }
+                track_type_payload(typ, "TypeDecl")
+            }
         }
         verify_type(typ, "TypeDecl", typ != null ? typ.at : LineInfo())
     }
 
+    // only the outermost slot of each declared type reaches visit (nested firstType /
+    // argTypes never do), so that is where an alias can be unshared
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
-        if (typ != null) {
-            tpath |> erase(intptr(typ))
+        if (typ == null) {
+            return typ
+        }
+        tpath |> erase(typ)
+        if (key_exists(aliased_types, typ)) {
+            aliased_types |> erase(typ)
+            return clone_type(typ)
         }
         return typ
     }
@@ -422,6 +527,16 @@ class private AstVerifyVisitor : AstVisitor {
         // ExprFor.body is deliberately NOT null-checked: it is transiently null.
         verify_elements(expr.sources, expr.at, "ExprFor.sources")
         verify_value_elements(expr.sources, expr.at, "ExprFor.sources")
+        // ExprFor::visit walks sources and body, never the tags
+        for (i in range(length(expr.iteratorsTags))) {
+            walk(expr.iteratorsTags[i])
+        }
+    }
+
+    // a quote body is AST data, not code, so the walk stops at it by default - it still
+    // holds nodes that must be uniquely owned
+    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool {
+        return true
     }
 
     // finalList only: a null in `list` compiles clean, so it is not a crash shape
@@ -437,6 +552,10 @@ class private AstVerifyVisitor : AstVisitor {
         }
         verify_elements(expr.finalList, expr.at, "ExprBlock.finalList")
         cut_list_cycles(expr.list, expr.at, "ExprBlock.list")
+        // ExprBlock::visit walks returnType only for a closure
+        if (!expr.blockFlags.isClosure) {
+            track_type_tree(expr.returnType, "ExprBlock.returnType")
+        }
     }
 
     def override visitExprBlock(var expr : ExprBlock?) : ExpressionPtr {
@@ -525,11 +644,26 @@ class private AstVerifyVisitor : AstVisitor {
     def override preVisitExprAscend(var expr : ExprAscend?) : void {
         need(expr.subexpr, "ExprAscend.subexpr", expr.at)
         verify_type(expr.ascType, "ExprAscend.ascType", expr.at)
+        track_type_tree(expr.ascType, "ExprAscend.ascType")
     }
 
     def override preVisitExprMakeTuple(var expr : ExprMakeTuple?) : void {
         verify_type(expr.recordType, "ExprMakeTuple.recordType", expr.at)
         verify_type(expr.makeType, "ExprMakeTuple.makeType", expr.at)
+        // makeType is left alone: ExprMakeLocal::visit walks it, so it is tracked already
+        track_type_tree(expr.recordType, "ExprMakeTuple.recordType")
+    }
+
+    def override preVisitExprConstBitfield(var expr : ExprConstBitfield?) : void {
+        track_type_tree(expr.bitfieldType, "ExprConstBitfield.bitfieldType")
+    }
+
+    // ExprAssume::visit walks assumeType's children but never preVisits the node itself
+    def override preVisitExprAssume(var expr : ExprAssume?) : void {
+        if (expr.assumeType != null && check_unique) {
+            let _dup = track_node(expr.assumeType, "TypeDecl {describe(expr.assumeType)} (ExprAssume.assumeType)",
+                expr.assumeType.at)
+        }
     }
 
     def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
@@ -612,7 +746,7 @@ class private AstVerifyVisitor : AstVisitor {
     }
 
     def payload_slot(var expr : ExpressionPtr; present : bool; what : string) : ExpressionPtr {
-        path |> erase(intptr(expr))
+        path |> erase(expr)
         if (present) {
             return expr
         }
@@ -705,8 +839,9 @@ def public verify_module(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module in place, emitting a ``macro_error`` per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building
     //! AST — see utils/ast-fuzz/README.md for when each entry point applies.
-    var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? false)
+    var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? true)
     make_visitor(*v) $(adapter) {
+        v.adapter = adapter
         visit_module(prog, adapter, mod)
     }
     let n = v.error_count
@@ -838,6 +973,18 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         report(at, "{what} has an unresolved func after inference")
     }
 
+    // A node with no location makes every later diagnostic over it point at nothing. No
+    // kind is exempt: a value from a C++ binding gets the call site stamped by infer.
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        if (expr == null || expr.at.fileInfo != null) {
+            return
+        }
+        report(expr.at, "{expr.__rtti} has no source location (at is unset)")
+        if (current_fn != null) {
+            expr.at = current_fn.at
+        }
+    }
+
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         need_typed(expr, "ExprVar '{expr.name}'", expr.at)
         return expr
@@ -935,6 +1082,152 @@ class AstPostInferVerifyMacro : AstPassMacro {
             return true
         }
         verify_program_after_infer(prog, mod)
+        return true
+    }
+}
+
+
+
+
+
+
+// ===== gc-root reachability =====
+
+// A gc-tracked node the module owns but no walk of its AST reaches is either orphaned or
+// sits in a slot the visitor skips - so any pass driven by a visitor (lint, folding, a
+// macro sweep) edits a tree it cannot see in full.
+class private AstGcReachVisitor : AstVisitor {
+    seen : table<void?>
+    @do_not_delete adapter : VisitorAdapter?
+
+    // recording twice is harmless here: only the reached set matters, not who reached it
+    def reach_expr(var expr : ExpressionPtr; what : string) : void {
+        note_expr_node(seen, expr, what) $(_msg, _at) {
+            pass
+        }
+    }
+
+    def reach_type(var typ : TypeDeclPtr; what : string) : void {
+        note_type_tree(seen, typ, what) $(_msg, _at) {
+            pass
+        }
+    }
+
+    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool {
+        return true
+    }
+
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        reach_expr(expr, expr == null ? "expression" : "{expr.__rtti}")
+    }
+
+    def override preVisitTypeDecl(var typ : TypeDeclPtr) : void {
+        reach_type(typ, "TypeDecl")
+    }
+
+    def override preVisitExprAscend(var expr : ExprAscend?) : void {
+        reach_type(expr.ascType, "ExprAscend.ascType")
+    }
+
+    def override preVisitExprMakeArray(var expr : ExprMakeArray?) : void {
+        reach_type(expr.recordType, "ExprMakeArray.recordType")
+    }
+
+    def override preVisitExprMakeTuple(var expr : ExprMakeTuple?) : void {
+        reach_type(expr.recordType, "ExprMakeTuple.recordType")
+    }
+
+    def override preVisitExprConstBitfield(var expr : ExprConstBitfield?) : void {
+        reach_type(expr.bitfieldType, "ExprConstBitfield.bitfieldType")
+    }
+
+    def override preVisitExprAssume(var expr : ExprAssume?) : void {
+        reach_type(expr.assumeType, "ExprAssume.assumeType")
+    }
+
+    def override preVisitExprBlock(var expr : ExprBlock?) : void {
+        reach_type(expr.returnType, "ExprBlock.returnType")
+    }
+
+    def override preVisitExprFor(var expr : ExprFor?) : void {
+        for (i in range(length(expr.iteratorsTags))) {
+            if (expr.iteratorsTags[i] != null && adapter != null) {
+                visit(expr.iteratorsTags[i], adapter)
+            }
+        }
+    }
+
+    // set while a generic instantiates and left on the node; no visit walks it
+    def override preVisitExprLooksLikeCall(var expr : ExprLooksLikeCall?) : void {
+        reach_type(expr.aliasSubstitution, "{expr.__rtti}.aliasSubstitution")
+    }
+
+    def override preVisitExprReturn(var expr : ExprReturn?) : void {
+        reach_type(expr.returnType, "ExprReturn.returnType")
+    }
+}
+
+// the bound program is gone by post-compile time, so the error goes to `prog` directly
+def private report_unreached(var prog : ProgramPtr; what : string; at : LineInfo) : void {
+    to_log(LOG_ERROR, "AST verify (gc root): {what} is not reached by the visitor at {describe(at)}\n")
+    prog |> macro_error(at, "AST verify (gc root): {what} is not reached by the visitor")
+}
+
+def public verify_module_gc_root(var prog : ProgramPtr; mod : Module?) : int {
+    //! Reports every gc-tracked node the module owns that a full walk of its AST never
+    //! reaches, returning the count. Meaningful only once the module root is collected,
+    //! i.e. from a ``[post_compile_macro]``.
+    var owned : table<void?>
+    for_each_gc_typedecl(mod) $(t) {
+        owned |> insert(t)
+    }
+    for_each_gc_expression(mod) $(e) {
+        owned |> insert(e)
+    }
+    var v = new AstGcReachVisitor()
+    // a shared module is promoted to builtin, which makes visitModule skip its functions
+    let was_visiting_builtin = prog.visitBuiltinFunctions
+    prog.visitBuiltinFunctions = true
+    make_visitor(*v) $(adapter) {
+        v.adapter = adapter
+        visit_module(prog, adapter, mod)
+        // visitModule walks generics only on request, and a generic keeps its own untyped
+        // tree on the module root
+        ast_core::for_each_generic(mod, "") $(fn) {
+            visit(fn, adapter)
+        }
+    }
+    prog.visitBuiltinFunctions = was_visiting_builtin
+    // `owned` is the state before the walk, so a node this pass allocated is not reported
+    var total = 0
+    for_each_gc_typedecl(mod) $(t) {
+        if (key_exists(owned, t) && !key_exists(v.seen, t)) {
+            total++
+            report_unreached(prog, "TypeDecl {describe(t)}", t.at)
+        }
+    }
+    for_each_gc_expression(mod) $(e) {
+        if (key_exists(owned, e) && !key_exists(v.seen, e)) {
+            total++
+            report_unreached(prog, "{e.__rtti}", e.at)
+        }
+    }
+    unsafe {
+        delete v
+    }
+    return total
+}
+
+[post_compile_macro]
+class AstGcRootVerifyMacro : AstPassMacro {
+    //! Runs the gc-root check over the module just compiled. Post-compile is the first
+    //! point where its root holds only live nodes - before the collect, the garbage
+    //! inference left behind is indistinguishable from a node nothing owns.
+    def override apply(var prog : ProgramPtr; mod : Module?) : bool {
+        // off by default: gc_collect keeps nodes no Visitor walks (see quote.das blacklist)
+        if (mod != null && (prog._options |> find_arg("_ast_verify_gc_root") ?as tBool ?? false)) {
+            verify_module_gc_root(prog, mod)
+        }
         return true
     }
 }

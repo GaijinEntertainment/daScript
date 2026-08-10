@@ -9,4 +9,5 @@ Name of the static_assert expression
 Arguments of the static_assert expression
 Whether the arguments failed to infer types
 Whether the last argument was attached via trailing pipe
+Type substituted for the alias while a generic instantiates; only set during inference
 Location of the enclosure where the static_assert is used
