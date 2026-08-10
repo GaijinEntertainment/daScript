@@ -9,3 +9,4 @@ Expression being coalesced
 If true, skip runtime null-pointer check
 Assume no aliasing occurs
 Default value expression
+If true, the original operator applies - user overloads are not consulted (the `!??` raw form)
