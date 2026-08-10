@@ -38,6 +38,18 @@ namespace das {
         return false;
     }
 
+    static bool isFreshTemporary ( ExpressionPtr expr ) {
+        if ( !expr ) return false;
+        if ( expr->rtti_isCast() ) {
+            return isFreshTemporary(static_cast<ExprCast*>(expr)->subexpr);
+        } else if ( expr->rtti_isNullCoalescing() ) {
+            return isFreshTemporary(static_cast<ExprNullCoalescing*>(expr)->defaultValue);
+        } else if ( expr->rtti_isCallLikeExpr() ) {
+            return !(expr->type && expr->type->ref);    // a call returning a reference is storage
+        }
+        return expr->rtti_isMakeLocal();
+    }
+
     // in ast_handle of all places, due to reporting fields
     void reportTrait(const TypeDeclPtr &type, const string &prefix, const callable<void(const TypeDeclPtr &, const string &)> &report);
 
@@ -5445,26 +5457,14 @@ namespace das {
         if (var->type->ref && !var->init)
             error("local reference has to be initialized", "", "",
                   var->at, CompilationError::missing_local_reference_init);
-        // A reference can only bind to addressable storage. Split the non-local case in two:
-        //  - a freshly-materialized temporary - a make-local literal, or a value-returning call. It needs
-        //    its own temp-stack slot and has no storage to point at, so the reference would dangle. Never
-        //    valid: a hard error, regardless of `unsafe`. (`[1]` etc. is lowered to a value-returning call
-        //    by this point, so rtti_isMakeLocal alone is not enough - hence the call-like test.) The test
-        //    is on the initializer's SHAPE, not just type->ref: an argument of a natively-by-reference
-        //    type (struct, array, table, tuple) is addressable storage yet also carries type->ref==false,
-        //    since it is already a reference at the ABI level. A value that is neither shape - an int, a
-        //    string, a lambda - never reaches here: the value-init check below rejects it first.
-        //  - an addressable non-local - a deref, or an upcast/reinterpret view of real storage: merely
-        //    unsafe (the existing policy-gated diagnostic).
-        if (var->type->ref && var->init && !(var->init->alwaysSafe || isLocalOrGlobal(var->init))
-                && var->init->type && !var->init->type->temporary) {
-            if (!var->init->type->ref && !var->init->rtti_isCast()
-                    && (var->init->rtti_isCallLikeExpr() || var->init->rtti_isMakeLocal())) {
+        if (var->type->ref && var->init && var->init->type && !var->init->type->temporary) {
+            if (isFreshTemporary(var->init)) {
                 error("local reference to a temporary value is not allowed",
                       "a reference must bind to addressable storage (a variable, a field, or a function "
                       "returning a reference); a freshly-built temporary has none", "",
                       var->at, CompilationError::unsafe_local_reference);
-            } else if (!safeExpression(expr) && program->policies.local_ref_is_unsafe) {
+            } else if (!(var->init->alwaysSafe || isLocalOrGlobal(var->init))
+                    && !safeExpression(expr) && program->policies.local_ref_is_unsafe) {
                 error("local reference to non-local expression is unsafe", "", "",
                       var->at, CompilationError::unsafe_local_reference);
             }

@@ -1,5 +1,10 @@
 .. _utils_detect_dupe:
 
+.. index::
+   single: Utils; detect-dupe
+   single: Utils; Duplicate detection
+   single: Utils; Code similarity
+
 .. This page has NO content of its own. The single source is the markdown file
    skills/detect_dupe_reference.md, which also ships in the SDK bundle (it is named
    in install/skills.list), so daslang.io and the SDK can never disagree.

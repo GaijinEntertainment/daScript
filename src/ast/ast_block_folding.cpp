@@ -225,10 +225,20 @@ namespace das {
                 }
                 if ( expr->rtti_isBlock() ) {
                     auto pBlock = static_cast<ExprBlock*>(expr);
-                    if ( !pBlock->isClosure && !pBlock->finalList.size() ) {
+                    bool keepScope = false;
+                    if ( pBlock->generated ) {
+                        for ( auto & st : pBlock->list ) if ( st && st->rtti_isLet() ) { keepScope = true; break; }
+                    }
+                    if ( !pBlock->isClosure && !pBlock->finalList.size() && !keepScope ) {
                         collect(list, pBlock->list);
                     } else {
                         list.push_back(expr);
+                        // a kept scope which always exits ends the enclosing flow too; without this
+                        // the statements behind it survive as dead code the JIT can't emit
+                        if ( keepScope && !pBlock->isClosure && doesExprTerminates(expr) ) {
+                            if ( stopAtExit ) break;
+                            skipTilLabel = true;
+                        }
                     }
                 } else if ( expr->rtti_isWith() ) {
                     auto pWith = static_cast<ExprWith*>(expr);

@@ -15,7 +15,7 @@ def private run_fixture(t : T?; tmp_dir, tag, extra_args : string; expect_ok : b
     let fixture = path_join(get_das_root(), "tests/daslib/_fixture_build_const.das")
     let out_path = path_join(tmp_dir, "{tag}.txt")
     // exe/fixture unquoted: a leading quote breaks Windows _popen (cmd /c quote stripping)
-    let cmd = "{get_das_exe()} {fixture} -- {extra_args} --out {out_path} 2>&1"
+    let cmd = "{get_das_exe()} -dasroot {get_das_root()} {fixture} -- {extra_args} --out {out_path} 2>&1"
     var child_output : string
     let rc = unsafe(popen(cmd) $(f) {
         if (f != null) {

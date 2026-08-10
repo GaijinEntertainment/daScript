@@ -1,9 +1,3 @@
-```{index}
-single: Utils; detect-dupe
-single: Utils; Duplicate detection
-single: Utils; Code similarity
-```
-
 # detect-dupe --- Cross-file similar-function detector
 
 `detect-dupe` walks one or more directories of `.das` files,

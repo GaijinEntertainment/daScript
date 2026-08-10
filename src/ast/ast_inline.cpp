@@ -2818,7 +2818,6 @@ namespace das {
                     }
                 }
                 if ( prefixFailed ) continue;
-                for ( auto & t : temps ) splice.push_back(t);
                 // body
                 InlineBodyRewriter rewriter;
                 rewriter.paramSub = &paramSub;
@@ -2831,6 +2830,7 @@ namespace das {
                     if ( ret->subexpr ) {
                         callReplacement = ret->subexpr->clone()->visit(rewriter);
                     }
+                    for ( auto & t : temps ) splice.push_back(t);
                 } else {
                     auto bodyClone = static_cast<ExprBlock *>(body->clone());
                     if ( site.kind==SiteKind::Devirt ) {
@@ -2855,10 +2855,6 @@ namespace das {
                         splice.push_back(makeUninitDecl(callLike->at, rsr.resName, subjResult));
                     }
                     rsr.apply(bodyClone);
-                    if ( rsr.flagUsed ) {
-                        splice.push_back(makeTemp(callLike->at, rsr.flagName,
-                            new ExprConstBool(callLike->at, false), false, false, false));
-                    }
                     if ( !isVoid ) {
                         callReplacement = new ExprVar(callLike->at, rsr.resName);
                     }
@@ -2897,6 +2893,18 @@ namespace das {
                         scopeWrap->body = host;
                         spliced = scopeWrap;
                     }
+                    if ( !temps.empty() || rsr.flagUsed ) {
+                        auto scope = new ExprBlock();
+                        scope->at = callLike->at;
+                        for ( auto & t : temps ) scope->list.push_back(t);
+                        if ( rsr.flagUsed ) {
+                            scope->list.push_back(makeTemp(callLike->at, rsr.flagName,
+                                new ExprConstBool(callLike->at, false), false, false, false));
+                        }
+                        scope->list.push_back(spliced);
+                        spliced = scope;
+                    }
+                    if ( spliced->rtti_isBlock() && !(subjResult && subjResult->ref) ) spliced->generated = true;
                     splice.push_back(spliced);
                 }
                 auto & list = site.anchor.block->list;
