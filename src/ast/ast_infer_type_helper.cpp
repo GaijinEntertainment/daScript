@@ -1035,6 +1035,19 @@ namespace das {
                 return true; }, moduleName);
         return result;
     }
+    // a return value that never resolves must fail loudly: errors are cleared and
+    // re-reported every pass, so this only sticks if infer converges — where the old
+    // silent skip let the return simulate with a garbage value (wrong code, no diagnostic)
+    void InferTypes::reportUnresolvedReturnValue(ExprReturn *expr) {
+        if (expr->subexpr->rtti_isBlock() && !static_cast<ExprBlock *>(expr->subexpr)->isClosure) {
+            // the known producer: a statement macro (e.g. `match`) folded in value position
+            error("can't return a block", "'match' is a statement, not an expression - write it as a statement and return from its arms", "",
+                  expr->at, CompilationError::invalid_result);
+        } else {
+            error("return subexpression type is not resolved", "", "",
+                  expr->at, CompilationError::not_resolved_yet_expression_type);
+        }
+    }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
             error("returning void value", "", "",
