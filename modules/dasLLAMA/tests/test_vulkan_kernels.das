@@ -3536,8 +3536,8 @@ def test_vkd_dn_family(t0 : T?) {
 def private pack_f16(src : array<float>) : array<float16> {
     var out : array<float16>
     out |> resize(length(src))
-    for (i in range(length(src))) {
-        out[i] = float16(src[i])
+    for (s, o in src, out) {
+        o = float16(s)
     }
     return <- out
 }
@@ -3546,8 +3546,8 @@ def private pack_f16(src : array<float>) : array<float16> {
 def private unpack_f16(src : array<float16>) : array<float> {
     var out : array<float>
     out |> resize(length(src))
-    for (i in range(length(src))) {
-        out[i] = float(src[i])
+    for (s, o in src, out) {
+        o = float(s)
     }
     return <- out
 }

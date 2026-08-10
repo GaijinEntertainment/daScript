@@ -111,7 +111,7 @@ def private vk_unmap_notify(base : void?; bytes : uint64) {
         }
     }
     if (hit) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: model unmapping — dropping imported stream mirrors first\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: model unmapping - dropping imported stream mirrors first\n")
         vk_drop_model_state()
     }
 }
@@ -160,17 +160,17 @@ def private vulkan_backend_available : bool {
 
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private vulkan_no_gemv(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    panic("dasLLAMA vulkan backend has no GEMV core — the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
+    panic("dasLLAMA vulkan backend has no GEMV core - the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
 }
 
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]
 def private vulkan_no_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    panic("dasLLAMA vulkan backend has no batch core — the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
+    panic("dasLLAMA vulkan backend has no batch core - the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
 }
 
 [unused_argument(y0p, y1p, y2p, wp, sp, woff0, woff1, woff2, xqp, xsp, n, d0, d1, d2)]
 def private vulkan_no_group3(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?; woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    panic("dasLLAMA vulkan backend has no group3 core — the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
+    panic("dasLLAMA vulkan backend has no group3 core - the MoE tier (DASLLAMA_GPU_MOE_LAYERS) is its only dispatch")
 }
 
 [unused_argument(wp, sp, n, d)]
@@ -225,18 +225,18 @@ def vulkan_moe_gpu_arm : bool {
     let nothing_wanted = (layers == 0l && gpu_want_moe_stream() == 0l && !gpu_want_dn() && !gpu_want_attn() && !gpu_want_dnd()
         && gpu_want_heat() <= 0l && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())
     if (nothing_wanted) {   // checked first — the device probe is not free
-        arm_say(0, "GPU tier NOT armed — no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want)")
+        arm_say(0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want)")
         return false
     }
     if (!vulkan_backend_available()) {
-        arm_say(2, "GPU tier NOT armed — {g_vk_why}")
+        arm_say(2, "GPU tier NOT armed - {g_vk_why}")
         return false
     }
     set_moe_gpu_layer_count(layers)
     if (!moe_gpu_tier_installed()) {
         install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
     }
-    arm_say(1, "GPU tier armed — vulkan, moe layers {layers}{layers < 0l ? " (auto)" : ""}, stream {gpu_want_moe_stream()}")
+    arm_say(1, "GPU tier armed - vulkan, moe layers {layers}{layers < 0l ? " (auto)" : ""}, stream {gpu_want_moe_stream()}")
     return true
 }
 

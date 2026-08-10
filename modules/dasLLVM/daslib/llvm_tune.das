@@ -1112,8 +1112,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
         }
         let mode = tune_mode()
         if (mode == "tune" || mode == "test") {
-            // visible generation cost: the grid multiplies the jit's function count, and a silent
-            // permutation stamp reads as a hung compile from outside
+            // visible generation cost: a silent permutation stamp reads as a hung compile from outside
             let ctail = empty(comps) ? "" : " (+{length(comps)} companions each)"
             print("llvm_tune: [tune] {func.name}: stamping {length(perms)} permutations{ctail}\n")
             let ok = stamp_grid(func, genKey, perms, comps, errors)

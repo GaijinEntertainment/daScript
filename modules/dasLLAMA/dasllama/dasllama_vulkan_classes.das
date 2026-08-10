@@ -1159,7 +1159,7 @@ class template AtAttnTileT {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -1169,7 +1169,7 @@ class template AtAttnTileT {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -1702,7 +1702,7 @@ class template DaAttnBH128T {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.kbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))
+                    fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1765,7 +1765,7 @@ class template DaAttnBH128T {
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
                     let src = pa.vbase + kr * pa.kvd + kvh * 128u + jp
-                    fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))
+                    fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
                 }
@@ -1879,7 +1879,7 @@ class template DaAttnT {
                 var sv = 0.0
                 var d = 0u
                 while (d < hs) {
-                    sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])
+                    sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                     d++
                 }
                 s = sv * pa.scale
@@ -1924,7 +1924,7 @@ class template DaAttnT {
             if (tid < npart * hs) {
                 var jj = g
                 while (jj < clen) {
-                    acc += sc[jj] * float(vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c])
+                    acc += sc[jj] * float(vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                     jj += npart
                 }
             }

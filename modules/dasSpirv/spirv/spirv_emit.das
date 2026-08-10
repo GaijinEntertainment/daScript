@@ -7040,7 +7040,7 @@ def private register_callback_func(var m : SpirvModule; var ctx : EmitCtx; f : F
     }
     let na = length(f.arguments)
     if (na > 0 && "{f.arguments[0].name}" == "self") {
-        errors |> push("{kind} function '{f.name}': must be a plain module-level function, not a class method — pass what the body needs as extra operands")
+        errors |> push("{kind} function '{f.name}': must be a plain module-level function, not a class method - pass what the body needs as extra operands")
         cf.valid = false
     } elif (per_element) {
         if (na < 3 || na > 7) {
