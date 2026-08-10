@@ -76,14 +76,12 @@ braceless `class sealed`). Born-wrong exists (embedding cpp_api.rst ManagedVecto
 5. **cpp-block rail** — one generated TU per embedding page compiled against headers.
 6. **Nightly lane** — `verify_docs_and_examples`: doc-verify + /examples + /tutorials
    compile/run/lint. NIGHTLY ONLY (regular per-PR cycle stays untouched). preflight mirror entry.
-   WIRING SPEC (needs one Boris call): home = extended_checks.yml nightly cron, step after
-   "Run tutorial dry-runs":
-   `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`
-   `run: $BIN/daslang ./utils/doc-verify/main.das -- --daslang $BIN/daslang`
-   BLOCKER: the extended main build has DAS_HV_DISABLED=ON, so rule 0 correctly aborts on
-   the dasHV companions. Decide: (a) flip dasHV ON in the extended main build for the cron,
-   or (b) give the lane its own build using ci/release_modules.txt (like the sequence smoke).
-   Then add the preflight.md mirror row (`bin/daslang utils/doc-verify/main.das`).
+   WIRED (2026-08-11): extended_checks.yml nightly cron + workflow_dispatch, posix cells,
+   step after "Run tutorial dry-runs". No build change was needed — the extended main build
+   already applies ci/release_modules.txt (dasHV et al. ON); the rest of the corpus modules
+   are default-enabled, and rule 0 verifies the full set on every run. preflight.md mirror
+   row added. The /examples+/tutorials lint-clean half of the lane remains its own
+   follow-up wave.
 7. **Procedure doc** — `skills/doc_sweep.md` (repo-only), written LAST, once the procedure
    survives the audit; each-release cadence, prose re-sweeps scoped to pages whose subject
    changed since the last sweep tag.
