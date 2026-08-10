@@ -76,6 +76,14 @@ braceless `class sealed`). Born-wrong exists (embedding cpp_api.rst ManagedVecto
 5. **cpp-block rail** — one generated TU per embedding page compiled against headers.
 6. **Nightly lane** — `verify_docs_and_examples`: doc-verify + /examples + /tutorials
    compile/run/lint. NIGHTLY ONLY (regular per-PR cycle stays untouched). preflight mirror entry.
+   WIRING SPEC (needs one Boris call): home = extended_checks.yml nightly cron, step after
+   "Run tutorial dry-runs":
+   `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`
+   `run: $BIN/daslang ./utils/doc-verify/main.das -- --daslang $BIN/daslang`
+   BLOCKER: the extended main build has DAS_HV_DISABLED=ON, so rule 0 correctly aborts on
+   the dasHV companions. Decide: (a) flip dasHV ON in the extended main build for the cron,
+   or (b) give the lane its own build using ci/release_modules.txt (like the sequence smoke).
+   Then add the preflight.md mirror row (`bin/daslang utils/doc-verify/main.das`).
 7. **Procedure doc** — `skills/doc_sweep.md` (repo-only), written LAST, once the procedure
    survives the audit; each-release cadence, prose re-sweeps scoped to pages whose subject
    changed since the last sweep tag.
@@ -127,24 +135,32 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
 
 ## Engine/daslib finds from the fan-out (Boris decision)
 
-- 🐞 LANGUAGE WART (macros-page agent): a class whose NAME matches a class in a required
-  module fails its own generated-method resolution — `class MacroMacro : ...` in a module
-  requiring daslib/ast_boost → `error[30810] function not found _::MacroMacro'__finalize`
-  (ambiguous with ast_boost::MacroMacro's). Blocks doc pages from recompiling excerpts of
-  modules they require; fixing it makes those fragments checkable.
+RULED by Boris 2026-08-11 — all follow-up work AFTER the sweep PR:
+
+- 🐞 FIX (bug, no discussion): tuple destructuring bypasses the shadowing check —
+  `let x = 1; let x = 2` is error[30704], but `let (ok, a) = p1(); let (ok, b) = p2()`
+  compiles and SILENTLY rebinds `ok`. Failing test first; sweep in-tree .das for repeated
+  destructure names to size breakage; several doc pages with repeated `let (ok, err)`
+  narratives will need a coordinated pass.
+- 🐞 FIX (bug, "historical reasons" — double-check then fix): a class whose NAME matches a
+  class in a required module fails its own generated-method resolution —
+  `class MacroMacro : ...` in a module requiring daslib/ast_boost →
+  `error[30810] function not found _::MacroMacro'__finalize` (ambiguous with
+  ast_boost::MacroMacro's). Generated class-method calls should pin to the defining
+  module, not `_::` open resolution (the `_::` convention is for clone/finalize OVERLOAD
+  dispatch, not a class's own generated members). Also unblocks doc excerpts of required
+  modules.
+- ✅ AS-DESIGNED (not a hole): init-move from a smart-pointer value (`var b <- f(p)`)
+  needing no unsafe while the statement form fires 31021. Rationale (Boris): the
+  statement-form unsafe exists because move-ASSIGN overwrites whatever live smart pointer
+  `b` held; an init has nothing to overwrite. Only 3-4 residual smart_ptr classes remain.
+- 🔍 INVESTIGATE: `..` field-bypass surface syntax must STAY writable (needed in generic
+  code, not only macro-built AST). Docs now teach the reachable `sp. .x` spelling; explore
+  whether the lexer/grammar can be made to parse `sp..x` directly (DOTDOT currently wins).
 - Re-confirmed open #3678 tail: `let s = match (...)` still yields the misleading
-  `error[30231] argument of format string can't be auto` instead of the return-match hint.
-- 🐞 COMPILER HOLE #2 (unsafe.rst agent): an INIT-move from a smart-pointer value
-  (`var b <- f(p)`) compiles clean while the statement form (`b <- f(p)`) correctly
-  fires error[31021] — ExprMove::visit checks only the statement path
-  (ast_infer_type_op.cpp:688-693); the init form is exactly as lifetime-opaque.
+  `error[30231]` instead of the return-match hint.
 - Historical note: tables.rst TAUGHT `unsafe { tab[k] = v }` — the likely origin of the
   `unsafe(tab[k])` residue CLAUDE.md warns about; now fixed to state the default.
-- 🐞 COMPILER HOLE (probe-verified by the stbimage agent): tuple destructuring bypasses
-  the shadowing check — `let x = 1; let x = 2` is error[30704], but
-  `let (ok, a) = p1(); let (ok, b) = p2()` compiles and SILENTLY rebinds `ok`, no
-  diagnostic. Closing the hole will red several doc pages with repeated `let (ok, err)`
-  narratives — coordinate the fix with a doc pass.
 - modules/dasStbImage/src/dasRaster.cpp:346 — the comment above rast_blend_pixel states a
   `+128` blend formula the code three lines below contradicts (exact /255 via
   `(x + 1 + (x>>8)) >> 8`); page 05's wrong formula was copied from it — fix together.
