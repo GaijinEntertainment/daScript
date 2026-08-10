@@ -444,7 +444,6 @@ struct coopmatWgB_f16_32x32 {}
 struct coopmatWgB_f16_32x128 {}
 struct coopmatWgB_f16_64x64 {}
 struct coopmatWgB_f16_128x32 {}
-struct coopmatWgB_f16_128x64 {}
 struct coopmatWgAcc_f32_64x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
@@ -479,8 +478,6 @@ def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c
 // flash-attention shapes: S = Qf16 @ K^T (hsk 64 / 128), O += P @ V (hsv 64 / 128), rowsum = P @ One
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
-[unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x128; b : coopmatWgB_f16_128x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
 // the h128 Bc=32 trio: S = Qf16 @ K^T, rowsum = P @ One, O += P @ V

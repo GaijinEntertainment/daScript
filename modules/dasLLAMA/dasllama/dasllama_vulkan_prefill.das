@@ -60,11 +60,11 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
         let split = nsplit > 1l
         if (split) {
-            assert(nsplit * wlen * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: split-k planes exceed the scratch bound")
+            verify(nsplit * wlen * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: split-k planes exceed the scratch bound")
         }
         let yob = split ? g_rd.pf_splitk : yb
         let yon = split ? g_rd.pf_splitk_bytes : yn
-        let yog = split ? VHG_SK : ybit
+        let yog = split ? VHZ_SK : ybit
         let ml = cm2_tc == 256l
         let key = idx * 16 + (ml ? (split ? 9 : 8) : (split ? 11 : 10))
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
@@ -94,7 +94,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
                 g_rd.pf_cls_gemm[rkey] = set_splitk_reduce_cls(
                     fixed_array(g_rd.pf_splitk, yb),
                     fixed_array(g_rd.pf_splitk_bytes, yn),
-                    fixed_array(VHG_SK, ybit))
+                    fixed_array(VHZ_SK, ybit))
             }
             var pcr = SkRedArgs(nelem = uint(wlen * d), k = uint(nsplit))
             enc_splitk_reduce_cls(raw, h, g_rd.pf_cls_gemm[rkey], pcr, (wlen * d + 1_023l) / 1_024l)
@@ -168,13 +168,14 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
-    // cm2 split-k scratch: heuristic bound 128*256*2*SMs floats (tiles * nsplit <= 2 * cores)
+    // cm2 split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
     if (any6 && g_gpu.coopmat_mode == 4) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
         if (fsk > 1l) {
             skb = max(skb, np * wide * fsk * 4l)
         }
+        skb = min(skb, vk_max_storage_range())
         if (skb > 0l) {
             g_rd.pf_splitk = make_device_buf(skb)
             g_rd.pf_splitk_bytes = skb

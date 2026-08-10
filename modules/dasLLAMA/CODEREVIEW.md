@@ -487,8 +487,9 @@ model class cannot witness the other's.
 
 **A kernel that reads or writes the K/V mirrors is stamped from a `[|> template_struct_instance]`
 codec template (`typedef KT`) with both f32 and f16 instances, and an f16 instance's mirror
-stores clamp to the f16 finite range.** A mirror-touching kernel that exists in one codec
-only, or an f16 store without the clamp, is a defect.
+stores clamp to the f16 finite range.** A single-codec mirror kernel is legal only when a
+codec-templated sibling serves the other codec and its arming gate keys on the mirror codec
+(`kv16`); otherwise a one-codec kernel, or an f16 store without the clamp, is a defect.
 
 **Every resident override gates sessions on the armed mirror codec and on the flat
 (non-paged) cache before touching the mirror.** Mirror bytes move only between same-codec

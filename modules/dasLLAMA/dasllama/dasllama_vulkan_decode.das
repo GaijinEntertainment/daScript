@@ -45,13 +45,16 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     if (g_gpu.dry) {
         return true   // guards above ARE the plan decision; everything below is device state
     }
-    // The driver is all-or-nothing across prefill AND decode: when the device workgroup cap
-    // declines prefill's batched attention (the largest footprint; ensure_ declines by name via
-    // vkd_wg_fits), residency declines WITH it, pre-upload. Dry-plan gap: followup_vulkan.
-    if (!(g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-            ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-            : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the batched-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
+    // all-or-nothing: pre-flight the SAME prefill-attention pick pf_setup will make (fa tile,
+    // h128 twin, or the chunked pair) so a declined kernel declines residency PRE-upload
+    let will_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+        && (head_size == 64l || head_size == 128l))
+    if (!(will_facm2
+            ? (head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls())
+            : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
+                ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+                : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls())))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the prefill-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,

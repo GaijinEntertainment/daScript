@@ -2083,7 +2083,7 @@ let VHG_ST = 0x40u        // dn recurrent state (in place)
 let VHG_WS = 0x80u        // dn o scratch (oq+os)
 let VHG_X = 0x100u        // add_rms residual x (in place)
 let VHG_YO = 0x200u       // the host-bound result plane (the DMA source)
-let VHG_SK = 0x400u       // cm2 split-k partial planes (the reduce's input scratch)
+let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

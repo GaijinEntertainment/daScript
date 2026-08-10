@@ -42,9 +42,10 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
    recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
    dn state on g_rd).
-3. **KV codecs on device** — Vulkan's mirror is f32-only; Metal carries f16/f32/q8_0/tq4
-   through every attention and rope-store kernel. Port the codec seams (the CPU truth is
-   `dasllama_convert`'s KV codec functions; the Metal kernels are the device reference).
+3. **KV codecs on device** — Vulkan's mirror serves f16 (the armed default) and f32 through
+   the codec-templated kernel stamps; Metal additionally carries q8_0/tq4. Port the quant
+   codecs next (the CPU truth is `dasllama_convert`'s KV codec functions; the Metal quant
+   kernels are the device reference).
 4. **Real batched decode** — the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.

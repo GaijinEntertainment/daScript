@@ -766,10 +766,11 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
     let kvd = layer_kv_dim(c, 0l)
-    // require the shape the mirror sync can handle: a flat cache in the armed mirror codec
+    // flat cache in the armed codec, every row within the mirror cap (sync has no bounds check past it)
     for (i in range64(nrows)) {
         var s = sessions[i]
-        if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
+        if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null
+                || ws.positions[i] + 1l > g_rdec_cap) {
             return false
         }
     }
@@ -861,7 +862,10 @@ def moe_gpu_resident_active() : bool => g_rdec_active
 //! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model``
 //! — the drop destroys the mirror, and an unhydrated owner's rows exist nowhere else.
 def moe_gpu_hydrate_session(t : Model; var s : Session) {
-    if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated) {
+    // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
+    // session must never receive them (the gen match alone is ambiguous at generation 0)
+    if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated
+            && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null) {
         rdec_hydrate_host(t, s)
     }
 }
