@@ -156,6 +156,22 @@ The trap also bites READS: module B calling A's accessor function reads **B's co
 - StructureAnnotation `finish`/`patch` do NOT run for a struct whose inference failed —
   `apply` is the only hook guaranteed to fire, so a deferred "better error" for a failing
   struct cannot live in `finish` (probe-verified 2026-08-07).
+- **A `[simulate_macro]` in a shared macro module NEVER fires for the user's program** —
+  `Program::simulate` walks `library.foreach_in_order`, and a macro module lives in the
+  libGroup / global module list, not in the consuming program's `library`. Pass macros
+  reach the user program because lint/infer application walks that global list instead
+  (`Module::foreach` for `[global_lint_macro]`). So a simulate macro only ever sees the
+  program its own module was compiled as — its `thisModule` is the macro module itself.
+  Hooks that DO see the user program: `[infer_macro]`, `[dirty_infer_macro]`,
+  `[pre_infer_macro]`, `[post_infer_macro]`, `[lint_macro]`, `[global_lint_macro]`,
+  `[post_compile_macro]`.
+- **`[post_compile_macro]` is the only hook that runs after the module's gc root is
+  collected.** Everything earlier (post-infer, lint) still sees the garbage inference left
+  behind, so a pass that reasons about *what the finished module still owns* — orphan
+  hunting, gc bookkeeping — has to run there. Registered into `Module::postCompileMacros`,
+  applied from `applyPostCompileMacros` at the end of `compileDaScript`. Note the bound
+  program is already reset by then: use the `prog` argument, not `compiling_program()`,
+  which throws.
 
 ## Structure macros — generating types and functions
 

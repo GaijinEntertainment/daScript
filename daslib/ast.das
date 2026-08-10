@@ -61,6 +61,19 @@ def for_each_global(mod : Module?; blk : block<(var value : VariablePtr) : void>
     ast_core::for_each_global(mod, blk)
 }
 
+//! Iterates every gc-tracked TypeDecl the module owns, reachable or not. Pairs with
+//! the visitor walk to find nodes no visitor reaches.
+[generic]
+def for_each_gc_typedecl(mod : Module?; blk : block<(var value : TypeDeclPtr) : void>) {
+    ast_core::for_each_gc_typedecl(mod, blk)
+}
+
+//! Iterates every gc-tracked Expression the module owns, reachable or not.
+[generic]
+def for_each_gc_expression(mod : Module?; blk : block<(var value : ExpressionPtr) : void>) {
+    ast_core::for_each_gc_expression(mod, blk)
+}
+
 
 [generic]
 def describe(decl : TypeDecl?; extra, contracts, modules : bool = true) {
@@ -464,6 +477,7 @@ class AstVisitor {
     def abstract preVisitExprStaticAssert(expr : ExprStaticAssert?) : void
     def abstract visitExprStaticAssert(expr : ExprStaticAssert?) : ExpressionPtr
 // quote
+    def abstract canVisitQuoteSubexpression(expr : ExprQuote?) : bool
     def abstract preVisitExprQuote(expr : ExprQuote?) : void
     def abstract visitExprQuote(expr : ExprQuote?) : ExpressionPtr
 // debug
@@ -961,6 +975,12 @@ def add_new_pre_infer_macro(name : string; var someClassPtr) {
 def add_new_post_infer_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
     this_module() |> add_post_infer_macro(ann)
+}
+
+[macro_function]
+def add_new_post_compile_macro(name : string; var someClassPtr) {
+    var ann = make_pass_macro(name, someClassPtr)
+    this_module() |> add_post_compile_macro(ann)
 }
 
 [macro_function]

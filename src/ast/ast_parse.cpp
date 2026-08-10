@@ -68,6 +68,17 @@ namespace das {
         }, "*");
     }
 
+    void applyPostCompileMacros ( Program * program ) {
+        // macro modules live in the global module list, not in program->library - the same
+        // reason Program::lint reaches global lint macros through Module::foreach
+        Module::foreach([&](Module * mod) -> bool {
+            for ( const auto & pm : mod->postCompileMacros ) {
+                pm->apply(program, program->thisModule.get());
+            }
+            return true;
+        });
+    }
+
     // defined in ast_module.cpp (runtime); appends a parsed builtin module's content
     bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName );
 
@@ -1128,8 +1139,8 @@ namespace das {
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             bool logModule = program->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time);
             // For the entry script (isDep == false) the heaviest post-parseDaScript work
-            // (markExecutableSymbolUse / removeUnusedSymbols / deriveAliases / allocateStack /
-            // validateAst) runs in compileDaScript AFTER this point, so the per-module
+            // (markExecutableSymbolUse / removeUnusedSymbols / deriveAliases / allocateStack)
+            // runs in compileDaScript AFTER this point, so the per-module
             // breakdown here would be misleadingly low. The top-level summary emitted later
             // in compileDaScript covers the entry's full cost authoritatively.
             if ( logModule && isDep ) {
@@ -1502,8 +1513,7 @@ namespace das {
         gc_guard compile_gc_scope;
         GcCollectOnExit compile_gc_collect(compile_gc_scope);
         ReuseCacheGuard rcg;
-        bool exportAll = policies.export_all || policies.validate_ast;
-        if ( policies.validate_ast ) policies.rtti = true;
+        bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
         *totParse = 0;
         *totInfer = 0;
@@ -1630,7 +1640,9 @@ namespace das {
             if ( !res->failed() ) {
                 res->thisNamespace = "_anon_" + to_string(normalizedPathHash(fileName, getDasRoot()));
             }
-            res->validateAst();
+            if ( !res->failed() ) {
+                applyPostCompileMacros(res.get());
+            }
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
                  || res->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
                 auto totT = get_time_usec(time0);

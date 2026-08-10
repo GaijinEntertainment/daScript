@@ -803,6 +803,7 @@ namespace das {
         for (auto & m : ptm->preInferMacros) target->preInferMacros.push_back(std::move(m));
         for (auto & m : ptm->postInferMacros) target->postInferMacros.push_back(std::move(m));
         for (auto & m : ptm->lintMacros) target->lintMacros.push_back(std::move(m));
+        for (auto & m : ptm->postCompileMacros) target->postCompileMacros.push_back(std::move(m));
         for (auto & m : ptm->globalLintMacros) target->globalLintMacros.push_back(std::move(m));
         for ( auto & rm : ptm->readMacros ) {
             rm.second->seal(target);

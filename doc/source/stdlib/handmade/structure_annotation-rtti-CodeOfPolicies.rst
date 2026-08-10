@@ -6,7 +6,6 @@ Specifies to AOT if we are compiling a module, or a final program.
 Enables AOT of macro code (like 'qmacro_block' etc).
 Never apply per-box [tune] stamps to this compile (cross-box artifacts: AOT generation, AST serialization).
 Whether paranoid validation is enabled (extra checks, no optimizations).
-Whether to validate the AST after compilation (uniqueness checks, etc.). Off by default (slow).
 Whether cross-platform AOT is enabled (if not, we generate code for the current platform).
 File name for AOT output (if not set, we generate a temporary file).
 If we are in code completion mode.

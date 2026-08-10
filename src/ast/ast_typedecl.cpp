@@ -950,8 +950,8 @@ namespace das
 
     void TypeDecl::clone ( TypeDeclPtr & dest, const TypeDeclPtr & src ) {
         // this only works when there are no duplicated types whatsoever
-        // there is CodeOfPolicies::validate_ast that checks for that, but its off by default (slow)
-        // if you suspect this is whats causing a problem, disable the optimization, enable the validation and find the duplicated type
+        // daslib/ast_verify reports a duplicated type; if you suspect this is whats causing a
+        // problem, disable the optimization and compile with --ast-verify to find it
 #if 0
         dest = new TypeDecl(*src);
 #else

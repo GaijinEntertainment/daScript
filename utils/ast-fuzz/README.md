@@ -124,6 +124,41 @@ that looks malformed. A shape the compiler tolerates (a null statement in a
 block) or legitimately produces (a bare `return` in a void function, an `if` with
 no `else`, `with (module x)` having no subject) is deliberately not flagged.
 
+### Node uniqueness
+
+An `Expression` or a `TypeDecl` reachable from two parents is a missing
+`clone_expression` / `clone_type` — a compiler or macro bug that surfaces later
+as a double edit or a double free, not as a segfault. Each such node is reported
+once per walk, and an aliased type is unshared by cloning it at the slot the
+visitor can replace (the outermost one — nested `firstType` / `argTypes` are
+reported only). `options _ast_verify_unique = false` turns the check off for a
+module that legitimately shares nodes.
+
+Expression types (`expr.type`) are not walked by the visitor either, so the pass
+records them as whole trees from `preVisitExpression`, along with the type slots
+the expression visits skip (`ascType`, `recordType`, `bitfieldType`,
+`assumeType`, a non-closure block's `returnType`) and the `typeMacroExpr` /
+`fixedDimExpr` payloads. A slot the walk itself enters is left alone —
+`ExprMakeLocal::visit` walks `makeType`, so recording it here would read as an
+alias of the node the walk is about to reach.
+
+Quote bodies count too: `ExprQuote::visit` descends only when a visitor answers
+`canVisitQuoteSubexpression`, which this pass does.
+
+### gc-root reachability (off by default)
+
+`verify_module_gc_root` reports every gc-tracked node a module owns that a full
+walk of its AST never reaches — an orphan, or a node in a slot no visitor walks.
+It runs from a `[post_compile_macro]`, the first hook after the compiler collects
+the module root; before that collect the root still holds the garbage inference
+left behind, so every node there reads as unreachable.
+
+Enable it with `options _ast_verify_gc_root = true`. It stays off because
+`gc_collect` deliberately keeps nodes no `Visitor` walks — `daslib/quote.das`
+carries a field blacklist naming three (`Function.inferStack`,
+`ExprReturn._block`, `ExprVar.pBlock`) — so gc-reachable and visitor-reachable
+are not yet the same set, and real files still report a handful of nodes.
+
 ### Why every check repairs
 
 `Expr*::visit` in `src/ast/ast.cpp` dereferences children without null checks:

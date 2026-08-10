@@ -1,0 +1,1 @@
+The ``[post_compile_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked once the module is compiled and its gc root collected, so every node the module still owns is a live one.

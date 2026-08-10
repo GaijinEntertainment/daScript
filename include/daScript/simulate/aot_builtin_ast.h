@@ -151,20 +151,7 @@ namespace das {
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
         virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) override;
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override;
-        /*
-        TODO: implement
-        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override {
-            if ( auto fnCanVisit = get_canVisitQuoteSubexpression(classPtr) ) {
-                bool result = true;
-                runMacroFunction(context, "canVisitQuoteSubexpression", [&]() {
-                    result = invoke_canVisitQuoteSubexpression(context,fnCanVisit,classPtr);
-                });
-                return result;
-            } else {
-                return true;
-            }
-        }
-        */
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * expr ) override;
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * expr ) override;
         virtual bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) override;
         virtual bool canVisitCall ( ExprCall * expr ) override;
@@ -552,6 +539,8 @@ namespace das {
     DAS_CC_API void for_each_structure ( Module * mod, const TBlock<void,Structure *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_generic ( Module * mod, const TBlock<void,Function *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_global ( Module * mod, const TBlock<void,Variable *> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_gc_typedecl ( Module * mod, const TBlock<void,TypeDecl *> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void for_each_gc_expression ( Module * mod, const TBlock<void,Expression *> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );

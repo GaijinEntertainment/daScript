@@ -11,3 +11,4 @@ Stack top position if temporary variable allocation is needed
 Reference stack top position if temporary variable allocation is needed
 Function associated with the return expression
 Block associated with the return expression
+Type the enclosing function or block returns, as resolved by inference

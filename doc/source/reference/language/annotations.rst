@@ -536,12 +536,16 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
    * - ``[global_lint_macro]``
      - ``AstPassMacro``
      - Runs after all modules are compiled
+   * - ``[post_compile_macro]``
+     - ``AstPassMacro``
+     - Runs once the module is compiled and its gc root collected
    * - ``[tag_function_macro(tag="...")]``
      - ``AstFunctionAnnotation``
      - Attaches the macro to every function tagged with ``[tag_function]``
 
 Every pass macro — ``[infer_macro]``, ``[dirty_infer_macro]``, ``[optimization_macro]``,
-``[pre_infer_macro]``, ``[post_infer_macro]``, ``[lint_macro]``, ``[global_lint_macro]`` —
+``[pre_infer_macro]``, ``[post_infer_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
+``[post_compile_macro]`` —
 derives from the single ``AstPassMacro`` base class and overrides
 ``apply(prog : ProgramPtr; mod : Module?) : bool``. There is no per-pass base class.
 

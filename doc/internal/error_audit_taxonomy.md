@@ -27,7 +27,7 @@ When unsure, prefer the order shown below (more general -> more specific).
 | `cant` | operation forbidden in this context (was: `cant_<verb>`) | cant_get_field, cant_index, cant_dereference, cant_be_null |
 | `mismatching` | two things expected to match don't | mismatching_parentheses, mismatching_curly_bracers |
 | `not_resolved_yet` | follow-on; might resolve in a later pass | (new — replaces several "is not fully resolved yet" sites) |
-| `internal` | compiler invariant violation; not user fault | (new — for current `unspecified` validate_ast / changed-fn sites) |
+| `internal` | compiler invariant violation; not user fault | (new — for current `unspecified` changed-fn sites) |
 | `exceeds` | size/count limit busted | too_many_arguments, integer_constant_out_of_range, comment_contains_eof |
 | `unsafe` | requires `unsafe()` block | (existing CompilationError::unsafe code) |
 | `runtime` | exception during compile-time evaluation | exception_during_macro |
