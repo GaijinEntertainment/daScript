@@ -784,10 +784,11 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         compiling_program() |> macro_error(at, "AST verify (post-infer): {msg}")
     }
 
-    // A template body is expanded per instantiation, so it carries no types; a generated
-    // body (lambda, generator) IS codegen'd, so unlike the infer-time pass it is checked.
+    // A template body is expanded per instantiation and a stub body (dasbind [extern]) is
+    // never inferred - InferTypes::canVisitFunction skips both, as does every pass this
+    // verifier guards. A generated body (lambda, generator) IS codegen'd, so it is checked.
     def override canVisitFunction(fun : Function?) : bool {
-        return !fun.moreFlags.isTemplate
+        return !fun.moreFlags.isTemplate && !fun.moreFlags.stub
     }
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
