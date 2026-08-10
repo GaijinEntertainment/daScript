@@ -15,14 +15,14 @@ Example:
 
     require daslib/random
 
-        [export]
-        def main() {
-            var seed = random_seed(12345)
-            print("int: {random_int(seed)}\n")
-            print("float: {random_float(seed)}\n")
-            print("float: {random_float(seed)}\n")
-        }
-        // output:
-        // int: 7584
-        // float: 0.5848567
-        // float: 0.78722495
+    [export]
+    def main() {
+        var seed = random_seed(12345)
+        print("int: {random_int(seed)}\n")
+        print("float: {random_float(seed)}\n")
+        print("float: {random_float(seed)}\n")
+    }
+    // output:
+    // int: 7584
+    // float: 0.5848567
+    // float: 0.78722495

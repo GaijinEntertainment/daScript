@@ -214,7 +214,7 @@ def last_nonblank(lines : array<string>) : string {
     return ""
 }
 
-def chunks_of(body : array<string>) : array<Chunk> {   // nolint:STYLE037 — flat line-classifier ladder; the branches ARE the spec
+def chunks_of(body : array<string>) : array<Chunk> {
     var chunks : array<Chunk>
     var cur : array<string>
     var kind = ""
@@ -335,7 +335,12 @@ def def_header_key(line : string) : string {
     if (a >= 0) {
         cut = min(cut, a)
     }
-    return trim(slice(line, 0, cut))
+    var k = trim(slice(line, 0, cut))
+    // `def main {` and `def main() {` are the same header
+    if (k |> ends_with("()")) {
+        k = trim(slice(k, 0, length(k) - 2))
+    }
+    return k
 }
 
 def var_decl_names(line : string) : array<string> {
@@ -499,6 +504,7 @@ struct EmittedPage {
     fragments : int
     expects : array<RstBlock>
     require_lines : array<string>
+    companion_requires : table<string>   // lines that came from the companion preamble
     file_written : table<string>    // sibling modules minted by `file` markers this page
     companion_backed : bool
 }
@@ -625,6 +631,15 @@ def mark_elisions(var body : array<string>) {
         let t = trim(l)
         if (t == "..." || t == "// ...") {
             l = slice(l, 0, leading_spaces(l)) + ELIDE
+            continue
+        }
+        // inline elided bodies: `if (cond) { ... }` — a brace pair whose sole
+        // content is `...` compiles as `{ pass }`
+        if (find(l, "\{ ... \}") >= 0) {
+            l = replace(l, "\{ ... \}", "\{ pass \}")
+        }
+        if (find(l, "\{...\}") >= 0) {
+            l = replace(l, "\{...\}", "\{ pass \}")
         }
     }
 }
@@ -827,7 +842,9 @@ def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock; va
     ])
     dc.lines |> push_from(members)
     if (!empty(stmts)) {
-        dc.lines |> push("    def _doc_body_{blk.rst_line}() \{")
+        // `: auto` lets method-TAIL excerpts (`return <expr>` in a member block) compile;
+        // a void body still infers void
+        dc.lines |> push("    def _doc_body_{blk.rst_line}() : auto \{")
         dc.lines |> push_from(stmts)
         dc.lines |> push("    \}")
     }
@@ -913,6 +930,13 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
     let comp <- companion_preamble(page.path, cfg.root, path_join(cfg.out, "pages"))
     em.companion_backed = !empty(comp)
     add_companion_hoists(hoists, comp, page)
+    // only requires that genuinely came FROM the companion are binary-gap-fatal;
+    // a page-text require on a companion-backed page is the page's own problem
+    for (h in hoists) {
+        if ((h |> starts_with("require ")) && !key_exists(em.companion_requires, h)) {
+            em.companion_requires |> insert(h)
+        }
+    }
     if (!em.companion_backed && (base_name(page.path) |> starts_with("dasAudio_"))) {
         hoists |> push("require audio/audio_boost")
         hoists |> push("require math")
@@ -1137,7 +1161,7 @@ def report_page(page_path : string; cfg : Config) : PageReport {
 }
 
 [export]
-def main() : int {   // nolint:STYLE037 — flat CLI driver: probe gate, page loop, report
+def main() : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "doc-verify")
     return rc if (rc >= 0)
@@ -1157,7 +1181,7 @@ def main() : int {   // nolint:STYLE037 — flat CLI driver: probe gate, page lo
         var em <- emit_page(page, cfg)
         for (r in em.require_lines) {
             let prev = require_origin?[r] ?? false
-            require_origin[r] = prev || em.companion_backed
+            require_origin[r] = prev || key_exists(em.companion_requires, r)
         }
         for (f in keys(em.file_written)) {
             let s = stem(f)

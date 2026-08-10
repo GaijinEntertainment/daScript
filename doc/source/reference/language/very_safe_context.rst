@@ -54,11 +54,16 @@ Both ``data[5]`` and ``data[100]`` must share the same lifetime, but ``5`` is ev
 and ``100`` after it. No order of operations can make this code correct with unboxed containers and
 pass-by-reference semantics. Equivalent C++ code exhibits the same behavior.
 
-The issue is even more apparent with tables:
+The issue is even more apparent with tables, where the compiler rejects the expression outright
+(see :ref:`Tables <tables>`):
 
+.. das-doc: expect error[30250]
 .. code-block:: das
 
-    tab[key1] <- tab[key2]  // may rehash the table, invalidating the key1 reference
+    var tab : table<string; int>
+    let key1 = "one"
+    let key2 = "two"
+    tab[key1] <- tab[key2]  // error[30250]: may rehash the table, invalidating the key1 reference
 
 ---------------------------------
 What ``very_safe_context`` does

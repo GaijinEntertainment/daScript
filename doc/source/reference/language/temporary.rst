@@ -10,18 +10,19 @@ Let's review the following C++ example:
 
 .. code-block:: cpp
 
-    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
         vec4f args[1];
         args[0] = cast<const char *>::from(str.c_str());
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
 The C++ function here exposes a pointer to a C-string, internal to std::string.
 From Daslang's perspective, the declaration of the function looks like this:
 
+.. das-doc: signatures
 .. code-block:: das
 
-    def peek ( str : das_string; blk : block<(arg:string#):void> )
+    def peek ( src : das_string implicit; block : block<(arg0:string#):void> implicit ) : void
 
 Where string# is a temporary version of a Daslang string type.
 
@@ -31,12 +32,13 @@ Temporary values enforce this through the following rules.
 
 Temporary values can't be copied or moved:
 
+.. das-doc: expect error[30915]
 .. code-block:: das
 
-    def sample ( var t : das_string ) {
+    def copy_temporary ( var t : das_string ) {
         var s : string
         peek(t) $ ( boo : string# ) {
-            s = boo // error, can't copy temporary value
+            s = boo // error[30915]: can't copy temporary value
         }
     }
 
@@ -48,7 +50,10 @@ Temporary values can't be returned or passed to functions, which require regular
         print("s={s}\n")
     }
 
-    def sample ( var t : das_string ) {
+.. das-doc: expect error[30341]
+.. code-block:: das
+
+    def pass_temporary ( var t : das_string ) {
         peek(t) $ ( boo : string# ) {
             accept_string(boo) // error
         }
@@ -72,7 +77,7 @@ These functions implicitly promise that the data will not be cached (copied, mov
         print("s={s}\n")
     }
 
-    def sample ( var t : das_string ) {
+    def pass_implicit ( var t : das_string ) {
         peek(t) $ ( boo : string# ) {
             accept_any_string(boo)
         }
@@ -82,7 +87,7 @@ Temporary values can and are intended to be cloned:
 
 .. code-block:: das
 
-    def sample ( var t : das_string ) {
+    def clone_temporary ( var t : das_string ) {
         peek(t) $ ( boo : string# ) {
             var boo_clone : string := boo
             accept_string(boo_clone)

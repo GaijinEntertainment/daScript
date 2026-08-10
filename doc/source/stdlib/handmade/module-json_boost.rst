@@ -1,6 +1,9 @@
 The JSON_BOOST module extends JSON support with operator overloads for convenient
-field access (``?[]``), null-coalescing (``??``), and automatic struct-to-JSON
-conversion macros (``from_JsValue``, ``to_JsValue``).
+field access (``?.`` / ``?[]``), null-coalescing (``??``), and generic
+conversions in both directions: ``JV(value)`` builds a ``JsonValue?`` tree from
+a struct, tuple, array, table, or vector, and ``from_JV(js, default)`` reads one
+back into a typed value. Field annotations on the struct steer both directions
+(see below), and the builtin ``sprint_json`` honours the same annotations.
 
 See also :doc:`json` for core JSON parsing and writing.
 See :ref:`tutorial_json` for a hands-on tutorial.
@@ -17,24 +20,24 @@ Example:
 
     require daslib/json_boost
 
-        [export]
-        def main() {
-            let data = "\{ \"name\": \"Alice\", \"age\": 30 \}"
-            var error = ""
-            var js <- read_json(data, error)
-            if (error == "") {
-                let name = js?.name ?? "?"
-                print("name = {name}\n")
-                let age = js?.age ?? -1
-                print("age = {age}\n")
-            }
-            unsafe {
-                delete js
-            }
+    [export]
+    def main() {
+        let data = "\{ \"name\": \"Alice\", \"age\": 30 \}"
+        var error = ""
+        var js <- read_json(data, error)
+        if (error == "") {
+            let name = js?.name ?? "?"
+            print("name = {name}\n")
+            let age = js?.age ?? -1
+            print("age = {age}\n")
         }
-        // output:
-        // name = Alice
-        // age = 30
+        unsafe {
+            delete js
+        }
+    }
+    // output:
+    // name = Alice
+    // age = 30
 
 Field annotations
 -----------------
@@ -45,8 +48,9 @@ parsed by :ref:`parse_json_annotation <function-json_boost_parse_json_annotation
 into a :ref:`JsonFieldState <struct-json_boost-JsonFieldState>` and stored in a
 ``static_let`` cache so each field is parsed only once.
 
-``sprint_json`` requires ``options rtti`` for annotations to take effect at
-runtime.
+``sprint_json`` reads the same annotations from the runtime ``TypeInfo`` of the
+value it is handed (``src/simulate/json_print.cpp``), so they apply with no extra
+module options.
 
 .. list-table::
    :header-rows: 1
@@ -59,9 +63,10 @@ runtime.
        empty string, empty array, empty table, null pointer).
    * - ``@rename="json_key"``
      - Use *json_key* instead of the daslang field name in JSON output and
-       when looking up keys during ``from_JV`` deserialization.  The annotation
-       value must be a string (``@rename="name"``).  A bare ``@rename`` with
-       no string value is silently ignored.
+       when looking up keys during ``from_JV`` deserialization.  A bare
+       ``@rename`` with no string value strips one leading underscore from the
+       field name — ``_type`` is written as ``"type"`` — and does nothing to a
+       name that does not start with ``_``.
    * - ``@embed``
      - Treat a ``string`` field as raw JSON — embed it without extra quoting.
        During ``JV`` conversion the string is parsed with ``read_json`` and
@@ -75,9 +80,16 @@ runtime.
 
 Example with ``sprint_json``:
 
+.. das-doc: fresh
+
 .. code-block:: das
 
-    options rtti
+    require daslib/json_boost
+
+    enum Priority {
+        low
+        high
+    }
 
     struct Config {
         name : string
@@ -88,6 +100,13 @@ Example with ``sprint_json``:
         @enum_as_int level : Priority   // integer, not string
     }
 
-    let json_str = sprint_json(cfg, false)
+    [export]
+    def main() {
+        let cfg = Config(name = "app", _type = "service", raw = "[1,2]",
+            path = "c:\\tmp", level = Priority.high)
+        print("{sprint_json(cfg, false)}\n")
+    }
+    // output:
+    // {"name":"app","type":"service","raw":[1,2],"path":"c:\tmp","level":1}
 
 See :ref:`tutorial_json` for runnable examples of every annotation.

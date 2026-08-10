@@ -68,30 +68,40 @@ representation of the interpolated value:
     let pi = 3.14159
     print("pi = {pi:5.2f}\n")          // fixed-point, 5 wide, 2 decimals
 
-Format specifiers follow a syntax similar to C ``printf`` format strings.
-The general form is:
+Specifiers use the libfmt (Python ``format``) replacement-field syntax, **not** C
+``printf`` syntax: the compiler rewrites ``{expression:spec}`` into
+``fmt(":spec", expression)``. The general form is:
 
-.. code-block:: das
+.. code-block:: text
 
-    {expression:flags width.precision type}
+    {expression:[[fill]align][sign][#][0][width][.precision][type]}
 
 Where:
 
-* **flags** — optional characters such as ``-`` (left-align), ``+`` (force sign),
-  ``0`` (zero-pad), ``#`` (alternate form, e.g. ``0x`` prefix for hex)
+* **fill / align** — ``<`` left-align, ``>`` right-align, ``^`` center, each optionally
+  preceded by the character to pad with (``{v:*>8}``)
+* **sign** — ``+`` prints a sign for positive numbers too; ``-`` (the default) only for
+  negative ones; a space puts a space where ``+`` would go
+* ``#`` — alternate form: ``0x`` / ``0b`` / ``0`` prefix for hex, binary, octal
+* ``0`` — zero-pad to the field width
 * **width** — minimum field width
-* **precision** — number of decimal places (for floating-point) or maximum string length
+* **precision** — number of decimal places, for floating-point
 * **type** — conversion character:
-    * ``d`` or ``i`` — signed decimal integer
-    * ``u`` — unsigned decimal integer
-    * ``x`` — hexadecimal (lowercase)
-    * ``X`` — hexadecimal (uppercase)
+    * ``d`` — decimal integer
+    * ``b`` or ``B`` — binary
     * ``o`` — octal
-    * ``f`` — fixed-point decimal
-    * ``e`` — scientific notation
-    * ``E`` — scientific notation (uppercase)
-    * ``g`` — general (shortest of ``f`` or ``e``)
-    * ``G`` — general (shortest of ``f`` or ``E``)
+    * ``x`` / ``X`` — hexadecimal (lowercase / uppercase)
+    * ``c`` — the integer's character
+    * ``f`` or ``F`` — fixed-point decimal
+    * ``e`` / ``E`` — scientific notation (lowercase / uppercase)
+    * ``g`` / ``G`` — general (shortest of ``f`` or ``e``)
+    * ``a`` / ``A`` — hexadecimal floating-point
+
+A specifier only applies to numeric values — ``fmt`` has no ``string`` or ``bool``
+overload, so ``"{name:>8}"`` fails to compile with ``error[30341]``; pad text with
+``pad_left`` / ``pad_right`` from ``daslib/strings_boost``. A type character libfmt does
+not know — ``i`` and ``u``, which C ``printf`` accepts, among them — panics at runtime
+with ``fmt error: invalid format specifier``.
 
 Examples:
 
@@ -100,8 +110,9 @@ Examples:
     print("{42:08x}\n")            // "0000002a"  — 8-digit zero-padded hex
     print("{42:08X}\n")            // "0000002A"  — uppercase hex
     print("{3.14159:.2f}\n")       // "3.14"      — 2 decimal places
-    print("{-7:+d}\n")             // "-7"        — with sign
+    print("{7:+d}\n")              // "+7"        — sign forced on a positive number
     print("{255:#x}\n")            // "0xff"      — with 0x prefix
+    print("{42:*>8}\n")            // "******42"  — right-aligned, '*' fill
 
 -----------------------
 Escaping Curly Brackets
@@ -119,6 +130,8 @@ Multi-line Strings
 ---------------------
 
 String interpolation works in multi-line (heredoc) strings as well:
+
+.. das-doc: given var value1, value2, value3 : int
 
 .. code-block:: das
 
@@ -143,6 +156,8 @@ Relationship to print
 ---------------------
 
 The ``print`` function accepts string builder strings directly:
+
+.. das-doc: given var x, y : int
 
 .. code-block:: das
 

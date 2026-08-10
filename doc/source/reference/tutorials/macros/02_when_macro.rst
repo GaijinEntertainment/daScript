@@ -195,7 +195,7 @@ Then we assemble the block and mark its argument as shadowable:
 
 The final result is an ``invoke`` call:
 
-.. das-doc: fragment
+.. das-doc: member AstCallMacro
 .. code-block:: das
 
    return qmacro(invoke($e(call_block), $e(cond)))

@@ -135,6 +135,14 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
 - modules/dasStbImage/src/dasRaster.cpp:346 — the comment above rast_blend_pixel states a
   `+128` blend formula the code three lines below contradicts (exact /255 via
   `(x + 1 + (x>>8)) >> 8`); page 05's wrong formula was copied from it — fix together.
+- FIXED in-tree: imgui_boost_v2.das:672 diagnostic suggested invalid `variable private`
+  spelling (now `var private`); state_telemetry.das:92 comment likewise. Still open
+  (report-only): modules/dasImgui/tests/record_layout_primitives.das:14 "empty_marker"
+  kind comment; examples/features/internal_log_capture.das:13 pre-1.92 ImGuiLogType
+  header comment; daslib/strings_boost + daslib/enum_trait docstrings FIXED in-tree.
+- imgui family-wide phrase to sweep post-fan-out: "re-exported by imgui_boost_v2" — v2
+  re-exports ONLY imgui, imgui_lint, imgui_boost_runtime; four pages carried the false
+  claim, more may exist on GREEN pages the fan-out never touched.
 
 - strudel `!N` is implemented as `fast(n)` (`strudel_mini.das:267-272`) with the comment
   "approximation since patterns aren't copyable" — lambdas ARE copyable now, so the
@@ -169,6 +177,12 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
   when ALL errors sit in a required module (peg agent: block likely lacks context).
 - `wrap <prefix>` marker idea (peg agent): synthesize a `def f(input; blk) { parse(input) {` shell
   around macro-DSL excerpts so grammar rules compile instead of going fragment.
+- `alt` on a hoist-only block is a vacuous pass (checked++ fires, flush early-returns empty) —
+  make alt refuse to count an empty segment. `expect` blocks append unrenamed — run them
+  through the page renamer (or the isolation redesign). `given member <field>` idea (macros
+  agent): inject a FIELD into the member-marker subclass for base-method-parameter context
+  (das_string/AnnotationArgumentList can't be globals). Backlog item 6 (def re-decl renaming)
+  is DONE for exact headers; modifier-differing headers still collide — extend def_header_key.
 - dasLLAMA report-only finds: tutorials/dasLLAMA/04_sessions_and_memory.das:56 hardcodes
   4 bytes/KV-entry (2× under the f16 default — its two prints disagree);
   modules/dasLLAMA/dasllama/dasllama.das:3-8 facade arch roll-call omits GLM-4-MoE and

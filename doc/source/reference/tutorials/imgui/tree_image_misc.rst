@@ -8,6 +8,7 @@ Two leaf widgets the container-shaped variants don't cover.
 ``tree_node_ex`` is the explicit-control sibling of the ``tree_node``
 container; ``image`` is the display-only sibling of ``image_button``.
 
+.. das-doc: signatures
 .. code-block:: das
 
    tree_node_ex(IDENT, (text = "..", flags = ...))    // returns open bool
@@ -96,9 +97,8 @@ icon strip), use ``image``. If it's an interactive surface, use
 .. code-block:: das
 
    let io & = unsafe(GetIO())
-   let font_tex = io.Fonts.TexID
-   if (font_tex != null) {
-       image(AVATAR, (user_texture_id = font_tex,
+   if (io.Fonts.TexData != null) {
+       image(AVATAR, (user_texture_id = io.Fonts.TexRef,
                       size = float2(128.0f, 128.0f),
                       uv0 = float2(0.0f, 0.0f),
                       uv1 = float2(1.0f, 1.0f),
@@ -107,13 +107,16 @@ icon strip), use ``image``. If it's an interactive surface, use
    }
 
 ``uv0`` / ``uv1`` slice into the texture (use for sprite sheets);
-``tint_col`` modulates the rendered face; ``border_col`` draws a
-1-pixel frame around it (transparent for no border).
+``tint_col`` modulates the rendered face. ``border_col`` is echoed into
+``ImageState`` for snapshot assertions only — ImGui's ``Image()`` takes
+no per-call border, it comes from the ``ImGuiCol_Border`` style.
 
-The font atlas (``io.Fonts.TexID``) is always available and works as a
-no-setup demo texture. Real apps load via ``stbi`` or whatever your
-GL/Vulkan texture pipeline provides; pass the opaque ``ImTextureID``
-(typed ``void?`` on the daslang side) as ``texture``.
+The font atlas is always available and works as a no-setup demo
+texture: ``io.Fonts.TexRef`` is its ImGui 1.92 ``ImTextureRef``, and the
+``io.Fonts.TexData != null`` guard skips the frames before the backend
+has built the atlas. Real apps decode + upload their own texture and put
+the handle in ``ref._TexID`` — see :ref:`tutorial_texture_ref` for the
+full path.
 
 Driving from outside
 ====================

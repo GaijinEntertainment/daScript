@@ -69,6 +69,8 @@ Module Declaration
 
 The ``module`` declaration names the current file's module:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
     module my_module
@@ -85,6 +87,8 @@ The ``module`` declaration supports several modifiers:
     Promotes the module to a built-in module. Only one instance is created per compilation
     environment, and it is shared across contexts:
 
+    .. das-doc: fragment
+
     .. code-block:: das
 
         module my_lib shared
@@ -92,6 +96,8 @@ The ``module`` declaration supports several modifiers:
 ``public`` / ``private``
     Sets the default visibility of all declarations in the module. Functions, structs,
     enums, and globals inherit this default unless they specify their own visibility:
+
+    .. das-doc: fragment
 
     .. code-block:: das
 
@@ -104,11 +110,16 @@ The ``module`` declaration supports several modifiers:
     Makes the module visible to all modules in the project without an explicit ``require``.
     This uses the ``!inscope`` syntax:
 
+    .. das-doc: fragment
+
     .. code-block:: das
 
         module my_lib !inscope
 
-Modifiers can be combined:
+Modifiers can be combined, in the order ``shared``, then ``public``/``private``, then
+``!inscope``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -144,21 +155,36 @@ that requires the current one:
 Aliasing
 ^^^^^^^^^^^^^^^^^^^
 
-The ``as`` keyword gives a required module a local qualifier of your choosing:
+The ``as`` keyword gives a required module a local qualifier of your choosing. Given a
+sibling module file ``event.das``:
+
+.. das-doc: file event.das
 
 .. code-block:: das
 
-    require ./sub/event.das as sub_event
+    module event
+
+    def public process {
+        print("event\n")
+    }
+
+a require can bind it to any local name:
+
+.. code-block:: das
+
+    require ./event.das as sub_event
 
     def handle {
         sub_event::process()          // qualified call using the alias
     }
 
-Aliasing only applies to **path** requires — those beginning with ``./``, ``../`` or ``%/``
-and naming the ``.das`` file explicitly. Under the default resolver a module-name require
-registers no qualifier at all, so ``require daslib/random as rng`` compiles but silently
-leaves ``rng::`` undefined; use the path form ``require %/daslib/random.das as rng`` when an
-alias is needed.
+An explicit ``as`` alias registers for every require form, module-name requires
+(``require daslib/random as rng``) included. Without ``as``, a **path** require — one
+beginning with ``./``, ``../`` or ``%/`` and naming the ``.das`` file explicitly — still
+registers the file stem as a qualifier, so ``event::process()`` resolves in the example
+above as well; a module-name require registers no implicit qualifier. In either case the
+module's own declared name keeps working as a qualifier, so ``random::random_seed(seed)``
+resolves whether or not an alias was given.
 
 (see :ref:`Modules <modules>` for details on module function visibility and the ``_`` / ``__``
 module prefixes).
@@ -211,6 +237,8 @@ Visibility
 --------------------
 
 Each top-level declaration can be marked ``public`` or ``private``:
+
+.. das-doc: alt
 
 .. code-block:: das
 
@@ -288,7 +316,9 @@ attributes:
         pass
     }
 
-The option ``no_init`` disables all ``[init]`` functions.
+The option ``no_init`` forbids ``[init]`` outright — with it set, declaring an ``[init]``
+(or ``[finalize]``) function, or giving a global a non-constant initializer, is
+``error[30164]``.
 
 ^^^^^^^^^^^^^^^^^^^
 [finalize]
@@ -308,54 +338,57 @@ no arguments, no return value:
 Expect Declaration
 --------------------
 
-The ``expect`` declaration is used in test files to declare expected compilation errors.
-When present, the compiler treats the listed errors as intentional — the file compiles
-"successfully" only if exactly those errors (and no others) are produced.
+The ``expect`` declaration records the compilation errors a file is *supposed* to produce.
+It does not silence them: the compiler still reports each error and still fails the file.
+What ``expect`` does is attach the list to the resulting ``Program``, where the test runner
+reads it back (through ``for_each_expected_error``) and turns a failed compile into a passing
+test — provided every reported error is covered by an ``expect`` entry and no expected count
+is left unused. Running such a file directly with ``daslang`` still exits non-zero.
 
-This is primarily used in negative test suites to verify that the compiler correctly
-rejects invalid code:
+This is used by negative test suites, run through ``dastest``, to verify that the compiler
+correctly rejects invalid code:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
-    expect 40214:3              // expect error 40214 exactly 3 times
-    expect 30304, 30101         // expect each error once (count defaults to 1)
+    expect 50501:3              // expect error 50501 exactly 3 times
+    expect 30308, 30341         // expect each error once (count defaults to 1)
 
 The syntax is:
 
-.. code-block:: das
+.. code-block:: text
 
     expect <error_code> [: <count>] [, <error_code> [: <count>] ...]
 
 Multiple ``expect`` declarations can appear in the same file. Error codes are numeric
-identifiers organized by compilation phase:
+identifiers; the leading digit is the compilation stage that raised the error:
 
-+------------------+--------------------------------------------+
-| Range            | Category                                   |
-+==================+============================================+
-| ``10001–10011``  | Lexer errors (mismatched brackets, etc.)   |
-+------------------+--------------------------------------------+
-| ``20000–20001``  | Parser errors (syntax errors)              |
-+------------------+--------------------------------------------+
-| ``30101–30128``  | Semantic: invalid type/annotation/name     |
-+------------------+--------------------------------------------+
-| ``30201–30213``  | Semantic: already declared / too many args |
-+------------------+--------------------------------------------+
-| ``30301–30311``  | Semantic: not found (type, func, var, etc.)|
-+------------------+--------------------------------------------+
-| ``30401–30403``  | Semantic: mismatching type / argument      |
-+------------------+--------------------------------------------+
-| ``30501–30509``  | Semantic: exceeds limit (recursion, etc.)  |
-+------------------+--------------------------------------------+
-| ``30601–30602``  | Semantic: ambiguous symbol (func/type/etc.)|
-+------------------+--------------------------------------------+
-| ``31300``        | Unsafe operation outside ``unsafe`` block  |
-+------------------+--------------------------------------------+
-| ``39901–39903``  | Semantic: missing value/typeinfo           |
-+------------------+--------------------------------------------+
-| ``40101–40214``  | Lint-time errors and warnings              |
-+------------------+--------------------------------------------+
++------------------+--------------------------------------------------------+
+| Range            | Stage                                                  |
++==================+========================================================+
+| ``1xxxx``        | Lexer — bad literals, mismatched brackets, size limits |
++------------------+--------------------------------------------------------+
+| ``2xxxx``        | Parser — syntax, module/require, duplicate declaration |
++------------------+--------------------------------------------------------+
+| ``3xxxx``        | Semantic analysis — types, lookup, unsafe operations   |
++------------------+--------------------------------------------------------+
+| ``40500``        | Lint — AOT side effects (the only ``4xxxx`` code)      |
++------------------+--------------------------------------------------------+
+| ``5xxxx``        | Integration — options, AOT link, internal errors       |
++------------------+--------------------------------------------------------+
+
+Within a stage the codes are grouped by category. In the semantic stage, for example,
+``30100–30298`` are ``invalid_*``, ``30300–30352`` ``missing_*``, ``30400–30413``
+``mismatching_*``, ``30500–30515`` ``exceeds_*``, ``30600–30615`` ``ambiguous_*``,
+``30700–30709`` ``already_declared_*``, ``30800–30840`` ``lookup_*``, ``30900–30952``
+``cant_*``, ``31000–31037`` ``unsafe_*``, ``31100–31106`` ``recursion_*``,
+``31200–31211`` ``runtime_*``, and ``31300–31336`` ``not_*``. The authoritative list of
+names and codes is ``include/daScript/ast/compilation_errors.h``.
 
 For example, a test that verifies the compiler rejects copying an array:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -424,9 +457,9 @@ The following example shows a complete program with all structural elements:
         dead
     }
 
-    let GRAVITY = float3(0.0, -9.8, 0.0)
+    let private GRAVITY = float3(0.0, -9.8, 0.0)
 
-    var particles : array<Particle>
+    var private particles : array<Particle>
 
     def update_particle(var p : Particle; dt : float) : State {
         p.vel += GRAVITY * dt
@@ -456,9 +489,7 @@ The following example shows a complete program with all structural elements:
 
     [finalize]
     def cleanup {
-        unsafe {
-            delete particles
-        }
+        delete particles
     }
 
 Expected output:

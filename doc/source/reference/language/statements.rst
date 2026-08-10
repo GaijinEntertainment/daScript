@@ -72,6 +72,9 @@ Sequential bare blocks allow reusing the same variable name with a different typ
 
 Bare blocks can have a ``finally`` clause that runs when the block exits:
 
+.. das-doc: given def acquire_resource : int { return 1 }
+.. das-doc: given def compute(t : int) : int { return t * 2 }
+
 .. code-block:: das
 
     def process {
@@ -106,6 +109,8 @@ if/elif/else
 
 Conditionally execute a block depending on the result of a boolean expression:
 
+.. das-doc: given var a, b : int
+
 .. code-block:: das
 
     if ( a > b ) {
@@ -133,7 +138,10 @@ call) can carry the condition after it:
 
 .. code-block:: das
 
-    return b if ( a < b )
+    def smaller(a, b : int) : int {
+        return b if ( a < b )
+        return a
+    }
 
 **Ternary-style if:**
 
@@ -141,7 +149,9 @@ A full ternary expression can use if/else inline:
 
 .. code-block:: das
 
-    return 13 if ( a == 42 ) else return 7
+    def pick(a : int) : int {
+        return 13 if ( a == 42 ) else return 7
+    }
 
 .. _static_if:
 
@@ -183,6 +193,8 @@ while
     pair: while; statement
 
 Execute a block repeatedly while a boolean condition is true:
+
+.. das-doc: given def done : bool { return true }
 
 .. code-block:: das
 
@@ -285,6 +297,9 @@ break
 
 Terminate the enclosing ``for`` or ``while`` loop immediately:
 
+.. das-doc: given var arr : array<int>
+.. das-doc: given var target : int
+
 .. code-block:: das
 
     for ( x in arr ) {
@@ -375,7 +390,11 @@ Move semantics are also supported:
 
 .. code-block:: das
 
-    yield <- some_array
+    var gen_arrays <- generator<array<int>> {
+        var some_array <- [1, 2, 3]
+        yield <- some_array
+        return false
+    }
 
 (see :ref:`Generators <generators>`).
 
@@ -423,21 +442,28 @@ every iteration** — on normal fall-through, ``continue``, ``break``, and ``ret
 This makes ``var inscope`` inside a loop body safe: each iteration finalizes its own
 scoped variables before the next iteration begins.
 
+.. das-doc: given var sizes : array<int>
+.. das-doc: given def allocate(n : int) : array<int> { var r : array<int>; r |> resize(n); return <- r }
+.. das-doc: given def consume(b : array<int>) { pass }
+
 .. code-block:: das
 
-    for ( x in data ) {
+    for ( x in sizes ) {
         var inscope buf <- allocate(x)
-        process(buf)
+        consume(buf)
     } finally {
         print("iteration done\n")
     }
-    // "iteration done" prints once per element in `data`
+    // "iteration done" prints once per element in `sizes`
 
 If the iterator is empty (or the initial ``while`` condition is false), the body
 never enters and the loop's ``finally`` never runs.
 
 ``finally`` can also be attached to a bare visibility block, where it runs once
-when the block exits:
+when the block exits. The block's own locals are still in scope there:
+
+.. das-doc: given def open_file(name : string) : array<int> { var r : array<int>; r |> push(1); return <- r }
+.. das-doc: given def close_file(var h : array<int>) { pass }
 
 .. code-block:: das
 
@@ -452,6 +478,9 @@ A ``finally`` block cannot contain ``break``, ``continue``, or ``return`` statem
 
 The ``defer`` macro from ``daslib/defer`` provides a convenient way to add cleanup code
 to the current scope's ``finally`` block:
+
+.. das-doc: given def acquire : array<int> { var r : array<int>; r |> push(1); return <- r }
+.. das-doc: given def release(var r : array<int>) { pass }
 
 .. code-block:: das
 
@@ -559,6 +588,11 @@ Every use of the alias substitutes the original expression:
 
 ``assume`` is particularly useful for simplifying repeated access to nested data:
 
+.. das-doc: given struct Resolution { width, height : int }
+.. das-doc: given struct Graphics { resolution : Resolution }
+.. das-doc: given struct Settings { graphics : Graphics }
+.. das-doc: given var settings : Settings
+
 .. code-block:: das
 
     assume cfg = settings.graphics.resolution
@@ -606,7 +640,22 @@ with (module ...)
 
 The module flavor of ``with`` is a compile-time resolution scope: names inside the block
 resolve as if the code were written in the named module — including that module's private
-functions, globals, structures, enumerations, and type aliases:
+functions, globals, structures, enumerations, and type aliases. Given a module that keeps
+both of those to itself:
+
+.. das-doc: file game_internals.das
+
+.. code-block:: das
+
+    module game_internals
+
+    var private secret_state = 42
+
+    def private dump_internal_tables {
+        print("internal tables\n")
+    }
+
+a ``with (module ...)`` block reaches them:
 
 .. code-block:: das
 
@@ -749,7 +798,10 @@ Daslang supports numeric labels and goto for low-level control flow:
     label 1:
         print("end\n")
 
-Labels use integer identifiers. Computed goto is also supported:
+Labels use integer identifiers. Computed goto is also supported — the target is any
+integer expression naming a label:
+
+.. das-doc: given var label_expression : int
 
 .. code-block:: das
 
@@ -766,13 +818,19 @@ Expression Statement
 .. index::
     pair: Expression statement; statement
 
-Any expression is also valid as a statement. The result of the expression is discarded:
+An expression is valid as a statement when it *does* something — a call, a pipe, an
+assignment, an increment. Its result is discarded:
 
 .. code-block:: das
 
     foo()               // function call as statement
-    a + b               // valid but result is unused
     arr |> push(42)     // pipe expression as statement
+    counter++           // increment as statement
+
+A bare built-in binary operator is **not** accepted at statement level: since it has no
+side effect, its result could only be discarded, so ``a + b`` on its own line is
+``error[30151]: top level no side effect operation +``. (A user-defined ``operator +``
+is not built-in and is therefore not rejected.)
 
 ----------------
 Global Variables
@@ -793,6 +851,8 @@ Global variables are initialized once during script initialization (or each time
 
 ``shared`` indicates that the variable's memory is shared between multiple Context instances
 and initialized only once:
+
+.. das-doc: given def generate_table : table<string; int> { var t : table<string; int>; return <- t }
 
 .. code-block:: das
 

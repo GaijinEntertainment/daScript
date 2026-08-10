@@ -39,6 +39,8 @@ The daslang script
 The companion script defines a struct hierarchy, an enum, and exported
 functions for the C host to inspect:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
    options gen2

@@ -43,10 +43,10 @@ and ``use_count()``:
        int32_t health;
 
        Entity() : name("unnamed"), x(0), y(0), health(100) {
-           printf("  Entity constructed\n");
+           printf("  [C++] Entity('%s') constructed\n", name.c_str());
        }
        ~Entity() {
-           printf("  Entity destroyed\n");
+           printf("  [C++] Entity('%s') destroyed\n", name.c_str());
        }
        // ... methods ...
    };
@@ -116,7 +116,12 @@ Using smart pointers in daslang
 ==================================
 
 Smart pointer variables must be declared with ``var inscope``, which
-ensures ``delRef()`` is called when the variable goes out of scope:
+ensures ``delRef()`` is called when the variable goes out of scope.
+``Entity`` and ``make_entity`` come from ``tutorial_12_cpp``, the C++
+module registered by ``12_smart_pointers.cpp`` — this script needs that
+host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -143,6 +148,7 @@ ensures ``delRef()`` is called when the variable goes out of scope:
            fresh.health = 50
        }
        // fresh destroyed here (delRef → ref_count==0 → delete)
+   }
 
 Key points:
 

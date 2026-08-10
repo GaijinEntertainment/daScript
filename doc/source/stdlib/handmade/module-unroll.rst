@@ -14,16 +14,16 @@ Example:
 
     require daslib/unroll
 
-        [export]
-        def main() {
-            unroll() {
-                for (i in range(4)) {
-                    print("step {i}\n")
-                }
+    [export]
+    def main() {
+        unroll() {
+            for (i in range(4)) {
+                print("step {i}\n")
             }
         }
-        // output:
-        // step 0
-        // step 1
-        // step 2
-        // step 3
+    }
+    // output:
+    // step 0
+    // step 1
+    // step 2
+    // step 3

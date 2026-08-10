@@ -59,7 +59,10 @@ compiler promotes it to the **global module registry**.  Subsequent
 compilations find it there -- no file needed.
 
 The promotion is a compile-time mechanism.  A minimal "loader" script
-triggers it:
+triggers it (``my_helpers`` resolves through the host's file access, not
+from disk):
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -117,7 +120,7 @@ Part 1 — demonstrating the problem
    // 1b: Fresh FileAccess — module file not introduced
    das_fileaccess_introduce_file(fa2, "user_script.das", USER_SCRIPT, 0);
    das_program * program2 = das_program_compile("user_script.das", fa2, tout, libgrp);
-   // error[30901]: missing prerequisite 'my_helpers'; file not found
+   // error[20605]: missing prerequisite 'my_helpers'; file not found
 
 
 Part 2 — the shared module solution

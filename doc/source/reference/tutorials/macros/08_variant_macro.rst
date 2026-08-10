@@ -47,6 +47,14 @@ compiler tries generic ``operator is``/``operator as`` overloads, and
 finally falls through to built-in ``variant`` type dispatching.
 
 
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var expr : ExprSafeAsVariant?
+.. das-doc: given let func_name = "getter"
+.. das-doc: given var vtype : TypeDeclPtr
+.. das-doc: given let iname = "IDrawable"
+.. das-doc: given var st : Structure?
+
 ``AstVariantMacro`` methods
 ===========================
 
@@ -123,7 +131,7 @@ Once the guard passes, ``visitExprIsVariant`` looks for a
 ``get`IFoo`` field on the source struct.  If found, the struct
 implements the interface → return ``true``.  Otherwise → ``false``:
 
-.. das-doc: fragment
+.. das-doc: member AstVariantMacro
 .. code-block:: das
 
    let getter_field = "get`{iname}"
@@ -144,7 +152,7 @@ The result is a **compile-time constant** — no runtime cost at all.
 
 ``visitExprAsVariant`` generates a call to the getter function:
 
-.. das-doc: fragment
+.. das-doc: member AstVariantMacro
 .. code-block:: das
 
    let func_name = "{st.name}`get`{iname}"
@@ -164,7 +172,7 @@ returns an ``IDrawable?`` proxy.
 ``visitExprSafeAsVariant`` adds a null check before calling the
 getter:
 
-.. das-doc: fragment
+.. das-doc: member AstVariantMacro
 .. code-block:: das
 
    return <- qmacro($e(expr.value) != null ? $c(func_name)(*$e(expr.value)) : null)

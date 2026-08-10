@@ -27,6 +27,8 @@ boolean flag:
 .. das-doc: given require daslib/ast_boost
 .. das-doc: given require daslib/templates_boost
 .. das-doc: given var call : ExprCallFunc?
+.. das-doc: given let flag_name = "once_flag"
+.. das-doc: given var stmts : array<ExpressionPtr>
 .. code-block:: das
 
    for (i in range(5)) {
@@ -222,7 +224,7 @@ expects ``array<ExpressionPtr>``, not an ``ExprBlock`` directly.
 Step 4 — Build the replacement
 --------------------------------
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var replacement = qmacro_block() {

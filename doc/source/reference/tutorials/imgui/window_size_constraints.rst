@@ -12,17 +12,30 @@ invokes on every resize so the callback can re-shape the requested size
 
 The boost module ``imgui/imgui_window_constraints_builtin`` ships a daslang
 wrapper around the 3-arg form: an ``ImGuiSizeConstraints`` struct that wraps
-a daslang lambda + the existing C++ trampoline (``das_invoke_lambda<void>``
-at ``src/dasIMGUI.main.cpp:361``). End-user code passes the wrapper directly:
+a daslang lambda + the existing C++ trampoline
+(``SetNextWindowSizeConstraintsCallback`` →
+``das_invoke_lambda<void>`` in ``src/dasIMGUI.main.cpp``). End-user code
+passes the wrapper:
 
 .. code-block:: das
 
-   let aspect = @ capture(= ratio) (var data : ImGuiSizeCallbackData) : void {
+   // Module scope: ImGui keeps the pointer for the NEXT Begin(), so the
+   // wrapper must outlive the SetNextWindowSizeConstraints call.
+   var private ASPECT_CN : ImGuiSizeConstraints
+
+   let aspect_ratio = 16.0f / 9.0f
+   ASPECT_CN <- ImGuiSizeConstraints(@ capture(= aspect_ratio)
+                                      (var data : ImGuiSizeCallbackData) : void {
        data.DesiredSize = float2(data.DesiredSize.x,
-                                  data.DesiredSize.x / ratio)
-   }
-   SetNextWindowSizeConstraints(float2(0,0), float2(FLT_MAX, FLT_MAX),
-                                ImGuiSizeConstraints(aspect))
+                                 data.DesiredSize.x / aspect_ratio)
+   })
+   SetNextWindowSizeConstraints(float2(0.0f, 0.0f), float2(FLT_MAX, FLT_MAX),
+                                ASPECT_CN)
+
+Seed the wrapper once (``init``) and pass the same struct on every frame —
+the lambda carries its own capture state. A stack local will not do: auto-fit
+invokes the callback from inside ``Begin()``, after the enclosing function has
+already returned.
 
 The 2-arg ``SetNextWindowSizeConstraints(min, max)`` form stays on the
 boost-surface allow-list — only require this module when you need the
@@ -93,8 +106,8 @@ callback shapes:
    }
 
 Capture rules follow the standard daslang lambda surface — ``capture(= var)``
-for by-value, ``capture(& var)`` for by-reference. The ``@`` (no-capture)
-form works for callbacks that read only ``data``.
+for by-value, ``capture(& var)`` for by-reference. A plain ``@(...)`` with no
+``capture`` clause is enough for callbacks that read only ``data``.
 
 Struct layout
 =============

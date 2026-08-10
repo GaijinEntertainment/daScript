@@ -116,10 +116,15 @@ One call registers:
 +--------------------------+--------------------------------------------------+
 | ``destroy_actor``        | only if ``destroyFnName`` (the argument after    |
 |                          | the type name) is non-empty — calls              |
-|                          | ``HandleRegistry<Actor>::release(h)``            |
+|                          | ``HandleRegistry<Actor>::instance().release(h)`` |
 +--------------------------+--------------------------------------------------+
 | leak-dump hook           | wired automatically via                          |
-|                          | ``handleRegistry_registerDump<Actor>``           |
+|                          | ``handleRegistry_registerDump(&dumpHandleLeaks   |
+|                          | <Actor>)``                                       |
++--------------------------+--------------------------------------------------+
+| live-count hook          | wired automatically via                          |
+|                          | ``handleRegistry_registerCount(&countHandleLeaks |
+|                          | <Actor>)``                                       |
 +--------------------------+--------------------------------------------------+
 
 
@@ -173,9 +178,15 @@ Explicit destroy and ``is_alive``
 =================================
 
 The daslang name passed as ``destroyFnName`` becomes a script-callable
-destructor that unregisters the handle:
+destructor that unregisters the handle.  ``make_actor``, ``destroy_actor``
+and ``is_alive`` come from the ``tutorial_23_cpp`` module registered by
+``23_handle_registry.cpp``, so this snippet needs that C++ host:
+
+.. das-doc: fragment
 
 .. code-block:: das
+
+   require tutorial_23_cpp
 
    var goblin = make_actor("Goblin", 10.0, 5.0)
    destroy_actor(goblin)

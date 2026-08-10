@@ -139,8 +139,13 @@ And the accumulator/reduce pattern:
 Calling from daslang
 =======================
 
-Blocks use the ``<|`` pipe syntax with ``$()`` lambda prefix.
-Function pointers use ``@@function_name``:
+A block is written as a trailing argument after the call —
+``func(args) $(a, b) { ... }``.  Function pointers use
+``@@function_name``.  ``with_values``, ``call_function_twice``,
+``for_each_fibonacci`` and ``reduce_range`` are the C++ functions bound
+above, so this script only compiles inside the tutorial host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -177,6 +182,7 @@ Function pointers use ``@@function_name``:
            return acc * i
        }
        print("10! = {fact}\n")
+   }
 
 
 Building and running

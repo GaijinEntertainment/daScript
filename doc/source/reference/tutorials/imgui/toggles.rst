@@ -9,6 +9,7 @@ one mental model. Click flips state; ``imgui_force_set`` writes it from
 outside. The three forms differ in glyph and in whether they share
 state across call sites:
 
+.. das-doc: signatures
 .. code-block:: das
 
    checkbox(IDENT, (text = ".."))                   // single bool, square glyph
@@ -102,18 +103,25 @@ The dispatcher (``[widget_dispatch]`` on ``ToggleState`` and
 Caller-owned variants
 =====================
 
-For sites where the value already lives on an external bool / int (not
-a widget state struct), use the ``edit_*`` rails — they take a ``T?``
-pointer via ``safe_addr`` and skip the state-struct allocation:
+For sites where the value already lives on an external bool (not a
+widget state struct), use the ``edit_*`` rails — they take a ``bool?``
+pointer via ``safe_addr`` (``require daslib/safe_addr``) and skip the
+state-struct allocation:
 
+.. das-doc: given require daslib/safe_addr
 .. code-block:: das
 
    var g_enabled : bool = false
    edit_checkbox(safe_addr(g_enabled), (id = "EN", text = "Enabled"))
 
-   var g_mode : int = 0
-   edit_radio_button_int(safe_addr(g_mode), (id = "MODE",
-                                              text = "Off", v_button = 0))
+   var g_subscribed : bool = false
+   edit_radio_button(safe_addr(g_subscribed), (id = "SUB", text = "Sub"))
+
+Only the **bool** forms have caller-owned rails: ``edit_checkbox`` and
+``edit_radio_button``. There is no ``edit_radio_button_int`` — the
+grouped one-of-N form needs the shared ``RadioIntState`` that carries
+the group's selected value, so declare a ``RadioIntState`` ident and use
+``radio_button_int``.
 
 See :ref:`tutorial_edit_external_tour`.
 

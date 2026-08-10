@@ -180,6 +180,11 @@ types.  Creating a mutable local variable of such a type requires an
 Using bound types in daslang
 ==============================
 
+``Vec2``, ``vec2_length``, ``make_vec2`` and the rest come from the C++
+module, so this script only compiles inside the tutorial host:
+
+.. das-doc: fragment
+
 .. code-block:: das
 
    require tutorial_04_cpp
@@ -203,6 +208,7 @@ Using bound types in daslang
        // Nested types and field access
        let r = make_rect(10.0, 20.0, 100.0, 50.0)
        print("rect area = {rect_area(r)}\n")
+   }
 
 Immutable locals created via ``let`` from factory functions work without
 ``unsafe``.  Use ``unsafe { var ... }`` only when the variable must be

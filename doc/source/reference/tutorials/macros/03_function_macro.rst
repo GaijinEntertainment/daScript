@@ -263,7 +263,7 @@ Replacing the function body
 
 Finally, we swap the function's body with our new block:
 
-.. das-doc: fragment
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    func.body = new_body
@@ -439,7 +439,6 @@ An important design decision: ``verifyCall`` only checks **constant**
 arguments.  When a runtime variable is passed, ``getConstantInt``
 returns ``false`` and the call is allowed:
 
-.. das-doc: fragment
 .. code-block:: das
 
    let alpha = 200

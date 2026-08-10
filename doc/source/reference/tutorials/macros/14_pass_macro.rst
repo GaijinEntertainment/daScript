@@ -22,7 +22,9 @@ single method:
 
 ``apply(prog : ProgramPtr; mod : Module?) → bool``
    ``prog`` is the full program being compiled.
-   ``mod`` is the module that registered the macro.
+   ``mod`` is the module currently being compiled — every pass-macro call
+   site passes ``prog.thisModule``, the same module ``compiling_module()``
+   returns.  It is *not* the module that owns the macro.
    The return value depends on the annotation (see below).
 
 Five annotations control **when** the macro runs:
@@ -47,7 +49,8 @@ Five annotations control **when** the macro runs:
        currently being compiled.
    * - ``[global_lint_macro]``
      - Same as ``[lint_macro]`` but runs for **all** modules, not just
-       the one that requires it.
+       the one that requires it.  The owning module must be ``shared``,
+       or the global sweep never reaches it.
    * - ``[optimization_macro]``
      - Runs during the **optimization** loop, after built-in
        optimisations.  Returning ``true`` continues the loop.
@@ -65,13 +68,24 @@ The module file
 
 Full source: :download:`pass_macro_mod.das <../../../../../tutorials/macros/pass_macro_mod.das>`
 
-Both macros live in a single module that the user requires.
+Both macros live in a single module that the user requires.  Macro modules
+open with a ``module`` declaration — without one the compiler rejects the
+file with *"module Module_Name is required"*.
 
 
 Section 1 — lint_macro (compile-time analysis)
 ----------------------------------------------
 
+.. das-doc: file pass_macro_mod.das
 .. code-block:: das
+
+    options gen2
+
+    module pass_macro_mod
+
+    require daslib/ast
+    require daslib/ast_boost
+    require daslib/templates_boost
 
     [lint_macro]
     class CodeStatsLint : AstPassMacro {
@@ -94,9 +108,10 @@ Key points:
 
 - ``[lint_macro]`` means this class runs **after inference succeeds**,
   during the read-only lint phase.
-- ``compiling_module()`` returns the module being compiled right now.
-  This is **not** the same as ``mod``, which is the module that owns
-  the macro (``pass_macro_mod``).
+- ``compiling_module()`` returns the module being compiled right now —
+  the same module the ``mod`` parameter carries.  Neither one names the
+  module that owns the macro (``pass_macro_mod``); a macro that needs its
+  own module has to capture it at registration time.
 - ``for_each_function("")`` iterates the module's functions.  The
   empty string means "all names".
 - The lint checks function body size: any function with more than
@@ -120,6 +135,7 @@ body.  It follows the same visitor pattern as ``daslib/heartbeat.das``.
 
 First, a helper function that the injected code will call:
 
+.. das-doc: file pass_macro_mod.das
 .. code-block:: das
 
     def public _trace_enter(name : string) {
@@ -128,6 +144,7 @@ First, a helper function that the injected code will call:
 
 The visitor walks the AST and modifies function bodies:
 
+.. das-doc: file pass_macro_mod.das
 .. code-block:: das
 
     class TraceCallsVisitor : AstVisitor {
@@ -190,6 +207,7 @@ Key visitor techniques:
 
 The pass macro creates the visitor and walks the full program:
 
+.. das-doc: file pass_macro_mod.das
 .. code-block:: das
 
     [infer_macro]
@@ -304,7 +322,10 @@ When the compiler processes the user's program:
 5. **Lint** — ``[lint_macro]`` macros run for each module compiled
    after the macro module.  ``CodeStatsLint`` inspects the user module
    via ``compiling_module()`` and warns about large function bodies.
-   (``[global_lint_macro]`` macros run once for the entire program.)
+   (``[global_lint_macro]`` macros also run once per compiled module —
+   they just skip the visibility check, so they fire for modules that
+   never required them.  Their module must be ``shared`` to be reachable
+   from that global sweep.)
 6. **Execution** — the instrumented program runs.
 
 

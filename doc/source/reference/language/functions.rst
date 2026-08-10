@@ -34,7 +34,11 @@ Completely empty functions (without arguments) can be also declared:
         print("foo")
     }
 
-    //same as above
+The parenthesized form declares exactly the same function:
+
+.. das-doc: alt
+.. code-block:: das
+
     def foo() {
         print("foo")
     }
@@ -42,13 +46,14 @@ Completely empty functions (without arguments) can be also declared:
 Daslang can always infer a function's return type.
 Returning different types is a compilation error:
 
+.. das-doc: expect error[30343]
 .. code-block:: das
 
-    def foo(a:bool) {
+    def bad_return(a:bool) {
         if ( a ) {
             return 1
         } else {
-            return 2.0  // error, expecting int
+            return 2.0  // error[30343], expecting int
         }
     }
 
@@ -60,7 +65,12 @@ The return type can be specified explicitly with ``:`` or ``->`` — both are eq
         return a + b
     }
 
-    def add(a, b : int) -> int {   // same as above
+The ``->`` spelling declares exactly the same function:
+
+.. das-doc: alt
+.. code-block:: das
+
+    def add(a, b : int) -> int {
         return a + b
     }
 
@@ -111,6 +121,7 @@ Publicity
 
 Functions can be ``private`` or ``public``
 
+.. das-doc: alt
 .. code-block:: das
 
     def private foo(a:bool) {
@@ -158,15 +169,17 @@ You can also call a function by using its name and passing all its arguments wit
 
 Named arguments should be still in the same order:
 
+.. das-doc: expect error[30341]
 .. code-block:: das
 
-    def bar {
-        foo([b = 1, a = 2])  // error, out of order
+    def bar_out_of_order {
+        foo([b = 1, a = 2])  // error[30341], out of order
     }
 
 Named argument calls increase the readability of callee code and ensure correctness in refactorings of the existing functions.
 They also allow default values for arguments other than the last ones:
 
+.. das-doc: alt
 .. code-block:: das
 
     def foo(a:int=13, b: int) {
@@ -185,12 +198,14 @@ Function pointer
 Pointers to a function use a similar declaration to that of a block or lambda.
 The type is written as ``function`` followed by an optional type signature in angle brackets:
 
+.. das-doc: fragment
 .. code-block:: das
 
     function < (arg1:int; arg2:float&) : bool >
 
 The ``->`` operator can be used instead of ``:`` for the return type:
 
+.. das-doc: fragment
 .. code-block:: das
 
     function < (arg1:int; arg2:float&) -> bool >   // equivalent
@@ -200,6 +215,7 @@ an unspecified signature.
 
 Function pointers can be obtained by using the ``@@`` operator:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a:int) {
@@ -210,6 +226,7 @@ Function pointers can be obtained by using the ``@@`` operator:
 
 When multiple functions have the same name, a pointer can be obtained by explicitly specifying signature:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a:int) {
@@ -224,6 +241,7 @@ When multiple functions have the same name, a pointer can be obtained by explici
 
 Function pointers can be called via ``invoke`` or via call notation:
 
+.. das-doc: given var fn : function<(a:int):int>
 .. code-block:: das
 
     let t = invoke(fn, 1)   // t = 2
@@ -244,16 +262,18 @@ similar to that of lambdas or blocks (see :ref:`Blocks <blocks_declarations>`):
 
 Nameless local functions do not capture variables at all:
 
+.. das-doc: expect error[30838]
 .. code-block:: das
 
     var count = 1
     let fn <- @@ ( a : int ) {
-        return a + count            // compilation error, can't locate variable count
+        return a + count            // error[30838], can't locate variable count
     }
 
 Internally, a regular function will be generated (illustrative — the backtick-mangled
 name is compiler-internal and is not source you can type):
 
+.. das-doc: skip
 .. code-block:: das
 
     def _localfunction_thismodule_8_8_1`function ( a:int const ) : int {
@@ -285,6 +305,7 @@ You cannot take the address of a generic function.
 
 Unspecified types can also be written via ``auto`` notation:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a:auto) {   // same as 'twice' above
@@ -293,6 +314,7 @@ Unspecified types can also be written via ``auto`` notation:
 
 Generic functions can specialize generic type aliases, and use them as part of the declaration:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a:auto(TT)) : TT {
@@ -322,6 +344,7 @@ Function overloading
 
 Functions can be specialized if their argument types are different:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a: int) {
@@ -340,6 +363,7 @@ Declaring functions with the same exact argument list is a compilation-time erro
 
 Functions can be partially specialized:
 
+.. das-doc: alt
 .. code-block:: das
 
     def twice(a:int) {      // int
@@ -401,6 +425,8 @@ Available logic operations are ``!``, ``&&``, ``||`` and ``^^``.
 
 LSP can be explicitly prohibited for a particular function argument via the ``explicit`` keyword:
 
+.. das-doc: alt
+.. das-doc: given struct Foo { a : int }
 .. code-block:: das
 
     def foo ( a : Foo explicit ) {  // will accept Foo, but not any subtype of Foo
@@ -432,7 +458,7 @@ It is valid to declare default values for arguments other than the last one:
 
 .. code-block:: das
 
-    def test(c: int = 1, d: int = 1, a, b: int) { // valid!
+    def test2(c: int = 1, d: int = 1, a, b: int) { // valid!
         return a + b + c + d
     }
 
@@ -440,18 +466,25 @@ Calling such functions with default arguments requires a named arguments call:
 
 .. code-block:: das
 
-    test(2, 3)           // invalid call, a,b parameters are missing
-    test([a = 2, b = 3]) // valid call
+    test2([a = 2, b = 3]) // valid call
+
+A positional call cannot skip the defaulted arguments, so ``a`` and ``b`` end up missing:
+
+.. das-doc: expect error[30341]
+.. code-block:: das
+
+    test2(2, 3)          // error[30341], a,b parameters are missing
 
 Default arguments can be combined with overloading:
 
+.. das-doc: alt
 .. code-block:: das
 
     def test(c: int = 1, d: int = 1, a, b: int) {
         return a + b + c + d
     }
     def test(a, b: int) { // now test(2, 3) is valid call
-        return test([a = a, b = b])
+        return test([c = 1, d = 1, a = a, b = b])
     }
 
 ---------------
@@ -472,7 +505,7 @@ However, code can be easily written "OOP style" by using the right pipe operator
         thisFoo.y = y
     }
     ...
-    var foo:Foo
+    var foo = Foo()
     foo |> setXY(10, 11)   // this is syntactic sugar for setXY(foo, 10, 11)
     setXY(foo, 10, 11)     // exactly same as above line
 
@@ -500,6 +533,7 @@ Operator Overloading
 Daslang allows you to overload operators, which means that you can define custom behavior for operators when used with your own data types.
 To overload an operator, you need to define a special function with the name of the operator you want to overload. Here's the syntax:
 
+.. das-doc: skip
 .. code-block:: das
 
     def operator <operator>(<arguments>) : <return_type>
@@ -584,6 +618,7 @@ Unary operators
 
 Unary operators take a single argument. To overload unary minus (negate):
 
+.. das-doc: given struct Vec2 { x, y : float }
 .. code-block:: das
 
     def operator -(a : Vec2) : Vec2 {
@@ -660,6 +695,7 @@ Additional index operators include ``[]<-`` (move into index), ``[]:=`` (clone i
 ``[]<-`` takes the right-hand side as a ``var`` parameter and moves from it (zeroing the
 source) — this is the store operator for non-copyable element types:
 
+.. das-doc: given struct Rows { rows : array<array<int>> }
 .. code-block:: das
 
     def operator []<-(var m : Rows; i : int; var v : array<int>) {
@@ -742,10 +778,11 @@ Null-coalesce operator
 ``operator ??`` can be overloaded to provide a default value when a nullable
 or optional type is null:
 
+.. das-doc: given struct MyOptional { has_value : bool; value : int }
 .. code-block:: das
 
     def operator ??(a : MyOptional; default_value : int) : int {
-        // return contained value or default_value
+        return a.has_value ? a.value : default_value
     }
 
 ---------------------------------------------
@@ -778,6 +815,7 @@ Overloading the '.' and '?.' operators
 Daslang allows you to overload the dot . operator, which is used to access fields of structure or a class.
 To overload the dot . operator, you need to define a special function with the name operator `.` Here's the syntax:
 
+.. das-doc: skip
 .. code-block:: das
 
     def operator.(<object>: <type>, <name>: string) : <return_type>
@@ -785,6 +823,7 @@ To overload the dot . operator, you need to define a special function with the n
 
 Alternatively you can specify field explicitly:
 
+.. das-doc: skip
 .. code-block:: das
 
     def operator.<name> (<object>: <type>) : <return_type>

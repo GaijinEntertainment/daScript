@@ -45,9 +45,11 @@ Init and shutdown
 =================
 
 ``init()`` opens a 1024x720 GLFW window via ``live_create_window`` and hands
-the handle to ``live_imgui_init``. It also bumps ``io.FontGlobalScale`` to
-``1.5`` so the recorded APNG reads at typical Sphinx HTML widths without
-zooming. ``shutdown()`` mirrors the pair in reverse order.
+the handle to ``live_imgui_init``. It also bumps
+``GetStyle().FontScaleMain`` to ``1.5`` so the recorded APNG reads at typical
+Sphinx HTML widths without zooming (ImGui 1.92 moved ``io.FontGlobalScale``
+onto the style as ``FontScaleMain``). ``shutdown()`` mirrors the pair in
+reverse order.
 
 The frame loop
 ==============
@@ -72,11 +74,14 @@ register at ``AUDIO_WIN/<ident>``:
    window(AUDIO_WIN, (text = "Audio settings", closable = false,
                       flags = ImGuiWindowFlags.None)) {
        input_text(USER_NAME, (text = "Your name"))
+       VOLUME.bounds = (0.0f, 1.0f)
        slider_float(VOLUME, (text = "Master volume"))
        checkbox(MUTED, (text = "Mute"))
        combo(QUALITY, (text = "Quality", items <- ["Low", "Medium", "High", "Ultra"]))
        color_edit3(TINT, (text = "Accent color"))
-       if (button(SAVE_BTN, (text = "Save settings"))) { ... }
+       if (button(SAVE_BTN, (text = "Save settings"))) {
+           print("save clicked: vol={VOLUME.value} muted={MUTED.value}\n")
+       }
    }
 
 Each boost macro declares the named global the first time it expands and

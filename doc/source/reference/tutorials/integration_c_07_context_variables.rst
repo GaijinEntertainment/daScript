@@ -31,6 +31,8 @@ The daslang script
 
 The companion script declares four scalar globals:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
    options gen2

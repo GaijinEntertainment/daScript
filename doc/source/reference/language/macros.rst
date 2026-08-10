@@ -7,6 +7,14 @@ Macros
 In Daslang, macros are the machinery that allow direct manipulation of the syntax tree.
 
 Macros are exposed via the :ref:`daslib/ast <stdlib_ast>` module and :ref:`daslib/ast_boost <stdlib_ast_boost>` helper module.
+Every example on this page assumes both are required, and lives in a file which declares a
+:ref:`module <modules>` — a file that carries macros has to be one:
+
+.. das-doc: given module doc_macros
+.. code-block:: das
+
+    require daslib/ast
+    require daslib/ast_boost
 
 Macros are evaluated at compilation time during different compilation passes.
 Macros assigned to a specific module are evaluated as part of the module every time that module is included.
@@ -89,12 +97,9 @@ For example, this is how this lifetime cycle is implemented for the reader macro
 
 .. code-block:: das
 
-    def add_new_reader_macro ( name:string; someClassPtr ) {
-        var ann <- make_reader_macro(name, someClassPtr)
+    def add_new_reader_macro ( name:string; var someClassPtr ) {
+        var ann = make_reader_macro(name, someClassPtr)
         this_module() |> add_reader_macro(ann)
-        unsafe {
-            delete ann
-        }
     }
 
 ---------------------
@@ -109,6 +114,7 @@ There is additionally the ``[function_macro]`` annotation which accomplishes the
 
 ``AstFunctionAnnotation`` allows several different manipulations:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstFunctionAnnotation {
@@ -170,25 +176,28 @@ Annotations that perform purely structural rewrites (no type information needed)
 example, ``[class_method]`` injecting a ``self`` argument — return true so that the
 rewrite happens once on the template and every instantiation inherits it.
 
-Lets review the following example from ``ast_boost`` of how the ``macro`` annotation is implemented:
+Lets review the following example from ``ast_boost`` of how the ``macro`` annotation is implemented
+(the excerpt is quoted from that module — a second declaration of ``MacroMacro`` cannot coexist with
+it in one program):
 
+.. das-doc: fragment
 .. code-block:: das
 
     class MacroMacro : AstFunctionAnnotation {
         def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool {
-            compiling_program().flags |= ProgramFlags.needMacroModule
-            func.flags |= FunctionFlags.init
+            compiling_program().flags.needMacroModule = true
+            func.flags.macroInit = true
             var blk = new ExprBlock(at=func.at)
             var ifm = new ExprCall(at=func.at, name:="is_compiling_macros")
             var ife = new ExprIfThenElse(at=func.at, cond=ifm, if_true=func.body)
-            push(blk.list,ife)
+            emplace(blk.list,ife)
             func.body = blk
             return true
         }
     }
 
 During the ``apply`` pass the function body is appended with the ``if is_compiling_macros()`` closure.
-Additionally, the ``init`` flag is set, which is equivalent to a ``_macro`` annotation.
+Additionally, the ``macroInit`` flag is set, which is what the ``_macro`` annotation itself sets.
 Functions annotated with ``[macro]`` are evaluated during module compilation.
 
 ------------------
@@ -197,6 +206,7 @@ AstBlockAnnotation
 
 ``AstBlockAnnotation`` is used to manipulate block expressions (blocks, lambdas, local functions):
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstBlockAnnotation {
@@ -217,6 +227,7 @@ AstStructureAnnotation
 
 The ``AstStructureAnnotation`` macro lets you manipulate structure or class definitions via annotation:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstStructureAnnotation {
@@ -224,6 +235,9 @@ The ``AstStructureAnnotation`` macro lets you manipulate structure or class defi
         def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
         def abstract complete ( var st:StructurePtr; var ctx:smart_ptr<Context> ) : void
+        def abstract aotPrefix ( var st:StructurePtr; args:AnnotationArgumentList; var writer:StringBuilderWriter ) : void
+        def abstract aotBody ( var st:StructurePtr; args:AnnotationArgumentList; var writer:StringBuilderWriter ) : void
+        def abstract aotSuffix ( var st:StructurePtr; args:AnnotationArgumentList; var writer:StringBuilderWriter ) : void
     }
 
 ``add_new_structure_annotation`` adds a structure annotation to a module.
@@ -238,6 +252,9 @@ After this, the structure is fully inferred and defined and can no longer be mod
 
 ``complete`` is invoked during the ``simulate`` portion of context creation. At this point Context is available.
 
+``aotPrefix``, ``aotBody`` and ``aotSuffix`` write C++ text into the generated AOT code: before the
+generated ``struct``, inside its body, and after its closing brace.
+
 An example of such annotation is ``SetupAnyAnnotation`` from :ref:`daslib/ast_boost <stdlib_ast_boost>`.
 
 ------------------------
@@ -246,6 +263,7 @@ AstEnumerationAnnotation
 
 The ``AstEnumerationAnnotation`` macro lets you manipulate enumerations via annotation:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstEnumerationAnnotation {
@@ -257,9 +275,16 @@ There is additionally the ``[enumeration_macro]`` annotation which accomplishes 
 
 ``apply`` is invoked before the infer pass. It is the best time to modify the enumeration, generate some code, etc.
 
-In gen2 syntax, register an enumeration macro and annotate enums with:
+An enumeration macro is a class registered with ``[enumeration_macro]``. It lives in its own
+module, because the annotation it registers has to exist before the file that uses it is parsed:
 
+.. das-doc: file enum_macro_mod.das
 .. code-block:: das
+
+    module enum_macro_mod public
+
+    require daslib/ast
+    require daslib/ast_boost
 
     [enumeration_macro(name="enum_total")]
     class EnumTotalAnnotation : AstEnumerationAnnotation {
@@ -271,8 +296,14 @@ In gen2 syntax, register an enumeration macro and annotate enums with:
         }
     }
 
+A file which requires that module can then annotate its enumerations:
+
+.. code-block:: das
+
+    require enum_macro_mod
+
     [enum_total]
-    enum Direction { North; South; East; West }
+    enum Direction { North, South, East, West }
 
 .. seealso::
 
@@ -293,6 +324,7 @@ There is additionally the ``[variant_macro]`` annotation which accomplishes the 
 
 Each of the 3 transformations are covered in the appropriate abstract function:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstVariantMacro {
@@ -303,6 +335,7 @@ Each of the 3 transformations are covered in the appropriate abstract function:
 
 Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`:
 
+.. das-doc: fragment
 .. code-block:: das
 
     // replacing ExprIsVariant(value,name) => ExprOp2("==", value.__rtti, "name")
@@ -344,6 +377,7 @@ There is additionally the ``[reader_macro]`` annotation, which essentially autom
 Reader macros accept characters, collect them if necessary, and produce output
 via one of two patterns:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstReaderMacro {
@@ -357,11 +391,21 @@ The ``accept`` function notifies the correct terminator of the character sequenc
 
 .. code-block:: das
 
+    require arr_macro_mod       // the module below, which registers `arr`
+
     var x = %arr~\{\}\w\x\y\n%% // invoking reader macro arr, %% is a terminator
 
-Consider the implementation for the example above:
+Consider the implementation for the example above.  Like every macro, it lives in its own
+module, so that the reader macro is registered before the file using it is parsed:
 
+.. das-doc: file arr_macro_mod.das
 .. code-block:: das
+
+    module arr_macro_mod public
+
+    require daslib/ast
+    require daslib/ast_boost
+    require strings
 
     [reader_macro(name="arr")]
     class ArrayReader : AstReaderMacro {
@@ -377,9 +421,8 @@ Consider the implementation for the example above:
         }
         def override visit ( prog:ProgramPtr; mod:Module?; expr:ExprReader? ) : ExpressionPtr {
             let seqStr = string(expr.sequence)
-            var arrT = new TypeDecl(baseType=Type.tInt)
-            push(arrT.dim,length(seqStr))
-            var mkArr = new ExprMakeArray(at = expr.at, makeType <- arrT)
+            var arrT = make_fixed_array_type(length(seqStr), new TypeDecl(baseType=Type.tInt))
+            var mkArr = new ExprMakeArray(at = expr.at, makeType = arrT)
             for ( x in seqStr ) {
                 var mkC = new ExprConstInt(at=expr.at, value=x)
                 push(mkArr.values,mkC)
@@ -408,6 +451,7 @@ Reader macros are normally invoked with the ``~`` separator (``%name~ ... %%``).
 **inline** form that uses a ``!`` separator (``%name! ... %%``) and runs ``suffix`` **in expression
 position**:
 
+.. das-doc: fragment
 .. code-block:: das
 
     var total = %sum! 1, 2, 3 %%   // rewrites to ( 1 + 2 + 3 ), re-parsed in place
@@ -433,17 +477,19 @@ It occurs during the infer pass.
 ``add_new_call_macro`` adds a call macro to a module.
 The ``[call_macro]`` annotation automates the same thing:
 
-    .. code-block:: das
+.. das-doc: signatures
+.. code-block:: das
 
-        class AstCallMacro {
-            def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : void
-            def abstract visit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : ExpressionPtr
-            def abstract canVisitArgument ( expr:ExprCallMacro?; argIndex:int ) : bool
-            def abstract canFoldReturnResult ( expr:ExprCallMacro? ) : bool
-        }
+    class AstCallMacro {
+        def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : void
+        def abstract visit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : ExpressionPtr
+        def abstract canVisitArgument ( expr:ExprCallMacro?; argIndex:int ) : bool
+        def abstract canFoldReturnResult ( expr:ExprCallMacro? ) : bool
+    }
 
 ``apply`` from :ref:`daslib/apply <stdlib_apply>` is an example of such a macro:
 
+.. das-doc: fragment
 .. code-block:: das
 
     [call_macro(name="apply")]  // apply(value, block)
@@ -470,16 +516,20 @@ AstPassMacro
 ``AstPassMacro`` is one macro to rule them all. It gets the entire program as
 input and can be invoked at numerous passes:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstPassMacro {
         def abstract apply(prog : ProgramPtr; mod : Module?) : bool
     }
 
-Five annotations control when a pass macro runs:
+Seven annotations control when a pass macro runs:
 
 - ``[infer_macro]`` — after clean type inference.  Returning ``true`` re-infers.
 - ``[dirty_infer_macro]`` — during each dirty inference pass.
+- ``[pre_infer_macro]`` — before each inference leg, on the not-yet-inferred tree.
+- ``[post_infer_macro]`` — once inference is finished, before the tree is consumed
+  (access flags, lint, each optimisation round).
 - ``[lint_macro]`` — after successful compilation (lint phase, read-only).
 - ``[global_lint_macro]`` — same as ``[lint_macro]`` but for all modules.
 - ``[optimization_macro]`` — during the optimisation loop.
@@ -501,6 +551,7 @@ AstTypeMacro
 ``AstTypeMacro`` lets you define custom type expressions resolved during
 type inference.  It has a single method:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstTypeMacro {
@@ -512,19 +563,19 @@ The ``[type_macro(name="…")]`` annotation automates registration.
 
 The compiler parses invocations like ``name(type<T>, N)`` in type position
 into a ``TypeDecl`` with ``baseType = Type.typeMacro``.  The arguments are
-stored in ``td.dimExpr``:
+stored in ``td.typeMacroExpr``:
 
-- ``dimExpr[0]`` — ``ExprConstString`` with the macro name
-- ``dimExpr[1..]`` — user arguments (``ExprTypeDecl`` for types,
+- ``typeMacroExpr[0]`` — ``ExprConstString`` with the macro name
+- ``typeMacroExpr[1..]`` — user arguments (``ExprTypeDecl`` for types,
   ``ExprConstInt`` for integers, etc.)
 
 ``visit()`` is called in two contexts:
 
 - **Concrete** — all types are inferred; ``passT`` is null;
-  ``dimExpr[i]._type`` is the resolved type.
+  ``typeMacroExpr[i]._type`` is the resolved type.
 - **Generic** — type parameters like ``auto(TT)`` are unresolved;
   ``passT`` carries the actual argument type for matching;
-  ``dimExpr[i]._type`` is null.
+  ``typeMacroExpr[i]._type`` is null.
 
 .. seealso::
 
@@ -537,6 +588,7 @@ AstTypeInfoMacro
 
 ``AstTypeInfoMacro`` is designed to implement custom type information inside a typeinfo expression:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstTypeInfoMacro {
@@ -571,6 +623,7 @@ AstForLoopMacro
 
 ``AstForLoopMacro`` is designed to implement custom processing of for loop expressions:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstForLoopMacro {
@@ -588,6 +641,7 @@ AstCaptureMacro
 
 ``AstCaptureMacro`` is designed to implement custom capturing and finalization of lambda expressions:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstCaptureMacro {
@@ -623,6 +677,7 @@ AstCommentReader
 
 ``AstCommentReader`` is designed to implement custom processing of comment expressions:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstCommentReader {
@@ -640,8 +695,24 @@ AstCommentReader
         def abstract afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterVariantEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract afterVariant ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeTuple ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterTupleEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterTuple ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeBitfield ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterBitfieldEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterBitfield ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract beforeEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterEnumerationEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        def abstract afterEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract afterEnumeration ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract beforeAlias ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
@@ -669,8 +740,13 @@ There is additionally the ``[comment_reader]`` annotation, which essentially aut
 ``afterGlobalVariable`` occurs after each individual global variable declaration.
 
 ``beforeVariant`` and ``afterVariant`` occur before and after each variant declaration, regardless of if it has comments.
+The same pair exists for tuples (``beforeTuple`` / ``afterTuple``) and bitfields (``beforeBitfield`` / ``afterBitfield``).
 
 ``beforeEnumeration`` and ``afterEnumeration`` occur before and after each enumeration declaration, regardless of if it has comments.
+
+Variants, tuples, bitfields and enumerations additionally report their bodies: ``before<Kind>Entries``
+and ``after<Kind>Entries`` bracket the entry list, and ``after<Kind>Entry`` occurs after each single
+entry, carrying its name.
 
 ``beforeAlias`` and ``afterAlias`` occur before and after each alias type declaration, regardless or if it has comments.
 
@@ -680,6 +756,7 @@ AstSimulateMacro
 
 ``AstSimulateMacro`` is designed to customize the simulation of the program:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstSimulateMacro {
@@ -698,6 +775,7 @@ AstVisitor
 ``AstVisitor`` implements the visitor pattern for the Daslang expression tree.
 It contains a callback for every single expression in prefix and postfix form, as well as some additional callbacks:
 
+.. das-doc: signatures
 .. code-block:: das
 
     class AstVisitor {
@@ -710,24 +788,31 @@ It contains a callback for every single expression in prefix and postfix form, a
 
 Postfix callbacks can return expressions to replace the ones passed to the callback.
 
-PrintVisitor from the ``ast_print`` example implements the printing of every single expression in Daslang syntax.
+``PrintVisitor`` from ``daslib/ast_print`` implements the printing of every single expression in Daslang syntax.
 
 ``make_visitor`` creates a visitor adapter from the class, derived from ``AstVisitor``.
 The adapter then can be applied to a program via the ``visit`` function:
 
 .. code-block:: das
 
+    require daslib/ast_print
+
     var astVisitor = new PrintVisitor()
     make_visitor(*astVisitor) $ (astVisitorAdapter) {
         visit(this_program(), astVisitorAdapter)
     }
 
-If an expression needs to be visited, and can potentially be fully substituted, the ``visit_expression`` function should be used:
+If an expression needs to be visited, and can potentially be fully substituted, the
+``visit_expression`` function from ``daslib/templates_boost`` should be used. It takes the
+expression by reference and replaces it in place, so there is nothing to assign back:
 
+.. das-doc: given var expr : ExpressionPtr
 .. code-block:: das
 
+    require daslib/templates_boost
+
     make_visitor(*astVisitor) $ (astVisitorAdapter) {
-        expr <- visit_expression(expr,astVisitorAdapter)
+        visit_expression(expr,astVisitorAdapter)
     }
 
 ---------------------

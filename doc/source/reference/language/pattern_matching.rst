@@ -8,6 +8,11 @@ Pattern matching allows you to compare a value against a set of structural patte
 fields when a pattern matches.
 In Daslang, pattern matching is implemented via macros in the ``daslib/match`` module.
 
+``match`` is a statement, not an expression. Each arm is a block, and a value leaves the
+match through a ``return`` (or an assignment) inside that arm. ``return match ( x ) { ... }``
+is an error — the compiler reports ``error[30220]`` and asks for the match to be written as a
+statement whose arms return.
+
 Enumeration Matching
 --------------------
 
@@ -15,6 +20,8 @@ You can match on enumeration values using the ``match`` keyword. Each ``if`` cla
 The ``_`` pattern is a catch-all that matches anything not covered by previous cases:
 
 .. code-block:: das
+
+    require daslib/match
 
     enum Color {
         Black
@@ -291,6 +298,7 @@ The ``||`` operator matches either of the provided patterns. Both sides must dec
 The ``[match_as_is]`` annotation enables pattern matching for structures of different types,
 provided the necessary ``is`` and ``as`` operators have been implemented:
 
+.. das-doc: given struct Cmd { rtti : string }
 .. code-block:: das
 
     [match_as_is]
@@ -331,7 +339,7 @@ The required ``is`` and ``as`` operators:
         return default<CmdMove>
     }
 
-With these operators in place, you can match against ``CmdMove`` in a ``match`` expression:
+With these operators in place, you can match against ``CmdMove`` in a ``match`` statement:
 
 .. code-block:: das
 
@@ -401,6 +409,8 @@ capture, and nested node patterns recurse:
 
 .. code-block:: das
 
+    require daslib/ast_boost
+
     def classify ( e : ExpressionPtr ) {
         match ( e ) {
             if ( ExprOp2(op="+", left=ExprOp2(op="*", left=$v(a), right=$v(b)), right=$v(c)) ) {
@@ -429,6 +439,7 @@ Static Matching
 ``static_match`` works like ``match``, but ignores patterns with type mismatches at compile time instead
 of reporting errors. This makes it suitable for generic functions:
 
+.. das-doc: skip
 .. code-block:: das
 
     static_match ( match_expression ) {
@@ -476,6 +487,7 @@ match_type
 
 The ``match_type`` subexpression matches based on the type of an expression:
 
+.. das-doc: skip
 .. code-block:: das
 
     if ( match_type(type<Type>, expr) ) {

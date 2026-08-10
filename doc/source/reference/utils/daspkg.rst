@@ -89,22 +89,32 @@ Commands
      - Upgrade one or all packages to the latest version.
    * - ``list``
      - List installed packages.
-   * - ``search <query>``
-     - Search the package index.
+   * - ``search [query]``
+     - Search the package index.  An empty query lists every entry.
    * - ``build``
-     - Build all C/C++ packages (cmake).
+     - Build all C/C++ packages (cmake).  ``build --wasm`` builds the
+       wasm64 runtime and module archives instead.
    * - ``check``
      - Verify installed packages are present and have ``.das_module``.
+   * - ``cleanup``
+     - Remove ``modules/`` and ``daspkg.lock`` for a fresh install.
+       With ``--global`` it also requires ``--force``.
    * - ``doctor``
      - Check environment (git, cmake, gh).
+   * - ``release``
+     - Bundle the project as a redistributable standalone (exe +
+       shared modules + assets) under ``<--out>/<bundle>/``.
+       ``release wasm`` cross-compiles to a standalone web app instead.
+   * - ``update-index``
+     - Refresh every index entry's metadata from its source repo.
    * - ``introduce [url]``
      - Submit a package to the index via PR (requires ``gh`` CLI).
    * - ``withdraw <name>``
      - Remove a package from the index via PR (requires ``gh`` CLI).
 
 All commands that operate on packages (``install``, ``remove``,
-``update``, ``upgrade``, ``list``, ``check``, ``build``) accept the
-``--global`` flag.
+``update``, ``upgrade``, ``list``, ``check``, ``build``, ``cleanup``)
+accept the ``--global`` flag.
 
 Options:
 
@@ -112,11 +122,20 @@ Options:
 - ``--force`` -- force reinstall even if already installed.
 - ``--global``, ``-g`` -- operate on global modules in
   ``{das_root}/modules/`` (see :ref:`daspkg_global_modules`).
+- ``--branch <name>``, ``-b`` -- install from a branch instead of a tag.
 - ``--color`` / ``--no-color`` -- enable/disable ANSI colored output.
 - ``--verbose``, ``-v`` -- print debug details (git commands, resolve
   steps, file operations).
 - ``--json`` -- machine-readable JSON output (``search``, ``list``,
   ``check``).
+- ``--out <path>`` -- output directory for ``release`` (default:
+  current directory).
+- ``--paranoid`` / ``--quick`` -- ``release`` tuning budget: re-mint the
+  ``[tune]`` sidecar with the paranoid budget, or accept a complete
+  existing sidecar instead of re-minting.
+- ``--wasm`` -- on ``build``, target wasm64 (memory64).
+- ``--wasm-lib-dir <path>`` -- directory holding the wasm64 archives;
+  default ``<das_root>/web/output64/lib``.
 
 
 Package sources
@@ -200,10 +219,16 @@ Manifest functions
    - ``package_author(author)`` -- author name
    - ``package_description(desc)`` -- short description
    - ``package_source(url)`` -- canonical source URL
+   - ``package_license(license)`` -- license identifier
+   - ``package_tag(tag)`` / ``package_tags(tags)`` -- index search tags
+     (both append)
+   - ``package_min_sdk(version)`` -- declared minimum daslang SDK
+     version (index metadata; not enforced at install time)
 
 ``resolve(sdk_version, version : string)``
-   Optional.  Receives the daslang SDK version and the user-requested
-   version string, and calls one of:
+   Optional.  Receives the user-requested version string -- the leading
+   ``v`` is stripped, so ``install foo@v1.0`` arrives as ``"1.0"`` -- and
+   calls one of:
 
    .. list-table::
       :header-rows: 1
@@ -218,9 +243,13 @@ Manifest functions
       * - ``download_redirect("github.com/org/new-repo", "v2.0")``
         - Re-clone from a different repository
 
-   If no ``resolve()`` function exists, the version string (from
-   ``install foo@v1.0``) is used as a git tag directly.  If no
-   version is specified, the default branch is used.
+   The first parameter, ``sdk_version``, is reserved -- daspkg passes an
+   empty string for it today, so a manifest cannot yet branch on the SDK
+   release.
+
+   If no ``resolve()`` function exists, the version string is used as a
+   git tag directly, retrying with a ``v`` prefix if that tag is
+   missing.  If no version is specified, the default branch is used.
 
 ``dependencies(version : string)``
    Optional.  Declares dependencies on other packages:
@@ -244,6 +273,14 @@ Manifest functions
 
    If omitted, no build step runs (pure-daslang package).
 
+``release()``
+   Optional.  Declares what ``daspkg release`` ships for this package:
+   the entry script (``release_main``), the bundle name
+   (``release_name``), asset globs (``release_include`` /
+   ``release_exclude`` / ``release_include_from``), force-included
+   dylibs (``release_shared_module``), and the wasm-specific hooks used
+   by ``release wasm``.  See ``daslib/daspkg.das`` for the full set.
+
 
 Install flow
 ============
@@ -252,15 +289,21 @@ When you run ``daspkg install github.com/user/repo@v1.0``:
 
 1. Shallow-clone the package from the default branch into a temp
    directory.
-2. If ``.das_package`` exists and has ``resolve()`` -- call it with
-   ``sdk_version`` and ``"v1.0"``.  Checkout the resolved tag/branch.
-   On redirect, discard the clone and re-clone from the new URL.
+2. If ``.das_package`` exists and has ``resolve()`` -- call it with the
+   requested version, ``"1.0"`` (the leading ``v`` is stripped).
+   Checkout the resolved tag/branch.  On redirect, discard the clone and
+   re-clone from the new URL.
 3. If resolve returned nothing and a version was requested -- checkout
-   the version string as a git tag.
+   the version string as a git tag, retrying with a ``v`` prefix.
 4. Move to ``modules/<name>/``.
-5. Record in ``daspkg.lock``.
-6. Install transitive dependencies (from ``dependencies()``).
-7. Auto-build if ``.das_package`` has ``build()``.
+5. Install transitive dependencies (from ``dependencies()``).
+6. Auto-build if ``.das_package`` has ``build()``.
+7. Record in ``daspkg.lock`` and add ``modules/<name>`` to
+   ``.gitignore`` (local installs only).
+
+The lock file is written **last**: if dependency installation or the
+build step fails, the partial install is removed and nothing is
+recorded.
 
 
 .. _daspkg_global_modules:
@@ -314,7 +357,7 @@ A package can exist both locally and globally.  The C++ runtime
 - If the same module directory exists in both ``{das_root}/modules/``
   and ``{project_root}/modules/``, the **local version wins**.
 - A warning is printed:
-  ``Warning: local 'dasVulkan' shadows global -- using local``
+  ``Warning: local 'dasVulkan' shadows global - using local``
 - This is safe -- removing the local copy seamlessly falls back to the
   global one.
 
@@ -507,10 +550,11 @@ Package with dependencies
    }
 
 
-SDK-aware version resolution
------------------------------
+Version aliases
+---------------
 
-A package that ships different versions for different SDK releases:
+A package that maps loose version requests (``latest``, ``1.x``) onto
+concrete tags:
 
 .. code-block:: das
 
@@ -601,8 +645,9 @@ Three version axes:
 
 - **Package version** -- semver of the package itself.
 - **daslang version** -- which SDK release the package is compatible
-  with.  The ``resolve()`` function receives ``sdk_version`` and can
-  return different tags for different SDK versions.
+  with.  Declared with ``package_min_sdk()`` and carried in the index;
+  ``resolve()`` reserves an ``sdk_version`` parameter for branching on
+  it, but daspkg passes an empty string there today.
 - **Dependencies** -- other packages with their own version
   constraints.
 

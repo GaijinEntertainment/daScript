@@ -56,8 +56,12 @@ function with the operator symbol as its daslang name:
        SideEffects::none, "vec3_neg")
            ->args({"a"});
 
-Available operator names: ``+``, ``-``, ``*``, ``/``, ``%``, ``<<``,
-``>>``, ``<``, ``>``, ``<=``, ``>=``, ``&``, ``|``, ``^``.
+Operators bind purely by name — there is no whitelist.  Registration
+only checks that the name is punctuation-only (``isValidBuiltinName``),
+so every operator the parser can produce is bindable: ``+ - * / % <<
+>> < > <= >= & | ^ ~ ! && ||``, the compound-assign family (``+= -= *=
+/= %= <<= >>= &= |= ^=``), ``++`` / ``--``, and ``[]``.  The special
+names ``clone`` and ``finalize`` bind the same way.
 
 .. note::
 
@@ -115,7 +119,12 @@ getter methods on the C++ type, then register them in the annotation:
        }
    };
 
-In daslang, properties are accessed with dot syntax just like fields:
+In daslang, properties are accessed with dot syntax just like fields.
+Every daslang snippet below needs this tutorial's C++ host — ``Vec3``,
+``Color``, ``SafeColor`` and ``make_vec3`` live in the
+``tutorial_09_cpp`` module registered by ``09_operators_and_properties.cpp``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -153,6 +162,8 @@ Register with explicit function-pointer types for both overloads:
    >("editable", "editable");
 
 In daslang, the property value depends on the variable's mutability:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -198,6 +209,8 @@ Consider a ``Color`` type with a non-trivial constructor:
    };
 
 Without annotation overrides, local Color variables need workarounds:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -269,6 +282,8 @@ We define ``SafeColor`` as a separate struct with the same layout:
 
 Now scripts can use SafeColor without ``unsafe``:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
    let sc = SafeColor()          // works — annotation says it's safe
@@ -281,6 +296,8 @@ Using operators in daslang
 =============================
 
 All operators work naturally:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -298,6 +315,7 @@ All operators work naturally:
        print("a == a: {a == a}\n")   // true
        print("a != b: {a != b}\n")   // true
        print("a.length = {a.length}\n")  // property access
+   }
 
 
 Building and running

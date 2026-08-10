@@ -52,11 +52,21 @@ The module file — enum_total
 ============================
 
 The macro module defines a single ``AstEnumerationAnnotation`` subclass
-that adds a ``total`` entry to any enum.
+that adds a ``total`` entry to any enum.  Macros live in their own module,
+so the file opens with a ``module`` declaration — without one the compiler
+rejects it with *"module Module_Name is required"*.
 
 Full source: :download:`enum_macro_mod.das <../../../../../tutorials/macros/enum_macro_mod.das>`
 
+.. das-doc: file enum_macro_mod.das
 .. code-block:: das
+
+    options gen2
+
+    module enum_macro_mod
+
+    require daslib/ast
+    require daslib/ast_boost
 
     [enumeration_macro(name="enum_total")]
     class EnumTotalAnnotation : AstEnumerationAnnotation {
@@ -191,6 +201,7 @@ How string_to_enum works internally
 The ``EnumFromStringConstruction`` class in ``daslib/enum_trait.das``
 demonstrates the **code generation** pattern for enumeration macros:
 
+.. das-doc: fragment
 .. code-block:: das
 
     [enumeration_macro(name="string_to_enum")]

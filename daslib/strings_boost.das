@@ -6,9 +6,12 @@ module strings_boost shared public
 
 //! Extended string manipulation functions.
 //!
-//! Adds ``wide``, ``split``, ``join``, ``escape``, ``unescape``,
-//! ``starts_with``, ``ends_with``, ``replace``, string-builder helpers,
-//! and many other utilities on top of the built-in ``strings`` module.
+//! Adds ``wide``, ``split``, ``join``, ``contains``, ``count``,
+//! ``trim_prefix``/``trim_suffix``, ``pad_left``/``pad_right``,
+//! ``levenshtein_distance``, ``replace_multiple``, ``glob_match``, and other
+//! utilities on top of the built-in ``strings`` module, which it re-exports
+//! (``escape``, ``unescape``, ``starts_with``, ``ends_with``, ``replace``
+//! come from ``strings`` via that re-export).
 
 require math
 require strings public

@@ -56,7 +56,9 @@ Binding constants
    addConstant(*this, "PI",    3.14159265358979323846f);
    addConstant(*this, "SQRT2", sqrtf(2.0f));
 
-In the script:
+In the script (after ``require tutorial_03_cpp``):
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -145,6 +147,8 @@ If a function takes a reference and modifies it, use
 
 In the script:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
    var val = 21
@@ -162,13 +166,15 @@ script caller does **not** see these parameters:
 .. code-block:: cpp
 
    void print_stack_info(Context * ctx) {
-       printf("Stack size: %d bytes\n", ctx->stack.size());
+       printf("Context stack size: %d bytes\n", ctx->stack.size());
    }
 
    addExtern<DAS_BIND_FUN(print_stack_info)>(*this, lib, "print_stack_info",
        SideEffects::modifyExternal, "print_stack_info");
 
 In the script the function takes zero arguments:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -192,6 +198,8 @@ The host program must request the module before ``Module::Initialize()``:
    }
 
 The script uses ``require`` to access the module:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

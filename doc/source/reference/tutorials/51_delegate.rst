@@ -160,8 +160,8 @@ Utilities: ``empty``, ``length``, ``clear``
     del.empty()     // true
     del.length()    // 0
 
-    del += @() { ... }
-    del += @() { ... }
+    del += @() { print("tick!\n") }
+    del += @() { print("tock!\n") }
     del.empty()     // false
     del.length()    // 2
 

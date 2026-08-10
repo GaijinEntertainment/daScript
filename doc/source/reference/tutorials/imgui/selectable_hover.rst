@@ -11,6 +11,8 @@ that:
 
 .. code-block:: das
 
+   var private SH_ROW : table<int; EmptyMarkerState>
+
    for (i in range(length(ROWS))) {
        let hovered = selectable_hover(SH_ROW[i], (text = "Row {i}: {ROWS[i]}"))
        if (hovered) {
@@ -21,6 +23,11 @@ that:
 ``EmptyMarkerState`` backs the widget; the return value is the per-frame
 hover bool. The selected flag is fixed at false — clicks render a brief
 selection highlight but the row never persists as selected.
+
+One widget per loop iteration means an **indexed** state table, and the
+``[widget]`` macro does not auto-emit those — declare
+``SH_ROW : table<int; EmptyMarkerState>`` at module scope yourself (string
+keys work too: ``table<string; EmptyMarkerState>``).
 
 Source: ``modules/dasImgui/examples/tutorial/selectable_hover.das``.
 
@@ -37,8 +44,10 @@ Walkthrough
 Requires
 ========
 
-Same baseline as ``selectable`` — already in
-``imgui/imgui_widgets_builtin`` (re-exported by ``imgui/imgui_boost_v2``).
+.. das-doc: given let ROWS = fixed_array("Arrow", "TextInput", "ResizeAll", "Hand", "NotAllowed")
+
+Same baseline as ``selectable`` — ``imgui/imgui_widgets_builtin``, which
+every widget tutorial already requires.
 
 When to reach for it
 ====================

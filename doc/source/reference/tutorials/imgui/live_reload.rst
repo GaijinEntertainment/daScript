@@ -64,8 +64,9 @@ A daslang-live reload runs in this order:
    in the OLD program. The ``live/live_vars`` module auto-generates
    one of these per ``@live`` global; the user can register more.
 3. Typer + codegen run against the new source. If they fail, the
-   reload aborts and the old program keeps running — ``live_get_error``
-   surfaces the diagnostic.
+   reload aborts and the old program keeps running —
+   ``get_last_error()`` surfaces the diagnostic in daslang, and the
+   ``last_error`` live command surfaces it over HTTP.
 4. The new program is loaded. ``[after_reload]`` hooks run, restoring
    the saved state (``@live`` first, then user hooks).
 5. The next ``update()`` call sees ``live_begin_frame() == true`` and
@@ -240,9 +241,10 @@ external events the same way it responds to mouse clicks.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/live_reload.das <../../../../../modules/dasImgui/examples/tutorial/live_reload.das>`
 
-   Framework module: ``live/live_host`` (the host itself),
-   ``live/live_commands`` (the ``[live_command]`` annotation), and
-   ``live/live_vars`` (the ``@live`` serializer).
+   Framework modules: ``live_host`` (the host itself — note the bare
+   name, it is the C++ module), ``live/live_commands`` (the
+   ``[live_command]`` annotation), and ``live/live_vars`` (the ``@live``
+   serializer).
 
    ImGui-specific lifecycle: ``imgui/imgui_live.das`` — the
    ``[before_reload]`` / ``[after_reload]`` pair that preserves the

@@ -157,7 +157,11 @@ The daslang side
 =================
 
 Scripts derive from the exposed abstract class and use ``def override``
-to provide implementations:
+to provide implementations.  ``TutorialBaseClass``, ``add_object`` and
+``tick`` all come from the ``tutorial_19`` module that
+``19_class_adapters.cpp`` registers, so this script needs that C++ host:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

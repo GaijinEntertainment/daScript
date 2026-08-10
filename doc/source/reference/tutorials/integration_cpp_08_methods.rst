@@ -109,7 +109,11 @@ Calling methods from daslang
 ===============================
 
 The bound methods are called as free functions.  Because handled types
-need mutable access under ``unsafe``, the pattern is:
+need mutable access under ``unsafe``, the pattern is (this snippet
+compiles only inside this tutorial's host — ``tutorial_08_cpp`` is the
+C++ module registered by ``08_methods.cpp``):
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -131,8 +135,10 @@ need mutable access under ``unsafe``, the pattern is:
            var c = make_counter(100, 10)
            c |> decrement()
            c |> decrement()
-           print("100 - 20 = {c |> get()}\n")  // 80
+           c |> decrement()
+           print("100 - 3*10 = {c |> get()}\n")  // 70
        }
+   }
 
 
 Building and running

@@ -14,20 +14,20 @@ Example:
 
     require daslib/lpipe
 
-        def take2(a, b : block) {
-            invoke(a)
-            invoke(b)
-        }
+    def take2(a, b : block) {
+        invoke(a)
+        invoke(b)
+    }
 
-        [export]
-        def main() {
-            take2() {
-                print("first\n")
-            }
-            lpipe() {
-                print("second\n")
-            }
+    [export]
+    def main() {
+        take2() {
+            print("first\n")
         }
-        // output:
-        // first
-        // second
+        lpipe() {
+            print("second\n")
+        }
+    }
+    // output:
+    // first
+    // second

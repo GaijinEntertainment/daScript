@@ -44,8 +44,9 @@ Five requirements every live-reloadable application must handle:
 
 3. **Runtime exception handling.**
    A crash in ``update()`` should not corrupt persistent state.  The
-   host clears the store on exception, so the application must handle
-   starting from scratch gracefully.
+   host clears the store's data entries on exception and stops calling
+   ``update()``, so the application must handle starting from scratch
+   gracefully.
 
 4. **State persistence.**
    GPU resources (windows, buffers, shaders) and game state (entities,
@@ -75,9 +76,13 @@ save --- the window stays open and the new code takes effect.
 
 Here is the full ``hello/main.das``:
 
+.. das-doc: file hello_main.das
+.. das-doc: given require hello_main
 .. code-block:: das
 
    options gen2
+   options persistent_heap
+   options gc
 
    require live/glfw_live
    require opengl/opengl_boost
@@ -156,6 +161,7 @@ Here is the full ``hello/main.das``:
        init()
        while (!exit_requested()) {
            update()
+           maybe_collect_gc()
        }
        shutdown()
    }
@@ -166,7 +172,9 @@ function drives the loop; under ``daslang-live.exe`` the host calls
 ``init()``, ``update()``, and ``shutdown()`` directly.
 
 For a stdin/stdout JSON-RPC transport instead of HTTP, swap one require
-line and use ``examples/daslive/hello_stdio/``::
+line and use ``examples/daslive/hello_stdio/``:
+
+.. code-block:: das
 
    require live/live_api_stdio   // instead of live/live_api
 
@@ -204,14 +212,20 @@ Lifecycle
 6. ``init()`` is called in the new context.
 
 **Failed reload:**
-The host reverts to the old context, pauses execution, and stores the
-compilation error.  Retrieve it via ``GET /error``, the
-``last_error`` stdio command, or ``get_last_error()``.  The next
-successful reload unpauses automatically.
+The host reverts to the old context, re-runs ``[after_reload]`` and
+``init()`` on it, pauses execution, and stores the compilation error.
+Retrieve it via ``GET /error``, the ``last_error`` stdio command, or
+``get_last_error()``.  The next successful reload unpauses
+automatically.
 
 **Runtime exception:**
-The host pauses, clears the persistent store (potentially corrupted),
-and sets the error.
+The host stores the exception message, pauses, and clears the store's
+data entries (``__live_vars_*`` and ``__decs_*``; infrastructure keys
+such as the GLFW window handle and audio handles are preserved).  The
+context is then marked dead: ``update()`` and the ``[before_update]``
+hooks are skipped from that point on even if you unpause --- only a
+reload or a reset recovers.  An exception thrown inside a
+``[live_command]`` does the same.
 
 
 Core API
@@ -231,7 +245,10 @@ Lifecycle and timing
    * - ``is_live_mode() : bool``
      - True when running under ``daslang-live.exe``.
    * - ``is_reload() : bool``
-     - True during the first frame after a reload.
+     - True from the start of a reload cycle (it is set before
+       ``shutdown()``) until the process exits.  Use it in ``init()`` /
+       ``shutdown()`` to tell a reload from a cold start --- it is not a
+       one-frame pulse.
    * - ``request_exit()``
      - Signal the host to exit after the current frame.
    * - ``exit_requested() : bool``
@@ -246,7 +263,7 @@ Lifecycle and timing
      - Current frames per second.
    * - ``is_paused() : bool``
      - True when execution is paused.
-   * - ``set_paused(v : bool)``
+   * - ``set_paused(paused : bool)``
      - Pause or unpause execution.
 
 Persistent store
@@ -262,8 +279,19 @@ Persistent store
      - Store a byte array under a string key.  Survives reloads.
    * - ``live_load_bytes(key, data) : bool``
      - Load a byte array.  Returns ``false`` if the key is not found.
+   * - ``live_store_string(key, value)``
+     - Same, for a string value.
+   * - ``live_load_string(key, value) : bool``
+     - Load a string.  Returns ``false`` if the key is not found.
    * - ``get_last_error() : string``
-     - Last compilation error (empty string if none).
+     - Last compilation error **or** runtime exception message (empty
+       string if none).
+   * - ``request_reset()``
+     - Re-simulate the already-compiled program into a fresh context
+       (no recompile); clears ``@live`` vars and store data.
+   * - ``get_reload_generation() : uint64``
+     - Bumped on every terminal reload / reset outcome, success or
+       failure.  Also reported by ``GET /status``.
 
 
 Reload annotations
@@ -280,8 +308,10 @@ Reload annotations
    * - ``[after_reload]``
      - Called after recompile, before ``init()``.  Restore state here.
    * - ``[before_update]``
-     - Called every frame before ``update()``.  Used internally by
-       ``live_api``, ``live_api_stdio``, and other transport agents.
+     - Called every frame before ``update()``.  Used by
+       ``live/glfw_live`` (synthetic input playback) and
+       ``live/opengl_live`` (capture).  Transport agents do **not** use
+       it --- they run on the debug-agent tick.
 
 The host discovers annotated functions by name prefix
 (``__before_reload_*``, ``__after_reload_*``, ``__before_update_*``).
@@ -300,6 +330,8 @@ Tag globals with ``@live`` and the macro auto-generates
 ``[before_reload]``/``[after_reload]`` handlers that serialize them
 via ``Archive``.  No manual save/restore needed:
 
+.. das-doc: file live_vars_main.das
+.. das-doc: given require live_vars_main
 .. code-block:: das
 
    options gen2
@@ -333,8 +365,13 @@ discarded and the new default takes effect --- safe format migration.
 Works with POD types, strings, enums, arrays, tables, and structs
 with serializable fields.
 
-Full reload (``request_reload(true)`` or ``POST /reload/full``) clears
-all ``@live`` entries.
+``@live`` also works on **struct fields**: a non-``@live`` global whose
+struct has ``@live`` fields is preserved field by field, and the
+non-marked fields take their source defaults on reload.  ``@live`` on a
+``let`` is a compile error --- a constant has nothing to restore.
+
+Full reload (``request_reload(true)`` or ``POST /reload/full``) and
+``POST /reset`` clear all ``@live`` entries.
 
 Manual serialization
 --------------------
@@ -357,13 +394,18 @@ Helper modules
    * - ``live/glfw_live``
      - GLFW window that persists across reloads + synthetic mouse driver.
    * - ``live/opengl_live``
-     - OpenGL screenshot + APNG video recording commands.
+     - OpenGL screenshot + APNG video recording commands, plus the
+       ``gl_stats`` command.
    * - ``live/decs_live``
      - Auto-serialization of DECS entities across reloads.
    * - ``live/live_commands``
      - ``[live_command]`` annotation for transport-callable functions.
    * - ``live/live_vars``
      - ``@live`` variable macro (auto-persistence).
+   * - ``live/live_gc``
+     - ``maybe_collect_gc()`` for standalone ``main`` loops (a no-op
+       under the host, which drives GC itself).  Re-exported by
+       ``live/glfw_live``.
    * - ``live/live_watch``
      - File watcher (auto-reload on save).
    * - ``live/live_watch_boost``
@@ -382,6 +424,11 @@ Helper modules
      - JSON-RPC 2.0 over stdin/stdout. No ``dasHV`` dependency.
    * - ``live/audio_live``
      - Audio state persistence across reloads.
+
+The ``live/`` prefix is a registered module alias, not a directory:
+``live/glfw_live``, ``live/opengl_live`` and ``live/audio_live`` live in
+``modules/dasGlfw/``, ``modules/dasOpenGL/`` and ``modules/dasAudio/``
+respectively; the rest are in ``modules/dasLiveHost/live/``.
 
 ``live/glfw_live``
 ------------------
@@ -441,13 +488,28 @@ re-record APNG tours from a JSON timeline.
      - Stop playback and clear the queue.
    * - ``mouse_status``
      - Playback status: ``playing``, ``elapsed_ms``, ``cursor_x``,
-       ``cursor_y``, ``queue_idx``, ``queue_total``.
+       ``cursor_y``, ``queue_idx``, ``queue_total``, ``held_count``,
+       ``cursor_owned``.
 
 ``get_synth_cursor() : tuple<bool; float; float>`` returns
-``(active, x, y)``. Overlays that draw a cursor sprite or motion trail
-should consult this — when ``active`` the synthetic driver owns the
-position, and ``ImGui_ImplGlfw``'s per-frame poll would otherwise
-overwrite ``io.MousePos`` with the real OS cursor on focused windows.
+``(active, x, y)``. ``active`` goes true on the first synthetic event and
+stays true for the rest of the session. Overlays that draw a cursor
+sprite or motion trail should consult this — when ``active`` the
+synthetic driver owns the position, and ``ImGui_ImplGlfw``'s per-frame
+poll would otherwise overwrite ``io.MousePos`` with the real OS cursor on
+focused windows.
+
+Synthetic keyboard driver
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The same module carries a keyboard timeline built the same way:
+``key_press`` / ``key_release`` (one key by GLFW keycode), ``key_char``
+(one codepoint through the char callback), ``key_type`` (type a whole
+string), ``key_chord`` (modifiers held around a key), ``key_play`` /
+``key_stop`` (scripted timeline), and ``key_status``.
+``get_synth_keys() : tuple<bool; uint; float>`` reports whether the
+synthetic keyboard is active, and ``live_apply_control_badge(locked)``
+draws the "input is scripted" affordance.
 
 ``live/decs_live``
 ------------------
@@ -456,6 +518,9 @@ Require this module and all DECS entities auto-persist across reloads.
 Guard ``decs::restart()`` with ``is_reload()`` to avoid wiping
 restored entities:
 
+.. das-doc: given require live/decs_live
+.. das-doc: given require daslib/decs
+.. das-doc: given require live_host
 .. code-block:: das
 
    if (!is_reload()) {
@@ -511,7 +576,9 @@ For ``daslang-live`` (the binary), pass ``--live-port N`` to the binary
 itself --- the C++ side scans the same full argv and keys its
 single-instance lock on the resolved port, so two daslang-live
 instances on different ports coexist on the same host. Invalid values
-(non-numeric, out of ``[1, 65535]``) fall through to the default.
+(non-numeric, out of ``[1, 65535]``) fall through to the default, and
+the **last** ``--live-port`` on the command line wins unconditionally ---
+``--live-port 19090 --live-port abc`` resolves to 9090, not 19090.
 
 Endpoints
 ^^^^^^^^^
@@ -525,10 +592,12 @@ Endpoints
      - Description
    * - GET
      - ``/status``
-     - JSON: ``fps``, ``uptime``, ``paused``, ``dt``, ``has_error``.
+     - JSON: ``fps``, ``uptime``, ``paused``, ``dt``, ``has_error``,
+       ``generation``.
    * - GET
      - ``/error``
-     - Plain text: last compilation error.
+     - ``text/plain`` with the last error; JSON ``null`` when there is
+       none.
    * - POST
      - ``/reload``
      - Incremental reload.
@@ -536,8 +605,12 @@ Endpoints
      - ``/reload/full``
      - Full recompile (clears ``@live`` vars).
    * - POST
+     - ``/reset``
+     - Re-simulate the compiled program into a fresh context (no
+       recompile); clears ``@live`` vars and store data.
+   * - POST
      - ``/pause``
-     - Pause execution.  Returns 503 if compile error active.
+     - Pause execution.
    * - POST
      - ``/unpause``
      - Resume execution.
@@ -555,9 +628,16 @@ Endpoints
        response is a JSON array of per-entry results in input order.
        Continue-on-error: malformed entries surface ``{"error":...}``
        in their slot.
-   * - ANY
-     - ``*``
-     - JSON help with all endpoints and curl examples.
+
+While a compilation error is active, ``/pause``, ``/unpause``,
+``/command`` and ``/commands`` return 503 with
+``{"error":…,"hint":"POST /reload to retry"}``.  ``/reload``,
+``/reload/full``, ``/reset``, ``/shutdown``, ``/status`` and ``/error``
+stay reachable.
+   * - GET
+     - ``/``
+     - JSON help with all endpoints and curl examples.  There is no
+       catch-all route --- any other path returns 404.
 
 curl examples
 ^^^^^^^^^^^^^
@@ -660,7 +740,8 @@ Available methods (built-ins from ``live/live_api_builtins``):
    * - ``status``
      - JSON: ``fps``, ``uptime``, ``paused``, ``dt``, ``has_error``.
    * - ``last_error``
-     - Last compilation error string (or JSON ``null`` if none).
+     - Last compilation error or runtime exception string (or JSON
+       ``null`` if none).
    * - ``reload``
      - Incremental reload.
    * - ``reload_full``
@@ -671,8 +752,16 @@ Available methods (built-ins from ``live/live_api_builtins``):
      - Resume execution.
    * - ``shutdown``
      - Graceful shutdown.
+   * - ``help``
+     - JSON object mapping every registered command name to its
+       description.  Works over both transports.
 
 Any user-defined ``[live_command]`` is also callable by name.
+
+An **unknown** method is not a ``-32601``: the dispatcher returns a
+successful envelope whose ``result`` is the string
+``"unknown command: <name>"``.  The ``-32700`` / ``-32600`` / ``-32602``
+codes only ever come from the envelope layer.
 
 .. warning::
 
@@ -707,8 +796,9 @@ CLI reference
    * - ``-project_root <path>``
      - Project root --- the parent of ``modules/`` for daspkg-style
        module resolution. Equivalent to passing ``project_root`` to
-       MCP tools.
-   * - ``-load_module <path>``
+       MCP tools. ``-project-root`` is accepted too. Defaults to the
+       script's own directory.
+   * - ``-load_module <path>`` (or ``-load-module``)
      - Directly load a single dynamic-module folder (the one containing
        ``.das_module``); repeatable. Bypasses the
        ``<project_root>/modules/<name>`` scan and shadows same-basename
@@ -729,7 +819,7 @@ CLI reference
    * - ``--dump-leaks`` / ``--no-dump-leaks``
      - Toggle JobStatus / HandleRegistry leak dumps at exit (default:
        dump).
-   * - ``--live-port <N>``
+   * - ``--live-port <N>`` (or ``--live-port=N``)
      - REST API port. Default 9090; range ``[1, 65535]``. The
        single-instance lock is keyed on this value, so two binaries on
        different ports coexist on the same host.
@@ -761,6 +851,12 @@ Examples
      - Full breakout game: DECS, audio, particles, 30+ live commands.
    * - ``examples/games/sequence/``
      - Card board game: multi-module, bot AI, tournament runner.
+   * - ``examples/games/asteroids/``
+     - Arcade shooter: GLFW + live commands + ``@live`` state.
+   * - ``examples/games/pacman/``
+     - Maze game on DECS with audio and live commands.
+   * - ``examples/games/river_run/``
+     - Scrolling arcade game.
    * - ``examples/daslive/tank_game/``
      - 3D tank combat with dynamic lighting.
    * - ``examples/daslive/live_vars_demo/``
@@ -788,8 +884,11 @@ Tips and gotchas
   ``is_reload()`` to detect reloads.
 - Debug agents persist across reloads; their code is **not** updated
   on reload (restart required to pick up agent code changes).
-- ``[live_command]`` functions cannot be defined in the same module
-  that registers them --- use a separate module.
+- ``[live_command]`` cannot be used inside ``live/live_commands``
+  itself --- the ``[function_macro]`` that implements it is not
+  available while its own module compiles.  That is why
+  ``live_watch_boost`` is a separate file from ``live_watch``.  Any
+  other module defines and registers its commands in one place.
 - Failed reload pauses the host --- check ``GET /error`` or
   ``get_last_error()``.
 - A single-instance lock prevents running two ``daslang-live.exe``
