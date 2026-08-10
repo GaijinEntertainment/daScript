@@ -18,6 +18,9 @@ submitted data).
 Prerequisites: :ref:`tutorial_dasHV_http_server` and
 :ref:`tutorial_dasHV_http_server_advanced`.
 
+.. das-doc: given var req : HttpRequest?
+.. das-doc: given let upload_dir = "/tmp/uploads"
+
 Cookies
 =======
 
@@ -27,6 +30,8 @@ Setting Cookies on a Response
 Inside a route handler, ``add_cookie(resp, name, value)`` appends a
 ``Set-Cookie`` header.  An extended overload accepts domain, path,
 max-age, secure, and httponly flags:
+
+.. das-doc: member HvWebServer
 
 .. code-block:: das
 
@@ -44,13 +49,15 @@ Reading Cookies from a Request
 On the server side, ``get_cookie`` reads a named cookie from the
 request pointer:
 
+.. das-doc: member HvWebServer
+
 .. code-block:: das
 
    GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        let session = get_cookie(req, "session")
        let prefs   = get_cookie(req, "prefs")
-       // session and prefs are strings; empty if not found
-       ...
+       // both are strings; empty if the cookie is not present
+       return resp |> TEXT_PLAIN("session={session}, prefs={prefs}")
    }
 
 Iterating All Cookies
@@ -117,6 +124,8 @@ Server Side — Reading Form Fields
 ``get_form_data`` reads a single text field.  ``each_form_field``
 iterates all fields (text and file):
 
+.. das-doc: member HvWebServer
+
 .. code-block:: das
 
    POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -146,24 +155,33 @@ preserved:
 URL-Encoded Form Data
 ======================
 
-For simple ``application/x-www-form-urlencoded`` submissions:
+For simple ``application/x-www-form-urlencoded`` submissions, set fields
+with ``set_url_encoded`` and read them back with ``get_url_encoded``.
+
+Client side:
 
 .. code-block:: das
 
-   // Client side
    with_http_request() <| $(var req) {
        req.method = http_method.POST
        req.url := "http://localhost:8080/login"
        set_url_encoded(req, "username", "admin")
        set_url_encoded(req, "password", "secret123")
-       request(req) <| $(resp) { ... }
+       request(req) <| $(resp) {
+           print("{resp.status_code}\n")
+       }
    }
 
-   // Server side
+Server side:
+
+.. das-doc: member HvWebServer
+
+.. code-block:: das
+
    POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        let username = get_url_encoded(req, "username")
        let password = get_url_encoded(req, "password")
-       ...
+       return resp |> TEXT_PLAIN(empty(password) ? "missing password" : "welcome {username}")
    }
 
 Quick Reference

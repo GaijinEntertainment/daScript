@@ -92,6 +92,7 @@ Type guard pattern
 Every visitor method starts with a *type guard* — a series of checks
 that decide whether this macro should handle the expression:
 
+.. das-doc: fragment
 .. code-block:: das
 
    def override visitExprIsVariant(prog : ProgramPtr; mod : Module?;
@@ -122,6 +123,7 @@ Once the guard passes, ``visitExprIsVariant`` looks for a
 ``get`IFoo`` field on the source struct.  If found, the struct
 implements the interface → return ``true``.  Otherwise → ``false``:
 
+.. das-doc: fragment
 .. code-block:: das
 
    let getter_field = "get`{iname}"
@@ -142,6 +144,7 @@ The result is a **compile-time constant** — no runtime cost at all.
 
 ``visitExprAsVariant`` generates a call to the getter function:
 
+.. das-doc: fragment
 .. code-block:: das
 
    let func_name = "{st.name}`get`{iname}"
@@ -161,6 +164,7 @@ returns an ``IDrawable?`` proxy.
 ``visitExprSafeAsVariant`` adds a null check before calling the
 getter:
 
+.. das-doc: fragment
 .. code-block:: das
 
    return <- qmacro($e(expr.value) != null ? $c(func_name)(*$e(expr.value)) : null)
@@ -226,11 +230,16 @@ handles all three operators automatically:
 
        // is — compile-time check
        print("w is IDrawable  = {w is IDrawable}\n")   // true
-       print("l is IResizable = {l is IResizable}\n")   // false
+       print("w is IResizable = {w is IResizable}\n")  // true
+       print("l is IDrawable  = {l is IDrawable}\n")   // true
+       print("l is IResizable = {l is IResizable}\n")  // false
 
        // as — get interface proxy
        var drawable = w as IDrawable
        drawable->draw(10, 20)
+
+       var resizable = w as IResizable
+       resizable->resize(800, 600)
 
        // ?as — null-safe access
        var maybe_draw = l ?as IDrawable

@@ -20,6 +20,7 @@ Declaring a tool
 A ``Tool`` wraps a ``FunctionDef``. ``parameters`` is a raw JSON-schema string
 describing the arguments the model should fill in:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    def weather_tool() : Tool {

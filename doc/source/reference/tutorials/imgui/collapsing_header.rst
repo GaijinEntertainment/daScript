@@ -37,6 +37,11 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_containers_builtin`` — ``collapsing_header``.
@@ -47,6 +52,7 @@ Two visibility dimensions
 
 ``CollapsingHeaderState`` carries both gates:
 
+.. das-doc: signatures
 .. code-block:: das
 
    var CLOSABLE_CH : CollapsingHeaderState

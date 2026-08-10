@@ -42,6 +42,8 @@ Part A: per-voice filters — ``lpf`` and ``hpf``
 Compare a muffled sawtooth (``lpf 200``) against a thin one
 (``hpf 2000``):
 
+.. das-doc: given require strudel/strudel public
+
 .. code-block:: das
 
     // Dark, all-bass:
@@ -57,8 +59,9 @@ Part B: per-orbit reverb — ``room`` and ``roomsize``
 ====================================================
 
 ``room(amount)`` sets the wet send to the orbit's reverb bus;
-``roomsize(N)`` controls the room dimensions.  Both live on the bus, so
-all voices on the same orbit share one reverb instance:
+``roomsize(N)`` sets that reverb's decay time in seconds — how big the
+room feels.  Both live on the bus, so all voices on the same orbit share
+one reverb instance:
 
 .. code-block:: das
 

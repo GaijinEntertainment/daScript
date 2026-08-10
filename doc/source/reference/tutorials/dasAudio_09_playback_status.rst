@@ -22,6 +22,8 @@ Create a ``LockBox`` with ``lock_box_create`` and attach it to a sound with
 ``set_status_update``. The call seeds the box with state ``starting``; the audio
 thread updates it from then on:
 
+.. das-doc: given var tone : array<float>
+
 .. code-block:: das
 
    require audio/audio_boost

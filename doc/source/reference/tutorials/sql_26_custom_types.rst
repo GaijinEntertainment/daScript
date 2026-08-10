@@ -23,6 +23,8 @@ step.
 The two-function pair
 =====================
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     def sql_bind    (v : T)            : P              // T -> primitive
@@ -56,7 +58,8 @@ every ``sql_bind`` overload in scope at the call site --- including
 the user's type-specific pair --- participates in overload
 resolution. Same mechanism as ``_::clone`` and ``_::finalize``.
 
-Built-in adapters ship in ``sqlite_boost`` for:
+Built-in adapters ship in ``daslib/sql_boost`` (re-exported by
+``sqlite/sqlite_boost``) for:
 
 * The four primitives (passthrough).
 * Stdlib widenings: ``int`` / ``int8`` / ``int16`` / ``uint`` /
@@ -177,8 +180,10 @@ Missing-adapter compile error
 =============================
 
 If a ``[sql_table]`` field has no ``sql_bind`` / ``sql_extract`` pair
-in scope, overload resolution fails at the macro-emitted ``_::sql_bind``
-call:
+in scope, the macro-emitted ``_::sql_bind`` call lands on the catch-all
+``auto`` overload, whose ``concept_assert`` fires as ``error[31400]``:
+
+.. das-doc: expect error[31400]
 
 .. code-block:: das
 
@@ -190,7 +195,8 @@ call:
         Bg : Color           // no sql_bind(Color) - compile error
     }
 
-Compiler message names the offending struct + field type. No runtime
+The message spells the fix, and the instantiation trail names the
+offending field type and the struct it came from. No runtime
 "type not registered" error --- this is all compile-time.
 
 .. seealso::

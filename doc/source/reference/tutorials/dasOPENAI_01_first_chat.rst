@@ -45,7 +45,14 @@ Constructing a client
    // local server, no key
    let client = openai_client("http://localhost:11434/v1")
 
-   // real OpenAI, key from the environment (requires daslib/fio)
+Against a real endpoint you pass a key. Reading it from the environment needs
+``daslib/fio``:
+
+.. das-doc: alt
+.. code-block:: das
+
+   require daslib/fio
+
    let client = openai_client("https://api.openai.com/v1", get_env_variable("OPENAI_API_KEY"))
 
 The chat_text one-liner

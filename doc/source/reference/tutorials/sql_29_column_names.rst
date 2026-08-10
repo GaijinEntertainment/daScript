@@ -40,6 +40,8 @@ Band 1 --- ``column_info(type<T>)``
 API. ``[sql_table]`` already walks struct fields at compile time to emit
 DDL and bind/column code; ``column_info`` is a view over that same walk:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     enum SqlType {
@@ -55,10 +57,14 @@ DDL and bind/column code; ``column_info`` is a view over that same walk:
         is_pk : bool
         is_nullable : bool
         default_expr : string   // "" if none
+        is_computed : bool      // @sql_computed - GENERATED ALWAYS AS column
     }
 
 ``SqlType`` is **abstract** --- it lives in ``daslib/sql``. Provider
-helpers render the dialect-specific spelling:
+helpers render the dialect-specific spelling (``sqlite_sql_type`` ships
+in ``sqlite/sqlite_provider``, re-exported by ``sqlite/sqlite_boost``):
+
+.. das-doc: signatures
 
 .. code-block:: das
 
@@ -114,13 +120,16 @@ comprehensions, ``for``-in, filters) without further ceremony:
 ``@sql_json`` and ``@sql_blob`` short-circuit the witness lookup ---
 ``column_info`` reports ``SqlType.Text`` for JSON columns and
 ``SqlType.Blob`` for archive columns regardless of the daslang field
-type. Computed columns appear in the array with empty ``default_expr``.
+type. Computed columns appear in the array with ``is_computed = true``
+and an empty ``default_expr``.
 
 Band 3 --- raw PRAGMA via ``query``
 ====================================
 
 ``[sql_table]`` on a read-only row shape is the idiomatic way to opt
 into the typed materializer without committing to a CREATE TABLE:
+
+.. das-doc: given var inscope db = open_sqlite(":memory:")
 
 .. code-block:: das
 

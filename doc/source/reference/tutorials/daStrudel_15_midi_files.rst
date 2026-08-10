@@ -19,6 +19,8 @@ Part A: Parsing
 
 ``load_midi`` reads a ``.mid`` file and returns a ``MidiFile`` struct:
 
+.. das-doc: given let media_path = "examples/media"
+
 .. code-block:: das
 
     require strudel/strudel_midi
@@ -65,6 +67,7 @@ and a built-in piano + drum sample bank.  The lifecycle:
 .. code-block:: das
 
     require strudel/strudel_midi_player
+    require daslib/fio              // sleep
 
     midi_load_samples(media_path)   // load built-in banks from media folder
     midi_init()                     // start the playback thread

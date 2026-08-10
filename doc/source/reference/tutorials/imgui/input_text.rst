@@ -9,6 +9,7 @@ grow-on-overflow, callback-driven, and the inline filter editor. Six
 widgets, one ``InputTextState`` (text_filter uses its own
 ``TextFilterState``).
 
+.. das-doc: signatures
 .. code-block:: das
 
    input_text(IDENT, (text = "..", flags = ImGuiInputTextFlags....))
@@ -37,6 +38,10 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given let LOG_LINES = fixed_array("[info] startup complete", "[error] disk full")
+.. das-doc: given var LOG_LINE : table<int; NarrativeState>
+.. das-doc: given def completion_cb(var data : ImGuiInputTextCallbackData) : int => 0
 
 Already in the baseline boost layer:
 
@@ -151,6 +156,7 @@ Indexed-form note
 The ``text(IDENT[i], (text = ...))`` form requires you to declare the
 table at module scope:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var private LOG_LINE : table<int; NarrativeState>

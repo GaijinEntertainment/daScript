@@ -21,6 +21,7 @@ normal ``ChatResult`` — the assistant's text is in
 ``choices[0].message.content``. The image can be an ``http(s)`` URL or a
 ``data:`` URL (base64-inlined bytes):
 
+.. das-doc: given let base_url = "http://localhost:11434/v1"
 .. code-block:: das
 
    require openai/openai_vision

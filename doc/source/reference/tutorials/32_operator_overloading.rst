@@ -45,6 +45,8 @@ Comparison operators
 Overload ``==``, ``!=``, ``<``, ``>``, ``<=``, ``>=`` for custom comparisons.
 Returning ``bool`` is required:
 
+.. das-doc: given struct Vec2 { x, y : float }
+
 .. code-block:: das
 
     def operator ==(a, b : Vec2) : bool {
@@ -153,8 +155,9 @@ Usage::
     m[0] += 5.0        // calls operator []+=
     print("{m[0]}\n")  // 15
 
-The safe index operator ``?[]`` returns a default value when the index is out of
-range, following the same pattern.
+``operator ?[]`` follows the same pattern for safe indexing. For built-in
+containers ``?[]`` yields a pointer that is ``null`` when the index is out of
+range, so call sites pair it with ``??`` to supply a fallback.
 
 Dot operators / property accessors
 ==================================

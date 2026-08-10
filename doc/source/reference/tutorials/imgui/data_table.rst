@@ -7,7 +7,7 @@ data_table
 ImGui's tables API — ``BeginTable`` / ``EndTable`` with body-internal
 ``TableSetupColumn`` / ``TableHeadersRow`` / ``TableNextRow`` /
 ``TableSetColumnIndex`` / ``TableNextColumn`` cursor primitives — lives
-behind one boost container plus six snake_case pass-throughs in
+behind one boost container plus a family of snake_case pass-throughs in
 ``imgui/imgui_table_builtin``. The container is named ``data_table`` (not
 ``table``) because ``table`` is a daslang reserved keyword for the
 ``table<K;V>`` type constructor.
@@ -42,10 +42,15 @@ text, so a header click that failed to re-sort would abort the recording.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_table_builtin
+
 One extra module on top of the baseline boost layer:
 
 * ``imgui/imgui_table_builtin`` — the ``data_table`` container plus the
-  six ``table_*`` snake_case primitives the body calls into.
+  ``table_*`` snake_case primitives the body calls into, the
+  ``TableSortSpec`` struct and the ``sort_specs`` helper.
 
 Container shape
 ===============
@@ -70,20 +75,27 @@ means "no explicit inner width" (use the outer width).
 Body primitives
 ===============
 
-The six body cursor calls are plain ``def public`` wrappers — same
+The body cursor calls are plain ``def public`` wrappers — same
 arguments as the underlying ImGui calls, snake_case names:
 
-* ``table_setup_column(label, flags?, init_width?, user_id?)`` — declare a
-  column before the header row.
+* ``table_setup_column(text, flags?, init_width_or_weight?, user_id?)`` —
+  declare a column before the header row.
 * ``table_setup_scroll_freeze(cols, rows)`` — pin the first N columns / M
   rows during scrolling.
 * ``table_headers_row()`` — submit the header row using the
   ``table_setup_column`` labels.
+* ``table_header(text)`` / ``table_angled_headers_row()`` — a single
+  custom header cell, and the rotated-label header row.
 * ``table_next_row(flags?, min_row_height?)`` — start the next row.
 * ``table_set_column_index(col) -> bool`` — jump to a specific column;
   returns ``true`` when the column is visible.
 * ``table_next_column() -> bool`` — advance one column (or wrap to next
   row); also returns the visibility bool.
+* ``table_set_bg_color(target, color, column_n?)`` — paint a row or cell
+  background.
+* ``table_get_column_count()`` / ``table_get_column_index()`` /
+  ``table_get_row_index()`` / ``table_get_column_name(col?)`` /
+  ``table_get_column_flags(col?)`` — cursor and layout queries.
 
 ``TableState`` (the container's state struct) echoes per-call config —
 columns, flags, outer_size, inner_width — so snapshot consumers can read
@@ -104,7 +116,7 @@ inside the body that ImGui fires when the sort state goes dirty.
 * ``ImGuiTableFlags.Sortable`` enables single-column sort (click any
   header). Adding ``ImGuiTableFlags.SortMulti`` enables multi-column
   sort (Shift+click a second header to append a secondary sort key).
-* ``table_setup_column("Name", flags, init_width, user_id=COL_NAME)``
+* ``table_setup_column("Name", flags, init_width_or_weight, user_id = COL_NAME)``
   tags the column with a stable identifier (a ``uint``). The sort
   comparator dispatches on ``column_user_id`` rather than
   ``column_index``, so the sort stays correct after the user reorders

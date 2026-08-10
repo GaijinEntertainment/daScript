@@ -15,21 +15,21 @@ Example:
 
     require daslib/enum_trait
 
-        enum Color {
-            red
-            green
-            blue
-        }
+    enum Color {
+        red
+        green
+        blue
+    }
 
-        [export]
-        def main() {
-            print("{Color.green}\n")
-            let c = to_enum(type<Color>, "blue")
-            print("{c}\n")
-            let bad = to_enum(type<Color>, "purple", Color.red)
-            print("fallback = {bad}\n")
-        }
-        // output:
-        // green
-        // blue
-        // fallback = red
+    [export]
+    def main() {
+        print("{Color.green}\n")
+        let c = to_enum(type<Color>, "blue")
+        print("{c}\n")
+        let bad = to_enum(type<Color>, "purple", Color.red)
+        print("fallback = {bad}\n")
+    }
+    // output:
+    // green
+    // blue
+    // fallback = red

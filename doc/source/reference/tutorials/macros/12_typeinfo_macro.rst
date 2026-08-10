@@ -78,7 +78,17 @@ struct_info — returning a string
 ``typeinfo struct_info(type<T>)`` builds a description string at compile
 time:
 
+.. das-doc: file typeinfo_macro_mod.das
 .. code-block:: das
+
+    options gen2
+    options no_aot
+
+    module typeinfo_macro_mod
+
+    require daslib/ast
+    require strings
+    require daslib/ast_boost
 
     [typeinfo_macro(name="struct_info")]
     class TypeInfoGetStructInfo : AstTypeInfoMacro {
@@ -126,6 +136,7 @@ enum_value_strings — returning an array
 ``typeinfo enum_value_strings(type<E>)`` returns a fixed-size array of
 enum value names:
 
+.. das-doc: fragment
 .. code-block:: das
 
     [typeinfo_macro(name="enum_value_strings")]
@@ -163,9 +174,9 @@ Key points:
 - ``expr.typeexpr.enumType.list`` iterates all ``EnumEntry`` nodes.
 - The bare block provides a lexical scope for the intermediate variable
   inside the loop.
-- The result is a **dynamic array** (``array<string>``), not a
-  fixed-size ``string[N]`` — ``ExprMakeArray`` always produces a
-  dynamic array.
+- The result is a **fixed-size array** — ``ExprMakeArray`` with a
+  ``makeType`` produces ``string[N]``, where ``N`` is the number of
+  values pushed, not a dynamic ``array<string>``.
 
 
 has_non_static_method — returning a bool with subtrait
@@ -175,6 +186,7 @@ has_non_static_method — returning a bool with subtrait
 has a non-static method with the given name.  The method name is passed
 via the ``subtrait`` parameter:
 
+.. das-doc: fragment
 .. code-block:: das
 
     [typeinfo_macro(name="has_non_static_method")]
@@ -224,6 +236,7 @@ Full source: :download:`12_typeinfo_macro.das <../../../../../tutorials/macros/1
 Section 1: struct_info
 ----------------------
 
+.. das-doc: given require typeinfo_macro_mod
 .. code-block:: das
 
     struct Vec3 {
@@ -252,6 +265,7 @@ reflection is involved.
 Section 2: enum_value_strings
 -----------------------------
 
+.. das-doc: fragment
 .. code-block:: das
 
     enum Color {
@@ -275,6 +289,7 @@ bind the result — fixed-size arrays are value types.
 Section 3: has_non_static_method
 --------------------------------
 
+.. das-doc: fragment
 .. code-block:: das
 
     class Animal {

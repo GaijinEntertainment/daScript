@@ -74,6 +74,7 @@ Keyword Disambiguation
 Variable names must not match keywords.  Negative lookahead (``!``)
 prevents ``TO``, ``STEP``, or ``THEN`` from being parsed as identifiers:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var primary : double
@@ -87,6 +88,7 @@ Text Capture for Deferred Evaluation
 The line parser captures expression text **without evaluating it**.
 Helper rules like ``until_then`` match everything up to a keyword:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var until_then : void?
@@ -96,6 +98,7 @@ Helper rules like ``until_then`` match everything up to a keyword:
 
 Then in the statement rule:
 
+.. das-doc: fragment
 .. code-block:: das
 
    rule("IF", WS, "{+until_then}" as cond, WS, "THEN", WS, number as target) {

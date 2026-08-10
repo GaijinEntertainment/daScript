@@ -125,6 +125,67 @@ From the sql (13/13 green) and classes (green) agents — fix BEFORE the full fa
    pages must use `code-block:: das` for anything the checker should see (docs-authoring
    rule for skills/doc_sweep.md).
 
+## Engine/daslib finds from the fan-out (Boris decision)
+
+- strudel `!N` is implemented as `fast(n)` (`strudel_mini.das:267-272`) with the comment
+  "approximation since patterns aren't copyable" — lambdas ARE copyable now, so the
+  justification is stale; docs (page 03) now describe actual behaviour. If the engine gets
+  the real replicate-into-parent-slots semantics, rewrite page 03 Part D back.
+- strudel `end_pos` naming rationale ("`end` is a reserved word") is false — `end` is not
+  reserved; stale in `strudel_event.das:78-79` and tutorial 13 comments.
+- `tutorials/daStrudel/daStrudel_03_*.das:85-88` + `daStrudel_13_*.das:135,183-192` carry
+  the same false claims the RST pages had (companions are compile-gated but their comments
+  are not).
+- `tutorials/sql/06-error_handling.das:66` count-returns-int64 comment — FIXED in-tree.
+- `daslib/sql_boost.das:597` — `[sql_index]` bad-field error omits the `Available: {field_names}`
+  suffix its sibling path at :475 has; making them match would let sql_24's original "lists
+  the valid columns" prose come back (currently rewritten to match the terse truth).
+- More stale companion SQL comments (predate the projection aliaser): tutorials/sql/
+  14-group_by.das:122,137, 15-join.das:96-100, 19-update.das:54, 21-upsert.das:85,128.
+- tutorials/daStrudel/daStrudel_16_live_reloading.das:132,138 — persistent-store key says
+  "tutorial15_reload_count" inside tutorial 16 (renumbering leftover); RST kept matching
+  the companion — fix both together.
+- examples/daStrudel/sfx_lab/main.das:3-4 — header still says "Layers/Editor/Mix" +
+  "(Reference target + save/load land in later slices)"; all shipped since.
+- Marker-vocabulary note for post-sweep polish: a page that legitimately SHOWS a
+  module-scope `var` in a block can't both display it and compile it (block top-level
+  var chunks as a statement; a given seeds the renamer so the visible duplicate renames).
+  Needs a `global`-ish per-block marker if it recurs.
+- Post-sweep tool polish: (a) hoist companion module-scope `let` constants as implicit
+  givens (hand-written `given TWO_PI = ...` duplicates compile-gated ground truth and can
+  drift); (b) replace_ident rewrites inside `//` comments and def parameter lists — restrict
+  renames to code text and don't apply page aliases inside a decl chunk's own param scope.
+- report_page truncates compiler output at 24 lines and surfaces cascade noise before the
+  actionable `can't locate variable` — rank 30838 first (sql agent suggestion); also hint
+  when ALL errors sit in a required module (peg agent: block likely lacks context).
+- `wrap <prefix>` marker idea (peg agent): synthesize a `def f(input; blk) { parse(input) {` shell
+  around macro-DSL excerpts so grammar rules compile instead of going fragment.
+- Stale companion comments: tutorials/dasPEG/06_debugging.das:76-77 (commit does NOT gate
+  error emission — probe-disproved, RST fixed); tutorials/sql/41-triggers.das:84 (wrong
+  audit-row count), :24/:104 (wrong module path + tutorial number);
+  tutorials/sql/39-schema_from.das:93 ("coming soon" long shipped);
+  tutorials/sql/38-concurrency.das:48 (nonexistent get_thread_id in comment).
+
+- ⚠ SPATIAL-AUDIO CONVENTION CONTRADICTION (needs a listening test): companion
+  tutorials/dasAudio/04_spatial_audio.das:60-73 + `g_head_direction` default (+Y,
+  audio_boost.das:662) vs the engine's own pan math (`pan = nrxy.y`, MIT HRTF azimuth
+  sign, volume_mixer.h pan law) and the HRTF demo's "-Y = forward, +X = right" comment —
+  a +X source pans LEFT for a +Y-facing listener by the math, RIGHT per the companion.
+  One of the two is wrong. The RST (dasAudio_04) now follows the engine math + demo.
+- audio_boost.das:1528 `set_position(sid; pos; dir : float3)` — third param named `dir`
+  but assigned to `velocity`; misleading for named-arg callers.
+- dasHV family-level doc gap: the STREAM/HttpResponseWriter streaming rail and SERVE_FILE
+  are documented on no RST page (page 07 covers buffered SSE only).
+
+## Regen traps (Boris decision)
+
+- `doc/reflections/gen_module_examples.py` generated the stdlib/handmade module-*.rst
+  fragments and still contains the defects the fan-out fixed (double-indent, stale
+  base64 output, wrong-module contracts example); it emits `::` literal blocks (invisible
+  to the checker) and is unrunnable as-is (hardcoded `d:\Work\daslang` path). Re-running
+  a fixed version would silently revert the batch. Delete it, or regenerate it FROM the
+  corrected RST before it bites.
+
 - (2026-08-10) Rule-0 probe on M1: zero true binary gaps; all scares were require-spelling
   errors (dasSQLITE → sqlite/sqlite_boost, openai → openai/openai_chat, peg → peg/peg,
   strudel → strudel/strudel). llvm/vulkan/anthropic referenced by no authored RST.

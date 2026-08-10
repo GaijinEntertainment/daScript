@@ -15,6 +15,11 @@ STBIMAGE-04 — Pixel Access and Format Conversion
 This tutorial covers reading and modifying pixel data, row-level access,
 and converting between channel counts and bit depths.
 
+The examples assume ``img`` holds a loaded RGBA image — see
+:ref:`tutorial_dasStbImage_loading_images`.
+
+.. das-doc: given var img : Image
+
 Reading Pixels
 ==============
 
@@ -57,8 +62,9 @@ image data:
 
 .. code-block:: das
 
+   let pixel_count = img.width * img.height
    img |> with_pixels() <| $(var pixels : array<uint8>#) {
-       for (i in range(width * height)) {
+       for (i in range(pixel_count)) {
            pixels[i * 4 + 0] = uint8(255 - int(pixels[i * 4 + 0]))
        }
    }
@@ -82,7 +88,7 @@ From        To           Behavior
 
 .. code-block:: das
 
-   var inscope rgb <- rgba_img.to_channels(3)      // drop alpha
+   var inscope rgb <- img.to_channels(3)           // drop alpha
    var inscope grey <- rgb.to_channels(1)          // to greyscale
    var inscope back <- grey.to_channels(4)         // grey → RGBA
 

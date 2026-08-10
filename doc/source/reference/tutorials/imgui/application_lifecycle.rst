@@ -75,7 +75,7 @@ collection is needed only occasionally.
 
 Standalone programs do not receive the live host's between-update collection
 pass. Their ``main`` loop must call ``harness_maybe_collect_gc()`` immediately
-after ``update()`` returns. The helper delegates to the existing ``glfw_live``
+after ``update()`` returns. The helper delegates to the ``live/live_gc``
 fragmentation heuristic: calling the check every loop does **not** mean
 collecting every loop. It only collects when the heap has enough unused space
 to make compaction worthwhile. It is a no-op under ``daslang-live``, because
@@ -89,6 +89,7 @@ collectable locals that span the collection call, and collect only after
 
 For a non-harness service, use the explicit server form:
 
+.. das-doc: fragment
 .. code-block:: das
 
    [export]
@@ -105,12 +106,14 @@ For non-harness services the equivalent call is their own
 ``maybe_collect_gc``. ``utils/dasllama-server/main.das`` is the production reference. Its
 ``maybe_collect_gc`` skips host-owned live mode, rate-limits collections, uses
 heap-fragmentation ratios, and can honor a forced diagnostic collection.
-Simple GLFW applications can use ``live/glfw_live``'s existing
-``maybe_collect_gc`` helper at the same post-update boundary.
+Applications that do not use the harness can call ``live/live_gc``'s
+``maybe_collect_gc`` helper at the same post-update boundary
+(``live/glfw_live`` re-exports it for GLFW callers).
 
 Delete-first example
 ====================
 
+.. das-doc: fragment
 .. code-block:: das
 
    def update() {

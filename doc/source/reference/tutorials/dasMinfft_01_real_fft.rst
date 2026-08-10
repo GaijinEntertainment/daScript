@@ -22,6 +22,8 @@ spectrum of a real signal is symmetric, so the upper half is redundant and not
 stored). A tone that completes exactly ``k`` cycles over the ``N`` samples lands
 on bin ``k`` with raw magnitude ``N/2`` times its amplitude:
 
+.. das-doc: given let TWO_PI = 6.2831853f
+
 .. code-block:: das
 
    let signal <- [for (i in range(64));

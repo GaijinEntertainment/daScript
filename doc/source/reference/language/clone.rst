@@ -11,6 +11,7 @@ see :ref:`Move, Copy, and Clone <move_copy_clone>`.
 
 Cloning is invoked via the clone operator ``:=``:
 
+.. das-doc: given var a, b, y : array<int>
 .. code-block:: das
 
     a := b
@@ -23,6 +24,7 @@ Cloning can be also invoked via the clone initializer in a variable declaration:
 
 This in turn expands into ``clone_to_move``:
 
+.. das-doc: alt
 .. code-block:: das
 
     var x <- clone_to_move(y)
@@ -92,22 +94,28 @@ Those in turn clone each of the array elements:
     var c, d : Foo[10]
     c := d
 
-This expands to:
+This expands to (as printed by ``daslang -log``, which shows the instantiated generics):
 
+.. das-doc: skip
 .. code-block:: das
 
-    def builtin`clone ( var a:array<Foo aka TT> explicit; b:array<Foo> const ) {
-        resize(a,length(b))
+    def builtin`clone ( var a:array<Foo aka TT> explicit; var b:array<Foo aka TT> ==const ) {
+        let ln = length(b)
+        resize(a,ln)
+        return if ( ln == 0 )
         for ( aV,bV in a,b ) {
             aV := bV
         }
     }
 
-    def builtin`clone_dim ( var a:Foo[10] explicit; b:Foo const[10] implicit explicit ) {
+    def builtin`clone_dim ( var a:Foo[10] explicit; b:Foo const[10] explicit ) {
         for ( aV,bV in a,b ) {
             aV := bV
         }
     }
+
+When the element type is POD, both generics substitute a single ``memcpy`` for the
+element-by-element loop.
 
 For tables, the ``clone`` generic is called, which in turn clones its values:
 
@@ -118,12 +126,14 @@ For tables, the ``clone`` generic is called, which in turn clones its values:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
-    def builtin`clone ( var a:table<string aka KT;Foo aka VT> explicit; b:table<string;Foo> const ) {
+    def builtin`clone ( var a:table<string;Foo aka VT> explicit; var b:table<string;Foo aka VT> ==const ) {
         clear(a)
         for ( k,v in keys(b),values(b) ) {
-            a[k] := v
+            let kk := k     // the string-key overload clones the key as well
+            a[kk] := v
         }
     }
 
@@ -138,9 +148,10 @@ For structures, the default ``clone`` function is generated, in which each eleme
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
-    def clone ( var a:Foo explicit; b:Foo const ) {
+    def clone ( var a:Foo explicit; b:Foo const implicit ) {
         a.a := b.a
         a.b = b.b   // note copy instead of clone
     }
@@ -154,9 +165,10 @@ For tuples, each individual element is cloned:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
-    def clone ( var dest:tuple<int;array<int>;string> -const; src:tuple<int;array<int>;string> const -const ) {
+    def clone ( var dest:tuple<int;array<int>;string> -const; var src:tuple<int;array<int>;string> implicit ==const -const ) {
         dest._0 = src._0
         dest._1 := src._1
         dest._2 = src._2
@@ -171,9 +183,10 @@ For variants, only the currently active element is cloned:
 
 This expands to:
 
+.. das-doc: skip
 .. code-block:: das
 
-    def clone ( var dest:variant<i:int;a:array<int>;s:string> -const; src:variant<i:int;a:array<int>;s:string> const -const ) {
+    def clone ( var dest:variant<i:int;a:array<int>;s:string> -const; var src:variant<i:int;a:array<int>;s:string> implicit ==const -const ) {
         if ( src is i ) {
             set_variant_index(dest,0)
             dest.i = src.i
@@ -192,15 +205,22 @@ This expands to:
 clone_to_move implementation
 ----------------------------
 
-``clone_to_move`` is implemented via regular generics as part of the builtin module:
+``clone_to_move`` is implemented via regular generics as part of the builtin module.
+The ``| #`` in the argument type accepts a temporary source, and ``-#`` on the return
+type makes the result a regular (non-temporary) value:
 
+.. das-doc: signatures
 .. code-block:: das
 
-    def clone_to_move(clone_src:auto(TT)) : TT -const {
-        var clone_dest : TT
-        clone_dest := clone_src
-        return <- clone_dest
+    def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
+        unsafe {
+            var clone_dest : TT -#
+            clone_dest := clone_src
+            return <- clone_dest
+        }
     }
+
+A second overload with a ``var`` source exists, so that a mutable value can be cloned too.
 
 Note that for non-cloneable types, Daslang will not promote ``:=`` initialize into ``clone_to_move``.
 

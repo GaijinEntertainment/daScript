@@ -22,6 +22,9 @@ Part A: Sequences and rests
 The simplest mini-notation is a space-separated list of tokens. Each
 token gets an equal slice of the cycle:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; seconds : float = 4.0; cps : double = 0.5lf) { }
+
 .. code-block:: das
 
     let pat <- s("bd sd ~ cp")

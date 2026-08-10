@@ -62,26 +62,33 @@ Iterating children
 ``for_each_child`` iterates over all child elements of a node using a
 block callback.  Pass an optional name to filter by tag:
 
+.. das-doc: given var node : xml_node
+.. das-doc: given var child_node : xml_node
+
 .. code-block:: das
 
    // all children
-   root |> for_each_child() <| $(ch) {
+   node |> for_each_child() <| $(ch) {
        print("<{ch.name}>\n")
    }
 
    // only <setting> children
-   root |> for_each_child("setting") <| $(ch) { ... }
+   node |> for_each_child("setting") <| $(ch) {
+       ...
+   }
 
 ``each_child`` returns a lazy iterator for use in ``for`` loops — same
 traversal, different syntax:
 
 .. code-block:: das
 
-   for (ch in each_child(root)) {
+   for (ch in each_child(node)) {
        print("<{ch.name}>\n")
    }
 
-   for (ch in each_child(root, "setting")) { ... }
+   for (ch in each_child(node, "setting")) {
+       ...
+   }
 
 ``for_each_attribute`` iterates attributes with a block callback:
 
@@ -134,7 +141,7 @@ to typed values:
    // Attribute access
    let x_attr = node["x"]           // xml_attribute
    let x_val  = node["x"] as int    // 10
-   let label  = node["label"] as string
+   let lbl    = node["label"] as string   // `label` is a reserved word
 
    // Text access
    let count = child_node.text as int
@@ -149,7 +156,7 @@ Combining these tools to read a book catalog:
 
 .. code-block:: das
 
-   open_xml("books.xml") <| $(doc, ok) {
+   open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
        if (!ok) { return; }
        doc.document_element |> for_each_child("book") <| $(book) {
            let title = node_text(book, "title")

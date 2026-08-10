@@ -33,6 +33,9 @@ The default autocommit makes every INSERT a separate transaction
 and the whole batch is one ``fsync``. ~50x speedup on cold WAL
 is typical:
 
+.. das-doc: given [sql_table(name="Events")] struct Event { @sql_primary_key Id : int; Kind : string; PayloadBytes : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     db |> with_transaction <| $() {
@@ -65,6 +68,13 @@ outer ``with_transaction`` for the fsync win. Reach for an outer
 ``with_transaction`` only to group ``insert(rows)`` atomically
 with **other** statements --- it adds no extra fsync benefit by
 itself.
+
+One constraint on the array overload: every row must agree on
+primary-key presence. The batch prepares one statement from
+``rows[0]`` --- with or without the PK column --- so a mixed
+array is rejected before the transaction opens (``try_insert``
+returns ``Err``, ``insert`` panics). Partition by "PK set /
+PK unset" and call once per partition.
 
 ``INSERT ... SELECT``
 =====================

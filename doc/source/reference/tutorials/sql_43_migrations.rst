@@ -135,6 +135,8 @@ Inspection: pure reads, no side effects
 Three functions answer "what's the migration state?" without
 running anything:
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     db |> current_schema_version()    // int (0 if no audit table yet)
@@ -161,8 +163,11 @@ apply.
 Typed ALTER: when daslang has enough info to validate
 ======================================================
 
-Migrations 2 and 3 above use the typed surface in
-``daslib/sqlite_boost``:
+Migrations 2 and 3 above use the provider-neutral typed ALTER
+surface from ``daslib/sql_boost`` (``drop_index_if_exists`` is
+provider-side, in ``sqlite/sqlite_boost``):
+
+.. das-doc: signatures
 
 .. code-block:: das
 
@@ -171,10 +176,13 @@ Migrations 2 and 3 above use the typed surface in
     db |> create_unique_index(type<T>, ... same shape ...)
     db |> drop_index_if_exists("name")
 
-Field selectors are **string literals**, not ``.Field`` syntax:
-gen2's parser only accepts ``.Field`` inside an ``_sql {...}``
-block. Plain call sites pass explicit string field names ---
-the same convention ``[sql_index(fields="A")]`` already uses.
+Field selectors are **string literals**, not ``_.Field``
+placeholders --- the ``_.`` row placeholder only has meaning
+inside the ``_sql(...)`` chain macros. These call sites pass
+explicit string field names, the same convention
+``[sql_index(fields="A")]`` already uses. The macro resolves
+each name against the struct at compile time, so a typo is a
+compile error.
 
 What the typed forms buy you:
 
@@ -307,9 +315,9 @@ The rebuild runs inside ``migrate_to_latest``'s big transaction
 
     [struct_convert]
     def my_v6_to_v7(old : UserV6; var dst : User) {
-        dst.Email = (old.LegacyEmail != "")
+        dst.Email = ((old.LegacyEmail != "")
             ? old.LegacyEmail
-            : "unknown@example.com"
+            : "unknown@example.com")
     }
 
     [sql_migration(version = 7, description = "restructure users")]

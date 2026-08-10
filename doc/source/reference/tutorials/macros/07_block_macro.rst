@@ -42,6 +42,7 @@ This tutorial builds a ``[traced(tag="X")]`` annotation that:
    statement count (``finish``).
 
 
+.. das-doc: fragment
 .. code-block:: das
 
    run_block() $ [traced(tag="setup")] {
@@ -59,6 +60,7 @@ Block annotation syntax
 Block annotations are placed between the ``$`` sigil and the parameter
 list (or body, for parameterless blocks):
 
+.. das-doc: fragment
 .. code-block:: das
 
    // Parameterless block
@@ -70,6 +72,7 @@ list (or body, for parameterless blocks):
 Multiple annotations can be comma-separated inside the brackets, just
 like function annotations:
 
+.. das-doc: fragment
 .. code-block:: das
 
    $ [traced(tag="x"), REQUIRE(hp)] (v : int) { ... }
@@ -102,11 +105,21 @@ The module: ``block_macro_mod.das``
 Registration
 ------------
 
+.. das-doc: file block_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module block_macro_mod public
+
+   require daslib/ast
+   require daslib/rtti
+   require daslib/ast_boost
+   require daslib/templates_boost
 
    [block_macro(name="traced")]
    class TracedBlockMacro : AstBlockAnnotation {
-       ...
+       // apply() and finish() follow, in the same class
    }
 
 ``[block_macro(name="traced")]`` tells the compiler:
@@ -130,6 +143,7 @@ an error string.  It runs during parsing, before inference.
 Step 1 — Validate arguments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    let labelArg = find_arg(args, "tag")
@@ -148,6 +162,7 @@ we check ``is tString`` and cast with ``as tString``.  Returning
 Step 2 — Prepend enter-print
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    var enterExpr = qmacro(print($v(">> {lbl}\n")))
@@ -164,6 +179,7 @@ value baked in) as a constant expression in the generated code.
 Step 3 — Append exit-print to ``finalList``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    var exitExpr = qmacro(print($v("<< {lbl}\n")))
@@ -184,6 +200,7 @@ the exit message prints even if the block has an early return.
 Inside ``finish()``
 -------------------
 
+.. das-doc: fragment
 .. code-block:: das
 
    def override finish(var blk : ExprBlock?; var group : ModuleGroup;

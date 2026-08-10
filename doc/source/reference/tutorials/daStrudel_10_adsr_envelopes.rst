@@ -43,6 +43,9 @@ With no ADSR setters at all, the resolver picks a held-tone envelope:
 the note rings for its full scheduled duration, instead of decaying to
 silence in 50ms as in older defaults.
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; cps : double = 0.5lf; seconds : double = 4.0lf) { }
+
 .. code-block:: das
 
     let pat <- note("c4 e4 g4 c5", "sine")

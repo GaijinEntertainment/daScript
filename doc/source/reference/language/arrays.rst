@@ -68,13 +68,13 @@ Arrays can be constructed inline:
 
 .. code-block:: das
 
-	let arr = fixed_array(1.,2.,3.,4.5)
+  let arr = fixed_array(1.,2.,3.,4.5)
 
 This expands to:
 
 .. code-block:: das
 
-	let arr : float[4] = fixed_array<float>(1.,2.,3.,4.5)
+  let arr : float[4] = fixed_array<float>(1.,2.,3.,4.5)
 
 Fixed-size arrays can be multi-dimensional. Dimensions read outermost first —
 ``float[4][4]`` is 4 rows of ``float[4]`` — and indexing peels one level at a time:
@@ -115,13 +115,13 @@ Dynamic arrays can also be constructed inline:
 
 .. code-block:: das
 
-	let arr <- ["one", "two", "three"]
+  let arr <- ["one", "two", "three"]
 
 This is syntactic equivalent to:
 
 .. code-block:: das
 
-	let arr : array<string> <- array<string>("one","two","three")
+  let arr : array<string> <- array<string>("one","two","three")
 
 Alternative syntax is:
 
@@ -161,7 +161,9 @@ Arrays of tuples can be constructed inline:
 
 When array elements can't be copied, use ``push_clone`` to insert a clone of a value, or ``emplace`` to move it in.
 
-``resize`` can potentially create new array elements. Those elements are initialized with 0.
+``resize`` can potentially create new array elements. Those elements are initialized with
+``default<T>`` — zeros for plain types, and the declared field initializers for structures
+that have them.
 
 ``reserve`` is there for performance reasons. Generally, array capacity doubles, if exceeded.
 ``reserve`` allows you to specify the exact known capacity and significantly reduce the overhead of multiple ``push`` operations.
@@ -184,21 +186,23 @@ It's possible to iterate over an array via a regular ``for`` loop.
 
 Additionally, a collection of unsafe iterators is provided:
 
+.. das-doc: signatures
 .. code-block:: das
 
-  def each ( a : auto(TT)[] ) : iterator<TT&>
-  def each ( a : array<auto(TT)> ) : iterator<TT&>
+  [unsafe_outside_of_for] def each ( a : auto(TT)[] ) : iterator<TT&>
+  [unsafe_outside_of_for] def each ( a : array<auto(TT)> ) : iterator<TT&>
 
 The reason both are unsafe operations is that they do not capture the array.
 
 Search functions are available for both static and dynamic arrays:
 
+.. das-doc: signatures
 .. code-block:: das
 
-  def find_index ( arr : array<auto(TT)> implicit; key : TT )
-  def find_index ( arr : auto(TT)[] implicit; key : TT )
-  def find_index_if ( arr : array<auto(TT)> implicit; blk : block<(key:TT):bool> )
-  def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
+  def find_index ( arr : array<auto(TT)> | #; key : TT )
+  def find_index ( arr : auto(TT)[] | #; key : TT )
+  def find_index_if ( arr : array<auto(TT)> | #; blk : block<(key:TT):bool> )
+  def find_index_if ( arr : auto(TT)[] | #; blk : block<(key:TT):bool> )
 
 .. seealso::
 

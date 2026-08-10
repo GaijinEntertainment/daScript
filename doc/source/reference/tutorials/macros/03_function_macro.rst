@@ -76,6 +76,13 @@ New concepts introduced:
 * **``expr.func._module.name``** — identifying a function’s source module
 
 
+.. das-doc: given require function_macro_mod
+.. das-doc: given require daslib/ast_boost
+.. das-doc: given require daslib/templates_boost
+.. das-doc: given var func : FunctionPtr
+.. das-doc: given var call_sb : ExprStringBuilder?
+.. das-doc: given var new_body : ExpressionPtr
+
 Prerequisites
 =============
 
@@ -115,9 +122,23 @@ Part 1: [log_calls] — apply()
 ==============================
 
 The ``apply()`` method receives the function being compiled and can
-modify its AST arbitrarily:
+modify its AST arbitrarily.  Macros live in their own module, so the file
+opens with a ``module`` declaration — without one the compiler rejects it
+with *"module Module_Name is required"*:
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module function_macro_mod public
+
+   require daslib/ast
+   require daslib/ast_boost
+   require daslib/templates_boost
+   require daslib/strings_boost
+   require daslib/macro_boost
+   require strings public
 
    [function_macro(name="log_calls")]
    class LogCallsMacro : AstFunctionAnnotation {
@@ -142,6 +163,7 @@ string like ``"add(2, 3)\n"`` at runtime.  This must be built as an
 ``ExprStringBuilder`` — a compile-time AST node that generates string
 interpolation code:
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var call_sb = new ExprStringBuilder(at = func.at)
@@ -198,6 +220,7 @@ The heart of the macro builds a new function body using
 ``qmacro_block``.  This generates a statement list (``ExprBlock``)
 rather than a single expression:
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var new_body = qmacro_block() {
@@ -240,6 +263,7 @@ Replacing the function body
 
 Finally, we swap the function's body with our new block:
 
+.. das-doc: fragment
 .. code-block:: das
 
    func.body = new_body
@@ -256,6 +280,7 @@ Public variables for shared state
 
 ``LOG_DEPTH`` is declared at module scope with ``var public``:
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
 
    var public LOG_DEPTH = 0
@@ -274,6 +299,7 @@ While ``apply()`` transforms the function at definition time,
 ``verifyCall()`` runs at every **call site** after type inference.
 It receives the call expression and can accept or reject it.
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
 
    [function_macro(name="expect_range")]
@@ -306,6 +332,7 @@ Annotation arguments like ``[expect_range(value, min=0, max=255)]``
 are stored in an ``AnnotationArgumentList``.  Each entry has a
 ``name`` and typed value fields:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var arg_name = ""
@@ -339,6 +366,7 @@ Extracting constant integer values
 To check whether a call-site argument is a compile-time constant and
 extract its value, we need a helper that navigates the AST:
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
 
    [macro_function]
@@ -380,6 +408,7 @@ Reporting compile-time errors
 The error reporting pattern is straightforward — set the ``errors``
 string and return ``false``:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var val = 0
@@ -410,6 +439,7 @@ An important design decision: ``verifyCall`` only checks **constant**
 arguments.  When a runtime variable is passed, ``getConstantInt``
 returns ``false`` and the call is allowed:
 
+.. das-doc: fragment
 .. code-block:: das
 
    let alpha = 200
@@ -429,6 +459,7 @@ types are resolved, overloads are selected, and the AST is ready to
 simulate.  This makes it ideal for structural validation that needs
 complete type information.
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
 
    [function_macro(name="no_print")]
@@ -463,6 +494,7 @@ To inspect the function body, ``lint()`` uses the **visitor pattern**.
 We define a class that inherits from ``AstVisitor`` and overrides
 ``preVisitExprCall`` to intercept function calls:
 
+.. das-doc: file function_macro_mod.das
 .. code-block:: das
 
    [macro]
@@ -521,6 +553,7 @@ Running the visitor from lint()
 The ``lint()`` method creates the visitor, adapts it with
 ``make_visitor``, and walks the function body with ``visit()``:
 
+.. das-doc: fragment
 .. code-block:: das
 
    def override lint(...) : bool {
@@ -622,6 +655,7 @@ Valid calls compile normally::
 
 Out-of-range constants are rejected at compile time:
 
+.. das-doc: fragment
 .. code-block:: das
 
    // set_channel("red", 300)   // compile error!
@@ -666,6 +700,7 @@ A natural extension is to add execution timing using
 same — the only addition is a local timing variable in the generated
 body:
 
+.. das-doc: member AstFunctionAnnotation
 .. code-block:: das
 
    var new_body = qmacro_block() {
@@ -720,7 +755,6 @@ Expected output::
     green = 0
     blue = 255
     alpha = 200
-
   compute = 13
 
 

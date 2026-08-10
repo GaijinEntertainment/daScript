@@ -41,6 +41,8 @@ End-to-end
 ``[sql_table]`` on a read-only row shape opts into the materializer rail
 without claiming a real underlying table:
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     [sql_table(name = "sqlite_master_rows")]

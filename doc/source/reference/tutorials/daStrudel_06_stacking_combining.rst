@@ -32,6 +32,8 @@ Part A: ``stack`` — play patterns at the same time
 ``stack`` takes an array of patterns and merges their events into the
 same cycle.  Use it to combine independent voices (bass + lead + drums):
 
+.. das-doc: given require strudel/strudel public
+
 .. code-block:: das
 
     let pat <- stack([

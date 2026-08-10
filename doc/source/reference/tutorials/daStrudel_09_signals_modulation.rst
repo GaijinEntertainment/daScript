@@ -25,6 +25,9 @@ Query one by hand and you get a number, not a drum hit. ``sine()`` is a
 *continuous* signal — one query window yields one Hap holding the wave's
 value at the start of that window:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given def play(var pat : Pattern; cps : double = 0.5lf; seconds : double = 4.0lf) { }
+
 .. code-block:: das
 
     let sig <- sine()

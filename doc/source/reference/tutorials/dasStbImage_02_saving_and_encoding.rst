@@ -13,6 +13,11 @@ STBIMAGE-02 — Saving and Encoding Images
 This tutorial covers saving images to files, encoding to in-memory byte
 arrays, loading from memory, and round-trip verification.
 
+The examples assume ``img`` holds a loaded image — see
+:ref:`tutorial_dasStbImage_loading_images`.
+
+.. das-doc: given var img : Image
+
 Saving to File
 ==============
 
@@ -60,7 +65,7 @@ Also available: ``load_hdr_from_memory()``, ``load_16_from_memory()``:
 .. code-block:: das
 
    var inscope img2 : Image
-   let (ok, error) = img2.load_from_memory(png_buf)
+   let (ok, error) = img2.load_from_memory(buf)
 
 Format detection works from memory too:
 
@@ -78,10 +83,10 @@ an encode/decode cycle:
 .. code-block:: das
 
    var buf : array<uint8>
-   original.encode("png", buf)
+   img.encode("png", buf)
    var inscope decoded : Image
    decoded.load_from_memory(buf)
-   // decoded pixels == original pixels
+   // decoded.bytes == img.bytes
 
 .. seealso::
 

@@ -14,15 +14,15 @@ Example:
 
     require daslib/defer
 
-        [export]
-        def main() {
-            print("start\n")
-            defer() {
-                print("cleanup runs last\n")
-            }
-            print("middle\n")
+    [export]
+    def main() {
+        print("start\n")
+        defer() {
+            print("cleanup runs last\n")
         }
-        // output:
-        // start
-        // middle
-        // cleanup runs last
+        print("middle\n")
+    }
+    // output:
+    // start
+    // middle
+    // cleanup runs last

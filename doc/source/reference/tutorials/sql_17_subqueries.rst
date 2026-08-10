@@ -46,6 +46,10 @@ IN / NOT IN with a single-column subquery
 For IN-style subqueries, project a single column with
 ``_select(_.Col)`` so the IN list shape matches.
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string; Active : bool }
+.. das-doc: given [sql_table(name="Orders")] struct Order { @sql_primary_key Id : int; UserId : int; Total : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let with_orders <- _sql(db |> select_from(type<User>)

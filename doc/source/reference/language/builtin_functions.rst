@@ -57,6 +57,7 @@ Assertions
     ``assert`` may be removed in release builds, so the expression ``x``
     must have **no side effects** — the compiler will reject it otherwise:
 
+    .. das-doc: given var index : int
     .. code-block:: das
 
         assert(index >= 0, "index must be non-negative")
@@ -68,6 +69,7 @@ Assertions
     (it generates ``DAS_VERIFY`` in C++ rather than ``DAS_ASSERT``).
     Additionally, the expression ``x`` is allowed to have side effects:
 
+    .. das-doc: given def initialize_system : bool { return true }
     .. code-block:: das
 
         verify(initialize_system(), "initialization failed")
@@ -78,6 +80,7 @@ Assertions
     ``x`` must be a compile-time constant.  ``static_assert`` expressions
     are removed from the compiled program:
 
+    .. das-doc: given struct Foo { a : int }
     .. code-block:: das
 
         static_assert(typeinfo is_pod(type<Foo>), "Foo must be POD")
@@ -104,6 +107,7 @@ Debug
     Prints the string ``str`` and the value of ``x`` (similar to ``print``), then
     **returns** ``x``.  This makes it suitable for debugging inside expressions:
 
+    .. das-doc: given var x, y, z : int
     .. code-block:: das
 
         let mad = debug(x, "x") * debug(y, "y") + debug(z, "z")
@@ -158,6 +162,7 @@ Memory & Type Utilities
     Converts a pointer (raw or smart) to a ``uint64`` integer value representing
     its address:
 
+    .. das-doc: given var some_ptr : int?
     .. code-block:: das
 
         let address = intptr(some_ptr)
@@ -167,6 +172,8 @@ Memory & Type Utilities
     Provides compile-time type information about an expression or a ``type<T>`` argument.
     Used extensively in generic programming:
 
+    .. das-doc: given struct MyStruct { x : int }
+    .. das-doc: given var myStruct : MyStruct
     .. code-block:: das
 
         typeinfo sizeof(type<float3>)       // 12
@@ -252,6 +259,7 @@ Remove & Erase
 
     Removes all elements for which ``blk`` returns ``true``:
 
+    .. das-doc: given var arr : array<int>
     .. code-block:: das
 
         erase_if(arr) $(x) { return x < 0 }
@@ -317,7 +325,7 @@ Sorting
 
     .. code-block:: das
 
-        sort(arr) $(a, b) { return a > b }  // descending order
+        sort(arr) $(x, y) { return x > y }  // descending order
 
 ^^^^^^^^^^^^^^^^
 Swap
@@ -344,6 +352,7 @@ Lookup
     Looks up ``key`` in the table.  If found, the table is locked and ``blk``
     is invoked with a reference to the value.  Returns ``true`` if the key was found:
 
+    .. das-doc: given var tab : table<string; int>
     .. code-block:: das
 
         get(tab, "key") $(value) {
@@ -424,6 +433,7 @@ Iterator Operations
 
     Creates an iterator from a range, array, fixed-size array, string, or lambda:
 
+    .. das-doc: given var my_range : range
     .. code-block:: das
 
         for (x in each(my_range)) {
@@ -512,6 +522,7 @@ Lock Operations
     then unlocks.  While locked, the container cannot be resized or modified
     structurally:
 
+    .. das-doc: given var my_table : table<string; int>
     .. code-block:: das
 
         lock(my_table) $(t) {

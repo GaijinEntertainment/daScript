@@ -31,6 +31,8 @@ Part A: Lifecycle Functions
 Scripts that export ``init`` / ``update`` / ``shutdown`` run in
 **lifecycle mode** under daslang-live:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     [export] def init() { ... }      // called on start and after every reload
@@ -49,6 +51,8 @@ player state alive across reloads.  The module registers
 player state (wall time, CPS/BPM, SID, and the sample bank) and the
 loaded SF2 data into the persistent byte store.  Tracks are not
 serialised — ``strudel_init`` re-adds them on every reload:
+
+.. das-doc: given def load_samples() { }
 
 .. code-block:: das
 
@@ -112,17 +116,19 @@ Part D: Custom Persistent State
 
 strudel_live handles the player.  Your own state needs its own hooks —
 use ``[before_reload]`` / ``[after_reload]`` and the persistent byte
-store to keep globals alive:
+store to keep globals alive.  Here the global is a module-scope
+``var g_reload_count : int = 0``, and the two hooks write it out and
+read it back:
+
+.. das-doc: given var g_reload_count : int = 0
 
 .. code-block:: das
-
-    var g_reload_count : int = 0
 
     [before_reload]
     def save_my_state() {
         var data : array<uint8>
         data |> resize(4)
-        unsafe { *reinterpret<int?>(addr(data[0])) = g_reload_count; }
+        unsafe { *addr<int?>(data[0]) = g_reload_count; }
         live_store_bytes("tutorial15_reload_count", data)
     }
 
@@ -130,7 +136,7 @@ store to keep globals alive:
     def restore_my_state() {
         var data : array<uint8>
         if (live_load_bytes("tutorial15_reload_count", data) && length(data) >= 4) {
-            unsafe { g_reload_count = *reinterpret<int?>(addr(data[0])); }
+            unsafe { g_reload_count = *addr<int?>(data[0]); }
             g_reload_count ++
         }
     }

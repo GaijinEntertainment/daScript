@@ -36,6 +36,10 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+
 Same baseline as ``color_button`` — already in
 ``imgui/imgui_widgets_builtin`` (re-exported by ``imgui/imgui_boost_v2``).
 
@@ -58,10 +62,13 @@ Click vs hover
 The two variants share the same call shape but pick the right state shape
 for the call site:
 
-* ``color_button(IDENT, (col, size, flags))`` — returns ``bool clicked``,
-  records ``state.click_count`` and ``state.clicked``.
-* ``color_button_hover(IDENT, (col, size, flags))`` — returns
+* ``color_button(IDENT, (desc_id, col, size, flags))`` — returns
+  ``bool clicked``, records ``state.click_count`` and ``state.clicked``.
+* ``color_button_hover(IDENT, (desc_id, col, size, flags))`` — returns
   ``bool hovered``, no click bookkeeping.
+
+``desc_id`` and ``col`` are mandatory in both; ``size`` and ``flags``
+default to ``float2(0, 0)`` and ``ImGuiColorEditFlags.None``.
 
 A site that needs both (click triggers an action, hover updates a
 preview) should use the regular ``color_button`` and read

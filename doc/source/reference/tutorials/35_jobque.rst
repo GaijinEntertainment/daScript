@@ -70,6 +70,9 @@ Spawning jobs
 ``new_job`` dispatches work to the thread pool.  Each job runs in a cloned
 context.  Use channels to communicate results back:
 
+.. das-doc: given struct IntVal { v : int }
+.. das-doc: given struct StringVal { s : string }
+
 .. code-block:: das
 
     with_job_que() {

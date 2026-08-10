@@ -15,12 +15,19 @@ For example this is how DECS implements component serialization:
 
 .. code-block:: das
 
-    def public serialize ( var arch:Archive; var src:Component )
+    require daslib/decs
+
+    def public serialize(var arch : Archive; var src : Component) {
         arch |> serialize(src.name)
         arch |> serialize(src.hash)
         arch |> serialize(src.stride)
         arch |> serialize(src.info)
-        invoke(src.info.serializer, arch, src.data)
+        if (src.info.serializer != null) {
+            invoke(src.info.serializer, arch, src.data, src.name)
+        } else {
+            panic("decs: unable to serialize component '{src.name}'")
+        }
+    }
 
 Example:
 
@@ -28,19 +35,19 @@ Example:
 
     require daslib/archive
 
-        struct Foo {
-            a : float
-            b : string
-        }
+    struct Foo {
+        a : float
+        b : string
+    }
 
-        [export]
-        def main() {
-            var original = Foo(a = 3.14, b = "hello")
-            var data <- mem_archive_save(original)
-            var loaded : Foo
-            data |> mem_archive_load(loaded)
-            delete data
-            print("a = {loaded.a}, b = {loaded.b}\n")
-        }
-        // output:
-        // a = 3.14, b = hello
+    [export]
+    def main() {
+        var original = Foo(a = 3.14, b = "hello")
+        var data <- mem_archive_save(original)
+        var loaded : Foo
+        data |> mem_archive_load(loaded)
+        delete data
+        print("a = {loaded.a}, b = {loaded.b}\n")
+    }
+    // output:
+    // a = 3.14, b = hello

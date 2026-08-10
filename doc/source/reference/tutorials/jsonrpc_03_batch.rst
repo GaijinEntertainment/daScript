@@ -85,11 +85,17 @@ directly:
 
 .. code-block:: das
 
-   let pb = parse_batch(wire)
-   if (!empty(pb.framing_error)) return pb.framing_error
-   for (req in pb.requests) {
-       if (!empty(req.error_envelope)) { /* per-entry error */ }
-       else { /* req.method, req.id_str, req.params, req.params_json available */ }
+   def handle_batch(wire : string) : string {
+       let pb = parse_batch(wire)
+       return pb.framing_error if (!empty(pb.framing_error))
+       for (req in pb.requests) {
+           if (!empty(req.error_envelope)) {
+               // per-entry error — req.error_envelope is ready to go on the wire
+           } else {
+               // req.method, req.id_str, req.params, req.params_json available
+           }
+       }
+       return ""   // assemble the response array from the per-entry results
    }
 
 Running the tutorial

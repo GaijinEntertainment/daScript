@@ -10,6 +10,7 @@ rows. ``combo_getter`` serves a procedural list from a lambda;
 ``selectable_label`` lets the caller own the selected-flag (so you
 can wire it through a list_box for single-select):
 
+.. das-doc: signatures
 .. code-block:: das
 
    combo(IDENT, (text = "..", items <- ["A", "B", ...]))                       // dropdown, items array
@@ -32,6 +33,8 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given let FONTS = fixed_array("Serif", "Sans", "Mono", "Cursive")
 
 Already in the baseline boost layer:
 
@@ -86,6 +89,7 @@ selectable — multi-toggle rows
 Each ``selectable`` owns its own ``ToggleState`` — rows toggle
 independently, which falls out as multi-select naturally:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var private TAG : table<int; ToggleState>
@@ -108,6 +112,7 @@ For one-of-N, switch to ``selectable_label`` with a **caller-owned**
 frame + scroller). The list_box's ``state.value`` holds the chosen
 index; the loop tags each row's ``selected`` from it:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var private SHIRT_ROW : table<int; ClickState>

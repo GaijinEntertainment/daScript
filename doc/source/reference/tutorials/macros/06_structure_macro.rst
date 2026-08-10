@@ -36,6 +36,8 @@ the compilation pipeline:
 |                     | Read-only — useful for diagnostics.          |
 +---------------------+----------------------------------------------+
 
+.. das-doc: given require structure_macro_mod
+
 This tutorial builds a ``[serializable]`` annotation that:
 
 1. Adds a ``_version`` field and generates a **stub**
@@ -90,11 +92,21 @@ The module: ``structure_macro_mod.das``
 Registration
 ------------
 
+.. das-doc: file structure_macro_mod.das
 .. code-block:: das
+
+   options gen2
+
+   module structure_macro_mod public
+
+   require daslib/ast
+   require daslib/rtti
+   require daslib/ast_boost
+   require daslib/templates_boost
 
    [structure_macro(name="serializable")]
    class SerializableMacro : AstStructureAnnotation {
-       ...
+       // apply(), patch() and finish() follow, in the same class
    }
 
 ``[structure_macro(name="serializable")]`` tells the compiler:
@@ -116,6 +128,7 @@ an error string.  It runs during parsing, before inference.
 Step 1 — Validate arguments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    var version = 1
@@ -142,6 +155,7 @@ the error message stored in ``errors``.
 Step 2 — Add a field
 ^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    st |> add_structure_field("_version",
@@ -159,6 +173,7 @@ type and default value.
 Step 3 — Generate a stub describe function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
@@ -217,6 +232,7 @@ non-serializable fields.
 Step 1 — Guard against re-patching
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    if (find_arg(args, "patched") is tBool) return true
@@ -230,6 +246,7 @@ and check for it here — if present, the work is already done.
 Step 2 — Find the stub function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
@@ -244,6 +261,7 @@ this pointer affect the actual function.
 Step 3 — Get the body as ExprBlock
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    unsafe {
@@ -258,6 +276,7 @@ pointer so we can access the ``list`` array of statements.
 Step 4 — Append field-printing statements
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
        for (fld in st.fields) {
@@ -284,6 +303,7 @@ the function where ``obj`` is a parameter.
 Step 5 — Mark as patched and trigger re-inference
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. das-doc: fragment
 .. code-block:: das
 
    for (ann in st.annotations) {
@@ -303,6 +323,7 @@ the modified function body.  On the next pass, ``find_arg(args,
 Inside ``finish()``
 -------------------
 
+.. das-doc: fragment
 .. code-block:: das
 
    def override finish(var st : StructurePtr; var group : ModuleGroup;
@@ -337,6 +358,7 @@ checked with ``is tInt`` / ``as tInt``.
 The usage file
 ==============
 
+.. das-doc: fragment
 .. code-block:: das
 
    options gen2

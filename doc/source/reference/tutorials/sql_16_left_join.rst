@@ -57,13 +57,17 @@ Probe in projection                         Allowed on join kind         Emitted
 LEFT JOIN
 =========
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string }
+.. das-doc: given [sql_table(name="Orders")] struct Order { @sql_primary_key Id : int; UserId : int; Total : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let rows <- _sql(db |> select_from(type<User>)
                        |> _left_join(db |> select_from(type<Order>),
                                      $(u : User, o : Order) => u.Id == o.UserId,
                                      $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
-    // SELECT "t0"."Name", "t1"."UserId" IS NOT NULL
+    // SELECT "t0"."Name", "t1"."UserId" IS NOT NULL AS "HasOrder"
     //   FROM "Users" AS "t0"
     //   LEFT JOIN "Orders" AS "t1"
     //     ON "t0"."Id" = "t1"."UserId"
@@ -79,7 +83,7 @@ Mirror of LEFT --- every right row surfaces, left side is ``Option<TA>``.
                        |> _right_join(db |> select_from(type<Order>),
                                       $(u : User, o : Order) => u.Id == o.UserId,
                                       $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
-    // SELECT "t0"."Id" IS NOT NULL, "t1"."Id"
+    // SELECT "t0"."Id" IS NOT NULL AS "HasUser", "t1"."Id" AS "OrderId"
     //   FROM "Users" AS "t0"
     //   RIGHT JOIN "Orders" AS "t1"
     //     ON "t0"."Id" = "t1"."UserId"
@@ -98,7 +102,8 @@ Both sides are ``Option<T>``. Probe either arg; the analyzer routes the
                        |> _full_outer_join(db |> select_from(type<Order>),
                                            $(u : User, o : Order) => u.Id == o.UserId,
                                            $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
-    // SELECT "t0"."Id" IS NOT NULL, "t1"."UserId" IS NOT NULL
+    // SELECT "t0"."Id" IS NOT NULL AS "HasUser",
+    //        "t1"."UserId" IS NOT NULL AS "HasOrder"
     //   FROM "Users" AS "t0"
     //   FULL OUTER JOIN "Orders" AS "t1"
     //     ON "t0"."Id" = "t1"."UserId"
@@ -115,7 +120,7 @@ inner-join-shaped result.
     let rows <- _sql(db |> select_from(type<User>)
                        |> _cross_join(db |> select_from(type<Order>),
                                       $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
-    // SELECT "t0"."Name", "t1"."Id"
+    // SELECT "t0"."Name" AS "UserName", "t1"."Id" AS "OrderId"
     //   FROM "Users" AS "t0"
     //   CROSS JOIN "Orders" AS "t1"
 

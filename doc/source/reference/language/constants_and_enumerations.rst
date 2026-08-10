@@ -39,6 +39,7 @@ You cannot change the value of a constant.
 
 Constants can be ``shared``:
 
+.. das-doc: fragment
 .. code-block:: das
 
     let shared blah <- ["blah","blahh","blahh"]
@@ -77,6 +78,7 @@ However, it's only visible inside the scope of the corresponding ``static_let`` 
 
 Global variables can be ``private`` or ``public``
 
+.. das-doc: fragment
 .. code-block:: das
 
     let public foobar = 100

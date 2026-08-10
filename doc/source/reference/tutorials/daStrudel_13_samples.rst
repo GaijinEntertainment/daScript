@@ -33,6 +33,10 @@ Every audio file inside the folder becomes an indexed variation:
 ``strudel_load_sound`` loads one folder under a given name.  Files are
 sorted alphabetically, so the ``:0``, ``:1``, ... indices are stable:
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: given require daslib/fio
+.. das-doc: given let MEDIA = "{get_das_root()}/examples/media"
+
 .. code-block:: das
 
     require strudel/strudel_player
@@ -104,8 +108,8 @@ Part E: Playing a Slice with ``begin`` / ``end_pos``
 
 ``begin(x)`` and ``end_pos(x)`` take normalized positions in 0..1 and
 play only the ``[begin, end)`` window of a sample.  ``begin(0.3)`` skips
-the first 30 % of the file; ``end_pos(0.8)`` trims the last 20 %.  (The
-setter is ``end_pos`` because ``end`` is a reserved word.)
+the first 30 % of the file; ``end_pos(0.8)`` trims the last 20 %.  The
+setter and the ``Event`` field are both spelled ``end_pos``.
 
 .. code-block:: das
 
@@ -135,17 +139,24 @@ Three ways to cut a sample into ``n`` grains:
 Part G: Loading a Whole Directory with ``strudel_load_sample_dir``
 ==================================================================
 
-``strudel_load_sample_dir(root)`` loads every audio file directly under
-``root``, using each filename as the sound name.  It is the quick way to
-bring in an external pack such as `tidalcycles/dirt-samples
-<https://github.com/tidalcycles/dirt-samples>`_.  The built-in drums
-need no loading at all, so reach for this only when you want sounds
-beyond ``bd`` / ``sd`` / ``hh`` / ``cp``:
+``strudel_load_sample_dir(root)`` walks the **folders** directly under
+``root`` and loads each one as a sound named after the folder — one
+``strudel_load_sound`` call per folder, done for you.  That is the
+layout an external pack such as `tidalcycles/dirt-samples
+<https://github.com/tidalcycles/dirt-samples>`_ ships in, and the layout
+``examples/media/drums`` uses:
 
 .. code-block:: das
 
-    strudel_load_sample_dir("{MEDIA}/audio")
-    let pat <- s("gong") |> gain(0.6)
+    strudel_load_sample_dir("{MEDIA}/drums")
+    let pat <- s("bd sd hh cp") |> gain(0.6)
+
+One call replaces the four in Part A, and it also picks up the folders
+they skipped (``ride``, ``tom_low``, ``sidestick``, …).  Point it at a
+folder of loose audio files and it loads nothing: a file is not a folder
+of variations, so there is nothing to index.  For loose files, call
+``strudel_load_sound(folder, name)`` and pick the name yourself — that
+is how ``examples/media/audio`` becomes the sound ``gong``.
 
 .. seealso::
 

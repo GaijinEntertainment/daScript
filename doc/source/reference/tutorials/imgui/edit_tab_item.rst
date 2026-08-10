@@ -10,14 +10,15 @@ of ``tab_item`` (which owns visibility internally). The canonical
 menu toggle, ``imgui_force_set``) drives the same flag the tab's X-close
 button writes.
 
+.. das-doc: fragment
 .. code-block:: das
 
    var private g_tab_open : bool = true
 
    edit_tab_item(safe_addr(g_tab_open), (id = "TAB_A",
-                                          text = "alpha",
-                                          flags = ImGuiTabItemFlags.None)) {
-       <tab body>
+                                         text = "alpha",
+                                         flags = ImGuiTabItemFlags.None)) {
+       text("alpha tab body")
    }
 
 When ``*p_open == false`` the tab is skipped entirely — no header

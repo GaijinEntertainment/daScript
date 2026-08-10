@@ -7,6 +7,7 @@ Color
 Five shapes for picking a color: two inline editors, two pop-out
 pickers, and one caller-owned swatch:
 
+.. das-doc: signatures
 .. code-block:: das
 
    color_edit3(IDENT, (text = ".."))           // inline RGB row
@@ -40,12 +41,20 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require daslib/safe_addr
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_widgets_builtin`` — ``color_edit3/4`` / ``color_picker3/4`` /
   ``color_button`` rails.
 * ``imgui/imgui_boost_runtime`` — ``ColorState3`` / ``ColorState4`` /
   ``ClickState`` structs.
+
+The caller-owned form at the end of this page also needs
+``daslib/safe_addr`` for ``safe_addr``.
 
 edit vs picker
 ==============
@@ -97,9 +106,11 @@ Flags
 ``flags : ImGuiColorEditFlags`` carries the standard edit-mode toggles
 — ``NoAlpha``, ``NoPicker``, ``NoOptions``, ``NoSmallPreview``,
 ``NoInputs``, ``NoTooltip``, ``NoLabel``, ``NoSidePreview``,
-``NoDragDrop``, ``NoBorder``, ``AlphaBar``, ``AlphaPreview``,
-``AlphaPreviewHalf``, ``HDR``, plus display-mode bits
-(``DisplayRGB`` / ``DisplayHSV`` / ``DisplayHex``) and input-mode bits
+``NoDragDrop``, ``NoBorder``, ``NoColorMarkers``, ``AlphaBar``,
+``AlphaOpaque``, ``AlphaNoBg``, ``AlphaPreviewHalf``, ``HDR``, plus
+display-mode bits (``DisplayRGB`` / ``DisplayHSV`` / ``DisplayHex``),
+data-type bits (``Uint8`` / ``Float``), picker-shape bits
+(``PickerHueBar`` / ``PickerHueWheel``) and input-mode bits
 (``InputRGB`` / ``InputHSV``). Composable via ``|``:
 
 .. code-block:: das

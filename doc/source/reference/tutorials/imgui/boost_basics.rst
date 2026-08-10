@@ -30,6 +30,11 @@ counting would abort the recording.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
+
 The ``require`` block pulls in:
 
 * The C++-bound Dear ImGui surface (``imgui``, ``imgui_app``).
@@ -123,7 +128,7 @@ bounds line is plain assignment to the struct field.
    text("bumps = {BUMP_BTN.click_count}")
 
 ``button(BUMP_BTN, ...)`` returns ``true`` on the frame the click registers; the
-underlying ``ButtonState`` keeps ``click_count`` updated for later assertions
+underlying ``ClickState`` keeps ``click_count`` updated for later assertions
 (e.g. from ``imgui_playwright``).
 
 Standalone vs live

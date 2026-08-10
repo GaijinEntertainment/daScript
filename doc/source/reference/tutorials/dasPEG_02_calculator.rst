@@ -120,6 +120,7 @@ PEEK (Lookahead)
 input**.  In the calculator, ``PEEK(set('0'..'9'))`` verifies the next
 character is a digit before committing to the ``number`` terminal:
 
+.. das-doc: fragment
 .. code-block:: das
 
    rule(PEEK(set('0'..'9')), commit, number as n) {

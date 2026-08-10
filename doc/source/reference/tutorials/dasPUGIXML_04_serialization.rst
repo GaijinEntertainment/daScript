@@ -208,6 +208,12 @@ field without changing the daslang field name:
 
 .. code-block:: das
 
+   enum Priority {
+       low
+       normal
+       high
+   }
+
    struct Config {
        @rename = "type" _type : string
        @enum_as_int level : Priority

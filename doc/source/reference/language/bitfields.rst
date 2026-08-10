@@ -20,7 +20,12 @@ There is a shorthand type alias syntax to define a bitfield:
         three
     }
 
-    typedef bits123 = bitfield<one; two; three> // exactly the same as the declaration above
+The shorthand declares exactly the same type alias as the ``typedef`` form:
+
+.. das-doc: alt
+.. code-block:: das
+
+    typedef bits123 = bitfield<one; two; three>
 
 Bitfield flags can be 8, 16, 32 or 64 bits in size. By default, bitfields are 32 bits.
 To specify a different size, use ``: bitfield : uintXX`` syntax:

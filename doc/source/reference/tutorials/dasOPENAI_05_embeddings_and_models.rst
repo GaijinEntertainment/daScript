@@ -20,6 +20,7 @@ Embeddings and cosine similarity
 produce vectors that point in similar directions — measured by cosine
 similarity (1.0 = identical direction, 0.0 = orthogonal):
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    require openai/openai_embeddings
@@ -37,8 +38,9 @@ similarity (1.0 = identical direction, 0.0 = orthogonal):
    }
    print("similarity: {cosine(v1, v2)}\n")
 
-For the full ``EmbeddingResponse`` (per-input vectors + usage), use
-``embeddings(client, req)`` with an ``EmbeddingRequest``.
+``embed`` embeds one string. For a batch, call ``embeddings(client, req)`` with
+an ``EmbeddingRequest``; it returns an ``EmbeddingResult`` whose ``response``
+holds one vector per input plus the token usage.
 
 Listing and retrieving models
 =============================

@@ -22,6 +22,8 @@ Part A: ``jux`` — stereo splitting via a transform
 ``fn(pat)`` in the right.  The classic move is to reverse the right
 side, producing the trademark live-coding stereo wobble:
 
+.. das-doc: given require strudel/strudel public
+
 .. code-block:: das
 
     let pat <- jux(note("c4 e4 g4 c5", "sine") |> sustain(0.4), @(p) => rev(p))

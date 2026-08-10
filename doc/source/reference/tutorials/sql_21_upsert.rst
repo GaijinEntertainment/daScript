@@ -39,6 +39,8 @@ INSERT OR IGNORE
 Silent no-op on PK / UNIQUE conflict. Returns rows-affected: 1 if
 inserted, 0 if ignored.
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let n = db |> insert_or_ignore(WordHit(Id = 2, Word = "world", Hits = 1, Last = 200l))
@@ -78,7 +80,7 @@ ON CONFLICT ... DO UPDATE --- the proper merge
         (Hits = _.Hits + 1, Last = _excluded.Last))
     // INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
     //   ON CONFLICT("Id") DO UPDATE SET
-    //     "Hits" = ("Hits") + (?),
+    //     "Hits" = ("WordHits"."Hits") + (?),
     //     "Last" = excluded."Last"
 
 Auto-assigned integer primary keys
@@ -162,7 +164,7 @@ practice; the array shape mirrors ``_sql_update_returning``).
         _.Id,
         (Hits = _.Hits + 1))
     // INSERT INTO "WordHits" (...) VALUES (?,?,?,?)
-    //   ON CONFLICT("Id") DO UPDATE SET "Hits" = ("Hits") + (?)
+    //   ON CONFLICT("Id") DO UPDATE SET "Hits" = ("WordHits"."Hits") + (?)
     //   RETURNING "Id", "Word", "Hits", "Last"
 
 Non-panic ``try_`` variants

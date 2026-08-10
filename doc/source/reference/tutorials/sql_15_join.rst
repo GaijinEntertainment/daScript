@@ -20,6 +20,8 @@ Equi-join shape
 
 The ``on`` predicate is locked to the equi-join shape
 
+.. das-doc: fragment
+
 .. code-block:: das
 
     $(l : TA, r : TB) => l.X == r.Y
@@ -41,13 +43,19 @@ WHERE, projection, and ON clauses qualifies with the matching alias.
 Single-source chains keep the unqualified shape --- only multi-source
 queries pay the alias-noise tax.
 
+.. das-doc: given [sql_table(name="Users")] struct User { @sql_primary_key Id : int; Name : string; Active : bool }
+.. das-doc: given [sql_table(name="Orders")] struct Order { @sql_primary_key Id : int; UserId : int; Total : int }
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key id : int; brand : string; price : int; dealer_id : int }
+.. das-doc: given [sql_table(name="Dealers")] struct Dealer { @sql_primary_key id : int; name : string }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let rows <- _sql(db |> select_from(type<User>)
                        |> _join(db |> select_from(type<Order>),
                                 $(u : User, o : Order) => u.Id == o.UserId,
                                 $(u : User, o : Order) => (UserName = u.Name, Total = o.Total)))
-    // SELECT "t0"."Name", "t1"."Total"
+    // SELECT "t0"."Name" AS "UserName", "t1"."Total"
     //   FROM "Users" AS "t0"
     //   INNER JOIN "Orders" AS "t1"
     //     ON "t0"."Id" = "t1"."UserId"
@@ -58,16 +66,20 @@ Filtering before / inside / after the join
 Pre-join ``_where`` filters the LEFT source. Column refs qualify
 with the left alias automatically:
 
+.. das-doc: fragment
+
 .. code-block:: das
 
     db |> select_from(type<User>)
        |> _where(_.Active)
        |> _join(...)
-    // ... WHERE "t0"."Active"
+    // ... WHERE ("t0"."Active" <> 0)
 
 ``_where`` can also live inside the right-side chain --- filters
 there qualify with the right alias ``t1`` and emit into the JOIN's
 ``ON`` clause (not the outer ``WHERE``):
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -112,6 +124,7 @@ to its qualified columns and reconstructs the exact nominal struct:
     //   INNER JOIN "Orders" AS "t1"
     //     ON "t0"."Id" = "t1"."UserId"
     //  WHERE "t1"."Total" >= ?
+    //  ORDER BY "t1"."Total" ASC
 
 The result type is ``array<Order>``, not a generated tuple. This form
 is useful when the other source only supplies filtering, ranking, or
@@ -137,7 +150,7 @@ SQL composes cleanly with the JOIN:
                  $(c : Car, d : Dealer) => (Brand = c.brand, Price = c.price))
         |> _group_by(_.Brand)
         |> _select((Brand = _._0, N = _._1 |> count())))
-    // SELECT ("t0"."brand"), COUNT(*)
+    // SELECT ("t0"."brand") AS "Brand", COUNT(*) AS "N"
     //   FROM "Cars" AS "t0" INNER JOIN "Dealers" AS "t1"
     //     ON "t0"."dealer_id" = "t1"."id"
     //   GROUP BY ("t0"."brand")

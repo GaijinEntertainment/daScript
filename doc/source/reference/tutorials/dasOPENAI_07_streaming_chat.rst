@@ -22,6 +22,7 @@ Streaming with on_delta
 the trailing block; the return value carries the full accumulated content and
 the ``finish_reason``:
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    var req = ChatCompletionRequest(model = "gpt-4o-mini",

@@ -8,6 +8,7 @@ Six shapes of click trigger. All six use ``ClickState``;
 ``state.clicked`` is the per-frame bool, ``state.click_count``
 accumulates across frames.
 
+.. das-doc: signatures
 .. code-block:: das
 
    button(IDENT, (text = ".."))                       // the workhorse
@@ -34,6 +35,11 @@ Walkthrough
 
 Requires
 ========
+
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+.. das-doc: given require imgui/imgui_containers_builtin
 
 Already in the baseline boost layer:
 
@@ -113,25 +119,27 @@ interaction stack.
 image_button — textured trigger
 ===============================
 
-Renders a texture as the button face. ``user_texture_id : void?`` is
-ImGui's opaque texture handle — on GL it's the GL texture id cast to
-``void?``. The font atlas (``io.Fonts.TexID``) is always available and
-makes for a no-setup demo target:
+Renders a texture as the button face. ``user_texture_id : ImTextureRef`` is
+ImGui 1.92's texture handle — either a backend-owned texture
+(``_TexData``) or your own GL texture name in the ``_TexID`` slot. The
+font atlas exposes itself as ``io.Fonts.TexRef``, which is always
+available and makes for a no-setup demo target:
 
 .. code-block:: das
 
    let io & = unsafe(GetIO())
-   let font_tex = io.Fonts.TexID
-   if (font_tex != null) {
+   if (io.Fonts.TexData != null) {
        image_button(BTN, (text = "##font",
-                          user_texture_id = font_tex,
+                          user_texture_id = io.Fonts.TexRef,
                           size = float2(48.0f, 48.0f)))
    }
 
-Real apps load their own textures via ``stbi`` or
-``LoadTextureFromFile`` helpers (see ``examples/imgui_demo/widgets.das``
-for the 8-button image-grid pattern). ``uv0`` / ``uv1`` slice into the
-texture; ``bg_col`` / ``tint_col`` modulate the rendered face.
+The ``TexData != null`` guard skips the frames before the backend has
+built the atlas. Real apps decode and upload their own texture and wrap
+the GL name in an ``ImTextureRef`` — see :ref:`tutorial_texture_ref` for
+the full path, and ``examples/imgui_demo/widgets.das`` for the 8-button
+image-grid pattern. ``uv0`` / ``uv1`` slice into the texture;
+``bg_col`` / ``tint_col`` modulate the rendered face.
 
 tab_item_button — button styled as a tab
 ========================================
@@ -144,7 +152,7 @@ to the start of the bar, ``Trailing`` to the end — the canonical
 .. code-block:: das
 
    tab_bar(BAR, (text = "MyTabBar",
-                  flags = ImGuiTabBarFlags.FittingPolicyResizeDown)) {
+                  flags = ImGuiTabBarFlags.FittingPolicyShrink)) {
        if (tab_item_button(HELP, (text = "?",
                                    flags = ImGuiTabItemFlags.Leading |
                                            ImGuiTabItemFlags.NoTooltip))) {
@@ -181,9 +189,13 @@ Every ``*_button`` accepts ``imgui_click`` and snapshot probes:
 Caller-owned variant
 ====================
 
-For sites where the click target lives on an external bool, use
-``edit_button`` from ``imgui_boost_runtime`` (see
-:ref:`tutorial_edit_external_tour`).
+There is no ``edit_button``: a button owns no value, only click
+bookkeeping, so there is nothing for the caller to hold. The
+caller-owned rail covers the *toggle* end of the click family instead —
+``edit_checkbox`` / ``edit_radio_button`` / ``edit_menu_item`` take a
+``bool?`` pointer via ``safe_addr`` and write the caller's own flag (see
+:ref:`tutorial_edit_external_tour`). For a plain trigger, read
+``button(...)``'s return value directly.
 
 .. seealso::
 

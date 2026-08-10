@@ -49,11 +49,14 @@ Alpha Blending
 pixel is the alpha value for blending the color ``(r, g, b)`` onto the
 destination.
 
-The blend formula per channel is::
+The blend formula per color channel is::
 
-   out = (alpha * color + (255 - alpha) * dest + 128) / 255
+   out = (alpha * color + (255 - alpha) * dest) / 255
 
-Alpha channel of the destination is updated as
+The division by 255 is exact — the implementation uses the integer identity
+``(x + 1 + (x >> 8)) >> 8``, not a shift by 8.  Source pixels with
+``alpha == 0`` are skipped, so the destination keeps its value there.
+The alpha channel of the destination is updated as
 ``min(dest_alpha + src_alpha, 255)``.
 
 This is the fundamental building block for software text rendering:
@@ -100,7 +103,9 @@ is a common pattern in UI rendering:
    canvas.fill_rect(8, 35, 48, 1, border)   // bottom
    canvas.fill_rect(8, 12, 1, 24, border)   // left
    canvas.fill_rect(55, 12, 1, 24, border)  // right
-   // Alpha-blended icon
+   // Alpha-blended icon — a 1-channel coverage map, like a glyph from a font atlas
+   var icon = make_image(12, 12, 1)
+   icon.fill_rect(2, 2, 8, 8, uint8(255))
    canvas.blit_alpha(icon, 0, 0, 14, 18, 12, 12, 255, 255, 255)
 
 .. seealso::

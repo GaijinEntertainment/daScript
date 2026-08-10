@@ -53,6 +53,8 @@ daslang refuses to guess.
 @sql_json: TEXT-backed, queryable
 =================================
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     [sql_table(name = "Users")]
@@ -64,6 +66,8 @@ daslang refuses to guess.
     }
 
 The macro emits, at module scope:
+
+.. das-doc: fragment
 
 .. code-block:: das
 
@@ -96,7 +100,7 @@ SELECT projections. The leaf type drives result-side adapter dispatch
     // WHERE descent
     let dark_users <- _sql(db |> select_from(type<User>)
         |> _where(_.Prefs.theme == "dark"))
-    //   SELECT Id, Name, Prefs FROM "Users"
+    //   SELECT "Id", "Name", "Prefs" FROM "Users"
     //   WHERE json_extract("Prefs", '$.theme') = ?
 
     // SELECT projection descent
@@ -107,7 +111,7 @@ SELECT projections. The leaf type drives result-side adapter dispatch
     // Mixed projection (plain column + JSON path)
     let mixed <- _sql(db |> select_from(type<User>)
         |> _select((Name = _.Name, Theme = _.Prefs.theme)))
-    //   SELECT "Name", json_extract("Prefs", '$.theme') FROM "Users"
+    //   SELECT "Name", json_extract("Prefs", '$.theme') AS "Theme" FROM "Users"
 
 Descent is arbitrary depth --- nested struct paths concatenate dotted:
 
@@ -124,7 +128,7 @@ Descent is arbitrary depth --- nested struct paths concatenate dotted:
 
     let in_ny <- _sql(db |> select_from(type<Account>)
         |> _where(_.Profile.Addr.City == "NY"))
-    //   SELECT Id, Profile FROM "Accounts"
+    //   SELECT "Id", "Profile" FROM "Accounts"
     //   WHERE json_extract("Profile", '$.Addr.City') = ?
 
 @sql_blob: opaque binary archive
@@ -149,6 +153,8 @@ The macro emits the archive variant of the adapter pair. The parameter
 is ``const`` because the catch-all binder passes ``v`` non-\ ``var``;
 ``mem_archive_save`` / ``mem_archive_load`` need a mutable reference, so
 the body clones into a local through ``clone_to_move``:
+
+.. das-doc: fragment
 
 .. code-block:: das
 

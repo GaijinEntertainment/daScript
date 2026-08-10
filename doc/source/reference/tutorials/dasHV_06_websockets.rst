@@ -18,6 +18,10 @@ and mixing HTTP routes with WebSocket endpoints.
 
 Prerequisites: :ref:`tutorial_dasHV_http_server`.
 
+.. das-doc: given let SERVER_PORT = 18085
+.. das-doc: given let base_url = "ws://127.0.0.1:18085"
+.. das-doc: given def wait_for_messages(var client : ChatClient?; count : int) { if (length(client.received) < count) { client->process_event_que() } }
+
 WebSocket Server
 ================
 
@@ -106,7 +110,10 @@ Connecting and Receiving
 ========================
 
 Create a client, call ``init(url)`` to connect, then pump the event
-queue with ``process_event_que()`` to receive callbacks:
+queue with ``process_event_que()`` to receive callbacks.  The
+``wait_for_messages`` used below is a helper from the companion source: it
+pumps the queue until the client has collected the requested number of
+messages, or a timeout expires.
 
 .. code-block:: das
 
@@ -168,12 +175,15 @@ WebSocket callbacks:
 
 .. code-block:: das
 
-   def override onInit {
-       GET("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-           return resp |> TEXT_PLAIN("pong")
-       }
-       GET("/clients") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-           return resp |> TEXT_PLAIN("{length(self.clients)}")
+   class ChatServer : HvWebServer {
+       ...
+       def override onInit {
+           GET("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+               return resp |> TEXT_PLAIN("pong")
+           }
+           GET("/clients") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+               return resp |> TEXT_PLAIN("{length(self.clients)}")
+           }
        }
    }
 

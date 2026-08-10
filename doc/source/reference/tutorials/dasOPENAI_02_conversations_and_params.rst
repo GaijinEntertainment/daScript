@@ -21,6 +21,7 @@ The model sees every prior turn. Roles are ``system`` (instructions),
 ``user``, ``assistant`` (previous model replies), and ``tool`` (function
 results — see :ref:`tutorial_dasOPENAI_tools`):
 
+.. das-doc: given let client = openai_client("http://localhost:11434/v1")
 .. code-block:: das
 
    let req = ChatCompletionRequest(model = "gpt-4o-mini", messages <- [

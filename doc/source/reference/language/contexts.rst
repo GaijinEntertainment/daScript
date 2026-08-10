@@ -44,12 +44,14 @@ It is initialized in the following order:
     3. All specifically ordered functions tagged with ``[init]`` are called in the order they appear after topological sort.
 
 The topological sort order for the init functions is specified in the init annotation.
-    * ``tag`` attribute specifies that the function will appear during the specified pass
-    * ``before`` attribute specifies that the function will appear before the specified pass
-    * ``after`` attribute specifies that the function will appear after the specified pass
+Both ``before`` and ``after`` name a *pass*, and say where that pass sits relative to this function:
+    * ``tag`` attribute puts the function into the named pass
+    * ``before`` attribute names a pass that runs **before** this function, i.e. the function is scheduled after every function of that pass
+    * ``after`` attribute names a pass that runs **after** this function, i.e. the function is scheduled before every function of that pass
 
 Consider the following example:
 
+.. das-doc: given var order : array<string>
 .. code-block:: das
 
     [init(before="middle")]
@@ -75,6 +77,7 @@ The functions will execute in the following order:
     3. a
 
 During shutdown, the context runs all functions marked with ``[finalize]`` in the order they are declared, per module.
+Those marked ``[finalize(late=true)]`` run after all the regular ones.
 
 Macro contexts
 --------------
@@ -90,8 +93,12 @@ Shared macro modules are initialized during their first compilation, and are shu
 Locking
 -------
 
-A context contains a ``recursive_mutex`` and can be locked and unlocked with the ``lock_context`` or ``lock_this_context`` RAII blocks.
+A context can carry a ``recursive_mutex``, and is locked and unlocked with the ``lock_context`` or ``lock_this_context`` RAII blocks.
 Cross-context calls via ``invoke_in_context`` automatically lock the target context.
+
+The mutex is only created when the program needs it: when it contains a cross-context call,
+when the ``threadlock_context`` option or policy is set, or when the debugger is enabled.
+Locking a context that has none reports ``threadlock_context is not set``.
 
 Lookups
 -------

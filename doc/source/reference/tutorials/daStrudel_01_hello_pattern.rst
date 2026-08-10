@@ -23,6 +23,8 @@ What is a Pattern?
 A ``Pattern`` is **a pure function from a query window to a list of events**.
 Concretely:
 
+.. das-doc: signatures
+
 .. code-block:: das
 
     typedef Pattern = lambda<(span : TimeSpan) : array<Hap>>
@@ -40,6 +42,8 @@ What is a Hap?
 ==============
 
 A ``Hap`` is one event with two timestamps and a value:
+
+.. das-doc: signatures
 
 .. code-block:: das
 
@@ -132,8 +136,10 @@ optional second argument picks an oscillator:
     let pat <- note("c4", "sine") |> sustain(0.5)
     play(pat, 4.0)
 
-``sustain(0.5)`` says each note holds for half its slot. Without it the
-default ADSR envelope would cut the note very short.
+``sustain(0.5)`` sets the envelope's sustain **level**: the note holds
+at half amplitude for as long as it is scheduled. It is a volume, not a
+duration — tutorial 10 covers the whole ADSR envelope, including what
+the defaults do when you set nothing.
 
 The pipe operator ``|>`` is just function call with the left side as the
 first argument — ``pat |> sustain(0.5)`` is identical to

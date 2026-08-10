@@ -24,6 +24,8 @@ Part A: Loading a SoundFont
 ``strudel_load_sf2`` reads a ``.sf2`` file and activates it for the next
 patterns.  It returns ``true`` on success:
 
+.. das-doc: given require strudel/strudel public
+
 .. code-block:: das
 
     require strudel/strudel_player
@@ -59,7 +61,7 @@ Program            Instrument
 40                 violin
 56                 trumpet
 73                 flute
-81                 lead square
+80                 square lead
 =================  =======================
 
 Use the program number when the name lookup does not match the preset

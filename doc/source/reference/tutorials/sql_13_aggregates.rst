@@ -48,6 +48,9 @@ one-row counterpart when several scalar facts are needed together.
 ``count`` --- whole-source row count
 ====================================
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let n = _sql(db |> select_from(type<Car>) |> count())

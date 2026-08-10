@@ -11,7 +11,7 @@ SQL-39 --- ``schema_from``: struct mirrors the DB
     single: Tutorial; check_schema
 
 ``[sql_table(schema_from = "path.db")]`` opens the .db at compile
-time, reads ``pragma_table_info``, and populates the struct's
+time, reads ``PRAGMA table_xinfo``, and populates the struct's
 fields from the actual schema. The struct mirrors the database ---
 which means schema drift becomes a **compile error** at the exact
 lines that need updating. No reflection, no migration metadata,
@@ -86,14 +86,14 @@ route through the existing custom-types adapter rail.
 
     // Annotation override: @sql_json on a TEXT column tells the macro
     // to bind/extract via JSON encoding for a structured payload.
-    struct Note {
+    struct NoteBody {
         title : string
         rank  : int
     }
     [sql_table(name = "Items",
-               schema_from = "items.db")]
+               schema_from = "tests/dasSQLITE/test_data/schema_from_nullable.db")]
     struct Item {
-        @sql_json Meta : Option<Note>    // TEXT column on disk; JSON-encoded daslang side
+        @sql_json Note : Option<NoteBody>   // nullable TEXT column; JSON-encoded daslang side
     }
 
 What you cannot do via partial body:
@@ -146,7 +146,7 @@ today is what the script reads/writes. ETL between two DBs,
 archival readers, admin tooling --- all good fits.
 
 For "the DB grows over time, run versioned schema migrations at
-startup", the ``daslib/sqlite_migrate`` module ships
+startup", the ``sqlite/sqlite_migrate`` module ships
 ``[sql_migration(version=N)]`` + a runtime runner
 (see :ref:`tutorial_sql_migrations`). The two are
 orthogonal: ``schema_from`` gives compile-time contract checks

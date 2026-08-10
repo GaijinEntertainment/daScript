@@ -30,6 +30,7 @@ next turn; ``add_user`` contributes the turn's text after the audio span.
 ``respond`` renders the turn — template framing, audio splice, embedding
 prefill — and streams the reply.
 
+.. das-doc: given var samples : array<float>
 .. code-block:: das
 
    var m <- load_model("Llama-3.2-1B-Instruct-Q8_0.gguf", QuantMode.q8)

@@ -8,8 +8,7 @@ dasImgui's read-only display family wraps ImGui's two main *output* widgets
 into the v2 boost surface. ``progress_bar`` wraps ``ImGui::ProgressBar``
 with a ``ProgressBarState`` payload carrying ``{fraction, size, overlay}``;
 ``image`` wraps ``ImGui::Image`` with the full ``uv0`` / ``uv1`` /
-``tint_col`` / ``border_col`` quartet plus a ``uint64`` reinterpret of the
-texture handle for snapshot readability.
+``tint_col`` / ``border_col`` quartet.
 
 .. code-block:: das
 
@@ -17,7 +16,8 @@ texture handle for snapshot readability.
                             size = float2(-1.0f, 0.0f),
                             overlay = "33%"))
 
-   image(IMG_PLAIN, (user_texture_id = font_tex,
+   let io & = unsafe(GetIO())
+   image(IMG_PLAIN, (user_texture_id = io.Fonts.TexRef,
                      size = float2(96.0f, 96.0f),
                      uv0 = float2(0.0f, 0.0f),
                      uv1 = float2(1.0f, 1.0f),
@@ -53,6 +53,10 @@ recording.
 Requires
 ========
 
+.. das-doc: given require imgui
+.. das-doc: given require imgui/imgui_boost_v2
+.. das-doc: given require imgui/imgui_widgets_builtin
+
 Baseline boost layer (``imgui/imgui_boost_v2`` re-exports the rail family
 from ``imgui/imgui_widgets_builtin``). No extra modules.
 
@@ -72,14 +76,17 @@ for the auto-formatted percentage.
 image
 =====
 
-``ImageState`` exposes ``user_texture_id`` as a ``uint64`` so the snapshot
-can carry the texture handle as a readable number (raw ``void?`` would
-serialize as a pointer string). All four ``uv0`` / ``uv1`` /
-``tint_col`` / ``border_col`` defaults match the C++ ``ImGui::Image``
-defaults so an unset call is the identity render. The tutorial uses the
-ImGui font atlas (``GetIO().Fonts.TexID``) as a guaranteed-available
-texture; production code passes a ``user_texture_id`` from your renderer
-that targets a real GPU resource.
+``user_texture_id`` is an ``ImTextureRef`` (ImGui 1.92's texture handle)
+and is deliberately **not** echoed into ``ImageState`` — the handle is
+opaque, so telemetry carries only the actionable per-call args
+(``size``, ``uv0``, ``uv1``, ``tint_col``, ``border_col``). All four
+``uv0`` / ``uv1`` / ``tint_col`` / ``border_col`` defaults match the C++
+``ImGui::Image`` defaults so an unset call is the identity render. The
+tutorial uses the ImGui font atlas (``GetIO().Fonts.TexRef``, guarded on
+``Fonts.TexData != null`` for the frames before the backend builds it)
+as a guaranteed-available texture; production code passes an
+``ImTextureRef`` wrapping its own GPU resource — see
+:ref:`tutorial_texture_ref`.
 
 Snapshot shape
 ==============

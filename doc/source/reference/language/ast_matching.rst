@@ -101,9 +101,14 @@ qmatch_function
 ^^^^^^^^^^^^^^^
 
 ``qmatch_function(func) $(args) : RetType { stmts }`` matches a compiled function's
-arguments, return type, and body:
+arguments, return type, and body. Reaching the compiled function needs ``options rtti``,
+and the matcher clones AST nodes, so the body runs inside ``ast_gc_guard``:
 
+.. das-doc: alt
 .. code-block:: das
+
+    options rtti
+    require dastest/testing_boost public
 
     [export]
     def target_add(a, b : int) : int {
@@ -112,11 +117,13 @@ arguments, return type, and body:
 
     [test]
     def test_add(t : T?) {
-        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
-        let r = qmatch_function(func) $(a : int; b : int) : int {
-            return a + b
+        ast_gc_guard() {
+            var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+            let r = qmatch_function(func) $(a : int; b : int) : int {
+                return a + b
+            }
+            t |> success(r.matched, "target_add matches the pattern")
         }
-        assert(r.matched)
     }
 
 The function has been through compilation and optimization, so the AST may differ from the source.
@@ -166,6 +173,7 @@ Also works on ``let`` declarations and ``for`` loop iterators:
 
 .. code-block:: das
 
+    var var_name : string
     let r = qmatch_block(blk) $ {
         var $i(var_name) = 5
     }
@@ -211,8 +219,10 @@ Works in both ``qmatch_function`` and ``qmatch_block``. Fixed arguments before `
 are matched by name and type as usual; everything after goes into the array.
 ``$a`` must be the last argument in the pattern.
 
-Capture remaining function arguments:
+Capture remaining function arguments (``func`` is a ``FunctionPtr``, as returned by
+``find_module_function_via_rtti`` above):
 
+.. das-doc: given var func : FunctionPtr
 .. code-block:: das
 
     var rest : array<VariablePtr>
@@ -375,6 +385,7 @@ and a qualified pattern name still requires an exact match.
 Result type
 -----------
 
+.. das-doc: signatures
 .. code-block:: das
 
     enum QMatchError : int {

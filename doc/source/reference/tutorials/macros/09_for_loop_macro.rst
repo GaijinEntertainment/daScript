@@ -32,6 +32,7 @@ daslang tables (``table<K;V>``) are not directly iterable.  The standard
 idiom to iterate a table requires the verbose ``keys()`` and ``values()``
 built-in functions:
 
+.. das-doc: given var tab : table<string; int>
 .. code-block:: das
 
    for (k, v in keys(tab), values(tab)) {
@@ -41,6 +42,7 @@ built-in functions:
 This tutorial builds a for-loop macro that supports a much more natural
 tuple-destructuring syntax:
 
+.. das-doc: fragment
 .. code-block:: das
 
    for ((k,v) in tab) {       // rewrites to keys/values automatically

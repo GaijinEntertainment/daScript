@@ -18,9 +18,10 @@ The dispatcher block
 ====================
 
 ``dispatch_line(line, strict, dispatcher_block)`` parses a wire line and
-invokes the dispatcher block for each non-notification request. The
-block receives ``(method, params_json)`` and returns the raw JSON result
-string; the library wraps the result in a JSON-RPC envelope.
+invokes the dispatcher block once per well-formed request — notifications
+included. The block receives ``(method, params_json)`` and returns the raw
+JSON result string; the library wraps that result in a JSON-RPC envelope
+for every request that carries an ``id``.
 
 .. code-block:: das
 
@@ -73,10 +74,14 @@ When you need to emit specific error codes per method
 
 .. code-block:: das
 
-   let req = parse_request(line)
-   if (!empty(req.error_envelope)) return req.is_notification ? "" : req.error_envelope
-   if (req.method == "unknown") return error(req.id_str, METHOD_NOT_FOUND, "no such method")
-   return response(req.id_str, dispatch(req.method, req.params_json))
+   def handle(line : string) : string {
+       let req = parse_request(line)
+       if (!empty(req.error_envelope)) return req.is_notification ? "" : req.error_envelope
+       if (req.method != "ping" && req.method != "echo") {
+           return error(req.id_str, METHOD_NOT_FOUND, "no such method: {req.method}")
+       }
+       return response(req.id_str, dispatch(req.method, req.params_json))
+   }
 
 Running the tutorial
 ====================

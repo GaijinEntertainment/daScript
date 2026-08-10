@@ -22,6 +22,7 @@ An annotation is written in square brackets before the declaration it applies to
 
 Multiple annotations can be combined with commas:
 
+.. das-doc: alt
 .. code-block:: das
 
     [export, no_aot]
@@ -31,6 +32,7 @@ Multiple annotations can be combined with commas:
 
 Some annotations accept arguments:
 
+.. das-doc: alt
 .. code-block:: das
 
     [init(tag="db")]
@@ -55,6 +57,7 @@ Lifecycle
     Marks a function as callable from the host application. The host invokes exported functions
     by name through the context API:
 
+    .. das-doc: alt
     .. code-block:: das
 
         [export]
@@ -107,14 +110,18 @@ Lifecycle
     Supports a ``late`` attribute for ordering.
 
 ``[run]``
-    Marks a function to run at compile time:
+    Evaluates calls to the function at compile time and folds the result into the program.
+    The function must be free of side effects and must return a foldable value — a call the
+    compiler cannot fold is ``error[50500] function did not run at compilation time``:
 
     .. code-block:: das
 
         [run]
-        def compile_time_check {
-            print("compiling...\n")
+        def table_size(n : int) : int {
+            return n * n + 1
         }
+
+        let size = table_size(4)        // folded to 17 during compilation
 
     Disabled by the ``disable_run`` option (see :ref:`Options <options>`).
 
@@ -185,6 +192,7 @@ Lint Control
 ``[nodiscard]``
     Errors if the return value of the function is discarded:
 
+    .. das-doc: expect error[30166]
     .. code-block:: das
 
         [nodiscard]
@@ -192,7 +200,7 @@ Lint Control
             return 42
         }
 
-        compute()       // error: return value discarded
+        compute()       // error[30166]: call to compute result is discarded
 
 ``[deprecated]``
     Marks a function as deprecated. Produces a compile-time warning when called:
@@ -282,9 +290,11 @@ Optimization and AOT
 
     .. code-block:: das
 
+        require math
+
         [inline]
         def clamp01(x : float) : float {
-            return saturate(x);
+            return saturate(x)
         }
 
     Leaf arguments (constants and variables) substitute textually; pure single-use
@@ -356,10 +366,13 @@ Macros
 
 ``[macro]``
     Defined in ``daslib/ast_boost``. Like ``[_macro]`` but wraps the function body in a
-    module-ready check. Requires ``require daslib/ast_boost``:
+    module-ready check. Requires ``require daslib/ast_boost``, and — like every macro
+    registration — a file that declares a ``module``:
 
+    .. das-doc: alt
     .. code-block:: das
 
+        module my_macros
         require daslib/ast_boost
 
         [macro]
@@ -422,7 +435,7 @@ Structure and Class Annotations
 
 ``[persistent]``
     Makes a structure persistent (survives context reset). All fields must be POD unless
-    ``non_pod=true`` is specified:
+    ``mixed_heap=true`` is specified:
 
     .. code-block:: das
 
@@ -514,9 +527,9 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
    * - ``[pre_infer_macro]``
      - ``AstPassMacro``
      - Runs before every (re-)inference pass
-   * - ``[pre_simulate_macro]``
+   * - ``[post_infer_macro]``
      - ``AstPassMacro``
-     - Runs after inference, before codegen
+     - Runs once inference is done, before lint, folding, and codegen
    * - ``[lint_macro]``
      - ``AstPassMacro``
      - Runs during linting
@@ -528,17 +541,19 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
      - Attaches the macro to every function tagged with ``[tag_function]``
 
 Every pass macro — ``[infer_macro]``, ``[dirty_infer_macro]``, ``[optimization_macro]``,
-``[pre_infer_macro]``, ``[pre_simulate_macro]``, ``[lint_macro]``, ``[global_lint_macro]`` —
+``[pre_infer_macro]``, ``[post_infer_macro]``, ``[lint_macro]``, ``[global_lint_macro]`` —
 derives from the single ``AstPassMacro`` base class and overrides
 ``apply(prog : ProgramPtr; mod : Module?) : bool``. There is no per-pass base class.
 
 ``[tag_function_macro]`` additionally requires a ``tag`` argument; unlike the other
 annotations here, that one is not optional.
 
-Example:
+Example — macro registration runs during module compilation, so the file declares a ``module``:
 
+.. das-doc: alt
 .. code-block:: das
 
+    module my_macros
     require daslib/ast_boost
 
     [function_macro(name="my_decorator")]
@@ -592,8 +607,10 @@ Requires ``require daslib/contracts``.
      - Argument must be a function type
    * - ``[expect_any_lambda(arg)]``
      - Argument must be a lambda
-   * - ``[expect_ref(arg)]``
-     - Argument must be a reference
+   * - ``[contracts::expect_ref(arg)]``
+     - Argument must be a reference. The name collides with the built-in ``[expect_ref]``
+       above, so in a file that requires ``daslib/contracts`` this one is written
+       module-qualified — the bare name is ``error[30600] too many options for annotation``
    * - ``[expect_pointer(arg)]``
      - Argument must be a pointer
    * - ``[expect_class(arg)]``
@@ -603,6 +620,7 @@ Requires ``require daslib/contracts``.
 
 Example:
 
+.. das-doc: alt
 .. code-block:: das
 
     require daslib/contracts
@@ -646,6 +664,9 @@ declaration:
         value : int
     }
 
-These ``@`` decorators attach metadata to the field. They are accessible via ``typeinfo`` and
-at compile time in macros.
+These ``@`` decorators attach metadata to the field. Macros read them from the structure's
+field declarations at compile time. At runtime they are reachable through ``rtti`` — the
+field's ``VarInfo`` carries ``annotation_argument_count`` and ``get_annotation_argument``,
+under ``options rtti``. A bare ``@big`` is a ``bool`` argument set to ``true``; ``@min = 13``
+carries the value.
 

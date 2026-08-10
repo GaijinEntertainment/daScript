@@ -50,6 +50,8 @@ appear and CASCADE silently no-ops. dasSQLITE turns it on always.
 CASCADE delete
 ==============
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     [sql_table(name = "Users")]

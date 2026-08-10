@@ -181,6 +181,11 @@ def is_decl_start(line : string) : bool {
     for (s in DECL_STARTERS) {
         return true if (line |> starts_with(s))
     }
+    // `private`/`shared` var-decls are module-scope-only grammar — a col-0 plain `var`
+    // stays a narrative statement, but these can only be globals
+    for (s in ["var private ", "let private ", "var shared ", "let shared ", "var public ", "let public "]) {
+        return true if (line |> starts_with(s))
+    }
     return line |> starts_with("[") || line |> starts_with("@")
 }
 
@@ -338,8 +343,15 @@ def var_decl_names(line : string) : array<string> {
     var names : array<string>
     if ((t |> starts_with("var ")) || (t |> starts_with("let "))) {
         t = trim(slice(t, 4))
-        if (t |> starts_with("inscope ")) {
-            t = trim(slice(t, length("inscope ")))
+        var again = true
+        while (again) {
+            again = false
+            for (m in ["inscope ", "private ", "shared ", "public "]) {
+                if (t |> starts_with(m)) {
+                    t = trim(slice(t, length(m)))
+                    again = true
+                }
+            }
         }
     } elif ((t |> starts_with("for (")) || (t |> starts_with("for("))) {
         let open = find(t, '(')

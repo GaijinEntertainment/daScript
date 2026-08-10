@@ -46,6 +46,9 @@ site. Same shape for ``try_transaction``.
 Canonical form
 ==============
 
+.. das-doc: given [sql_table(name="Friends")] struct Friend { @sql_primary_key Id : int; Name : string }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     db |> with_transaction() {

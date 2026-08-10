@@ -37,6 +37,9 @@ when you want spatial cues plain pan can't provide.
 API
 ===
 
+.. das-doc: given require strudel/strudel public
+.. das-doc: signatures
+
 .. code-block:: das
 
     pat |> hrtf_azimuth(deg)        // numeric or pattern-valued, -180..180

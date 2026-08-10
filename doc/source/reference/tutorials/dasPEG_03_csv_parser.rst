@@ -64,6 +64,7 @@ The canonical PEG idiom for comma-separated lists is:
 This avoids ambiguity with trailing commas.  The last element has no
 comma:
 
+.. das-doc: fragment
 .. code-block:: das
 
    var row : Row
@@ -142,6 +143,7 @@ Inverted Character Sets (not_set)
 set.  It is the complement of ``set()`` and is useful for "match
 anything except a specific character":
 
+.. das-doc: fragment
 .. code-block:: das
 
    // Match any character that is not a newline or semicolon

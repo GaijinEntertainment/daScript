@@ -51,6 +51,8 @@ writes. Default to ``VIRTUAL`` otherwise.
 Schema example
 ==============
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     [sql_table(name = "Items")]
@@ -87,8 +89,8 @@ them itself, so any value the struct holds for ``DoubleQty`` /
     db |> insert(Item(Id = 1, Name = "thing", Active = true, Quantity = 7,
                       Tag = "t", CreatedAt = "",
                       DoubleQty = 9999, QtyPlusOne = 9999))
-    // INSERT INTO "Items" ("Id","Name","Active","Quantity","Tag","CreatedAt")
-    //   VALUES (?,?,?,?,?,?)
+    // INSERT INTO "Items" ("Id", "Name", "Active", "Quantity", "Tag", "CreatedAt")
+    //   VALUES (?, ?, ?, ?, ?, ?)
 
 Defaults fire when the column is omitted
 ========================================

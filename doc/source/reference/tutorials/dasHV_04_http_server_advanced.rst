@@ -18,22 +18,32 @@ content-type control, and status codes.
 
 Prerequisites: :ref:`tutorial_dasHV_http_server` (basic routes and JSON).
 
+.. das-doc: given var server : HvWebServer?
+
 Static File Serving
 ===================
 
-``STATIC(server, path, dir)`` maps a URL prefix to a filesystem
-directory.  All files under that directory are served with the correct
-``Content-Type`` based on their extension.
+``STATIC`` maps a URL prefix to a filesystem directory.  All files under
+that directory are served with the correct ``Content-Type`` based on
+their extension.
+
+Two spellings reach the same call.  From outside the class, the free
+function takes the native server handle — the ``server`` field of your
+``HvWebServer`` instance:
 
 .. code-block:: das
 
    // After server->init(port) but before server->start():
    STATIC(server.server, "/static", "/path/to/public")
 
+Inside ``onInit`` the class method takes the path and directory alone:
+``STATIC("/static", "/path/to/public")``.
+
 .. important::
 
    ``STATIC`` must be called after ``init()`` (which registers the
-   HTTP service with the router) and before ``start()``.
+   HTTP service with the router) and before ``start()``.  ``onInit``
+   itself runs inside ``init()``, so registering there is in time.
 
 Clients can then fetch ``/static/index.html``, ``/static/style.css``,
 etc.
@@ -42,22 +52,29 @@ CORS (Cross-Origin Resource Sharing)
 =====================================
 
 ``allow_cors()`` enables CORS headers on all responses.  Call it in
-``onInit``:
+``onInit``, alongside your route registrations:
 
 .. code-block:: das
 
-   def override onInit {
-       allow_cors()
-       // ... routes ...
+   class AdvancedServer : HvWebServer {
+       def override onInit {
+           allow_cors()
+           // ... routes ...
+       }
    }
 
 The server will respond to ``OPTIONS`` preflight requests automatically
 with ``Access-Control-Allow-Origin`` and related headers.
 
+Every route snippet below is a body of ``AdvancedServer``'s ``onInit`` —
+each one goes where the ``// ... routes ...`` comment sits.
+
 HTTP Redirects
 ==============
 
 ``REDIRECT(resp, location, status)`` sends a redirect response:
+
+.. das-doc: member AdvancedServer
 
 .. code-block:: das
 
@@ -75,6 +92,8 @@ Custom Response Headers and Caching
 
 Use ``set_header`` on the response to add cache-control, ETags, and
 custom application headers:
+
+.. das-doc: member AdvancedServer
 
 .. code-block:: das
 
@@ -104,6 +123,8 @@ Content-Type and Status Codes
 ``set_content_type(resp, type)``
 gives full control over the response:
 
+.. das-doc: member AdvancedServer
+
 .. code-block:: das
 
    // HTML response
@@ -119,26 +140,32 @@ Non-200 JSON Responses
 ``JSON()`` and ``TEXT_PLAIN()`` accept an optional status parameter
 (defaults to ``http_status.OK``):
 
+.. das-doc: member AdvancedServer
+
 .. code-block:: das
 
    GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let payload : tuple<error:string; code:int> = ("resource not found", 404)
+       let payload = (error = "resource not found", code = 404)
        return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
    }
 
 201 Created with Location Header
 '''''''''''''''''''''''''''''''''
 
+.. das-doc: member AdvancedServer
+
 .. code-block:: das
 
    POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        set_header(resp, "Location", "/items/42")
-       let payload : tuple<id:int; body:string> = (42, string(req.body))
+       let payload = (id = 42, body = string(req.body))
        return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
    }
 
 204 No Content
 ''''''''''''''
+
+.. das-doc: member AdvancedServer
 
 .. code-block:: das
 
@@ -152,7 +179,8 @@ Quick Reference
 =============================================  ===============================================
 Function                                       Description
 =============================================  ===============================================
-``STATIC(server, path, dir)``                  Serve static files from directory
+``STATIC(path, dir)``                          Serve static files from directory (method)
+``STATIC(server.server, path, dir)``           Same, from outside the server class
 ``allow_cors()``                               Enable CORS headers on all routes
 ``REDIRECT(resp, location, status)``           Send 3xx redirect response
 ``JSON(resp, json_str, status?)``              JSON response (default 200)

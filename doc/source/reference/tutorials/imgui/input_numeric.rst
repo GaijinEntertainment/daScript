@@ -9,6 +9,7 @@ focus, type, Enter to commit. Optional ``+`` / ``-`` step buttons turn
 scalar forms into discrete-step editors. Same call shape spans scalar /
 vector / double-precision — nine widgets, one mental model.
 
+.. das-doc: signatures
 .. code-block:: das
 
    input_float(IDENT, (text = "..", step = 0.0f, step_fast = 0.0f,
@@ -17,8 +18,8 @@ vector / double-precision — nine widgets, one mental model.
                      flags = ImGuiInputTextFlags....))
    input_double(IDENT, (text = "..", step = 0.0lf, step_fast = 0.0lf,
                         format = "%.6f"))
-   input_float2 / input_float3 / input_float4   // vector — no step args
-   input_int2   / input_int3   / input_int4
+   input_float2 / input_float3 / input_float4   // vector — format + flags, no step
+   input_int2   / input_int3   / input_int4     // vector — flags only
 
 No bounds. ``input_*`` is for **typed entry**; if you need clamped
 scrubbing, use :ref:`tutorial_drag` or :ref:`tutorial_slider`.
@@ -38,11 +39,16 @@ Walkthrough
 Requires
 ========
 
+.. das-doc: given require daslib/safe_addr
+
 Already in the baseline boost layer:
 
 * ``imgui/imgui_widgets_builtin`` — every ``input_*`` numeric rail.
 * ``imgui/imgui_boost_runtime`` — ``InputStateFloat`` / ``InputStateInt`` /
   ``InputStateDouble`` (+ vector variants) state structs.
+
+The caller-owned form at the end of this page also needs
+``daslib/safe_addr`` for ``safe_addr``.
 
 Step buttons
 ============
@@ -70,14 +76,19 @@ Component-wise editing only.
 Format
 ======
 
-``format`` is the printf-style label format. Defaults are sane for most
-cases; bump precision when the user needs to see it:
+``format`` is the printf-style label format, on the **float and double**
+forms only. Defaults are sane for most cases; bump precision when the
+user needs to see it:
 
 .. code-block:: das
 
-   input_float(MASS, (text = "mass", format = "%.6f"))   // 6 decimal places
-   input_int(LEVEL, (text = "level", format = "%03d"))   // 003, 042, etc.
+   input_float(MASS, (text = "mass", format = "%.6f"))    // 6 decimal places
+   input_float3(BOX, (text = "box", format = "%.1f"))     // vectors take it too
    input_double(EPOCH, (text = "epoch", format = "%.9f")) // sub-ns precision
+
+The ``input_int*`` forms take **no** ``format`` argument — ImGui's
+``InputInt`` picks the format itself (``%d``, or ``%08X`` when
+``CharsHexadecimal`` is set, see *Flags* below).
 
 Vector forms
 ============
@@ -120,8 +131,8 @@ allowed), ``EscapeClearsAll``, etc. Composable via ``|``:
 .. code-block:: das
 
    input_int(HEX_ADDR, (text = "addr",
-                        flags = ImGuiInputTextFlags.CharsHexadecimal,
-                        format = "0x%08X"))
+                        flags = ImGuiInputTextFlags.CharsHexadecimal))
+   // ImGui renders and parses this field as %08X on its own
 
 Driving from outside
 ====================

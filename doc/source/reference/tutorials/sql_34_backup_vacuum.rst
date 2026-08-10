@@ -42,6 +42,8 @@ returning ``SqlError`` / ``Result<...>`` for non-panic recovery.
 End-to-end
 ==========
 
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     require daslib/sql

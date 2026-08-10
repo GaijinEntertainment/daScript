@@ -18,7 +18,7 @@ You will learn:
 - ``option(color)`` --- colored terminal output
 - ``option(print_generated)`` --- inspect generated code
 - ``log("message")`` --- inline debug messages during parsing
-- How ``commit`` enables meaningful error messages
+- How ``commit`` cuts backtracking and shapes the error list
 - Reading and interpreting ``ParsingError`` results
 - Performance tips
 
@@ -28,6 +28,7 @@ Tracing
 Add ``option(tracing)`` inside the ``parse`` block to see which
 alternatives are tried and whether they succeed:
 
+.. das-doc: fragment
 .. code-block:: das
 
    parse(input) {
@@ -66,6 +67,7 @@ Inline Log Messages
 ``log("message")`` prints during parsing.  Use string interpolation to
 include bound variables:
 
+.. das-doc: fragment
 .. code-block:: das
 
    parse(input) {
@@ -77,31 +79,49 @@ include bound variables:
        }
    }
 
-Log messages fire during the **first parse pass** --- they may fire for
-alternatives that later fail via backtracking.
+A message prints every time the parser reaches that point, including
+alternatives that fail a moment later and backtrack.  A failed parse reads
+the input twice --- once to parse, once to collect the errors --- so each
+message prints twice on failure.
 
 Commit and Error Reporting
 ==========================
 
-Without ``commit``, PEG silently backtracks when an alternative fails.
-The error array may be empty even on parse failure:
+``commit`` is the cut operator.  Once the parser passes it, the rest of the
+rule's alternatives are skipped: the alternative holding the ``commit``
+either matches, or the whole rule fails.
 
+.. das-doc: fragment
 .. code-block:: das
 
-   // Without commit --- may produce no errors
+   // Without commit --- both alternatives are tried
    rule("val", WS, "=", WS, number as n, ";", EOF) {
        return n
    }
+   rule("val", WS, "=", WS, "?", EOF) {
+       return -1
+   }
 
-   // With commit --- produces meaningful errors
+   // With commit --- after "=", the second alternative is dead
    rule("val", WS, "=", commit, WS, number as n, ";", EOF) {
        return n
    }
+   rule("val", WS, "=", WS, "?", EOF) {
+       return -1
+   }
 
-Place ``commit`` after an **unambiguous prefix** --- the point where
-the parser knows which alternative it is in.  After commit, if the
-rest of the alternative fails, a ``ParsingError`` is generated with
-the position and description of the failure.
+On ``"val = ;"`` both grammars fail, and the error lists differ.  Without
+commit every failing alternative adds its own ``ParsingError``, so you get
+two.  With commit you get one, for the alternative the parser committed to.
+The cut also costs you matches: ``"val = ?"`` parses without commit, and
+fails with it, because the second alternative never runs.
+
+So place ``commit`` after an **unambiguous prefix** --- the point where the
+input can only be this alternative.
+
+Errors raised inside a lookahead (``PEEK``, ``!``), a repetition (``*``,
+``+``), or an ``MB()`` are suppressed.  A parse that fails only there
+reports an empty error array.
 
 Interpreting ParsingError
 =========================
@@ -111,6 +131,7 @@ Each ``ParsingError`` has two fields:
 - ``text : string`` --- human-readable description of what was expected
 - ``index : int`` --- byte position in the input where the error occurred
 
+.. das-doc: given def parse_with_commit(input : string; blk : block<(val : int; err : array<ParsingError>) : void>) {}
 .. code-block:: das
 
    parse_with_commit("val = ;") $(val; err) {

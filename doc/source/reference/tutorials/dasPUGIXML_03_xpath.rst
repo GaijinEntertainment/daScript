@@ -13,7 +13,33 @@ This tutorial demonstrates querying XML documents with XPath, using both
 convenience wrappers and compiled queries in ``pugixml/PUGIXML_boost``.
 
 The tutorial uses an inline catalog XML for most examples, then queries
-``books.xml`` at the end.
+``books.xml`` at the end.  Here is the catalog every query below runs
+against:
+
+.. code-block:: das
+
+   let CATALOG_XML = "<catalog>
+     <product id=\"A1\" category=\"electronics\">
+       <name>Wireless Mouse</name>
+       <price>29.99</price>
+       <rating>4.5</rating>
+     </product>
+     <product id=\"A2\" category=\"electronics\">
+       <name>Keyboard</name>
+       <price>79.99</price>
+       <rating>4.8</rating>
+     </product>
+     <product id=\"B1\" category=\"books\">
+       <name>daslang Handbook</name>
+       <price>49.99</price>
+       <rating>4.9</rating>
+     </product>
+     <product id=\"B2\" category=\"books\">
+       <name>XML in Practice</name>
+       <price>34.99</price>
+       <rating>4.2</rating>
+     </product>
+   </catalog>"
 
 ``select_text`` — first match text
 ====================================
@@ -25,13 +51,13 @@ first matching node.  Returns a default string if nothing matches:
 
    parse_xml(CATALOG_XML) <| $(doc, ok) {
        if (!ok) { return; }
-       let root = doc.document_element
+       let catalog = doc.document_element
 
-       let first_name = select_text(root, "product[1]/name")
+       let first_name = select_text(catalog, "product[1]/name")
        print("first product: {first_name}\n")
        // first product: Wireless Mouse
 
-       let missing = select_text(root, "product/description", "N/A")
+       let missing = select_text(catalog, "product/description", "N/A")
        print("description: {missing}\n")
        // description: N/A
    }
@@ -41,6 +67,8 @@ first matching node.  Returns a default string if nothing matches:
 
 ``select_value`` returns the string value of the first XPath match —
 either an attribute's value or an element's text content:
+
+.. das-doc: given var root : xml_node
 
 .. code-block:: das
 
@@ -132,16 +160,16 @@ The tutorial ends by querying the real ``books.xml`` sample file:
 
    open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
        if (!ok) { return; }
-       let root = doc.document_element
+       let library = doc.document_element
 
-       var en_books = select_nodes(root, "book[@lang='en']")
+       var en_books = select_nodes(library, "book[@lang='en']")
        print("English books: {en_books.size}\n")
        unsafe { delete en_books; }
 
-       let cheapest = select_text(root, "book[not(price > ../book/price)]/title")
+       let cheapest = select_text(library, "book[not(price > ../book/price)]/title")
        print("cheapest: {cheapest}\n")
 
-       root |> for_each_select("book/author") <| $(xn) {
+       library |> for_each_select("book/author") <| $(xn) {
            print("  {xn.node.text as string}\n")
        }
    }
