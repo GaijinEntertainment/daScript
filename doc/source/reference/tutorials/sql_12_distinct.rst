@@ -21,6 +21,9 @@ Full-row DISTINCT
 Without a ``_select``, every column is in the row --- DISTINCT
 deduplicates whole rows:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let all_rows <- _sql(db |> select_from(type<Car>) |> distinct())
@@ -161,7 +164,7 @@ all source columns:
                           |> _group_by(_.Name)
                           |> _select((Brand    = _._0,
                                       FirstCar = _._1 |> first())))
-    // SELECT "Name", "Id", "Name", "Price"
+    // SELECT "Name" AS "Brand", "Id", "Name", "Price"
     //   FROM (SELECT *, MIN("Id") FROM "Cars" GROUP BY "Name") AS "t0"
     // Output type: array<(Brand:string, FirstCar:Car)>
 

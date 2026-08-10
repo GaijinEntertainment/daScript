@@ -70,7 +70,9 @@ Reading the last rowid directly
 
 .. code-block:: das
 
-    let id = db |> last_insert_rowid()
+    with_sqlite(":memory:") <| $(db) {
+        let id = db |> last_insert_rowid()
+    }
 
 Use this when you need the most recent rowid in a context where the
 ``insert`` return value is no longer in scope.

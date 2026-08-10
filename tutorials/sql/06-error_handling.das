@@ -63,7 +63,7 @@ def main() {
     // Returns the SAME shape as _sql but wrapped in Result<..., string>.
     // _try_sql(... |> _first())     returns  Result<T, string>
     // _try_sql(... |> _first_opt()) returns  Result<Option<T>, string>
-    // _try_sql(... |> count())      returns  Result<int64, string>
+    // _try_sql(... |> count())      returns  Result<int, string>  (long_count() for int64)
     let res = _try_sql(db |> select_from(type<User>) |> _first())
     if (res |> is_ok) {
         let u = res |> unwrap

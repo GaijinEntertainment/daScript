@@ -27,6 +27,9 @@ Key shape                                       Emitted SQL
 Single-column order
 ===================
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let by_price <- _sql(db |> select_from(type<Car>)

@@ -222,6 +222,7 @@ See [skills/daspkg.md](skills/daspkg.md#L224) for the bundle-shipping side of th
 - `fread(file)` requires **binary mode** (`"rb"`). Text mode causes a partial-read error.
 - `fopen(path, mode, blk)` (3-arg block form) auto-closes on block exit; the 2-arg `FILE?` form needs explicit `fclose`. Prefer the 3-arg form unless you need the file handle to outlive the call.
 - `dir(path)` callback yields `.` and `..` on POSIX — skip them.
+- **`dir_rec(path)` callback yields paths RELATIVE to the walked root** (`std::filesystem::relative(entry, root)` — source-verified `builtin_fs_dir_rec`), not absolute and not bare filenames. `path_join(root, name)` before any `fread`/`stat` — a bare `fread(name)` silently returns `""` from the wrong cwd.
 - `dir_name`/`base_name` use platform-specific code (POSIX `dirname`/Windows `_splitpath`); `parent`/`stem`/`extension` use C++17 `std::filesystem` and are uniform across platforms. All are exposed; either set is correct.
 - `getcwd()` and `chdir()` are no-ops on Emscripten — guard if your code runs there.
 - **Out of scope for this skill** (same C++ module, but different concerns): `popen`, `popen_timeout`, `system`, `exit`, `get_env_variable`, `has_env_variable`, `sleep`, `get_clock`, `mktime`, `register_dynamic_module`. Use them directly from `fio`; they're not the focus here. (`run_and_capture` is the exception — it is a `daslib/fio` function and is listed above, because it's the shell-free way to run a child process and capture its output.)

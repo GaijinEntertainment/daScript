@@ -39,6 +39,9 @@ Inspecting the SQL with ``_sql_text``
 string instead of running it. The ``?`` placeholders show where each
 bind goes:
 
+.. das-doc: given [sql_table(name="Cars")] struct Car { @sql_primary_key Id : int; Name : string; Price : int }
+.. das-doc: given var inscope db = open_sqlite(":memory:")
+
 .. code-block:: das
 
     let sql1 = _sql_text(db |> select_from(type<Car>)
@@ -65,6 +68,8 @@ parameterized either way is the safe-by-default behavior:
 
 Column-side detection is symmetric --- the analyzer recognizes
 ``_.Field`` as a column on whichever side of an operator it appears:
+
+.. das-doc: skip
 
 .. code-block:: das
 

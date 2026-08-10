@@ -335,7 +335,8 @@ def test_help_rendering() {
     print("\n=== Help rendering ===\n")
     let info <- get_command_info(type<DemoConfig>)
     print(format_help(info, "demo"))
-    // output:
+    // output (usage line is host-dependent; under the script host it reads
+    // "Usage: daslang demo -- [flags]"):
     //   Usage: demo [flags]
     //
     //   Flags:
