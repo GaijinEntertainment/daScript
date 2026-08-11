@@ -439,9 +439,13 @@ def private tier_hits(tier : string; var seen : table<string>;
 def find_sidecars(db : SqlRunner; version : int; ident : BoxIdentity) : array<SidecarHit> {
     var out : array<SidecarHit>
     var seen : table<string>
-    let box = "{ident.platform}|{ident.arch}|{ident.model_id}|{ident.os_build}|{ident.cpu}"
+    // exact = same platform/arch/model_id/cpu (the indexed columns) — NOT the full box string.
+    // os_build is stored verbatim but deliberately out of the match key: the Windows UBR churns
+    // monthly, and an OS-patch is not a hardware change, so matching on the raw box would demote
+    // every pre-patch sidecar out of the exact tier. model_id is what separates same-cpu machines.
     let exact <- _sql(db |> select_from(type<SidecarRow>)
-        |> _where(_.DasllamaVersion == version && _.Box == box)
+        |> _where(_.DasllamaVersion == version && _.Platform == ident.platform
+            && _.Arch == ident.arch && _.ModelId == ident.model_id && _.Cpu == ident.cpu)
         |> _order_by_descending(_.CreatedAt))
     tier_hits("exact", seen, out, exact)
     let cpu <- _sql(db |> select_from(type<SidecarRow>)

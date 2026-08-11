@@ -158,7 +158,9 @@ def private exchange_write_applied(text : string; sha, doc_box, manifest_path, l
     }
     update(prov, "origin", JV("exchange"))
     update(prov, "exchange_sha", JV(sha))
-    if (doc_box != local_box) {
+    // applied_box only for a genuinely different box — a same-box-modulo-UBR download (this box
+    // after a Windows patch) is not a cross-box adoption, so it needs no applied_box override
+    if (box_match_key(doc_box) != box_match_key(local_box)) {
         update(prov, "applied_box", JV(local_box))
     }
     let ok = fwrite(manifest_path, write_json(doc))
@@ -456,7 +458,7 @@ def exchange_submit_current(policy : ExchangePolicy) : string {
     if (!parse_sidecar_info(text, info)) {
         return "sidecar is malformed"
     }
-    if (info.box != tune_box_identity()) {
+    if (box_match_key(info.box) != box_match_key(tune_box_identity())) {
         return "sidecar was not measured on this box"
     }
     if (sidecar_origin(text) == "exchange") {
@@ -516,7 +518,7 @@ def exchange_status_json(policy : ExchangePolicy) : string {
             delete_json(doc)
         }
         cur_tab |> insert("shared", JV(state_submitted_for(manifest) == sha256_hex(text)))
-        cur_tab |> insert("local", JV(parsed && info.box == tune_box_identity() && sidecar_origin(text) != "exchange"))
+        cur_tab |> insert("local", JV(parsed && box_match_key(info.box) == box_match_key(tune_box_identity()) && sidecar_origin(text) != "exchange"))
         cur_tab |> insert("version_ok", JV(info.dasllama_version == DASLLAMA_VERSION))
     }
     var top <- {
@@ -562,7 +564,8 @@ def exchange_boot_submit_check(policy : ExchangePolicy) {
     let text = fread(manifest)
     var info : SidecarInfo
     if (empty(text) || tune_sidecar_stale(manifest) || !parse_sidecar_info(text, info)
-            || info.box != tune_box_identity() || info.dasllama_version != DASLLAMA_VERSION
+            || box_match_key(info.box) != box_match_key(tune_box_identity())
+            || info.dasllama_version != DASLLAMA_VERSION
             || sidecar_origin(text) == "exchange") {
         return
     }

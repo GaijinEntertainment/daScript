@@ -151,19 +151,70 @@ def tune_manifest_path() : string {
 
 var private g_box_identity = ""
 
-    //! This box's tune identity: platform|arch|hardware|OS-build|cpu. Measurements are a
-    //! property of the box AND its OS (GPU fallback perf moves with macOS updates), so a
-    //! sidecar carrying a different identity reads as stale — the cross-box-copy hazard.
+def private all_digits(s : string) : bool {
+    if (empty(s)) {
+        return false
+    }
+    var ok = true
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            ok = ok && is_number(int(b))
+        }
+    }
+    return ok
+}
+
+// the substring from the first digit to the end — locale-proof extraction of the version
+// number out of a `ver` banner whose leading word ("Version", "Versión", "Версия", …) varies
+def private digits_tail(s : string) : string {
+    var at = -1
+    peek_data(s) $(arr) {
+        for (i in range(length(arr))) {
+            if (is_number(int(arr[i]))) {
+                at = i
+                break
+            }
+        }
+    }
+    return at >= 0 ? slice(s, at) : ""
+}
+
+// The CPU brand from /proc/cpuinfo — x86 has "model name", arm64 does not (it carries "Model" /
+// "Hardware" / "CPU part"); try the keys in order so the identity's cpu field is never empty
+def private linux_cpu_brand() : string {
+    var brand = ""
+    for (key in fixed_array("model name", "Model", "Hardware", "CPU part")) {
+        fopen("/proc/cpuinfo", "rb") $(f) {
+            if (f != null) {
+                while (!feof(f)) {
+                    let ln = fgets(f)
+                    if (ln |> starts_with(key)) {
+                        let ix = find(ln, ":")
+                        if (ix >= 0) {
+                            brand = strip(slice(ln, ix + 1))
+                        }
+                        break
+                    }
+                }
+            }
+        }
+        break if (!empty(brand))
+    }
+    return brand
+}
+
+    //! This box's tune identity: platform|arch|model_id|os_build|cpu — a sidecar carrying a
+    //! different identity reads as stale (the cross-box hazard). Always five fields, non-empty
+    //! cpu (the schema requires it); os_build keeps its full value, `box_match_key` folds it.
 def tune_box_identity() : string {
     if (!empty(g_box_identity)) {
         return g_box_identity
     }
-    // hw must contribute exactly three fields — model_id|os_build|cpu (model_id may be blank) —
-    // so every platform yields the five-field identity the exchange schema keys on
-    var hw = ""
+    var model_id = ""
+    var os_build = ""
+    var cpu = ""
     let plat = get_platform_name()
     if (plat == "windows") {
-        // no hardware model id on the env surface; `ver` carries the real OS build
         var build = ""
         unsafe {
             popen("ver") $(f) {
@@ -179,50 +230,60 @@ def tune_box_identity() : string {
         }
         let lb = find(build, "[")
         let rb = find(build, "]")
-        if (lb >= 0 && rb > lb) {
-            build = strip(slice(build, lb + 1, rb))   // "Version 10.0.26200.5074"
-            if (build |> starts_with("Version ")) {
-                build = slice(build, 8)
-            }
-        } else {
-            build = get_env_variable("OS")
+        // keep only the trailing [0-9.] version run, so a localized "Version" word (and its
+        // console-codepage bytes) never enters the identity
+        os_build = (lb >= 0 && rb > lb) ? digits_tail(strip(slice(build, lb + 1, rb))) : ""
+        if (empty(os_build)) {
+            os_build = get_env_variable("OS")
         }
-        hw = "|{build}|{get_env_variable("PROCESSOR_IDENTIFIER")}"
+        cpu = get_env_variable("PROCESSOR_IDENTIFIER")
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
+        var lines : array<string>
         unsafe {
             popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
                 while (!feof(f)) {
                     let ln = strip(fgets(f))
                     if (!empty(ln)) {
-                        hw = empty(hw) ? ln : "{hw}|{ln}"
+                        lines |> push(ln)
                     }
                 }
             }
         }
+        // positional: a missing sysctl key blank-fills its field rather than collapsing the count
+        model_id = !empty(lines) ? lines[0] : ""
+        os_build = length(lines) > 1 ? lines[1] : ""
+        cpu = length(lines) > 2 ? lines[2] : ""
+        delete lines
     } else {
-        var kern = ""
         unsafe {
             popen("uname -r 2>/dev/null") $(f) {
-                kern = strip(fgets(f))
+                os_build = strip(fgets(f))
             }
         }
-        var cpu = ""
-        fopen("/proc/cpuinfo", "rb") $(f) {
-            if (f != null) {
-                while (!feof(f)) {
-                    let ln = fgets(f)
-                    if (ln |> starts_with("model name")) {
-                        let ix = find(ln, ":")
-                        cpu = strip(slice(ln, ix + 1))
-                        break
-                    }
-                }
-            }
-        }
-        hw = "|{kern}|{cpu}"
+        cpu = linux_cpu_brand()
     }
-    g_box_identity = "{plat}|{get_architecture_name()}|{hw}"
+    if (empty(cpu)) {
+        cpu = "unknown-cpu"   // the schema rejects an empty cpu field; never emit one
+    }
+    g_box_identity = "{plat}|{get_architecture_name()}|{model_id}|{os_build}|{cpu}"
     return g_box_identity
+}
+
+    //! Comparison key for a box identity — stored and shown verbatim, but staleness and same-box
+    //! tests fold the volatile Windows `os_build` UBR (4th dotted component) so a monthly patch
+    //! neither invalidates a sidecar nor blocks its resubmit. Lowercased; other builds unchanged.
+def box_match_key(box : string) : string {
+    let parts <- split(box, "|")
+    if (length(parts) != 5) {
+        return to_lower(box)
+    }
+    var osb = parts[3]
+    let dots <- split(osb, ".")
+    if (length(dots) == 4 && all_digits(dots[0]) && all_digits(dots[1])
+        && all_digits(dots[2]) && all_digits(dots[3])) {
+        osb = "{dots[0]}.{dots[1]}.{dots[2]}"   // drop the UBR
+    }
+    return to_lower("{parts[0]}|{parts[1]}|{parts[2]}|{osb}|{parts[4]}")
 }
 
 // provenance.box of the sidecar at `path`, "" when absent/unreadable — cached per path+mtime
@@ -262,7 +323,7 @@ def tune_sidecar_stale(path : string) : bool {
     if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
         return true
     }
-    return sidecar_box(path, "{sfs.mtime}") != tune_box_identity()
+    return box_match_key(sidecar_box(path, "{sfs.mtime}")) != box_match_key(tune_box_identity())
 }
 
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;

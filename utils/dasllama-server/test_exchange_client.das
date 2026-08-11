@@ -191,6 +191,25 @@ def private read_provenance(t : T?; path : string; key : string) : string {
 }
 
 [test]
+def test_box_match_key(t : T?) {
+    t |> run("the Windows UBR folds out of the match key, everything else stays") @(tt : T?) {
+        let a = "windows|x86_64||10.0.26200.8875|AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD"
+        let patched = "windows|x86_64||10.0.26200.9999|AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD"
+        tt |> equal(box_match_key(a), box_match_key(patched), "a monthly patch keeps the same key")
+        let osver = "windows|x86_64||10.0.27000.1|AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD"
+        tt |> success(box_match_key(a) != box_match_key(osver), "a real OS-version change differs")
+        let othercpu = "windows|x86_64||10.0.26200.8875|GenuineIntel Family 6"
+        tt |> success(box_match_key(a) != box_match_key(othercpu), "a different cpu differs")
+    }
+    t |> run("non-Windows os_build is not folded") @(tt : T?) {
+        let mac = "darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max"
+        tt |> equal(box_match_key(mac), to_lower(mac), "macOS build passes through")
+        let linux = "linux|arm64||6.1.0-49|Cortex-A76"
+        tt |> equal(box_match_key(linux), to_lower(linux), "linux kernel passes through")
+    }
+}
+
+[test]
 def test_lookup_and_pick(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("lookup parses the ladder response") @(tt : T?) {
