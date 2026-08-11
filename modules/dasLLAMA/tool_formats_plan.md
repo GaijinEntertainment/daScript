@@ -82,6 +82,15 @@ Gating four working formats on it inverts the value order.
 - The concrete trigger for starting the arc: the llama-3.2-3B live leg flaking at greedy, or
   a real `tool_choice:"required"` / structured-output consumer.
 
+## Follow-up discussion before the PR: dasllama-server chat preview
+
+The control page's chat panel speaks the same OpenAI surface this arc extends — before the PR
+opens, discuss what the preview should DO with the new fields: render `reasoning_content`
+(collapsed thinking block? streamed inline?), display declared tools and emitted
+`tool_calls`/results turns, and whether the preview grows a way to answer a call (a canned
+tool-result box) so a tool round-trip is demonstrable from the page. Scope decision is Boris's;
+the outcome lands either in this PR or as its own follow-up arc.
+
 ## Order of work inside the PR
 
 1. ToolMode enum + dispatch skeleton; migrate Hermes onto it (zero-behavior-change commit,
@@ -92,3 +101,30 @@ Gating four working formats on it inverts the value order.
    warns-as-auto until the constrained-decoding arc).
 4. Docs: THINKING.md tool section update, both READMEs, das2rst grouping for any new facade
    verb (the docs gate re-runs — the think_drain lesson).
+
+## Chat-layer wiring design (settled; implement next)
+
+**Defs placement per mode** (all in the first-turn machinery): hermes = system prose (as
+shipped); harmony = canonical system body (identity + `Reasoning: medium` + channel declaration
++ commentary-routing line; no live date — noted deviation) then a DEVELOPER turn
+`# Instructions\n\n{system}\n\n# Tools\n\n{namespace}`; gemma4 = `<|tool>decl<tool|>` blocks
+spliced after the system content (markers + `<|"|>` are vocab specials — marker-split);
+mistral + llama_json = defs block prefixed into the FIRST user turn (deviation: canonical
+mistral puts them before the LAST user turn — identical for single-turn requests; note it).
+
+**Replay per mode** (render_assistant_calls_): harmony = ` to=functions.NAME` + `<|channel|>`
+`commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` —
+per-mode close suppression); gemma4 = `<|tool_call>` DSL blocks, turn stays OPEN (a
+`turn_open` session flag; results continue the same model turn); mistral = `[TOOL_CALLS]`
+special + JSON array text + `</s>`; llama_json = the bare JSON object + `<|eot_id|>`.
+
+**Results per mode** (add_tool_results_): hermes = user-framed `<tool_response>` (as shipped);
+harmony = own turns `<|start|>functions.NAME to=assistant<|channel|>commentary<|message|>` +
+JSON-quoted result + `<|end|>` (names from a `last_call_names` session field, positional);
+gemma4 = `<|tool_response>response:NAME{...}<tool_response|>` in the open model turn, then
+generation continues in-turn (no assistant_open); mistral = `[TOOL_RESULTS]` framing;
+llama_json = an `ipython`-header turn with the string-results-JSON-quoted quirk.
+
+**Server**: finish-path dispatch — harmony+tools = `harmony_parse` (one walk supersedes
+split-then-parse); gemma4 = think-split then `gemma4_parse`; mistral/llama_json = think-split
+(inert) then their parsers; hermes = as shipped.
