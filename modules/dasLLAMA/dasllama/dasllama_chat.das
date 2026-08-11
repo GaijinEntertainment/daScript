@@ -987,11 +987,18 @@ def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, 
             ts.state = harmony_header_is_content(ts.hdr) ? TS_CONTENT : TS_REASON
             ts.hdr = ""
         } elif (ts.state == TS_REASON) {
-            let fe = find(work, HARMONY_END)
+            var fe = find(work, HARMONY_END)
+            var flen = length(HARMONY_END)
+            // a bare <|start|> re-header also ends the segment — the stream can suppress <|end|>
+            let fs = find(work, "<|start|>")
+            if (fs >= 0 && (fe < 0 || fs < fe)) {
+                fe = fs
+                flen = length("<|start|>")
+            }
             let fc = find(work, HARMONY_CH)
             if (fe >= 0 && (fc < 0 || fe <= fc)) {
                 rp |> push(slice(work, 0, fe))
-                work = slice(work, fe + length(HARMONY_END), length(work))
+                work = slice(work, fe + flen, length(work))
                 ts.state = TS_BETWEEN
             } elif (fc >= 0) {
                 rp |> push(slice(work, 0, fc))
@@ -999,7 +1006,8 @@ def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, 
                 ts.state = TS_HEADER
                 ts.hdr = ""
             } else {
-                let h = max(tail_prefix_len(work, HARMONY_END), tail_prefix_len(work, HARMONY_CH))
+                var h = max(tail_prefix_len(work, HARMONY_END), tail_prefix_len(work, HARMONY_CH))
+                h = max(h, tail_prefix_len(work, "<|start|>"))
                 let n = length(work)
                 rp |> push(slice(work, 0, n - h))
                 ts.hold = slice(work, n - h, n)

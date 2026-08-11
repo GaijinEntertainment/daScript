@@ -201,3 +201,17 @@ def test_mistral_markerless(t : T?) {
         delete r2
     }
 }
+
+[test]
+def test_harmony_no_end_token(t : T?) {
+    t |> run("the live wire: <|end|> suppressed, segments split on bare <|start|>assistant") @(t : T?) {
+        var r <- harmony_parse("<|channel|>analysis<|message|>We need to call get_weather.<|start|>assistant<|channel|>commentary to=functions.get_weather <|constrain|>json<|message|>\{\"city\":\"Paris\"}")
+        t |> equal(r.reasoning, "We need to call get_weather.")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "get_weather")
+            t |> equal(r.calls[0].args, "\{\"city\":\"Paris\"}")
+        }
+        delete r
+    }
+}

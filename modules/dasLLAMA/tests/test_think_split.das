@@ -228,3 +228,14 @@ def test_split_unarmed(t : T?) {
         delete ct
     }
 }
+
+[test]
+def test_split_gptoss_no_end(t : T?) {
+    t |> run("analysis -> final with the <|end|> control token suppressed (live wire)") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        check_all_chunkings(t, ct,
+            "<|channel|>analysis<|message|>Deep thought.<|start|>assistant<|channel|>final<|message|>The answer.",
+            "Deep thought.", "The answer.")
+        delete ct
+    }
+}

@@ -218,7 +218,15 @@ def harmony_parse(reply : string) : ToolReply { // nolint:STYLE037 — the segme
     while (pos < n) {
         var name = ""
         let kind = harmony_header(reply, pos, name)
-        let bend = find(reply, "<|end|>", pos)
+        // segment boundary: <|end|>, or a bare <|start|>assistant re-header — the stream can
+        // suppress the <|end|> control token entirely (observed live on gpt-oss-20b)
+        var bend = find(reply, "<|end|>", pos)
+        var blen = length("<|end|>")
+        let bstart = find(reply, "<|start|>assistant", pos)
+        if (bstart >= 0 && (bend < 0 || bstart < bend)) {
+            bend = bstart
+            blen = length("<|start|>assistant")
+        }
         let body = slice(reply, pos, bend < 0 ? n : bend)
         if (kind == "reasoning") {
             rparts |> push(body)
@@ -230,7 +238,7 @@ def harmony_parse(reply : string) : ToolReply { // nolint:STYLE037 — the segme
         if (bend < 0) {
             break
         }
-        pos = bend + length("<|end|>")
+        pos = bend + blen
         if (starts_with(slice(reply, pos, n), "<|start|>assistant")) {
             pos += length("<|start|>assistant")
         }
