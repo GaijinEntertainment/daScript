@@ -41,6 +41,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     ADD_MODULE_DAS(dasllama dasllama dasllama_arch_gptoss)
     ADD_MODULE_DAS(dasllama dasllama dasllama_transformer)
     ADD_MODULE_DAS(dasllama dasllama dasllama_asr)
+    ADD_MODULE_DAS(dasllama dasllama dasllama_tools)
     ADD_MODULE_DAS(dasllama dasllama dasllama_chat)
     ADD_MODULE_DAS(dasllama dasllama dasllama)
 

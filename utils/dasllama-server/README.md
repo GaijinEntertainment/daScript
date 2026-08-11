@@ -246,11 +246,16 @@ request still returns 400. `finish_reason: "length"` means generation consumed i
 messages, repeat. Assistant `tool_calls` turns and `role: "tool"` results replay exactly through
 the chat template on each stateless resend, so agent loops (opencode, pi, …) work end-to-end.
 
-The wire format is per model family: the ChatML/Hermes shape (Qwen2.5 / Qwen3 — tool JSONs in a
-`<tools>` system block, calls as `<tool_call>{"name":…,"arguments":…}</tool_call>`) is
-implemented; a model whose chat template declares no tool format gets an honest 400. Streaming
-with tools streams content up to the first tool-call marker, then buffers and emits the parsed
-calls as one `delta.tool_calls` chunk at finish.
+The wire format is per model family (`ToolMode`, `dasllama_tools.das`): **hermes** (Qwen2.5 /
+Qwen3 family — `<tools>` system block, `<tool_call>` JSON), **harmony** (gpt-oss — developer-turn
+TypeScript namespace defs, commentary-channel recipient calls; reasoning and calls come from one
+channel walk), **gemma4** (gemma-4 — declaration/call/response DSL with the `<|"|>` quote token),
+**mistral** (v0.3+ — `[AVAILABLE_TOOLS]` defs, `[TOOL_CALLS]` array, bare-array replies
+tolerated since the SPM stream suppresses control-token pieces), and **llama_json** (llama-3.x —
+the whole reply is one `{"name","parameters"}` object, results on the `ipython` role). A model
+whose chat template declares no tool format (GLM until its zen2 leg) gets an honest 400.
+Streaming with tools buffers the native envelope and emits the parsed calls as one
+`delta.tool_calls` chunk at finish.
 
 Requests the server does NOT fully understand are visible in the log: unknown endpoints 404
 through a catch-all that logs method + path + body head, and known routes warn per ignored field

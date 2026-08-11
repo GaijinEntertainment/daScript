@@ -106,6 +106,8 @@ New suite-less files register on this note (CODEREVIEW: "A new file under `tests
 in `tests/CLAUDE.md`"); suite members register in their suite's arm list via `run.das` instead.
 Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
+`test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs
+serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
 
 ## Model loads — never the image rail (CODEREVIEW: "A test suite loads models with load_model_")
 

@@ -65,6 +65,11 @@ never hand-edit the tables).
 - **`dasllama_config.das`** — `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
   belong here; a knob that does and is missing is an image-aliasing bug.
+- **`dasllama_tools.das`** — the per-ToolMode tool wire codecs (definition serializers,
+  replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
+  control tokens, llama JSON). Every byte of tool wire text is produced here — pure string+JSON
+  functions, model-free testable; the chat layer assembles the output into ChatParts and the
+  server parses through the parsers. Verbatim-format provenance: `tool_formats_plan.md`.
 - **`dasllama_chat.das`** — conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (§1.6), not written here.
 - **`dasllama_par.das`** — `maybe_parallel_for` and nothing else. Threading policy (job counts,

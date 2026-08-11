@@ -10,6 +10,7 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
 require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
+require dasllama/dasllama_tools   // the per-ToolMode wire parsers (harmony/gemma4/mistral/llama_json)
 require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
 require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
@@ -149,6 +150,7 @@ struct private StreamWire {
     last_keepalive_ticks : int64    // tool streams buffer native envelopes; empty deltas keep HTTP alive
     call_open : string              // the family's tool-call markers (copied from the chat template)
     call_close : string
+    tool_mode : ToolMode = ToolMode.none   // the family's tool wire format — the finish parse dispatches on it
     think : ThinkStream = ThinkStream()   // the reply-side reasoning splitter (pass-through when unarmed)
 }
 
@@ -1545,7 +1547,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
-                             seed : int = 0; think : ThinkStream = ThinkStream()) {
+                             seed : int = 0; think : ThinkStream = ThinkStream();
+                             tool_mode : ToolMode = ToolMode.none) {
     let np = long_length(prompt)
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
@@ -1570,9 +1573,10 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     to_log(LOG_INFO, "[req {rid}] {prefix}: prompt={np} tok, stream={streaming}, max_new={max_new}\n")
     var wire <- StreamWire(writer = writer, streaming = streaming, is_chat = is_chat,
                            slot = g_cur, id = cid, created = created,
-                           has_tools = tools_declared && !empty(call_open),
+                           has_tools = tools_declared && tool_mode != ToolMode.none,
                            last_keepalive_ticks = ref_time_ticks(),
-                           call_open = call_open, call_close = call_close, think = think)
+                           call_open = call_open, call_close = call_close,
+                           tool_mode = tool_mode, think = think)
     g_wires[rid] <- wire
     if (streaming && is_chat) {
         send_chat_chunk(srv, writer, cid, created, "assistant", "", "")   // opening role delta
@@ -1587,14 +1591,15 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
                                max_new : int64; start : int; think_set, think_val : bool;
                                var prompt, stop_ids, close : array<int64>&;
-                               var call_open, call_close : string&; var think_out : ThinkStream&) : string {
+                               var call_open, call_close : string&; var think_out : ThinkStream&;
+                               var tool_mode_out : ToolMode&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
         set_thinking(chat, think_val)
     }
     if (!empty(tools)) {
-        if (empty(chat.tmpl.tool_call_open)) {
+        if (chat.tmpl.tool_mode == ToolMode.none) {
             return "'tools' is not supported: the {cur_name()} chat template declares no tool-call format"
         }
         var render_tools <- [for (tool in tools); tool]
@@ -1602,10 +1607,30 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         delete render_tools
     }
 
+    // tool_call_id -> function name over the WHOLE transcript: results carry their names, so the
+    // name-spelling framings (harmony, gemma-4) pair correctly even out of call order
+    var id2name : table<string; string>
+    defer() { delete id2name }
+    for (av in (msgs_v.value as _array)) {
+        let tcv = av?["tool_calls"]
+        if (((av?["role"] ?? "") == "assistant") && tcv != null && tcv.value is _array) {
+            for (tcall in (tcv.value as _array)) {
+                let cid = tcall?["id"] ?? ""
+                let cnm = tcall?["function"]?["name"] ?? ""
+                if (!empty(cid) && !empty(cnm)) {
+                    id2name[cid] = cnm
+                }
+            }
+        }
+    }
     var rendered : array<int64>
     var pending = false
     var tool_results : array<string>
-    defer() { delete tool_results }
+    var tool_names : array<string>
+    defer() {
+        delete tool_results
+        delete tool_names
+    }
     for (i in range(length(msgs_v.value as _array))) {
         let mv = (msgs_v.value as _array)[i]
         let role = mv?["role"] ?? ""
@@ -1614,8 +1639,9 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         }
         let content = message_text(mv, "/v1/chat/completions")
         if (role != "tool" && !empty(tool_results)) {
-            add_tool_results(chat, tool_results)
+            add_tool_results(chat, tool_results, tool_names)
             tool_results |> clear()
+            tool_names |> clear()
             pending = true
         }
         if (role == "user") {
@@ -1656,13 +1682,15 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
             }
             delete calls
         } elif (role == "tool") {
+            let tcid = mv?["tool_call_id"] ?? ""
             tool_results |> push(content)
+            tool_names |> push(id2name?[tcid] ?? "")   // "" falls back to positional pairing
         } elif (role != "system") {
             to_log(LOG_WARNING, "/v1/chat/completions: dropping message with unsupported role '{role}'\n")
         }
     }
     if (!empty(tool_results)) {
-        add_tool_results(chat, tool_results)
+        add_tool_results(chat, tool_results, tool_names)
         pending = true
     }
     if (!pending) {
@@ -1679,6 +1707,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     call_open = chat.tmpl.tool_call_open
     call_close = chat.tmpl.tool_call_close
     think_out = make_think_stream(chat)   // armed per the family's reply format + effective thinking
+    tool_mode_out = chat.tmpl.tool_mode
     return ""
 }
 
@@ -1797,10 +1826,12 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     var call_open = ""
     var call_close = ""
     var think_stream = ThinkStream()
+    var wire_tool_mode = ToolMode.none
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
-                                              prompt, stop_ids, close, call_open, call_close, think_stream)
+                                              prompt, stop_ids, close, call_open, call_close, think_stream,
+                                              wire_tool_mode)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -1822,7 +1853,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
         delete close
     }
     register_request(srv, writer, prompt, stop_ids, close, params, max_new, streaming, true, "chatcmpl",
-                     has_tools, call_open, call_close, seed, think_stream)
+                     has_tools, call_open, call_close, seed, think_stream, wire_tool_mode)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -1906,6 +1937,43 @@ def private split_wire_reasoning(var w : StreamWire?; full : string; var reasoni
     return res.content
 }
 
+// dasllama_tools calls -> the OpenAI wire shape, minting ids where the format carries none.
+def private oai_calls_of(tcs : array<ToolCall>; id_base : string; var calls : array<OaiToolCall>) {
+    calls |> reserve(length(tcs))
+    var i = 0
+    for (tc in tcs) {
+        let id = empty(tc.id) ? "{id_base}_{i}" : tc.id
+        calls |> emplace(OaiToolCall(id = id, _type = "function",
+                                     _function = OaiToolCallFn(name = tc.name, arguments = tc.args)))
+        i ++
+    }
+}
+
+// The finish-time parse for a tool-capable wire, dispatched on its ToolMode: harmony walks the
+// channel structure once (reasoning + content + calls); the marker modes split reasoning first
+// and parse their format from the content half; hermes keeps the marker+sniff path.
+def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
+                             var reasoning : string&; var calls : array<OaiToolCall>) : string {
+    if (w.tool_mode == ToolMode.harmony) {
+        var tr <- harmony_parse(full)
+        reasoning = tr.reasoning
+        oai_calls_of(tr.calls, id_base, calls)
+        let content = tr.content
+        delete tr
+        return content
+    }
+    let body = split_wire_reasoning(w, full, reasoning)
+    if (w.tool_mode == ToolMode.gemma4 || w.tool_mode == ToolMode.mistral || w.tool_mode == ToolMode.llama_json) {
+        var tr <- (w.tool_mode == ToolMode.gemma4 ? gemma4_parse(body)
+            : (w.tool_mode == ToolMode.mistral ? mistral_parse(body) : llama_json_parse(body)))
+        oai_calls_of(tr.calls, id_base, calls)
+        let content = tr.content
+        delete tr
+        return content
+    }
+    return parse_tool_calls_auto(body, w.call_open, w.call_close, id_base, calls)
+}
+
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
@@ -1966,13 +2034,11 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                 // Normalize the complete reply: reasoning first, then calls, in OpenAI framing.
                 let full = join(w.reply_parts, "")
                 var rsn = ""
-                let body = split_wire_reasoning(w, full, rsn)
+                var calls : array<OaiToolCall>
+                let content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
                 if (!empty(rsn)) {
                     send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
                 }
-                var calls : array<OaiToolCall>
-                let content = parse_tool_calls_auto(body, w.call_open, w.call_close,
-                                                    "call_{e.stream}", calls)
                 if (!empty(content)) {
                     send_chat_chunk(srv, w.writer, w.id, w.created, "", content, "")
                 }
@@ -2003,15 +2069,16 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
         } elif (w.is_chat) {
             let full = join(w.reply_parts, "")
             var rsn = ""
-            var content = split_wire_reasoning(w, full, rsn)
+            var content = ""
             var finish = e.finish
             var calls : array<OaiToolCall>
             if (w.has_tools) {
-                content = parse_tool_calls_auto(content, w.call_open, w.call_close,
-                                                "call_{e.stream}", calls)
+                content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
                 if (!empty(calls)) {
                     finish = "tool_calls"
                 }
+            } else {
+                content = split_wire_reasoning(w, full, rsn)
             }
             var out = OaiChatResponse(id = w.id, _object = "chat.completion", created = w.created, model = cur_name())
             out.choices |> emplace(OaiChoice(index = 0,

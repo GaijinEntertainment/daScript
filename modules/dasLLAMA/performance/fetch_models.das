@@ -75,6 +75,17 @@ def models_provenance() : array<ProvEntry> {   // nolint:STYLE038 — flat prove
         ProvEntry(name = "Llama-3.2-1B-Instruct-Q8_0.gguf", root = "llm",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
             bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"),
+        // the tool-format live-leg carriers (CODEREVIEW recognition-test rule): each family's
+        // smallest catalogued GGUF, exercised by utils/dasllama-server/test_openai_server_think.das
+        ProvEntry(name = "Llama-3.2-3B-Instruct-Q4_K_M.gguf", root = "llm",
+            url = "{HF}/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            bytes = 2019377696l, sha256 = "6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff"),
+        ProvEntry(name = "gemma-4-E2B-it-Q4_K_M.gguf", root = "llm",
+            url = "{HF}/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
+            bytes = 3106738272l, sha256 = "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8"),
+        ProvEntry(name = "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf", root = "llm",
+            url = "{HF}/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+            bytes = 4372812000l, sha256 = "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6"),
         ProvEntry(name = "gemma-4-12B-it-Q4_K_M.gguf", root = "llm",
             url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8"),

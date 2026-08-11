@@ -1021,6 +1021,18 @@ enum ThinkMode {
     asymmetric      // gemma-4: <|channel>thought ... <channel|> (asymmetric brackets by design)
 }
 
+//! The family's tool-calling convention — defs render, call parse, replay, and results framing
+//! all dispatch on it (`ToolMode.none` = no format declared; the server answers `tools` with an
+//! honest 400 there).
+enum ToolMode {
+    none        // no tool format declared
+    hermes      // Qwen: JSON defs in the system prose, <tool_call> marker pair, results ride user turns
+    harmony     // gpt-oss: developer-turn `functions` namespace defs, commentary-channel recipient calls
+    gemma4      // gemma-4: asymmetric <|tool_call> ... <tool_call|> pair
+    mistral     // Mistral v0.3+: [AVAILABLE_TOOLS] defs, [TOOL_CALLS] + JSON array, [TOOL_RESULTS]
+    llama_json  // Llama-3.x custom functions: the whole reply is one JSON object; results on the ipython role
+}
+
 //! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
 //! `stop` lists the special-token spellings that end a turn. `system` is empty for arches with no
 //! system role (folded into the first user turn, e.g. Gemma).
@@ -1044,8 +1056,9 @@ struct ChatTemplate {
     audio_post : ChatTurn = ChatTurn()
     stop : array<string>
     stop_nothink : array<string>   // extra stops when thinking is OFF (gemma-4: a channel marker in an instruct turn is framing noise — the turn is over)
-    // tool-calling format (empty tool_call_open = the family declares none; see hermes_tools)
-    tool_sys_prelude : string = ""    // opens the tool-definitions block in the system turn
+    // tool-calling format (ToolMode.none = the family declares none; see hermes_tools)
+    tool_mode : ToolMode = ToolMode.none
+    tool_sys_prelude : string = ""    // opens the tool-definitions block in the system turn (marker modes)
     tool_sys_epilogue : string = ""   // closes the block + the call-format instructions
     tool_call_open : string = ""      // marker opening one call in assistant output
     tool_call_close : string = ""
@@ -4407,6 +4420,7 @@ def gemma_chat(var ct : ChatTemplate) {
 //! ``<tools>`` JSON definitions in the system turn, ``<tool_call>`` JSON calls in assistant
 //! output, ``<tool_response>`` results riding user turns.
 def hermes_tools(var ct : ChatTemplate) {
+    ct.tool_mode = ToolMode.hermes
     ct.tool_sys_prelude = "# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>"
     ct.tool_sys_epilogue = "</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n\{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>"
     ct.tool_call_open = "<tool_call>"

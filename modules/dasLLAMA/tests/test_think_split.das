@@ -228,3 +228,26 @@ def test_split_unarmed(t : T?) {
         delete ct
     }
 }
+
+[test]
+def test_split_gptoss_no_end(t : T?) {
+    t |> run("analysis -> final with the <|end|> control token suppressed (live wire)") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        check_all_chunkings(t, ct,
+            "<|channel|>analysis<|message|>Deep thought.<|start|>assistant<|channel|>final<|message|>The answer.",
+            "Deep thought.", "The answer.")
+        delete ct
+    }
+    t |> run("post-final framing re-enters the grammar instead of streaming raw") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        // an off-grammar segment AFTER the final channel classifies by its own header ...
+        check_all_chunkings(t, ct,
+            "<|channel|>final<|message|>Done.<|start|>assistant<|channel|>analysis<|message|>stray",
+            "stray", "Done.")
+        // ... and a bare trailing re-header with nothing behind it drops as framing glue
+        check_all_chunkings(t, ct,
+            "<|channel|>final<|message|>Done.<|start|>assistant",
+            "", "Done.")
+        delete ct
+    }
+}
