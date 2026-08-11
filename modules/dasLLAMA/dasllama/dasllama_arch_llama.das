@@ -26,6 +26,7 @@ def register_arch_llama() {
                           chat_text("\n\n"), chat_content(), chat_special("<|eot_id|>")]
     d.chat.assistant_open.parts <- [chat_special("<|start_header_id|>"), chat_text("assistant"),
                                     chat_special("<|end_header_id|>"), chat_text("\n\n")]
+    d.chat.tool_mode = ToolMode.llama_json   // first-user-turn JSON defs; the whole reply is one call object
     d.chat.stop <- ["<|eot_id|>", "<|end_of_text|>"]
     register_arch("llama", d)
 }

@@ -6,6 +6,7 @@ module dasllama_chat shared public
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
+require dasllama/dasllama_tools   // the per-ToolMode wire codecs (defs serializers, reply parsers)
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 require math   // min/max in the reply-side reasoning matcher
 
@@ -92,6 +93,7 @@ def private mistral_instruct_template() : ChatTemplate {
     ct.add_bos = true   // <s>
     ct.user.parts <- [chat_special("[INST]"), chat_text(" "), chat_content(), chat_text(" "), chat_special("[/INST]")]
     ct.assistant_close.parts <- [chat_special("</s>")]   // [INST] wraps USER turns; assistant turns end with EOS
+    ct.tool_mode = ToolMode.mistral   // the v0.3+ vocab carries the [TOOL_CALLS]-family control tokens
     ct.stop <- ["</s>"]
     return <- ct
 }
@@ -177,12 +179,10 @@ def private render_parts(m : Model; parts : array<ChatPart>; content : string; v
     }
 }
 
-// Split `s` into template parts at every tool marker that resolves in the vocab — HF added-token
-// splitting: vocab markers tokenize as their ids, the prose around them as text (encode() does not
-// match added tokens inline). Markers absent from the vocab stay in the text run.
-def private split_on_tool_markers(m : Model; c : ChatSession; s : string; var parts : array<ChatPart>) {
-    let markers = fixed_array(c.tmpl.tool_call_open, c.tmpl.tool_call_close,
-                              c.tmpl.tool_resp_open, c.tmpl.tool_resp_close)
+// Split `s` into template parts at every marker that resolves in the vocab — HF added-token
+// splitting: vocab markers tokenize as their ids, the prose around them as text (encode() does
+// not match added tokens inline). Markers absent from the vocab stay in the text run.
+def private split_on_markers(m : Model; s : string; markers; var parts : array<ChatPart>) {
     var pos = 0
     let n = length(s)
     while (pos < n) {
@@ -209,6 +209,12 @@ def private split_on_tool_markers(m : Model; c : ChatSession; s : string; var pa
     if (pos < n) {
         parts |> push(chat_text(slice(s, pos, n)))
     }
+}
+
+// The hermes marker set: the call/response pair from the template's tool fields.
+def private split_on_tool_markers(m : Model; c : ChatSession; s : string; var parts : array<ChatPart>) {
+    split_on_markers(m, s, fixed_array(c.tmpl.tool_call_open, c.tmpl.tool_call_close,
+                                       c.tmpl.tool_resp_open, c.tmpl.tool_resp_close), parts)
 }
 
 // Render a turn with its content slot replaced by pre-split parts.
@@ -281,11 +287,11 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
     }
 }
 
-// The system-turn content on the first turn: the user system prompt, and — when tools are
-// declared and the family has a tool format — the tool block wrapping the verbatim tool JSONs
-// (one per line, the Qwen/Hermes shape).
+// The system-turn content on the first turn: the user system prompt, and — for the HERMES tool
+// mode — the tool block wrapping the verbatim tool JSONs (one per line, the Qwen shape). The
+// other modes place their definitions elsewhere (developer turn, <|tool> blocks, user prefix).
 def private system_content(c : ChatSession) : string {
-    if (empty(c.tools_json) || c.tmpl.tool_mode == ToolMode.none) {
+    if (empty(c.tools_json) || c.tmpl.tool_mode != ToolMode.hermes) {
         return c.system
     }
     var parts : array<string>
@@ -297,29 +303,65 @@ def private system_content(c : ChatSession) : string {
     return s
 }
 
+// The canonical Harmony system body when tools are declared: identity + reasoning effort +
+// the channel declaration + the commentary routing line. No live date line — a cache-stable
+// deviation from the canonical template, noted in tool_formats_plan.md.
+let private HARMONY_SYSTEM_BODY = ("You are ChatGPT, a large language model trained by OpenAI.\n" +
+    "Knowledge cutoff: 2024-06\n\n" +
+    "Reasoning: medium\n\n" +
+    "# Valid channels: analysis, commentary, final. Channel must be included for every message.\n" +
+    "Calls to these tools must go to the commentary channel: 'functions'.")
+
 // The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
 // before the content, tool markers split where declared. Returns the text to FOLD into the user
 // turn instead when the family has no system role (gemma-2/3); "" = rendered or nothing to do.
-def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string {
-    let sys = system_content(c)
+def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string { // nolint:STYLE037 — one arm per tool-defs placement mode
+    let tool_mode = empty(c.tools_json) ? ToolMode.none : c.tmpl.tool_mode
+    var sys = system_content(c)
+    if (tool_mode == ToolMode.harmony) {
+        sys = HARMONY_SYSTEM_BODY   // the user system prompt moves to the developer turn below
+    }
     let gate = think_gate_now(c)   // gate implies a declared system turn — it renders even with no prompt text
-    if (!gate && (empty(sys) || empty(c.tmpl.system.parts))) {
+    let force = tool_mode == ToolMode.harmony || tool_mode == ToolMode.gemma4
+    if (!gate && !force && (empty(sys) || empty(c.tmpl.system.parts))) {
         return sys
     }
     var sp : array<ChatPart>
     if (gate) {
         sp := c.tmpl.think_gate.parts
     }
-    if (empty(c.tools_json)) {
+    if (tool_mode == ToolMode.hermes) {
+        // the hermes block quotes the call markers (format instructions) — marker-split
+        split_on_tool_markers(m, c, sys, sp)
+    } else {
         if (!empty(sys)) {
             sp |> push(chat_text(sys))
         }
-    } else {
-        // the tool block quotes the call markers (format instructions) — marker-split
-        split_on_tool_markers(m, c, sys, sp)
+        if (tool_mode == ToolMode.gemma4) {
+            // one <|tool>declaration:...<tool|> block per tool, quote tokens as specials
+            sp |> reserve(length(sp) + length(c.tools_json) * 8)
+            for (tj in c.tools_json) {
+                sp |> push(chat_special("<|tool>"))
+                split_on_markers(m, gemma4_tool_declaration(tj), fixed_array("<|\"|>"), sp)
+                sp |> push(chat_special("<tool|>"))
+            }
+        }
     }
     render_parts_spliced(m, c.tmpl.system.parts, sp, out)
     delete sp
+    if (tool_mode == ToolMode.harmony) {
+        // the developer turn: # Instructions (the user system prompt) + # Tools (the namespace)
+        let dev = build_string() $(w) {
+            if (!empty(c.system)) {
+                w |> write("# Instructions\n\n{c.system}\n\n")
+            }
+            w |> write("# Tools\n\n{harmony_tools_namespace(c.tools_json)}")
+        }
+        var dp <- [chat_special("<|start|>"), chat_text("developer"), chat_special("<|message|>"),
+                   chat_text(dev), chat_special("<|end|>")]
+        render_parts(m, dp, "", out)
+        delete dp
+    }
     return ""
 }
 
@@ -332,16 +374,36 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
         render_parts(m, c.tmpl.prelude.parts, "", out)
     }
     var user_content = c.pending
+    var user_markers = false   // the user content carries vocab markers — render marker-split
     if (c.first) {
         let fold = render_system_turn(m, c, out)
         if (!empty(fold)) {
             user_content = "{fold}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
         }
+        if (!empty(c.tools_json)) {
+            // defs prefix the FIRST user turn (canonical mistral uses the LAST — deviation noted in tool_formats_plan.md)
+            if (c.tmpl.tool_mode == ToolMode.mistral) {
+                let defs = join(c.tools_json, ", ")
+                user_content = "[AVAILABLE_TOOLS][{defs}][/AVAILABLE_TOOLS]{user_content}"
+                user_markers = true
+            } elif (c.tmpl.tool_mode == ToolMode.llama_json) {
+                let defs = join(c.tools_json, "\n\n")
+                user_content = ("Given the following functions, please respond with a JSON for a function call " +
+                    "with its proper arguments that best answers the given prompt.\n\n" +
+                    "Respond in the format \{\"name\": function name, \"parameters\": dictionary of argument name and its value}." +
+                    "Do not use variables.\n\n{defs}\n\n{user_content}")
+            }
+        }
     }
-    if (c.pending_is_tool) {
-        // tool results ride the user turn frames; their response markers split like the system block's
+    if (c.pending_is_tool || user_markers) {
+        // tool results/defs ride the user turn frames; their markers split like the system block's
         var tp : array<ChatPart>
-        split_on_tool_markers(m, c, user_content, tp)
+        if (c.tmpl.tool_mode == ToolMode.mistral) {
+            split_on_markers(m, user_content, fixed_array("[AVAILABLE_TOOLS]", "[/AVAILABLE_TOOLS]",
+                                                          "[TOOL_RESULTS]", "[/TOOL_RESULTS]"), tp)
+        } else {
+            split_on_tool_markers(m, c, user_content, tp)
+        }
         render_parts_spliced(m, c.tmpl.user.parts, tp, out)
         delete tp
     } else {

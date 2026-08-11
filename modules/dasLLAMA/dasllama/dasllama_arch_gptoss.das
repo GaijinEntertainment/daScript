@@ -33,6 +33,7 @@ def register_arch_gptoss() {
     d.chat.user.parts <- [chat_special("<|start|>"), chat_text("user"), chat_special("<|message|>"), chat_content(), chat_special("<|end|>")]
     d.chat.assistant_open.parts <- [chat_special("<|start|>"), chat_text("assistant")]
     d.chat.think_mode = ThinkMode.channel_switch   // reply-side: analysis channel(s) = reasoning, final = content
+    d.chat.tool_mode = ToolMode.harmony   // developer-turn namespace defs, commentary-channel recipient calls
     d.chat.stop <- ["<|return|>", "<|call|>"]
     register_arch("gpt-oss", d)
 }

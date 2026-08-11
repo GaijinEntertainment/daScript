@@ -46,6 +46,7 @@ def register_arch_gemma4() {
     d.chat.think_default = false
     d.chat.think_gate.parts <- [chat_special("<|think|>")]
     d.chat.assistant_open_think.parts <- [chat_special("<|turn>"), chat_text("model\n")]
+    d.chat.tool_mode = ToolMode.gemma4   // <|tool>declaration DSL defs, <|tool_call> DSL calls
     d.chat.think_mode = ThinkMode.asymmetric
     d.chat.think_open = "<|channel>thought"
     d.chat.think_close = "<channel|>"
