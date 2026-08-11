@@ -180,6 +180,9 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity
   formatter.
 - `dasllama_chat.das` — conversation turns and chat-template application.
+- `dasllama_tools.das` — the per-ToolMode wire codecs: tool-definition serializers and reply
+  parsers, pure string+JSON. Prompt orchestration stays in `dasllama_chat.das`; a codec written
+  there, or render logic written here, is a defect.
 - `dasllama_par.das` — the parallel-for macro.
 - `dasllama_prefix.das` — the prefix cache for evaluated token history.
 - `dasllama_parity.das` — CPU reference caches for parity instruments.

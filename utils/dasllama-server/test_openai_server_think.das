@@ -331,3 +331,97 @@ def test_think_gptoss(t : T?) {
         }
     }
 }
+
+// ===== the four new ToolMode families: live tool legs =====
+
+let TOOLS_BODY = ("\"tools\":[\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"description\":\"Get current weather for a city\"," +
+    "\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"}},\"required\":[\"city\"]}}}]")
+
+// One single-shot tools request: the model must call get_weather and the server must parse it.
+def private assert_tool_call(t : T?; base_url : string; max_toks : int) {
+    chat_resp(t, base_url,
+        "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+        TOOLS_BODY + ",\"max_tokens\":{max_toks},\"temperature\":0}") $(r) {
+        t |> equal(r.choices[0].finish_reason, "tool_calls")
+        let msg & = unsafe(r.choices[0].message)
+        t |> equal(length(msg.tool_calls), 1)
+        if (length(msg.tool_calls) == 1) {
+            t |> equal(msg.tool_calls[0]._function.name, "get_weather")
+            t |> success(!empty(msg.tool_calls[0]._function.arguments), "call carries arguments")
+        }
+    }
+}
+
+[test]
+def test_tools_llama(t : T?) {
+    if (model_missing(t, path_join(models_dir(), "Llama-3.2-3B-Instruct-Q4_K_M.gguf"))) {
+        return
+    }
+    with_think_server(t, path_join(models_dir(), "Llama-3.2-3B-Instruct-Q4_K_M.gguf"), TEST_PORT + 4, 90) $(base_url) {
+        t |> run("llama_json: the whole-reply call object parses to tool_calls") @(t : T?) {
+            assert_tool_call(t, base_url, 128)
+        }
+    }
+}
+
+[test]
+def test_tools_mistral(t : T?) {
+    if (model_missing(t, path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"))) {
+        return
+    }
+    with_think_server(t, path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"), TEST_PORT + 5, 120) $(base_url) {
+        t |> run("mistral: [TOOL_CALLS] + JSON array parses to tool_calls") @(t : T?) {
+            assert_tool_call(t, base_url, 128)
+        }
+    }
+}
+
+[test]
+def test_tools_gemma4(t : T?) {   // nolint:STYLE038 — one live server session: the call + round-trip pair share the boot
+    if (model_missing(t, GEMMA4_PATH)) {
+        return
+    }
+    with_think_server(t, GEMMA4_PATH, TEST_PORT + 6, 180) $(base_url) {
+        t |> run("gemma4: the DSL call block parses to tool_calls") @(t : T?) {
+            assert_tool_call(t, base_url, 256)
+        }
+        t |> run("gemma4: the tool round-trip replays (call + result -> answer)") @(t : T?) {
+            chat_resp(t, base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}," +
+                "\{\"role\":\"assistant\",\"tool_calls\":[\{\"id\":\"call_1\",\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"arguments\":\"\{\\\"city\\\": \\\"Paris\\\"}\"}}]}," +
+                "\{\"role\":\"tool\",\"tool_call_id\":\"call_1\",\"content\":\"\{\\\"temp_c\\\": 21}\"}]," +
+                TOOLS_BODY + ",\"max_tokens\":128,\"temperature\":0}") $(r) {
+                let msg & = unsafe(r.choices[0].message)
+                t |> success(!empty(msg.content), "the model answered from the tool result")
+                t |> success(find(msg.content, "<|tool_response>") < 0 && find(msg.content, "<tool_call|>") < 0,
+                             "no DSL framing leaked into content")
+            }
+        }
+    }
+}
+
+[test]
+def test_tools_gptoss(t : T?) {
+    if (get_env_variable("DASLLAMA_PARITY_FULL") != "1") {
+        t |> success(true, "skipped: gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
+        return
+    }
+    if (model_missing(t, GPTOSS_PATH)) {
+        return
+    }
+    with_think_server(t, GPTOSS_PATH, TEST_PORT + 7, 600) $(base_url) {
+        t |> run("harmony: the commentary-channel call parses; analysis stays reasoning") @(t : T?) {
+            chat_resp(t, base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+                TOOLS_BODY + ",\"max_tokens\":512,\"temperature\":0}") $(r) {
+                t |> equal(r.choices[0].finish_reason, "tool_calls")
+                let msg & = unsafe(r.choices[0].message)
+                t |> equal(length(msg.tool_calls), 1)
+                if (length(msg.tool_calls) == 1) {
+                    t |> equal(msg.tool_calls[0]._function.name, "get_weather")
+                }
+                t |> success(find(msg.content, "<|channel|>") < 0, "no Harmony framing leaked into content")
+            }
+        }
+    }
+}

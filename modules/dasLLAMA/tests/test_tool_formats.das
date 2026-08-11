@@ -183,3 +183,21 @@ def test_gemma4_codecs(t : T?) {   // nolint:STYLE038 — one arm per DSL codec 
         t |> equal(got, want)
     }
 }
+
+[test]
+def test_mistral_markerless(t : T?) {
+    t |> run("a bare call array parses (the SPM stream suppresses the [TOOL_CALLS] piece)") @(t : T?) {
+        var r <- mistral_parse(" [\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}]")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "get_weather")
+        }
+        t |> equal(r.content, "")
+        delete r
+        // an array that is NOT call-shaped stays content
+        var r2 <- mistral_parse("Here is a list: [1, 2, 3]")
+        t |> equal(length(r2.calls), 0)
+        t |> equal(r2.content, "Here is a list: [1, 2, 3]")
+        delete r2
+    }
+}

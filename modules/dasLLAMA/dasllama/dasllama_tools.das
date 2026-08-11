@@ -251,6 +251,37 @@ def mistral_parse(reply : string) : ToolReply {
     var out = ToolReply()
     let m = find(reply, "[TOOL_CALLS]")
     if (m < 0) {
+        // the SPM stream suppresses control-token pieces, so the marker may never reach the
+        // decoded reply — accept a bare call array/object (requires name+arguments to qualify)
+        let b = find(reply, "[")
+        let b2 = find(reply, "\{")
+        let start = b >= 0 && (b2 < 0 || b < b2) ? b : b2
+        if (start >= 0) {
+            var perr = ""
+            var js = read_json(slice(reply, start, length(reply)), perr)
+            if (js != null) {
+                if (js.value is _array) {
+                    for (cv in (js.value as _array)) {
+                        let nm = cv?["name"] ?? ""
+                        if (!empty(nm) && cv?["arguments"] != null) {
+                            out.calls |> push(mistral_call_of(cv))
+                        }
+                    }
+                } elif (js.value is _object) {
+                    let nm = js?["name"] ?? ""
+                    if (!empty(nm) && js?["arguments"] != null) {
+                        out.calls |> push(mistral_call_of(js))
+                    }
+                }
+                unsafe {
+                    delete js
+                }
+            }
+            if (!empty(out.calls)) {
+                out.content = strip(slice(reply, 0, start))
+                return <- out
+            }
+        }
         out.content = reply
         return <- out
     }

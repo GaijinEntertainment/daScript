@@ -63,16 +63,19 @@ DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
 
 | family | thinking default | reply mode | tools | smallest local model |
 |---|---|---|---|---|
-| Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | Hermes | Qwen2.5-0.5B |
-| Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | Hermes | Qwen3-0.6B / Qwen3.5-0.8B |
+| Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | hermes | Qwen2.5-0.5B |
+| Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
 | GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local — zen2 leg pending, below** |
-| gpt-oss | on | channel_switch | none declared | gpt-oss-20b (11 GB, large-tier) |
-| gemma-4 E-series | **off** (`<|think|>` gate) | asymmetric | none declared | gemma-4-E2B |
-| llama, phi3, gemma2/3, mistral3 | none | none | none declared | — |
+| gpt-oss | on | channel_switch | harmony (developer-turn namespace, commentary-channel calls) | gpt-oss-20b (11 GB, large-tier) |
+| gemma-4 E-series | **off** (`<|think|>` gate) | asymmetric | gemma4 (declaration/call/response DSL) | gemma-4-E2B |
+| llama-3.x (llama) | none | none | llama_json (whole-reply object, ipython results) | Llama-3.2-3B |
+| mistral v0.3 (mistral-instruct template) | none | none | mistral ([AVAILABLE_TOOLS]/[TOOL_CALLS]) | Mistral-7B-v0.3 Q4 |
+| phi3, gemma2/3, mistral3 (v7-tekken) | none | none | none declared | — |
 
-Tool formats for gpt-oss (`<|call|>` envelopes), gemma-4 (`<|tool_call>`), GLM, llama-3, and
-mistral-3 are NOT declared — the server answers `tools` on those families with an honest 400.
-Declaring one is follow-up work and takes the test obligations below with it.
+Every ToolMode's wire codec lives in `dasllama_tools.das` (serializers + parsers, model-free
+pinned in `tests/test_tool_formats.das`); the chat layer dispatches defs/replay/results on the
+mode and the server's `parse_wire_tools` dispatches the finish parse. GLM's tool format stays
+undeclared (an honest 400) pending the zen2 leg.
 
 ## Test map
 
