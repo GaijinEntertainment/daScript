@@ -282,6 +282,53 @@ def private mistral_call_of(cv : JsonValue?) : ToolCall {
     return c
 }
 
+//! Extract one call from a verbatim `\{"name":...,"arguments":...}` JSON string (the server's
+//! replay shape) — name + args normalized to compact JSON object text.
+def tool_call_of_json(cj : string) : ToolCall {
+    var perr = ""
+    var js = read_json(cj, perr)
+    if (js == null) {
+        return ToolCall()
+    }
+    let c = mistral_call_of(js)
+    unsafe {
+        delete js
+    }
+    return c
+}
+
+//! The canonical `content|tojson` rule for result turns: a result that IS valid JSON
+//! (object/array/number/bool) passes through normalized; anything else renders as a JSON
+//! string literal. harmony + llama_json result turns use this.
+def json_value_or_quoted(s : string) : string {
+    var perr = ""
+    var js = read_json(s, perr)
+    if (js != null && !(js.value is _string)) {
+        let out = write_json_compact(js)
+        unsafe {
+            delete js
+        }
+        return out
+    }
+    if (js != null) {
+        unsafe {
+            delete js
+        }
+    }
+    return json_quoted(s)
+}
+
+//! `s` as a JSON string literal (quotes + escapes) — harmony/llama result turns carry plain
+//! string results JSON-quoted on the wire.
+def json_quoted(s : string) : string {
+    var jv = JV(s)
+    let out = write_json_compact(jv)
+    unsafe {
+        delete jv
+    }
+    return out
+}
+
 //! Render one replayed Mistral call turn's text: `[TOOL_CALLS][{...}]` with the id kept when
 //! the call carries one (the Nemo template requires ids in history; v0.3 output has none).
 def mistral_calls_text(calls : array<ToolCall>) : string {

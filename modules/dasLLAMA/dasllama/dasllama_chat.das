@@ -39,7 +39,9 @@ struct ChatSession {
     stop_ids : array<int64>         // resolved stop-token ids
     stop_ids_nothink : array<int64> // extra stops in force only while thinking is OFF (tmpl.stop_nothink)
     system : string = ""
-    tools_json : array<string>      // verbatim tool JSONs; non-empty => the system turn carries the family's tool block
+    tools_json : array<string>      // verbatim tool JSONs; non-empty => the family's defs block renders on the first turn
+    last_call_names : array<string> // the last replayed/emitted call names — pairs results to calls positionally
+    pending_results : array<string> // raw tool results awaiting the next render (non-hermes modes frame at render)
     pending : string = ""           // the user text awaiting the next respond()
     has_pending : bool = false
     pending_is_tool : bool = false  // pending is a tool-results block: marker-split at render
@@ -66,6 +68,8 @@ def finalize(var c : ChatSession) {
     delete c.stop_ids
     delete c.stop_ids_nothink
     delete c.tools_json
+    delete c.last_call_names
+    delete c.pending_results
     delete c.history
     delete c.tower
     delete c.enc
@@ -395,12 +399,14 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
             }
         }
     }
-    if (c.pending_is_tool || user_markers) {
-        // tool results/defs ride the user turn frames; their markers split like the system block's
+    let mode = c.tmpl.tool_mode
+    if (c.pending_is_tool && mode != ToolMode.hermes) {
+        render_tool_results(m, c, out)   // non-hermes results have their own framing, no user turn
+    } elif (c.pending_is_tool || user_markers) {
+        // hermes results / marker-carrying defs ride the user turn frames, marker-split
         var tp : array<ChatPart>
-        if (c.tmpl.tool_mode == ToolMode.mistral) {
-            split_on_markers(m, user_content, fixed_array("[AVAILABLE_TOOLS]", "[/AVAILABLE_TOOLS]",
-                                                          "[TOOL_RESULTS]", "[/TOOL_RESULTS]"), tp)
+        if (mode == ToolMode.mistral) {
+            split_on_markers(m, user_content, fixed_array("[AVAILABLE_TOOLS]", "[/AVAILABLE_TOOLS]"), tp)
         } else {
             split_on_tool_markers(m, c, user_content, tp)
         }
@@ -409,7 +415,54 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     } else {
         render_parts(m, c.tmpl.user.parts, user_content, out)
     }
-    render_assistant_open(m, c, out)
+    if (c.pending_is_tool && mode == ToolMode.gemma4) {
+        // the model turn is still open; a thinking turn re-opens the thought channel (canonical)
+        if (think_turn_active_(c)) {
+            var gp <- [chat_special("<|channel>"), chat_text("thought\n")]
+            render_parts(m, gp, "", out)
+            delete gp
+        }
+    } else {
+        render_assistant_open(m, c, out)
+    }
+}
+
+// The pending tool results in the family's own framing (everything but hermes): harmony/llama
+// result turns, gemma-4's in-turn response blocks, mistral's bracket pair. Names pair to the
+// last call set positionally; a missing name renders as `unknown`.
+def private render_tool_results(m : Model; c : ChatSession; var out : array<int64>) { // nolint:STYLE037 — one arm per ToolMode framing
+    var bp : array<ChatPart>
+    bp |> reserve(length(c.pending_results) * 8)
+    var idx = 0
+    for (r in c.pending_results) {
+        let name = idx < length(c.last_call_names) ? c.last_call_names[idx] : "unknown"
+        idx ++
+        if (c.tmpl.tool_mode == ToolMode.harmony) {
+            bp |> push(chat_special("<|start|>"))
+            bp |> push(chat_text("functions.{name} to=assistant"))
+            bp |> push(chat_special("<|channel|>"))
+            bp |> push(chat_text("commentary"))
+            bp |> push(chat_special("<|message|>"))
+            bp |> push(chat_text(json_value_or_quoted(r)))
+            bp |> push(chat_special("<|end|>"))
+        } elif (c.tmpl.tool_mode == ToolMode.gemma4) {
+            bp |> push(chat_special("<|tool_response>"))
+            split_on_markers(m, gemma4_response_dsl(name, r), fixed_array("<|\"|>"), bp)
+            bp |> push(chat_special("<tool_response|>"))
+        } elif (c.tmpl.tool_mode == ToolMode.mistral) {
+            bp |> push(chat_special("[TOOL_RESULTS]"))
+            bp |> push(chat_text(r))
+            bp |> push(chat_special("[/TOOL_RESULTS]"))
+        } else {   // llama_json: the ipython role turn, string results JSON-quoted
+            bp |> push(chat_special("<|start_header_id|>"))
+            bp |> push(chat_text("ipython"))
+            bp |> push(chat_special("<|end_header_id|>"))
+            bp |> push(chat_text("\n\n{json_value_or_quoted(r)}"))
+            bp |> push(chat_special("<|eot_id|>"))
+        }
+    }
+    render_parts(m, bp, "", out)
+    delete bp
 }
 
 //! Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
@@ -628,14 +681,17 @@ def set_tools_(var c : ChatSession; var tools : array<string>) {
 }
 
 //! Queue TOOL RESULTS as the next pending turn — the reply to an assistant turn that called
-//! tools. Each result wraps in the family's tool-response markers, riding the user turn frames
-//! (ChatML/Hermes convention). Call in place of ``add_user_``, then respond/render as usual.
+//! tools. The family's ToolMode frames them at render: hermes rides the user turn, harmony and
+//! llama use their own result turns, gemma-4 continues the model turn, mistral its brackets.
 def add_tool_results_(var c : ChatSession; results : array<string>) {
+    c.pending_results |> clear()
+    c.pending_results |> reserve(length(results))
+    c.history |> reserve(length(c.history) + length(results))
     var parts : array<string>
     parts |> reserve(length(results))
-    c.history |> reserve(length(c.history) + length(results))
     for (r in results) {
-        parts |> push("{c.tmpl.tool_resp_open}\n{r}\n{c.tmpl.tool_resp_close}")
+        parts |> push("{c.tmpl.tool_resp_open}\n{r}\n{c.tmpl.tool_resp_close}")   // the hermes frame (unused elsewhere)
+        c.pending_results |> push(r)
         c.history |> push(Message(role = Role.tool, content = r))
     }
     c.pending = join(parts, "\n")
@@ -647,28 +703,80 @@ def add_tool_results_(var c : ChatSession; results : array<string>) {
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
 //! ``calls`` are verbatim ``\{"name":…,"arguments":…}`` JSON objects; ``text`` is any content
 //! alongside. Precondition: a pending user or tool turn; a no-op otherwise.
-def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
+def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) { // nolint:STYLE037 — one arm per ToolMode replay shape
     if (!c.has_pending) {
         return
     }
     render_prompt(m, c, out)
-    var parts : array<string>
-    parts |> reserve(length(calls) + 1)
-    if (!empty(text)) {
-        parts |> push(text)
-    }
+    c.last_call_names |> clear()
+    c.last_call_names |> reserve(length(calls))
+    var tcs : array<ToolCall>
+    tcs |> reserve(length(calls))
     for (cj in calls) {
-        parts |> push("{c.tmpl.tool_call_open}\n{cj}\n{c.tmpl.tool_call_close}")
+        tcs |> emplace(tool_call_of_json(cj))
+        c.last_call_names |> push(tcs[length(tcs) - 1].name)
     }
-    let body = join(parts, "\n")
-    delete parts
+    let mode = c.tmpl.tool_mode
+    var close_turn = true
     var bp : array<ChatPart>
-    split_on_tool_markers(m, c, body, bp)   // call markers tokenize as their ids where the vocab has them
+    bp |> reserve(length(tcs) * 8 + 2)
+    if (mode == ToolMode.harmony) {
+        // ` to=functions.NAME<|channel|>commentary json<|message|>{args}` closed by <|call|>
+        for (tc in tcs) {
+            bp |> push(chat_text(" to=functions.{tc.name}"))
+            bp |> push(chat_special("<|channel|>"))
+            bp |> push(chat_text("commentary json"))
+            bp |> push(chat_special("<|message|>"))
+            bp |> push(chat_text(tc.args))
+            bp |> push(chat_special("<|call|>"))
+        }
+        close_turn = false   // <|call|> IS the turn terminator
+    } elif (mode == ToolMode.gemma4) {
+        for (tc in tcs) {
+            bp |> push(chat_special("<|tool_call>"))
+            split_on_markers(m, gemma4_call_dsl(tc.name, tc.args), fixed_array("<|\"|>"), bp)
+            bp |> push(chat_special("<tool_call|>"))
+        }
+        close_turn = false   // the model turn stays open — the tool responses continue it
+    } elif (mode == ToolMode.mistral) {
+        if (!empty(text)) {
+            bp |> push(chat_text(text))
+        }
+        split_on_markers(m, mistral_calls_text(tcs), fixed_array("[TOOL_CALLS]"), bp)
+    } elif (mode == ToolMode.llama_json) {
+        // the whole turn body is the ONE call object (content on a call message drops, per canonical)
+        if (!empty(tcs)) {
+            let a = empty(tcs[0].args) ? "\{}" : tcs[0].args
+            bp |> push(chat_text("\{\"name\": \"{tcs[0].name}\", \"parameters\": {a}}"))
+        }
+    } else {
+        // hermes: marker-wrapped verbatim call JSONs, content alongside
+        var parts : array<string>
+        parts |> reserve(length(calls) + 1)
+        if (!empty(text)) {
+            parts |> push(text)
+        }
+        for (cj in calls) {
+            parts |> push("{c.tmpl.tool_call_open}\n{cj}\n{c.tmpl.tool_call_close}")
+        }
+        split_on_tool_markers(m, c, join(parts, "\n"), bp)
+        delete parts
+    }
     render_parts(m, bp, "", out)
     delete bp
+    delete tcs
     consume_pending_(c)
-    render_parts(m, c.close_parts, "", out)
-    c.history |> push(Message(role = Role.assistant, content = body))
+    if (close_turn) {
+        render_parts(m, c.close_parts, "", out)
+    }
+    var hist : array<string>
+    hist |> reserve(length(calls) + 1)
+    if (!empty(text)) {
+        hist |> push(text)
+    }
+    hist |> push_from(calls)
+    c.history |> push(Message(role = Role.assistant, content = join(hist, "\n")))
+    delete hist
 }
 
 //! Inject a KNOWN assistant reply into the conversation WITHOUT generating: prefills the pending
