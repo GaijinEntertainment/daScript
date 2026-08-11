@@ -589,6 +589,19 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 #endif
     }
 
+    // The library handle dasbind's own extern machinery resolves (already-loaded check +
+    // dll_search_paths + dasroot/lib fallbacks) — so das code needing raw entry points from a
+    // bound library (the --jit-split-modules parallel emit) shares ONE resolution truth.
+    void * dasbind_get_library ( const char * library ) {
+#if DAS_BIND_EXTERNAL
+        if ( !library || !*library ) return nullptr;
+        return bindDynamicLibrary(library);
+#else
+        (void)library;
+        return nullptr;
+#endif
+    }
+
     class Module_DASBIND : public Module {
     public:
         Module_DASBIND() : Module("dasbind") {
@@ -602,6 +615,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             addExtern<DAS_BIND_FUN(dasbind_resolve)>(*this, lib, "__dasbind_resolve",
                 SideEffects::accessExternal, "dasbind_resolve")
                     ->args({"mangledName"});
+            addExtern<DAS_BIND_FUN(dasbind_get_library)>(*this, lib, "__dasbind_get_library",
+                SideEffects::accessExternal, "dasbind_get_library")
+                    ->args({"library"});
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_dasbind.h\"\n";

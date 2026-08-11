@@ -30,7 +30,6 @@ require daslib/lpipe
 require daslib/rtti
 require math
 require jit
-require daslib/fio
 
 // uncomment to enable debug
 /*
@@ -341,9 +340,10 @@ class public LlvmJitVisitor : AstVisitor {
             // Untyped subroutine (no param/return DI types yet) — enough for line tables.
             var ty = LLVMDIBuilderCreateSubroutineType(
                 g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
+            // split mode makes impls external-hidden, so the DISubprogram must not claim local-to-unit
             di_function = LLVMDIBuilderCreateFunction(g_di_builder, unit,
                 implName, uint64(long_length(implName)), "", 0ul, unit, fun.at.line,
-                ty, 1, 1, fun.at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
+                ty, g_jit_split_active ? 0 : 1, 1, fun.at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
             LLVMSetSubprogram(ffunc, di_function)
         }
     }
@@ -554,27 +554,81 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def build_llvm_function_pair(fun_name : DllName; isCmres : bool; arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; annotations : AnnotationList) {
-        var inscope nat <- build_noalias_list(annotations)
-        // implementation function
+    // The impl-half ABI signature: args..., [capture], context, [cmres]. The ONE builder both the
+    // definition (build_llvm_function_pair) and the split-mode declare-on-reference use, so a
+    // cross-partition declaration can never drift from the defining partition's signature.
+    def build_impl_fn_type(arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; isCmres : bool) : LLVMOpaqueType? {
         var fun_args <-  [for (a in arguments); type_to_llvm_abi_type(a._type)]
         if (captureType != null) {
             fun_args |> push(LLVMPointerType(captureType, 0u)) // capture
         }
         fun_args |> push(types.LLVMVoidPtrType())  // context
-        var fun_type : LLVMOpaqueType?
         if (isCmres) {
             fun_args |> push(types.LLVMVoidPtrType())  // CMRES
-            fun_type = LLVMFunctionType(types.t_void, fun_args)
-        } else {
-            fun_type = LLVMFunctionType(type_to_llvm_abi_type(result), fun_args)
+            return LLVMFunctionType(types.t_void, fun_args)
         }
+        return LLVMFunctionType(type_to_llvm_abi_type(result), fun_args)
+    }
+
+    // nolint:STYLE014 - the definition/declaration parity contract below is load-bearing
+    // The impl-half parameter attributes: alignments, readonly on const indirect args, the
+    // annotation-driven noalias/nocapture, and the capture/context/cmres tail attrs. Shared by
+    // the definition AND get_or_declare_impl's cross-partition declaration - LLVM reads call-site
+    // parameter attributes off the DECLARATION, so a split build loses alias precision wherever
+    // the two drift. use_option_flags: the definition reads the visitor's option_no_* state
+    // (blocks inherit the enclosing function's); a declaration mirrors the eager-declare pass,
+    // where that state is always fresh/false.
+    def apply_impl_param_attrs(fn : LLVMOpaqueValue?; arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; isCmres : bool; annotations : AnnotationList; use_option_flags : bool) {
+        var inscope nat <- build_noalias_list(annotations)
+        for (a, ai in arguments, ucount()) {
+            var param = LLVMGetParam(fn, ai)
+            if (a._type.isRef) {
+                LLVMSetParamAlignment(param, uint(a._type.alignOf))
+            } elif (a._type.isPointer && a._type.firstType != null) {
+                LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
+            }
+            LLVMSetValueName(param, string(a.name))
+            if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant) {
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.readonly)
+            }
+            if ((use_option_flags && option_no_alias) || nat.noalias |> key_exists(string(a.name))) {
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.noalias)
+            }
+            if ((use_option_flags && option_no_capture) || nat.nocapture |> key_exists(string(a.name))) {
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.nocapture)
+            }
+        }
+        // noalias of the capture target, context, result; alignment of the context and the result
+        var nai = uint(length(arguments))
+        if (captureType != null) {
+            LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
+            LLVMAddAttributeToFunctionArgument(fn, nai++, attributes.noalias)  // capture target
+        }
+        LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
+        LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)        // context
+        LLVMSetParamAlignment(LLVMGetParam(fn, nai++), 16u)
+        if (isCmres) {
+            LLVMAddAttributeToFunctionArgument(fn, nai, attributes.nocapture)
+            LLVMAddAttributeToFunctionArgument(fn, nai, attributes.noalias)    // cmres
+            LLVMSetParamAlignment(LLVMGetParam(fn, nai), uint(result.alignOf))
+        }
+    }
+
+    def build_llvm_function_pair(fun_name : DllName; isCmres : bool; arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; annotations : AnnotationList; cross_module : bool = false) {
+        // implementation function
+        let fun_type = build_impl_fn_type(arguments, result, captureType, isCmres)
         if (LLVMGetNamedFunction(g_mod, fun_name.impl()) != null) {
             to_log(LOG_ERROR, "LLVM JIT: Function {fun_name.impl()} somehow already present!")
             failed("Function {fun_name.impl()} somehow already present!")
         }
         ffunc = LLVMAddFunctionWithType(g_mod, fun_name.impl(), fun_type)
-        if (flags.need_di) {
+        if (cross_module) {
+            // --jit-split-modules: sibling partition objects call this impl directly, so it must
+            // be link-visible (external); hidden visibility + no DLLExport storage keeps it out
+            // of the DLL export table (COFF has no visibility - not exported is the same truth)
+            LLVMSetLinkage(ffunc, LLVMLinkage.LLVMExternalLinkage)
+            LLVMSetVisibility(ffunc, LLVMVisibility.LLVMHiddenVisibility)
+        } elif (flags.need_di) {
             set_debug_linkage(ffunc)
         } else {
             set_private_linkage(ffunc)
@@ -587,42 +641,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMAddAttributeAtIndex(ffunc, 0u, ret_ext)
             }
         }
-        // setup parameter alignment
-        for (a, ai in arguments, ucount()) {
-            var param = LLVMGetParam(ffunc, ai)
-            if (a._type.isRef) {
-                LLVMSetParamAlignment(param, uint(a._type.alignOf))
-            } elif (a._type.isPointer && a._type.firstType != null) {
-                LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
-            }
-            LLVMSetValueName(param, string(a.name))
-            if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant) {
-                LLVMAddAttributeToFunctionArgument(ffunc, ai, attributes.readonly)
-            }
-            if (option_no_alias || nat.noalias |> key_exists(string(a.name))) {
-                LLVMAddAttributeToFunctionArgument(ffunc, ai, attributes.noalias)
-            }
-            if (option_no_capture || nat.nocapture |> key_exists(string(a.name))) {
-                LLVMAddAttributeToFunctionArgument(ffunc, ai, attributes.nocapture)
-            }
-        }
-        // noalias of the capture target, context, result
-        var nai = uint(length(arguments))
-        if (captureType != null) {
-            LLVMAddAttributeToFunctionArgument(ffunc, nai, attributes.nocapture)
-            LLVMAddAttributeToFunctionArgument(ffunc, nai++, attributes.noalias)  // capture target
-        }
-        LLVMAddAttributeToFunctionArgument(ffunc, nai, attributes.nocapture)
-        LLVMAddAttributeToFunctionArgument(ffunc, nai++, attributes.noalias)      // context
-        if (isCmres) {
-            LLVMAddAttributeToFunctionArgument(ffunc, nai, attributes.nocapture)
-            LLVMAddAttributeToFunctionArgument(ffunc, nai++, attributes.noalias)  // cmres
-        }
-        // alignment of the context and the result
-        LLVMSetParamAlignment(get_context_param(), 16u)
-        if (isCmres) {
-            LLVMSetParamAlignment(get_cmres_param(), uint(result.alignOf))
-        }
+        apply_impl_param_attrs(ffunc, arguments, result, captureType, isCmres, annotations, true)
         // wrapper function
         var ret_type : LLVMOpaqueType?
         if (captureType != null) {
@@ -661,8 +680,31 @@ class public LlvmJitVisitor : AstVisitor {
     def add_llvm_functions(fun : FunctionPtr) {
         thisFunc = fun
         let fnmna = uid.get_dll_fn_name(fun)
-        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations)
+        // split mode: function impls (never blocks/lambdas - those stay partition-local) are
+        // cross-partition callable
+        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations, g_jit_split_active)
         thisFunc = null
+    }
+
+    // --jit-split-modules: a direct call may target a function whose pair lives in a SIBLING
+    // partition module - declare-on-reference via build_impl_fn_type (the definition's own builder)
+    // plus the ABI return-extension. Monolith mode never takes the null branch (eager declare).
+    def get_or_declare_impl(callee : Function?; fmna : DllName) : tuple<fn : LLVMOpaqueValue?; typ : LLVMOpaqueType?> {
+        var func = LLVMGetNamedFunction(g_mod, fmna.impl())
+        if (func == null) {
+            let cmres = isCMRES(callee)
+            let fn_type = build_impl_fn_type(callee.arguments, callee.result, null, cmres)
+            func = LLVMAddFunctionWithType(g_mod, fmna.impl(), fn_type)
+            LLVMSetVisibility(func, LLVMVisibility.LLVMHiddenVisibility)
+            if (!cmres) {
+                let ret_ext = need_z_or_s_ext(callee.result)
+                if (ret_ext != null) {
+                    LLVMAddAttributeAtIndex(func, 0u, ret_ext)
+                }
+            }
+            apply_impl_param_attrs(func, callee.arguments, callee.result, null, cmres, callee.annotations, false)
+        }
+        return (fn = func, typ = g_fn_types[fmna.impl()])
     }
 
     // [llvm_code(name="key")] path: the registered das generator (llvm_jit_code registry) emits the
@@ -1405,7 +1447,8 @@ class public LlvmJitVisitor : AstVisitor {
                 if (mode != LlvmJitMode.JIT) {
                     set_private_linkage(ofunc)
                 } else {
-                    set_public_linkage(ofunc)
+                    // mangled-name-keyed - shared across split partitions (linkonce_odr dedup)
+                    set_shared_export_linkage(ofunc, mangled_name.glob())
                 }
                 LLVMSetInitializer(ofunc, LLVMConstPointerNull(fn_ptr_type))
                 return tuple(ofunc, fn_type)
@@ -1522,7 +1565,9 @@ class public LlvmJitVisitor : AstVisitor {
                 set_private_linkage(global_addr)
                 LLVMSetInitializer(global_addr, LLVMConstPointerNull(nonnull_type))
             } else {
-                set_public_linkage(global_addr)
+                // interp-call / interop globs are mangled-name-keyed - shared across split
+                // partitions (linkonce_odr dedup); uid-keyed names dedup to themselves
+                set_shared_export_linkage(global_addr, name.glob())
                 LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
             }
         } elif (mode == LlvmJitMode.JIT) {
@@ -1702,8 +1747,7 @@ class public LlvmJitVisitor : AstVisitor {
                     params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
                 }
                 let fmna = uid.get_dll_fn_name_ptr(expr.func)
-                var func = LLVMGetNamedFunction(g_mod, fmna.impl())
-                var typ = g_fn_types[fmna.impl()]
+                let (func, typ) = get_or_declare_impl(expr.func, fmna)
                 var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
                 if (cmresEval != null) {
                     setE(expr, cmresEval)
@@ -4264,8 +4308,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
             ]
             let fmna = uid.get_dll_fn_name_ptr(expr_func)
-            var func = LLVMGetNamedFunction(g_mod, fmna.impl())
-            var typ = g_fn_types[fmna.impl()]
+            let (func, typ) = get_or_declare_impl(expr_func, fmna)
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
         } else {
             let name = uid.get_ctor(expr)
@@ -7898,22 +7941,34 @@ def public reset_codegen_accumulators() {
     active_filenames |> clear()
 }
 
+// The one pipeline-string truth for both the in-place optimize below and the split parallel emit.
+def public opt_pipeline_string(opt_level : uint; size_level : uint) : string {
+    return (size_level >= 2u ? "default<Oz>"
+          : (size_level == 1u ? "default<Os>"
+                              : "default<O{opt_level:d}>"))
+}
+
+// The one pass-builder-options truth (vectorize/unroll/inliner) — caller disposes.
 [macro_function]
-def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool) {
-    return if (is_in_completion() || is_compiling_macros() || is_folding()
-            || g_failed || !LLVM_ENABLE_OPT_PASS)
+def public create_jit_pass_builder_options(inline_threshold : uint) : LLVMOpaquePassBuilderOptions? {
     var pbopts = LLVMCreatePassBuilderOptions()
-    // Ensure pbopts is released even if the pass run fails and we panic.
-    defer() {
-        LLVMDisposePassBuilderOptions(pbopts)
-    }
     LLVMPassBuilderOptionsSetLoopVectorization(pbopts, 1)
     LLVMPassBuilderOptionsSetSLPVectorization(pbopts, 1)
     LLVMPassBuilderOptionsSetLoopUnrolling(pbopts, 1)
     LLVMPassBuilderOptionsSetInlinerThreshold(pbopts, int(inline_threshold))
-    let pipeline = (size_level >= 2u ? "default<Oz>"
-                  : (size_level == 1u ? "default<Os>"
-                                      : "default<O{opt_level:d}>"))
+    return pbopts
+}
+
+[macro_function]
+def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool) {
+    return if (is_in_completion() || is_compiling_macros() || is_folding()
+            || g_failed || !LLVM_ENABLE_OPT_PASS)
+    var pbopts = create_jit_pass_builder_options(inline_threshold)
+    // Ensure pbopts is released even if the pass run fails and we panic.
+    defer() {
+        LLVMDisposePassBuilderOptions(pbopts)
+    }
+    let pipeline = opt_pipeline_string(opt_level, size_level)
     // use_host_cpu=true for JIT (artifact runs on this host); false for exe emission so the IR
     // pipeline's TTI cost model stays generic and produces redistributable shapes (host-tuned loop
     // unroll / vectorize would otherwise get baked into the emitted object).
@@ -8078,5 +8133,6 @@ def init_llvm_jit_module_options() {
     if (is_compiling_macros_in_module("llvm_jit")) {
         this_module() |> add_module_option("jit_vec3_ldu", Type.tBool)
         this_module() |> add_module_option("jit_target", Type.tString)
+        this_module() |> add_module_option("jit_split_modules", Type.tInt)
     }
 }
