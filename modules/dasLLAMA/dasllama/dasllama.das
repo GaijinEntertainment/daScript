@@ -313,10 +313,17 @@ def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
 }
 
 def make_think_stream(chat : ChatSession) : ThinkStream {
-    //! The incremental reasoning/content splitter for ``chat``'s family and its CURRENT thinking
-    //! toggle — feed streamed pieces through ``think_feed`` and flush with ``think_finish``. A
-    //! non-thinking family (or thinking off) yields a pass-through stream.
-    return make_think_stream_(chat.tmpl, chat.enable_thinking)
+    //! The incremental reasoning/content splitter for ``chat``'s next turn — feed streamed pieces
+    //! through ``think_feed``, flush with ``think_finish``. Armed only when the turn actually
+    //! thinks (toggle on, markers in the vocab, gate rendered) — else a pass-through stream.
+    return make_think_stream_(chat)
+}
+
+def think_drain(var ts : ThinkStream; full : string) : ThinkSplit {
+    //! Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule
+    //! (both halves strip when a reasoning span was consumed). The buffered-response twin of the
+    //! ``think_feed``/``think_finish`` streaming pair.
+    return think_drain_(ts, full)
 }
 
 def think_feed(var ts : ThinkStream; piece : string; var reasoning, content : string&) {

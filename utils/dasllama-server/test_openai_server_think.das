@@ -29,6 +29,7 @@ def private models_dir() : string {
     return g_env_harness.models_dir   // empty -> paths are relative -> the tests skip
 }
 let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
 let GEMMA4_PATH = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
 let GPTOSS_PATH = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
 
@@ -242,6 +243,33 @@ def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session:
                     }
                 }
                 t |> success(!empty(msg.reasoning_content), "the model thought before calling (hybrid compose)")
+                t |> success(find(msg.content, "<tool_call>") < 0, "no raw tool envelope leaked into content")
+            }
+        }
+    }
+}
+
+// ===== Qwen3.5-0.8B: the deltanet hybrid keeps Hermes tools (the qwen35 registration fix) =====
+
+[test]
+def test_think_qwen35_tools(t : T?) {
+    if (model_missing(t, QWEN35_PATH)) {
+        return
+    }
+    with_think_server(t, QWEN35_PATH, TEST_PORT + 3, 60) $(base_url) {
+        t |> run("qwen35 declares Hermes: the model calls the tool and the server parses it") @(t : T?) {
+            chat_resp(t, base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+                "\"tools\":[\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"description\":\"Get current weather for a city\"," +
+                "\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"}},\"required\":[\"city\"]}}}]," +
+                "\"max_tokens\":512,\"temperature\":0}") $(r) {
+                t |> equal(r.choices[0].finish_reason, "tool_calls")
+                let msg & = unsafe(r.choices[0].message)
+                t |> equal(length(msg.tool_calls), 1)
+                if (length(msg.tool_calls) == 1) {
+                    t |> equal(msg.tool_calls[0]._function.name, "get_weather")
+                    t |> success(!empty(msg.tool_calls[0]._function.arguments), "call carries arguments")
+                }
                 t |> success(find(msg.content, "<tool_call>") < 0, "no raw tool envelope leaked into content")
             }
         }

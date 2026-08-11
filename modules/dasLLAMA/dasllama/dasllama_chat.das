@@ -45,6 +45,9 @@ struct ChatSession {
     first : bool = true             // first turn emits add_bos + the system turn
     max_new : int64 = 256l          // per-reply token budget
     enable_thinking : bool = true   // init from tmpl.think_default; off + a think_suppress form => instruct mode
+    think_vocab : bool = false      // the vocab carries the reply-side reasoning markers (resolved at create)
+    gate_ok : bool = false          // the think_gate specials resolve in the vocab (true when no gate declared)
+    gate_rendered : bool = false    // a consumed turn actually rendered the gate — thinking is armed for the session
     history : array<Message>
     tower : AudioTower = AudioTower()     // d_model == 0 => text-only chat
     enc : EncoderState = EncoderState()   // encoder scratch (sized once at create)
@@ -223,13 +226,24 @@ def private render_parts_spliced(m : Model; turn_parts : array<ChatPart>; splice
     delete parts
 }
 
-// The thinking gate (gemma-4's <|think|> opening the system turn) renders only when thinking is
-// ON, the arch declares one, and the vocab carries its specials — the think_suppress mirror.
-def private think_gate_active(m : Model; c : ChatSession) : bool {
-    if (!c.enable_thinking || empty(c.tmpl.think_gate.parts) || empty(c.tmpl.system.parts)) {
+// The vocab carries the reply-side reasoning markers — resolved once at create. A thinking
+// declaration on a vocab without the markers (qwen2/2.5 share chatml_chat) stays INERT: the
+// reply matcher must not arm, or a literal "<think>" echo reclassifies a non-thinking reply.
+def private think_vocab_ok(m : Model; tmpl : ChatTemplate) : bool {
+    if (tmpl.think_mode == ThinkMode.none) {
         return false
     }
-    for (p in c.tmpl.think_gate.parts) {
+    if (tmpl.think_mode == ThinkMode.channel_switch) {
+        return special_id(m, HARMONY_CH) >= 0l
+    }
+    if (tmpl.think_mode == ThinkMode.symmetric) {
+        return special_id(m, tmpl.think_open) >= 0l && special_id(m, tmpl.think_close) >= 0l
+    }
+    return special_id(m, tmpl.think_close) >= 0l   // asymmetric: the closer special fingerprints the family
+}
+
+def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool {
+    for (p in tmpl.think_gate.parts) {
         if (p.kind == ChatPartKind.special && special_id(m, p.s) < 0l) {
             return false
         }
@@ -237,10 +251,30 @@ def private think_gate_active(m : Model; c : ChatSession) : bool {
     return true
 }
 
-// The generation prompt: the thinking-ON alternate opener when the arch declares one (gemma-4's
+// The thinking gate (gemma-4's <|think|> opening the system turn) renders THIS turn: first turn,
+// thinking on, gate declared with its specials in the vocab, and a system turn to carry it.
+def private think_gate_now(c : ChatSession) : bool {
+    return (c.first && c.enable_thinking && c.gate_ok
+        && !empty(c.tmpl.think_gate.parts) && !empty(c.tmpl.system.parts))
+}
+
+// The NEXT turn is a THINKING turn: toggle on, the vocab carries the reply markers, and — for
+// gate families (gemma-4) — the gate rendered on a consumed turn or renders this turn. A gate
+// that never entered the context (mid-conversation toggle) stays instruct.
+def private think_turn_active_(c : ChatSession) : bool {
+    if (!c.enable_thinking || !c.think_vocab) {
+        return false
+    }
+    if (empty(c.tmpl.think_gate.parts)) {
+        return true
+    }
+    return c.gate_rendered || think_gate_now(c)
+}
+
+// The generation prompt: the thinking-turn alternate opener when the arch declares one (gemma-4's
 // bare model header — the model emits its own thought channel), else the standard opener.
 def private render_assistant_open(m : Model; c : ChatSession; var out : array<int64>) {
-    if (c.enable_thinking && !empty(c.tmpl.assistant_open_think.parts)) {
+    if (think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
         render_parts(m, c.tmpl.assistant_open_think.parts, "", out)
     } else {
         render_parts(m, c.tmpl.assistant_open.parts, "", out)
@@ -263,6 +297,32 @@ def private system_content(c : ChatSession) : string {
     return s
 }
 
+// The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
+// before the content, tool markers split where declared. Returns the text to FOLD into the user
+// turn instead when the family has no system role (gemma-2/3); "" = rendered or nothing to do.
+def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string {
+    let sys = system_content(c)
+    let gate = think_gate_now(c)   // gate implies a declared system turn — it renders even with no prompt text
+    if (!gate && (empty(sys) || empty(c.tmpl.system.parts))) {
+        return sys
+    }
+    var sp : array<ChatPart>
+    if (gate) {
+        sp := c.tmpl.think_gate.parts
+    }
+    if (empty(c.tools_json)) {
+        if (!empty(sys)) {
+            sp |> push(chat_text(sys))
+        }
+    } else {
+        // the tool block quotes the call markers (format instructions) — marker-split
+        split_on_tool_markers(m, c, sys, sp)
+    }
+    render_parts_spliced(m, c.tmpl.system.parts, sp, out)
+    delete sp
+    return ""
+}
+
 // Render this turn's prefill: (first turn) BOS + system, then the user turn and the generation prompt.
 def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
@@ -273,26 +333,9 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     }
     var user_content = c.pending
     if (c.first) {
-        let sys = system_content(c)
-        let gate = think_gate_active(m, c)
-        if (gate || (!empty(sys) && !empty(c.tmpl.system.parts))) {
-            // the gate renders the system turn even with no prompt text (gemma-4's <|think|> gate)
-            var sp : array<ChatPart>
-            if (gate) {
-                sp := c.tmpl.think_gate.parts
-            }
-            if (empty(c.tools_json)) {
-                if (!empty(sys)) {
-                    sp |> push(chat_text(sys))
-                }
-            } else {
-                // the tool block quotes the call markers (format instructions) — marker-split
-                split_on_tool_markers(m, c, sys, sp)
-            }
-            render_parts_spliced(m, c.tmpl.system.parts, sp, out)
-            delete sp
-        } elif (!empty(sys)) {
-            user_content = "{sys}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
+        let fold = render_system_turn(m, c, out)
+        if (!empty(fold)) {
+            user_content = "{fold}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
         }
     }
     if (c.pending_is_tool) {
@@ -319,20 +362,9 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
     }
     var user_content = c.pending
     if (c.first) {
-        let sys = system_content(c)
-        let gate = think_gate_active(m, c)
-        if (gate || (!empty(sys) && !empty(c.tmpl.system.parts))) {
-            var sp : array<ChatPart>
-            if (gate) {
-                sp := c.tmpl.think_gate.parts
-            }
-            if (!empty(sys)) {
-                sp |> push(chat_text(sys))
-            }
-            render_parts_spliced(m, c.tmpl.system.parts, sp, head)
-            delete sp
-        } elif (!empty(sys)) {
-            user_content = "{sys}\n\n{c.pending}"
+        let fold = render_system_turn(m, c, head)
+        if (!empty(fold)) {
+            user_content = "{fold}\n\n{c.pending}"
         }
     }
     var before : array<ChatPart>
@@ -351,7 +383,7 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
     render_parts(m, c.tmpl.audio_pre.parts, "", head)
     var tail_parts := c.tmpl.audio_post.parts
     tail_parts |> push(chat_content())
-    if (c.enable_thinking && !empty(c.tmpl.assistant_open_think.parts)) {
+    if (think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
         tail_parts |> push_from(after, c.tmpl.assistant_open_think.parts)
     } else {
         tail_parts |> push_from(after, c.tmpl.assistant_open.parts)
@@ -365,6 +397,9 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
 // gated only on n_audio_rows, so a leftover would silently re-inject the text into a later
 // audio-only turn.
 def private consume_pending_(var c : ChatSession) {
+    if (think_gate_now(c)) {   // this consumed turn rendered the gate — thinking arms for the session
+        c.gate_rendered = true
+    }
     c.first = false
     c.has_pending = false
     c.pending = ""
@@ -377,6 +412,8 @@ def private consume_pending_(var c : ChatSession) {
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
     c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
+    c.think_vocab = think_vocab_ok(model, c.tmpl)
+    c.gate_ok = gate_specials_ok(model, c.tmpl)
     for (sp in c.tmpl.stop) {
         let id = special_id(model, sp)
         if (id >= 0l) {
@@ -503,10 +540,11 @@ def set_thinking_(var c : ChatSession; on : bool) {
 }
 
 //! The stop ids in force for the NEXT generation: the template's stops, plus its thinking-off
-//! extras while thinking is off (gemma-4 cuts at a stray channel marker in instruct mode).
+//! extras while the next turn is NOT a thinking turn (gemma-4 cuts at a stray channel marker in
+//! instruct mode — including "thinking on" that never armed: missing vocab, un-rendered gate).
 def effective_stop_ids_(c : ChatSession) : array<int64> {
     var out := c.stop_ids
-    if (!c.enable_thinking) {
+    if (!think_turn_active_(c)) {
         out |> push_from(c.stop_ids_nothink)
     }
     return <- out
@@ -636,16 +674,24 @@ struct ThinkStream {
     state : int = TS_CONTENT   // pass-through by default — only make_think_stream_ arms TS_START
     hold : string = ""      // undecided tail: leading whitespace, a partial marker, or header glue
     hdr : string = ""       // channel_switch: the channel header accumulating up to <|message|>
+    consumed : bool = false // a reasoning span was entered — the drain's strip rule keys on this
 }
 
-//! The reply matcher for `tmpl`, armed (`thinking` = the session's effective enable_thinking).
-//! Unarmed or `ThinkMode.none` streams pass everything straight to content.
+//! The reply matcher for `tmpl`, armed (`thinking` = the caller's own arming decision — the
+//! low-level form for tests; sessions use the ChatSession overload below, which folds in the
+//! vocab and gate state). Unarmed or `ThinkMode.none` streams pass everything to content.
 def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
     if (!thinking || tmpl.think_mode == ThinkMode.none) {
         return ThinkStream()
     }
     return ThinkStream(mode = tmpl.think_mode, open_mark = tmpl.think_open, close_mark = tmpl.think_close,
                        state = TS_START)
+}
+
+//! The reply matcher for `c`'s NEXT turn: armed only when the turn is a thinking turn
+//! (`think_turn_active_` — toggle on, markers in the vocab, gate rendered or rendering).
+def make_think_stream_(c : ChatSession) : ThinkStream {
+    return make_think_stream_(c.tmpl, think_turn_active_(c))
 }
 
 // Longest k < length(mark) where s ends with mark's first k characters — the hold-back length
@@ -681,10 +727,13 @@ def private probe_opener(work : string; mark : string; var cut : int&) : int {
     return 1
 }
 
-// Route one channel header: reasoning unless it names the `final` channel (Harmony's content
-// channel); `analysis`, `commentary`, and anything unrecognized classify as reasoning.
+// Route one channel header by its NAME token — the text up to the first space, since Harmony
+// headers carry recipients (`commentary to=functions.finalize_report`): only the `final` channel
+// is content; `analysis`, `commentary`, and anything unrecognized classify as reasoning.
 def private harmony_header_is_content(hdr : string) : bool {
-    return find(hdr, "final") >= 0
+    let name = strip(hdr)
+    let sp = find(name, " ")
+    return (sp < 0 ? name : slice(name, 0, sp)) == "final"
 }
 
 def private think_feed_symmetric(var ts : ThinkStream; var work : string; var rp, cp : array<string>) {
@@ -709,6 +758,7 @@ def private think_feed_symmetric(var ts : ThinkStream; var work : string; var rp
             }
             work = slice(work, cut, length(work))
             ts.state = TS_REASON
+            ts.consumed = true
         } elif (ts.state == TS_REASON) {
             let f = find(work, ts.close_mark)
             if (f >= 0) {
@@ -752,6 +802,7 @@ def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, 
             work = slice(work, cut, length(work))
             ts.state = TS_HEADER
             ts.hdr = ""
+            ts.consumed = true
         } elif (ts.state == TS_HEADER) {
             let f = find(work, HARMONY_MSG)
             if (f < 0) {
@@ -840,6 +891,7 @@ def think_finish_(var ts : ThinkStream; var reasoning, content : string&) {
         let mark = ts.mode == ThinkMode.channel_switch ? HARMONY_CH : ts.open_mark
         if (probe_opener(ts.hold, mark, cut) == 1) {
             reasoning = ts.mode == ThinkMode.channel_switch ? "" : slice(ts.hold, cut, length(ts.hold))
+            ts.consumed = true   // generation truncated AT the opener — a reasoning span was entered
         } else {
             content = ts.hold
         }
@@ -849,23 +901,29 @@ def think_finish_(var ts : ThinkStream; var reasoning, content : string&) {
     ts.state = TS_CONTENT
 }
 
-//! Split a complete reply at its reasoning boundary per the template's reply-side format —
-//! `strip_think`'s per-arch generalization. When a reasoning span is found both halves come back
-//! stripped (`strip_think` parity); a reply with no reasoning passes through untouched.
-def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
-    var ts = make_think_stream_(tmpl, true)
+//! Drain a COMPLETE reply through `ts` — feed, finish, and the strip rule in one place: both
+//! halves strip when a reasoning span was CONSUMED (an empty think block strips too — the
+//! `strip_think` parity rule). The one engine behind `split_reasoning_` and the server.
+def think_drain_(var ts : ThinkStream; full : string) : ThinkSplit {
     var res = ThinkSplit()
-    think_feed_(ts, reply, res.reasoning, res.content)
+    think_feed_(ts, full, res.reasoning, res.content)
     var rtail = ""
     var ctail = ""
     think_finish_(ts, rtail, ctail)
     res.reasoning = "{res.reasoning}{rtail}"
     res.content = "{res.content}{ctail}"
-    if (!empty(res.reasoning)) {
+    if (ts.consumed) {
         res.reasoning = strip(res.reasoning)
         res.content = strip(res.content)
     }
     return res
+}
+
+//! Split a complete reply at its reasoning boundary per the template's reply-side format —
+//! `strip_think`'s per-arch generalization (see think_drain_ for the strip rule).
+def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
+    var ts = make_think_stream_(tmpl, true)
+    return think_drain_(ts, reply)
 }
 
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
@@ -923,7 +981,11 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
     render_parts(m, c.close_parts, "", close)
     eval_(m, c.session, close)
     let reply = join(reply_parts, "")
-    // history holds only the answer — the per-arch reasoning span strips (strip_think's generalization)
-    c.history |> push(Message(role = Role.assistant, content = split_reasoning_(c.tmpl, reply).content))
+    // history holds only the answer — the per-arch reasoning span strips; families with no
+    // declared reply format keep the legacy unconditional <think> strip (a thinking fine-tune
+    // served under a non-thinking arch — R1-distills on `llama` — must not bloat history)
+    let stored = (c.tmpl.think_mode == ThinkMode.none ? strip_think(reply)
+        : split_reasoning_(c.tmpl, reply).content)
+    c.history |> push(Message(role = Role.assistant, content = stored))
     return reply
 }

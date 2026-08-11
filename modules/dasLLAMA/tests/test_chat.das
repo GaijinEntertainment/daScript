@@ -408,6 +408,10 @@ def test_chat_think_suppress(t : T?) {
         add_user(b, USR)
         let got_off <- render_turn(m, b)
         t |> success(same(got_on, got_off), "no think tokens => prompt unchanged, no panic")
+        // the reply matcher is vocab-gated the same way: a chatml family without the think
+        // tokens (qwen2.5) must NOT arm, or a literal "<think>" echo reclassifies the reply
+        let ts = make_think_stream(b)
+        t |> success(ts.mode == ThinkMode.none, "no think vocab => the reply matcher stays unarmed")
         delete b
         delete m
     }
@@ -506,6 +510,23 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want3 |> push_from(encode(m, "model\n", false, false))
         t |> success(same(got3, want3), "thinking-ON + system prompt: gate precedes the prompt text")
         delete c3
+
+        // a mid-conversation set_thinking(true) cannot inject the gate (the system turn already
+        // rendered) — the prompt stays instruct-shaped and the channel-marker stops stay armed
+        var c5 = create_chat_renderer(m, "", 8l)
+        add_user(c5, USR)
+        var replay : array<int64>
+        render_assistant(m, c5, "The answer.", replay)   // consumes turn 1, thinking off — no gate
+        delete replay
+        set_thinking(c5, true)
+        add_user(c5, "and again?")
+        let got5 <- render_turn(m, c5)
+        t |> success(find_index(got5, thk) < 0, "no late gate materializes")
+        t |> equal(got5[length(got5) - 1], chc, "the opener keeps the closed empty thought")
+        var eff5 <- effective_stop_ids(c5)
+        t |> success(find_index(eff5, chc) >= 0, "the channel-marker stops stay armed (thinking never armed)")
+        delete eff5
+        delete c5
         delete m
     }
 }

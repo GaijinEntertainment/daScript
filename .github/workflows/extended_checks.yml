@@ -414,6 +414,7 @@ jobs:
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
 
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a

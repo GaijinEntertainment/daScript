@@ -1898,23 +1898,12 @@ def private flush_tool_keepalives(srv : WebSocketServer) {
 }
 
 // Split a complete buffered reply through the wire's splitter (fresh on buffered wires — pieces
-// never fed it): reasoning lands in the out-param, the content half returns; both stripped when a
-// reasoning span exists (split_reasoning parity).
+// never fed it): reasoning lands in the out-param, the content half returns. One engine with the
+// chat layer's split_reasoning — the strip rule lives in think_drain.
 def private split_wire_reasoning(var w : StreamWire?; full : string; var reasoning : string&) : string {
-    var r = ""
-    var c = ""
-    think_feed(w.think, full, r, c)
-    var rt = ""
-    var ct = ""
-    think_finish(w.think, rt, ct)
-    r = "{r}{rt}"
-    var body = "{c}{ct}"
-    if (!empty(r)) {
-        r = strip(r)
-        body = strip(body)
-    }
-    reasoning = r
-    return body
+    let res = think_drain(w.think, full)
+    reasoning = res.reasoning
+    return res.content
 }
 
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires

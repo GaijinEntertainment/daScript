@@ -36,7 +36,7 @@ def private stream_split(tmpl : ChatTemplate; reply : string; chunk : int) : Thi
     var res = ThinkSplit(reasoning = join(rp, ""), content = join(cp, ""))
     delete rp
     delete cp
-    if (!empty(res.reasoning)) {
+    if (ts.consumed) {   // the drain's strip rule: a consumed span strips both halves
         res.reasoning = strip(res.reasoning)
         res.content = strip(res.content)
     }
@@ -68,7 +68,12 @@ def test_split_symmetric(t : T?) {
         delete ct
         var g <- arch_chat("glm4moe")
         t |> success(g.think_mode == ThinkMode.symmetric, "glm4moe mode")
+        t |> equal(g.think_open, "<think>")
+        t |> equal(g.think_close, "</think>")
         t |> success(g.think_default, "glm4moe thinks by default")
+        // the wire shape runs against glm's OWN template, not qwen's — a mis-spelled marker
+        // in a future glm registration must fail here
+        check_all_chunkings(t, g, "<think>\nglm ponders\n</think>\n\nThe answer.", "glm ponders", "The answer.")
         delete g
     }
     t |> run("the qwen wire shape splits") @(t : T?) {
@@ -96,10 +101,17 @@ def test_split_symmetric(t : T?) {
         check_all_chunkings(t, ct, "  \n<think>r</think>answer", "r", "answer")
         delete ct
     }
+    t |> run("an EMPTY think block still strips (the consumed rule)") @(t : T?) {
+        var ct <- arch_chat("qwen3")
+        // reasoning is "" but the span WAS consumed — strip_think would return "The answer."
+        check_all_chunkings(t, ct, "<think></think>The answer.\n", "", "The answer.")
+        delete ct
+    }
     t |> run("strip_think parity on the content half") @(t : T?) {
         var ct <- arch_chat("qwen3")
         for (reply in ["<think>\nr\n</think>\n\nThe answer is 42.", "  \n<think>r</think>answer",
-                       "<think>never closed", "The answer is 42.", "", "use the <think> tag like this"]) {
+                       "<think>never closed", "The answer is 42.", "", "use the <think> tag like this",
+                       "<think></think>The answer.\n"]) {
             t |> equal(split_reasoning_(ct, reply).content, strip_think(reply), "parity on '{reply}'")
         }
         delete ct
@@ -167,6 +179,16 @@ def test_split_gptoss(t : T?) {
         check_all_chunkings(t, ct,
             "<|channel|>analysis<|message|>one.<|end|><|start|>assistant<|channel|>commentary<|message|>two.<|end|><|start|>assistant<|channel|>final<|message|>done",
             "one.two.", "done")
+        delete ct
+    }
+    t |> run("header routing matches the channel NAME token, not a substring") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        // a recipient-qualified commentary header CONTAINS 'final' — still reasoning
+        check_all_chunkings(t, ct,
+            "<|channel|>commentary to=functions.finalize_report<|message|>tool payload<|end|><|start|>assistant<|channel|>final<|message|>done",
+            "tool payload", "done")
+        // and the final channel routes to content with a recipient suffix too
+        check_all_chunkings(t, ct, "<|channel|>final extra<|message|>Hi.", "", "Hi.")
         delete ct
     }
     t |> run("truncated analysis classifies as reasoning") @(t : T?) {

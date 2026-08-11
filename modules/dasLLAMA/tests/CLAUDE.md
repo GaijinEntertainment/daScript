@@ -99,6 +99,14 @@ small-model run joins it. Small-tier warnings for kernels whose carriers sit abo
 the served-count floor is asserted only on family-unfiltered runs. The vulkan half here is
 the device-free rail unit; the serving vulkan census runs on the PC box.
 
+## Model-free / no-arm tests
+
+Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
+New suite-less files register on this note (CODEREVIEW: "A new file under `tests/` registers
+in `tests/CLAUDE.md`"); suite members register in their suite's arm list via `run.das` instead.
+Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
+thinking family's wire shape, whole-string and per-chunk down to 1 byte.
+
 ## Model loads — never the image rail (CODEREVIEW: "A test suite loads models with load_model_")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
