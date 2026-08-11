@@ -2639,7 +2639,9 @@ def private exchange_policy_now : ExchangePolicy {
 // API deliberately binds every interface) cannot stall generation or trigger those actions.
 def private is_loopback_req(req : HttpRequest?) : bool {
     let ip = client_ip(req)
-    return empty(ip) || ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+    // an unknown/empty peer counts as remote (fail closed, like the ladder's is_loopback_peer):
+    // this service binds every interface, so a LAN caller must not slip through on an unresolved peer
+    return ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
 }
 
 def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

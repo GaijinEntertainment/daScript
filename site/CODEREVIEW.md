@@ -41,9 +41,9 @@ samples are gen2 and compile with the current binary; no pseudo-code presented a
 measurement record; anything else is a placeholder and carries an HTML comment naming it as
 one.** A placeholder that could be mistaken for a fact is a defect.
 
-**New `dl-*` measurement-table css lands in `files/dasllama-table.css`, never inline.** That
-file is the table language shared with dasllama.io; a diff adding `dl-*` rules anywhere else
-is a defect.
+**The `dl-*` measurement-table language's source of truth is `files/dasllama-table.css`**
+(the file dasllama.io loads). This page does not link it — it carries an inline mirror — so a
+`dl-*` change updates the source AND this page's inline copy together; changing only one is a defect.
 
 **News entries state real, shipped events.** An entry in `_news/*.md` for something not yet
 true at publish time is a defect.
