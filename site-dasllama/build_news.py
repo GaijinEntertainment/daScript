@@ -31,6 +31,7 @@ except ImportError as e:
     sys.exit(f"build_news.py requires markdown >= 3.0: pip install -U markdown  ({e})")
 
 KEY_RE = re.compile(r'^([a-zA-Z_]+):\s*(.*)$')
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 MARK_BEGIN = '<!-- news:begin'
 MARK_END = '<!-- news:end -->'
 
@@ -39,21 +40,33 @@ def parse_front_matter(text: str) -> tuple[dict, str]:
     if not text.startswith('---'):
         return {}, text
     lines = text.split('\n')
-    meta, i = {}, 1
-    while i < len(lines) and lines[i].strip() != '---':
+    meta, i, closed = {}, 1, False
+    while i < len(lines):
+        if lines[i].strip() == '---':
+            closed = True
+            break
         m = KEY_RE.match(lines[i])
         if m:
             meta[m.group(1)] = m.group(2).strip().strip('"')
         i += 1
+    if not closed:
+        # an unclosed block would silently swallow the whole body (empty entry ships)
+        raise ValueError("front matter is not closed with '---'")
     return meta, '\n'.join(lines[i + 1:])
 
 
 def load_entries(news_dir: Path) -> list[dict]:
     out = []
     for f in sorted(news_dir.glob('*.md')):
-        meta, body = parse_front_matter(f.read_text(encoding='utf-8'))
+        try:
+            meta, body = parse_front_matter(f.read_text(encoding='utf-8'))
+        except ValueError as e:
+            sys.exit(f"{f}: {e}")
         if not meta.get('date') or not meta.get('title'):
             sys.exit(f"{f}: front matter needs at least date and title")
+        if not DATE_RE.match(meta['date']):
+            # a bad date otherwise ships an invalid Atom <updated> and sitemap <lastmod>, exit 0
+            sys.exit(f"{f}: date '{meta['date']}' is not YYYY-MM-DD")
         out.append({
             'slug': f.stem,
             'date': meta['date'],
@@ -83,9 +96,16 @@ def entry_html(e: dict, lead: bool) -> str:
 
 def rewrite_index(index: Path, entries: list[dict]) -> None:
     text = index.read_text(encoding='utf-8')
+    if MARK_BEGIN not in text or MARK_END not in text:
+        sys.exit(f"{index}: missing the news:begin/news:end markers")
     begin = text.index(MARK_BEGIN)
     begin = text.index('-->', begin) + len('-->')
-    end = text.index(MARK_END)
+    # LAST end marker is the structural closer: an entry body may legitimately contain the
+    # literal '<!-- news:end -->', and it always sits BEFORE the real closer (inside the region),
+    # so rfind picks the real one and a build cannot append an orphan </article> fragment
+    end = text.rfind(MARK_END)
+    if end < begin:
+        sys.exit(f"{index}: news:end precedes news:begin")
     items = '\n'.join(entry_html(e, i == 0) for i, e in enumerate(entries))
     index.write_text(text[:begin] + '\n' + items + '\n' + text[end:],
                      encoding='utf-8', newline='\n')
@@ -114,6 +134,7 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<feed xmlns="http://www.w3.org/2005/Atom">\n'
         '<title>dasllama.io news</title>\n'
+        '<author><name>dasllama.io</name></author>\n'   # RFC 4287 §4.1.1 requires a feed-level author
         f'<link href="{site_url}/"/>\n'
         f'<link href="{site_url}/feed.xml" rel="self"/>\n'
         f'<updated>{newest}</updated>\n'
