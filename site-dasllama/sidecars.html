@@ -56,27 +56,25 @@
 <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>the cli does this for you</div>
 <div class="dio-get__grid">
 <div>
-<h2 class="forge-h2">Downloading by hand is the fallback.</h2>
-<p class="forge-p">At startup the server matches your box string against the exchange and asks. Manual download is for air-gapped boxes and for people who want to read the manifest before trusting it.</p>
+<h2 class="forge-h2">No questions asked.</h2>
+<p class="forge-p">At startup the server matches your box against the exchange — one code path, no prompts. Manual download is for air-gapped boxes and for people who want to read the manifest before trusting it.</p>
 <div class="dio-get__steps">
-<div class="dio-get__step"><i>01</i><span>exact match, verified → applied silently</span></div>
-<div class="dio-get__step"><i>02</i><span>unverified match → offered, flagged</span></div>
-<div class="dio-get__step"><i>03</i><span>nothing → tune here, ~20 min quiet box, and submit</span></div>
+<div class="dio-get__step"><i>01</i><span>verified match → downloaded, validated, applied</span></div>
+<div class="dio-get__step"><i>02</i><span>unverified match → never auto-applied; adopt it from the control page, or from the tray while a tune runs</span></div>
+<div class="dio-get__step"><i>03</i><span>nothing → the box tunes itself, ~20 min quiet machine, and can share the result back</span></div>
 </div>
 </div>
-<!-- placeholder: this transcript is the contract for the client integration slice —
-     before ship every command and output line here must be verified verbatim against
-     the real dasllama-server (CODEREVIEW.md: no invented shell commands) -->
+<!-- every command and output line below is verbatim from a real untuned dasllama-server
+     boot against a live exchange (CODEREVIEW.md: no invented shell commands) -->
 <div class="forge-terminal">
-<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">dasllama-server</span><span class="forge-terminal__status">startup</span></div>
+<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">dasllama-server</span><span class="forge-terminal__status">first start, untuned box</span></div>
 <div class="forge-output" style="border-top:0;padding:18px 20px;font-size:12.5px;line-height:1.85">
-<div class="forge-output__line"><span class="forge-output__prompt">$</span> dasllama-server --model Qwen3.6-35B-A3B-Q4_K_M.gguf</div>
-<div class="forge-output__line forge-output__hint">box  darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max</div>
-<div class="forge-output__line forge-output__hint">exchange … 1 verified sidecar · noise 0.8% · 2026-08-09</div>
-<div class="forge-output__line"><span style="color:var(--amber)">?</span> use it, or tune for this exact box (~20 min)? [<span class="forge-output__stdout">use</span>/tune/skip]</div>
-<div class="forge-output__ok">✓ applied · 40/40 kernel families · 23 scalars</div>
-<div class="dio-term__sp"></div>
-<div class="forge-output__line"><span class="forge-output__prompt">$</span> dasllama-server --tune --submit <span class="forge-output__hint"># publish yours</span></div>
+<div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang -jit main.das -- --model model.gguf</div>
+<div class="forge-output__line">exchange: scope 'dasllama' is untuned - looking up a sidecar for this box (dasllama version 1)</div>
+<div class="forge-output__line">@sidecar lookup version=1</div>
+<div class="forge-output__ok">exchange: applied verified sidecar 6a30d7cfb58e (exact match, 41 kernel families)</div>
+<div class="forge-output__line">exchange: sidecar applied, restart to apply the winners</div>
+<div class="forge-output__line forge-output__hint">exit 3 — the watchdog relaunches; the fresh compile stamps the winners</div>
 </div>
 </div>
 </div>
