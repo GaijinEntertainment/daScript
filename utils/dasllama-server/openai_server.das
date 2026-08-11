@@ -10,7 +10,6 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
 require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
-require dasllama/dasllama_tools   // the per-ToolMode wire parsers (harmony/gemma4/mistral/llama_json)
 require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
 require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path

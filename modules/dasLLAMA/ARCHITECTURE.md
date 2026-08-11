@@ -297,6 +297,16 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 
 ---
 
+### 1.9 Serving
+
+- **`dasllama_scheduler.das`** — the continuous-batching scheduler, the serving layer over the
+  facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each
+  `scheduler_step` admits queued requests, runs one `eval_batch` decode step over every
+  decoding stream, then at most one bounded prefill chunk FCFS; paged serving donates finished
+  streams' KV pages to the prefix cache. Results flow out as `SchedEvent`s — no HTTP here.
+  `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
+  teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
+
 ## 2. Mechanisms
 
 The "why" behind criteria that CODEREVIEW states in one line each.

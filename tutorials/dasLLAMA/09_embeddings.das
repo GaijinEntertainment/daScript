@@ -46,7 +46,7 @@ def cosine(a, b : array<float>) : float {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section banners are its structure
     let path = model_path()
     if (empty(path)) {
         print("usage: daslang -jit tutorials/dasLLAMA/09_embeddings.das -- <model.gguf>\n")

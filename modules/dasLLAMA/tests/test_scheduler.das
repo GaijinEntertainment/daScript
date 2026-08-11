@@ -34,7 +34,7 @@ def private model_missing(t : T?) : bool {
 }
 
 def private load_capped(cap : int64) : Model {
-    var m <- load_model(MODEL_PATH, QuantMode.q8)
+    var m <- load_model_(MODEL_PATH, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, cap)
     return <- m
 }
@@ -124,7 +124,7 @@ def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
 
 [test]
 def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
-    t |> run("scheduler ≡ generate: bit-exact stream, seeded sampling, stop/budget (needs SmolLM2-135M)") @(t : T?) {
+    t |> run("scheduler == generate: bit-exact stream, seeded sampling, stop/budget (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
         }
@@ -214,7 +214,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
 
 [test]
 def test_scheduler_chunk_sizes(t : T?) {
-    t |> run("prefill chunk sizes 1/3/17/64 give the same stream — classic mode (needs SmolLM2-135M)") @(t : T?) {
+    t |> run("prefill chunk sizes 1/3/17/64 give the same stream - classic mode (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
         }
@@ -507,7 +507,7 @@ let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 
 [test]
 def test_scheduler_mtp(t : T?) {
-    t |> run("scheduler mtp: self-spec greedy stream ≡ plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+    t |> run("scheduler mtp: self-spec greedy stream == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -527,7 +527,7 @@ def test_scheduler_mtp(t : T?) {
         set_deltanet_prefill_mode(DnPrefillMode.recurrent)
         with_job_que() {
             setup_dasllama_jobque()
-            var m <- load_model(MTP_MODEL_PATH, QuantMode.q8)
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
             var none : array<int64>

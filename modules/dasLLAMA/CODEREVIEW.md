@@ -111,7 +111,9 @@ run under one tune state by construction, so the comparison holds untuned.
 `performance/gen_bench_records.das` (`--oracle` = the regression gate, bare = the publishing
 board); both spawn `benchmarks/lcpp_bench.das`, the only thing that measures record-grade
 time. A new model-timing harness, a one-off measurement script, or a revived rig is a defect;
-the one sanctioned sub-model instrument is the kernel A/B lab (next rule). `PROFILE.md`
+the one sanctioned sub-model instrument is the kernel A/B lab (next rule). The rule's scope is
+engine and measurement code: a tutorial's printed wall-clock (05, 13) is teaching output, never
+a record — it feeds no board, no results file, no PROFILE.md claim. `PROFILE.md`
 carries the commands; the rig's shape is `ARCHITECTURE.md` §2.5.
 
 **A kernel A/B lab under `benchmarks/` is a decision instrument, never a record rig.** A lab
@@ -198,6 +200,10 @@ provisioned box — BRINGUP.md §2 is the runbook.
   wire text — definition serializers, replay/result text builders, reply parsers — is produced
   by a function here. `dasllama_chat.das` assembles ChatParts and places them in turns; a
   wire-text literal written there, or ChatPart/render logic written here, is a defect.
+- `dasllama_scheduler.das` — the continuous-batching serving layer OVER the facade: stream
+  admission, the batched decode step, bounded prefill chunks, prefix-page donation, results
+  as `SchedEvent`s. Its one engine require is `dasllama/dasllama`; engine logic written here,
+  or HTTP/writer logic (the server's), is a defect.
 - `dasllama_par.das` — the parallel-for macro.
 - `dasllama_prefix.das` — the prefix cache for evaluated token history.
 - `dasllama_parity.das` — CPU reference caches for parity instruments.
@@ -483,7 +489,10 @@ platform-neutral file is a defect.
 
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
-declaration. See `ARCHITECTURE.md` §2.8.
+declaration. Scope: roots that require `dasllama/` and export `main`;
+`tests/test_program_roots.das` enforces exactly that over tutorials, examples, and the server
+tools, plus prefill intent for model-loading roots. The dasllama-free tutorial 00 budgets its
+own stack deliberately. See `ARCHITECTURE.md` §2.8.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
 a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose

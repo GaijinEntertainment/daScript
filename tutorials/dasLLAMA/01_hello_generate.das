@@ -34,7 +34,7 @@ def model_path() : string {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - the hello tutorial is one linear read; the section banners are its structure
     let path = model_path()
     if (empty(path)) {
         print("usage: daslang -jit tutorials/dasLLAMA/01_hello_generate.das -- <model.gguf>\n")

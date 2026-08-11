@@ -365,3 +365,16 @@ def test_parse_calls_dispatch(t : T?) {
         delete c
     }
 }
+
+[test]
+def test_string_arguments_passthrough(t : T?) {
+    t |> run("arguments emitted as a JSON string pass through verbatim (the shared normalizer)") @(t : T?) {
+        let c = tool_call_of_json("\{\"name\": \"a\", \"arguments\": \"\{\\\"x\\\": 1}\"}")
+        t |> equal(c.name, "a")
+        t |> equal(c.args, "\{\"x\": 1}")
+    }
+    t |> run("explicit-null and empty-string arguments normalize to the empty object") @(t : T?) {
+        t |> equal(tool_call_of_json("\{\"name\": \"a\", \"arguments\": null}").args, "\{}")
+        t |> equal(tool_call_of_json("\{\"name\": \"a\", \"arguments\": \"\"}").args, "\{}")
+    }
+}

@@ -108,6 +108,11 @@ Current note: `test_think_split.das` — the reply-side reasoning matcher, model
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs
 serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
+`test_scheduler.das` — the continuous-batching scheduler (dasllama_scheduler) against
+`generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only.
+`test_program_roots.das` — model-free: every dasllama program root (tutorials, examples,
+server tools) declares `options stack = 524288`, and every model-loading root declares its
+prefill intent.
 
 ## Model loads — never the image rail (CODEREVIEW: "A test suite loads models with load_model_")
 
