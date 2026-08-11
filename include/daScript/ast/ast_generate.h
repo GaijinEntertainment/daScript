@@ -15,8 +15,6 @@ namespace das {
     TypeDecl *isFullyInferredBlock ( ExprBlock * block );
 
     // make sure generated code contains line information etc
-    void verifyGenerated ( ExpressionPtr expr );
-    void verifyGenerated ( const FunctionPtr & fn );
 
     // make sure fake context and fake line info are pre-assigned
     void assignDefaultArguments ( Function * func );

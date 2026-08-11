@@ -36,25 +36,6 @@ namespace das {
         return false;
     }
 
-#define LOG_GENERATED       0
-
-
-    // A generated body is written for a source construct - the structure being finalized,
-    // the lambda being closed over - so every node in it reports at that construct. The
-    // generators set it on the function and the outer block; this fills in the rest, so a
-    // later diagnostic or profile row over generated code still points at real source.
-    void verifyGenerated ( const FunctionPtr & fn ) {
-        if ( !fn ) return;
-        stampMissingAt(fn->body, fn->at);
-        verifyGenerated(ExpressionPtr(fn->body));
-    }
-
-    void verifyGenerated ( ExpressionPtr expr ) {
-        (void)expr;
-#if LOG_GENERATED
-        LOG(LogLevel::trace) << "VERIFY:\n" << *expr << "\n";
-#endif
-    }
 
     ExpressionPtr genComment ( const string & comment ) {
         auto call = new ExprCall(LineInfo(), "print");
@@ -359,7 +340,6 @@ namespace das {
             block->list.push_back(returnDecl);
         }
         fn->body = block;
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -399,7 +379,6 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -487,7 +466,6 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -559,7 +537,6 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(pFunc);
         }
-        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -620,7 +597,6 @@ namespace das {
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         // wrapInUnsafe(pFunc);
-        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -643,7 +619,6 @@ namespace das {
             cA->marked_used = true;
             pFunc->arguments.push_back(cA);
         }
-        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -720,7 +695,6 @@ namespace das {
             }
             return true;
         },"*");
-        verifyGenerated(pFunc);
         return pFunc;
     }
 
@@ -862,7 +836,6 @@ namespace das {
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->argNames.erase(asc->ascType->argNames.begin());
         asc->ascType->baseType = Type::tLambda;
-        verifyGenerated(asc);
         return asc;
     }
 
@@ -1137,7 +1110,6 @@ namespace das {
         auto lbx = new ExprLabel(expr->at, LabelX,
                                           "yield at line " + to_string(expr->at.line));
         blk->list.push_back(lbx);
-        verifyGenerated(blk);
         return blk;
     }
 
@@ -1198,7 +1170,6 @@ namespace das {
                 blk->list.push_back(mz);
             }
         }
-        verifyGenerated(blk);
         return blk;
     }
 
@@ -1258,7 +1229,6 @@ namespace das {
                                                 "end if at line " + to_string(expr->at.line));
             blk->list.push_back(enddl);
         }
-        verifyGenerated(blk);
         return blk;
     }
 
@@ -1396,7 +1366,6 @@ namespace das {
         auto ell = new ExprLabel(expr->at, end_loop_label,
                                           "end while at line " + to_string(expr->at.line));
         blk->list.push_back(ell);
-        verifyGenerated(blk);
         return blk;
     }
 
@@ -1698,7 +1667,6 @@ namespace das {
             cbif->arguments.push_back(new ExprVar(expr->at, pVarName));
             blk->list.push_back(cbif);
         }
-        verifyGenerated(blk);
         return blk;
     }
 
@@ -1740,7 +1708,6 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -1785,7 +1752,6 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -1851,7 +1817,6 @@ namespace das {
         }
         if (topIf) block->list.push_back(topIf);
         fn->body = block;
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -1913,7 +1878,6 @@ namespace das {
         if ( needUnsafe ) {
             wrapInUnsafe(fn);
         }
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -1954,7 +1918,6 @@ namespace das {
         cl->arguments.push_back(rv);
         block->list.push_back(cl);
         fn->body = block;
-        verifyGenerated(fn);
         return fn;
     }
 
@@ -2131,7 +2094,6 @@ namespace das {
         func->isClassMethod = true;
         func->classParent = baseClass;
         DAS_ASSERT(func->classParent);
-        verifyGenerated(func);
     }
 
     FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method ) {
@@ -2194,7 +2156,6 @@ namespace das {
         block->list.push_back(returnDecl);
         // and done
         func->body = block;
-        verifyGenerated(func);
         return func;
     }
 
@@ -2274,7 +2235,6 @@ namespace das {
         edel->alwaysSafe = true;
         block->list.push_back(edel);
         // and done
-        verifyGenerated(func);
         return func;
     }
 
@@ -2326,7 +2286,6 @@ namespace das {
         // make-block
         auto mkb = new ExprMakeBlock(mks->at,block,false);
         // and done
-        verifyGenerated(mkb);
         return mkb;
     }
 
