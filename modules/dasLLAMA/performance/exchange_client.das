@@ -150,7 +150,27 @@ def exchange_pick(hits : array<ExchangeHit>; accept : string) : int {
     return -1
 }
 
+// a content sha is 64 lowercase hex — validate before it goes into the request path, so an
+// exchange listing can't inject path/query characters into the URL we build (the content-hash
+// gate refuses a mismatch afterward, but the URL is built from this value up front)
+def private is_hex_sha(s : string) : bool {
+    if (length(s) != 64) {
+        return false
+    }
+    var ok = true
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            ok = ok && (is_number(c) || (c >= 'a' && c <= 'f'))
+        }
+    }
+    return ok
+}
+
 def private exchange_download(base_url : string; sha : string) : string {
+    if (!is_hex_sha(sha)) {
+        return ""
+    }
     var status = 0
     let body = http_get_body("{base_url}/api/sidecar/{sha}", 30, status)
     return status == 200 ? body : ""

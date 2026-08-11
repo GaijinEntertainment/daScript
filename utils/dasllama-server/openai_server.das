@@ -2642,7 +2642,11 @@ def private is_loopback_req(req : HttpRequest?) : bool {
     return empty(ip) || ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
 }
 
-def private handle_exchange_get(var resp : HttpResponse?) : http_status {
+def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        // the status carries the local sidecar path (username in it) — operator-only, like the rest
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
     return resp |> JSON(exchange_status_json(exchange_policy_now()))
 }
 
@@ -3041,7 +3045,7 @@ class OpenAiServer : HvWebServer {
             return handle_config_save(req, resp)
         }
         GET("/exchange") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_get(resp)
+            return handle_exchange_get(req, resp)
         }
         GET("/exchange/matches") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_exchange_matches(req, resp)
