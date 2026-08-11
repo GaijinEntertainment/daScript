@@ -851,7 +851,7 @@ def fill_plan_begin {
 def fill_plan_take(var out : array<FillJob>) {
     g_fill_plan_mode = false
     delete out   // a take replaces whatever the caller brought, so release it rather than drop it
-    out <- g_fill_plan   // nolint:PERF030 — released on the line above; the rule has no delete tracking
+    out <- g_fill_plan   // nolint:PERF030,LINT019 — released on the line above; the rule has no delete tracking, and fires only in downstream compiles
 }
 
 // ONE source for the (fmt, disk type) -> kq transcode decision. load_big and fill_stream_plane
