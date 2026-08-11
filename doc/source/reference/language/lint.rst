@@ -831,6 +831,90 @@ nanosecond timestamp is shape-identical to ``int(max(keep, 0l))``. The rule
 cannot tell them apart; ``// nolint:LINT021`` on the declaration line is the
 answer there.
 
+LINT022 — private declaration is never used
+============================================
+
+A ``private`` declaration is reachable only from its own module, so if nothing
+in that module references it the declaration is dead code — it still compiles,
+formats and lints clean while nothing outside can ever reach it. The rule
+covers functions, structures, classes and enumerations. The same applies to
+every symbol of a ``private`` module, where the module declaration makes the
+whole surface private.
+
+.. code-block:: das
+
+    def private rollback(var st : State) {       // LINT022 — no caller anywhere
+        st.claimed |> resize(st.mark)
+    }
+
+    struct private Bucket {                      // LINT022 — no type mentions it
+        lo, hi : int
+    }
+
+    def private commit(var st : State) {         // fine — called below
+        st.mark = length(st.claimed)
+    }
+
+    def scan(var st : State) {
+        commit(st)
+    }
+
+Function references are collected from resolved calls, ``@@fn`` function
+pointers, ``new`` constructors and operator sites, and — for generic bodies,
+which are never inferred and therefore resolve nothing — by call name.
+Structures and enumerations are referenced through *types* rather than
+expressions, so they are marked from every type the walk touches: the type of
+every expression, every function signature (generics included), every
+structure field, every global and every ``typedef``. A generic body carries no
+inferred types at all, so the extra sweep over generics matches by *spelled
+name* — the declared type of every local and argument, every cast target and
+every ``new`` — which is the only trace a private type leaves there. A string literal matching
+a declaration's name counts as a reference, which is what makes a name-based
+lookup (``find_structure``, RTTI, a macro registry) safe.
+
+**Global variables are deliberately not checked.** Const folding and
+``static_if`` erase the very references the check would need: a debug flag read
+only in ``static_if (log_enabled) { ... }`` leaves no trace of itself once the
+branch is elided, and a const global's uses are replaced by its value. Both
+shapes are common and deliberate — a family of ``typeinfo variant_index``
+constants, a phase ladder, a switched-off trace scaffold — so a global check
+reports code that is neither dead nor removable.
+
+Three self-reference shapes deliberately do **not** count as a use, or nothing
+would ever report: a structure field of the structure's own type (a linked list
+keeping itself alive), a class referenced by its own method fields or by
+``self`` inside its own methods, and a compiler-generated body naming its own
+subject type — a constructor, finalizer or clone mentions it by construction.
+That last exclusion is scoped to the one subject type on purpose: a lambda body
+also compiles to a generated function, so skipping generated bodies wholesale
+would blind the rule to every type used only inside a lambda.
+
+A declaration of any kind — function, structure, class or enumeration — stays
+silent when it carries **any** annotation (``[export]``, ``[init]``,
+``[test]``, ``[enum_total]``, any macro hook: those are entry points nothing
+references from das source, and a macro often consumes the declaration without
+ever naming it), when it is a class method (virtual dispatch), or when it is
+generic, template-flavoured or compiler-generated.
+
+The rule is **on by default under ``daslib/`` and ``utils/``** and off
+elsewhere: in other trees an unreferenced private declaration is a cleanup
+backlog rather than a gate, and a type-matrix overload family (three ``kv_dot``
+overloads covering three element types, say) has members that are legitimately
+unreferenced today. Override per module with ``options _unused_private = true``
+(or ``false``), or everywhere with ``LINT022 = true`` in ``.lint_config``.
+
+One driver-dependent gap is worth knowing. The **function** half stands down
+when heuristic auto-inlining is active (``auto_inline_functions``, on by
+default in optimized builds): that tier splices a small private callee into
+its call sites *before* lint runs and leaves an unreferenced husk behind,
+indistinguishable from dead code. Types survive that tier untouched, so they
+are always checked. The lint runner compiles with ``no_optimizations``, so it
+checks everything; a fixture or module that wants the function half under a
+plain compile sets ``options auto_inline_functions = false``.
+
+``// nolint:LINT022`` on the declaration line is the answer for a symbol kept
+on purpose — a debug helper behind a commented-out call, say.
+
 .. _perf_lint:
 
 -----------------

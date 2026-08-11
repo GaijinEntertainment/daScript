@@ -197,6 +197,15 @@ def public is_shipped_library_source(prog : ProgramPtr) : bool {
     return path_has_segment(file, "daslib") || path_has_segment(file, "modules")
 }
 
+//! True under ``daslib/`` or ``utils/`` - the trees kept free of duplicated regions and unused
+//! private declarations (STYLE040/LINT022). Elsewhere both are a backlog, not a gate.
+def public is_core_library_source(prog : ProgramPtr) : bool {
+    let file = module_source_path(prog)
+    // `modules/<X>/daslib/` carries a "daslib" segment too, and those trees are NOT swept
+    return ((path_has_segment(file, "daslib") || path_has_segment(file, "utils"))
+        && !path_has_segment(file, "modules"))
+}
+
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).
 struct public LintIssue {
     code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none

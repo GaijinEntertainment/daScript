@@ -50,6 +50,106 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
     return false
 }
 
+// Everything a reference sweep records. Both the rule-bearing visitor and the generic-body
+// collector own one, so the sweep is written once instead of threading four tables through it.
+struct private RefIndex {
+    functions : table<Function const?>
+    names : table<string>       //!< references knowable by name only (uninferred generic bodies)
+    structs : table<Structure?>
+    enums : table<Enumeration?>
+}
+
+def private unqualified(raw_name : string) : string {
+    let sep = raw_name |> rfind("::")     // strip module qualification, e.g. `_::foo`
+    return sep >= 0 ? raw_name |> slice(sep + 2) : raw_name
+}
+
+def private note_ref(var self : RefIndex; fn : Function?; raw_name : string) : void {
+    if (fn != null) {
+        self.functions |> insert(fn)
+        return
+    }
+    let nm = unqualified(raw_name)
+    if (!empty(nm)) {
+        self.names |> insert(nm)
+    }
+}
+
+def private knows(self : RefIndex; fn : Function?; nm : string) : bool {
+    return key_exists(self.functions, fn) || key_exists(self.names, nm)
+}
+
+def private note_type(var self : RefIndex; t : TypeDecl?; depth : int; skip : Structure const? = null) : void {
+    return if (t == null || depth > 24)
+    let st : Structure const? = t.structType     // add-const, so the identity compare below matches `skip`
+    if (st != null && st != skip) {
+        self.structs |> insert(t.structType)
+    }
+    if (t.enumType != null) {
+        self.enums |> insert(t.enumType)
+    }
+    self |> note_type(t.firstType, depth + 1, skip)
+    self |> note_type(t.secondType, depth + 1, skip)
+    for (a in t.argTypes) {
+        self |> note_type(a, depth + 1, skip)
+    }
+}
+
+def private note_type_names(var self : RefIndex; t : TypeDecl?; depth : int) : void {
+    // an uninferred generic body carries no structType/enumType, only the spelled alias name
+    return if (t == null || depth > 24)
+    let alias = "{t.alias}"
+    if (!empty(alias)) {
+        self.names |> insert(alias)
+    }
+    if (t.structType != null) {
+        self.names |> insert("{t.structType.name}")
+    }
+    if (t.enumType != null) {
+        self.names |> insert("{t.enumType.name}")
+    }
+    self |> note_type_names(t.firstType, depth + 1)
+    self |> note_type_names(t.secondType, depth + 1)
+    for (a in t.argTypes) {
+        self |> note_type_names(a, depth + 1)
+    }
+}
+
+def private lint022_optimized(prog : ProgramPtr) : bool {
+    // mirrors Program::getOptimize: `optimize` decides outright, `no_optimization` only if absent
+    return false if (prog.policies.no_optimizations)
+    let optimize = prog._options |> find_arg("optimize")
+    return optimize as tBool if (optimize is tBool)
+    let no_optimization = prog._options |> find_arg("no_optimization")
+    return !(no_optimization as tBool) if (no_optimization is tBool)
+    return true
+}
+
+def private lint022_calls_may_be_inlined(prog : ProgramPtr) : bool {
+    // Program::patchInline's own gate: that tier splices a small private callee away before lint runs, leaving an unreferenced husk indistinguishable from dead code.
+    return (lint022_optimized(prog)
+        && !(prog._options |> find_arg("disable_auto_inline") ?as tBool ?? prog.policies.disable_auto_inline)
+        && !(prog._options |> find_arg("no_aliasing") ?as tBool ?? prog.policies.no_aliasing)
+        && (prog._options |> find_arg("auto_inline_functions") ?as tBool ?? prog.policies.auto_inline_functions))
+}
+
+def private lint022_enabled(prog : ProgramPtr) : bool {
+    // tri-state: module option wins; '.lint_config' LINT022=true means everywhere; else path default
+    let configured = prog._options |> find_arg("_unused_private")
+    if (configured is tBool) return configured as tBool
+    if (lint_config_forces_on("LINT022")) return true
+    return is_core_library_source(prog)
+}
+
+def private lint022_is_skipped(fn : Function?; mod : Module?) : bool {
+    // Public symbols, annotated entry points ([export]/[init]/[test]/macro hooks), virtually dispatched class methods, and generic/template/generated bodies all have callers lint cannot see.
+    return (fn == null || !fn.flags.privateFunction
+        || fn.flags.generated || fn.flags.isClassMethod
+        || fn.fromGeneric != null || fn.isGeneric || fn.moreFlags.isTemplate
+        || length(fn.annotations) > 0
+        || fn.at.fileInfo == null || fn._module != mod)
+}
+
 class LintVisitor : AstVisitor {
     // LINT014 is decided after the body: a `var` argument that is returned needs its mutability
     // for the move (a non-copyable result cannot move from a const argument). Arguments are
@@ -82,6 +182,10 @@ class LintVisitor : AstVisitor {
     lint021_narrow_depth : int = 0
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
+    // LINT022 — referenced functions, plus names of calls that never resolved (generic bodies)
+    lint022_refs : RefIndex
+    lint022_self_struct : Structure const? = null
+    lint022_generic_sweep : bool = false
     def LintVisitor() {
         pass
     }
@@ -223,8 +327,17 @@ class LintVisitor : AstVisitor {
         lint_error("LINT016: 'push_clone' does not clone a string without 'options multiple_contexts'; use 'push(value)' for same-context storage, or did you mean 'push(clone_string(value))' for a cross-context copy", expr.at)
     }
     def override preVisitFunction(fun : FunctionPtr) : void {
-        noLint = false
+        noLint = lint022_generic_sweep      // the sweep collects references and reports nothing
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
+        // LINT022 — scoped to the one subject type, so lambda bodies (generated too) still count
+        lint022_self_struct = null
+        if (fun.flags.isClassMethod || fun.flags.generated) {
+            if (fun.result != null && fun.result.structType != null) {
+                lint022_self_struct = fun.result.structType
+            } elif (!empty(fun.arguments) && fun.arguments[0]._type != null) {
+                lint022_self_struct = fun.arguments[0]._type.structType
+            }
+        }
         if (fun.fromGeneric != null || fun.flags.generated) {
             genericDepth++
         }
@@ -339,6 +452,9 @@ class LintVisitor : AstVisitor {
     // --- LINT005: redundant reinterpret cast ---
 
     def override preVisitExprCast(expr : ExprCast?) : void {
+        if (lint022_generic_sweep) {
+            lint022_refs |> note_type_names(expr.castType, 0)
+        }
         // alwaysSafe = compiler-authorized (e.g. the early-out relocation const-strips a finally-used `let` with a reinterpret the user never wrote)
         if (noLint || genericDepth > 0
             || !expr.castFlags.reinterpretCast || expr.genFlags.alwaysSafe
@@ -438,6 +554,9 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
+        if (lint022_generic_sweep) {
+            lint022_refs |> note_type_names(arg._type, 0)
+        }
         // class-method signatures are dictated by the base class / interface, and [extern] stubs by the bound C function — unused params there are structural, not a mistake
         if (fun.flags.isClassMethod) return
         for (ann in fun.annotations) {
@@ -591,6 +710,7 @@ class LintVisitor : AstVisitor {
             }
         }
         lint021_call_kind |> push(kind)
+        lint022_note(expr.func, "{expr.name}")
         check_string_push_clone(expr)
         check_lint017_long_cast(expr)
         check_lint018_mem_size_narrowing(expr)
@@ -608,6 +728,171 @@ class LintVisitor : AstVisitor {
             }
         }
         return <- expr
+    }
+
+    // --- LINT022: unused private declaration ---
+
+    def lint022_note(fn : Function?; raw_name : string) : void {
+        lint022_refs |> note_ref(fn, raw_name)
+    }
+
+    def override preVisitStructure(st : StructurePtr) : void {
+        // a class's method fields hold @@method pointers back to itself - not a use of the class
+        lint022_self_struct = st
+    }
+
+    def override visitStructure(var st : StructurePtr) : StructurePtr {
+        lint022_self_struct = null
+        return <- st
+    }
+
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        lint022_refs |> note_type(expr._type, 0, lint022_self_struct)
+        if (lint022_generic_sweep) {
+            lint022_refs |> note_type_names(expr._type, 0)      // uninferred: names are all there is
+        }
+        // a name-based lookup (find_structure, RTTI, a macro registry) leaves only a literal
+        if (expr is ExprConstString && !expr.genFlags.generated) {
+            let nm = string((expr as ExprConstString).value)
+            if (!empty(nm)) {
+                lint022_refs.names |> insert(nm)
+            }
+        }
+    }
+
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
+        lint022_note(expr.func, "{expr.target}")
+    }
+
+    def override preVisitExprNew(expr : ExprNew?) : void {
+        if (lint022_generic_sweep) {
+            lint022_refs |> note_type_names(expr.typeexpr, 0)
+        }
+        lint022_note(expr.func, "{expr.name}")
+    }
+
+    def override preVisitExprOp1(expr : ExprOp1?) : void {
+        lint022_note(expr.func, "{expr.name}")
+    }
+
+    def lint022_is_unreferenced(fn : Function?; mod : Module?) : bool {
+        return (!lint022_is_skipped(fn, mod)
+            && !(lint022_refs |> knows(fn, "{fn.name}")))
+    }
+
+    def lint022_collect_generic_refs(mod : Module?) : void {
+        // `visit(prog)` skips generics; same visitor, reporting latched off
+        lint022_generic_sweep = true
+        make_visitor(self) $(adapter) {
+            for_each_generic(mod, "") $(gfn) {
+                visit(gfn, adapter)
+            }
+        }
+        lint022_generic_sweep = false
+        noLint = false
+    }
+
+    def lint022_note_decl_types(mod : Module?) : void {
+        // a private type can be reachable from a declaration alone - a field, a signature, a typedef
+        for_each_function(mod, "") $(fn) {
+            return if (fn.flags.generated)
+            let self_st = (fn.flags.isClassMethod && !empty(fn.arguments)
+                && fn.arguments[0]._type != null) ? fn.arguments[0]._type.structType : null
+            for (a in fn.arguments) {
+                lint022_refs |> note_type(a._type, 0, self_st)
+            }
+            lint022_refs |> note_type(fn.result, 0, self_st)
+        }
+        for_each_generic(mod, "") $(gfn) {
+            for (a in gfn.arguments) {
+                lint022_refs |> note_type(a._type, 0)
+            }
+            lint022_refs |> note_type(gfn.result, 0)
+        }
+        for_each_structure(mod) $(st) {
+            // a field of its own type keeps a linked list alive, so it does not count as a use
+            if (st.parent != null) {
+                lint022_refs.structs |> insert(st.parent)
+            }
+            for (f in st.fields) {
+                lint022_refs |> note_type(f._type, 0, st)
+            }
+        }
+        for_each_global(mod) $(v) {
+            lint022_refs |> note_type(v._type, 0)
+        }
+        for_each_typedef(mod) $(_name, td) {
+            lint022_refs |> note_type(td, 0)
+        }
+    }
+
+    def lint022_struct_unreferenced(st : Structure?; mod : Module?) : bool {
+        return (st != null && st.flags.privateStructure && !st.flags.generated
+            && length(st.annotations) == 0
+            && st.at.fileInfo != null && st._module == mod
+            && !key_exists(lint022_refs.structs, st)
+            && !key_exists(lint022_refs.names, "{st.name}"))
+    }
+
+    def lint022_enum_unreferenced(en : Enumeration?; mod : Module?) : bool {
+        return (en != null && en.isPrivate
+            && length(en.annotations) == 0
+            && en.at.fileInfo != null && en._module == mod
+            && !key_exists(lint022_refs.enums, en)
+            && !key_exists(lint022_refs.names, "{en.name}"))
+    }
+
+    def lint022_has_candidate(prog : ProgramPtr; mod : Module?; check_functions : bool) : bool {
+        var any = false
+        if (check_functions) {
+            for_each_function(mod, "") $(fn) {
+                if (lint022_is_unreferenced(fn, mod)) {
+                    any = true
+                }
+            }
+        }
+        for_each_structure(mod) $(st) {
+            if (lint022_struct_unreferenced(st, mod)) {
+                any = true
+            }
+        }
+        for_each_enumeration(mod) $(en) {
+            if (lint022_enum_unreferenced(en, mod)) {
+                any = true
+            }
+        }
+        return any
+    }
+
+    def lint022_check_unused_private(prog : ProgramPtr) : void {
+        return if (key_exists(disabled_codes, "LINT022")
+                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT022"))
+                    || !lint022_enabled(prog))
+        let mod = prog.getThisModule
+        return if (mod == null)
+        // inlining erases calls before lint runs; types and globals survive that tier untouched
+        let check_functions = !lint022_calls_may_be_inlined(prog)
+        lint022_note_decl_types(mod)
+        return if (!lint022_has_candidate(prog, mod, check_functions))
+        lint022_collect_generic_refs(mod)
+        if (check_functions) {
+            for_each_function(mod, "") $(fn) {
+                return if (!lint022_is_unreferenced(fn, mod))
+                funcFile = "{fn.at.fileInfo.name}"
+                lint_error("LINT022: private function '{fn.name}' is never used; remove it, or make it public if another module needs it", fn.at)
+            }
+        }
+        for_each_structure(mod) $(st) {
+            return if (!lint022_struct_unreferenced(st, mod))
+            funcFile = "{st.at.fileInfo.name}"
+            let kind = st.flags.isClass ? "class" : "structure"
+            lint_error("LINT022: private {kind} '{st.name}' is never used; remove it, or make it public if another module needs it", st.at)
+        }
+        for_each_enumeration(mod) $(en) {
+            return if (!lint022_enum_unreferenced(en, mod))
+            funcFile = "{en.at.fileInfo.name}"
+            lint_error("LINT022: private enumeration '{en.name}' is never used; remove it, or make it public if another module needs it", en.at)
+        }
     }
 
     // `assume name = <block>` keeps a template block at the alias-definition site; every use of
@@ -644,6 +929,8 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
+        lint022_refs |> note_ref(expr.func, "{expr.name}")
+        lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         let op = string(expr.op)
         if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
@@ -669,6 +956,8 @@ class LintVisitor : AstVisitor {
     // --- LINT008: ternary both branches equal ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
+        lint022_refs |> note_ref(expr.func, "{expr.name}")
+        lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         if (expr_equal(expr.left, expr.right, false)) {
             lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
@@ -711,6 +1000,9 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprLetVariable(_let : ExprLet?; v : VariablePtr; _last : bool) : void {
+        if (lint022_generic_sweep) {
+            lint022_refs |> note_type_names(v._type, 0)
+        }
         check_string_clone_init(v)
         if (noLint || genericDepth > 0) return
         // LINT021 — seed initialized non-ref 64-bit locals
@@ -739,6 +1031,9 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprVar(expr : ExprVar?) : void {
+        if (lint022_generic_sweep) {
+            lint022_refs.names |> insert("{expr.name}")
+        }
         if (noLint || genericDepth > 0) return
         // LINT021 — classify this use of a tracked 64-bit local
         let ci = lint021_find(expr.variable)
@@ -850,6 +1145,7 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool; disabled_code
         astVisitor.astVisitorAdapter = adapter
         visit(prog, astVisitor.astVisitorAdapter)
     }
+    astVisitor->lint022_check_unused_private(prog)
     unsafe {
         delete astVisitor
     }
@@ -876,6 +1172,7 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
         astVisitor.astVisitorAdapter = adapter
         visit(prog, astVisitor.astVisitorAdapter)
     }
+    astVisitor->lint022_check_unused_private(prog)
     let count = length(astVisitor.errors)
     errors |> push_from(astVisitor.errors)
     unsafe {
@@ -898,6 +1195,7 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
         astVisitor.astVisitorAdapter = adapter
         visit(prog, astVisitor.astVisitorAdapter)
     }
+    astVisitor->lint022_check_unused_private(prog)
     let count = length(astVisitor.issues)
     issues |> push_from(astVisitor.issues)
     unsafe {
