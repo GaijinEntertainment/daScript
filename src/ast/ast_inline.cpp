@@ -2263,8 +2263,10 @@ namespace das {
                     auto tempTypeIsLocal = [&]( Expression * init, bool ref ) {
                         if ( ref || !init->type ) return true;
                         // infer exempts block types from the isLocal test - a block local is legal,
-                        // it just has to be initialized with a make-block - so leave those alone
-                        if ( init->type->isGoodBlockType() ) return true;
+                        // it just has to be initialized with a make-block. a generator is the one
+                        // exception: its top-level locals lift into the capture structure, where a
+                        // block (stack storage, dead when the call returns) could only dangle
+                        if ( init->type->isGoodBlockType() ) return !fn->generator;
                         if ( !init->type->isLocal() ) return false;
                         return init->type->canCopy() || init->type->canMove()
                             || !init->type->hasNonTrivialCtor();

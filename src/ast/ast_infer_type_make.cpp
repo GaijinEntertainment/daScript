@@ -168,6 +168,11 @@ namespace das {
             if (it != capture.end()) {
                 mode = it->mode;
             }
+            if (cV->type->isGoodBlockType()) {
+                error("can't capture block variable " + cV->name, "", "",
+                      at, CompilationError::cant_capture_variable);
+                return false;
+            }
             if (mode == CaptureMode::capture_any) {
                 if (cV->capture_as_ref) {
                     // this is ok by default
