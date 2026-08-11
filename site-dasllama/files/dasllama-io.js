@@ -45,7 +45,9 @@
   }
 
   function ratioCell(r) {
-    if (r === null) return '<td class="dl-num dl-dim">-</td>';
+    // an empty ratio is a das-only row: it MUST read "not raced", never a dash that a sorted
+    // table lets sit next to real ratios and imply parity (site CODEREVIEW: the honesty rule)
+    if (r === null) return '<td class="dl-num dl-dim" title="no llama.cpp reference was raced">not raced</td>';
     var cls = r > 1.005 ? 'dl-win' : (r < 0.995 ? 'dl-loss' : '');
     return '<td class="' + ('dl-num ' + cls).trim() + '">' + fmt(r, 2) + '×</td>';
   }
@@ -450,7 +452,9 @@
       var vis = t ? t.visible() : rows;
       var paired = vis.filter(function (r) { return r[m + '_ratio'] !== null; })
         .sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; });
-      var solo = vis.length - vis.filter(function (r) { return r.pp_ratio !== null || r.tg_ratio !== null; }).length;
+      // every visible row NOT plotted for this metric — a row that raced pp512 but not tg128 is
+      // unplotted on the tg128 view and must still be counted (was: only both-null rows)
+      var solo = vis.length - paired.length;
       renderPairBars(barsBox, paired.map(function (r) {
         return { label: r.model, sub: r.boxName + ' · ' + r.lane,
                  das: r[m + '_das'], ref: r[m + '_ref'], ratio: r[m + '_ratio'], r: r };
@@ -499,7 +503,11 @@
     var paired = rows.filter(function (r) { return r.pp_ratio !== null; })
       .sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 3);
     if (!paired.length) {
-      barsBox.innerHTML = '<div class="dl-empty">Nothing on the ladder yet — the first accepted submission lands here.</div>';
+      // the teaser plots PAIRED rows; say so, and don't contradict the "N measurements" tile
+      // above when there are das-only rows but nothing raced against llama.cpp yet
+      barsBox.innerHTML = rows.length
+        ? '<div class="dl-empty">No paired measurements yet — the ' + rows.length + ' row' + (rows.length > 1 ? 's' : '') + ' on the ladder are das-only. See the full ladder →</div>'
+        : '<div class="dl-empty">Nothing on the ladder yet — the first accepted submission lands here.</div>';
       return;
     }
     renderPairBars(barsBox, paired.map(function (r) {
@@ -536,8 +544,10 @@
     });
     if (best === null) return '';
     var pct = (best - wrow.med_us) / wrow.med_us * 100;
-    // a gap inside the family's own measured noise floor is noise, not a win margin
-    if (Math.abs(pct) <= (r.floor_pct || 0)) return 'within noise of ' + bestName;
+    // a gap inside the family's own measured noise floor is noise, not a win margin. A missing
+    // floor_pct is UNKNOWN, not zero — don't print a hard ±0.3% margin against an unproven floor.
+    if (!(r.floor_pct > 0)) return 'winner ' + bestName + ' (noise floor not recorded)';
+    if (Math.abs(pct) <= r.floor_pct) return 'within noise of ' + bestName;
     return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% over ' + bestName;
   }
 
@@ -546,9 +556,11 @@
     var cells = fams.map(function (fam) {
       var win = doc.kernels[fam];
       if (!win) {
+        // only claim "raced" when a race table for this family is actually in the document
+        var raced = doc.race && doc.race[fam];
         return '<div class="dio-kernel dio-kernel--fallback"><div class="dio-kernel__fam">' + esc(fam) + '</div>' +
           '<div class="dio-kernel__win"><em>—</em> <span style="color:var(--fg-faint)">nothing applied</span></div>' +
-          '<div class="dio-kernel__margin">raced; no variant cleared the gate</div></div>';
+          '<div class="dio-kernel__margin">' + (raced ? 'raced; no variant cleared the gate' : 'no variant applied') + '</div></div>';
       }
       var margin = raceMargin(fam, doc);
       return '<div class="dio-kernel"><div class="dio-kernel__fam">' + esc(fam) + '</div>' +

@@ -24,7 +24,7 @@
 <a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
 <div class="dio-tabs"><a class="dio-tab" href="index.html">home</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab is-active" href="sidecars.html">sidecars</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span id="dio-nav-version">v0.6.4</span></div>
+<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <header class="dio-head"><div class="forge-container"><div class="dio-head__row">
@@ -32,7 +32,9 @@
 <h1>Somebody may already have tuned <em>your box.</em></h1>
 <p class="dio-head__lede">A sidecar is dasLLAMA's per-box tune manifest: which JIT kernel variant won in each of ~40 families, 23 tuned runtime scalars, and the provenance to prove where it came from. Producing one costs about 20 minutes of quiet machine. <b style="color:var(--fg);font-weight:400">dasllama-server picks a matching sidecar up automatically at startup</b> — this page is the manual browse.</p>
 </div>
-<div class="dio-head__aside" id="dio-sc-stats"><b>—</b> sidecars · <b>—</b> architectures<br/>engine <b>0.6.4</b><br/>a sidecar is valid for one <b>version × arch</b></div>
+<!-- dio-sc-stats is filled live by mountSidecars; this is the pre-load/API-down fallback (must
+     match what the JS renders — a sidecar keys on version × BOX, not arch) -->
+<div class="dio-head__aside" id="dio-sc-stats"><b>—</b> sidecars · <b>—</b> architectures<br/>engine <b>0.6.4</b><br/>a sidecar is valid for one <b>version × box</b></div>
 </div></div></header>
 
 <div class="forge-container">
@@ -73,10 +75,11 @@
 <div class="forge-output__line">exchange: scope 'dasllama' is untuned - looking up a sidecar for this box (dasllama version 1)</div>
 <div class="forge-output__line">@sidecar lookup version=1</div>
 <div class="forge-output__ok">exchange: applied verified sidecar 6a30d7cfb58e (exact match, 41 kernel families)</div>
+<div class="forge-output__line">@sidecar apply sha=6a30d7cfb58e… verified=1 tier=exact kernels=41</div>
 <div class="forge-output__line">exchange: sidecar applied, restart to apply the winners</div>
-<div class="forge-output__line forge-output__hint">exit 3 — the watchdog relaunches; the fresh compile stamps the winners</div>
 </div>
 </div>
+<p class="forge-p" style="margin-top:14px;font-size:13px;color:var(--fg-dim)">The process exits with code 3; the watchdog relaunches it, and the fresh compile stamps the downloaded winners. The <code class="forge-inline-code">@sidecar</code> lines are structured events the watchdog folds into its tray.</p>
 </div>
 </div>
 </section>

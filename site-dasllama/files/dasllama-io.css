@@ -104,9 +104,14 @@
    Small screens keep the standard horizontal scroll — 13 columns cannot wrap onto a phone. */
 #table-wrap{overflow:visible}
 #table-wrap table.dl-table{min-width:0}
-#ladder-table thead th,#ladder-table tbody td{white-space:normal;padding-left:7px;padding-right:7px}
-#ladder-table thead th.dl-num,#ladder-table tbody td.dl-num{white-space:nowrap}
-@media (max-width:1149px){#table-wrap{overflow-x:auto;overflow-y:hidden}}
+/* overflow-wrap:anywhere is load-bearing: a community box string can be one long unbroken token
+   (an underscore-joined CPU brand), and white-space:normal alone cannot break it — without this
+   it overflows the container with NO scrollbar (the page clips x), hiding columns for everyone */
+#ladder-table thead th,#ladder-table tbody td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;padding-left:7px;padding-right:7px}
+#ladder-table thead th.dl-num,#ladder-table tbody td.dl-num{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+/* the fit is tuned to the container's design width (1180px .forge-container); below that the
+   content box is too narrow to hold 13 columns, so fall back to a contained horizontal scroll */
+@media (max-width:1179px){#table-wrap{overflow-x:auto;overflow-y:hidden}}
 .dio-cell{display:block;min-width:0}
 .dio-chev{color:var(--fg-faint);font-size:10px;text-align:right;transition:transform 140ms ease}
 .dio-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
