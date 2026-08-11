@@ -40,85 +40,29 @@
 </div>
 </div></div></header>
 
-<section class="forge-section" style="padding:44px 0 64px;border-top:0">
+<section class="forge-section" style="padding:44px 0 52px;border-top:0">
 <div class="forge-container">
-<div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>news</div>
-<div class="dio-feed">
-<div class="dio-feed__bar"><span class="dio-feed__count" id="dio-feed-count"></span><a class="dio-feed__feed" href="/feed.xml">atom feed</a></div>
-<div id="dio-feed-items">
-<!-- news entries are generated from _news/*.md at deploy; the entries below are
-     design placeholders and are replaced by the generator -->
-
-<article class="dio-item dio-item--lead is-open" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-09</span><span class="dio-item__tag">model</span><h2 class="dio-item__title">Qwen3.6-35B-A3B lands — hybrid Gated-DeltaNet attention, routed experts, stock GGUF.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body">
-<p>Loads from stock GGUF with no conversion step; attention runs the hybrid Gated-DeltaNet path and the routed experts use the native K-quant kernels. Verified token-for-token against the reference engine on the q4k file. First measurements are on the ladder; a reference run did not ride along on this box, so the ratio column is empty — the absolute numbers stand alone.</p>
-<div class="dio-item__nums">
-<div><b>217.7 <span style="color:var(--fg-faint);font-size:11px">± 2.0</span></b>pp512 tok/s · M1 Max · cpu · 8 threads</div>
-<div><b>34.5 <span style="color:var(--fg-faint);font-size:11px">± 0.05</span></b>tg128 tok/s · same run</div>
-<div><b>q4k</b>quant · <code>darwin|arm64</code></div>
-</div>
-</div>
-</article>
-
-<article class="dio-item" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-06</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.</h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body"><p>Everything measured now lives here, community submissions included. <a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional scoreboard and carries official measurements only.</p></div>
-</article>
-
-<article class="dio-item" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-02</span><span class="dio-item__tag">ladder</span><h2 class="dio-item__title">Community submissions open — race your box, keep the sidecar.</h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body"><p>A tuning run takes about 20 minutes of quiet box and produces a sidecar; submitting it publishes the measurements that rode along. Rows without a paired llama.cpp run are published as das-only and never imply parity.</p></div>
-</article>
-
-<article class="dio-item" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-07-26</span><span class="dio-item__tag">release</span><h2 class="dio-item__title">0.6.4 — Qwen3-30B-A3B q4k at 301.5 tok/s prefill on cpu + accel.</h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body">
-<p>Measured against llama.cpp on the same box, same session, 10 threads.</p>
-<div class="dio-item__nums">
-<div><b>301.5</b>prefill tok/s · 1.78× llama.cpp</div>
-<div><b>85.2</b>decode tok/s · 1.11× llama.cpp</div>
-<div><b>17.3 GB</b>Qwen3-30B-A3B-Instruct-2507-Q4_K_M</div>
-</div>
-</div>
-</article>
-
-<article class="dio-item" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-07-21</span><span class="dio-item__tag">model</span><h2 class="dio-item__title">gpt-oss-20b — native MXFP4 experts, attention sinks, YaRN, Harmony chat format.</h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body"><p>MXFP4 expert weights are read directly from the stock file — no upcast pass.</p></div>
-</article>
-</div>
+<div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>get it</div>
+<div class="dio-get__steps" style="margin-top:22px;max-width:720px">
+<div class="dio-get__step"><i>01</i><span><a href="https://github.com/GaijinEntertainment/daScript">daslang on github ↗</a> — the language and SDK this runs on; pre-built binaries at <a href="https://daslang.io/downloads.html">daslang.io/downloads</a></span></div>
+<div class="dio-get__step"><i>02</i><span><a href="https://github.com/GaijinEntertainment/daScript/tree/master/modules/dasLLAMA">dasLLAMA on github ↗</a> — the engine, in-tree at <code class="forge-inline-code">modules/dasLLAMA</code></span></div>
 </div>
 </div>
 </section>
 
-<section class="forge-section forge-section--alt" style="padding:64px 0">
+<section class="forge-section forge-section--alt" style="padding:52px 0 64px">
 <div class="forge-container">
-<div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span>how to get it</div>
-<div class="dio-get__grid">
-<div>
-<h2 class="forge-h2">Three lines, no build step.</h2>
-<p class="forge-p">dasLLAMA ships inside the daslang SDK. Point the JIT at a script that requires it, or run <code class="forge-inline-code">dasllama-server</code> for the turnkey path — it asks about sidecars at startup.</p>
-<div class="dio-get__steps">
-<div class="dio-get__step"><i>01</i><span><a href="https://daslang.io/downloads.html">daslang SDK ↗</a> — pre-built binaries for macOS, Linux, Windows</span></div>
-<div class="dio-get__step"><i>02</i><span>drop a GGUF next to the script; nothing to convert</span></div>
-<div class="dio-get__step"><i>03</i><span>server mode picks up a matching sidecar, or tunes for your box</span></div>
-</div>
-</div>
-<div class="forge-terminal">
-<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">run.das</span><span class="forge-terminal__status">jit</span></div>
-<div class="dio-term__body"><span class="c">// LLM inference in daslang — JIT, no C++</span>
-<span class="k">require</span> <span class="d">dasllama/dasllama</span>
+<div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span>news</div>
+<div class="dio-feed">
+<div class="dio-feed__bar"><span class="dio-feed__count" id="dio-feed-count"></span><a class="dio-feed__feed" href="/feed.xml">atom feed</a></div>
+<div id="dio-feed-items">
+<!-- entries are generated from _news/*.md at deploy; this seed entry mirrors
+     _news/2026-08-10-dasllama-io-is-live.md until the generator lands -->
 
-<span class="d">[export]</span>
-<span class="k">def</span> main() {
-    <span class="k">var</span> m &lt;- load_model(<span class="s">"model.gguf"</span>, <span class="t">QuantMode</span>.q4k)
-    <span class="k">var</span> s = create_session(m)
-    generate(m, s, encode(m, <span class="s">"Summarize:"</span>), <span class="t">SamplingParams</span>(), 128l) $(_id, p) {
-        print(p); <span class="k">return</span> true
-    }
-}</div>
-<div class="forge-output"><div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang -jit run.das</div><div class="forge-output__line forge-output__hint">sidecar: verified · darwin|arm64|MacBookPro18,2 · 40/40 kernels</div><div class="forge-output__ok">✓ prefill 217.7 tok/s · decode 34.5 tok/s</div><div class="dio-term__sp"></div><div class="forge-output__line"><span class="forge-output__prompt">$</span> dasllama-server --model model.gguf --port 8080</div></div>
+<article class="dio-item dio-item--lead is-open" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-10</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Everything measured now lives here, community submissions included. <a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional scoreboard and carries official measurements only.</p></div>
+</article>
 </div>
 </div>
 </div>

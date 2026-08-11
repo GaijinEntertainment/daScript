@@ -38,6 +38,22 @@ from the first commit, watchdog contract, ndjson logging).
   locally. Supporting that honestly is the partial re-race follow-up (below); v1 states
   version compatibility plainly and offers full tune as the local action.
 
+## Site content rules (Boris, 2026-08-10)
+
+- **Home order: get-it first, then news, then the ladder teaser.** Get-it is git links only
+  for now (daslang repo + the modules/dasLLAMA folder); package managers later. No `.das`
+  integration card on the home page.
+- **Only real news.** Entries state shipped events; the seed entry is
+  `_news/2026-08-10-dasllama-io-is-live.md`.
+- **No invented shell commands or code samples anywhere on either site** — every command
+  shown must run verbatim and produce the shown result. Enforced by `site/CODEREVIEW.md`
+  and `site-dasllama/CODEREVIEW.md` (template: `skills/codereview_md.md`). The sidecars-page
+  startup transcript is comment-marked as the client-integration contract and gets verified
+  verbatim against the real dasllama-server before ship.
+- **Ladder table fix rides the data hookup (slice 5):** the dasllama.html tables on
+  daslang.io show a vertical scrollbar — fix it in the shared `dasllama-table.css` AND in
+  dasllama.html's inline copy (or fold the adoption forward if it stays trivial).
+
 ## Trust model (settled)
 
 Anonymous submissions; schema validation; per-IP rate limit (Caddy body cap + service
