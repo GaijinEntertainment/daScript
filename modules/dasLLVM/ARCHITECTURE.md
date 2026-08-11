@@ -28,6 +28,15 @@ link) — provided both levels print. When a phase is split into finer steps, ea
 its own number; an aggregate label silently absorbing new sub-steps breaks the contract the
 same way an untimed phase does.
 
+Under `--jit-split-modules` (`run_split_codegen` in `llvm_jit_run.das`) the same labels map
+differently: **declare** reads ~zero (declaration moves inside the partition loop), **irgen**
+covers partitioning plus every partition's declare/irgen/ctor work, **optimize** carries the
+`jit_par_emit_run` pool wall — per-job passes AND object emission interleave on the workers —
+plus the post-optimize verifies and the partition teardown, and **emit+link** is the
+`link_dll_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
+one `LLVM JIT time: job {obj} passes … emit …` line per partition (from the pool, under the
+same log option) and the `link … (N objects)` line under emit+link.
+
 ### 1.2 The codegen tier
 
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize

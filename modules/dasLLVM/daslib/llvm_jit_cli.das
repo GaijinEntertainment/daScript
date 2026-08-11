@@ -20,6 +20,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT: LLVM size-optimization level (0..2)"
     size_level : Option<int>
 
+    @clarg_name = "jit-split-modules"
+    @clarg_doc = "JIT (dll mode): partition codegen per das-module - one .o per module, linked into the ONE cached DLL. 0 = off (default, monolithic emission); 1 = split with serial emit; N>1 = split + N optimize/emit threads; -1 = split + auto threads (JobQue count). Opt-in: cross-module inlining is lost across partitions (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin: options jit_split_modules = N"
+    split_modules : Option<int>
+
     @clarg_short = "g"
     @clarg_name = "jit-debug"
     @clarg_doc = "JIT: emit debug info / symbols"

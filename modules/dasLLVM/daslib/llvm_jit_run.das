@@ -35,7 +35,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4cul   // write_dll's target machine follows --jit-opt-level (was pinned 3) - non-O3 DLL codegen changed (0x4b: block annotationData via jit_ad_by_sid)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4dul   // --jit-split-modules: per-das-module partition emission (impl linkage, shared-glob linkonce, split bool in the cache key) (0x4c: write_dll's target machine follows --jit-opt-level)
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -154,7 +154,7 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
 }
 
 def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
-                     emit_prologue : bool; debug_info : bool; target_triple : string) : string {
+                     emit_prologue : bool; debug_info : bool; target_triple : string; split : bool) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
         h = (h ^ get_function_aot_hash(fn)) * JIT_FNV_PRIME
@@ -166,6 +166,8 @@ def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : i
     h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (debug_info ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (g_jit_fast_math ? 1ul : 0ul)) * JIT_FNV_PRIME   // fast-math changes codegen → distinct cache
+    // split-built and monolith DLLs differ in inlining — never share a cache entry (bool only: partition count is data-driven)
+    h = (h ^ (split ? 1ul : 0ul)) * JIT_FNV_PRIME
     // EH vs longjmp hosts emit different unwind tables — must not share a cache entry (panic would crash)
     h = (h ^ (das_is_exceptions_enabled() ? 1ul : 0ul)) * JIT_FNV_PRIME
     // AVX2 gates the x64 intrinsic table — an AVX2-jitted DLL must not cache-hit an AVX2-less host (illegal instr)
@@ -229,6 +231,20 @@ struct JitState {
     ctx : void?
 }
 
+// reopen the freshly written DLL for the install phase + GC stale artifacts - the ONE tail both
+// the monolith and split arms share (the keep-mask decides which cached artifacts survive)
+[macro_function]
+def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs : array<FunctionPtr>;
+                              disabled : array<FunctionPtr>; var uids : UidNodes?; dll_hash_basename : string) {
+    dll.reset()
+    dll = get_dll_by_path(output_path)
+    let (missing, disabling) = get_dll_missing(funcs, disabled, dll, uids)
+    assert(missing |> empty() && disabling |> empty())
+    if (!(dll_hash_basename |> empty())) {
+        jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename)
+    }
+}
+
 [macro_function]
 def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitState? {
     verify(!(is_in_completion() || is_compiling_macros()))
@@ -271,6 +287,11 @@ def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitS
 // unjittable file instead of the next run_jit inheriting it and cascade-failing.
 [macro_function]
 def reset_jit_globals_after_failure() {
+    // --jit-split-modules: drain the stashed partition states (the ambient one is handled below)
+    for (p in g_split_parts) {
+        dispose_split_part(p, p.ctx != g_ctx)
+    }
+    g_split_parts |> clear()
     if (g_engine != null) {
         LLVMDisposeExecutionEngine(g_engine)    // engine owns g_mod, frees it too
     } elif (g_ctx != null) {
@@ -290,7 +311,7 @@ def reset_jit_globals_after_failure() {
 // always-on summary (a silent multi-second jit is indistinguishable from a hang) + the
 // log_compile_time per-phase breakdown; both artifact paths report through here
 def private jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_level : int; tier_known : bool;
-                           log_time : bool; totalTime : int64;
+                           split : bool; split_parts : int; log_time : bool; totalTime : int64;
                            t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize : int) {
     var tuneStamped = 0
     for (fn in funcs) {
@@ -303,11 +324,233 @@ def private jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_le
     }
     let tuneTail = tuneStamped > 0 ? " incl {tuneStamped} tune-stamped" : ""
     let tierTail = tier_known ? ", O{opt_level}" : ""
+    // always announce split - a split-built DLL's profile is not comparable to a monolith build
+    let splitTail = !split ? "" : (split_parts > 0 ? ", split {split_parts} modules" : ", split")
     let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
-    to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompiled ? "codegen" : "cache"}{tierTail})\n")
+    to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompiled ? "codegen" : "cache"}{tierTail}{splitTail})\n")
     if (log_time) {
         to_log(LOG_INFO, "LLVM JIT time: hash {jit_sec(t_hash)} init {jit_sec(t_init)} declare {jit_sec(t_declare)} probe {jit_sec(t_probe)} irgen {jit_sec(t_irgen)} optimize {jit_sec(t_opt)} emit+link {jit_sec(t_emit)} install {jit_sec(t_install)} finalize {jit_sec(t_finalize)}\n")
     }
+}
+
+// "Debug Info Version" gates all !dbg metadata (absent -> silently stripped); "CodeView" flips
+// COFF debug emission from DWARF to CodeView so lld-link /DEBUG can build PDB line tables
+// (windows targets only). Per-module flags: split mode stamps every partition module.
+def private add_debug_module_flags(debug_info : bool; target_triple : string) {
+    return if (!debug_info)
+    let div_key = "Debug Info Version"
+    LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, div_key, uint64(long_length(div_key)),
+        LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 3ul, 0)))
+    // host_jit_triple() is "" on MSVC hosts — LLVM's default triple is the actual host answer
+    let triple = (target_triple |> empty()) ? LLVMGetDefaultTargetTriple() : target_triple
+    if (triple |> find("windows") != -1) {
+        let cv_key = "CodeView"
+        LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, cv_key, uint64(long_length(cv_key)),
+            LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 1ul, 0)))
+    }
+}
+
+// irgen one function set into the current g_mod, with the per-function verifier panics
+[macro_function]
+def private irgen_functions(ctx : Context?; var uids : UidNodes?; attrs : Attributes?;
+                            part : array<FunctionPtr>; jit_flags : LlvmJitFlags; jit_mode : LlvmJitMode;
+                            prog : Program?) : bool {
+    var has_externals = false
+    for (fun in part) {
+        has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || has_externals
+        let fnmna = uids.get_dll_fn_name(fun)
+        var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
+        var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
+        assume maybe_mod = empty(prog.thisModuleName) ? "" : "in module {prog.thisModuleName}"
+        if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+            reset_jit_globals_after_failure()
+            panic("Internal jit error. Failed to get IR of '{fun.name} implementation' {maybe_mod}.\n")
+        }
+        if (!LLVMVerifyFunction(fn, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+            reset_jit_globals_after_failure()
+            panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
+        }
+    }
+    return has_externals
+}
+
+// whole-module verify + the g_failed panic tail (shared by the pre-optimize and post-optimize checks)
+[macro_function]
+def private verify_module_or_panic(funcs : array<FunctionPtr>) {
+    if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+        g_failed = true
+    }
+    if (g_failed) {
+        let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
+        reset_jit_globals_after_failure()
+        panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
+    }
+}
+
+// the IR dump debug rail: globaldce (drop unused declarations) then print
+def private dump_module_ir(mod : LLVMOpaqueModule?) {
+    var pmo = LLVMCreatePassBuilderOptions()
+    let dce_err = LLVMRunPasses(mod, "globaldce", null, pmo)
+    if (dce_err != null) {
+        let dce_msg = LLVMGetErrorMessage(dce_err)
+        to_log(LOG_WARNING, "LLVM globaldce failed: {dce_msg}\n")
+        LLVMDisposeErrorMessage(dce_msg)
+    }
+    LLVMDisposePassBuilderOptions(pmo)
+    let module_str = LLVMPrintModuleToString(mod)
+    let msg = clone_string(module_str)
+    LLVMDisposeMessage(module_str)
+    to_log(LOG_INFO, "LLVM JIT: {msg}\n");
+}
+
+// post-irgen tail: optimize, optional IR dump, whole-module verify
+[macro_function]
+def private optimize_and_verify_module(opt_level, size_level : int; use_host_cpu, dump_ir : bool;
+                                       funcs : array<FunctionPtr>) {
+    optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
+    if (dump_ir) {
+        dump_module_ir(g_mod)
+    }
+    verify_module_or_panic(funcs)
+}
+
+struct private JitSplitPart {
+    ctx : LLVMContextRef
+    mod : LLVMOpaqueModule?
+    engine : LLVMExecutionEngineRef
+    prim_t : PrimitiveTypes?
+    tm : LLVMTargetMachineRef
+    pbo : LLVMOpaquePassBuilderOptions?
+    obj : string
+    tag : string
+}
+
+// live split partitions between codegen and disposal - module-global so the failure path
+// (reset_jit_globals_after_failure) can drain them and a bulk run leaks nothing
+var g_split_parts : array<JitSplitPart>
+
+def private dispose_split_part(var p : JitSplitPart; dispose_state : bool) {
+    LLVMDisposeTargetMachine(p.tm)
+    LLVMDisposePassBuilderOptions(p.pbo)
+    if (dispose_state) {
+        LLVMDisposeExecutionEngine(p.engine)   // engine owns p.mod
+        LLVMContextDispose(p.ctx)
+        unsafe {
+            delete p.prim_t
+        }
+    }
+}
+
+// nolint:STYLE014
+// --jit-split-modules driver, three phases. A (serial das): partition `funcs` by owning das-module
+// (program order), codegen each partition into its OWN (context, module, engine) emitter state -
+// stashed in g_split_parts, the LAST left ambient for the shared install/finalize path. B: the
+// jit_par_emit_run C++ pool optimizes + emits every partition on K threads (K=1 = serial bring-up;
+// one LLVMContext per job is LLVM's threading contract; the SAME LLVMRunPasses/EmitToFile calls as
+// the monolith path, entry points resolved through dasbind - libDaScript never links LLVM). C
+// (serial das): post-optimize verify per partition, then dispose everything but the ambient state.
+[macro_function]
+def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<FunctionPtr>;  // nolint:STYLE038 - the split orchestration is one linear pipeline; the phases share the re-pointed g_* state
+                              var uids : UidNodes?; jit_flags : LlvmJitFlags;
+                              opt_level, size_level, split_threads : int; use_host_cpu : bool;
+                              debug_info, dump_ir : bool; target_triple : string;
+                              output_path : string; log_jit_time : bool) : tuple<has_externals : bool; objs : array<string>; t_irgen : int; t_optemit : int> {
+    var phase_tm = ref_time_ticks()   // t_irgen covers partitioning + per-partition declare/irgen/ctors
+    // partition by owning das-module, first-appearance (= program module) order - deterministic
+    var order : array<string>
+    var buckets : table<string; array<FunctionPtr>>
+    for (fn in funcs) {
+        let mname = string(fn._module.name)
+        if (!(buckets |> key_exists(mname))) {
+            order |> push(mname)
+        }
+        buckets[mname] |> push(unsafe(reinterpret<Function?>(fn)))   // nolint:PERF006 - per-module counts unknown up front, one-shot build
+    }
+    let thrTag = split_threads < 0 ? "auto" : "{split_threads}"
+    to_log(LOG_INFO, "LLVM JIT: split codegen - {length(order)} das-module partitions, {thrTag} threads -> one DLL\n")
+    // the dir must exist before the FIRST emit (a missing dir crashes LLVMTargetMachineEmitToFile)
+    mkdir_rec(dir_name(output_path))
+    jit_par_emit_begin()
+    g_split_parts |> reserve(length(order))
+    // empty pipeline = pool skips optimization (the LLVM_ENABLE_OPT_PASS / LLVM_DEBUG_EVERYTHING rail)
+    let pipeline = LLVM_ENABLE_OPT_PASS ? opt_pipeline_string(opt_level |> uint, size_level |> uint) : ""
+    var has_externals = false
+    for (pname, pi in order, count()) {
+        let ptag = empty(pname) ? "main" : pname
+        if (pi > 0) {
+            // the previous partition's state lives on in g_split_parts until phase C
+            init_jit_state(opt_level |> uint, target_triple, use_host_cpu, "llvm_jit_{ptag}")
+            add_debug_module_flags(debug_info, target_triple)
+        }
+        let attrs = new Attributes(g_ctx)
+        // eager declare covers OWN pairs only; out-of-partition callees declare-on-reference
+        var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
+        ast_gc_guard() {
+            for (fun in buckets[pname]) {
+                fake_visitor->add_llvm_functions(fun)
+            }
+        }
+        unsafe {
+            delete fake_visitor
+        }
+        has_externals = irgen_functions(ctx, uids, attrs, buckets[pname], jit_flags, LlvmJitMode.JIT, prog) || has_externals
+        verify_module_or_panic(buckets[pname])
+        // fileinfo ctors ride llvm.global_ctors (private; the link appends all, LoadLibrary runs every one)
+        generate_global_ctors_dtors(g_prim_t, false)
+        if (g_jit_fast_math) {
+            apply_fast_math_to_module(g_mod)
+        }
+        g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
+            tm = create_default_target_machine(opt_level |> uint, use_host_cpu),
+            pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
+            obj = add_obj_extension("{output_path}.p{pi}_{ptag}"), tag = ptag))
+    }
+    for (p in g_split_parts) {
+        jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, p.obj)
+    }
+    let tIr = get_time_usec(phase_tm)
+    phase_tm = ref_time_ticks()
+    // phase B - per-job walls (the sharding signal) are logged by the pool under log_compile_time
+    let llvm_lib = __dasbind_get_library("LLVM.dll")
+    if (llvm_lib == null) {
+        reset_jit_globals_after_failure()
+        panic("LLVM JIT: split emit - can't resolve the LLVM library handle")
+    }
+    // resolve once + validate ALL entry points - a mismatched LLVM.dll names its missing symbol here
+    let lfn_names = ["LLVMRunPasses", "LLVMVerifyModule", "LLVMTargetMachineEmitToFile",
+                     "LLVMGetErrorMessage", "LLVMDisposeErrorMessage", "LLVMDisposeMessage"]
+    var lfns : array<void?>
+    lfns |> reserve(length(lfn_names))
+    for (nm in lfn_names) {
+        let p = llvm_lib |> get_function_address(nm)
+        if (p == null) {
+            reset_jit_globals_after_failure()
+            panic("LLVM JIT: split emit - can't resolve {nm} in the LLVM library")
+        }
+        lfns |> push(p)
+    }
+    let ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
+        lfns[0], lfns[1], lfns[2], lfns[3], lfns[4], lfns[5], log_jit_time)
+    if (!ok) {
+        reset_jit_globals_after_failure()
+        panic("LLVM JIT: split parallel optimize+emit failed")
+    }
+    // phase C - the opt-in IR dump only (workers verified each module post-optimize, pre-emit)
+    var objs : array<string>
+    objs |> reserve(length(g_split_parts))
+    for (p in g_split_parts) {
+        if (dump_ir) {
+            dump_module_ir(p.mod)
+        }
+        objs |> push(p.obj)
+    }
+    for (p in g_split_parts) {
+        dispose_split_part(p, p.ctx != g_ctx)   // the ambient (last) survives for install/finalize
+    }
+    g_split_parts |> clear()
+    // captured AFTER phase C: verifies, dump, and teardown land inside "optimize" - no untimed gap
+    let tOptEmit = get_time_usec(phase_tm)
+    return <- (has_externals = has_externals, objs <- objs, t_irgen = tIr, t_optemit = tOptEmit)
 }
 
 //! Run the full JIT backend for an already-compiled & simulated program: collect the functions to
@@ -359,6 +602,16 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     }
     defer() { g_emit_aot_object_globals = false; }
     let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only && !emit_aot_object
+    // --jit-split-modules (or `options jit_split_modules`): per-das-module partition emission.
+    // 0 = off (default, today's monolithic path); any other value = split. Opt-in by ruling:
+    // the monolith stays the right default (one context, full cross-module inlining).
+    let split_modules = cli_opts.split_modules |> unwrap_or((prog._options |> find_arg("jit_split_modules")) ?as tInt ?? 0)
+    let jit_split = split_modules != 0 && use_dll
+    if (split_modules != 0 && !use_dll) {
+        to_log(LOG_WARNING, "LLVM JIT: --jit-split-modules applies to the JIT DLL path only - ignored for this artifact mode\n")
+    }
+    g_jit_split_active = jit_split
+    defer() { g_jit_split_active = false; }
     let opt_level = cli_opts.opt_level |> unwrap_or(prog.policies.jit_opt_level)
     let size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
     // This policy must be set before compilation so stack-frame sizes include the prologue.
@@ -469,7 +722,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         // jit_output_path or an exe keeps the user's path.
         var dll_hash_basename : string
         if (use_dll && config_out_path |> empty()) {
-            dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info, target_triple)
+            dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info, target_triple, jit_split)
             output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
         }
         // the first aot-hash per function lands here (cached after) — cheap-looking cache hits hide in it
@@ -481,22 +734,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         init_jit(opt_level |> uint, target_triple, use_host_cpu)
         let t_init = get_time_usec(phase_tm)
 
-        // "Debug Info Version" gates all !dbg metadata (absent -> silently stripped);
-        // "CodeView" flips COFF debug emission from DWARF to CodeView so lld-link
-        // /DEBUG can build PDB line tables (windows targets only).
-        if (debug_info) {
-            let div_key = "Debug Info Version"
-            LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, div_key, uint64(long_length(div_key)),
-                LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 3ul, 0)))
-            // host_jit_triple() is "" on MSVC hosts (it only disambiguates mingw arches) —
-            // LLVM's default triple is the actual host answer.
-            let triple = (target_triple |> empty()) ? LLVMGetDefaultTargetTriple() : target_triple
-            if (triple |> find("windows") != -1) {
-                let cv_key = "CodeView"
-                LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, cv_key, uint64(long_length(cv_key)),
-                    LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 1ul, 0)))
-            }
-        }
+        add_debug_module_flags(debug_info, target_triple)
 
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = emit_prologue
@@ -505,14 +743,18 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
 
         let attrs = new Attributes(g_ctx)
         var uids = create_uid_nodes(prog, funcs, gen_exe)
-        var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
-        ast_gc_guard() {
-            for (fun in funcs) {
-                fake_visitor->add_llvm_functions(fun)
+        // split mode declares per partition inside run_split_codegen (eager-declaring all
+        // functions into every partition module would be O(funcs x partitions) dead work)
+        if (!jit_split) {
+            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
+            ast_gc_guard() {
+                for (fun in funcs) {
+                    fake_visitor->add_llvm_functions(fun)
+                }
             }
-        }
-        unsafe {
-            delete fake_visitor
+            unsafe {
+                delete fake_visitor
+            }
         }
         t_declare = get_time_usec(phase_tm) - t_init
         phase_tm = ref_time_ticks()
@@ -533,24 +775,26 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         t_probe = get_time_usec(phase_tm)
         phase_tm = ref_time_ticks()
         var jit_has_externals = false
-        if (recompile_prog) {
-            for (fun in funcs) {
-                jit_has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || jit_has_externals
-                let fnmna = uids.get_dll_fn_name(fun)
-                var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
-                var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
-                assume maybe_mod = empty(prog.thisModuleName) ? "" : "in module {prog.thisModuleName}"
-                if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                    // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
-                    reset_jit_globals_after_failure()
-                    panic("Internal jit error. Failed to get IR of '{fun.name} implementation' {maybe_mod}.\n")
-                }
-                if (!LLVMVerifyFunction(fn, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                    // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
-                    reset_jit_globals_after_failure()
-                    panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
-                }
+        var split_parts = 0
+        if (recompile_prog && jit_split) {
+            let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
+                split_modules, use_host_cpu, debug_info, dump_ir, target_triple, output_path, log_jit_time)
+            jit_has_externals = sres.has_externals
+            t_irgen = sres.t_irgen
+            // the pool interleaves passes and emission, so "optimize" carries the combined
+            // optimize + emit-obj + post-opt-verify + partition-teardown wall, and "emit+link"
+            // below is the link+reopen tail only (ARCHITECTURE.md §1.1 split mapping)
+            t_opt = sres.t_optemit
+            split_parts = length(sres.objs)
+            phase_tm = ref_time_ticks()
+            if (!link_dll_from_objects(sres.objs, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time)) {
+                reset_jit_globals_after_failure()
+                panic("LLVM JIT: split link failed for {output_path}")
             }
+            // the partition .o files start with "{dll_hash_basename}." so the GC keeps them
+            reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename)
+        } elif (recompile_prog) {
+            jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
             if (gen_exe) {
                 let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
                     cli_opts.register_all_modules |> unwrap_or(false))
@@ -562,14 +806,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                     return true
                 }
             }
-            if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                g_failed = true
-            }
-            if (g_failed) {
-                let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
-                reset_jit_globals_after_failure()
-                panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
-            }
+            verify_module_or_panic(funcs)
             // Offline AOT object: build the self-registration + glob-re-resolution ctors (llvm_aot pass).
             var aot_ctor : LLVMOpaqueValue? = null
             var aot_dtor : LLVMOpaqueValue? = null
@@ -584,30 +821,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             }
             t_irgen = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
-            optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
-            if (dump_ir) {
-                // Let's remove unused attributes before we print IR.
-                var pmo = LLVMCreatePassBuilderOptions()
-                let dce_err = LLVMRunPasses(g_mod, "globaldce", null, pmo)
-                if (dce_err != null) {
-                    let dce_msg = LLVMGetErrorMessage(dce_err)
-                    to_log(LOG_WARNING, "LLVM globaldce failed: {dce_msg}\n")
-                    LLVMDisposeErrorMessage(dce_msg)
-                }
-                LLVMDisposePassBuilderOptions(pmo)
-                let module_str = LLVMPrintModuleToString(g_mod)
-                let msg = clone_string(module_str)
-                LLVMDisposeMessage(module_str)
-                to_log(LOG_INFO, "LLVM JIT: {msg}\n");
-            }
-            if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                g_failed = true
-            }
-            if (g_failed) {
-                let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
-                reset_jit_globals_after_failure()
-                panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
-            }
+            optimize_and_verify_module(opt_level, size_level, use_host_cpu, dump_ir, funcs)
             // optimize covers the passes plus the opt-in IR dump and the post-opt verify
             t_opt = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
@@ -627,17 +841,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             } elif (use_dll) {
                 mkdir_rec(dir_name(output_path))
                 write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, opt_level |> uint)
-
-                // Open just stored DLL, so we can keep working.
-                g_dynamic_lib_handle.reset()
-                g_dynamic_lib_handle = get_dll_by_path(output_path)
-                let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
-                assert(missing |> empty() && disabling |> empty())
-
-                // Clean up stale DLLs in the per-script subdirectory.
-                if (!(dll_hash_basename |> empty())) {
-                    jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename)
-                }
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename)
             }
         }
         t_emit = get_time_usec(phase_tm)
@@ -654,7 +858,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             unsafe {
                 delete g_str2v
             }
-            jit_log_report(funcs, true, opt_level, true, log_jit_time, totalTime,
+            jit_log_report(funcs, true, opt_level, true, false, 0, log_jit_time, totalTime,
                 t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, 0, 0)
             return true
         }
@@ -694,7 +898,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         // so the tier label is asserted only when this run built the DLL or the content-addressed
         // name (which folds opt_level) matched
         let tier_known = recompile_prog || !empty(dll_hash_basename)
-        jit_log_report(funcs, recompile_prog, opt_level, tier_known, log_jit_time, totalTime,
+        jit_log_report(funcs, recompile_prog, opt_level, tier_known, jit_split, split_parts, log_jit_time, totalTime,
             t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize)
     } else {
         // a -jit run that jitted NOTHING is indistinguishable from jit working (just slower) -

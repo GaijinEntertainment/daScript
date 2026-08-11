@@ -34,6 +34,11 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <cstdlib>
+#include <thread>
+#include <atomic>
+#include <algorithm>
+
+#include "daScript/misc/job_que.h"   // JobQue::get_num_threads - the split emit pool's auto count
 #if !DAS_NO_FILEIO
 #include <filesystem>
 #endif
@@ -1273,6 +1278,131 @@ extern "C" {
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, bool debugInfo, Context *context ) { return true; }
 #endif
 
+    // ===== --jit-split-modules parallel optimize+emit =====
+    // LLVM-agnostic job runner: the das side resolves the LLVM C-API entry points through its own
+    // dasbind registry (one resolution truth, libDaScript never links LLVM) and hands them over as
+    // raw pointers. Each job owns its (module, target machine, pass-builder options) trio, so
+    // LLVM's one-context-per-thread contract holds by construction. No shared mutable state and
+    // no lock: workers claim jobs via one atomic fetch_add and write only their own job's slots;
+    // Context is not thread-safe, so failures/walls are reported after join on the calling thread.
+    struct JitParEmitJob {
+        void * mod;
+        void * tm;
+        void * pbo;
+        string pipeline;
+        string objPath;
+        double passesSec = 0.0;
+        double emitSec = 0.0;
+        string error;
+    };
+    static vector<JitParEmitJob> g_jitParEmitJobs;
+
+    void jit_par_emit_begin () {
+        g_jitParEmitJobs.clear();
+    }
+
+    void jit_par_emit_add ( void * mod, void * tm, void * pbo, const char * pipeline, const char * objPath ) {
+        JitParEmitJob job;
+        job.mod = mod;
+        job.tm = tm;
+        job.pbo = pbo;
+        job.pipeline = pipeline ? pipeline : "";
+        job.objPath = objPath ? objPath : "";
+        g_jitParEmitJobs.emplace_back(std::move(job));
+    }
+
+    // threads <= 0 = auto (JobQue::get_num_threads - honors DAS_JOBQUE_THREADS, the das-side cap,
+    // Apple P-core selection, and >64-CPU Windows processor groups); always clamped to [1, jobs].
+    // fileType is LLVMCodeGenFileType (the das side passes the enum value). An empty pipeline
+    // skips the pass run (the LLVM_ENABLE_OPT_PASS debug rail). Each module is verified AFTER
+    // passes and BEFORE emission - the monolith ordering; a broken module never reaches ISel.
+    // Fail-closed: any job failure reports every collected error and returns false; caller panics.
+    bool jit_par_emit_run ( int32_t threads, int32_t fileType, void * fnRunPasses, void * fnVerifyModule,
+                            void * fnEmitToFile, void * fnGetErrorMessage, void * fnDisposeErrorMessage,
+                            void * fnDisposeMessage, bool logTimes, Context * context ) {
+        // LLVMErrorRef LLVMRunPasses(M, Passes, TM, Options); LLVMBool LLVMVerifyModule(M, Action, char** Msg);
+        // LLVMBool LLVMTargetMachineEmitToFile(T, M, Filename, codegen, char** Err)
+        using RunPassesFn = void * (*) ( void *, const char *, void *, void * );
+        using VerifyModuleFn = int32_t (*) ( void *, int32_t, char ** );
+        using EmitToFileFn = int32_t (*) ( void *, void *, const char *, int32_t, char ** );
+        using GetErrMsgFn = char * (*) ( void * );
+        using DisposeFn = void (*) ( void * );
+        auto runPasses = (RunPassesFn) fnRunPasses;
+        auto verifyModule = (VerifyModuleFn) fnVerifyModule;
+        auto emitToFile = (EmitToFileFn) fnEmitToFile;
+        auto getErrMsg = (GetErrMsgFn) fnGetErrorMessage;
+        auto disposeErrMsg = (DisposeFn) fnDisposeErrorMessage;
+        auto disposeMsg = (DisposeFn) fnDisposeMessage;
+        auto li = LineInfo();
+        // the das caller validates each symbol by name first; this is the complete backstop so a
+        // future caller can't run workers that leak diagnostics through null dispose/message fns
+        if ( !runPasses || !verifyModule || !emitToFile || !getErrMsg || !disposeErrMsg || !disposeMsg
+                || g_jitParEmitJobs.empty() ) {
+            context->to_out(&li, LogLevel::error, "jit_par_emit_run: missing entry points or no jobs\n");
+            g_jitParEmitJobs.clear();
+            return false;
+        }
+        int nThreads = threads > 0 ? threads : JobQue::get_num_threads();
+        nThreads = std::max(1, std::min(nThreads, int(g_jitParEmitJobs.size())));
+        std::atomic<size_t> nextJob{0};
+        constexpr int32_t LLVM_RETURN_STATUS_ACTION = 2;   // LLVMReturnStatusAction
+        auto worker = [&]() {
+            for ( ;; ) {
+                size_t i = nextJob.fetch_add(1);
+                if ( i >= g_jitParEmitJobs.size() ) break;
+                auto & job = g_jitParEmitJobs[i];
+                auto t0 = ref_time_ticks();
+                if ( !job.pipeline.empty() ) {
+                    void * err = runPasses(job.mod, job.pipeline.c_str(), job.tm, job.pbo);
+                    if ( err ) {
+                        char * msg = getErrMsg ? getErrMsg(err) : nullptr;   // consumes err
+                        job.error = string("pass run failed: ") + (msg ? msg : "(no message)");
+                        if ( msg && disposeErrMsg ) disposeErrMsg(msg);
+                        continue;
+                    }
+                }
+                char * vmsg = nullptr;
+                if ( verifyModule(job.mod, LLVM_RETURN_STATUS_ACTION, &vmsg) != 0 ) {
+                    job.error = string("post-optimize verify failed for ") + job.objPath + ": " + (vmsg ? vmsg : "(no message)");
+                    if ( vmsg && disposeMsg ) disposeMsg(vmsg);
+                    continue;
+                }
+                if ( vmsg && disposeMsg ) disposeMsg(vmsg);
+                job.passesSec = double(get_time_usec(t0)) / 1000000.0;
+                auto t1 = ref_time_ticks();
+                char * emitErr = nullptr;
+                if ( emitToFile(job.tm, job.mod, job.objPath.c_str(), fileType, &emitErr) != 0 ) {
+                    job.error = string("emit failed for ") + job.objPath + ": " + (emitErr ? emitErr : "(no message)");
+                    if ( emitErr && disposeMsg ) disposeMsg(emitErr);
+                    continue;
+                }
+                job.emitSec = double(get_time_usec(t1)) / 1000000.0;
+            }
+        };
+        if ( nThreads == 1 ) {
+            worker();
+        } else {
+            vector<std::thread> pool;
+            pool.reserve(nThreads);
+            for ( int t = 0; t != nThreads; ++t ) pool.emplace_back(worker);
+            for ( auto & th : pool ) th.join();
+        }
+        bool ok = true;
+        for ( auto & job : g_jitParEmitJobs ) {
+            if ( !job.error.empty() ) {
+                ok = false;
+                string msg = string("LLVM JIT: parallel emit: ") + job.error + "\n";
+                context->to_out(&li, LogLevel::error, msg.c_str());
+            } else if ( logTimes ) {
+                auto msg = fmt::format(FMT_STRING("LLVM JIT time: job {} passes {:.6f} emit {:.6f}\n"),
+                    job.objPath.c_str(), job.passesSec, job.emitSec);
+                context->to_out(&li, LogLevel::info, msg.c_str());
+            }
+        }
+        g_jitParEmitJobs.clear();
+        return ok;
+    }
+
 #if (defined(_WIN32) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     // Cross-compile-link a wasm32 object into a standalone .wasm via emcc.
     //   runtimeLibPath — path to libDaScript_runtime.a (wasm32). Optional:
@@ -1510,6 +1640,14 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","context"});
+            addExtern<DAS_BIND_FUN(jit_par_emit_begin)>(*this, lib,  "jit_par_emit_begin",
+                SideEffects::worstDefault, "jit_par_emit_begin");
+            addExtern<DAS_BIND_FUN(jit_par_emit_add)>(*this, lib,  "jit_par_emit_add",
+                SideEffects::worstDefault, "jit_par_emit_add")
+                    ->args({"mod","tm","pbo","pipeline","objPath"});
+            addExtern<DAS_BIND_FUN(jit_par_emit_run)>(*this, lib,  "jit_par_emit_run",
+                SideEffects::worstDefault, "jit_par_emit_run")
+                    ->args({"threads","fileType","fnRunPasses","fnVerifyModule","fnEmitToFile","fnGetErrorMessage","fnDisposeErrorMessage","fnDisposeMessage","logTimes","context"});
             addExtern<DAS_BIND_FUN(host_jit_triple)>(*this, lib, "host_jit_triple",
                 SideEffects::none, "host_jit_triple");
             addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",

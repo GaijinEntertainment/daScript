@@ -241,9 +241,27 @@ def public FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS() {
 }
 
 
-def private add_table_linkage(val : LLVMOpaqueValue?) {
-    // DLLExport storage so set_glob_address (GetProcAddress on Windows) finds the slot on cache-hit reload — else #2802 stale-addr.
-    LLVMSetLinkage(val, LLVMLinkage.LLVMDLLExportLinkage)
+// nolint:STYLE014
+// Address-carrying globals whose NAME is shared across split partitions (interp-call / interop
+// fn-ptr globs keyed by mangled name, the jit table-method globs keyed by key type): under
+// --jit-split-modules several partition objects define the same symbol, so it takes linkonce_odr
+// + an any-comdat and the linker keeps ONE copy. DLLExport storage stays in BOTH modes so
+// set_glob_address (GetProcAddress on Windows) finds the slot on cache-hit reload — else #2802
+// stale-addr. NEVER SetGlobalConstant on these — DLLExport + non-constant is what stops LLVM
+// folding the baked codegen-time address into call sites (fold = ASLR death on cached DLLs).
+def public set_shared_export_linkage(val : LLVMOpaqueValue?; name : string) {
+    if (g_jit_split_active) {
+        LLVMSetLinkage(val, LLVMLinkage.LLVMLinkOnceODRLinkage)
+        // Mach-O has NO comdat support - LLVM's checkMachOComdat is a fatal error at emission;
+        // linkonce_odr alone dedups there (weak defs). Split is host-only, so host truth suffices.
+        if (get_platform_name() != "darwin") {
+            var comdat = LLVMGetOrInsertComdat(g_mod, name)
+            LLVMSetComdatSelectionKind(comdat, LLVMComdatSelectionKind.LLVMAnyComdatSelectionKind)
+            LLVMSetComdat(val, comdat)
+        }
+    } else {
+        LLVMSetLinkage(val, LLVMLinkage.LLVMDLLExportLinkage)
+    }
     LLVMSetDLLStorageClass(val, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
 }
 
@@ -260,7 +278,7 @@ def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : 
             LLVMSetLinkage(tab_fun, LLVMLinkage.LLVMInternalLinkage)
             LLVMSetInitializer(tab_fun, LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u)))
         } else {
-            add_table_linkage(tab_fun)
+            set_shared_export_linkage(tab_fun, fn_name.glob())
             LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
         }
     } else {
@@ -563,6 +581,11 @@ var g_jit_clopts_parsed = false
 // instead of a baked codegen-process address. run_jit sets/clears it around codegen.
 var public g_emit_aot_object_globals = false
 
+// --jit-split-modules is active: per-das-module partitions, one .o each, one linked DLL. Flips
+// function impls to external-hidden (cross-partition calls) and shared-name globs to linkonce_odr.
+// run_jit sets/clears it around the run; false = today's monolithic emission, byte-identical.
+var public g_jit_split_active = false
+
 // Emit-object mode: cross-module / non-jit das call + ctor target globs hold a host-
 // meaningless SimFunction*. Recorded here (glob + callee mnh) during codegen; the
 // globinit ctor fills them from the host Context at load. run_jit clears per compile.
@@ -645,9 +668,21 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
 }
 
 [macro_function]
-def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_features : bool = true) {  // nolint:STYLE038 - flat one-call-per-item LLVM target/machine/pass setup; the calls are order-coupled and a split would only hide the sequence
+def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_features : bool = true) {
     // also prevent double init (g_mod != null)
     return if (is_in_completion() || is_compiling_macros() || g_mod != null)
+    init_jit_state(cg_opt_level, target_triple, host_features, "llvm_jit_module")
+}
+
+// nolint:STYLE014 - the overwrite-without-disposal contract below is load-bearing
+// One fresh emitter state: context, module (named module_name), MCJIT engine, PrimitiveTypes,
+// per-module caches, and the full runtime-extern declaration set. init_jit guards + delegates here.
+// The --jit-split-modules driver calls it directly, once per partition, OVERWRITING the g_* state
+// WITHOUT disposal - the previous partition's state deliberately stays live in g_split_parts until
+// the driver's phase C (its module is still queued for the emit pool); partition 0 rides run_jit's
+// init_jit. Any other caller owns the previous state's teardown or leaks it.
+[macro_function]
+def public init_jit_state(cg_opt_level : uint; target_triple : string; host_features : bool; module_name : string) {  // nolint:STYLE038 - flat one-call-per-item LLVM target/machine/pass setup; the calls are order-coupled and a split would only hide the sequence
     LLVMLinkInMCJIT()
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
@@ -659,7 +694,8 @@ def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_featu
     g_failed = false
     g_fn_types |> clear()
     g_handled_field_offset_globals |> clear()
-    g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
+    g_str2v |> clear()
+    g_mod = LLVMModuleCreateWithNameInContext(module_name, g_ctx)
     LLVMCreateJITCompilerForModule(g_engine, g_mod, cg_opt_level)
     // Cross-compile targets (wasm32, etc.): pin the module's data layout to the TARGET's, not the
     // host's, BEFORE any IR is built — LLVM constant-folds GEPs against the current layout, so a
@@ -824,7 +860,6 @@ def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_featu
         get_jit_init_extern_function(), fixed_array(nounwind, willreturn), (nocapture, [0, 1, 2]))
 }
 
-
 def private build_jit_types {
     g_t_simFunction = jit_struct_type(type<tuple<name : void?; mangledName : void?; code : void?; debugInfo : void?; mangledNameHash : int64; aotFunction : void?; stackSize : int; flags : int>>)
     g_t_function = jit_struct_type(type<tuple<func : void?>>)
@@ -851,8 +886,7 @@ def public build_block_type {
 // DLL-cache, host-only artifacts); false = generic baseline for redistributable exe/dll. Build a
 // TargetMachine for a triple/cpu/features — caller owns them; we do NOT LLVMDisposeMessage (plain das strings).
 [macro_function]
-def public with_target_machine(triple, cpu, features : string; opt_level : uint;
-                               blk : block<(LLVMTargetMachineRef) : void>) {
+def public create_target_machine(triple, cpu, features : string; opt_level : uint) : LLVMTargetMachineRef {
     var target : LLVMTarget?
     let rc = LLVMGetTargetFromTriple(triple, unsafe(addr(target)), null)
     if (rc != 0 || target == null) {
@@ -865,7 +899,7 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
       : (opt_level >= 1u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelLess
                           : LLVMCodeGenOptLevel.LLVMCodeGenLevelNone)
 
-    let targetMachine = LLVMCreateTargetMachine(
+    return LLVMCreateTargetMachine(
         target,
         triple,
         cpu,
@@ -874,14 +908,18 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
         LLVMRelocMode.LLVMRelocPIC, // PIC in order to have shared object
         LLVMCodeModel.Default
     )
+}
 
+[macro_function]
+def public with_target_machine(triple, cpu, features : string; opt_level : uint;
+                               blk : block<(LLVMTargetMachineRef) : void>) {
+    let targetMachine = create_target_machine(triple, cpu, features, opt_level)
     invoke(blk, targetMachine)
     LLVMDisposeTargetMachine(targetMachine)
 }
 
 [macro_function]
-def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
-                                       blk : block<(LLVMTargetMachineRef) : void>) {
+def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) : LLVMTargetMachineRef {
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
@@ -910,6 +948,7 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     // aarch64 host daslang JITs on has dotprod, so add the feature explicitly rather
     // than trusting CPU-name recognition. (Verified: -mcpu=generic fails to select
     // SDOT; -mcpu=generic -mattr=+dotprod emits `sdot.4s`.)
+    var targetMachine : LLVMTargetMachineRef
     if (use_host_cpu && g_target_is_aarch64) {
         var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
         // DAS_JIT_ARM64_FORCE_FEATURES (comma-separated aarch64 feature names, e.g. "i8mm"): the // nolint:STYLE014
@@ -921,16 +960,16 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
         if (!empty(forced_arm)) {
             feats = "{feats},{join(forced_arm, ",")}"
         }
-        with_target_machine(triple_msg, cpu_msg, feats, opt_level, blk)
+        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     } elif (use_host_cpu && g_target_is_x64 && !empty(x64_forced_plus_features())) {
         // DAS_JIT_X64_FORCE_FEATURES emission-only override (see the g_target_x64_* declaration
         // comment): append AFTER the host features — the last occurrence of a feature wins in
         // LLVM's SubtargetFeatures, so "+avx512f" here overrides the host list's "-avx512f".
         let forced = x64_forced_plus_features()
         let feats = empty(features_msg) ? forced : "{features_msg},{forced}"
-        with_target_machine(triple_msg, cpu_msg, feats, opt_level, blk)
+        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
     } else {
-        with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
+        targetMachine = create_target_machine(triple_msg, cpu_msg, features_msg, opt_level)
     }
 
     if (use_host_cpu) {
@@ -940,6 +979,15 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     if (triple_owned_by_llvm) {
         LLVMDisposeMessage(triple_msg)
     }
+    return targetMachine
+}
+
+[macro_function]
+def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
+                                       blk : block<(LLVMTargetMachineRef) : void>) {
+    let targetMachine = create_default_target_machine(opt_level, use_host_cpu)
+    invoke(blk, targetMachine)
+    LLVMDisposeTargetMachine(targetMachine)
 }
 
 // Offline AOT: emit a native object only, no linker step (jit_emit_object path).
@@ -957,6 +1005,42 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
             panic("emit_object_only: LLVMTargetMachineEmitToFile failed for {file}")
         }
     }
+}
+
+// nolint:STYLE014
+// Split link: one DLL from N partition objects. create_shared_library takes one object path;
+// the rest ride a @response file (lld-link and the POSIX compiler drivers both accept @file),
+// which sidesteps the Windows ~8K command-line ceiling a large module count would hit via the
+// verbatim extra-args slot. Returns false on any failure - the CALLER resets the jit globals
+// and panics (this module cannot reach reset_jit_globals_after_failure).
+def public link_dll_from_objects(objs : array<string>; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool; log_time : bool) : bool {
+    assert(!empty(objs))
+    // every partition object must exist - create_shared_library checks only its first argument
+    for (obj in objs) {
+        if (!stat(obj).is_valid) {
+            to_log(LOG_ERROR, "link_dll_from_objects: partition object missing: {obj}\n")
+            return false
+        }
+    }
+    let rsp = "{out_path}.objs.rsp"   // shares the DLL's hash prefix, so jit_gc_stale_dlls tracks it
+    let rsp_content = join([for (i in range(1, length(objs))); "\"{objs[i]}\""], "\n")
+    var rsp_ok = false
+    fopen(rsp, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite(rsp_content)
+            rsp_ok = true
+        }
+    }
+    if (!rsp_ok) {
+        to_log(LOG_ERROR, "link_dll_from_objects: can't write response file {rsp}\n")
+        return false
+    }
+    let phase_tm = ref_time_ticks()
+    let ok = create_shared_library(objs[0], add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", "\"@{rsp}\" {linker_string}", true, link_whole_lib, debug_info)
+    if (log_time) {
+        to_log(LOG_INFO, "LLVM JIT time: link {jit_sec(get_time_usec(phase_tm))} ({length(objs)} objects)\n")
+    }
+    return ok
 }
 
 // @out_path - folder + file name, without extension. @path_to_dascript_lib - required on Windows,
