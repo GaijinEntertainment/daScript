@@ -2482,6 +2482,8 @@ namespace das
         addExtern<DAS_BIND_FUN(_builtin_hash_float)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_float")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_das_string")->arg("value");
+        addExtern<DAS_BIND_FUN(hash_combine64)>(*this, lib, "hash_combine64", SideEffects::none, "hash_combine64")
+            ->args({"hash","value"});
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")

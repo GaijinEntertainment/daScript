@@ -2756,6 +2756,69 @@ disables the rule for the module — the right escape for a legitimately dense
 file such as a code emitter or a ported kernel. Suppress a single deliberate
 keep with ``// nolint:STYLE038`` on the ``def`` line.
 
+STYLE040 — duplicated statement region a helper could absorb
+=============================================================
+
+A run of statements that appears verbatim somewhere else in the same module,
+where a helper function could absorb it as-is. Variable names may differ —
+structure, types, called functions and literal values may not.
+
+.. code-block:: das
+
+    // Bad — the same four statements twice, only the names differ
+    def alpha(var acc : array<int>; base : int) {    // STYLE040
+        acc |> push(base * 2)
+        acc |> push(base + 7)
+        acc |> push(base - 1)
+        acc |> push(base * base)
+    }
+
+    def beta(var out : array<int>; seed : int) {
+        out |> push(seed * 2)
+        out |> push(seed + 7)
+        out |> push(seed - 1)
+        out |> push(seed * seed)
+    }
+
+    // Good — one helper, two calls
+    def spread(var dst : array<int>; n : int) {
+        dst |> push(n * 2)
+        dst |> push(n + 7)
+        dst |> push(n - 1)
+        dst |> push(n * n)
+    }
+
+Detection is the classic AST clone algorithm: a Merkle hash per node picks
+candidate pairs, and each pair is then confirmed by an exact lockstep walk that
+compares node class, payload text and type text under a variable bijection — so
+a hash collision can never produce a finding, and an AST class the engine does
+not know is treated as opaque and never matches.
+
+The rule fires only when the extraction is mechanically valid. It stays silent
+when the region declares a local that is read after it (that needs a return
+value, a different refactor), when a ``return`` / ``break`` / ``continue`` /
+``goto`` would escape the region, when it contains an ``assume`` alias the rest
+of the block consumes, when a ``var inscope`` inside it would have its
+finalization moved, when a written free variable is not a ref or ref type (the
+write would not survive the call), and when any statement performs an operation
+whose ``unsafe`` authorization comes from an enclosing scope — a ``reinterpret``
+or ``upcast`` cast, a ``delete``, an ``addr``, an unsafe deref, or a call the
+compiler marks unsafe — because the same statements inside a plain helper fail
+to compile. The message lists the suggested parameter list, derived from the
+region's free variables and spelled without alias decoration so it can be
+pasted straight into a ``def``.
+
+The rule is **on by default under ``daslib/`` and ``utils/``** — the trees this
+repo keeps free of duplicated regions — and off elsewhere, so a PR touching an
+unrelated file never inherits findings it did not create. Override per module
+with ``options _duplicate_regions = true`` (or ``false``), or everywhere with
+``STYLE040 = true`` in ``.lint_config``. It walks and hashes the whole module
+once per compile, which measures under 1% of a lint pass even on the largest
+modules in this tree. Tune the thresholds per module with ``options _dupe_min_nodes = N``
+(default 20 AST nodes) and ``options _dupe_min_statements = N`` (default 2);
+``0`` on either leaves the default in place. Suppress a deliberate repetition
+with ``// nolint:STYLE040``.
+
 -----
 Tests
 -----
@@ -2769,4 +2832,5 @@ Lint tests are in ``utils/lint/tests/``::
     ``daslib/lint.das`` (paranoid lint source),
     ``daslib/perf_lint.das`` (performance lint source),
     ``daslib/style_lint.das`` (style lint source),
+    ``daslib/dupe_detect.das`` (STYLE040 duplicate-region engine),
     ``utils/lint/main.das`` (unified standalone utility)
