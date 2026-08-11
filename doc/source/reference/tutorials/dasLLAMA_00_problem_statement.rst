@@ -83,9 +83,12 @@ Numbers, not words
 
 The model cannot read. Before it runs, a **tokenizer** cuts the prompt
 into **tokens**: short words or parts of words. The model knows exactly
-32,000 of them — that list is its **vocabulary**. ``Once`` is one token;
-so is ``upon``. The model receives only their integer IDs. Everything
-after that is arithmetic on **vectors** — fixed-length arrays of floats.
+32,000 of them — that list is its **vocabulary**. The count is a setting
+of this particular model, not a law: real models turn the same dials
+higher, and nothing below depends on the exact values. ``Once`` is one
+token; so is ``upon``. The model receives only their integer IDs.
+Everything after that is arithmetic on **vectors** — fixed-length arrays
+of floats.
 
 .. _t00-training:
 
@@ -99,8 +102,10 @@ comes out right. We never train here. We only run the result.
 
 .. _t00-embedding:
 
-Each token ID becomes a vector — 288 floats, one learned row from a
-32,000-row table. That vector is the token's **embedding**.
+The model's parameters include a learned table with one row per
+vocabulary token — 32,000 rows, each 288 floats wide. A token ID picks
+its row by plain lookup, and from then on the model computes with those
+floats, not the ID. The row is the token's **embedding**.
 
 Tokens that behave alike get similar embeddings: ``dog`` lands much closer
 to ``cat`` than to ``Tuesday``. Nobody programmed that — training pushed
@@ -151,12 +156,29 @@ token's own features, in place — this is the **feed-forward** block.
 Correction means addition: ``x = x + correction``, twice per layer.
 Nothing ever replaces ``x``; layers only add their differences on top. A
 running sum of differences — residuals — is why ``x`` is called the
-**residual stream**: the model's working memory for the current token.
+**residual stream**: everything the model has worked out about the
+current token so far.
+
+The program's first printed line showed three of this model's settings;
+here are all of them, with the size-independent idea each one sets:
+
+==========  ======  =================================================
+Setting     Here    The idea
+==========  ======  =================================================
+dim         288     width: every stream vector is this long
+layers      6       depth: how many times ``x`` gets corrected
+heads       6       ways of looking back, per layer
+head_size   48      dim / heads — one head's slice of the stream
+hidden      768     the feed-forward block's wider middle, ~8/3 · dim
+vocab       32000   tokens the model knows
+seq_len     256     positions the model can hold
+==========  ======  =================================================
 
 .. _t00-classifier:
 
-At the end we compare the result vector with every vocabulary row — the
-:ref:`dot product <t00-dot>` again. Rows that look alike get a higher score; the
+At the end we compare the result vector with every row of the embedding
+table — one row per vocabulary token, and the :ref:`dot product <t00-dot>`
+again. Rows that look alike get a higher score; the
 score is called a **logit**, and the winner is the highest one. The
 vocabulary helps us decide — *classify* — what our vector is most like,
 and that is why this final matrix is called the **classifier**. The
@@ -166,12 +188,17 @@ repeats.
 .. _t00-prefill:
 
 Before the model can continue our prompt, it must read it: every prompt
-token goes through the transformer, one after another, and the model
-builds up its memory of them. This warm-up is called **prefill**. Then
-comes the loop: pick the winner, print it, feed it back, pick again —
-that is **generation**. Same transformer both times. The only difference
-is where the next token comes from: the prompt, or the model's own last
-pick.
+token goes through the transformer, one after another. Each pass makes
+two things, about two different tokens: a stored record of the token it
+was given — later positions will read it — and, at the top, the logits'
+guess at the token that follows. While the prompt is being read, the
+guess is thrown away: the next token is already in the prompt. The
+record is the point. This warm-up is called **prefill**. Then comes the
+loop: pick the winner, print it, feed it back, pick again — that is
+**generation**: now the guess is the point, and every generated token
+still leaves its record. Same transformer both times. The only
+difference is where the next token comes from: the prompt, or the
+model's own last pick.
 
 Five small functions
 ====================
@@ -218,6 +245,22 @@ into it — no copies:
        }
    }
 
+Watch what never happens here: a copy. The checkpoint is about 60 MB of
+floats, and ``fmap`` does not read it — the operating system lends the
+file's bytes to the program as if they were already an array; this
+lending is **memory-mapping**. Each ``array_view`` then lends a typed
+window into those bytes: the header as seven ints, the weights as one
+float array, one matrix at its offset. ``matmul`` reads its rows straight
+off the disk cache. Between the file on disk and the arithmetic there is
+no loading step at all — the only copy ever made of the model's numbers
+is the one 288-float embedding row written into the stream each token.
+
+A window that is lent can be taken back. Each view exists only inside
+its block: when the block ends, the window is gone, and no pointer into
+those 60 MB can outlive it. That is why the views nest — file, float
+array, matrix — each opened exactly where it is needed and closed behind
+it.
+
 One token through the model
 ===========================
 
@@ -226,6 +269,36 @@ the transformer. It takes one ``token`` at one ``position`` and fills
 ``state.logits`` — the scores from which the caller chooses the next
 :ref:`token <t00-token>`. In the code the state parameter is written ``s``, short for
 ``state``, so ``s.x`` is the :ref:`residual stream <t00-residual>`.
+
+Here is the whole function with the details folded away — the map for
+everything below:
+
+.. das-doc: fragment
+.. code-block:: das
+
+   def forward(
+               c : Config;
+               w : Weights;
+               model : array<float>#;
+               var s : State;
+               token, position : int
+               ) {
+       ...                                          // embedding: the token's row into s.x
+       for (layer in range(c.layers)) {
+           normalize(s.xb, ..., s.x, dim)           // RMSNorm
+           project(s.query, ...); project(s.key, ...); project(s.value, ...)
+           rope(s.query, ...); rope(s.key, ...)     // stamp position
+           ...                                      // append K,V to the layer's cache
+           for (head in range(c.heads)) { ... }     // score, softmax, blend
+           project(s.xb2, w.attention_output, ...)
+           s.x += s.xb2                             // residual add #1
+           normalize(s.xb, ..., s.x, dim)           // RMSNorm again
+           ...                                      // SwiGLU: gate * up
+           s.x += s.xb                              // residual add #2
+       }
+       normalize(s.xb, ..., w.final_norm, s.x, dim)
+       project(s.logits, ..., w.classifier, s.xb, dim, c.vocab)
+   }
 
 Embedding: an ID becomes a vector
 ---------------------------------
@@ -370,8 +443,17 @@ value it returns.
 
 The rotated K and the untouched V are then appended to the layer's
 **KV cache**: the model's stored keys and values for every position it
-has processed, the current one included. The cache is plain memoization —
+has processed, the current one included. This is the stored record from
+the :ref:`prefill <t00-prefill>` story — prefill filled it, and every
+generated token keeps adding to it. The cache is plain memoization —
 without it, every new token would recompute K and V for the entire past.
+
+One more dial lives here. Some models cache fewer K/V heads than they
+have query heads (``kv_heads`` in the code), and several query heads
+then share one cached head — a memory saver called **grouped-query
+attention**. ``kv_multiple = c.heads / c.kv_heads`` is that sharing
+factor; for stories15M it is 1 — every query head has its own cached
+head — and the code carries the general form.
 
 Now the look-back itself. For one head and one cached position ``p``, the
 code computes:
@@ -525,11 +607,14 @@ Logits: the vector becomes a choice
 
 After the final layer, one last :ref:`RMSNorm <t00-rmsnorm>` steadies ``x``, and the
 :ref:`classifier <t00-classifier>` projects it from 288 values to 32,000
-:ref:`logits <t00-classifier>` — one :ref:`dot product <t00-dot>` of ``x`` against each of
-the 32,000 vocabulary rows. For stories15M the classifier *is* the
-:ref:`embedding <t00-embedding>` table (``shared_classifier`` in the code; larger models
-often train a separate matrix), so the question is literal: which token's
-row does ``x`` now point along?
+:ref:`logits <t00-classifier>` — one :ref:`dot product <t00-dot>` of ``x`` against each
+row of the :ref:`embedding <t00-embedding>` table, one row per vocabulary
+token. The table has now been used both ways a grid of numbers can be
+used: at the start an ID *indexed into* it and picked one row; here ``x``
+*multiplies* it, and every row answers at once. For stories15M these are
+literally the same numbers (``shared_classifier`` in the code; larger
+models often train a separate matrix), so the question is literal: which
+token's row does ``x`` now point along?
 
 Stop on that question, because it is the heart of the whole page. ``x``
 *started* as the current token's own row — so why does the comparison
@@ -543,7 +628,21 @@ pipeline; the checkpoint's numbers are why it points the right way.
 .. _t00-sampling:
 
 ``most_likely`` picks the largest logit — this is called **greedy
-decoding**, and it is deterministic: one prompt, one story. But we do not
+decoding**, and it is deterministic: one prompt, one story:
+
+.. code-block:: das
+
+   def most_likely(logits : array<float>) : int {
+       var best = 0
+       for (i in range(1, length(logits))) {
+           if (logits[i] > logits[best]) {
+               best = i
+           }
+       }
+       return best
+   }
+
+But we do not
 have to pick the top one every time. Turn the logits into probabilities
 with :ref:`softmax <t00-softmax>`, roll the dice, and every run can tell
 a different story. Choosing this way is called **sampling**, and the
