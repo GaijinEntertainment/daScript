@@ -5684,6 +5684,11 @@ namespace das {
                     error("type not ready yet", "", "", var->at, CompilationError::not_resolved_yet_local_type);
                     return Visitor::visit(expr);
                 }
+                if (var->type->isGoodBlockType()) {
+                    error("local block variable " + var->name + " can't be declared in generator", "", "",
+                          var->at, CompilationError::invalid_local_type);
+                    return Visitor::visit(expr);
+                }
             }
             auto blk = replaceGeneratorLet(expr, func, scopes.back());
             scopes.back()->needCollapse = true;
