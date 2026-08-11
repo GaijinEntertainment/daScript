@@ -199,23 +199,50 @@ def private handle_submission_doc(var req : HttpRequest?; var resp : HttpRespons
     return resp |> JSON(doc)
 }
 
+def private sidecar_hit_jv(h : SidecarHit) : JsonValue? {
+    return JV((sha = h.sha, box = h.box, tier = h.tier,
+        verified = h.verified, noise = h.noise, written = h.written,
+        kernel_count = h.kernel_count, engine_sha = h.engine_sha,
+        dasllama_version = h.dasllama_version, url = "/api/sidecar/{h.sha}"))
+}
+
 def private handle_find_sidecars(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    // no box = the browse listing (?version=N scopes it, absent/0 = every version);
+    // with a box it is the lookup ladder, where version is required — the exchange keys on it
+    let box_param = get_param(req, "box")
+    if (empty(box_param)) {
+        var version = 0
+        let vparam = get_param(req, "version")
+        if (!empty(vparam)) {
+            let parsed = try_to_int(vparam)
+            if (!(parsed |> is_ok)) {
+                log_request("GET", "/api/sidecars", 400, ip, 0, 0, t0)
+                return resp |> JSON(write_json(JV((error = "malformed version"))), http_status.BAD_REQUEST)
+            }
+            version = parsed ?? 0
+        }
+        let all <- list_sidecars(g_db, version)
+        var larr <- [for (h in all); sidecar_hit_jv(h)]
+        let lbody = write_json(JV((version = version, sidecars = JV(larr))))
+        resp |> set_header("Cache-Control", "no-store")
+        resp |> set_header("X-Content-Type-Options", "nosniff")
+        log_request("GET", "/api/sidecars", 200, ip, 0, length(lbody), t0)
+        return resp |> JSON(lbody)
+    }
     let parsed = try_to_int(get_param(req, "version"))
     if (!(parsed |> is_ok) || (parsed ?? 0) < 1) {
         log_request("GET", "/api/sidecars", 400, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "version is required (the exchange keys on it)"))), http_status.BAD_REQUEST)
     }
     var ident : BoxIdentity
-    if (!parse_box_string(get_param(req, "box"), ident)) {
+    if (!parse_box_string(box_param, ident)) {
         log_request("GET", "/api/sidecars", 400, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "box must be the five-field platform|arch|model_id|os_build|cpu form"))), http_status.BAD_REQUEST)
     }
     let hits <- find_sidecars(g_db, parsed ?? 0, ident)
-    var arr <- [for (h in hits); JV((sha = h.sha, box = h.box, tier = h.tier,
-        verified = h.verified, noise = h.noise, written = h.written,
-        kernel_count = h.kernel_count, url = "/api/sidecar/{h.sha}"))]
+    var arr <- [for (h in hits); sidecar_hit_jv(h)]
     let body = write_json(JV((version = parsed ?? 0, hits = JV(arr))))
     resp |> set_header("Cache-Control", "no-store")
     resp |> set_header("X-Content-Type-Options", "nosniff")

@@ -16,8 +16,11 @@
 
 .dl-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
 
-/* data table */
-.dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; scrollbar-width: thin; }
+/* data table.
+   overflow-y pinned: bare overflow-x:auto computes overflow-y to auto, and any 1px
+   sub-pixel rounding (zoom/DPI) or a hover tooltip past the last row spawns a phantom
+   vertical scrollbar on the wrap */
+.dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 table.dl-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 720px; }
 .dl-table thead th {
   text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;

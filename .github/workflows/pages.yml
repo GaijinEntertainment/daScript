@@ -525,6 +525,30 @@ jobs:
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Physarum Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/physarum_lab/physarum_lab.html
         fi
 
+    - name: "Stage dasllama.io for deployment"
+      run: |
+        set -eux
+        mkdir -p _site_dasllama/files
+
+        # Regenerate the news board + feed + sitemap from _news/. The generated
+        # copies are checked in (the preview rig serves the tree directly), but the
+        # deploy regenerates anyway so a forgotten local run cannot ship stale news.
+        python3 site-dasllama/build_news.py --root site-dasllama
+
+        cp site-dasllama/index.html _site_dasllama/
+        cp site-dasllama/ladder.html _site_dasllama/
+        cp site-dasllama/sidecars.html _site_dasllama/
+        cp site-dasllama/robots.txt _site_dasllama/
+        cp site-dasllama/sitemap.xml _site_dasllama/
+        cp site-dasllama/feed.xml _site_dasllama/
+        cp site-dasllama/files/* _site_dasllama/files/
+
+        # Shared visual language, staged from the daslang.io tree — single source
+        # in the repo, mirrored by site-dasllama/serve.py for local preview.
+        for f in forge.css nav-dropdown.css dasllama-table.css; do
+            cp "site/files/$f" "_site_dasllama/files/$f"
+        done
+
     - name: "Deploy to daslang.io origin (VPS)"
       # master-only, in the workflow itself. This guard used to sit on the Pages step
       # ("so a workflow_dispatch from a branch cannot touch the production site") and
@@ -574,6 +598,17 @@ jobs:
         # Atomic flip, then prune to the 5 newest releases.
         $RSH deploy@89.167.63.131 "ln -sfn /srv/daslang.io/releases/$REL /srv/daslang.io/current \
             && cd /srv/daslang.io/releases && ls -1t | tail -n +6 | xargs -r rm -rf"
+        # dasllama.io rides the same box and key, same release layout. Its Caddy
+        # vhost may still mirror daslang.io until the flip (the deploy slice of
+        # plans/dasllama_io_site.md) — staging releases before the flip is harmless.
+        DLINK=""
+        if $RSH deploy@89.167.63.131 "test -d /srv/dasllama.io/current/"; then
+            DLINK="--link-dest=/srv/dasllama.io/current/"
+        fi
+        rsync -az --delete $DLINK \
+            -e "$RSH" _site_dasllama/ "deploy@89.167.63.131:/srv/dasllama.io/releases/$REL/"
+        $RSH deploy@89.167.63.131 "ln -sfn /srv/dasllama.io/releases/$REL /srv/dasllama.io/current \
+            && cd /srv/dasllama.io/releases && ls -1t | tail -n +6 | xargs -r rm -rf"
         # The curated dropdown is fed from dasweb-playground's store, which
         # imports the tree this deploy just replaced. Without this nudge a
         # changed or added sample stays invisible until the service restarts.

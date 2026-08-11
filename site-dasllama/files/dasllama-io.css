@@ -95,7 +95,9 @@
 /* ── small shared bits ───────────────────────────────────────── */
 /* ladder rows carry longer GGUF names than daslang.io's board: let the model
    cell wrap inside its 300px cap instead of overflowing into the machine column */
-.dl-table--bench td.dl-td-model{white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+/* long model names wrap instead of stretching the table — but the min-width keeps the
+   auto layout from collapsing the wrapping column to one character per line */
+.dl-table--bench td.dl-td-model{white-space:normal;overflow-wrap:anywhere;line-height:1.35;min-width:240px}
 .dio-cell{display:block;min-width:0}
 .dio-chev{color:var(--fg-faint);font-size:10px;text-align:right;transition:transform 140ms ease}
 .dio-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}

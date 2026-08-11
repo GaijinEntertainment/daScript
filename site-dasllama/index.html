@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="files/forge.css"/>
 <link rel="stylesheet" href="files/dasllama-table.css"/>
 <link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
 </head><body><div class="forge-page">
 
 <nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
@@ -56,13 +57,15 @@
 <div class="dio-feed">
 <div class="dio-feed__bar"><span class="dio-feed__count" id="dio-feed-count"></span><a class="dio-feed__feed" href="/feed.xml">atom feed</a></div>
 <div id="dio-feed-items">
-<!-- entries are generated from _news/*.md at deploy; this seed entry mirrors
-     _news/2026-08-10-dasllama-io-is-live.md until the generator lands -->
-
-<article class="dio-item dio-item--lead is-open" onclick="this.classList.toggle('is-open')">
+<!-- news:begin — everything between the markers is generated from _news/*.md by
+     build_news.py (run at deploy AND checked in, so preview matches production) -->
+<article class="dio-item dio-item--lead is-open" id="n-2026-08-10-dasllama-io-is-live" onclick="this.classList.toggle('is-open')">
 <div class="dio-item__head"><span class="dio-item__date">2026-08-10</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
-<div class="dio-item__body"><p>Everything measured now lives here, community submissions included. <a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional scoreboard and carries official measurements only.</p></div>
+<div class="dio-item__body"><p>Everything measured now lives here, community submissions included.
+<a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional
+scoreboard and carries official measurements only.</p></div>
 </article>
+<!-- news:end -->
 </div>
 </div>
 </div>
@@ -74,34 +77,8 @@
 <h2 class="forge-h2">Latest measurements.</h2>
 <div class="dio-teaser">
 <div class="dio-teaser__head"><span id="dio-teaser-scope">newest first</span><a href="ladder.html">the whole ladder →</a></div>
-<div class="dl-bars" id="dio-teaser-bars">
-<!-- teaser rows render from the ladder API (newest entries, whatever their numbers);
-     the rows below are design placeholders -->
-<div class="dl-bar-row">
-<div class="dl-bar-label">Qwen3-30B-A3B-Instruct-2507<span class="dl-dim2">Apple M2 Max · cpu + accel</span></div>
-<div class="dl-bar-pair">
-<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">301.5</span></div>
-<div class="dl-bar-line"><div class="dl-bar-ref" style="width:56.19%"></div><span class="dl-bar-val">169.4</span></div>
-</div>
-<div class="dl-bar-ratio dl-win">1.78×</div>
-</div>
-<div class="dl-bar-row">
-<div class="dl-bar-label">gpt-oss-20b<span class="dl-dim2">AMD Ryzen TR 7970X · cpu</span></div>
-<div class="dl-bar-pair">
-<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">264.0</span></div>
-<div class="dl-bar-line"><div class="dl-bar-ref" style="width:70.42%"></div><span class="dl-bar-val">185.9</span></div>
-</div>
-<div class="dl-bar-ratio dl-win">1.42×</div>
-</div>
-<div class="dl-bar-row">
-<div class="dl-bar-label">Llama-3.1-8B-Instruct<span class="dl-dim2">Apple M1 Max · cpu</span></div>
-<div class="dl-bar-pair">
-<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">96.2</span></div>
-<div class="dl-bar-line"><div class="dl-bar-ref" style="width:74.11%"></div><span class="dl-bar-val">71.3</span></div>
-</div>
-<div class="dl-bar-ratio dl-win">1.35×</div>
-</div>
-</div>
+<!-- teaser rows render from /api/runs joined with the verbatim submission documents -->
+<div class="dl-bars" id="dio-teaser-bars"><div class="dl-empty">loading the ladder…</div></div>
 </div>
 <p class="dio-note">amber = dasLLAMA, teal = the llama.cpp run it was measured against — the same pair bars daslang.io uses. Rows compare only within one engine version.</p>
 </div>

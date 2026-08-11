@@ -117,6 +117,32 @@ def test_sidecar_ladder(t : T?) {
 }
 
 [test]
+def test_list_sidecars(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        var pol = test_policy()
+        pol.max_submissions_per_ip_hour = 100
+        let v3a = put_sidecar(db, sidecar_doc(BOX_A, "3", "vec8_u8"), "10.5.0.1", pol, 1000l)
+        let v3b = put_sidecar(db, sidecar_doc(BOX_C, "3", "vec4_u2"), "10.5.0.2", pol, 2000l)
+        let v2 = put_sidecar(db, sidecar_doc(BOX_B, "2", "vec16"), "10.5.0.3", pol, 3000l)
+        t |> run("version 0 lists every sidecar newest first, tier empty") @(tt : T?) {
+            let all <- list_sidecars(db, 0)
+            tt |> equal(length(all), 3)
+            tt |> equal(all[0].sha, v2.sha)
+            tt |> equal(all[1].sha, v3b.sha)
+            tt |> equal(all[2].sha, v3a.sha)
+            tt |> equal(all[0].tier, "")
+            tt |> equal(all[0].dasllama_version, 2)
+            tt |> equal(all[0].engine_sha, "8a538d795")
+        }
+        t |> run("a version scopes the listing") @(tt : T?) {
+            let v3 <- list_sidecars(db, 3)
+            tt |> equal(length(v3), 2)
+            tt |> equal(length(list_sidecars(db, 9)), 0)
+        }
+    }
+}
+
+[test]
 def test_put_records(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a stamped submission lands as unverified community rows") @(tt : T?) {

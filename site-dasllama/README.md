@@ -12,9 +12,14 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
   official-only
 - `sidecars.html` — the sidecar exchange: finder, kernel-win viewer, downloads
 - `files/dasllama-io.css` — site chrome (`dio-` prefix)
+- `files/dasllama-io.js` — the one renderer for all three pages (page detected by mount
+  points); community text is escaped before it reaches markup
 - `files/dasllama-favicon.svg` — from the dasllama-mark brand set (amber)
-- `_news/` — news entries as dated markdown, same pipeline shape as `site/_news`;
-  generator emits the home feed + `feed.xml` (Atom)
+- `_news/` — news entries as dated markdown, same pipeline shape as `site/_news`
+- `build_news.py` — regenerates the index.html news region (between the `news:begin`
+  markers), `feed.xml` (Atom) and `sitemap.xml` from `_news/`; output is checked in so the
+  preview matches production, and the deploy re-runs it anyway
+- `robots.txt` — static
 
 Shared css is NOT duplicated here: `forge.css`, `nav-dropdown.css` and
 `dasllama-table.css` live in `site/files/` (single source) and are staged into this
@@ -26,12 +31,21 @@ ledgered follow-up.
 
     py -3 serve.py     # http://127.0.0.1:8932/ — stages shared css like the deploy does
 
+`serve.py` also proxies `/api/*` to a locally running ladder service on 127.0.0.1:8201
+(mirroring the Caddy vhost), so a preview against real data is: start
+`utils/dasllama-ladder/main.das` with `--official-dir modules/dasLLAMA/performance/records`,
+then browse. Without the service the pages show their unreachable/zero states.
+
 ## Data
 
 Tables, fact tiles, and the sidecar finder render client-side from the `dasllama-ladder`
-service (`/api/ladder/*`, `/api/sidecars/*`; 127.0.0.1:8201 behind Caddy). The rows and
-entries currently in the HTML are design placeholders and are replaced by the live
-renderers; pages must read sensibly with zero rows (launch state).
+service (`utils/dasllama-ladder/README.md` §1.1 lists the routes; 127.0.0.1:8201 behind
+Caddy). The ladder joins `/api/runs` with the verbatim `/api/submission/:id` documents —
+measurements, receipts and command lines all come from the submission itself, and pairing
+is within one submission only (a ratio appears when the methodology's reference flavor
+rode along in the same document). The sidecar finder lists `/api/sidecars` and fetches the
+sidecar document on expand. Pages must read sensibly with zero rows (launch state) and
+with the service down.
 
 ## Copy rules (Boris)
 

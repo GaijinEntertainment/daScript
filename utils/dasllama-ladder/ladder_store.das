@@ -188,7 +188,8 @@ struct ImportResult {
 }
 
 //! One rung of the sidecar lookup ladder. tier: "exact" (same box string),
-//! "cpu" (same platform/arch/cpu on another machine), "arch" (same platform/arch only).
+//! "cpu" (same platform/arch/cpu on another machine), "arch" (same platform/arch only),
+//! "" (a listing row — not part of a ladder).
 struct SidecarHit {
     sha : string
     box : string
@@ -197,6 +198,8 @@ struct SidecarHit {
     noise : string
     written : string
     kernel_count : int
+    engine_sha : string
+    dasllama_version : int
 }
 
 def private rate_exceeded(db : SqlRunner; client_ip : string; policy : LadderPolicy; now : int64) : bool {
@@ -416,7 +419,9 @@ def private tier_hits(tier : string; var seen : table<string>;
                     verified = r.Verified != 0,
                     noise = r.Noise,
                     written = r.Written,
-                    kernel_count = r.KernelCount))
+                    kernel_count = r.KernelCount,
+                    engine_sha = r.EngineSha,
+                    dasllama_version = r.DasllamaVersion))
             }
         }
     }
@@ -443,6 +448,33 @@ def find_sidecars(db : SqlRunner; version : int; ident : BoxIdentity) : array<Si
         |> _order_by_descending(_.CreatedAt))
     tier_hits("arch", seen, out, arch)
     return <- out
+}
+
+def private listing_hits(rows : array<SidecarRow>) : array<SidecarHit> {
+    return <- [for (r in rows); SidecarHit(
+        sha = r.Sha,
+        box = r.Box,
+        tier = "",
+        verified = r.Verified != 0,
+        noise = r.Noise,
+        written = r.Written,
+        kernel_count = r.KernelCount,
+        engine_sha = r.EngineSha,
+        dasllama_version = r.DasllamaVersion)]
+}
+
+//! Every sidecar for one version (0 = all versions), newest first — the browse page
+//! listing. tier stays "" on every row: a listing is not a lookup ladder.
+def list_sidecars(db : SqlRunner; version : int) : array<SidecarHit> {
+    if (version == 0) {
+        let rows <- _sql(db |> select_from(type<SidecarRow>)
+            |> _order_by_descending(_.CreatedAt))
+        return <- listing_hits(rows)
+    }
+    let rows <- _sql(db |> select_from(type<SidecarRow>)
+        |> _where(_.DasllamaVersion == version)
+        |> _order_by_descending(_.CreatedAt))
+    return <- listing_hits(rows)
 }
 
 //! The stored sidecar document, or "" when the sha is unknown (an empty document can

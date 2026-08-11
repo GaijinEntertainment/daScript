@@ -22,11 +22,12 @@ The anatomy mirrors `utils/dasweb-playground`.
 ### 1.1 Routes
 
 Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]`,
-`GET /api/submission/:id` (the verbatim receipt), `GET /api/sidecars?version=N&box=<encoded>`
-(the lookup ladder), `GET /api/sidecar/:sha` (download), `POST /api/submit/records`,
-`POST /api/submit/sidecar`. Loopback-only: `POST /admin/import-official`, `POST /shutdown`,
-plus `GET /healthz` for the watchdog. The `box` query value must be percent-encoded — box
-strings carry `|`, `,` and spaces.
+`GET /api/submission/:id` (the verbatim receipt), `GET /api/sidecars[?version=N]` (the
+browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
+lookup ladder — a `box` switches modes and then version is required), `GET /api/sidecar/:sha`
+(download), `POST /api/submit/records`, `POST /api/submit/sidecar`. Loopback-only:
+`POST /admin/import-official`, `POST /shutdown`, plus `GET /healthz` for the watchdog. The
+`box` query value must be percent-encoded — box strings carry `|`, `,` and spaces.
 
 ## 2. Data model
 

@@ -53,7 +53,15 @@ prefix in `files/dasllama-io.css`.
 
 **News entries state real, shipped events.** An entry for something not yet true at publish
 time is a defect; entries live in `_news/*.md` and the page carries only what the generator
-emits (plus the marked seed until the generator lands).
+emits.
+
+**The region between the `news:begin`/`news:end` markers in index.html is `build_news.py`
+output.** A hand-edit inside the markers is a defect — edit `_news/` and re-run the
+generator; the regenerated index.html, feed.xml and sitemap.xml land in the same change.
+
+**Every community-supplied string that `files/dasllama-io.js` renders passes through its
+`esc()` before reaching `innerHTML`.** A submission-derived value concatenated into markup
+unescaped is a defect.
 
 **Every page keeps `<title>`, meta description, OpenGraph tags, and the Atom `<link>`.**
 A new or renamed page without them is a defect.

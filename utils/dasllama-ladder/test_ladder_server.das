@@ -113,6 +113,25 @@ def test_sidecar_routes(t : T?) {
                 tt |> equal(length(js?["hits"] as _array), 0, "no hits on an unseen version")
             }
         }
+        t |> run("no box = the browse listing") @(tt : T?) {
+            GET("{base_url}/api/sidecars") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                let rows = js?["sidecars"]
+                tt |> success(rows != null && rows is _array, "sidecars array")
+                tt |> equal(length(rows as _array), 1)
+                tt |> equal(rows?[0]?["sha"] ?? "", sha)
+                tt |> equal(rows?[0]?["tier"] ?? "?", "")
+                tt |> equal(rows?[0]?["dasllama_version"] ?? 0, 3)
+                tt |> equal(rows?[0]?["engine_sha"] ?? "", "8a538d795")
+            }
+            GET("{base_url}/api/sidecars?version=9") $(resp) {
+                tt |> equal(length(json_of(resp)?["sidecars"] as _array), 0, "version scopes the listing")
+            }
+            GET("{base_url}/api/sidecars?version=junk") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "malformed version refused")
+            }
+        }
         t |> run("transport-shape rejections") @(tt : T?) {
             GET("{base_url}/api/sidecar/nothex") $(resp) {
                 tt |> equal(int(resp.status_code), 400)
