@@ -24,6 +24,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT (dll mode): partition codegen per das-module - one .o per module, linked into the ONE cached DLL. 0 = off (default, monolithic emission); 1 = split with serial emit; N>1 = split + N optimize/emit threads; -1 = split + auto threads (JobQue count). Opt-in: cross-module inlining is lost across partitions (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin: options jit_split_modules = N"
     split_modules : Option<int>
 
+    @clarg_name = "jit-obj-cache"
+    @clarg_doc = "JIT (dll mode, with --jit-split-modules): reuse cached per-module partition objects, keyed by a chained module-prefix hash - a changed das-module re-emits itself and every module after it in program order; unchanged prefix modules link their cached .o. Require order is therefore the cache layout: place hot-edit modules as late in the require chain as their dependencies allow. 1 = on (default under split; off under a pinned jit_output_path, where no GC runs); 0 = always re-emit with positional object names. Script-level pin: options jit_obj_cache = false"
+    obj_cache : Option<int>
+
     @clarg_short = "g"
     @clarg_name = "jit-debug"
     @clarg_doc = "JIT: emit debug info / symbols"

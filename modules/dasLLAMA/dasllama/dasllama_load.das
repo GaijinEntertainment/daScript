@@ -851,7 +851,7 @@ def fill_plan_begin {
 def fill_plan_take(var out : array<FillJob>) {
     g_fill_plan_mode = false
     delete out   // a take replaces whatever the caller brought, so release it rather than drop it
-    out <- g_fill_plan   // nolint:PERF030 — released on the line above; the rule has no delete tracking
+    out <- g_fill_plan   // nolint:PERF030,LINT019 — released on the line above; the rule has no delete tracking, and fires only in downstream compiles
 }
 
 // ONE source for the (fmt, disk type) -> kq transcode decision. load_big and fill_stream_plane
@@ -2256,6 +2256,11 @@ def quantize_weights_q4(var t : Model) {
 //! Applies the tune sidecar's "runtime" knobs first (see apply_box_profile_runtime).
 def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
+    // same guard rail as load_model_cached: a GPU-armed env whose backend never registered
+    // (tier module not required, shared_module load swallowed) says so instead of resolving CPU
+    if (get_metal_mode() == MetalMode.off) {
+        warn_gpu_backend_absent()
+    }
     var m <- load_gguf(path, mode)
     m.tok <- load_tokenizer_auto(path)
     return <- m

@@ -45,7 +45,9 @@ never hand-edit the tables).
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Nothing platform-specific may be added; new shared concerns get their own
   file rather than another thousand lines here.
-- **`dasllama_transformer.das`** — the block-composition seam only.
+- **`dasllama_transformer.das`** — the block-composition seam, and the require umbrella: the
+  `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
+  requires the engine back, which the umbrella therefore hosts to break the cycle).
 - **`dasllama_blocks.das`** — the std/dense/MoE transformer block kernels, decode and prefill,
   plus the two default block sets the arch files bind. `forward()` never names a kernel here — it
   dispatches through the `ArchBlocks` function pointers, which is why the family lives outside the
@@ -167,7 +169,9 @@ that a question answered for one backend has an obvious address in the other. Th
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
   identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
-  and its NAME is common's `?vulkan` require contract: **never rename it.**
+  and its NAME is the transformer umbrella's `?vulkan` require contract (deliberately LAST in the
+  umbrella: the vulkan drivers are the hot-edit modules, and require order is the jit obj-cache
+  layout): **never rename it.**
 - **Vulkan additionally has `dasllama_vulkan_seams.das`** — the thin whole-op call seams the tier
   and suites dispatch through (`vk_add_rms`, `vk_rope_kv_store`, `vk_decode_attn`). It exists
   because of a require direction: common cannot require the classes module (classes requires
@@ -220,10 +224,11 @@ both paths.
 **The allowed asymmetries between the backends — this list is closed; a new one lands with its
 entry here:**
 
-- **Metal sits ABOVE `dasllama_common`** (typed `Model`/`Session` access, umbrella entry via the
-  transformer's `?das_metal` requires, shapes unconditional); **Vulkan sits BELOW it** (untyped
-  pointer/array seams, the single `?vulkan` entry through the `dasllama_math_vulkan` facade).
-  That inversion is why their kernels↔common require directions differ.
+- **Metal sits ABOVE `dasllama_common`** (typed `Model`/`Session` access, shapes unconditional);
+  **Vulkan sits BELOW it** (untyped pointer/array seams — the family never requires common).
+  Both tiers ENTER from the transformer umbrella (`?das_metal` requires; the single `?vulkan`
+  require of the `dasllama_math_vulkan` facade); the inversion that remains is the
+  kernels↔common require DIRECTION, and it is why their seam shapes differ.
 - **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
   upload economics, mirrors and hydration are Vulkan's alone.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes — Metal via
