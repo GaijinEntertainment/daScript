@@ -1,0 +1,136 @@
+/* dasLLAMA bench table — the shared measurement-table language.
+   Lifted verbatim from site/dasllama.html's dl-* block so daslang.io and dasllama.io
+   render identical tables, bars and receipts. dasllama.html still carries its own inline
+   copy — folding it onto this file is a ledgered follow-up (plans/dasllama_io_site.md).
+   Markup contract (see site/files/dasllama.js):
+     .dl-table-wrap > table.dl-table.dl-table--bench
+       thead th.js-sort[.dl-num][.dl-grp][.dl-grp-start][.is-sorted[.is-desc]]
+       tbody tr.dl-row[data-row] + tr[hidden][data-receipt] > td > .dl-bench-receipt
+     .dl-bars > .dl-bar-row.js-bar-expand > .dl-bar-label + .dl-bar-pair + .dl-bar-ratio
+   Ladder-only additions (source/status column) are at the bottom, clearly marked. */
+
+:root { --dl-teal: #4fb8a8; }
+
+.dl-win, .dl-num.dl-win { color: var(--amber); }
+.dl-loss, .dl-num.dl-loss { color: var(--dl-teal); }
+
+.dl-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
+
+/* data table */
+.dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; scrollbar-width: thin; }
+table.dl-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 720px; }
+.dl-table thead th {
+  text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule);
+  background: var(--bg-2); white-space: nowrap;
+}
+.dl-table thead th:first-child { text-align: left; }
+.dl-table thead th.dl-grp { color: var(--amber); }
+.dl-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--rule); }
+.dl-table tbody tr:last-child td { border-bottom: 0; }
+.dl-table tbody tr:hover td { background: rgba(232,161,58,0.04); }
+.dl-num { text-align: right; color: var(--fg); }
+.dl-dim { color: var(--fg-faint); }
+.dl-td-model { color: var(--fg); max-width: 300px; }
+
+/* view toggle + paired bars: das (amber) over its reference (teal), each pair normalized to its own max */
+.dl-viewbar { margin-top: 26px; display: flex; gap: 14px; align-items: center; }
+.dl-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.dl-seg button {
+  background: none; border: 0; color: var(--fg-faint); font-family: var(--font-mono);
+  font-size: 11px; padding: 6px 14px; cursor: pointer; letter-spacing: 0.04em;
+}
+.dl-seg button + button { border-left: 1px solid var(--rule); }
+.dl-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
+.dl-bars { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; }
+.dl-bar-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+.dl-bar-row:last-child { border-bottom: 0; }
+.dl-bar-row:hover { background: rgba(232, 161, 58, 0.04); }
+.dl-bar-row.js-bar-expand { cursor: pointer; }
+.dl-bar-receipt { padding: 4px 0 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+.dl-bar-label { flex: 0 0 250px; overflow: hidden; color: var(--fg); line-height: 1.35; }
+.dl-bar-label .dl-dim2 { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-bar-pair { flex: 1 1 auto; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
+.dl-bar-line { display: flex; align-items: center; gap: 8px; height: 10px; }
+.dl-bar-das, .dl-bar-ref { height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.dl-bar-das { background: var(--amber); opacity: 0.55; }
+.dl-bar-ref { background: var(--dl-teal); opacity: 0.45; }
+.dl-bar-row:hover .dl-bar-das, .dl-bar-row:hover .dl-bar-ref { opacity: 0.95; }
+.dl-bar-val { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
+.dl-bar-val--das { color: var(--fg); }
+.dl-bar-line .dl-bar-das, .dl-bar-line .dl-bar-ref { max-width: calc(100% - 58px); }
+.dl-bar-ratio { flex: 0 0 52px; text-align: right; }
+@media (max-width: 860px) { .dl-bar-label { flex-basis: 150px; } .dl-bar-pair { min-width: 120px; } }
+
+/* filters */
+.dl-filters { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin: 26px 0 0; }
+.dl-filters label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.dl-filters select {
+  font-family: var(--font-mono); font-size: 12px; color: var(--fg);
+  background: var(--bg-2); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 7px 10px; cursor: pointer; text-transform: none; letter-spacing: 0;
+  max-width: 260px;
+}
+.dl-filters select:hover { border-color: var(--amber-dim); }
+.dl-filters select:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+.dl-filters__reset {
+  font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint);
+  background: transparent; border: 1px solid var(--rule); border-radius: 6px;
+  padding: 7px 12px; cursor: pointer;
+}
+.dl-filters__reset:hover { color: var(--fg); border-color: var(--amber-dim); }
+
+/* sortable bench table */
+.dl-table--bench thead th { cursor: pointer; user-select: none; }
+.dl-table--bench thead th:hover { color: var(--fg); }
+.dl-table--bench thead th::after { content: ''; }
+.dl-table--bench thead th.is-sorted { color: var(--amber); }
+.dl-table--bench thead th.is-sorted::after { content: ' ▲'; font-size: 8px; }
+.dl-table--bench thead th.is-sorted.is-desc::after { content: ' ▼'; }
+.dl-table--bench tbody tr.dl-row { cursor: pointer; }
+.dl-table--bench tbody tr.dl-row--flat { cursor: default; }
+.dl-table--bench tbody td { padding: 8px 9px; white-space: nowrap; }
+.dl-table--bench thead th { padding: 12px 9px; }
+.dl-table--bench th.dl-grp-start, .dl-table--bench td.dl-grp-start { border-left: 1px solid var(--rule); }
+.dl-table--bench .dl-dim2 { color: var(--fg-dim); }
+.dl-table--bench .dl-model-sub { color: var(--fg-faint); font-size: 10.5px; }
+.dl-table--bench tbody tr[data-receipt] td { padding: 0 11px; }
+.dl-bench-receipt {
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.65; color: var(--fg-dim);
+  background: var(--bg-3); border-radius: 6px; padding: 12px 14px; margin: 2px 0 8px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.dl-bench-receipt b { color: var(--amber); font-weight: 400; }
+.dl-empty { font-family: var(--font-mono); font-size: 12px; color: var(--fg-faint); padding: 22px 14px; text-align: center; }
+.dl-note-mark { color: var(--amber); font-size: 11px; }
+.dl-bench-receipt .dl-receipt-note { color: var(--amber); }
+td[data-note], .dl-bar-label[data-note] { position: relative; cursor: help; }
+td[data-note]:hover::after, .dl-bar-label[data-note]:hover::after {
+  content: attr(data-note);
+  position: absolute; left: 12px; top: calc(100% - 4px); z-index: 40;
+  width: max-content; max-width: 460px;
+  background: var(--bg-2); border: 1px solid var(--rule); border-left: 2px solid var(--amber);
+  border-radius: 6px; padding: 10px 12px;
+  color: var(--fg); font-size: 11.5px; line-height: 1.55;
+  white-space: pre-line; text-transform: none; letter-spacing: normal;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+/* ───── ladder additions (dasllama.io only) ─────
+   The ladder carries community rows, so it needs a provenance column daslang.io does not.
+   Everything above is unchanged shared language. */
+.dl-src { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.dl-src__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.dl-src__dot--ok { background: var(--green); }
+.dl-src__dot--un { background: var(--amber); }
+.dl-src__badge {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase;
+  border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; color: var(--fg-dim);
+}
+.dl-src__badge--official { color: var(--amber); border-color: var(--amber-dim); }
+.dl-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+.dl-legend span { display: inline-flex; align-items: center; gap: 7px; }

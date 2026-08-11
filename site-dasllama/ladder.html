@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ladder — dasllama.io</title>
+<meta name="description" content="Every dasLLAMA measurement — official boards and community submissions, with receipts, hardware, and the llama.cpp reference run where one rode along."/>
+<meta property="og:title" content="dasLLAMA ladder"/>
+<meta property="og:description" content="Every measurement in the world — official and community — with receipts."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/ladder.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="index.html">home</a><a class="dio-tab is-active" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span id="dio-nav-version">v0.6.4</span></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>This is the <em>ladderboard.</em></h1>
+<p class="dio-head__lede">Every measurement we have — official boards and community submissions alike, in the same pair table <a href="https://daslang.io/dasllama.html">daslang.io</a> uses. There it is official rows only; here it is all of them. Community rows may be das-only: when no reference ran in the session, the ratio column stays empty and the absolute numbers stand alone. Rows compare only within one engine version.</p>
+</div>
+<div class="dio-head__aside" id="dio-ladder-stats"><b>—</b> rows · <b>—</b> boxes<br/><b>—</b> last submission<br/><a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a></div>
+</div></div></header>
+
+<div class="forge-container">
+
+<div class="dl-filters">
+<label>version <select id="f-version"><option>0.6.4 — latest</option><option>all versions</option></select></label>
+<label>model <select id="f-model"><option>all models</option></select></label>
+<label>machine <select id="f-machine"><option>all machines</option></select></label>
+<label>category <select id="f-category"><option>all categories</option><option>cpu</option><option>cpu + accel</option><option>gpu</option></select></label>
+<label>source <select id="f-source"><option>all sources</option><option>official</option><option>community</option></select></label>
+<button class="dl-filters__reset" type="button" id="f-reset">reset</button>
+</div>
+
+<div class="dl-viewbar">
+<div class="dl-seg" id="view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
+<div class="dl-seg" id="metric" style="visibility:hidden"><button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button></div>
+</div>
+
+<div class="dl-bars" id="bars" hidden>
+<!-- design placeholders — live rows render from /api/ladder/* -->
+<div class="dl-bar-row js-bar-expand">
+<div class="dl-bar-label">Qwen3-30B-A3B-Instruct-2507<span class="dl-dim2">Apple M2 Max · cpu + accel</span></div>
+<div class="dl-bar-pair">
+<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">301.5</span></div>
+<div class="dl-bar-line"><div class="dl-bar-ref" style="width:56.19%"></div><span class="dl-bar-val">169.4</span></div>
+</div>
+<div class="dl-bar-ratio dl-win">1.78×</div>
+</div>
+<div class="dl-bar-row js-bar-expand">
+<div class="dl-bar-label">gpt-oss-20b<span class="dl-dim2">AMD Ryzen TR 7970X · cpu</span></div>
+<div class="dl-bar-pair">
+<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">264.0</span></div>
+<div class="dl-bar-line"><div class="dl-bar-ref" style="width:70.42%"></div><span class="dl-bar-val">185.9</span></div>
+</div>
+<div class="dl-bar-ratio dl-win">1.42×</div>
+</div>
+<div class="dl-bar-row js-bar-expand">
+<div class="dl-bar-label">Llama-3.1-8B-Instruct<span class="dl-dim2">Apple M1 Max · cpu</span></div>
+<div class="dl-bar-pair">
+<div class="dl-bar-line"><div class="dl-bar-das" style="width:100%"></div><span class="dl-bar-val dl-bar-val--das">96.2</span></div>
+<div class="dl-bar-line"><div class="dl-bar-ref" style="width:74.11%"></div><span class="dl-bar-val">71.3</span></div>
+</div>
+<div class="dl-bar-ratio dl-win">1.35×</div>
+</div>
+<div class="dl-empty" style="border-top:1px solid var(--rule);margin-top:6px">das-only rows are not plotted — bars are pairs. 2 rows in this filter have no reference run; the table shows them.</div>
+</div>
+
+<div class="dl-table-wrap" id="table-wrap"><table class="dl-table dl-table--bench">
+<thead><tr>
+<th class="js-sort">model</th>
+<th class="js-sort">machine</th>
+<th class="js-sort">category</th>
+<th class="js-sort dl-num">threads</th>
+<th class="js-sort dl-num">size GB</th>
+<th class="js-sort dl-num dl-grp dl-grp-start">pp512 das</th>
+<th class="js-sort dl-num">lcpp</th>
+<th class="js-sort dl-num dl-grp">ratio</th>
+<th class="js-sort dl-num dl-grp dl-grp-start">tg128 das</th>
+<th class="js-sort dl-num">lcpp</th>
+<th class="js-sort dl-num dl-grp">ratio</th>
+<th class="js-sort dl-grp-start">source</th>
+<th class="js-sort dl-num is-sorted is-desc">date</th>
+</tr></thead>
+<tbody id="ladder-tbody">
+<!-- design placeholders — live rows render from /api/ladder/* -->
+
+<tr class="dl-row" data-row="0">
+<td class="dl-td-model">Qwen3-30B-A3B-Instruct-2507 <span class="dl-model-sub">qwen3moe · Q4_K_M</span></td>
+<td class="dl-dim2">Apple M2 Max</td>
+<td class="dl-dim2">cpu + accel</td>
+<td class="dl-num dl-dim">10</td>
+<td class="dl-num dl-dim">17.3</td>
+<td class="dl-num dl-grp-start">301.5</td>
+<td class="dl-num dl-dim">169.4</td>
+<td class="dl-num dl-win">1.78×</td>
+<td class="dl-num dl-grp-start">85.2</td>
+<td class="dl-num dl-dim">76.8</td>
+<td class="dl-num dl-win">1.11×</td>
+<td class="dl-grp-start"><span class="dl-src"><span class="dl-src__dot dl-src__dot--ok"></span><span class="dl-src__badge dl-src__badge--official">official</span></span></td>
+<td class="dl-num dl-dim">2026-07-26</td>
+</tr>
+<tr data-receipt="0"><td colspan="13"><div class="dl-bench-receipt"><b>das      </b>  $ dasllama-bench -m Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -t 10 -p 512 -n 128 -r 5
+        das @ 6b9f27aa4 · 0.6.4 · 2026-07-26 · 10 threads
+        tune: sidecar verified · 40/40 kernel families · noise 0.8%
+        executes: jit · mach-o arm64
+        model: Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf sha256:e31a7c4b90f2… · 18575319040 B
+        Apple M2 Max · Mac14,6 · 12 cores · 64 GB · macOS 15.5
+
+<b>reference</b>  $ llama-bench -m Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -t 10 -p 512 -n 128 -r 5 -nopo 1
+        llama.cpp @ 9d4f21c7a · b4021 · 2026-07-26 · 10 threads
+        executes: stock build
+        model: Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf sha256:e31a7c4b90f2… · 18575319040 B
+        Apple M2 Max · Mac14,6 · 12 cores · 64 GB · macOS 15.5</div></td></tr>
+
+<tr class="dl-row dl-row--noted" data-row="1">
+<td class="dl-td-model" data-note="No reference run rode along on this box, so no ratio is published — the absolute numbers stand alone.">Qwen3.6-35B-A3B <span class="dl-model-sub">qwen3.6moe · Q4_K_M</span> <span class="dl-note-mark">✱</span></td>
+<td class="dl-dim2">Apple M1 Max</td>
+<td class="dl-dim2">cpu</td>
+<td class="dl-num dl-dim">8</td>
+<td class="dl-num dl-dim">19.8</td>
+<td class="dl-num dl-grp-start">217.7</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-grp-start">34.5</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-grp-start"><span class="dl-src"><span class="dl-src__dot dl-src__dot--ok"></span><span class="dl-src__badge dl-src__badge--official">official</span></span></td>
+<td class="dl-num dl-dim">2026-08-09</td>
+</tr>
+<tr hidden data-receipt="1"><td colspan="13"><div class="dl-bench-receipt"><span class="dl-receipt-note"><b>note     </b> No reference run rode along on this box — absolute numbers only, no parity claimed.</span>
+<b>das      </b>  $ dasllama-bench -m Qwen3.6-35B-A3B-Q4_K_M.gguf -t 8 -p 512 -n 128 -r 5
+        das @ 6b9f27aa4 · 0.6.4 · 2026-08-09 · 8 threads
+        tune: sidecar verified · noise 0.8%
+        executes: jit · mach-o arm64
+        model: Qwen3.6-35B-A3B-Q4_K_M.gguf sha256:77bd0e41c5aa… · 21260934144 B
+        Apple M1 Max · MacBookPro18,2 · 10 cores · 32 GB · macOS 26.0 (25F84)
+
+<b>reference</b>  none — pp512 217.7 ± 2.0 tok/s, tg128 34.5 ± 0.05 tok/s stand alone.</div></td></tr>
+
+<tr class="dl-row" data-row="2">
+<td class="dl-td-model">gpt-oss-20b <span class="dl-model-sub">gptoss · MXFP4</span></td>
+<td class="dl-dim2">AMD Ryzen TR 7970X</td>
+<td class="dl-dim2">cpu</td>
+<td class="dl-num dl-dim">16</td>
+<td class="dl-num dl-dim">12.1</td>
+<td class="dl-num dl-grp-start">264.0</td>
+<td class="dl-num dl-dim">185.9</td>
+<td class="dl-num dl-win">1.42×</td>
+<td class="dl-num dl-grp-start">52.8</td>
+<td class="dl-num dl-dim">50.3</td>
+<td class="dl-num dl-win">1.05×</td>
+<td class="dl-grp-start"><span class="dl-src"><span class="dl-src__dot dl-src__dot--ok"></span><span class="dl-src__badge">community</span></span></td>
+<td class="dl-num dl-dim">2026-08-04</td>
+</tr>
+<tr hidden data-receipt="2"><td colspan="13"><div class="dl-bench-receipt"><b>das      </b>  $ dasllama-bench -m gpt-oss-20b-MXFP4.gguf -t 16 -p 512 -n 128 -r 5
+        das @ 6b9f27aa4 · 0.6.4 · 2026-08-04 · 16 threads · community
+        tune: sidecar 4f0c9a12 · verified · noise 1.1%
+        executes: jit · elf x86_64
+        AMD Ryzen Threadripper 7970X · 32 cores · 128 GB · Linux 6.9.7
+
+<b>reference</b>  $ llama-bench -m gpt-oss-20b-MXFP4.gguf -t 16 -p 512 -n 128 -r 5 -ngl 0
+        llama.cpp @ 9d4f21c7a · b4021 · clean-cpu · 2026-08-04 · 16 threads</div></td></tr>
+
+<tr class="dl-row" data-row="3">
+<td class="dl-td-model">Gemma-3-12B <span class="dl-model-sub">gemma3 · Q5_K_M</span></td>
+<td class="dl-dim2">Apple M3</td>
+<td class="dl-dim2">gpu</td>
+<td class="dl-num dl-dim">8</td>
+<td class="dl-num dl-dim">8.4</td>
+<td class="dl-num dl-grp-start">128.4</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-grp-start">21.9</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-num dl-dim">-</td>
+<td class="dl-grp-start"><span class="dl-src"><span class="dl-src__dot dl-src__dot--un"></span><span class="dl-src__badge">community</span></span></td>
+<td class="dl-num dl-dim">2026-08-01</td>
+</tr>
+<tr hidden data-receipt="3"><td colspan="13"><div class="dl-bench-receipt"><span class="dl-receipt-note"><b>note     </b> Unverified: the tuning noise floor sat above the gate (4.6%), so the sidecar behind this run was kept but not promoted.</span>
+<b>das      </b>  $ dasllama-bench -m gemma-3-12b-it-Q5_K_M.gguf -t 8 -p 512 -n 128 -r 5 --backend metal
+        das @ 6b9f27aa4 · 0.6.4 · 2026-08-01 · 8 threads · community
+        executes: jit · mach-o arm64 · metal shaders emitted from daslang
+        Apple M3 · Mac15,12 · 8 cores · 24 GB · macOS 15.4 (24E263)
+
+<b>reference</b>  none.</div></td></tr>
+
+<tr class="dl-row" data-row="4">
+<td class="dl-td-model">Llama-3.1-8B-Instruct <span class="dl-model-sub">llama · Q8_0</span></td>
+<td class="dl-dim2">Apple M1 Max</td>
+<td class="dl-dim2">cpu</td>
+<td class="dl-num dl-dim">8</td>
+<td class="dl-num dl-dim">8.5</td>
+<td class="dl-num dl-grp-start">96.2</td>
+<td class="dl-num dl-dim">71.3</td>
+<td class="dl-num dl-win">1.35×</td>
+<td class="dl-num dl-grp-start">14.7</td>
+<td class="dl-num dl-dim">13.6</td>
+<td class="dl-num dl-win">1.08×</td>
+<td class="dl-grp-start"><span class="dl-src"><span class="dl-src__dot dl-src__dot--ok"></span><span class="dl-src__badge dl-src__badge--official">official</span></span></td>
+<td class="dl-num dl-dim">2026-07-19</td>
+</tr>
+<tr hidden data-receipt="4"><td colspan="13"><div class="dl-bench-receipt"><b>das      </b>  $ dasllama-bench -m Meta-Llama-3.1-8B-Instruct-Q8_0.gguf -t 8 -p 512 -n 128 -r 5
+        das @ 6b9f27aa4 · 0.6.4 · 2026-07-19 · 8 threads
+        executes: jit · mach-o arm64
+        Apple M1 Max · MacBookPro18,2 · 10 cores · 32 GB · macOS 26.0 (25F84)
+
+<b>reference</b>  $ llama-bench -m Meta-Llama-3.1-8B-Instruct-Q8_0.gguf -t 8 -p 512 -n 128 -r 5 -ngl 0
+        llama.cpp @ 9d4f21c7a · b4021 · clean-cpu · 2026-07-19 · 8 threads</div></td></tr>
+
+</tbody></table></div>
+
+<div class="dl-caption" id="dio-ladder-caption">measured 2026-07-19 → 2026-08-09 · llama.cpp @ 9d4f21c7a &nbsp;·&nbsp; showing 5 of 142 rows &nbsp;·&nbsp; click any row for its receipt &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity</div>
+
+<div class="dl-legend">
+<span><span class="dl-src__dot dl-src__dot--ok"></span>verified — noise gates passed</span>
+<span><span class="dl-src__dot dl-src__dot--un"></span>unverified — kept, not promoted</span>
+<span><span class="dl-src__badge dl-src__badge--official">official</span>measured by us</span>
+<span><span class="dl-src__badge">community</span>submitted with a sidecar</span>
+<span><span class="dl-note-mark">✱</span>hand-written note — hover the model cell</span>
+</div>
+<p class="dio-note">Live rows render client-side from <span style="color:var(--fg-dim)">/api/ladder/*</span> through the same <span style="color:var(--fg-dim)">dasllama.js</span> pair-table builder daslang.io uses. · <a href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology ↗</a></p>
+</div>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="index.html">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+</div></div></footer>
+
+<script>
+document.querySelectorAll('tr.dl-row').forEach(function(tr){tr.addEventListener('click',function(){
+  var n=document.querySelector('[data-receipt="'+tr.dataset.row+'"]');if(n)n.hidden=!n.hidden;});});
+var viewSeg=document.getElementById('view'),metricSeg=document.getElementById('metric');
+viewSeg.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){
+  viewSeg.querySelectorAll('button').forEach(function(x){x.classList.toggle('is-on',x===b)});
+  var bars=b.dataset.view==='bars';
+  document.getElementById('bars').hidden=!bars;
+  document.getElementById('table-wrap').hidden=bars;
+  metricSeg.style.visibility=bars?'visible':'hidden';});});
+metricSeg.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){
+  metricSeg.querySelectorAll('button').forEach(function(x){x.classList.toggle('is-on',x===b)});});});
+document.querySelectorAll('.js-bar-expand').forEach(function(el){el.addEventListener('click',function(){el.classList.toggle('is-open')});});
+</script>
+</div></body></html>

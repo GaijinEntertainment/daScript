@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>sidecars — dasllama.io</title>
+<meta name="description" content="The sidecar exchange — per-box tune manifests for dasLLAMA. Pick one up for your platform, architecture and engine version instead of spending 20 minutes tuning."/>
+<meta property="og:title" content="dasLLAMA sidecars"/>
+<meta property="og:description" content="Per-box tune manifests: kernel winners, runtime scalars, provenance. Pick one up instead of tuning."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/sidecars.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="index.html">home</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab is-active" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span id="dio-nav-version">v0.6.4</span></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>Somebody already tuned <em>your box.</em></h1>
+<p class="dio-head__lede">A sidecar is dasLLAMA's per-box tune manifest: which JIT kernel variant won in each of ~40 families, 23 tuned runtime scalars, and the provenance to prove where it came from. Producing one costs about 20 minutes of quiet machine. <b style="color:var(--fg);font-weight:400">dasllama-server picks a matching sidecar up automatically at startup</b> — this page is the manual browse.</p>
+</div>
+<div class="dio-head__aside" id="dio-sc-stats"><b>—</b> sidecars · <b>—</b> architectures<br/>engine <b>0.6.4</b><br/>a sidecar is valid for one <b>version × arch</b></div>
+</div></div></header>
+
+<div class="forge-container">
+<div class="dl-filters">
+<label>engine <select id="f-engine"><option>0.6.4 — latest</option><option>all versions</option></select></label>
+<label>status <select id="f-status"><option>all</option><option>verified</option><option>unverified</option></select></label>
+<label>sort <select id="f-sort"><option>newest first</option><option>lowest noise floor</option><option>most downloaded</option></select></label>
+<button class="dl-filters__reset" type="button" id="f-reset">reset</button>
+</div>
+
+<div class="dio-finder">
+<aside class="dio-tree" id="dio-tree">
+<!-- design placeholders — the tree renders from /api/sidecars/* -->
+<div class="dio-tree__label">platform · arch</div>
+<button class="dio-tree__item is-active">darwin · arm64 <i>21</i></button>
+<button class="dio-tree__item">linux · x86_64 <i>11</i></button>
+<button class="dio-tree__item">linux · arm64 <i>3</i></button>
+<button class="dio-tree__item">windows · x86_64 <i>3</i></button>
+<div class="dio-tree__label" style="margin-top:8px">cpu model</div>
+<button class="dio-tree__item is-active">Apple M1 Max <i>6</i></button>
+<button class="dio-tree__item">Apple M2 Max <i>5</i></button>
+<button class="dio-tree__item">Apple M4 Pro <i>4</i></button>
+<button class="dio-tree__item">Apple M3 <i>4</i></button>
+<button class="dio-tree__item">Apple M1 <i>2</i></button>
+</aside>
+
+<div id="dio-sc-list">
+<div class="dio-sc__head"><span>status</span><span>box</span><span>engine sha</span><span>date</span><span>noise floor</span><span></span><span></span></div>
+<!-- design placeholders — entries render from /api/sidecars/* -->
+
+<div class="dio-sc__entry is-open">
+<div class="dio-sc__row" onclick="this.parentNode.classList.toggle('is-open')">
+<span class="dio-status"><span class="dio-dot dio-dot--ok"></span>verified</span>
+<span class="dio-sc__box">darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max</span>
+<span class="dio-cell" data-l="engine sha">6b9f27aa4</span>
+<span class="dio-cell" data-l="date">2026-08-09</span>
+<span class="dio-cell dio-noise" data-l="noise floor"><span class="dio-noise__bar"><i style="width:22%"></i></span>0.8%</span>
+<a class="dio-dl" href="#" onclick="event.stopPropagation()">download</a>
+<span class="dio-chev">▾</span>
+</div>
+<div class="dio-panel">
+<div class="dio-subhead">kernel winners — 40 families</div>
+<div class="dio-kernels">
+<div class="dio-kernel"><div class="dio-kernel__fam">softmax</div><div class="dio-kernel__win"><em>vec8_u2</em></div><div class="dio-kernel__margin">+14.2% over scalar_u1</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">rmsnorm</div><div class="dio-kernel__win"><em>vec4_fma</em></div><div class="dio-kernel__margin">+9.1% over vec8</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">mul_mat_q4k</div><div class="dio-kernel__win"><em>tile64_u4</em></div><div class="dio-kernel__margin">+21.7% over tile32_u2</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">mul_mat_q8</div><div class="dio-kernel__win"><em>tile32_u4</em></div><div class="dio-kernel__margin">+6.4% over tile64_u4</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">rope</div><div class="dio-kernel__win"><em>vec4_lut</em></div><div class="dio-kernel__margin">+3.8% over vec4</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">attn_kv_gather</div><div class="dio-kernel__win"><em>blocked_u2</em></div><div class="dio-kernel__margin">+11.0% over linear</div></div>
+<div class="dio-kernel"><div class="dio-kernel__fam">dequant_q4k</div><div class="dio-kernel__win"><em>vec16</em></div><div class="dio-kernel__margin">+17.9% over vec8</div></div>
+<div class="dio-kernel dio-kernel--fallback"><div class="dio-kernel__fam">moe_route</div><div class="dio-kernel__win"><em>scalar</em> <span style="color:var(--fg-faint)">fallback</span></div><div class="dio-kernel__margin">no variant cleared the gate</div></div>
+</div>
+<div class="dio-more">showing 8 of 40 families · <a href="#">expand all</a> · <a href="#">race margins</a> · <a href="#">raw sidecar.json ↗</a></div>
+<div class="dio-subhead" style="margin-top:22px">tuned runtime scalars — 23</div>
+<div class="dio-scalars">
+<div><span>jobque_spin_us</span><b>30000</b></div>
+<div><span>tile_m</span><b>64</b></div>
+<div><span>tile_n</span><b>128</b></div>
+<div><span>prefetch_dist</span><b>2</b></div>
+<div><span>kv_block</span><b>256</b></div>
+<div><span>threads</span><b>8</b></div>
+</div>
+<div class="dio-cmd" style="margin-top:18px"><div><span class="p">$</span> dasllama-server --sidecar darwin-arm64-m1max-6b9f27aa4.json</div></div>
+</div>
+</div>
+
+<div class="dio-sc__entry">
+<div class="dio-sc__row" onclick="this.parentNode.classList.toggle('is-open')">
+<span class="dio-status"><span class="dio-dot dio-dot--ok"></span>verified</span>
+<span class="dio-sc__box">darwin|arm64|MacBookPro18,2|24E263|Apple M1 Max</span>
+<span class="dio-cell" data-l="engine sha">6b9f27aa4</span>
+<span class="dio-cell" data-l="date">2026-08-02</span>
+<span class="dio-cell dio-noise" data-l="noise floor"><span class="dio-noise__bar"><i style="width:34%"></i></span>1.3%</span>
+<a class="dio-dl" href="#" onclick="event.stopPropagation()">download</a>
+<span class="dio-chev">▾</span>
+</div>
+<div class="dio-panel"><div class="dio-more">Same box identity, older OS build — kept because OS build is part of the identity string and can move kernel winners.</div></div>
+</div>
+
+<div class="dio-sc__entry">
+<div class="dio-sc__row" onclick="this.parentNode.classList.toggle('is-open')">
+<span class="dio-status"><span class="dio-dot dio-dot--un"></span>unverified</span>
+<span class="dio-sc__box">darwin|arm64|Mac14,9|25F84|Apple M1 Max</span>
+<span class="dio-cell" data-l="engine sha">6b9f27aa4</span>
+<span class="dio-cell" data-l="date">2026-07-28</span>
+<span class="dio-cell dio-noise" data-l="noise floor"><span class="dio-noise__bar"><i class="warn" style="width:78%"></i></span>4.6%</span>
+<a class="dio-dl" href="#" onclick="event.stopPropagation()">download</a>
+<span class="dio-chev">▾</span>
+</div>
+<div class="dio-panel"><div class="dio-more">Tuned on a busy machine: the noise floor sat above the gate, so the winners are plausible but unproven. The server will offer it, flagged, and suggest tuning your own.</div></div>
+</div>
+
+<div class="dio-sc__entry">
+<div class="dio-sc__row" onclick="this.parentNode.classList.toggle('is-open')">
+<span class="dio-status"><span class="dio-dot dio-dot--ok"></span>verified</span>
+<span class="dio-sc__box">darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max</span>
+<span class="dio-cell" data-l="engine sha">c02d18f61 <span style="color:var(--fg-faint)">· 0.6.3</span></span>
+<span class="dio-cell" data-l="date">2026-06-14</span>
+<span class="dio-cell dio-noise" data-l="noise floor"><span class="dio-noise__bar"><i style="width:19%"></i></span>0.7%</span>
+<a class="dio-dl" href="#" onclick="event.stopPropagation()">download</a>
+<span class="dio-chev">▾</span>
+</div>
+<div class="dio-panel"><div class="dio-more">Previous engine version — kernel families changed in 0.6.4, so this one is not applied to a 0.6.4 runtime.</div></div>
+</div>
+</div>
+</div>
+
+<p class="dio-note">Zero-state: an architecture with no sidecars shows “nothing here yet — tuning your box takes ~20 min and publishes the measurements that ride along”. Entries render client-side from <span style="color:var(--fg-dim)">/api/sidecars/*</span>.</p>
+</div>
+
+<section class="forge-section forge-section--alt" style="margin-top:48px;padding:64px 0">
+<div class="forge-container">
+<div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>the cli does this for you</div>
+<div class="dio-get__grid">
+<div>
+<h2 class="forge-h2">Downloading by hand is the fallback.</h2>
+<p class="forge-p">At startup the server matches your box string against the exchange and asks. Manual download is for air-gapped boxes and for people who want to read the manifest before trusting it.</p>
+<div class="dio-get__steps">
+<div class="dio-get__step"><i>01</i><span>exact match, verified → applied silently</span></div>
+<div class="dio-get__step"><i>02</i><span>unverified match → offered, flagged</span></div>
+<div class="dio-get__step"><i>03</i><span>nothing → tune here, ~20 min quiet box, and submit</span></div>
+</div>
+</div>
+<div class="forge-terminal">
+<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">dasllama-server</span><span class="forge-terminal__status">startup</span></div>
+<div class="forge-output" style="border-top:0;padding:18px 20px;font-size:12.5px;line-height:1.85">
+<div class="forge-output__line"><span class="forge-output__prompt">$</span> dasllama-server --model Qwen3.6-35B-A3B-Q4_K_M.gguf</div>
+<div class="forge-output__line forge-output__hint">box  darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max</div>
+<div class="forge-output__line forge-output__hint">exchange … 1 verified sidecar · noise 0.8% · 2026-08-09</div>
+<div class="forge-output__line"><span style="color:var(--amber)">?</span> use it, or tune for this exact box (~20 min)? [<span class="forge-output__stdout">use</span>/tune/skip]</div>
+<div class="forge-output__ok">✓ applied · 40/40 kernel families · 23 scalars</div>
+<div class="dio-term__sp"></div>
+<div class="forge-output__line"><span class="forge-output__prompt">$</span> dasllama-server --tune --submit <span class="forge-output__hint"># publish yours</span></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<footer class="dio-footer" style="margin-top:0"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="index.html">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+</div></div></footer>
+
+<script>
+document.querySelectorAll('.dio-tree').forEach(t=>{
+  const groups=[];let cur=null;
+  for(const el of t.children){if(el.classList.contains('dio-tree__label')){cur=[];groups.push(cur)}else if(cur)cur.push(el)}
+  groups.forEach(g=>g.forEach(b=>b.onclick=()=>{g.forEach(x=>x.classList.remove('is-active'));b.classList.add('is-active')}));
+});
+</script>
+</div></body></html>
