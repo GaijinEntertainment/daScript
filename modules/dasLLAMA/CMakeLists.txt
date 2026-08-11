@@ -44,6 +44,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     ADD_MODULE_DAS(dasllama dasllama dasllama_tools)
     ADD_MODULE_DAS(dasllama dasllama dasllama_chat)
     ADD_MODULE_DAS(dasllama dasllama dasllama)
+    ADD_MODULE_DAS(dasllama dasllama dasllama_scheduler)
 
     # dasLLAMA IS NEVER AOT'D — -jit only; no AOT source/depends exports (see tests/aot/CMakeLists.txt).
 

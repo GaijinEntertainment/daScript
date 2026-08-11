@@ -1,6 +1,6 @@
 options gen2
 
-module llm_scheduler
+module dasllama_scheduler shared public
 
 require dasllama/dasllama   // the public facade — the scheduler reaches no engine internals
 require math
@@ -168,13 +168,13 @@ def n_queued(sch : Scheduler) : int64 => long_length(sch.queue)
 def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     let np = long_length(req.prompt)
     if (np <= 0l) {
-        panic("llm_scheduler: empty prompt (stream {req.id}) — the wiring must reject it first")
+        panic("dasllama_scheduler: empty prompt (stream {req.id}) — the wiring must reject it first")
     }
     if (np + 1l > model.config.seq_len) {
-        panic("llm_scheduler: {np}-token prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) — the wiring must reject it first")
+        panic("dasllama_scheduler: {np}-token prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) — the wiring must reject it first")
     }
     if (req.max_new < 1l) {
-        panic("llm_scheduler: max_new {req.max_new} < 1 (stream {req.id}) — the wiring must clamp it first")
+        panic("dasllama_scheduler: max_new {req.max_new} < 1 (stream {req.id}) — the wiring must clamp it first")
     }
     if (long_length(sch.queue) >= sch.max_queue) {
         return false

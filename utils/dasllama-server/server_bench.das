@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — a serving benchmark, not the bit-exact suite
 
-// Serving-latency benchmark for llm_scheduler — drives the scheduler directly through the
+// Serving-latency benchmark for dasllama_scheduler — drives the scheduler directly through the
 // SchedEvent seam (no HTTP), so every number is server-side truth:
 //   1. aggregate tok/s + TTFT p50/p95 + inter-token p50/p95 vs batch size B
 //   2. chunk interference: a decoding stream's inter-token p95 while a long prompt prefills,
@@ -10,7 +10,7 @@ options fast_math = true  // ggml-parity FP laxity — a serving benchmark, not 
 //   3. warm vs cold TTFT for an identical prompt — the prefix-cache collapse
 //   bin/daslang -jit utils/dasllama-server/server_bench.das -- -m <model.gguf> [-b 8] [-n 64] [--long-prompt 512]
 
-require llm_scheduler           // the scheduler under bench (sibling — bare require, hyphenated dir)
+require dasllama/dasllama_scheduler   // the scheduler under bench
 require dasllama/dasllama       // facade: load_model / setup_dasllama_jobque
 require daslib/jobque_boost
 require daslib/clargs

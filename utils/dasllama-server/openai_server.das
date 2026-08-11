@@ -5,7 +5,7 @@ options fast_math = true   // ggml-parity FP laxity (non-bit-exact); inference t
 module openai_server
 
 require dasllama/dasllama       // the public facade — the main dasLLAMA surface this tool touches
-require llm_scheduler           // continuous-batching scheduler (sibling — bare require, hyphenated dir)
+require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 over the facade)
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
@@ -30,7 +30,7 @@ require dasllama/dasllama_gpu_resident   // multi-model slot switch (marks save/
 // surface builds without reaching into the engine, the facade is complete. (The dashboard-only
 // surfaces additionally read dasllama_math's tier-status getters — see the require above.)
 // Chat and completion requests batch continuously: handlers parse + render + register and return;
-// run_server's loop drives llm_scheduler (one eval_batch decode step over every live stream + one
+// run_server's loop drives dasllama_scheduler (one eval_batch decode step over every live stream + one
 // bounded prefill chunk per tick) and routes SchedEvents back to each request's writer. Streaming
 // and buffered responses both ride the deferred writer ops, so N streams generate concurrently.
 // ASR uploads are queued to long-lived new_thread workers, each with its own model/session/context;

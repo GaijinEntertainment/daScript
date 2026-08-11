@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options persistent_heap   // each test frees its model/scheduler before the next loads
 
 require dastest/testing_boost public
-require llm_scheduler                                   // the scheduler under test (sibling — bare require, hyphenated dir)
+require dasllama/dasllama_scheduler   // the scheduler under test
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require daslib/jobque_boost
 require daslib/fio
@@ -98,7 +98,7 @@ def private drain(m : Model; var sch : Scheduler; var events : array<SchedEvent>
     while (scheduler_step(m, sch, events)) {
         steps ++
         if (steps > 4096) {
-            panic("test_llm_scheduler: scheduler did not go idle in 4096 steps")
+            panic("test_scheduler: scheduler did not go idle in 4096 steps")
         }
     }
 }
