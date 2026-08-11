@@ -94,9 +94,23 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; aut
     return true
 }
 
+def private cfg_from_toml(root : JsonValue?; key : string; var field : bool&; auth : bool; user_args : array<string>; var sources : table<string; string>; var error : string&) : bool {
+    if (!toml_wins(root, key, auth, user_args)) {
+        return true
+    }
+    let v = root?[key]
+    if (v == null || !(v.value is _bool)) {
+        error = "config key '{key}' must be a boolean"
+        return false
+    }
+    field = v ?? false
+    sources[key] = "toml"
+    return true
+}
+
 def mark_cli_sources(user_args : array<string>; var sources : table<string; string>) {
     for (key in fixed_array("port", "db", "max_records_bytes", "max_sidecar_bytes",
-        "max_submissions_per_ip_hour", "official_dir")) {
+        "max_submissions_per_ip_hour", "submit_open", "official_dir")) {
         if (from_cli(user_args, key)) {
             sources[key] = "cli"
         }
@@ -119,6 +133,7 @@ def apply_config_text(var cfg : LadderArgs; body : string; user_args : array<str
         cfg_from_toml(root, "max_records_bytes", cfg.max_records_bytes, auth, user_args, sources, error) &&
         cfg_from_toml(root, "max_sidecar_bytes", cfg.max_sidecar_bytes, auth, user_args, sources, error) &&
         cfg_from_toml(root, "max_submissions_per_ip_hour", cfg.max_submissions_per_ip_hour, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "submit_open", cfg.submit_open, auth, user_args, sources, error) &&
         cfg_from_toml(root, "official_dir", cfg.official_dir, auth, user_args, sources, error))
     unsafe {
         delete root   // read_toml minted this tree; nothing outlives this scope
@@ -167,6 +182,7 @@ def config_banner(cfg : LadderArgs; sources : table<string; string>) : JsonValue
         max_submissions_per_ip_hour = cfg.max_submissions_per_ip_hour,
         max_submissions_per_ip_hour_src = sources?["max_submissions_per_ip_hour"] ?? "default",
         submit_open = cfg.submit_open,
+        submit_open_src = sources?["submit_open"] ?? "default",
         official_dir = cfg.official_dir,
         official_dir_src = sources?["official_dir"] ?? "default",
         config = cfg.config))

@@ -9,4 +9,7 @@
 # shell. It is close to root in practice (the `install` verb unpacks a tarball as root), so
 # the real protections are: the key never gets an interactive root shell, every run is in the
 # sudo audit log, and the whole privileged surface is this one reviewed script.
+#
+# `boris` is the dasweb-1 operator account. On any other box, replace it with that box's
+# deploying user (this file is box-specific, not a drop-in-anywhere template).
 boris ALL=(root) NOPASSWD: /usr/local/sbin/dasllama-deploy.sh

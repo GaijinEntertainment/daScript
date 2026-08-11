@@ -8,7 +8,8 @@
 #   caddy                      splice caddy.snippet into the dasllama.io vhost, validate, reload
 #   install <sha> <tarball>    per-release: unpack, carry operator files, flip current, restart, health
 #   open-submit | close-submit flip the public-submission gate (loopback admin call)
-#   status                     service + gate state
+#   status                     systemd active-state + /api health (the gate state is not
+#                              remotely queryable; it is in the service's startup banner/log)
 #
 # The bundle comes from the builder box (zen4), from the arc worktree there:
 #   cd ~/daScript-dasweb && git pull --ff-only origin <branch>
@@ -80,6 +81,12 @@ caddy_apply() {
         }
         { print }
     ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
+    # The awk match is exact (`dasllama.io {`); if the vhost is ever reformatted (shared address,
+    # renamed) it matches nothing, validate still passes on the unchanged file, and we would
+    # wrongly report success. Confirm the proxy line actually landed before reloading.
+    if ! grep -q "reverse_proxy 127.0.0.1:$PORT" "$CADDYFILE"; then
+        echo "caddy: splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
+    fi
     if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
         echo "caddy validate FAILED - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
     fi
@@ -89,6 +96,15 @@ caddy_apply() {
 
 install_release() {
     SHA="${1:?install <sha> <tarball>}"; TARBALL="${2:?install <sha> <tarball>}"
+    # $SHA names a release dir under $APP/releases and drives rm -rf/mv/ln as root. Pin it to a
+    # git short-sha shape so a typo like "." or "../x" can't escape the releases tree.
+    case "$SHA" in ''|*[!0-9a-fA-F]*) echo "bad sha '$SHA' (hex only)"; exit 2;; esac
+    [ -f "$TARBALL" ] || { echo "no tarball at '$TARBALL'"; exit 2; }
+    # `tar xzf` runs as root below; reject an archive with absolute or `..` entries so a crafted
+    # or corrupt tarball can't escape the releases tree and overwrite arbitrary files.
+    if tar tzf "$TARBALL" | grep -qE '(^/|(^|/)\.\.(/|$))'; then
+        echo "unsafe tarball: contains absolute or '..' path entries"; exit 2
+    fi
     CARRY=$(mktemp -d); trap 'rm -rf "$CARRY"' EXIT
     had_toml=0
     for f in dasllama-ladder.toml watchdog.json; do

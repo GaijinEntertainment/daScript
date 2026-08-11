@@ -403,12 +403,15 @@ def private handle_admin_submit(var req : HttpRequest?; var resp : HttpResponse?
         log_request("POST", "/admin/submit", 403, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
     }
-    var jerr = ""
-    var js = read_json(string(req.body), jerr)
-    let want : bool = js?["open"] ?? false   // absent/garbage body → closed (fail-safe)
-    unsafe {
-        delete js   // read_json minted this tree; the bool is already copied out
+    var early = http_status.OK
+    let doc = submit_body_of(req, "/admin/submit", resp, early, t0)
+    if (empty(doc)) {
+        return early
     }
+    var jerr = ""
+    var js = read_json(doc, jerr)
+    let want : bool = js?["open"] ?? false   // absent/garbage body → closed (fail-safe)
+    delete_json(js)                          // no-ops on null; the bool is already copied out
     g_policy.submit_open = want
     logger_info("ladder", want ? "submissions OPENED via loopback admin" : "submissions CLOSED via loopback admin")
     let body = write_json(JV((submit_open = g_policy.submit_open)))

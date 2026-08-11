@@ -71,5 +71,40 @@ Plain dastest — the same lane `extended_checks` runs the dasweb-playground sui
 The consuming half lives with dasLLAMA: `modules/dasLLAMA/performance/exchange_client.das`
 (boot-time sidecar lookup/apply as llvm_tune's scope resolver, the privacy-stripped submit
 rails, the control-page surface), wired into `utils/dasllama-server` (the `/exchange`
-endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. Deploy and the follow-up
-ledger (partial re-race, cross-box matrix, version diff) are in `plans/dasllama_io_site.md`.
+endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. The follow-up ledger (partial
+re-race, cross-box matrix, version diff) is in `plans/dasllama_io_site.md`.
+
+## 6. Deploy
+
+Mirrors dasweb-playground: a `daspkg release` bundle, supervised by `systemd → watchdog.py`,
+fronted by Caddy on the `dasllama.io` vhost. `dasllama-deploy.sh` is the box-side tool, run
+through the scoped sudoers drop-in (`dasllama-deploy.sudoers`) — the one privileged surface.
+
+Build the bundle on the builder box (zen4) from the arc worktree:
+
+```
+cd ~/daScript-dasweb && git pull --ff-only origin <branch>
+bin/daslang utils/daspkg/main.das -- release --root utils/dasllama-ladder --out ~/dasllama_release
+SHA=$(git rev-parse --short HEAD)
+cd ~/dasllama_release && tar czf dasllama-ladder-$SHA.tar.gz dasllama-ladder
+# scp dasllama-ladder-$SHA.tar.gz to dasweb-1:/tmp
+```
+
+On the box, in order — `provision` before `install` before `caddy` (install needs the unit
+`provision` writes; `caddy` needs the `caddy.snippet` `install` stages):
+
+```
+sudo dasllama-deploy.sh provision                                  # user, dirs, systemd unit, restic snapshot line
+sudo dasllama-deploy.sh install $SHA /tmp/dasllama-ladder-$SHA.tar.gz
+sudo dasllama-deploy.sh caddy                                      # splice /api into the dasllama.io vhost, validate, reload
+```
+
+The board launches **read-only**: `submit_open` defaults false, so `/api/submit/*` returns 403
+until an operator opens it. Toggle for a test window over the loopback tunnel with
+`sudo dasllama-deploy.sh open-submit` / `close-submit`; the permanent open (after the security
+audit) is `submit_open = true` in the deployed toml, or the `--submit-open` boot flag.
+
+Seed the official boards (they're not in the release — the record stores live under
+`modules/dasLLAMA/performance/records/`): stage that directory on the box, point the deployed
+toml's `official_dir` at it (imported at every start), or import once over loopback with
+`admin.das`.

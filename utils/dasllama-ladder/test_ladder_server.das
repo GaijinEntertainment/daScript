@@ -287,5 +287,21 @@ def test_submit_gate(t : T?) {
                 tt |> equal(int(resp.status_code), 403, "records refused again")
             }
         }
+        t |> run("a malformed admin body cannot leave the gate open (fail-safe)") @(tt : T?) {
+            POST("{base_url}/admin/submit", "\{\"open\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            // garbage must resolve to closed: read_json -> null -> ?? false. (A non-loopback
+            // caller is also refused, but every in-process peer is 127.0.0.1 so that path
+            // can't be exercised here — it is covered by is_loopback_caller's exact-match.)
+            POST("{base_url}/admin/submit", "not json at all") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                tt |> success(!(js?["submit_open"] ?? true), "garbage body closed the gate")
+            }
+            POST("{base_url}/api/submit/sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 403, "submit refused after the garbage close")
+            }
+        }
     }
 }
