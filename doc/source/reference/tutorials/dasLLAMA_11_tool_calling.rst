@@ -95,6 +95,8 @@ requests over exactly this surface.
 
    Full source: :download:`tutorials/dasLLAMA/11_tool_calling.das <../../../../tutorials/dasLLAMA/11_tool_calling.das>`
 
+   Next tutorial: :ref:`tutorial_dasLLAMA_voice_activity`
+
    Thinking models and the reasoning split: :ref:`tutorial_dasLLAMA_thinking`
 
    Chat basics: :ref:`tutorial_dasLLAMA_chat`

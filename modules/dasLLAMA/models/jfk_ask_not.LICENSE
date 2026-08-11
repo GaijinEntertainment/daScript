@@ -1,0 +1,6 @@
+jfk_ask_not.wav — public domain.
+
+Four-second excerpt of John F. Kennedy's inaugural address (1961-01-20), a United States
+government work with no copyright. Resampled to 16 kHz mono PCM16 from whisper.cpp's
+canonical samples/jfk.wav test fixture. Used as the speech fixture for the voice-activity
+tutorial and any test needing a few seconds of real speech with zero downloads.

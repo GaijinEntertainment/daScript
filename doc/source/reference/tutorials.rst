@@ -275,6 +275,8 @@ with ``-jit``::
    tutorials/dasLLAMA_09_embeddings.rst
    tutorials/dasLLAMA_10_thinking.rst
    tutorials/dasLLAMA_11_tool_calling.rst
+   tutorials/dasLLAMA_12_voice_activity.rst
+   tutorials/dasLLAMA_13_serving.rst
 
 .. _tutorials_dasopenai:
 
