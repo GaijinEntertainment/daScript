@@ -97,7 +97,16 @@
    cell wrap inside its 300px cap instead of overflowing into the machine column */
 /* long model names wrap instead of stretching the table — but the min-width keeps the
    auto layout from collapsing the wrapping column to one character per line */
-.dl-table--bench td.dl-td-model{white-space:normal;overflow-wrap:anywhere;line-height:1.35;min-width:240px}
+.dl-table--bench td.dl-td-model{white-space:normal;overflow-wrap:anywhere;line-height:1.35;min-width:220px}
+/* the ladder table FITS its container — no inner scrollbar in table mode. Text cells may
+   wrap (numbers, badges and dates stay nowrap via the shared rules below), padding is a
+   notch tighter than the shared language, and the wrap stops being a scroll container.
+   Small screens keep the standard horizontal scroll — 13 columns cannot wrap onto a phone. */
+#table-wrap{overflow:visible}
+#table-wrap table.dl-table{min-width:0}
+#ladder-table thead th,#ladder-table tbody td{white-space:normal;padding-left:7px;padding-right:7px}
+#ladder-table thead th.dl-num,#ladder-table tbody td.dl-num{white-space:nowrap}
+@media (max-width:1149px){#table-wrap{overflow-x:auto;overflow-y:hidden}}
 .dio-cell{display:block;min-width:0}
 .dio-chev{color:var(--fg-faint);font-size:10px;text-align:right;transition:transform 140ms ease}
 .dio-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
