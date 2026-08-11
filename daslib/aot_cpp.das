@@ -228,18 +228,8 @@ enum CpptSubstitureRef {
     no
     yes
 };
-enum CpptSkipRef {
-    //! Controls whether references are skipped in C++ type printing.
-    no
-    yes
-};
 enum CpptSkipConst {
     //! Controls whether const qualifiers are skipped in C++ type printing.
-    no
-    yes
-};
-enum CpptRedundantConst {
-    //! Controls whether redundant const qualifiers are emitted in C++ type printing.
     no
     yes
 };
@@ -689,9 +679,6 @@ def enumInfoName(info : EnumInfo?) {
 def public funcInfoName(info : FuncInfo?) {
     //! Returns the C++ identifier name for a function's runtime info based on its hash.
     return "__func_info__{info.hash:x}";
-}
-def varInfoName(info : VarInfo?) {
-    return "__var_info__{info.hash:x}";
 }
 def structInfoName(info : StructInfo?) {
     return "__struct_info__{info.hash:x}";
@@ -1310,9 +1297,6 @@ class public BlockVariableCollector : AstVisitor {
     moved : table<Variable?>
     tempCounter : uint64 = uint64(0)
 };
-
-def collect_block_variables() {
-}
 
 def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
     //! Returns the C++ function signature string for an AOT-compiled function.

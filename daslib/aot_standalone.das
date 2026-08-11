@@ -30,22 +30,6 @@ def aotFunctionName(str : string) {
     return replace(str, "`", "__")
 }
 
-def getInitSemanticHash(_ctx : Context) {
-    /*
-    const uint64_t fnv_prime = 1099511628211ul;
-    uint64_t hash = globalsSize ^ sharedSize;
-    for (int i = 0; i != totalVariables; ++i) {
-        hash = (hash ^ (globalVariables[i].shared ? 13 : 17)) * fnv_prime;
-        hash = (hash ^ globalVariables[i].mangledNameHash) * fnv_prime;
-        hash = (hash ^ globalVariables[i].size) * fnv_prime;
-        if (globalVariables[i].init) {
-            hash = (hash ^ getSemanticHash(globalVariables[i].init, this)) * fnv_prime;
-        }
-    }
-    return hash;
-    */
-}
-
 def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilderWriter; prefix : string; declare_only : bool; cfg : StandaloneContextCfg) {
     let fnn = collectProgramUsedFunctions(prog, false, false);
 

@@ -450,62 +450,6 @@ def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
     return td
 }
 
-def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
-    ok = true
-    var stmt_count = 0
-    let sql = build_string() $(var w) {
-        for (ann in st.annotations) {
-            if (ann.annotation.name != "sql_index") continue
-            let idx_name_arg = find_annotation(ann.arguments, "name", "")
-            let is_unique = find_annotation(ann.arguments, "unique", false)
-            let cols = find_string_array_annotation(ann.arguments, "fields")
-            if (empty(cols)) {
-                errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
-                ok = false
-                return
-            }
-            for (col in cols) {
-                var found = false
-                for (fn in field_names) {
-                    if (fn == col) {
-                        found = true
-                    }
-                }
-                if (!found) {
-                    errors := "[sql_index]: field '{col}' is not a column of struct '{st.name}'. Available: {field_names}"
-                    ok = false
-                    return
-                }
-            }
-            let auto_name = build_string() $(var w2) {
-                w2 |> write("idx_")
-                w2 |> write(table_name)
-                for (col in cols) {
-                    w2 |> write("_")
-                    w2 |> write(col)
-                }
-            }
-            let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
-            let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
-            if (stmt_count > 0) {
-                w |> write("; ")
-            }
-            stmt_count++
-            w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
-            for (j in range(length(cols))) {
-                if (j > 0) {
-                    w |> write(", ")
-                }
-                w |> write("\"")
-                w |> write(cols[j])
-                w |> write("\"")
-            }
-            w |> write(")")
-        }
-    }
-    return sql
-}
-
 def private extract_string_return(var fn : FunctionPtr) : string {
     if (fn == null || fn.body == null || !(fn.body is ExprBlock)) return ""
     let blk = fn.body as ExprBlock

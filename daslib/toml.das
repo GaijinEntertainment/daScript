@@ -101,10 +101,6 @@ struct private LexState {
     row  : int       //! 0-based column on current line
 }
 
-def private at(data : array<uint8>&; st : LexState) : int {
-    return st.pos < st.n ? int(data[st.pos]) : -1
-}
-
 def private peek(data : array<uint8>&; st : LexState; offset : int) : int {
     let p = st.pos + offset
     return p < st.n ? int(data[p]) : -1
@@ -137,17 +133,6 @@ def private starts_with_at(data : array<uint8>&; pos : int; s : string) : bool {
         }
     }
     return ok
-}
-
-def private skip_inline_ws(data : array<uint8>&; var st : LexState&) : void {
-    while (st.pos < st.n) {
-        let c = int(data[st.pos])
-        if (c == ' ' || c == '\t') {
-            advance(data, st)
-        } else {
-            break
-        }
-    }
 }
 
 def private skip_comment_to_eol(data : array<uint8>&; var st : LexState&) : void {

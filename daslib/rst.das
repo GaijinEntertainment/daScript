@@ -639,20 +639,6 @@ def make_header(name, lab : string) {
     return ".. _stdlib_{lab}:\n\n{strings::repeat("=",wide)}\n{name}\n{strings::repeat("=",wide)}\n\n"
 }
 
-def private write_table_separator(var writer : StringBuilderWriter; wid : array<int>; sep : string = "-") {
-    for (x in wid) {
-        write(writer, "+{strings::repeat(sep,x)}")
-    }
-    write(writer, "+\n")
-}
-
-def private write_table_line(var writer : StringBuilderWriter; line : array<string>; wid : array<int>) {
-    for (x, l in wid, line) {
-        write(writer, "+{wide(l,x)}")
-    }
-    write(writer, "+\n")
-}
-
 def make_table(title : string; tab : array<array<string>>) {
     return build_string() $(writer) {
         let header = ":{title}:"
@@ -713,28 +699,6 @@ def private table_block(header : string; tab : array<array<string>>; nosearch : 
     return ".. container:: nosearch\n\n{indent_block(t)}"
 }
 
-
-def make_table_(tab : array<array<string>>; withHeader : bool = false) {
-    return build_string() $(writer) {
-        var cols = 0
-        for (c in tab) {
-            cols = max(cols, length(c))
-        }
-        var wid : array<int>
-        resize(wid, cols)
-        for (cc in tab) {
-            for (x in range(cols)) {
-                wid[x] = max(wid[x], length(cc[x]))
-            }
-        }
-        for (ccc, idx in tab, count()) {
-            write_table_separator(writer, wid, (idx == 1 && withHeader) ? "=" : "-")
-            write_table_line(writer, ccc, wid)
-        }
-        write_table_separator(writer, wid)
-        write(writer, "\n\n")
-    }
-}
 
 // def make_fake_table(tab:array<array<string>>) return build_string() $(writer) let rows = length(tab) var cols = 0 for c in tab cols = max(cols,length(c)) var wid : array<int> resize(wid,cols) for cc in tab for x in range(cols) wid[x] = max(wid[x], length(cc[x])) for ccc in tab for x,l in wid,ccc write(writer,"+{strings::repeat(\"-\",l)}") write(writer,"+\n") for x,l in wid,ccc write(writer,"|{l}") write(writer,"|\n") for x,l in wid write(writer,"+{strings::repeat(\"-\",l)}") write(writer,"+\n")
 
@@ -2012,14 +1976,6 @@ struct public DocGroup {
     func : array<tuple<fn : Function?; mod : Module?>>
     hidden : bool
     @do_not_delete _module : Module?
-}
-
-def debug_group(var group : DocGroup) {
-    print("Group {group.name}\n")
-    for (func in group.func) {
-        print("\t{rst_describe_function_short(func.fn)}\n")
-    }
-    return <- group
 }
 
 def public append_to_group_by_regex(var group : DocGroup; var mod : Module?; var reg : Regex) : DocGroup& {

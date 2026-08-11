@@ -45,14 +45,6 @@ def private debug_rst ( _s : string ) {
     }
 }
 
-def error_rst ( s : string ) {
-    if (DEBUG_COMMENT_READER) {
-        error("{s} at {get_line_info(1) |> describe}\n")
-    } else {
-        error(s)
-    }
-}
-
 def panic_rst ( s : string ) {
     if (DEBUG_COMMENT_READER) {
         error("{s} at {get_line_info(1) |> describe}\n")
@@ -74,8 +66,6 @@ def private get_macro_name ( st:StructurePtr; mtype:string ) : string {
     return string(st.name)
 }
 
-
-var private modName : function<(): string>
 
 [macro_function]
 def get_module_name(prog, mod) {

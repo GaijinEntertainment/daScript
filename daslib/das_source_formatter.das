@@ -822,13 +822,6 @@ def fmt_remove_space_before_args(var ctx : FormatterCtx) {
 }
 
 
-def debug_print_tokens(ctx : FormatterCtx) {
-    for (t in ctx.tokens) {
-        to_log(LOG_DEBUG, "{t.isInFunctionParam ? ">" : " "}{t.isInType ? "*" : " "} '{t.str}'\n")
-    }
-}
-
-
 def generate_source(ctx : FormatterCtx) : string {
     var res : array<uint8>
     res |> reserve(1000 + length(ctx.tokens) * 8)

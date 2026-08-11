@@ -2254,58 +2254,6 @@ class private DAServer : Server {
 
 
 
-class private EvalWalker : DapiStackWalker {
-    //! Stack walker for expression evaluation in debug sessions.
-    W : StringBuilderWriter?
-
-    def EvalWalker(var wr : StringBuilderWriter) {
-        //! Constructs an EvalWalker with a reference to the output StringBuilderWriter.
-        W = unsafe(addr(wr))
-    }
-
-    def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
-        //! Writes a function argument as a let-binding for runtime expression evaluation.
-        if (vinfo.flags.refType) {
-            let parg = unsafe(reinterpret<void?>(arg))
-            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?>({parg}ul) // ref argument\n")
-        } elif (vinfo.dimSize > 0u) {
-            let parg = unsafe(reinterpret<void?>(arg))
-            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(vinfo))}?>({parg}ul) // ref argument\n")
-        } else {
-            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = ")
-            if (vinfo.basicType == Type.tString) {
-                *W |> write("\"");
-                *W |> write(sprint_data(arg, type_info(vinfo), print_flags(uninitialized)));
-                *W |> write("\"")
-            } else {
-                *W |> write(sprint_data(arg, type_info(vinfo), print_flags(uninitialized)))
-            }
-            *W |> write("\n")
-        }
-    }
-
-    def override onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void {
-        //! Writes an in-scope local variable as a let-binding for runtime expression evaluation.
-        if (inScope) {
-            if (arg != null) {
-                if (vinfo.flags.ref) {
-                    unsafe {
-                        let pref = unsafe(reinterpret<void ??>(arg))
-                        var cvinfo = vinfo
-                        cvinfo.flags.ref = false
-                        *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?>({*pref}ul) // already ref\n")
-                    }
-                } elif (vinfo.dimSize > 0u) {
-                    *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(vinfo))}?>({arg}ul)\n")
-                } else {
-                    *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?>({arg}ul)\n")
-                }
-            }
-        }
-    }
-}
-
-
 def private tick_debugger() {
     tick_debug_agent("~debug")
     sleep(10u)
