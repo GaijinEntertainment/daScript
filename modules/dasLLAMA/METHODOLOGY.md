@@ -119,7 +119,10 @@ Each run is one record, and das and reference runs are siblings in the same stor
 ratios are derived when the site renders, never stored. The store lives at
 `performance/records/<box>.json`; `performance/profile_common.das` is its authoritative reader
 and writer (`BenchRun`, `read_bench_records` / `write_bench_records`), so every tool that
-touches it goes through the same schema.
+touches it goes through the same schema. Documents arriving from outside — community
+submissions to the ladder service — are gated by `performance/exchange_schema.das`, an
+engine-free validator of the same record shape plus the tune-sidecar form;
+`tests/test_exchange_schema.das` keeps it pinned to what the writers emit.
 
 - **`flavor`** names what that engine got, so two rows from one box can never be confused: das
   is `tuned` or `accel` (the +AMX tier over the tuned stack); a reference row carries its build

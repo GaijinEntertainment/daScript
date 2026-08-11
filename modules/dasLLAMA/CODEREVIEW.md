@@ -155,6 +155,12 @@ defect.
 directory glob; `CMakeLists.txt`'s `ADD_MODULE_DAS` list is a subset and is touched only when a
 file joins it.
 
+**`performance/exchange_schema.das` is the single validator for exchange submissions — record
+stores and tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM
+require added to it (the ladder service must build without the engine), is a defect; a change
+to what the record or sidecar writers emit lands with `tests/test_exchange_schema.das` still
+green against the in-tree corpus.
+
 **`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
 catalog file: the exact HF repo + revision pin, canonical bytes + sha256, or the conversion
 recipe where no registry serves the file. Verify is the default, `--fetch` downloads what is

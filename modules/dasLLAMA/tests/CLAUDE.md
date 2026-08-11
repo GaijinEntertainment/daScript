@@ -185,3 +185,10 @@ FORCED-FEED logits-tolerance form (the k4 freeform cell, cached stream `gen_free
 token equality. For that form the cache is a FEED, not a truth: both sides force through the
 same tokens, so a stale feed stays a valid instrument and the stale-cache red class does not
 exist for it. Counting cells stay token-exact.
+
+## Standalone schema tests (model-free)
+
+`test_bench_records_schema.das` (the record store: round-trip, upsert identity, annotations)
+and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
+records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
+with `-jit` — no runner, no arms, no models.
