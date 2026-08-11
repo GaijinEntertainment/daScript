@@ -158,10 +158,36 @@ def tune_box_identity() : string {
     if (!empty(g_box_identity)) {
         return g_box_identity
     }
+    // hw must contribute exactly three fields — model_id|os_build|cpu (model_id may be blank) —
+    // so every platform yields the five-field identity the exchange schema keys on
     var hw = ""
     let plat = get_platform_name()
     if (plat == "windows") {
-        hw = "{get_env_variable("PROCESSOR_IDENTIFIER")}|{get_env_variable("OS")}"
+        // no hardware model id on the env surface; `ver` carries the real OS build
+        var build = ""
+        unsafe {
+            popen("ver") $(f) {
+                if (f != null) {
+                    while (!feof(f)) {
+                        let ln = strip(fgets(f))
+                        if (!empty(ln)) {
+                            build = ln
+                        }
+                    }
+                }
+            }
+        }
+        let lb = find(build, "[")
+        let rb = find(build, "]")
+        if (lb >= 0 && rb > lb) {
+            build = strip(slice(build, lb + 1, rb))   // "Version 10.0.26200.5074"
+            if (build |> starts_with("Version ")) {
+                build = slice(build, 8)
+            }
+        } else {
+            build = get_env_variable("OS")
+        }
+        hw = "|{build}|{get_env_variable("PROCESSOR_IDENTIFIER")}"
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         unsafe {
             popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
@@ -174,23 +200,26 @@ def tune_box_identity() : string {
             }
         }
     } else {
+        var kern = ""
         unsafe {
             popen("uname -r 2>/dev/null") $(f) {
-                hw = strip(fgets(f))
+                kern = strip(fgets(f))
             }
         }
+        var cpu = ""
         fopen("/proc/cpuinfo", "rb") $(f) {
             if (f != null) {
                 while (!feof(f)) {
                     let ln = fgets(f)
                     if (ln |> starts_with("model name")) {
                         let ix = find(ln, ":")
-                        hw = "{hw}|{strip(slice(ln, ix + 1))}"
+                        cpu = strip(slice(ln, ix + 1))
                         break
                     }
                 }
             }
         }
+        hw = "|{kern}|{cpu}"
     }
     g_box_identity = "{plat}|{get_architecture_name()}|{hw}"
     return g_box_identity
