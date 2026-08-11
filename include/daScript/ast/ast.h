@@ -1536,8 +1536,18 @@ namespace das
         das_hash_map<StructInfo *,string>        s2cppTypeName;
     };
 
-    // bump when CodeOfPolicies changes meaning without changing size (field reorder/repurpose)
+    // bump when CodeOfPolicies changes layout or meaning without changing size — a field
+    // reorder/repurpose, or an insert that lands in a padding pocket (sizeof can't see those)
     #define DAS_POLICIES_VERSION    1
+
+    // per-binary linkage for the ABI-stamp functions: at -O0 gcc/clang emit them as weak
+    // default-visibility symbols, and the dynamic linker would bind every binary to the FIRST
+    // copy — the exe's stamp answered by the exe's own headers, silently defeating the check
+    #if defined(__GNUC__) || defined(__clang__)
+        #define DAS_ABI_LOCAL __attribute__((visibility("hidden")))
+    #else
+        #define DAS_ABI_LOCAL
+    #endif
 
     struct CodeOfPolicies {
     // ABI canary - MUST stay the first field. The default initializer compiles into whatever binary
@@ -1690,10 +1700,11 @@ namespace das
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
 
-        // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context):
-        // low byte 0 on purpose, so a pre-stamp libDaScript reading this word as its leading bools
-        // still sees aot == false
-        static constexpr uint32_t expected_abi_stamp() {
+        // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
+        // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -
+        // cosmetic only; the stale-LIBRARY direction is unrecoverable either way (every later
+        // field shifts). The checked direction is the stale-HOST one.
+        static constexpr DAS_ABI_LOCAL uint32_t expected_abi_stamp() {
             return (uint32_t(DAS_POLICIES_VERSION) << 24) | (uint32_t(sizeof(CodeOfPolicies)) << 8);
         }
     };
@@ -2013,7 +2024,7 @@ namespace das
     // subtly wrong (ABI drift surfaces as behavior/perf skew, not a crash). This folds the sizeof
     // of the core ABI surface; REGISTER_DYN_MODULE exports it per module and the loader compares
     // (warning, not refusal). Computed per-TU from the including binary's own headers.
-    constexpr uint64_t das_abi_vintage () {
+    constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
         constexpr uint64_t sizes[] = {
             uint64_t(DAS_BUILD_ID),
             sizeof(Module), sizeof(Context), sizeof(SimNode), sizeof(Program),

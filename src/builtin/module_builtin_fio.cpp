@@ -220,6 +220,7 @@ namespace das {
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     // filesystem stubs
     char * builtin_fs_extension ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_stem ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -288,7 +289,6 @@ namespace das {
     DAS_API void retry_pending_dynamic_modules () GENERATE_IO_STUB
     DAS_API string describe_pending_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API int report_pending_dynamic_modules () GENERATE_IO_STUB_RET
-    char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET

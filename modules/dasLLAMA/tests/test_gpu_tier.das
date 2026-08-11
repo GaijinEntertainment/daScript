@@ -112,6 +112,9 @@ def test_gpu_tier_contract(t : T?) {
         delete logits
     }
     t |> run("want state round-trips through the accessors") @(t : T?) {
+        // env-backed: DASLLAMA_GPU* may be exported (the vulkan census boxes); assert only the
+        // DELTA our set_gpu_tier_want introduces, and restore to the ambient answer
+        let ambient_any = gpu_want_arms_tier()
         let want = GpuTierWant(moe_layers = 3l, moe_stream = 2l, vram_mb = 1234l,
                                dn = true, attn = true, heat = 5l, qkv = true)
         set_gpu_tier_want(want)
@@ -123,9 +126,14 @@ def test_gpu_tier_contract(t : T?) {
         t |> equal(gpu_want_heat(), 5l)
         t |> success(gpu_want_qkv(), "qkv wanted")
         t |> success(!gpu_want_auto(), "auto not requested")
-        t |> success(gpu_want_any(), "any-want reflects the set state")
+        t |> success(gpu_want_arms_tier(), "arms-tier reflects the set state")
+        // membership witness: ONE rail alone must flip the predicate (the aggregate case
+        // above cannot see a dropped member)
+        set_gpu_tier_want(GpuTierWant(qkv = true))
+        t |> success(gpu_want_arms_tier(), "a single rail flips arms-tier")
         set_gpu_tier_want(GpuTierWant())
-        t |> success(!gpu_want_any(), "any-want resets with the want")
+        t |> success(gpu_want_arms_tier() == ambient_any, "arms-tier resets to the ambient env state")
+        warn_gpu_backend_absent()   // the no-backend-registered path must not crash whatever the env says
     }
     t |> run("arm gate reflects the registered hook; reset to unarmed") @(t : T?) {
         set_moe_gpu_arm("testtier", @@arm_on)

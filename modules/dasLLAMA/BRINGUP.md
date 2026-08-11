@@ -101,7 +101,10 @@ non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run esc
 suppresses the auto-mint, so an untuned box runs fallback stamps instead of tuning first).
 
 Minting goes through the hardened wrapper — noise gates at start/mid/end (a refusal exits
-nonzero and writes NOTHING), median ranking with deterministic tie-breaks inside the noise
+nonzero and writes NOTHING; the wrapper's closing line names the refusal and the escapes:
+`DAS_TUNE_NOISE_CV` recalibrates the gate, `DAS_TUNE_NOISE_OVERRIDE=1` mints anyway with
+`noise: overridden` stamped in provenance, `DASLLAMA_ALLOW_UNTUNED=1` skips minting for dev
+runs), median ranking with deterministic tie-breaks inside the noise
 floor, a validation re-race (winners must reproduce or the mint fails), race tables +
 provenance (noise verdict, mode, engine sha, box, date) in the sidecar, `.bak` + printed
 DIFF on re-mint, and an archive in `~/.tune-history/<box>/`. Two budgets only: normal

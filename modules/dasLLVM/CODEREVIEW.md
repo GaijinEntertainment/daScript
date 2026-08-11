@@ -34,7 +34,9 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 emitters (`write_dll` / `write_exe` / `write_wasm` / `emit_object_only` in
 `llvm_jit_common.das`) keeps that work inside a timed phase of the `LLVM JIT time:`
 breakdown** — new work landing between phases, before the first timer, or after the last one
-is a defect; the phase inventory the breakdown must match is `ARCHITECTURE.md` §1.
+is a defect; the phase inventory the breakdown must match is `ARCHITECTURE.md` §1. A path
+that runs no pipeline phase and prints no breakdown (an early return, an empty function set)
+is out of scope, and a diagnostic log line is not work.
 
 **A phase split stays split in the log.** When a diff extracts a timed phase into finer
 steps, each resulting step reports its own number under a `LLVM JIT time:` label; a parent
@@ -50,8 +52,11 @@ silently serves stale code from cache (`ARCHITECTURE.md` §2).
 
 ## Overrides
 
-**An active override announces itself in the run's output.** A knob that changes what the
-backend compiles, tunes, or emits beyond its defaults — a policy override, a gate escape, a
-threshold recalibration — prints one line naming the knob when it is set, and stays silent
-when it is not. Output that an unannounced override shaped is a defect of the change that
-added the knob or the read.
+**An override announces itself where it changes the outcome.** The knobs this governs are the
+inventory in `ARCHITECTURE.md` §3 (the `DAS_TUNE_*` family, `--tune`, `tune_suppress_mint`,
+under `llvm_jit_run.das` / `llvm_jit_common.das` / `llvm_tune.das`); at the point one changes
+what a run compiles, tunes, or emits, at least one line names the knob — set-but-inert stays
+silent, per-scope repeats are fine, and a diff that only exposes the override bit (a
+`*_overridden` query) discharges this when the announce lands at the consumer in the same
+change. A diff that adds a knob to that surface, or gives one a new effect, without its
+announce is a defect.

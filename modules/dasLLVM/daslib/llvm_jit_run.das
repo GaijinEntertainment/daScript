@@ -323,6 +323,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     }
     var funcs : array<FunctionPtr>
     var disabled : array<FunctionPtr>
+    var visitorDisabled = 0
     var disableJitVisitor = new DisableJitVisitor()
 
     let r <- parse_args(type<JitCliOptions>)
@@ -331,10 +332,10 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     let debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info)
     let dump_ir = cli_opts.dump_ir |> unwrap_or(false)
     if (prog.policies.jit_dll_mode && !das_is_dll_build()) {
-        // no DLL cache => every run pays full in-memory codegen; and a SHARED build reporting
-        // static here means the host exe is stale (the ABI-canary class) - either way, loud
-        to_log(LOG_ERROR, "LLVM JIT: dll mode requested but this daslang build reports STATIC - no DLL cache, " +
-            "every run pays full in-memory codegen. If the build IS shared, the exe stub is stale - relink daslang.\n")
+        // a legitimate configuration (static daslang), but the cost is worth naming: no DLL
+        // cache exists, so every -jit run pays full in-memory codegen
+        to_log(LOG_WARNING, "LLVM JIT: dll mode requested but this daslang build is static - no DLL cache, " +
+            "every run pays full in-memory codegen\n")
     }
     let gen_exe = prog.policies.jit_exe_mode
     // Drives the $::is_standalone_exe JIT intrinsic in llvm_jit_intrin so daslang
@@ -436,6 +437,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                             fun.moreFlags.requestJit = true
                             funcs |> emplace(fun)
                         } else {
+                            visitorDisabled++
                             to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
                         }
                     } else {
@@ -697,7 +699,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     } else {
         // a -jit run that jitted NOTHING is indistinguishable from jit working (just slower) -
         // the whole-program interpret must be loud, not inferred from timings
-        to_log(LOG_ERROR, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit) - the WHOLE program runs interpreted\n")
+        to_log(LOG_ERROR, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")
     }
     return true
 }

@@ -78,6 +78,16 @@ namespace das
     }
 
     void Context::setup(int totalVars, uint32_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
+        // the ABI canary for hosts that construct policies WITHOUT compiling (standalone AOT,
+        // module-side contexts) - the compile entries carry their own check in ast_parse.cpp
+        if ( policies.abi_stamp != CodeOfPolicies::expected_abi_stamp() ) {
+            TextPrinter tp;
+            tp << "FATAL: CodeOfPolicies ABI stamp mismatch at Context::setup - the host wrote 0x" << HEX
+               << policies.abi_stamp << ", this libDaScript expects 0x" << CodeOfPolicies::expected_abi_stamp() << DEC
+               << "\nthe host binary was built against different daScript headers - relink it\n";
+            tp.output();
+            exit(1);
+        }
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         breakOnException |= policies.debugger;
         gcEnabled = options.getBoolOption("gc", false);

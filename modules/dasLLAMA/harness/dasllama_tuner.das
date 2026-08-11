@@ -152,8 +152,10 @@ def private run_half(name : string; paranoid : bool) : bool {
     print("dasllama_tuner: {name} finished in {elapsed_ms} ms (rc={rc})\n")
     if (rc != 0) {
         // the refusal detail scrolled by minutes ago mid-stream — the closing line carries the
-        // WHY and the escape hatches so a nonzero exit is self-diagnosing where you look
-        if (noiseRefused) {
+        // WHY and the escape hatches so a nonzero exit is self-diagnosing where you look.
+        // Under NOISE_OVERRIDE the gate line prints but the mint proceeds — a later nonzero
+        // exit is then some OTHER fault, and blaming noise would hide it
+        if (noiseRefused && !tune_noise_override()) {
             print("dasllama_tuner: {name} REFUSED for noise (rc={rc}) - quiet the box and re-run; escapes: DAS_TUNE_NOISE_CV recalibrates the gate, DAS_TUNE_NOISE_OVERRIDE=1 mints anyway (stamped), DASLLAMA_ALLOW_UNTUNED=1 skips minting for dev runs\n")
         } else {
             print("dasllama_tuner: {name} FAILED (rc={rc})\n")

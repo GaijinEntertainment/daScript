@@ -1594,11 +1594,11 @@ var private g_reexec_code = 0
 
 var private g_mint_suppressed = ""
 
-//! Suppress the auto/restart mint for this process (a library's dev-run escape, e.g. dasLLAMA's
-//! ``DASLLAMA_ALLOW_UNTUNED=1``, called from an ``[init]``): an untuned scope keeps its fallback
-//! stamps instead of paying the minutes-long tune. An explicit ``--tune`` still wins.
-def public tune_suppress_mint(reason : string) {
-    g_mint_suppressed = reason
+//! Suppress the auto/restart mint (from a library ``[init]``): untuned scopes keep fallback
+//! stamps instead of paying the minutes-long tune. Process-wide across ALL scopes by design —
+//! a dev-run escape, not per-scope policy. ``--tune`` still wins. `knob` prints verbatim.
+def public tune_suppress_mint(knob : string) {
+    g_mint_suppressed = knob
 }
 
     //! Runtime half of `[tune_policy(missing = "auto")]` / `--tune`, injected at the top of the
@@ -1609,7 +1609,9 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
         return
     }
     if (!force && !empty(g_mint_suppressed)) {
-        print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+        if (tune_verbosity() != "silent") {
+            print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+        }
         return
     }
     announce_tuning(scopeName, force, true)
@@ -1667,7 +1669,9 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     }
     if (!empty(g_mint_suppressed)) {
         // false = carry on with fallback stamps, do not tune and do not stop main
-        print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+        if (tune_verbosity() != "silent") {
+            print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+        }
         return false
     }
     if (empty(tunerPath)) {
@@ -1769,10 +1773,13 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
     var policy = declared
     {
         let penv = get_env_variable("DAS_TUNE_POLICY")
+        // announce deferred to the first INCOMPLETE scope - a fully-tuned start stays silent
+        var envNote = ""
         if (!empty(penv)) {
             policy = penv
-            // active overrides announce themselves: output shaped by an escape must say so
-            print("llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n")
+            if (tune_verbosity() != "silent") {
+                envNote = "llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n"
+            }
         }
         if (policy != "fallback" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
             errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | warn | error | auto | restart"
@@ -1791,6 +1798,10 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             seen |> insert(scope.scopeName)
             // per-scope KEY completeness, not file existence — the sidecar is shared
             continue if (!force && tune_sidecar_entries_complete(scope.manifestPath, scope_fnames_joined(scope)))
+            if (!empty(envNote)) {
+                print(envNote)
+                envNote = ""
+            }
             if (force || policy == "auto") {
     // a runtime guard tunes and RE-EXECS: restamping a required module's compiled function is a cross-module mutation re-infer cannot survive
                 if (empty(scope.tunerPath)) {

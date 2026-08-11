@@ -126,6 +126,7 @@ namespace das {
     DAS_API char * get_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at );
     DAS_API char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at );
     // filesystem operations (C++17 <filesystem>)
     struct DiskSpaceInfo {
         uint64_t capacity = 0;
