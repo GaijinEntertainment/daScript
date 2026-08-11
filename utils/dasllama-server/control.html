@@ -2040,7 +2040,7 @@ function renderMatches(doc) {
                 const r = await fetch("/exchange/apply", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sha: h.sha }),
+                    body: JSON.stringify({ sha: h.sha, box: h.box }),
                 });
                 const j = await r.json();
                 if (!r.ok) {

@@ -2654,7 +2654,10 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     if (empty(sha)) {
         return resp |> JSON(error_body("body must carry the sidecar sha", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    let err = exchange_fetch_and_apply(exchange_policy_now().url, sha, tune_manifest_path())
+    // the listing box the page picked: passed through so the downloaded sidecar is verified to
+    // match what the exchange listed — the same lying-exchange gate the boot resolver applies
+    let box : string = js?["box"] ?? ""
+    let err = exchange_fetch_and_apply(exchange_policy_now().url, sha, tune_manifest_path(), box)
     if (!empty(err)) {
         return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
     }

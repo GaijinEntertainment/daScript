@@ -241,6 +241,27 @@ def test_fetch_and_apply(t : T?) {   // nolint:STYLE038 - flat scenario arms ove
             tt |> success(!tune_sidecar_stale(manifest), "applied_box re-admits the cross-box mint")
             remove(manifest)
         }
+        t |> run("a local tune over an adopted sidecar discards the adopted winners") @(tt : T?) {
+            let manifest = temp_manifest(tt, "adopt")
+            return if (empty(manifest))
+            // adopt an exchange sidecar (origin=exchange, carries dot/softmax winners)
+            tt |> equal(exchange_fetch_and_apply(base_url, sha256_hex(verified_doc()), manifest, tune_box_identity()), "")
+            tt |> equal(read_provenance(tt, manifest, "origin"), "exchange")
+            // a local tuner writing over it must NOT merge — the file would otherwise end up
+            // half-adopted, half-local, provenance rewritten local, and wrongly re-submittable
+            set_tune_manifest_runtime_path(manifest)
+            tune_manifest_set("mykernel", "local1")
+            set_tune_manifest_runtime_path("")
+            var jerr = ""
+            var doc = read_json(fread(manifest), jerr)
+            let kernels = doc?["kernels"]
+            tt |> success(kernels != null && kernels is _object, "kernels object")
+            tt |> equal(length(kernels as _object), 1, "adopted dot/softmax discarded, only the local key")
+            tt |> success(key_exists(kernels as _object, "mykernel"), "the local key is present")
+            tt |> equal(read_provenance(tt, manifest, "origin"), "", "origin cleared by the local write")
+            delete_json(doc)
+            remove(manifest)
+        }
         t |> run("version and tamper gates refuse") @(tt : T?) {
             let manifest = temp_manifest(tt, "gates")
             return if (empty(manifest))

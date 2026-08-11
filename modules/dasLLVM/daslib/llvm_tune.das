@@ -307,9 +307,9 @@ def tune_manifest_get(fname : string) : string {
     return r
 }
 
-// the sidecar document for read-modify-write: parsed when fresh, a new empty object when
-// absent, unparsable, or STALE (stale measurements are invalid; the first save makes the
-// file newer than the binary so the rest of the run appends)
+// the sidecar document for read-modify-write: a new empty object when absent, unparsable,
+// STALE, or EXCHANGE-ADOPTED — a local tuner writing over an adopted file must not blend its
+// measured keys with the donor's (that yields a complete-looking, wrongly re-submittable mix).
 def private load_sidecar_doc(path : string) : JsonValue? {
     var doc : JsonValue?
     if (!tune_sidecar_stale(path)) {
@@ -317,6 +317,11 @@ def private load_sidecar_doc(path : string) : JsonValue? {
         if (!empty(text)) {
             var err = ""
             doc = read_json(text, err)
+            if (doc != null && doc.value is _object
+                && (doc?["provenance"]?["origin"] ?? "") == "exchange") {
+                delete_json(doc)
+                doc = null
+            }
         }
     }
     if (doc == null || !(doc.value is _object)) {
@@ -1184,6 +1189,25 @@ class private TuneAnnotation : AstFunctionAnnotation {
         var suffix = ""
         if (manifestFound) {
             suffix = manifest?[fname] ?? ""
+        }
+        // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
+        if (!empty(suffix) && suffix != "reference") {
+            var known = false
+            var eligible = true
+            for (p in perms) {
+                if (p.suffix == suffix) {
+                    known = true
+                    eligible = perm_requires_ok(p)
+                    break
+                }
+            }
+            if (!known || !eligible) {
+                if (tune_verbosity() != "silent") {
+                    let why = known ? "fails its requires= on this box" : "is not in this build's grid"
+                    print("llvm_tune: {fname} manifest winner '{suffix}' {why} - using the fallback chain\n")
+                }
+                suffix = ""
+            }
         }
         let fromManifest = !empty(suffix)
         var ok = true
