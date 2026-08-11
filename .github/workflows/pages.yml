@@ -47,13 +47,15 @@ jobs:
         sudo apt-get update
         # libc++ so the wasm cross-compile host can be built with the SAME C++
         # stdlib as the emscripten target (see the host build step below).
-        # libglfw3 is the RUNTIME .so for imgui2rst below: on a wasm-cache hit
-        # the host build is skipped, so the superbuild's libglfw.so.3 (found
-        # via build-tree rpath on full builds) doesn't exist — the cached
-        # imguiApp/dasGlfw shared modules then fail to dlopen and imgui2rst
-        # dies on `missing prerequisite 'imgui_app'`. The system soname
-        # satisfies the same lookup on both paths.
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev libglfw3
+        # NO libglfw3 here: the runtime glfw for cache-hit runs is the
+        # superbuild's own (modules/dasGlfw/glfw_dyn, cached below with the
+        # shared modules). A system libglfw3 satisfies the libglfw.so.3 soname
+        # but not the newer symbols the dasGLFW binding takes ADDRESSES of
+        # (data relocs bind eagerly even under RTLD_LAZY), so dasModuleGlfw's
+        # dlopen fails quietly and das2rst dies on `Unable to initialize some
+        # modules: imgui_app`. Version skew is worse than absence — absence
+        # at least fails loudly.
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
 
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
@@ -96,11 +98,17 @@ jobs:
         # daslib misses the key), the same way the lib/ omission above stayed
         # hidden. #3652 was the first such merge; this is the second member of
         # that class, so the list goes.
+        # modules/dasGlfw/glfw_dyn is the superbuild's glfw install — the exact
+        # .so the glfw-family shared modules were linked against, at the path
+        # their rpath ($ORIGIN/glfw_dyn/Release/lib) resolves. Without it a
+        # cache-hit run has no loadable glfw (third member of the class; a
+        # system libglfw3 is no substitute — see the apt step above).
         path: |
           bin
           lib
           modules/**/*.shared_module
           examples/**/*.shared_module
+          modules/dasGlfw/glfw_dyn
           web/output
           web/output64
           site/playground/samples
@@ -149,6 +157,13 @@ jobs:
         cmake --build ./build --target daslang dasModuleGlfw dasModuleOpenGL
 
     - name: "Run das2rst"
+      # DAS_TRACE_MODULE_LOAD prints every shared-module dlopen attempt with
+      # its dlerror. A failed dlopen is otherwise quietly deferred (retry
+      # queue) and only surfaces steps later as a cryptic `Unable to
+      # initialize some modules` / `missing prerequisite` — with the trace,
+      # the log names the .so and the missing symbol directly.
+      env:
+        DAS_TRACE_MODULE_LOAD: 1
       run: |
         set -eux
         ./bin/daslang -documentation doc/reflections/das2rst.das
@@ -156,6 +171,8 @@ jobs:
     - name: "Run imgui2rst"
       # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
       # from its own generator; the host above builds with dasGlfw+dasImgui ON.
+      env:
+        DAS_TRACE_MODULE_LOAD: 1
       run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
 
     - name: "Stage tutorial recordings (docs-assets release)"
