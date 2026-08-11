@@ -9,6 +9,7 @@ module tuner_noise shared public
 //! A noisy end-probe means the sidecar is not written at all.
 
 require llvm/daslib/llvm_tune
+require dasllama/dasllama_version  // DASLLAMA_VERSION — stamped into sidecar provenance (zero-require leaf)
 require daslib/strings_boost
 require daslib/fio            // popen + get_das_root — the engine-sha probe
 require math
@@ -141,6 +142,7 @@ def noise_provenance_stamp() {
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
     tune_provenance_note("mode", g_paranoid ? "paranoid" : "normal")
     tune_provenance_note("engine_sha", engine_sha())
+    tune_provenance_note("dasllama_version", "{DASLLAMA_VERSION}")
 }
 
 // the engine commit this mint measured, "unknown" outside a repo (the shipped SDK)

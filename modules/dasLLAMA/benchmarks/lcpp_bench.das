@@ -228,6 +228,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
+        dasllama_version = DASLLAMA_VERSION,
         tune = tune_summary(), tune_sha = tune_manifest_sha(), noise = tune_manifest_noise(),
         hardware = gather_hardware())
     run.files |> emplace(file_identity(model_path, "weights"))
@@ -912,6 +913,7 @@ def main() : int {
         env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true),
         version = das_version(),
+        dasllama_version = DASLLAMA_VERSION,
         tune = tune_summary(),
         tune_sha = tune_manifest_sha(),
         noise = tune_manifest_noise(),

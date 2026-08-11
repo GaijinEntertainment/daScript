@@ -1633,6 +1633,8 @@ struct BenchRun {
     @optional source : string   // "official" | "community" — stamped by the store driver, not the tool
     @optional sha : string      // engine commit (das: git HEAD; llama.cpp: build_commit)
     @optional version : string  // das release version
+    @optional dasllama_version : int // dasLLAMA's own release counter (das rows only) — the
+                                // sidecar-exchange roster key; see dasllama_version.das
     @optional versions : string // reference-tool version line (venv package pins, patch sha) — see B4
     @optional tune : string     // das gen-kernel stamp provenance — required for reproducibility
     @optional tune_sha : string // sha256 of the tune sidecar the exe shipped with — the sidecar

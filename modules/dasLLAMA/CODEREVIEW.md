@@ -165,6 +165,8 @@ provisioned box — BRINGUP.md §2 is the runbook.
 ### Engine
 
 - `dasllama.das` — the public API surface and its re-exports.
+- `dasllama_version.das` — the `DASLLAMA_VERSION` release counter, and nothing else. It requires
+  nothing, so the lightest harness can stamp it.
 - `dasllama_common.das` — engine types, forward loops, override registries, runtime knobs. No
   platform-specific code, and no load walk.
 - `dasllama_load.das` — the GGUF load walk: metadata to `Config`, plane layout, format detection,
@@ -397,6 +399,13 @@ not of the docs.
 string, and doc line that named the old value names the new one in the same diff.
 
 ## Implementation
+
+**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.**
+Kernel work is a diff that adds, removes, or edits any compute-kernel body or its variant set —
+the CPU tiers, the generated GEMM families, the GPU kernel classes, the KV-codec and convert
+kernels — or a tune family's registration. Equal versions must mean an equal kernel roster:
+the sidecar exchange keys validity on (version, box), so a kernel diff without the bump breaks
+that promise silently.
 
 **A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a
 given compiled kernel, can this value change between dispatches? If yes it is data and belongs in

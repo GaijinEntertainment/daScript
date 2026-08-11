@@ -131,6 +131,10 @@ touches it goes through the same schema.
   inside the sidecar.
 - **`hardware`** is auto-probed on the box, never typed in — it is the block a reader has to be
   able to trust.
+- **`dasllama_version`** rides das rows only: dasLLAMA's own release counter
+  (`dasllama/dasllama_version.das`), bumped by any kernel work, decoupled from the daslang
+  version in `version`. Sidecar provenance carries the same counter, which is what lets a
+  sidecar's validity be judged as (version, box) without opening it.
 - **`source`** is `official` or `community`.
 - The identity is **`(gguf, box, engine, backend, flavor, workload)`**. A re-measure replaces
   its row in place with a fresh date and commit; git history is the archive. There are no

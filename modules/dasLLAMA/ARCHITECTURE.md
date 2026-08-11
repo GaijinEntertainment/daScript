@@ -39,6 +39,11 @@ never hand-edit the tables).
 - **`dasllama.das`** — the public API facade and nothing else: `load_model` → `create_session` →
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
   in the module that owns the concern, and the facade re-exports it.
+- **`dasllama_version.das`** — `DASLLAMA_VERSION`, the module's own release counter, and nothing
+  else. Decoupled from the daslang version and from `LLVM_JIT_CODEGEN_VERSION`; ANY kernel work
+  bumps it (CODEREVIEW.md), so equal versions mean an equal kernel roster — the sidecar exchange
+  keys validity on (version, box). A zero-require leaf so the tuner's noise half, the benches,
+  and the facade chain (`dasllama_common` re-exports it) all reach it without weight.
 - **`dasllama_common.das`** — the engine: `Model`/`Session`/`Config`, the forward loops, the
   override registries, the runtime knobs. **Not** the load walk (§1.3) and **not** GPU residency
   (§1.5) — both left, and the seam each left behind is a registered hook, so neither comes back.
