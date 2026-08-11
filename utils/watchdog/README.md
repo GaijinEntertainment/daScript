@@ -90,15 +90,24 @@ the tray menu and the control page do:
   unverified offer exists. Writes the tune-control file (the tuner polls `DAS_TUNE_CONTROL` at
   kernel-family boundaries, so the measurement in flight always completes), then relaunches with
   a ONE-SHOT `DASLLAMA_EXCHANGE_ACCEPT=any` — consent that never outlives the click.
-- **Stop tuning, run untuned** — visible while a tune is in flight. Same stop file, then
-  `DAS_TUNE_POLICY=fallback` STICKY for the rest of the watchdog session, so a later
-  crash-restart cannot surprise the box with a 20-minute tune. Untuned serving is legitimate.
+- **Stop tuning, run untuned** — visible while a tune is in flight. Same stop file, then a
+  `DAS_TUNE_POLICY=fallback` hold kept in `STATE["sticky_env"]` and re-applied on every spawn,
+  so a later crash-restart cannot surprise the box with a 20-minute tune. The hold shows as
+  `· tuning off` in the tooltip and is revocable via **Resume tuning**; a control-page config
+  restart (which a re-tune rides) also clears it, so the re-tune is not silently defeated.
+- **Resume tuning** — visible only while a run-untuned hold is active; clears it so the next
+  start tunes normally again.
 - **Share this box's tune…** — visible while a `pending_submit` offer stands and the server is
   healthy; opens the control page at the exchange card.
 
-The tray menu is a pure function of `STATE`: pystray re-evaluates the item callables when the
-menu opens, and the supervision tick calls `update_menu()` on a state transition so an
-already-open menu cannot go stale.
+Balloons fire once per distinct sidecar sha across restarts, so an untuned noise-abort loop does
+not re-announce the same offer every boot.
+
+The tray menu is a pure function of `STATE`, but note the mechanism: pystray bakes each item's
+`visible`/`enabled` when the menu is BUILT and does **not** re-evaluate them when the menu opens.
+The supervision tick's `update_menu()` on a `STATE` transition is therefore the only thing that
+refreshes the dynamic items — so its transition key must name every `STATE` field an item's
+predicate reads (health, the sidecar state, `tuning_disabled`), or that item never appears.
 
 ## Control plugin
 
@@ -113,7 +122,10 @@ in a supervisor. A plugin that fails to import is reported and skipped, never fa
 program alive outranks being able to reconfigure it.
 
 `host.read_state()` publishes supervision state (`child_pid`, `child_started_at`,
-`child_exit_code`, `restart_delay`, `stage`, `tune`, `sidecar`) for the plugin's status route.
+`child_exit_code`, `restart_delay`, `stage`, `healthy`, `serving_since`, `tune`, `sidecar`,
+`tuning_disabled`) for the plugin's status route. Transient control keys (`tune_stop`,
+`sticky_env`, `resume_tuning`) also live in `STATE` but are consumed by the supervision loop —
+a status route should not surface them.
 
 ## Shipping it
 

@@ -621,6 +621,11 @@ def advance_stage(stage: dict[str, object], message: str, now: float) -> dict[st
 TUNE_EVENT_PREFIX = "@tune "
 SIDECAR_EVENT_PREFIX = "@sidecar "
 
+# Balloons are announce-once per distinct sidecar sha, across restarts: an untuned noise-loop
+# re-emits the same `offer`/`pending_submit` on every boot, and a balloon per restart (each a
+# fresh 11 s PowerShell process on Windows) is pure spam. Persist across children in the process.
+_BALLOONED: set[str] = set()
+
 
 def parse_child_event(message: str, prefix: str) -> tuple[str, dict[str, str]] | None:
     """Return (kind, fields) for a `<prefix><kind> k=v ...` line, or None. Never raises."""
@@ -657,6 +662,11 @@ def apply_tune_event(tune: dict[str, object], kind: str, fields: dict[str, str])
         # publishes an incoherent state (round=47 against rounds=0) that a status page renders
         tune["done"] = int(tune.get("done", 0)) + 1
         tune.update(round=0, rounds=0, phase="", live=0)
+    elif kind == "abort":
+        # a supervisor interrupt stopped the tune at a kernel boundary; drop the "total" that
+        # drives the "minting N/M" display so the status stops claiming a tune is in flight
+        tune.clear()
+        tune.update(aborted=True, at=fields.get("at", ""))
 
 
 def apply_sidecar_event(sidecar: dict[str, object], kind: str, fields: dict[str, str]) -> None:
@@ -705,7 +715,7 @@ def stream_child(
             # A tune is hundreds of steps; publish every one for the control page but log only
             # the kernel boundaries, or the log becomes the flood these events exist to replace.
             set_state(tune=dict(tune))
-            if kind in ("plan", "end"):
+            if kind in ("plan", "end", "abort"):
                 # the child's stdout is arbitrary bytes, so a line could carry a field named
                 # like one of emit()'s own: "pid"/"kind" would be a duplicate kwarg (TypeError,
                 # killing this daemon thread and with it stage detection AND tune_restart_seen),
@@ -723,13 +733,18 @@ def stream_child(
                     if k not in ("pid", "kind", "ts", "event")}
             emit(logger, "sidecar", pid=proc.pid, kind=kind, **safe)
             # Balloons announce a DECISION the user can make; they never carry the action
-            # (a PowerShell balloon cannot) — the tray menu and the control page do.
-            if kind == "offer":
-                notify(f"{name}: unverified sidecar available",
-                       "The tray menu can adopt it instead of finishing the tune")
-            elif kind == "pending_submit":
-                notify(f"{name}: share this box's tune?",
-                       "Open the control page to submit it to the exchange")
+            # (a PowerShell balloon cannot) — the tray menu and the control page do. Announce
+            # once per distinct sha (a noise-abort loop re-emits the same offer every boot).
+            sha = fields.get("sha", "")
+            balloon_key = f"{kind}:{sha}"
+            if kind in ("offer", "pending_submit") and balloon_key not in _BALLOONED:
+                _BALLOONED.add(balloon_key)
+                if kind == "offer":
+                    notify(f"{name}: unverified sidecar available",
+                           "The tray menu can adopt it instead of finishing the tune")
+                else:
+                    notify(f"{name}: share this box's tune?",
+                           "Open the control page to submit it to the exchange")
             continue
         # both the tuner's marker and the exchange client's "sidecar applied" marker license
         # the immediate exit-3 relaunch — the process restarts to stamp fresh winners
@@ -902,6 +917,8 @@ def tray_state() -> tuple[str, str]:
         up = time.time() - since if since else 0.0
         hours, mins = int(up // 3600), int(up % 3600 // 60)
         line = f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        if s.get("tuning_disabled"):
+            line += " · tuning off"   # a 'run untuned' hold is active — visible, and revocable in the menu
         return line, "base"
     stage = s.get("stage")
     if healthy is False:
@@ -938,38 +955,69 @@ def take_tune_stop() -> dict[str, object] | None:
     return action if isinstance(action, dict) else None
 
 
+def take_resume_tuning() -> bool:
+    with STATE_LOCK:
+        return bool(STATE.pop("resume_tuning", None))
+
+
+def request_resume_tuning(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Tray action: undo a 'run untuned' hold so the next start tunes normally again."""
+    set_state(resume_tuning=True)
+    emit(logger, "tuning_resume_requested")
+    notify(f"{args.name}: tuning re-enabled", "The next start will tune this box normally")
+
+
 def request_tune_stop(args: argparse.Namespace, logger: logging.Logger, mode: str) -> None:
     """Tray action: stop the in-flight tune at the next kernel boundary (the race in flight
     always completes). `use_sidecar` arms a ONE-SHOT unverified-accept relaunch — precise
     consent that must never outlive this click; `untuned` makes fallback stamps sticky for
-    the rest of this watchdog session, so a later crash-restart cannot surprise the box with
-    a 20-minute tune."""
-    path = tune_control_path(args)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("stop\n", encoding="ascii")
-    except OSError as exc:
-        emit(logger, "tune_stop_failed", mode=mode, error=str(exc))
-        return
+    the rest of this watchdog session (revocable via 'Resume tuning'), so a later crash-restart
+    cannot surprise the box with a 20-minute tune."""
     if mode == "use_sidecar":
         action: dict[str, object] = {
             "mode": mode, "env": {"DASLLAMA_EXCHANGE_ACCEPT": "any"}, "sticky": False}
     else:
         action = {"mode": mode, "env": {"DAS_TUNE_POLICY": "fallback"}, "sticky": True}
+    # Arm STATE BEFORE writing the file: the supervision loop unlinks the control file and then
+    # take_tune_stop()s at each spawn — if the file were written first, that unlink could delete
+    # it and the take miss the action, letting a fresh child tune for the full ~20 minutes.
     set_state(tune_stop=action)
+    path = tune_control_path(args)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("stop\n", encoding="ascii")
+    except OSError as exc:
+        # the file only interrupts the IN-FLIGHT tune; the armed policy still governs the
+        # relaunch, so a failed write still stops the box tuning on the next start
+        emit(logger, "tune_stop_failed", mode=mode, error=str(exc))
     emit(logger, "tune_stop_requested", mode=mode, path=str(path))
     notify(f"{args.name}: stopping the tune",
            "The measurement in flight finishes first; the tune stops at the next kernel")
 
 
 def tray_tick(icon, name: str) -> None:
-    """Refresh the tooltip from live state. Called from the supervision loop's 0.25s tick;
-    writes only on change so the shell isn't spammed with NOTIFYICONDATA updates."""
+    """Refresh the tray from live state. Called from the supervision loop's 0.25s tick; writes
+    only on change so the shell isn't spammed with updates."""
     if icon is None:
         return
-    # AppKit objects serve only the process's main thread, and on macOS the supervision loop
-    # is NOT that thread (run_with_darwin_tray). The menu's status row is a callable the
-    # runloop re-evaluates on open, so live state stays visible without the tooltip write.
+    # Menu refresh runs on EVERY platform. pystray bakes each item's visible/enabled at build
+    # time and does NOT re-evaluate them when the menu opens, so this update_menu() on a STATE
+    # transition is the ONLY thing that makes the dynamic exchange items appear/disappear. The
+    # key must include every STATE field an item's predicate reads (healthy, tuning_disabled),
+    # or that item never refreshes. Wrapped so a backend that rejects a cross-thread rebuild
+    # (macOS AppKit off the main thread) degrades to a no-op rather than taking supervision down.
+    sc = sidecar_state()
+    st = read_state()
+    menu_key = (tune_in_flight(), str(sc.get("state") or ""), bool(sc.get("pending_submit")),
+                st.get("healthy") is True, bool(st.get("tuning_disabled")))
+    if getattr(icon, "_das_last_menu_key", None) != menu_key:
+        try:
+            icon.update_menu()
+            icon._das_last_menu_key = menu_key
+        except Exception:  # noqa: BLE001
+            pass
+    # Tooltip + icon image go through NOTIFYICONDATA-style writes; AppKit serves only the main
+    # thread and darwin runs this tick on a worker, so skip those there.
     if sys.platform == "darwin":
         return
     status, coarse = tray_state()
@@ -989,16 +1037,6 @@ def tray_tick(icon, name: str) -> None:
                 icon._das_last_state = coarse
             except Exception:  # noqa: BLE001
                 pass
-    # The exchange rows appear/disappear with STATE; pystray re-evaluates on open, but a menu
-    # already open when an offer lands would go stale — force a rebuild on the transition only.
-    sc = sidecar_state()
-    menu_key = (tune_in_flight(), str(sc.get("state") or ""), bool(sc.get("pending_submit")))
-    if getattr(icon, "_das_last_menu_key", None) != menu_key:
-        try:
-            icon.update_menu()
-            icon._das_last_menu_key = menu_key
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: threading.Event):
@@ -1035,17 +1073,21 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
     def on_run_untuned(_icon, _item) -> None:
         request_tune_stop(args, logger, "untuned")
 
+    def on_resume_tuning(_icon, _item) -> None:
+        request_resume_tuning(args, logger)
+
     def on_share(_icon, _item) -> None:
         try:
             webbrowser.open(f"{url}#exchange")
         except Exception as exc:  # noqa: BLE001
             emit(logger, "tray_open_failed", reason=repr(exc))
 
-    # Menu text/enabled/visible are callables: pystray re-evaluates them each time the menu
-    # opens (tray_tick additionally forces update_menu on a state transition), so the menu is
-    # a pure function of STATE. "Open" greys out until health is green — offering a page that
-    # isn't up is how a tray lies. The exchange rows exist only while their action is real:
-    # adopting a sidecar needs a live tune AND an offer; sharing needs a pending submit.
+    # Menu item visible/enabled are baked when the menu is BUILT — pystray does not re-evaluate
+    # them on open — so tray_tick's update_menu() on a STATE transition is what refreshes them,
+    # and its menu_key must name every STATE field these predicates read. The menu is a pure
+    # function of STATE. "Open" greys out until health is green. The exchange rows exist only
+    # while their action is real: adopting needs a live tune AND an offer; sharing needs a
+    # pending submit; "Resume tuning" only while a run-untuned hold is active.
     items = [pystray.MenuItem(lambda item: tray_status(), None, enabled=False)]
     if url:
         items.append(pystray.MenuItem(
@@ -1063,6 +1105,11 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
         "Stop tuning, run untuned",
         on_run_untuned,
         visible=lambda item: tune_in_flight(),
+    ))
+    items.append(pystray.MenuItem(
+        "Resume tuning",
+        on_resume_tuning,
+        visible=lambda item: bool(read_state().get("tuning_disabled")),
     ))
     if url:
         items.append(pystray.MenuItem(
@@ -1482,17 +1529,22 @@ def supervise(
                     control_file.unlink()
                 except FileNotFoundError:
                     pass
-            # a tray stop-the-tune action arms the next child's policy: one-shot for
-            # adopt-the-sidecar (consent must not outlive the click), sticky for run-untuned
-            # (a later crash-restart must not surprise the box with a 20-minute tune)
-            spawn_env = child_env
+            # a "resume tuning" request (tray item, or reconciled by a config restart) clears the
+            # sticky untuned hold so the next start tunes normally again
+            if take_resume_tuning():
+                set_state(sticky_env=None, tuning_disabled=False)
+                emit(logger, "tuning_resumed")
+            # per-spawn env: base + the persistent sticky hold (run-untuned, in STATE so it is
+            # revocable) + a one-shot action (adopt-the-sidecar, consumed here and gone)
+            spawn_env = dict(child_env)
+            sticky = read_state().get("sticky_env")
+            if isinstance(sticky, dict):
+                spawn_env.update(sticky)
             action = take_tune_stop()
             if action is not None:
+                spawn_env.update(action.get("env") or {})
                 if action.get("sticky"):
-                    child_env.update(action.get("env") or {})
-                else:
-                    spawn_env = dict(child_env)
-                    spawn_env.update(action.get("env") or {})
+                    set_state(sticky_env=dict(action.get("env") or {}), tuning_disabled=True)
                 emit(logger, "tune_stop_consumed", mode=str(action.get("mode", "")))
             started_at = time.time()
             creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if IS_WINDOWS else 0
@@ -1635,6 +1687,12 @@ def supervise(
                 stopping.wait(delay)
                 continue
             if return_code == CONFIG_RESTART_EXIT:
+                # a config restart is the user actively reconfiguring — and a control-page
+                # re-tune rides this exit, so clear any sticky untuned hold that would otherwise
+                # inject DAS_TUNE_POLICY=fallback and silently defeat the re-tune
+                if read_state().get("sticky_env") is not None:
+                    set_state(sticky_env=None, tuning_disabled=False)
+                    emit(logger, "tuning_resumed", reason="config_restart")
                 emit(logger, "config_restart_relaunch")
                 failures = 0
                 continue
