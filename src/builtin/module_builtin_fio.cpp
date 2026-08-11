@@ -220,6 +220,7 @@ namespace das {
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     // filesystem stubs
     char * builtin_fs_extension ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_stem ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -1988,6 +1989,19 @@ namespace das {
             closeLibrary(lib);
             return nullptr;
         }
+        // Module-vintage stamp: DAS_BUILD_ID (checked above) changes only at releases, so a module
+        // built against DIFFERENT headers of the SAME version passes it and is silently, subtly
+        // wrong (ABI drift surfaces as behavior/perf skew, not a crash). Warn loud, don't refuse.
+        auto vinFn = getFunctionAddress(lib, getDynModuleVintageName(mod_name).c_str());
+        if (!vinFn) {
+            LOG(LogLevel::warning) << "dynamic module `" << mod_name << "` (" << actualPath
+                << ") carries no ABI vintage stamp (built before vintage stamps) - rebuild it against current daScript headers\n";
+        } else if (auto vintage = reinterpret_cast<uint64_t(*)()>(vinFn)(); vintage != das_abi_vintage()) {
+            LOG(LogLevel::warning) << "dynamic module `" << mod_name << "` (" << actualPath
+                << ") was built against DIFFERENT daScript headers (vintage 0x" << HEX << vintage
+                << " vs host 0x" << das_abi_vintage() << DEC
+                << ") - ABI drift surfaces as subtle misbehavior, not a crash; rebuild the module\n";
+        }
         *ModuleKarma += unsigned(intptr_t(mod));
         g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
         return lib;
@@ -2036,6 +2050,13 @@ namespace das {
     // registers is REQUIRED by its program, so a module still pending after the retry pass
     // is a hard failure — report it loudly instead of dying later on the first extern
     // lookup with an unrelated-looking "Failed to find <fn> in module <mod>" fatal.
+    // das-visible form: lets a library say WHY an optional native module is absent (e.g. dasLLAMA's
+    // GPU tier reporting the exact dlopen failure instead of silently resolving CPU)
+    char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) {
+        auto res = describe_pending_dynamic_modules();
+        return context->allocateString(res, at);
+    }
+
     DAS_API int report_pending_dynamic_modules() {
         for (auto & pr : g_pending_dynamic_modules) {
             LOG(LogLevel::error) << "dynamic module `" << get<1>(pr) << "` failed to load: " << get<0>(pr)
@@ -2650,6 +2671,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(register_native_path)>(*this, lib, "register_native_path",
                 SideEffects::worstDefault, "register_native_path")
                     ->args({"mod_name", "src", "dst", "context","at"});
+            addExtern<DAS_BIND_FUN(builtin_describe_pending_dynamic_modules)>(*this, lib, "describe_pending_dynamic_modules",
+                SideEffects::accessExternal, "builtin_describe_pending_dynamic_modules")
+                    ->args({"context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(for_each_registered_dynamic_module)>(*this, lib, "for_each_registered_dynamic_module",
                 SideEffects::accessExternal, "for_each_registered_dynamic_module")
                     ->args({"block", "context","at"});

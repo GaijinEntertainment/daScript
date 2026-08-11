@@ -468,6 +468,13 @@ literal-name `env_config_*` anywhere else in the module is a defect. The sanctio
 tri-state knobs, dynamic names, pre-init foreign-library writes — are `ARCHITECTURE.md` §2.9,
 and `tests/test_env_registry.das` enforces the lot.
 
+**An override announces itself where it changes the outcome.** An override is a gate escape,
+a policy override, or a threshold recalibration — the inventory and the announce contract are
+`ARCHITECTURE.md` §2.9; at the point one changes what a run measures, mints, or emits, at
+least one printed or logged line names the knob by its env spelling. Set-but-inert stays
+silent and per-site repeats are correct. A diff that adds such a knob, or gives one a new
+effect, without its announce in the same diff is a defect.
+
 
 ### Vulkan
 

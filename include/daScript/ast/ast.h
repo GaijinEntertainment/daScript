@@ -1323,6 +1323,9 @@ namespace das
                 module_##ClassName->cppClassName = #ClassName; \
                 return module_##ClassName; \
             } \
+            DAS_EXPORT_DLL uint64_t vintage_dyn_##ExtName () { \
+                return das::das_abi_vintage(); \
+            } \
         }
     #else
         #define REGISTER_DYN_MODULE(ClassName, ExtName)
@@ -1330,6 +1333,10 @@ namespace das
 
     static inline string getDynModuleRegistratorName(const string &mod) {
         return "register_dyn_" + mod;
+    }
+
+    static inline string getDynModuleVintageName(const string &mod) {
+        return "vintage_dyn_" + mod;
     }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
@@ -1529,7 +1536,25 @@ namespace das
         das_hash_map<StructInfo *,string>        s2cppTypeName;
     };
 
+    // bump when CodeOfPolicies changes layout or meaning without changing size — a field
+    // reorder/repurpose, or an insert that lands in a padding pocket (sizeof can't see those)
+    #define DAS_POLICIES_VERSION    1
+
+    // per-binary linkage for the ABI-stamp functions: at -O0 gcc/clang emit them as weak
+    // default-visibility symbols, and the dynamic linker would bind every binary to the FIRST
+    // copy — the exe's stamp answered by the exe's own headers, silently defeating the check
+    #if defined(__GNUC__) || defined(__clang__)
+        #define DAS_ABI_LOCAL __attribute__((visibility("hidden")))
+    #else
+        #define DAS_ABI_LOCAL
+    #endif
+
     struct CodeOfPolicies {
+    // ABI canary - MUST stay the first field. The default initializer compiles into whatever binary
+    // CONSTRUCTS the struct (the host exe), while libDaScript checks it against ITS headers at the
+    // parse/compile entries (verifyCodeOfPoliciesStamp) - a host built against different daScript
+    // headers fails loud there instead of the library reading every policy field at shifted offsets.
+        uint32_t    abi_stamp = expected_abi_stamp();
     // Aot config
         bool        aot = false;                        // enable AOT
         /*option*/ bool        aot_lib = false;
@@ -1674,7 +1699,21 @@ namespace das
         vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
+
+        // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
+        // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -
+        // cosmetic only; the stale-LIBRARY direction is unrecoverable either way (every later
+        // field shifts). The checked direction is the stale-HOST one.
+        static constexpr DAS_ABI_LOCAL uint32_t expected_abi_stamp() {
+            return (uint32_t(DAS_POLICIES_VERSION) << 24) | (uint32_t(sizeof(CodeOfPolicies)) << 8);
+        }
     };
+
+    // the pure predicate (tested in tests-cpp), and the fatal wrapper called at the
+    // policy-receiving entries (parseDaScript/compileDaScript): prints and exits on a stamp
+    // mismatch - no policy field can be trusted when the host wrote a different layout
+    DAS_CC_API bool checkCodeOfPoliciesStamp ( const CodeOfPolicies & policies );
+    DAS_CC_API void verifyCodeOfPoliciesStamp ( const CodeOfPolicies & policies );
 
     struct CommentReader {
         virtual ~CommentReader() = default;
@@ -1979,6 +2018,25 @@ namespace das
         inline static DAS_THREAD_LOCAL(daScriptEnvironment *) bound;
         inline static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
     };
+
+    // The module-vintage stamp: DAS_BUILD_ID changes only at releases, so a shared module built
+    // against DIFFERENT headers of the SAME version passes the build-id gate and is silently,
+    // subtly wrong (ABI drift surfaces as behavior/perf skew, not a crash). This folds the sizeof
+    // of the core ABI surface; REGISTER_DYN_MODULE exports it per module and the loader compares
+    // (warning, not refusal). Computed per-TU from the including binary's own headers.
+    constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
+        constexpr uint64_t sizes[] = {
+            uint64_t(DAS_BUILD_ID),
+            sizeof(Module), sizeof(Context), sizeof(SimNode), sizeof(Program),
+            sizeof(TypeDecl), sizeof(Function), sizeof(Structure), sizeof(Variable),
+            sizeof(Expression), sizeof(TypeAnnotation), sizeof(CodeOfPolicies),
+            sizeof(daScriptEnvironment), sizeof(StructInfo), sizeof(TypeInfo),
+            sizeof(FuncInfo), sizeof(LineInfo),
+        };
+        uint64_t h = 14695981039346656037ul;    // FNV-1a over the size list
+        for ( auto v : sizes ) h = (h ^ v) * 1099511628211ul;
+        return h;
+    }
 
     struct DAS_API daScriptEnvironmentGuard {
         das::daScriptEnvironment *initialBound;

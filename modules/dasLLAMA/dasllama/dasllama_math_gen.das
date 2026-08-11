@@ -13,6 +13,7 @@ require llvm/daslib/llvm_tune public  // [tune]/[tune_perm]/[tune_companion] + [
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
 require dasllama/dasllama_par
+require dasllama/dasllama_env  // DASLLAMA_ALLOW_UNTUNED wires tune_suppress_mint at [init]
 require math
 
 // The GEMM family as a [tune] client (gemm_generator_plan.md part 3; promoted from the M2
@@ -1846,6 +1847,13 @@ def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 c
 
 [init]
 def dasllama_math_gen_register() {
+    // the dev-run escape must skip the MINT, not just the measurement gate: without this an
+    // untuned box still pays the minutes-long auto-tune before the gate ever runs. The log
+    // line is unconditional-when-set — active overrides announce themselves
+    if (g_env_bench.allow_untuned) {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ALLOW_UNTUNED=1 - tune mint suppressed; untuned kernels run fallback, numbers are not publishable\n")
+        tune_suppress_mint("DASLLAMA_ALLOW_UNTUNED=1")
+    }
     // the cross-box override's q51 reach: x64-gen keeps disk-order q51 slots, so the generic
     // grp<mr> q51 repack registers here for bakes whose TARGET has grp q51 planes
     set_bake_q51_repack(@@repack_q51_bake)

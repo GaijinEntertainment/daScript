@@ -46,6 +46,28 @@ triple — same inputs, same filename, cache hit. AST-level changes therefore se
 through the function hashes; **emitter-level changes do not** — a change that alters generated
 machine code for identical inputs (IR generation, target-machine setup, `[llvm_code]`
 generators, the jit ABI) is invisible to the key and silently serves stale code from cache
-unless `LLVM_JIT_CODEGEN_VERSION` is bumped. A pinned `jit_output_path` bypasses the
-content-addressed name entirely; its probe compares function hashes only, which is why the
-summary line asserts the opt-level tag only when the tier is actually known.
+unless `LLVM_JIT_CODEGEN_VERSION` is bumped. "The jit call ABI" is the contract between the
+generated code and the engine: the generated function signatures and name scheme
+(`create_uid_nodes` / `get_dll_fn_name`), the prologue shape (`jit_emit_prologue`), the
+`LlvmJitFlags`/`LlvmJitMode` inputs to the emitter, and the extern-resolution surface the
+install phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A pinned
+`jit_output_path` bypasses the content-addressed name entirely; its probe compares function
+hashes only, which is why the summary line asserts the opt-level tag only when the tier is
+actually known.
+
+## 3. Overrides and their announces
+
+The backend's override knobs — the escapes that change what a run compiles, tunes, or emits
+beyond its defaults — are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
+`DAS_TUNE_MODE` (grid/tuner compile modes), `DAS_TUNE_MANIFEST` (pins the sidecar),
+`DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
+through a failing gate), `--tune` (forced re-mint), and the runtime escape API
+`tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
+passes the knob name it acts for). The announce contract: an override announces at the point
+it CHANGES THE OUTCOME — at least one line naming the knob (its env spelling, or the
+caller-supplied knob name for `tune_suppress_mint`); a set-but-inert override may stay silent,
+and per-scope or per-site repeats are correct. A library that only exposes the override bit
+(a `*_overridden` query such as `tune_noise_threshold_overridden`) discharges the contract
+when the announce lands at the consumer in the same change. Verbosity knobs
+(`DAS_TUNE_VERBOSITY`) shape only how much is printed, not what runs — they are not overrides
+under this contract.

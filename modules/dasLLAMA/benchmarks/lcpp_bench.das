@@ -622,6 +622,15 @@ def main() : int {
     if (gpu) {
         set_metal_mode(MetalMode.required)   // before load_model — pins the portable backend, activates the metal overrides
     }
+    // vulkan rails requested via env but the tier did not install at [init]: refuse BEFORE any
+    // model loads — every input to this check is settled by now. Metal (--ngl) rides the
+    // override registries, not this SPI — its own required-mode tripwire covers that arm
+    if (get_metal_mode() == MetalMode.off && gpu_want_arms_tier() && !moe_gpu_tier_installed()) {
+        let why = (moe_gpu_backend_registered()
+            ? "backend registered but the tier did not arm (device probe/VRAM - see the log above)"
+            : "no GPU backend module is registered (vulkan shared_module absent or failed to load - see the log above)")
+        panic("lcpp_bench: DASLLAMA_GPU* rails requested but the GPU tier is NOT installed - {why}")
+    }
     if (cfg.frozen) {
         set_image_artifacts_frozen(true)   // fail on a missing .dlim instead of minting one
     }
@@ -677,7 +686,11 @@ def main() : int {
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
             panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
         }
-        say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
+        // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
+        // a jit run that produced nothing logs its own LLVM JIT error beside this
+        let exec_state = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "INTERPRETED")
+        let gpu_seg = moe_gpu_tier_installed() ? " | gpu {gpu_tier_status().backend}" : ""
+        say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | {exec_state}{gpu_seg} | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)

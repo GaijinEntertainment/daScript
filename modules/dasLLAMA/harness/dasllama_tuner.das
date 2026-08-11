@@ -3,6 +3,7 @@ options gen2
 require daslib/module_path
 require daslib/command_line
 require daslib/fio
+require strings   // find — the NOISE GATE refusal detector in run_half
 require daslib/jobque_boost   // get_total_hw_cores: the measurement-regime lane count
 require daslib/json
 require daslib/json_boost
@@ -132,20 +133,33 @@ def private run_half(name : string; paranoid : bool) : bool {
     let full = get_platform_name() == "windows" && empty(pfx) ? "\"{cmd}\"" : cmd
     print("dasllama_tuner: {cmd}\n")
     var rc : int
+    var noiseRefused = false
     unsafe {
         rc = popen_timeout(full, 3600.0) $(f) {
             if (f == null) {
                 return
             }
             while (!feof(f)) {
-                print(fgets(f))
+                let ln = fgets(f)
+                if (find(ln, "NOISE GATE") >= 0) {
+                    noiseRefused = true
+                }
+                print(ln)
             }
         }
     }
     let elapsed_ms = get_time_usec(t0) / 1000
     print("dasllama_tuner: {name} finished in {elapsed_ms} ms (rc={rc})\n")
     if (rc != 0) {
-        print("dasllama_tuner: {name} FAILED (rc={rc})\n")
+        // the refusal detail scrolled by minutes ago mid-stream — the closing line carries the
+        // WHY and the escape hatches so a nonzero exit is self-diagnosing where you look.
+        // Under NOISE_OVERRIDE the gate line prints but the mint proceeds — a later nonzero
+        // exit is then some OTHER fault, and blaming noise would hide it
+        if (noiseRefused && !tune_noise_override()) {
+            print("dasllama_tuner: {name} REFUSED for noise (rc={rc}) - quiet the box and re-run; escapes: DAS_TUNE_NOISE_CV recalibrates the gate, DAS_TUNE_NOISE_OVERRIDE=1 mints anyway (stamped), DASLLAMA_ALLOW_UNTUNED=1 skips minting for dev runs\n")
+        } else {
+            print("dasllama_tuner: {name} FAILED (rc={rc})\n")
+        }
     }
     return rc == 0
 }
@@ -159,6 +173,13 @@ def main : int {
         ? "PARANOID (kernels 20 screening / 240 max, generators best-of-18, 1% gate, validation)"
         : "default (kernels 20 screening / 80 max, generators best-of-6, validation)")
     print("dasllama_tuner: mode = {modeDesc}\n")
+    // active overrides announce themselves up front: a mint an escape shaped must say so
+    if (tune_noise_threshold_overridden()) {
+        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_CV - noise gate recalibrated to {tune_noise_threshold_pct(paranoid):0.1f}%\n")
+    }
+    if (tune_noise_override()) {
+        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_OVERRIDE - a failing noise gate mints anyway (sidecar stamped 'noise: overridden')\n")
+    }
     // pre-mint snapshot: COPY, not rename — the halves UPSERT, and a rename would drop other
     // scopes' keys from the shared file. The post-mint diff reads it back.
     let sidecar = g_env_core.tune_manifest

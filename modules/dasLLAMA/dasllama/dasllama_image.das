@@ -1461,6 +1461,11 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
 //! Call inside ``with_job_que()``.
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                       planar_only : bool = false; image_fp32 : bool = false) : Model {
+    // vulkan-SPI worlds only: under an active Metal mode the GPU serves through the override
+    // registries, and "no backend registered" would be a false alarm
+    if (get_metal_mode() == MetalMode.off) {
+        warn_gpu_backend_absent()
+    }
     let qs = "{mode}"
     if (path |> ends_with(".dlim")) {
         // a prepared image named directly — first-class once the source gguf is gone. EXPECTED

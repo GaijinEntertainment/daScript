@@ -836,6 +836,24 @@ namespace das {
         ModuleGcFinalize & operator = ( const ModuleGcFinalize & ) = delete;
     };
 
+    // the CodeOfPolicies ABI canary (see the abi_stamp field): the host exe wrote the stamp with
+    // ITS headers' layout; a mismatch means every later field would be read at wrong offsets, so
+    // fail loud here instead of letting a stale host silently misread the policies (e.g. jit off)
+    bool checkCodeOfPoliciesStamp ( const CodeOfPolicies & policies ) {
+        return policies.abi_stamp == CodeOfPolicies::expected_abi_stamp();
+    }
+
+    void verifyCodeOfPoliciesStamp ( const CodeOfPolicies & policies ) {
+        if ( checkCodeOfPoliciesStamp(policies) ) return;
+        TextPrinter tp;
+        tp << "FATAL: CodeOfPolicies ABI stamp mismatch - the host executable wrote 0x" << HEX
+           << policies.abi_stamp << ", libDaScript expects 0x" << CodeOfPolicies::expected_abi_stamp() << DEC
+           << "\nthe host executable (daslang.exe or an embedder) was built against different daScript"
+           << " headers than this libDaScript - relink the host\n";
+        tp.output();
+        exit(1);
+    }
+
     ProgramPtr parseDaScript ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
@@ -844,6 +862,7 @@ namespace das {
                               bool exportAll,
                               bool isDep,
                               CodeOfPolicies policies ) {
+        verifyCodeOfPoliciesStamp(policies);
         CompilationCallbackGuard compilationCallbackGuard(moduleName, fileName);
         ProgramPtr program = make_smart<Program>();
         // The module's own root is the working/active root for the whole compile, so live
@@ -1507,6 +1526,7 @@ namespace das {
                                 TextWriter & logs,
                                 ModuleGroup & libGroup,
                                 CodeOfPolicies policies ) {
+        verifyCodeOfPoliciesStamp(policies);
         DAS_ASSERTF(policies.no_init_check || (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_modulesInitialized),
             "compileDaScript on an environment that never called Module::Initialize(); "
             "call das::Module::Initialize() after registering modules in this environment.");

@@ -220,11 +220,9 @@ def private arm_say(outcome : int; msg : string) {
 //! Idempotent — re-arming after ``set_gpu_tier_want`` just refreshes the layer count.
 def vulkan_moe_gpu_arm : bool {
     let layers = gpu_want_moe_layers()
-    // counts test == 0, NOT <= 0: -1 is the auto sentinel and must read as a REQUEST, or an
-    // auto-sized-layers-only want would silently fail to arm
-    let nothing_wanted = (layers == 0l && gpu_want_moe_stream() == 0l && !gpu_want_dn() && !gpu_want_attn() && !gpu_want_dnd()
-        && gpu_want_heat() <= 0l && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())
-    if (nothing_wanted) {   // checked first — the device probe is not free
+    // the want truth is gpu_want_arms_tier — ONE definition shared with the loud-failure
+    // checks, so "would arm" and "should have armed" can never drift apart
+    if (!gpu_want_arms_tier()) {   // checked first — the device probe is not free
         arm_say(0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want)")
         return false
     }

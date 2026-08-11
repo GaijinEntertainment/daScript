@@ -195,8 +195,21 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(l12 |> has("FAKE TUNER ->"))
     t |> success(l12 |> has("RESULT 7"))
 
+    // 13. tune_suppress_mint from a library [init] (the dev-run escape): the auto DEFAULT would
+    //     tune, but the mint is suppressed — no tuner, fallback stamps, the suppression says why
+    let supClient = "{get_this_module_dir()}/llvm_tune_scope_client_suppress.das"
+    let supSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_suppress.tune.json"
+    remove(supSidecar)
+    var l13 : array<string>
+    t |> equal(spawn_child("{tune_env("")}\"{bin}\" -jit \"{supClient}\"", l13), 0)
+    t |> success(!(l13 |> has("FAKE TUNER")))
+    t |> success(l13 |> has("mint SUPPRESSED (TEST_SUPPRESS=1)"))
+    t |> success(l13 |> has("RESULT 6"))
+    t |> success(!fexist(supSidecar))
+
     remove(sidecar)
     remove(autoSidecar)
+    remove(supSidecar)
     remove(aotOut)
     delete l1
     delete l2
@@ -213,4 +226,5 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     delete l10
     delete l11
     delete l12
+    delete l13
 }

@@ -5,6 +5,7 @@ module dasllama_gpu_tier shared public
 
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
+require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
 require math
 
 // The device-COOPERATION seam (SPI): hook types, install/unset slots, route/mark/want/status
@@ -558,7 +559,7 @@ def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
 // save/restore pairing, so an unpaired restore would otherwise drop the old set unreleased.
 def private install_mark_table(var dst : table<auto(KT); auto(VT)>; var src : table<KT; VT>) {
     delete dst
-    dst <- src   // nolint:PERF030 — released on the line above; the rule has no delete tracking
+    dst <- src
 }
 
 //! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after).
@@ -772,11 +773,36 @@ def public gpu_want_cls : bool
 def public gpu_want_cls_upload : bool
     => g_env_gpu.gpu_cls ?? true
 
+//! The ONE truth for "did the caller request rails the vulkan tier arms on" — the arm gate and
+//! the loud-failure checks share it, so they can never drift. -1 moe_layers = auto, a REQUEST.
+//! Excludes what cannot arm alone: dense + its sub-gates (post-arm routing), the vram budget.
+def public gpu_want_arms_tier : bool
+    => (gpu_want_moe_layers() != 0l || gpu_want_moe_stream() != 0l
+        || gpu_want_dn() || gpu_want_attn() || gpu_want_dnd()
+        || gpu_want_heat() > 0l || gpu_want_shexp() || gpu_want_qkv() || gpu_want_cls())
+
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).
 def public set_moe_gpu_arm(name : string; f : function<() : bool>) {
     g_moe_gpu_backend = name
     g_moe_gpu_arm = f
+}
+
+//! False = no GPU backend module ever registered an arm probe — distinct from registered-but-
+//! declined (device probe/VRAM); the loud-failure checks use it to say WHICH failure happened.
+def public moe_gpu_backend_registered : bool => !empty(g_moe_gpu_backend)
+
+//! One loud line when GPU rails are requested but no backend module ever registered — the
+//! ``require ?vulkan`` guard makes a failed shared_module load VANISH otherwise. Log-only;
+//! the model-load rail calls it once per load.
+def public warn_gpu_backend_absent {
+    if (!gpu_want_arms_tier() || moe_gpu_backend_registered()) {
+        return
+    }
+    let pending = describe_pending_dynamic_modules()
+    let detail = (empty(pending) ? "  no GPU backend module is installed (dasVulkan under modules/?)"
+        : "  shared modules that FAILED to load:\n{pending}")
+    to_log(LOG_ERROR, "dasLLAMA: GPU rails requested (DASLLAMA_GPU*) but NO GPU backend module is registered - the run stays on the CPU\n{detail}\n")
 }
 
 //! (Re-)arm the GPU tier from the current want. False = no GPU backend in this build,

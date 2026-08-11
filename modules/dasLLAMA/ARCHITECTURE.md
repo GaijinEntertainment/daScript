@@ -499,6 +499,16 @@ the documentation and to the registry test. The sanctioned forms beyond a plain 
 `tests/test_env_registry.das` enforces the lot in both directions (declared ↔ documented,
 read ↔ registered, writes included).
 
+**Override announces.** A knob that is a gate escape, a policy override, or a threshold
+recalibration — one whose presence makes a run measure, mint, or emit something its defaults
+would not (`DASLLAMA_ALLOW_UNTUNED`, the `DAS_TUNE_NOISE_*` pair and `DAS_TUNE_POLICY` read
+through llvm_tune's accessors) — announces at the point it changes the outcome: at least one
+printed or logged line naming the knob by its env spelling. Set-but-inert stays silent;
+per-site repeats are correct (the same knob may legitimately announce at its `[init]` wire, at
+a gate it bypasses, and in a tool banner). Ordinary behavior knobs (thread counts, rail
+selection, formats) are not overrides under this contract — their state belongs in the tools'
+existing config/status lines, not in per-knob announces.
+
 ### 2.10 Sanctioned instrumentation rails
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
