@@ -413,6 +413,146 @@ def test_chat_think_suppress(t : T?) {
     }
 }
 
+// ===== gemma-4 E-series thinking (opt-in via the <|think|> gate) =====
+
+[test]
+def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
+    t |> run("default = closed empty thought; thinking-ON = gate + bare opener (needs gemma-4-E2B)") @(t : T?) {
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        let trn = special_id(m, "<|turn>")
+        let trc = special_id(m, "<turn|>")
+        let cho = special_id(m, "<|channel>")
+        let chc = special_id(m, "<channel|>")
+        let thk = special_id(m, "<|think|>")
+        t |> success(trn >= 0l && trc >= 0l && cho >= 0l && chc >= 0l, "the vocab carries the turn/channel markers")
+        t |> success(thk >= 0l, "the vocab carries the <|think|> gate")
+
+        // thinking OFF (the E-series default): the closed empty thought prefill — the exact
+        // pre-thinking-arc token stream, pinned so the assistant_open restructure changes nothing
+        var c = create_chat_renderer(m, "", 8l)
+        t |> success(!c.enable_thinking, "gemma-4 defaults to thinking off")
+        // instruct mode stops at a stray channel marker; thinking-ON must NOT (they frame the thought)
+        let base_stops = length(c.stop_ids)
+        var eff_off <- effective_stop_ids(c)
+        t |> equal(length(eff_off), base_stops + 2, "thinking-off adds the two channel-marker stops")
+        t |> success(find_index(eff_off, cho) >= 0 && find_index(eff_off, chc) >= 0, "the extras are the channel markers")
+        delete eff_off
+        set_thinking(c, true)
+        var eff_on <- effective_stop_ids(c)
+        t |> equal(length(eff_on), base_stops, "thinking-on keeps only the template stops")
+        delete eff_on
+        set_thinking(c, false)
+        add_user(c, USR)
+        let got <- render_turn(m, c)
+        var want : array<int64>
+        want |> push(bos_id(m))
+        want |> push(trn)
+        want |> push_from(encode(m, "user\n{USR}", false, false))
+        want |> push(trc)
+        want |> push_from(encode(m, "\n", false, false))
+        want |> push(trn)
+        want |> push_from(encode(m, "model\n", false, false))
+        want |> push(cho)
+        want |> push_from(encode(m, "thought\n", false, false))
+        want |> push(chc)
+        t |> success(same(got, want), "default prefill token-for-token (instruct shape)")
+        delete c
+
+        // thinking ON: the <|think|> gate opens a system turn (even with no system prompt) and
+        // the generation prompt is the bare model header — the model emits its own thought channel
+        var c2 = create_chat_renderer(m, "", 8l)
+        set_thinking(c2, true)
+        add_user(c2, USR)
+        let got2 <- render_turn(m, c2)
+        var want2 : array<int64>
+        want2 |> push(bos_id(m))
+        want2 |> push(trn)
+        want2 |> push_from(encode(m, "system\n", false, false))
+        want2 |> push(thk)
+        want2 |> push(trc)
+        want2 |> push_from(encode(m, "\n", false, false))
+        want2 |> push(trn)
+        want2 |> push_from(encode(m, "user\n{USR}", false, false))
+        want2 |> push(trc)
+        want2 |> push_from(encode(m, "\n", false, false))
+        want2 |> push(trn)
+        want2 |> push_from(encode(m, "model\n", false, false))
+        t |> success(same(got2, want2), "thinking-ON prefill: <|think|> system gate + bare opener")
+        delete c2
+
+        // thinking ON with a system prompt: the gate precedes the prompt text in the same turn
+        var c3 = create_chat_renderer(m, SYS, 8l)
+        set_thinking(c3, true)
+        add_user(c3, USR)
+        let got3 <- render_turn(m, c3)
+        var want3 : array<int64>
+        want3 |> push(bos_id(m))
+        want3 |> push(trn)
+        want3 |> push_from(encode(m, "system\n", false, false))
+        want3 |> push(thk)
+        want3 |> push_from(encode(m, SYS, false, false))
+        want3 |> push(trc)
+        want3 |> push_from(encode(m, "\n", false, false))
+        want3 |> push(trn)
+        want3 |> push_from(encode(m, "user\n{USR}", false, false))
+        want3 |> push(trc)
+        want3 |> push_from(encode(m, "\n", false, false))
+        want3 |> push(trn)
+        want3 |> push_from(encode(m, "model\n", false, false))
+        t |> success(same(got3, want3), "thinking-ON + system prompt: gate precedes the prompt text")
+        delete c3
+        delete m
+    }
+}
+
+// ===== qwen35 Hermes tools (the qwen2/qwen3 block, kept by the 3.5 template) =====
+
+[test]
+def test_chat_qwen35_tools(t : T?) {
+    t |> run("the qwen35 registration declares the Hermes tool format (model-free)") @(t : T?) {
+        var ct <- arch_chat("qwen35")
+        t |> equal(ct.tool_call_open, "<tool_call>")
+        t |> equal(ct.tool_resp_open, "<tool_response>")
+        t |> success(!empty(ct.tool_sys_prelude), "tool block prelude declared")
+        delete ct
+    }
+    t |> run("tool markers resolve in the 3.5 vocab and render as single ids (needs Qwen3.5-0.8B)") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        let tco = special_id(m, "<tool_call>")
+        let tcc = special_id(m, "</tool_call>")
+        t |> success(tco >= 0l && tcc >= 0l, "the vocab carries the tool-call markers")
+        var c = create_chat_renderer(m, "", 8l)
+        var tools : array<string>
+        tools |> push("\{\"type\": \"function\", \"function\": \{\"name\": \"get_weather\", \"parameters\": \{}}}")
+        set_tools(c, tools)
+        add_user(c, USR)
+        let got <- render_turn(m, c)
+        // the format instructions quote the markers — each must encode as its single vocab id
+        var n_open = 0
+        var n_close = 0
+        for (id in got) {
+            if (id == tco) {
+                n_open ++
+            } elif (id == tcc) {
+                n_close ++
+            }
+        }
+        t |> success(n_open >= 1 && n_close >= 1, "system tool block renders the markers as vocab ids")
+        delete c
+        delete m
+    }
+}
+
 // ===== Template detection (model-free) =====
 
 // Distinctive first special of a template's user turn — "" when the user turn opens with plain

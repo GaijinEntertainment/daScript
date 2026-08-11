@@ -7,6 +7,7 @@ require dasllama/dasllama_transformer   // the umbrella fires each arch [init] r
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
+require math   // min/max in the reply-side reasoning matcher
 
 // The chat layer (layer 2). One engine drives every model: create_chat resolves the arch's chat
 // template (from the transformer's registry), add_user queues a message, respond renders the turn,
@@ -35,6 +36,7 @@ struct ChatSession {
     tmpl : ChatTemplate = ChatTemplate()
     close_parts : array<ChatPart>   // how a turn terminates (the user template after its content slot)
     stop_ids : array<int64>         // resolved stop-token ids
+    stop_ids_nothink : array<int64> // extra stops in force only while thinking is OFF (tmpl.stop_nothink)
     system : string = ""
     tools_json : array<string>      // verbatim tool JSONs; non-empty => the system turn carries the family's tool block
     pending : string = ""           // the user text awaiting the next respond()
@@ -42,7 +44,7 @@ struct ChatSession {
     pending_is_tool : bool = false  // pending is a tool-results block: marker-split at render
     first : bool = true             // first turn emits add_bos + the system turn
     max_new : int64 = 256l          // per-reply token budget
-    enable_thinking : bool = true   // false + a template with a think_suppress form => instruct mode
+    enable_thinking : bool = true   // init from tmpl.think_default; off + a think_suppress form => instruct mode
     history : array<Message>
     tower : AudioTower = AudioTower()     // d_model == 0 => text-only chat
     enc : EncoderState = EncoderState()   // encoder scratch (sized once at create)
@@ -58,6 +60,7 @@ def finalize(var c : ChatSession) {
     delete c.tmpl
     delete c.close_parts
     delete c.stop_ids
+    delete c.stop_ids_nothink
     delete c.tools_json
     delete c.history
     delete c.tower
@@ -220,6 +223,30 @@ def private render_parts_spliced(m : Model; turn_parts : array<ChatPart>; splice
     delete parts
 }
 
+// The thinking gate (gemma-4's <|think|> opening the system turn) renders only when thinking is
+// ON, the arch declares one, and the vocab carries its specials — the think_suppress mirror.
+def private think_gate_active(m : Model; c : ChatSession) : bool {
+    if (!c.enable_thinking || empty(c.tmpl.think_gate.parts) || empty(c.tmpl.system.parts)) {
+        return false
+    }
+    for (p in c.tmpl.think_gate.parts) {
+        if (p.kind == ChatPartKind.special && special_id(m, p.s) < 0l) {
+            return false
+        }
+    }
+    return true
+}
+
+// The generation prompt: the thinking-ON alternate opener when the arch declares one (gemma-4's
+// bare model header — the model emits its own thought channel), else the standard opener.
+def private render_assistant_open(m : Model; c : ChatSession; var out : array<int64>) {
+    if (c.enable_thinking && !empty(c.tmpl.assistant_open_think.parts)) {
+        render_parts(m, c.tmpl.assistant_open_think.parts, "", out)
+    } else {
+        render_parts(m, c.tmpl.assistant_open.parts, "", out)
+    }
+}
+
 // The system-turn content on the first turn: the user system prompt, and — when tools are
 // declared and the family has a tool format — the tool block wrapping the verbatim tool JSONs
 // (one per line, the Qwen/Hermes shape).
@@ -247,20 +274,25 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     var user_content = c.pending
     if (c.first) {
         let sys = system_content(c)
-        if (!empty(sys)) {
-            if (!empty(c.tmpl.system.parts)) {
-                if (empty(c.tools_json)) {
-                    render_parts(m, c.tmpl.system.parts, sys, out)
-                } else {
-                    // the tool block quotes the call markers (format instructions) — marker-split
-                    var sp : array<ChatPart>
-                    split_on_tool_markers(m, c, sys, sp)
-                    render_parts_spliced(m, c.tmpl.system.parts, sp, out)
-                    delete sp
+        let gate = think_gate_active(m, c)
+        if (gate || (!empty(sys) && !empty(c.tmpl.system.parts))) {
+            // the gate renders the system turn even with no prompt text (gemma-4's <|think|> gate)
+            var sp : array<ChatPart>
+            if (gate) {
+                sp := c.tmpl.think_gate.parts
+            }
+            if (empty(c.tools_json)) {
+                if (!empty(sys)) {
+                    sp |> push(chat_text(sys))
                 }
             } else {
-                user_content = "{sys}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
+                // the tool block quotes the call markers (format instructions) — marker-split
+                split_on_tool_markers(m, c, sys, sp)
             }
+            render_parts_spliced(m, c.tmpl.system.parts, sp, out)
+            delete sp
+        } elif (!empty(sys)) {
+            user_content = "{sys}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
         }
     }
     if (c.pending_is_tool) {
@@ -272,7 +304,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     } else {
         render_parts(m, c.tmpl.user.parts, user_content, out)
     }
-    render_parts(m, c.tmpl.assistant_open.parts, "", out)
+    render_assistant_open(m, c, out)
 }
 
 //! Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
@@ -288,12 +320,19 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
     var user_content = c.pending
     if (c.first) {
         let sys = system_content(c)
-        if (!empty(sys)) {
-            if (!empty(c.tmpl.system.parts)) {
-                render_parts(m, c.tmpl.system.parts, sys, head)
-            } else {
-                user_content = "{sys}\n\n{c.pending}"
+        let gate = think_gate_active(m, c)
+        if (gate || (!empty(sys) && !empty(c.tmpl.system.parts))) {
+            var sp : array<ChatPart>
+            if (gate) {
+                sp := c.tmpl.think_gate.parts
             }
+            if (!empty(sys)) {
+                sp |> push(chat_text(sys))
+            }
+            render_parts_spliced(m, c.tmpl.system.parts, sp, head)
+            delete sp
+        } elif (!empty(sys)) {
+            user_content = "{sys}\n\n{c.pending}"
         }
     }
     var before : array<ChatPart>
@@ -312,7 +351,11 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
     render_parts(m, c.tmpl.audio_pre.parts, "", head)
     var tail_parts := c.tmpl.audio_post.parts
     tail_parts |> push(chat_content())
-    tail_parts |> push_from(after, c.tmpl.assistant_open.parts)
+    if (c.enable_thinking && !empty(c.tmpl.assistant_open_think.parts)) {
+        tail_parts |> push_from(after, c.tmpl.assistant_open_think.parts)
+    } else {
+        tail_parts |> push_from(after, c.tmpl.assistant_open.parts)
+    }
     render_parts(m, tail_parts, user_content, tail)
 }
 
@@ -333,10 +376,17 @@ def private consume_pending_(var c : ChatSession) {
 //! whole prompt holding tokens only, no cache memory. Do not eval/respond on it.
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
+    c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
     for (sp in c.tmpl.stop) {
         let id = special_id(model, sp)
         if (id >= 0l) {
             c.stop_ids |> push(id)
+        }
+    }
+    for (sp in c.tmpl.stop_nothink) {
+        let id = special_id(model, sp)
+        if (id >= 0l) {
+            c.stop_ids_nothink |> push(id)
         }
     }
     // how the assistant turn terminates: the template's explicit assistant_close, else the
@@ -452,6 +502,16 @@ def set_thinking_(var c : ChatSession; on : bool) {
     c.enable_thinking = on
 }
 
+//! The stop ids in force for the NEXT generation: the template's stops, plus its thinking-off
+//! extras while thinking is off (gemma-4 cuts at a stray channel marker in instruct mode).
+def effective_stop_ids_(c : ChatSession) : array<int64> {
+    var out := c.stop_ids
+    if (!c.enable_thinking) {
+        out |> push_from(c.stop_ids_nothink)
+    }
+    return <- out
+}
+
 //! Queue a user message for the next respond().
 def add_user_(var c : ChatSession; text : string) {
     c.pending = text
@@ -544,16 +604,280 @@ def strip_think(reply : string) : string {
     return close < 0 ? "" : strip(slice(reply, close + length("</think>"), length(reply)))
 }
 
+// ===== Reply-side reasoning matcher (per-arch, streaming-capable) =====
+
+// gpt-oss Harmony markers — the channel_switch grammar is the format, not per-arch data.
+let private HARMONY_CH = "<|channel|>"
+let private HARMONY_MSG = "<|message|>"
+let private HARMONY_END = "<|end|>"
+
+// ThinkStream.state values (shared by every mode; HEADER/BETWEEN are channel_switch-only).
+// Public: the ThinkStream field default references them, so cross-module construction needs them.
+let TS_START = 0     // deciding whether the reply opens with the reasoning opener
+let TS_REASON = 1    // inside the reasoning span
+let TS_WS = 2        // swallowing whitespace between the closer and the content
+let TS_CONTENT = 3   // past the reasoning: everything passes through
+let TS_HEADER = 4    // channel_switch: reading a channel header up to <|message|>
+let TS_BETWEEN = 5   // channel_switch: framing glue between <|end|> and the next header
+
+//! One reply split at its reasoning boundary (`split_reasoning_`).
+struct ThinkSplit {
+    reasoning : string = ""
+    content : string = ""
+}
+
+//! Incremental reasoning/content splitter for a streamed reply: `make_think_stream_` builds it,
+//! `think_feed_` yields per-piece deltas, `think_finish_` flushes the tail at end-of-generation.
+//! An unarmed stream (`ThinkMode.none`) passes everything to content.
+struct ThinkStream {
+    mode : ThinkMode = ThinkMode.none
+    open_mark : string = ""
+    close_mark : string = ""
+    state : int = TS_CONTENT   // pass-through by default — only make_think_stream_ arms TS_START
+    hold : string = ""      // undecided tail: leading whitespace, a partial marker, or header glue
+    hdr : string = ""       // channel_switch: the channel header accumulating up to <|message|>
+}
+
+//! The reply matcher for `tmpl`, armed (`thinking` = the session's effective enable_thinking).
+//! Unarmed or `ThinkMode.none` streams pass everything straight to content.
+def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
+    if (!thinking || tmpl.think_mode == ThinkMode.none) {
+        return ThinkStream()
+    }
+    return ThinkStream(mode = tmpl.think_mode, open_mark = tmpl.think_open, close_mark = tmpl.think_close,
+                       state = TS_START)
+}
+
+// Longest k < length(mark) where s ends with mark's first k characters — the hold-back length
+// that keeps a marker split across feed boundaries matchable.
+def private tail_prefix_len(s : string; mark : string) : int {
+    let n = length(s)
+    var k = min(n, length(mark) - 1)
+    while (k > 0) {
+        if (slice(s, n - k, n) == slice(mark, 0, k)) {
+            return k
+        }
+        k --
+    }
+    return 0
+}
+
+// One whitespace-or-marker probe at TS_START: -1 = need more input, 0 = no opener (content),
+// 1 = opener matched at `cut` (first index past it, leading whitespace included).
+def private probe_opener(work : string; mark : string; var cut : int&) : int {
+    let stripped = strip_left(work)
+    if (empty(stripped)) {
+        return -1
+    }
+    let m = length(mark)
+    let avail = min(length(stripped), m)
+    if (slice(stripped, 0, avail) != slice(mark, 0, avail)) {
+        return 0
+    }
+    if (avail < m) {
+        return -1
+    }
+    cut = length(work) - length(stripped) + m
+    return 1
+}
+
+// Route one channel header: reasoning unless it names the `final` channel (Harmony's content
+// channel); `analysis`, `commentary`, and anything unrecognized classify as reasoning.
+def private harmony_header_is_content(hdr : string) : bool {
+    return find(hdr, "final") >= 0
+}
+
+def private think_feed_symmetric(var ts : ThinkStream; var work : string; var rp, cp : array<string>) {
+    while (!empty(work)) {
+        if (ts.state == TS_START) {
+            var cut = 0
+            let r = probe_opener(work, ts.open_mark, cut)
+            if (r < 0) {
+                ts.hold = work
+                return
+            }
+            if (r == 0) {
+                ts.state = TS_CONTENT
+                continue
+            }
+            // asymmetric openers spell an optional trailing newline (gemma-4's `thought\n`)
+            if (ts.mode == ThinkMode.asymmetric && cut < length(work) && slice(work, cut, cut + 1) == "\n") {
+                cut ++
+            } elif (ts.mode == ThinkMode.asymmetric && cut >= length(work)) {
+                ts.hold = work   // the optional newline may still arrive with the next piece
+                return
+            }
+            work = slice(work, cut, length(work))
+            ts.state = TS_REASON
+        } elif (ts.state == TS_REASON) {
+            let f = find(work, ts.close_mark)
+            if (f >= 0) {
+                rp |> push(slice(work, 0, f))
+                work = slice(work, f + length(ts.close_mark), length(work))
+                ts.state = TS_WS
+            } else {
+                let h = tail_prefix_len(work, ts.close_mark)
+                let n = length(work)
+                rp |> push(slice(work, 0, n - h))
+                ts.hold = slice(work, n - h, n)
+                return
+            }
+        } elif (ts.state == TS_WS) {
+            let stripped = strip_left(work)
+            if (empty(stripped)) {
+                return   // still whitespace: drop it (content leading-trim)
+            }
+            work = stripped
+            ts.state = TS_CONTENT
+        } else {
+            cp |> push(work)
+            return
+        }
+    }
+}
+
+def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, cp : array<string>) {
+    while (!empty(work)) {
+        if (ts.state == TS_START) {
+            var cut = 0
+            let r = probe_opener(work, HARMONY_CH, cut)
+            if (r < 0) {
+                ts.hold = work
+                return
+            }
+            if (r == 0) {
+                ts.state = TS_CONTENT
+                continue
+            }
+            work = slice(work, cut, length(work))
+            ts.state = TS_HEADER
+            ts.hdr = ""
+        } elif (ts.state == TS_HEADER) {
+            let f = find(work, HARMONY_MSG)
+            if (f < 0) {
+                let h = tail_prefix_len(work, HARMONY_MSG)
+                let n = length(work)
+                ts.hdr = "{ts.hdr}{slice(work, 0, n - h)}"   // headers are a few chars; no O(n^2) risk
+                ts.hold = slice(work, n - h, n)
+                return
+            }
+            ts.hdr = "{ts.hdr}{slice(work, 0, f)}"
+            work = slice(work, f + length(HARMONY_MSG), length(work))
+            ts.state = harmony_header_is_content(ts.hdr) ? TS_CONTENT : TS_REASON
+            ts.hdr = ""
+        } elif (ts.state == TS_REASON) {
+            let fe = find(work, HARMONY_END)
+            let fc = find(work, HARMONY_CH)
+            if (fe >= 0 && (fc < 0 || fe <= fc)) {
+                rp |> push(slice(work, 0, fe))
+                work = slice(work, fe + length(HARMONY_END), length(work))
+                ts.state = TS_BETWEEN
+            } elif (fc >= 0) {
+                rp |> push(slice(work, 0, fc))
+                work = slice(work, fc + length(HARMONY_CH), length(work))
+                ts.state = TS_HEADER
+                ts.hdr = ""
+            } else {
+                let h = max(tail_prefix_len(work, HARMONY_END), tail_prefix_len(work, HARMONY_CH))
+                let n = length(work)
+                rp |> push(slice(work, 0, n - h))
+                ts.hold = slice(work, n - h, n)
+                return
+            }
+        } elif (ts.state == TS_BETWEEN) {
+            // framing glue (<|start|>assistant etc.) up to the next channel header is dropped
+            let f = find(work, HARMONY_CH)
+            if (f < 0) {
+                let h = tail_prefix_len(work, HARMONY_CH)
+                let n = length(work)
+                ts.hold = slice(work, n - h, n)   // the glue before it is framing, not content
+                return
+            }
+            work = slice(work, f + length(HARMONY_CH), length(work))
+            ts.state = TS_HEADER
+            ts.hdr = ""
+        } else {
+            cp |> push(work)
+            return
+        }
+    }
+}
+
+//! Feed one decoded piece through the splitter. The out-strings are OVERWRITTEN with this piece's
+//! reasoning/content deltas (either may come back empty — e.g. while a partial marker is held).
+//! Pieces may split markers at any byte; the stream holds partial matches back across calls.
+def think_feed_(var ts : ThinkStream; piece : string; var reasoning, content : string&) {
+    let work = empty(ts.hold) ? piece : "{ts.hold}{piece}"
+    ts.hold = ""
+    var rp : array<string>
+    var cp : array<string>
+    if (ts.mode == ThinkMode.channel_switch) {
+        think_feed_channel(ts, work, rp, cp)
+    } else {
+        think_feed_symmetric(ts, work, rp, cp)
+    }
+    reasoning = join(rp, "")
+    content = join(cp, "")
+    delete rp
+    delete cp
+}
+
+//! Flush the splitter at end-of-generation, OVERWRITING the out-strings with the final deltas:
+//! an unclosed reasoning span stays reasoning (the truncated-tail rule); an opener probe that
+//! never completed was ordinary content; whitespace/framing tails (TS_WS/HEADER/BETWEEN) drop.
+def think_finish_(var ts : ThinkStream; var reasoning, content : string&) {
+    reasoning = ""
+    content = ""
+    if (ts.state == TS_REASON) {
+        reasoning = ts.hold
+    } elif (ts.state == TS_CONTENT) {
+        content = ts.hold
+    } elif (ts.state == TS_START && !empty(ts.hold)) {
+        // EOG mid-probe: a COMPLETED opener means generation truncated at the opener — the tail
+        // past it (gemma-4's undecided optional newline hold) is reasoning; an incomplete opener
+        // was ordinary content all along
+        var cut = 0
+        let mark = ts.mode == ThinkMode.channel_switch ? HARMONY_CH : ts.open_mark
+        if (probe_opener(ts.hold, mark, cut) == 1) {
+            reasoning = ts.mode == ThinkMode.channel_switch ? "" : slice(ts.hold, cut, length(ts.hold))
+        } else {
+            content = ts.hold
+        }
+    }
+    ts.hold = ""
+    ts.hdr = ""
+    ts.state = TS_CONTENT
+}
+
+//! Split a complete reply at its reasoning boundary per the template's reply-side format —
+//! `strip_think`'s per-arch generalization. When a reasoning span is found both halves come back
+//! stripped (`strip_think` parity); a reply with no reasoning passes through untouched.
+def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
+    var ts = make_think_stream_(tmpl, true)
+    var res = ThinkSplit()
+    think_feed_(ts, reply, res.reasoning, res.content)
+    var rtail = ""
+    var ctail = ""
+    think_finish_(ts, rtail, ctail)
+    res.reasoning = "{res.reasoning}{rtail}"
+    res.content = "{res.content}{ctail}"
+    if (!empty(res.reasoning)) {
+        res.reasoning = strip(res.reasoning)
+        res.content = strip(res.content)
+    }
+    return res
+}
+
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
 //! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the
-//! budget. Terminates the turn, strips a `<think>` block (see strip_think), returns the reply.
+//! budget. Terminates the turn; history stores the reply reasoning-stripped (split_reasoning_).
 def respond_(m : Model; var c : ChatSession; params : SamplingParams;
              blk : block<(piece : string) : bool>) : string {
     if (!c.has_pending && c.n_audio_rows == 0l) {
         return ""
     }
     // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
-    var stops := c.stop_ids
+    var stops <- effective_stop_ids_(c)
     var reply_parts : array<string>
     if (c.n_audio_rows > 0l) {
         // audio turn: token spans around the soft-token splice, prefilled as embedding rows
@@ -599,6 +923,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
     render_parts(m, c.close_parts, "", close)
     eval_(m, c.session, close)
     let reply = join(reply_parts, "")
-    c.history |> push(Message(role = Role.assistant, content = strip_think(reply)))
+    // history holds only the answer — the per-arch reasoning span strips (strip_think's generalization)
+    c.history |> push(Message(role = Role.assistant, content = split_reasoning_(c.tmpl, reply).content))
     return reply
 }

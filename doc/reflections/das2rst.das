@@ -327,7 +327,8 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
         group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_assistant|render_turn|render_assistant|render_close|respond|set_thinking)$%%),
-        group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls)$%%)
+        group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls)$%%),
+        group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|effective_stop_ids)$%%)
     )
     var hook = DocsHook()
     hook.afterEnums <- @(var f : FILE const?; _was_enums : bool) {
@@ -356,6 +357,10 @@ def document_module_dasllama(_root : string) {
             "What the model honestly supports at the chat layer, as returned by ``caps``: ``system_prompt`` is false for architectures with no system role (gemma), where the chat layer silently folds the system prompt into the first user turn. Grows as gaps surface.")
         dasllama_type_stanza(f, "struct-dasllama_chat-ChatSession", "ChatSession",
             "A conversation over a model: its ``session``, the resolved chat template, and the running transcript in ``history``. Create with ``create_chat``, then drive with ``add_user`` + ``respond``.")
+        dasllama_type_stanza(f, "struct-dasllama_chat-ThinkStream", "ThinkStream",
+            "The incremental reasoning/content splitter for a streamed reply (``make_think_stream``): feed decoded pieces through ``think_feed``, flush with ``think_finish``. Holds partial reasoning markers back across chunk boundaries; a non-thinking family yields a pass-through stream.")
+        dasllama_type_stanza(f, "struct-dasllama_chat-ThinkSplit", "ThinkSplit",
+            "One reply split at its reasoning boundary, as returned by ``split_reasoning``: ``reasoning`` holds the thinking span (empty when the model answered directly), ``content`` the answer.")
         dasllama_type_stanza(f, "struct-dasllama_audio-AudioTower", "AudioTower",
             "A loaded audio encoder: Whisper-family encoder weights plus the model-specific projector tail, as produced by ``load_audio_tower`` from an mmproj GGUF. Pass it to ``create_chat`` to enable ``add_user_audio`` turns.")
     }

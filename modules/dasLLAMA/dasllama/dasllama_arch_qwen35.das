@@ -39,6 +39,7 @@ def register_arch_qwen35() {
     var d = ArchDesc(name = "qwen35", configure = @@configure_qwen35)
     d.blocks = qwen35_blocks()
     chatml_chat(d.chat)
+    hermes_tools(d.chat)   // same Hermes tool block as qwen2/qwen3 (the Qwen3.5 template keeps it)
     // (clone the template BEFORE register_arch moves `d`)
     var dm = ArchDesc(name = "qwen35moe", configure = @@configure_qwen35moe)
     dm.blocks = qwen35moe_blocks()

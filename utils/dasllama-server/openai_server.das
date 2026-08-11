@@ -149,6 +149,7 @@ struct private StreamWire {
     last_keepalive_ticks : int64    // tool streams buffer native envelopes; empty deltas keep HTTP alive
     call_open : string              // the family's tool-call markers (copied from the chat template)
     call_close : string
+    think : ThinkStream = ThinkStream()   // the reply-side reasoning splitter (pass-through when unarmed)
 }
 
 var g_wires : table<int64; StreamWire>
@@ -851,6 +852,7 @@ struct OaiToolCall {
 struct private OaiMessage {
     role : string
     content : string
+    @optional reasoning_content : string   // the reply's reasoning span (thinking models; absent when empty)
     @optional tool_calls : array<OaiToolCall>
 }
 
@@ -887,6 +889,7 @@ struct private OaiStreamToolCall {
 struct private OaiDelta {
     @optional role : string
     @optional content : string
+    @optional reasoning_content : string   // streamed reasoning deltas (the DeepSeek/llama.cpp framing)
     @optional tool_calls : array<OaiStreamToolCall>
 }
 
@@ -1110,12 +1113,15 @@ def private utf8_hold_bytes(s : string) : int {
     return hold
 }
 
-// One chat.completion.chunk SSE event. role-only for the opening delta, content for each token,
-// empty delta + finish_reason for the terminating chunk.
+// One chat.completion.chunk SSE event. role-only for the opening delta, content and/or
+// reasoning_content for each token, empty delta + finish_reason for the terminating chunk.
 def private send_chat_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
-                            id : string; created : int64; role, content, finish : string) {
+                            id : string; created : int64; role, content, finish : string;
+                            reasoning : string = "") {
     var chunk = OaiStreamChunk(id = id, _object = "chat.completion.chunk", created = created, model = cur_name())
-    chunk.choices |> emplace(OaiStreamChoice(index = 0, delta <- OaiDelta(role = role, content = content),
+    chunk.choices |> emplace(OaiStreamChoice(index = 0,
+                                             delta <- OaiDelta(role = role, content = content,
+                                                               reasoning_content = reasoning),
                                              finish_reason = finish))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
@@ -1539,7 +1545,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
-                             seed : int = 0) {
+                             seed : int = 0; think : ThinkStream = ThinkStream()) {
     let np = long_length(prompt)
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
@@ -1566,7 +1572,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                            slot = g_cur, id = cid, created = created,
                            has_tools = tools_declared && !empty(call_open),
                            last_keepalive_ticks = ref_time_ticks(),
-                           call_open = call_open, call_close = call_close)
+                           call_open = call_open, call_close = call_close, think = think)
     g_wires[rid] <- wire
     if (streaming && is_chat) {
         send_chat_chunk(srv, writer, cid, created, "assistant", "", "")   // opening role delta
@@ -1579,13 +1585,13 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
-                               max_new : int64; start : int; thinking : bool;
+                               max_new : int64; start : int; think_set, think_val : bool;
                                var prompt, stop_ids, close : array<int64>&;
-                               var call_open, call_close : string&) : string {
+                               var call_open, call_close : string&; var think_out : ThinkStream&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
-    if (!thinking) {
-        set_thinking(chat, false)
+    if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
+        set_thinking(chat, think_val)
     }
     if (!empty(tools)) {
         if (empty(chat.tmpl.tool_call_open)) {
@@ -1668,10 +1674,11 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     delete turn
     // out-params: the sole caller hands them in empty and deletes them before every re-render
     prompt <- rendered      // nolint:PERF030 — empty on entry
-    stop_ids <- chat.stop_ids   // nolint:PERF030 — empty on entry
+    stop_ids <- effective_stop_ids(chat)   // nolint:PERF030 — empty on entry; + thinking-off extras
     close <- render_close(cur_model(), chat)   // nolint:PERF030 — empty on entry
     call_open = chat.tmpl.tool_call_open
     call_close = chat.tmpl.tool_call_close
+    think_out = make_think_stream(chat)   // armed per the family's reply format + effective thinking
     return ""
 }
 
@@ -1774,8 +1781,12 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     } elif (ctk != null && !(ctk.value is _null)) {
         to_log(LOG_WARNING, "/v1/chat/completions: 'chat_template_kwargs' must be an object — ignoring\n")
     }
-    var think = js?["enable_thinking"] ?? true
-    think = think && (ctk?["enable_thinking"] ?? true)
+    // tri-state: an ABSENT enable_thinking leaves the family's own default in force (qwen thinks,
+    // gemma-4 E doesn't); a present bool — either spelling — overrides it
+    let tv = js?["enable_thinking"]
+    let cv = ctk?["enable_thinking"]
+    let think_set = (tv != null && tv.value is _bool) || (cv != null && cv.value is _bool)
+    let think_val = (tv ?? true) && (cv ?? true)
     let has_tools = !empty(tools)
     var prompt : array<int64>
     defer() { delete prompt }
@@ -1785,10 +1796,11 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     defer() { delete close }
     var call_open = ""
     var call_close = ""
+    var think_stream = ThinkStream()
     var start = 0
     while (true) {
-        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think,
-                                              prompt, stop_ids, close, call_open, call_close)
+        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
+                                              prompt, stop_ids, close, call_open, call_close, think_stream)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -1810,7 +1822,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
         delete close
     }
     register_request(srv, writer, prompt, stop_ids, close, params, max_new, streaming, true, "chatcmpl",
-                     has_tools, call_open, call_close, seed)
+                     has_tools, call_open, call_close, seed, think_stream)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -1885,6 +1897,26 @@ def private flush_tool_keepalives(srv : WebSocketServer) {
     }
 }
 
+// Split a complete buffered reply through the wire's splitter (fresh on buffered wires — pieces
+// never fed it): reasoning lands in the out-param, the content half returns; both stripped when a
+// reasoning span exists (split_reasoning parity).
+def private split_wire_reasoning(var w : StreamWire?; full : string; var reasoning : string&) : string {
+    var r = ""
+    var c = ""
+    think_feed(w.think, full, r, c)
+    var rt = ""
+    var ct = ""
+    think_finish(w.think, rt, ct)
+    r = "{r}{rt}"
+    var body = "{c}{ct}"
+    if (!empty(r)) {
+        r = strip(r)
+        body = strip(body)
+    }
+    reasoning = r
+    return body
+}
+
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
@@ -1913,7 +1945,17 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                 w.utf8_tail = hold > 0 ? slice(whole, cut) : ""
                 if (!empty(emit_now)) {
                     if (w.is_chat) {
-                        send_chat_chunk(srv, w.writer, w.id, w.created, "", emit_now, "")
+                        // reasoning/content split rides the wire's splitter; either half may be
+                        // empty (partial markers hold back across deltas)
+                        var rsn = ""
+                        var cnt = ""
+                        think_feed(w.think, emit_now, rsn, cnt)
+                        if (!empty(rsn)) {
+                            send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
+                        }
+                        if (!empty(cnt)) {
+                            send_chat_chunk(srv, w.writer, w.id, w.created, "", cnt, "")
+                        }
                     } else {
                         send_compl_chunk(srv, w.writer, w.id, w.created, emit_now, "")
                     }
@@ -1932,10 +1974,15 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
             }
             var finish = e.finish
             if (w.has_tools) {
-                // Normalize the complete reply, then send content and calls in OpenAI framing.
+                // Normalize the complete reply: reasoning first, then calls, in OpenAI framing.
                 let full = join(w.reply_parts, "")
+                var rsn = ""
+                let body = split_wire_reasoning(w, full, rsn)
+                if (!empty(rsn)) {
+                    send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
+                }
                 var calls : array<OaiToolCall>
-                let content = parse_tool_calls_auto(full, w.call_open, w.call_close,
+                let content = parse_tool_calls_auto(body, w.call_open, w.call_close,
                                                     "call_{e.stream}", calls)
                 if (!empty(content)) {
                     send_chat_chunk(srv, w.writer, w.id, w.created, "", content, "")
@@ -1945,6 +1992,17 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                     finish = "tool_calls"
                 }
                 delete calls
+            } elif (w.is_chat) {
+                // flush the splitter's tail (an unclosed reasoning span classifies as reasoning)
+                var rsn = ""
+                var cnt = ""
+                think_finish(w.think, rsn, cnt)
+                if (!empty(rsn)) {
+                    send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
+                }
+                if (!empty(cnt)) {
+                    send_chat_chunk(srv, w.writer, w.id, w.created, "", cnt, "")
+                }
             }
             if (w.is_chat) {
                 send_chat_chunk(srv, w.writer, w.id, w.created, "", "", finish)
@@ -1955,11 +2013,12 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
             close_writer(srv, w.writer)
         } elif (w.is_chat) {
             let full = join(w.reply_parts, "")
-            var content = full
+            var rsn = ""
+            var content = split_wire_reasoning(w, full, rsn)
             var finish = e.finish
             var calls : array<OaiToolCall>
             if (w.has_tools) {
-                content = parse_tool_calls_auto(full, w.call_open, w.call_close,
+                content = parse_tool_calls_auto(content, w.call_open, w.call_close,
                                                 "call_{e.stream}", calls)
                 if (!empty(calls)) {
                     finish = "tool_calls"
@@ -1968,6 +2027,7 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
             var out = OaiChatResponse(id = w.id, _object = "chat.completion", created = w.created, model = cur_name())
             out.choices |> emplace(OaiChoice(index = 0,
                                              message <- OaiMessage(role = "assistant", content = content,
+                                                                   reasoning_content = rsn,
                                                                    tool_calls <- calls),
                                              finish_reason = finish))
             out.usage = OaiUsage(prompt_tokens = e.n_prompt, completion_tokens = e.n_gen,

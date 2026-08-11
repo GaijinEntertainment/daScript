@@ -81,6 +81,12 @@ and the arm then skips forever while the suite stays green.
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
+**A family that declares thinking or tool markers ships recognition tests in the same change.**
+A `dasllama_arch_*.das` registration adding `think_mode` or `tool_call_open` also adds that
+family's wire shape to `tests/test_think_split.das` (model-free split) and a live leg to
+`utils/dasllama-server/test_openai_server_think.das` gated on its smallest local GGUF; a family
+with no small-enough model records its remote leg in `THINKING.md` instead.
+
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
