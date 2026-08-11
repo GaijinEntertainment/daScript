@@ -228,7 +228,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
-        tune = tune_summary(), tune_sha = tune_manifest_sha(), hardware = gather_hardware())
+        tune = tune_summary(), tune_sha = tune_manifest_sha(), noise = tune_manifest_noise(),
+        hardware = gather_hardware())
     run.files |> emplace(file_identity(model_path, "weights"))
     if (!empty(spec.das_mmproj)) {
         run.files |> emplace(file_identity("{spec.root}{spec.das_mmproj}", "mmproj"))
@@ -866,11 +867,15 @@ def main() : int {
             delete refRows
             continue
         }
+        // the das row's backend is what OUR engine ran on — metal (--ngl protocol), the armed
+        // vulkan tier, or cpu; the reference row keeps the --ngl-derived value (llama-bench
+        // knows nothing of the vulkan tier)
         let backend = gpu ? "metal" : "cpu"
+        let das_backend = gpu ? "metal" : (moe_gpu_tier_installed() ? "vulkan" : "cpu")
         let gguf = base_name(mpath)
         if (fmt == OutFmt.md) {
             for (st in results) {
-                var row <- ["das", gguf, backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
+                var row <- ["das", gguf, das_backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
                 mdRows |> emplace(row)
             }
             for (rr in refRows) {
@@ -898,7 +903,7 @@ def main() : int {
     }
     var dr = BenchRun(
         engine = "das",
-        backend = backend,
+        backend = das_backend,
         flavor = flavor_stamp(cfg.accel ? "accel" : "tuned"),
         box = box,
         threads = threads,
@@ -909,6 +914,7 @@ def main() : int {
         version = das_version(),
         tune = tune_summary(),
         tune_sha = tune_manifest_sha(),
+        noise = tune_manifest_noise(),
         exec_fmt = execFmt,
         hardware = hw,
         tests <- tests_of(results))
