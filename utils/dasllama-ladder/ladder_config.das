@@ -32,6 +32,10 @@ struct LadderArgs {
     @clarg_doc = "Per-IP accepted-submission ceiling per hour"
     max_submissions_per_ip_hour : int = 20
 
+    @clarg_name = "submit-open"
+    @clarg_doc = "Accept public submissions at boot (default false = read-only board); toggled at runtime via the loopback /admin/submit route"
+    submit_open : bool = false
+
     @clarg_doc = "Official record stores dir (records/<box>.json); imported at startup; empty = no import"
     official_dir : string = ""
 
@@ -162,6 +166,7 @@ def config_banner(cfg : LadderArgs; sources : table<string; string>) : JsonValue
         max_sidecar_bytes_src = sources?["max_sidecar_bytes"] ?? "default",
         max_submissions_per_ip_hour = cfg.max_submissions_per_ip_hour,
         max_submissions_per_ip_hour_src = sources?["max_submissions_per_ip_hour"] ?? "default",
+        submit_open = cfg.submit_open,
         official_dir = cfg.official_dir,
         official_dir_src = sources?["official_dir"] ?? "default",
         config = cfg.config))

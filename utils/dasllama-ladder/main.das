@@ -65,7 +65,8 @@ def init {
         LadderPolicy(
             max_records_bytes = g_cfg.max_records_bytes,
             max_sidecar_bytes = g_cfg.max_sidecar_bytes,
-            max_submissions_per_ip_hour = g_cfg.max_submissions_per_ip_hour),
+            max_submissions_per_ip_hour = g_cfg.max_submissions_per_ip_hour,
+            submit_open = g_cfg.submit_open),
         g_cfg.official_dir)
     if (!g_ready) {
         g_exit_code = 1

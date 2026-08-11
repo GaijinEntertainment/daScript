@@ -48,7 +48,7 @@ def private with_ladder_server(policy : LadderPolicy; blk : block<(base_url : st
 }
 
 def private default_policy : LadderPolicy {
-    return LadderPolicy()
+    return LadderPolicy(submit_open = true)   // the submit-path tests need an open board; the gate itself has its own test
 }
 
 def private json_of(var resp : HttpResponse?) : JsonValue? {
@@ -222,7 +222,7 @@ def test_records_routes(t : T?) {
 
 [test]
 def test_policy_status_mapping(t : T?) {
-    with_ladder_server(LadderPolicy(max_sidecar_bytes = 64, max_submissions_per_ip_hour = 1)) $(base_url) {
+    with_ladder_server(LadderPolicy(max_sidecar_bytes = 64, max_submissions_per_ip_hour = 1, submit_open = true)) $(base_url) {
         t |> run("oversize is 413, throttle is 429") @(tt : T?) {
             POST("{base_url}/api/submit/sidecar", sidecar_doc(BOX_A, "3", "vec8")) $(resp) {
                 tt |> equal(int(resp.status_code), 413, "the tiny cap rejects the real fixture")
@@ -236,7 +236,7 @@ def test_policy_status_mapping(t : T?) {
         }
     }
     // the attempt limiter caps REJECTED traffic too — the accepted ceiling never fires on it
-    with_ladder_server(LadderPolicy(max_attempts_per_ip_hour = 2)) $(base_url) {
+    with_ladder_server(LadderPolicy(max_attempts_per_ip_hour = 2, submit_open = true)) $(base_url) {
         t |> run("invalid submissions are attempt-limited before parse") @(tt : T?) {
             // two malformed bodies (400, never stored, so the accepted ceiling is untouched)
             POST("{base_url}/api/submit/sidecar", "not json") $(resp) {
@@ -248,6 +248,43 @@ def test_policy_status_mapping(t : T?) {
             // the third attempt trips the transport-layer limiter regardless of validity
             POST("{base_url}/api/submit/sidecar", sidecar_doc(BOX_A, "3", "vec8")) $(resp) {
                 tt |> equal(int(resp.status_code), 429, "attempt ceiling reached on rejected traffic")
+            }
+        }
+    }
+}
+
+[test]
+def test_submit_gate(t : T?) {
+    // default policy = submit CLOSED: the read board serves, writes are refused until opened, and
+    // the loopback admin flip is reversible (the test-window switch)
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        let doc = sidecar_doc(BOX_A, "3", "vec8_u8")
+        t |> run("a closed board refuses submissions with 403") @(tt : T?) {
+            POST("{base_url}/api/submit/sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 403, "sidecar refused")
+            }
+            POST("{base_url}/api/submit/records", records_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 403, "records refused")
+            }
+        }
+        t |> run("the loopback admin toggle opens submissions") @(tt : T?) {
+            POST("{base_url}/admin/submit", "\{\"open\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                tt |> success(js?["submit_open"] ?? false, "reports open")
+            }
+            POST("{base_url}/api/submit/sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 200, "sidecar now accepted")
+            }
+        }
+        t |> run("the toggle closes them again") @(tt : T?) {
+            POST("{base_url}/admin/submit", "\{\"open\":false}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                tt |> success(!(js?["submit_open"] ?? true), "reports closed")
+            }
+            POST("{base_url}/api/submit/records", records_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 403, "records refused again")
             }
         }
     }

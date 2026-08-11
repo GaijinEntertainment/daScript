@@ -115,6 +115,9 @@ class LadderServer : HvWebServer {
         POST("/admin/import-official") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_official(req, resp)
         }
+        POST("/admin/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_submit(req, resp)
+        }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let t0 = ref_time_ticks()
             if (!is_loopback_caller(req)) {
@@ -329,6 +332,11 @@ def private put_status_of(status : PutStatus) : http_status {
 def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    if (!g_policy.submit_open) {
+        let body = write_json(JV((error = "submissions are not open yet")))
+        log_request("POST", "/api/submit/sidecar", 403, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.FORBIDDEN)
+    }
     if (attempt_exceeded(ip, current_unix_time())) {
         let body = write_json(JV((error = "too many requests")))
         log_request("POST", "/api/submit/sidecar", 429, ip, length(req.body), length(body), t0)
@@ -356,6 +364,11 @@ def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpRespons
 def private handle_submit_records(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    if (!g_policy.submit_open) {
+        let body = write_json(JV((error = "submissions are not open yet")))
+        log_request("POST", "/api/submit/records", 403, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.FORBIDDEN)
+    }
     if (attempt_exceeded(ip, current_unix_time())) {
         let body = write_json(JV((error = "too many requests")))
         log_request("POST", "/api/submit/records", 429, ip, length(req.body), length(body), t0)
@@ -378,6 +391,29 @@ def private handle_submit_records(var req : HttpRequest?; var resp : HttpRespons
     }
     log_request("POST", "/api/submit/records", int(status), ip, length(doc), length(body), t0)
     return resp |> JSON(body, status)
+}
+
+// Flip the public-submission gate at runtime (loopback-only): POST {"open":true|false}. In-memory
+// only — a restart re-reads the config, so closed stays the fail-safe resting state. This is the
+// test-window switch; the permanent open state is the --submit-open boot flag.
+def private handle_admin_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_loopback_caller(req)) {
+        log_request("POST", "/admin/submit", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    var jerr = ""
+    var js = read_json(string(req.body), jerr)
+    let want : bool = js?["open"] ?? false   // absent/garbage body → closed (fail-safe)
+    unsafe {
+        delete js   // read_json minted this tree; the bool is already copied out
+    }
+    g_policy.submit_open = want
+    logger_info("ladder", want ? "submissions OPENED via loopback admin" : "submissions CLOSED via loopback admin")
+    let body = write_json(JV((submit_open = g_policy.submit_open)))
+    log_request("POST", "/admin/submit", 200, ip, length(req.body), length(body), t0)
+    return resp |> JSON(body)
 }
 
 def private handle_import_official(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
