@@ -592,6 +592,41 @@ def private validate_sidecar_doc(doc : JsonValue const?; submission : bool; var 
     return empty(errors)
 }
 
+//! Strip what must never leave (or reach) a public store: `provenance.binary` (a full local
+//! path with the username in it) and any other path-shaped provenance value. Returns the
+//! stripped document, "" when the input does not parse. The submitting client AND the ladder
+//! service both run this — defense in depth against a client that skipped it.
+def exchange_strip_private(text : string) : string {
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    if (doc == null) {
+        return ""
+    }
+    var prov = doc?["provenance"]
+    if (prov != null && prov.value is _object) {
+        var pt & = unsafe(prov.value as _object)
+        var drop : array<string>
+        for (k, v in keys(pt), values(pt)) {
+            var path_shaped = false
+            if (v != null && v.value is _string) {
+                let s = v.value as _string
+                path_shaped = find(s, "/") >= 0 || find(s, "\\") >= 0
+            }
+            if (k == "binary" || path_shaped) {
+                drop |> push("{k}")   // clone — k aliases the key the erase below frees
+            }
+        }
+        for (k in drop) {
+            delete_json(pt[k])
+            pt |> erase(k)
+        }
+        delete drop
+    }
+    let out = write_json(doc)
+    delete_json(doc)
+    return out
+}
+
 //! Shape-level validation of a tune sidecar (`<box>.tune.<sha>.json`): kernels + provenance
 //! required and identifier-clean, runtime knobs flat numeric, race rows well-formed. The
 //! charset rules double as the injection guard for everything a site renders verbatim.

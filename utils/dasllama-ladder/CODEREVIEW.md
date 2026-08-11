@@ -103,9 +103,10 @@ skips validation is a defect.
 **`Source` and `Verified` are written only from store code.** A submitter-supplied value
 reaching either column is a defect.
 
-**The uploaded document is stored verbatim in `submissions.Doc` and never mutated after
-insert.** Derived columns may be recomputed; the document itself may only be inserted or
-deleted with its submission.
+**A sidecar submission is privacy-stripped (`exchange_strip_private`) before validation,
+hashing, and storage — the stripped text IS the document; record submissions are stored
+verbatim. After insert no document is ever mutated.** Derived columns may be recomputed; the
+document itself may only be inserted or deleted with its submission.
 
 **A shipped `[sql_migration]` body is never edited.** Schema change means a new, higher
 version in the same stream.

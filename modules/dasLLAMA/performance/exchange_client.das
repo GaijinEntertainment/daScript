@@ -390,40 +390,6 @@ def private sidecar_origin(text : string) : string {
     return r
 }
 
-//! Strip what must never leave the box: `provenance.binary` (a full local path with the
-//! username in it) and any other path-shaped provenance value. Returns the stripped document
-//! ("" when the input does not parse — nothing unparsable ever gets submitted).
-def exchange_strip_private(text : string) : string {
-    var jerr = ""
-    var doc = read_json(text, jerr)
-    if (doc == null) {
-        return ""
-    }
-    var prov = doc?["provenance"]
-    if (prov != null && prov.value is _object) {
-        var pt & = unsafe(prov.value as _object)
-        var drop : array<string>
-        for (k, v in keys(pt), values(pt)) {
-            var path_shaped = false
-            if (v != null && v.value is _string) {
-                let s = v.value as _string
-                path_shaped = find(s, "/") >= 0 || find(s, "\\") >= 0
-            }
-            if (k == "binary" || path_shaped) {
-                drop |> push("{k}")   // clone — k aliases the key the erase below frees
-            }
-        }
-        for (k in drop) {
-            delete_json(pt[k])
-            pt |> erase(k)
-        }
-        delete drop
-    }
-    let out = write_json(doc)
-    delete_json(doc)
-    return out
-}
-
 //! POST an already-stripped sidecar document to the exchange. "" on success (`out_sha` gets
 //! the ladder's content sha), else the error. Validates submission grade first — fail early.
 def exchange_submit_sidecar_doc(base_url : string; text : string; var out_sha : string&) : string {

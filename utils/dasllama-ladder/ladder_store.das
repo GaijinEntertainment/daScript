@@ -231,7 +231,7 @@ def private add_submission(db : SqlRunner; kind, doc_sha, doc, client_ip : strin
 //! Accept a community tune sidecar. Checks run cheapest-first (size, rate ceiling,
 //! then parse/validate/hash), mirroring the playground store discipline: a throttled
 //! caller must not spend a validation pass on work that can never be stored.
-def put_sidecar(db : SqlRunner; doc : string; client_ip : string; policy : LadderPolicy; now : int64) : PutSidecarResult {
+def put_sidecar(db : SqlRunner; var doc : string; client_ip : string; policy : LadderPolicy; now : int64) : PutSidecarResult {
     if (empty(doc)) {
         return PutSidecarResult(status = PutStatus.empty_doc)
     }
@@ -240,6 +240,13 @@ def put_sidecar(db : SqlRunner; doc : string; client_ip : string; policy : Ladde
     }
     if (rate_exceeded(db, client_ip, policy, now)) {
         return PutSidecarResult(status = PutStatus.rate_limited)
+    }
+    // server-side privacy strip, mirroring the submitting client (defense in depth): what a
+    // stripped-at-the-client doc round-trips unchanged, an unstripped one loses here — the
+    // STRIPPED text is what gets validated, content-hashed, stored, and served
+    doc = exchange_strip_private(doc)
+    if (empty(doc)) {
+        return PutSidecarResult(status = PutStatus.invalid, error = "json parse failed")
     }
     var errors : array<string>
     if (!validate_sidecar_submission(doc, errors)) {

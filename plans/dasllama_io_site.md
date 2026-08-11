@@ -158,6 +158,16 @@ spec removes, so the page gets rewritten to the real output.
   what makes exchange sidecars honest.
 - **Codegen soft-staleness**: `LLVM_JIT_CODEGEN_VERSION` bump shifts winners without
   changing rosters → mark affected sidecars "re-race recommended", never invalid.
+- **Hardware-identity normalization (the "which boxes are the same hardware" tier)**: the
+  lookup ladder's middle tier matches on the raw cpu identity field, whose grain differs by
+  platform — Windows `PROCESSOR_IDENTIFIER` ("AMD64 Family 23 Model 49 Stepping 0") groups a
+  whole µarch (every Zen 2 Threadripper/EPYC/Ryzen of that model), while darwin/linux brand
+  strings are per-SKU ("Apple M1 Max" ≠ "Apple M1 Pro"; "3970X" ≠ "3960X") — so µarch
+  siblings never match on those platforms. Curated names like "zen2" exist only as
+  `DASLLAMA_BOX` records tags, not derived from hardware. Fix: a curated cpu-identity → µarch
+  map (schema- or ladder-side) adding a "same µarch" tier between same-cpu and same-arch;
+  possibly a CPU-features axis (the `requires=`/`cpu_supports` vocabulary) as the honest
+  compatibility floor beneath it.
 - **Cross-box winner matrix**: family × architecture → winner, aggregated server-side;
   the grid-pruning view (a variant that wins nowhere is a deletion candidate).
 - **Version diff view**: roster changes + winner flips between adjacent versions.

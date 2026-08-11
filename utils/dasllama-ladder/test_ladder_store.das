@@ -42,6 +42,22 @@ def test_put_sidecar(t : T?) {
             let again = put_sidecar(db, doc, "10.0.0.2", test_policy(), 1001l)
             tt |> success(again.status == PutStatus.ok && !again.created, "content dedup")
         }
+        t |> run("path-shaped provenance is stripped server-side") @(tt : T?) {
+            var jerr = ""
+            var jdoc = read_json(sidecar_doc(BOX_B, "3", "vec8_u8"), jerr)
+            var prov = jdoc?["provenance"]
+            update(prov, "binary", JV("/Users/someone/bin/daslang"))
+            update(prov, "weird", JV("C:\\Users\\bob\\thing"))
+            let dirty = write_json(jdoc)
+            delete_json(jdoc)
+            let put = put_sidecar(db, dirty, "10.0.0.6", test_policy(), 3000l)
+            tt |> success(put.status == PutStatus.ok, "stored")
+            let stored = get_sidecar_doc(db, put.sha)
+            tt |> success(find(stored, "binary") < 0, "binary gone")
+            tt |> success(find(stored, "bob") < 0, "path-shaped value gone")
+            tt |> success(find(stored, "\"noise\"") >= 0, "plain provenance survives")
+            tt |> equal(sha256_hex(stored), put.sha, "the sha is of the stripped text")
+        }
         t |> run("an unversioned sidecar is refused") @(tt : T?) {
             var bad = %json~
             {
