@@ -358,7 +358,14 @@ def mistral_parse(reply : string) : ToolReply {
 def private mistral_call_of(cv : JsonValue?) : ToolCall {
     var c = ToolCall(name = cv?["name"] ?? "", id = cv?["id"] ?? "")
     let av = cv?["arguments"]
-    c.args = av != null ? write_json_compact(av) : "\{}"
+    if (av != null && av.value is _string) {   // non-spec but seen: arguments emitted as a string pass through verbatim
+        let s = av ?? ""
+        c.args = empty(s) ? "\{}" : s
+    } elif (av != null && !(av.value is _null)) {
+        c.args = write_json_compact(av)
+    } else {
+        c.args = "\{}"
+    }
     return c
 }
 
