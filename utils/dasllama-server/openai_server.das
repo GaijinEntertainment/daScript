@@ -1929,7 +1929,7 @@ def private oai_calls_of(tcs : array<ToolCall>; id_base : string; var calls : ar
 // The finish-time parse for a tool-capable wire, dispatched on its ToolMode: harmony walks the
 // channel structure once (reasoning + content + calls); the marker modes split reasoning first
 // and parse their format from the content half; hermes keeps the marker+sniff path.
-def private parse_wire_tools(var w : StreamWire?; full, id_base : string; // nolint:STYLE037 — one arm per ToolMode
+def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
                              var reasoning : string&; var calls : array<OaiToolCall>) : string {
     if (w.tool_mode == ToolMode.harmony) {
         var tr <- harmony_parse(full)

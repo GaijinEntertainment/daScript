@@ -38,7 +38,7 @@ def test_harmony_namespace(t : T?) {
 }
 
 [test]
-def test_harmony_parse(t : T?) {   // nolint:STYLE038 — one arm per wire shape from the PEG spec
+def test_harmony_parse(t : T?) {
     t |> run("analysis -> final splits into reasoning + content") @(t : T?) {
         var r <- harmony_parse("<|channel|>analysis<|message|>THINK<|end|><|start|>assistant<|channel|>final<|message|>ANSWER")
         t |> equal(r.reasoning, "THINK")
@@ -148,7 +148,7 @@ def test_llama_json_parse(t : T?) {
 }
 
 [test]
-def test_gemma4_codecs(t : T?) {   // nolint:STYLE038 — one arm per DSL codec direction
+def test_gemma4_codecs(t : T?) {
     t |> run("the call DSL parses to JSON args (quote tokens, bare keys, nesting)") @(t : T?) {
         var r <- gemma4_parse("I will check.<|tool_call>call:get_weather\{city:<|\"|>London<|\"|>,days:3,opts:\{fast:true}}<tool_call|> Done.")
         t |> equal(r.content, "I will check. Done.")

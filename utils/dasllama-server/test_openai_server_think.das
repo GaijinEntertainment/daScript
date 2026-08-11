@@ -154,7 +154,7 @@ def private chat_resp(t : T?; base_url, body : string; blk : block<(r : ChatResp
 // ===== Qwen3-0.6B: symmetric <think> + Hermes tools (the hybrid-thinking flagship) =====
 
 [test]
-def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session: every thinking/tool assertion runs against that one boot
+def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session: the four thinking/tool arms share that one boot
     if (model_missing(t, QWEN3_PATH)) {
         return
     }
@@ -377,7 +377,7 @@ def test_tools_mistral(t : T?) {
 }
 
 [test]
-def test_tools_gemma4(t : T?) {   // nolint:STYLE038 — one live server session: the call + round-trip pair share the boot
+def test_tools_gemma4(t : T?) {
     if (model_missing(t, GEMMA4_PATH)) {
         return
     }

@@ -319,7 +319,7 @@ let private HARMONY_SYSTEM_BODY = ("You are ChatGPT, a large language model trai
 // The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
 // before the content, tool markers split where declared. Returns the text to FOLD into the user
 // turn instead when the family has no system role (gemma-2/3); "" = rendered or nothing to do.
-def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string { // nolint:STYLE037 — one arm per tool-defs placement mode
+def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string {
     let tool_mode = empty(c.tools_json) ? ToolMode.none : c.tmpl.tool_mode
     var sys = system_content(c)
     if (tool_mode == ToolMode.harmony) {
@@ -430,7 +430,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
 // The pending tool results in the family's own framing (everything but hermes): harmony/llama
 // result turns, gemma-4's in-turn response blocks, mistral's bracket pair. Names pair to the
 // last call set positionally; a missing name renders as `unknown`.
-def private render_tool_results(m : Model; c : ChatSession; var out : array<int64>) { // nolint:STYLE037 — one arm per ToolMode framing
+def private render_tool_results(m : Model; c : ChatSession; var out : array<int64>) {
     var bp : array<ChatPart>
     bp |> reserve(length(c.pending_results) * 8)
     var idx = 0
@@ -703,7 +703,7 @@ def add_tool_results_(var c : ChatSession; results : array<string>) {
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
 //! ``calls`` are verbatim ``\{"name":…,"arguments":…}`` JSON objects; ``text`` is any content
 //! alongside. Precondition: a pending user or tool turn; a no-op otherwise.
-def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) { // nolint:STYLE037 — one arm per ToolMode replay shape
+def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
     if (!c.has_pending) {
         return
     }

@@ -41,7 +41,7 @@ def private tool_function_of(v : JsonValue?) : JsonValue const? {
 
 // One parameter's TS type per the canonical template's mapping (unions/oneOf and unknown
 // shapes fall to `any`; `nullable` appends `| null`).
-def private harmony_ts_type(schema : JsonValue?) : string { // nolint:STYLE037 — one arm per JSON-schema shape, mirroring the template's type ladder
+def private harmony_ts_type(schema : JsonValue?) : string {
     if (schema == null) {
         return "any"
     }
@@ -99,7 +99,7 @@ def private harmony_ts_type(schema : JsonValue?) : string { // nolint:STYLE037 �
 
 //! The `# Tools` developer-turn block for Harmony: the canonical TypeScript `functions`
 //! namespace (trailing commas included — the template emits one after the LAST parameter too).
-def harmony_tools_namespace(tools_json : array<string>) : string { // nolint:STYLE037 — flat per-tool emission into one builder
+def harmony_tools_namespace(tools_json : array<string>) : string {
     return build_string() $(w) {
         w |> write("## functions\n\nnamespace functions \{\n\n")
         for (tj in tools_json) {
@@ -148,7 +148,7 @@ def harmony_tools_namespace(tools_json : array<string>) : string { // nolint:STY
 }
 
 // One Harmony header at `pos` -> kind (reasoning|content|preamble|call|drop, name set for calls); advances pos to the body.
-def private harmony_header(s : string; var pos : int&; var name : string&) : string { // nolint:STYLE037 — one arm per header shape, per the PEG rules
+def private harmony_header(s : string; var pos : int&; var name : string&) : string {
     name = ""
     // role-header recipient form: the reply opens with ` to=functions.NAME<|channel|>...`
     if (starts_with(slice(s, pos, length(s)), " to=")) {
@@ -209,7 +209,7 @@ def private harmony_header(s : string; var pos : int&; var name : string&) : str
 //! Parse a complete Harmony reply into (reasoning, content, calls) in ONE walk — gpt-oss tool
 //! calls ride the channel structure, superseding split-then-parse for this mode. Segments end
 //! at `<|end|>` (+ optional re-header); the terminal one at end-of-reply (stops never appear).
-def harmony_parse(reply : string) : ToolReply { // nolint:STYLE037 — the segment loop routes each kind once
+def harmony_parse(reply : string) : ToolReply {
     var out = ToolReply()
     var rparts : array<string>
     var cparts : array<string>
@@ -432,7 +432,7 @@ def llama_json_parse(reply : string) : ToolReply {
 let private G4Q = "<|\"|>"   // the family's string-quote TOKEN — DSL strings need no escaping
 
 // One DSL value at `pos` -> JSON text (recursive: string | dict | array | raw number/bool/null).
-def private gemma4_dsl_value(s : string; var pos : int&) : string { // nolint:STYLE037 — one arm per DSL value shape
+def private gemma4_dsl_value(s : string; var pos : int&) : string {
     let n = length(s)
     if (starts_with(slice(s, pos, n), G4Q)) {
         let e = find(s, G4Q, pos + length(G4Q))
@@ -536,7 +536,7 @@ def gemma4_parse(reply : string) : ToolReply {
 }
 
 // JSON value -> gemma-4 DSL text (dict keys bare + ALPHABETICAL, strings in quote tokens).
-def private gemma4_json_dsl(v : JsonValue?) : string { // nolint:STYLE037 — one arm per JSON value shape
+def private gemma4_json_dsl(v : JsonValue?) : string {
     if (v == null || v.value is _null) {
         return "null"
     }
@@ -602,7 +602,7 @@ def gemma4_response_dsl(name : string; result : string) : string {
 //! One tool declaration for the system turn: `declaration:NAME\{description:...,parameters:
 //! \{properties:\{...},required:[...],type:<|"|>OBJECT<|"|>}}` — dictsorted properties, types
 //! UPPERCASED, the fixed per-property key order of the canonical template.
-def gemma4_tool_declaration(tool_json : string) : string { // nolint:STYLE037 — the template's fixed field order, one arm each
+def gemma4_tool_declaration(tool_json : string) : string {
     var perr = ""
     var tv = read_json(tool_json, perr)
     if (tv == null) {
