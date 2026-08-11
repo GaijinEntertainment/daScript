@@ -780,6 +780,8 @@ def public env_markdown() : string {
         write_info_rows(w, get_env_config_info(type<TestEnv>))
         write_section(w, "Examples and tutorials", "")
         write_info_rows(w, get_env_config_info(type<ExampleEnv>))
+        write_section(w, "Sidecar exchange", "Overrides for the dasllama.io exchange client.")
+        write_info_rows(w, get_env_config_info(type<ExchangeEnv>))
         write_section(w, "daslang core knobs dasLLAMA honours",
             "Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.")
         write_info_rows(w, get_env_config_info(type<CoreEnv>))
@@ -807,6 +809,7 @@ def public registered_env_names() : array<string> {
     push_info_names(out, get_env_config_info(type<ProfilingEnv>))
     push_info_names(out, get_env_config_info(type<TestEnv>))
     push_info_names(out, get_env_config_info(type<ExampleEnv>))
+    push_info_names(out, get_env_config_info(type<ExchangeEnv>))
     push_info_names(out, get_env_config_info(type<CoreEnv>))
     var extras <- core_extra_rows()
     for (e in extras) {

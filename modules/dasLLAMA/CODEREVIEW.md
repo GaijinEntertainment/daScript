@@ -151,6 +151,12 @@ and their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
 `tests/test_env_registry.das` enforces both directions. A knob declared anywhere else is a
 defect.
 
+**A NEW `[EnvConfig]` area struct is wired into `env_markdown()` AND `registered_env_names()`
+in the same change, and `ENVIRONMENT.md` is regenerated.** Those two lists are hand-maintained,
+so a struct that is declared and `env_config`-instantiated but absent from them renders nowhere
+and the registry test passes vacuously (both generated and checked-in omit it). A new area
+struct whose knobs do not appear in `ENVIRONMENT.md` is a defect.
+
 **A new module file is registered in `.das_module` in the same change.** The install rule is a
 directory glob; `CMakeLists.txt`'s `ADD_MODULE_DAS` list is a subset and is touched only when a
 file joins it.

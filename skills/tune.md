@@ -249,9 +249,11 @@ A sidecar whose mtime **predates the running binary's** is stale: it reads as
 absent (stamps fall back, the policy rail re-tunes), and the first
 `tune_manifest_set` resets it to a fresh document. Measurements never
 outlive the binary that made them. A sidecar carrying another box's
-`provenance.box` identity is stale too — measurements are a property of the
-box — unless `provenance.applied_box` names this box, which is how a scope
-resolver (below) adopts a compatible sibling box's mint deliberately.
+identity is stale too — measurements are a property of the box — unless
+`provenance.applied_box` names this box, which is how a scope resolver (below)
+adopts a compatible sibling box's mint deliberately. The identity compare runs
+through `box_match_key`, which folds the volatile Windows `os_build` UBR, so a
+monthly cumulative update does not re-tune while a real OS-version change does.
 
 Two seams let a supervisor or a network service participate:
 
@@ -262,7 +264,9 @@ Two seams let a supervisor or a network service participate:
   re-checked, never trusted, and `--tune` never consults it.
 - `tune_interrupt_requested()` — true while the file named by
   `DAS_TUNE_CONTROL` exists. Tuners poll it between kernel families and abort
-  without minting; the measurement in flight always completes.
+  without minting; the measurement in flight always completes. (A tuner that
+  spans multiple processes end-gates each process's own write, so an interrupt
+  in a later process leaves earlier processes' mints on disk.)
 
 ## Runtime status — `tune_status()`
 

@@ -78,9 +78,12 @@ defect, and this section is the whole test.
 
 ## Transport
 
-**`/admin/*` and `/shutdown` answer only to a loopback transport peer (`is_loopback_peer`,
-exact match), and never appear in `caddy.snippet`.** A proxy route to an operator surface is
-a defect.
+**Operator routes (`/admin/*`, `/shutdown`) never appear in `caddy.snippet` — or in any
+Caddyfile route reaching this service.** This is the SOLE boundary: Caddy proxies from the same
+box, so `is_loopback_peer` sees `127.0.0.1` for every proxied request and cannot distinguish an
+internet caller. A `handle /admin/*` (or a catch-all reaching the port) added to the deployed
+vhost is unauthenticated remote access to shutdown/import, and it is a defect no matter what the
+code gate says. The `is_loopback_peer` check is defense-in-depth for direct-to-port access only.
 
 **Every route logs one `ladder.req` line through `log_request`, including refusals.** A
 response path that skips the log is a defect.

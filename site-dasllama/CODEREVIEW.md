@@ -59,9 +59,13 @@ emits.
 output.** A hand-edit inside the markers is a defect — edit `_news/` and re-run the
 generator; the regenerated index.html, feed.xml and sitemap.xml land in the same change.
 
-**Every community-supplied string that `files/dasllama-io.js` renders passes through its
-`esc()` before reaching `innerHTML`.** A submission-derived value concatenated into markup
-unescaped is a defect.
+**Every value `files/dasllama-io.js` takes from `/api/*` reaches markup only through the
+context-correct escape: `esc()` (which escapes `< > & " '`) for text AND for quoted-attribute
+values, `Number(...)` for anything numeric, and `safeApiHref()` (an `^/api/…` allow-list) for
+anything landing in `href`/`src` or fed to `fetch`.** A submission-derived value concatenated
+into markup with the wrong escape — a bare `esc()`-less number, an unfiltered URL, or (before
+`esc()` escaped quotes) a value inside `"…"` — is a defect. The rule names the CONTEXT because
+"passed through `esc()`" alone does not catch a quote breaking out of an attribute.
 
 **Every page keeps `<title>`, meta description, OpenGraph tags, and the Atom `<link>`.**
 A new or renamed page without them is a defect.

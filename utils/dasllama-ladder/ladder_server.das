@@ -47,8 +47,10 @@ def is_loopback_peer(peer : string) : bool {
 }
 
 def private is_loopback_caller(var req : HttpRequest?) : bool {
-    //! Operator-surface gate on the transport peer — the one identity a caller
-    //! cannot forge through the proxy.
+    //! Operator-surface gate on the TRANSPORT peer. Behind Caddy (which proxies from the same
+    //! box) that peer is always 127.0.0.1, so this passes for any internet caller — the REAL
+    //! boundary is that operator routes never appear in caddy.snippet. This is defense-in-depth
+    //! for direct-to-port access only; do not treat it as unforgeable behind the proxy.
     return is_loopback_peer(client_ip(req))
 }
 
