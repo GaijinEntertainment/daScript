@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require ladder_store
+require _ladder_test_common
 require daslib/sql_linq
 require daslib/json_boost
 require daslib/strings_boost   // replace — the re-measure fixture edit
@@ -12,22 +13,6 @@ require daslib/strings_boost   // replace — the re-measure fixture edit
 def private test_policy : LadderPolicy {
     return LadderPolicy(max_records_bytes = 65536, max_sidecar_bytes = 4096, max_submissions_per_ip_hour = 2)
 }
-
-def private sidecar_doc(box : string; version : string; winner : string) : string {
-    return write_json(JV((
-        kernels = (dot = winner, softmax = "vec8_u2"),
-        runtime = (jobque_spin_us = 30000, metal_tensor = ""),
-        provenance = (
-            box = box,
-            engine_sha = "8a538d795",
-            written = "2026-08-10T00:00:00Z",
-            noise = "ok",
-            dasllama_version = version))))
-}
-
-let BOX_A = "darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max"
-let BOX_B = "darwin|arm64|Macmini9,1|25F84|Apple M1 Max"      // same cpu, another machine
-let BOX_C = "darwin|arm64|MacBookAir10,1|25F84|Apple M2"      // same arch, another cpu
 
 def private ident_a : BoxIdentity {
     var b : BoxIdentity
@@ -131,38 +116,6 @@ def test_sidecar_ladder(t : T?) {
     }
 }
 
-// a stamped community submission: one model, a das row with full receipts + a reference row
-def private records_doc : string {
-    var doc = %json~
-    [ {
-        "gguf" : "test-model-Q8_0.gguf",
-        "arch" : "Test 1B",
-        "quant" : "Q8_0",
-        "size_bytes" : 1234567,
-        "runs" : [
-            {
-                "engine" : "das", "backend" : "cpu", "flavor" : "tuned",
-                "box" : "testbox", "threads" : 8, "date" : "2026-08-10",
-                "cmd" : "daslang -jit bench.das", "env" : "DASLLAMA_BOX=test",
-                "sha" : "abc123def", "version" : "0.6.4", "dasllama_version" : 3,
-                "tune" : "k4q8_tile_gen=mr8 (manifest)", "tune_sha" : "cafe0123beef",
-                "exec_fmt" : "q8 blob",
-                "hardware" : { "cpu" : "Test CPU 9000" },
-                "tests" : { "pp512" : { "tok_s" : 100.0, "stddev" : 1.0 } }
-            },
-            {
-                "engine" : "llama.cpp", "backend" : "cpu", "flavor" : "clean-cpu",
-                "box" : "testbox", "threads" : 8, "date" : "2026-08-10",
-                "cmd" : "llama-bench -m m.gguf", "sha" : "ebd048fc5",
-                "hardware" : { "cpu" : "Test CPU 9000" },
-                "tests" : { "pp512" : { "tok_s" : 80.0, "stddev" : 1.0 } }
-            }
-        ]
-    } ]
-    %%
-    return write_json(doc)
-}
-
 [test]
 def test_put_records(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
@@ -244,30 +197,7 @@ def test_admin_levers(t : T?) {
 [test]
 def test_official_import(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
-        // official history predates the release counter: strip the stamps, keep shape
-        var official = %json~
-        [ {
-            "gguf" : "gemma-3-1b-it-Q8_0.gguf",
-            "runs" : [
-                {
-                    "engine" : "das", "backend" : "cpu", "flavor" : "tuned",
-                    "box" : "m1", "threads" : 8, "date" : "2026-08-01",
-                    "cmd" : "daslang -jit bench.das", "sha" : "8a538d795", "version" : "0.6.4",
-                    "source" : "official",
-                    "hardware" : { "cpu" : "Apple M1 Max" },
-                    "tests" : { "pp512" : { "tok_s" : 259.6 } }
-                },
-                {
-                    "engine" : "llama.cpp", "backend" : "cpu", "flavor" : "clean-cpu",
-                    "box" : "m1", "threads" : 8, "date" : "2026-08-01",
-                    "cmd" : "llama-bench", "sha" : "ebd048fc5",
-                    "hardware" : { "cpu" : "Apple M1 Max" },
-                    "tests" : { "pp512" : { "tok_s" : 145.0 } }
-                }
-            ]
-        } ]
-        %%
-        let text1 = write_json(official)
+        let text1 = official_doc()
         t |> run("official rows import verified") @(tt : T?) {
             let res = import_official_store(db, text1, 1000l)
             tt |> success(res.ok, "imported")

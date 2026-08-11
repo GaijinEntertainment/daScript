@@ -7,12 +7,26 @@ change here is `CODEREVIEW.md`.
 
 ## 1. Layout
 
+- `main.das` — the launcher (clargs → config → `init`/`update`/`shutdown` lifecycle, GC loop).
+- `ladder_config.das` — config schema + the defaults < toml < CLI merge (`dasllama-ladder.toml`).
+- `ladder_server.das` — the HTTP surface (routes, transport shape checks, official-dir import).
 - `ladder_store.das` — schema, migrations, and every policy decision (size caps, rate
   ceiling, source stamping, the sidecar lookup ladder). Zero HTTP.
-- `test_ladder_store.das` — the store's dastest coverage.
+- `admin.das` — the operator CLI (verify/delete levers, manual official import; run on the box).
+- `caddy.snippet` / `watchdog.json` / `dasllama-ladder.toml` — the deploy contract.
+- `_ladder_test_common.das` + `test_ladder_*.das` — fixtures and the three dastest suites
+  (store, config, server; the server suite owns reserved port 19015).
 
-The server module, config loader, launcher, `caddy.snippet`, and `watchdog.json` follow in
-the HTTP slice, mirroring the `utils/dasweb-playground` anatomy.
+The anatomy mirrors `utils/dasweb-playground`.
+
+### 1.1 Routes
+
+Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]`,
+`GET /api/submission/:id` (the verbatim receipt), `GET /api/sidecars?version=N&box=<encoded>`
+(the lookup ladder), `GET /api/sidecar/:sha` (download), `POST /api/submit/records`,
+`POST /api/submit/sidecar`. Loopback-only: `POST /admin/import-official`, `POST /shutdown`,
+plus `GET /healthz` for the watchdog. The `box` query value must be percent-encoded — box
+strings carry `|`, `,` and spaces.
 
 ## 2. Data model
 

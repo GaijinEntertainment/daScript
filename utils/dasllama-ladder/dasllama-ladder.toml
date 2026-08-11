@@ -1,0 +1,16 @@
+# dasllama-ladder starter config. Deployed beside the binary; edits there
+# survive upgrades (release_include_if_missing). CLI flags override these
+# unless `authoritative = true` is set.
+#
+# These are DEVELOPMENT values on purpose. The file is discovered automatically
+# beside the module, so production absolute paths here would make any in-repo
+# run open the live database. Deployed values live on the box — README.md (Run)
+# lists them.
+port = 8201
+db = "ladder.db"
+max_records_bytes = 4194304
+max_sidecar_bytes = 1048576
+max_submissions_per_ip_hour = 20
+# the deployed toml points this at the release's records/ copy so the official
+# boards import (and refresh) at every service start; empty = no import
+official_dir = ""

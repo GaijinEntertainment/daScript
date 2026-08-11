@@ -1,0 +1,60 @@
+# dasllama-ladder routes for the dasllama.io vhost in /etc/caddy/Caddyfile.
+# This file is the authoritative copy of the service's public boundary — the
+# deployed Caddyfile is edited to match it, never the other way round, so a
+# route change is reviewable in the same diff as the code it exposes.
+#
+# Paste inside the `dasllama.io { ... }` block, ahead of `root`/`file_server`.
+
+# The submit routes, and ONLY these, carry the large-body allowance: a record
+# store or tune sidecar is an MB-scale JSON document. The service enforces its
+# own (smaller) per-kind caps on top — the proxy cap exists because libhv
+# buffers a body in full before any handler runs, so this is the only place an
+# unbounded chunked POST can be stopped.
+#
+# The named matcher is required, not stylistic: `handle` takes exactly ONE
+# path token (`handle /a /b { }` is a parse error — the playground snippet
+# verified this with `caddy validate`).
+@ladder_submit path /api/submit/records /api/submit/sidecar
+handle @ladder_submit {
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+
+# Read-only surface: listings, receipts, sidecar downloads. GET-only handlers,
+# but libhv still buffers whatever body arrives — cap it small.
+handle /api/versions {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+handle /api/runs {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+handle /api/submission/* {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+handle /api/sidecars {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+handle /api/sidecar/* {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8201
+}
+
+# /admin/* and /shutdown are deliberately absent: they are operator surfaces.
+# The service also refuses them from a non-loopback peer, so adding a route
+# here does not merely expose them — it breaks them.

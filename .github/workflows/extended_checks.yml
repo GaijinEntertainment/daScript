@@ -430,12 +430,15 @@ jobs:
         done
 
     - name: "Test dasllama-ladder"
-      # The dasllama.io exchange store (sidecars + ladder records). In-dir
-      # suite like the playground's; store-only, runs against :memory:.
+      # The dasllama.io exchange service (sidecars + ladder records). In-dir
+      # suites like the playground's; the server suite binds 127.0.0.1:19015
+      # and shuts itself down, the store/config suites run against :memory:.
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-ladder/test_ladder_store.das
+        for suite in test_ladder_store test_ladder_config test_ladder_server; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-ladder/$suite.das
+        done
 
     - name: "Test dasweb-buildd"
       # The wasm build worker (compute-box side of the same pipeline). In-dir

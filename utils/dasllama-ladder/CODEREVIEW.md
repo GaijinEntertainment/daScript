@@ -28,13 +28,20 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 ## Tests
 
-**Every store operation and every policy or limit behavior has a dastest test in this
-directory.** A behavior that ships without its test is a defect.
+**Every route, every store operation, and every config or limit behavior has a dastest test in
+this directory.** A behavior that ships without its test is a defect. Exempt: `main.das` and
+`admin.das` argv/dispatch glue — their behaviors live in the modules they call, which are the
+tested surface.
 
 **Every bug fix lands with the regression test that fails without it, in the same change.**
 
 **`[test]` files live in this directory and require siblings by bare name** — never under the
 global `tests/` tree, and never registered in any `CMakeLists.txt`.
+
+**HTTP tests go through the local `with_ladder_server` harness (`test_ladder_server.das`) on
+this directory's reserved test port 19015; store tests call `ladder_store` directly with no
+server.** A store behavior proven only through HTTP, or an HTTP behavior proven only against
+the store, is a defect.
 
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
 creates; store tests run against `:memory:`.** A test writing into the repo tree is a defect.
@@ -48,9 +55,38 @@ defect, and this section is the whole test.
 
 **A new file ships with its rule here and its tests, in the same change.**
 
+- `main.das` — the launcher: argv parsing into globals, logger init, the exported
+  `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
+  no SQL, no hashing.
+- `ladder_config.das` — the config schema (`LadderArgs`), the defaults/toml/CLI merge with
+  per-key provenance, and the startup banner payload. No HTTP, no SQL, no filesystem beyond
+  reading the config file.
+- `ladder_server.das` — the `HvWebServer` class: the route table and handlers, plus the
+  startup official-dir import. A handler validates transport-level shape, translates HTTP to
+  one store call, and formats the response. A SQL statement, a hash computation, or a policy
+  decision (size, rate, source) in this file is a defect.
 - `ladder_store.das` — the store: schema structs, migrations, content hashing, and every
   policy decision (size caps, rate ceiling, source stamping, the sidecar lookup ladder). Zero
   HTTP: a require of `dashv` here is a defect.
+- `admin.das` — the operator CLI: argv dispatch onto `ladder_store` calls. A store mutation
+  here that bypasses `ladder_store` functions is a defect.
+- `caddy.snippet` — the authoritative copy of the public route boundary; the deployed
+  Caddyfile is edited to match it, never the reverse. A route added to `ladder_server.das`
+  that a public caller needs lands here in the same change.
+
+---
+
+## Transport
+
+**`/admin/*` and `/shutdown` answer only to a loopback transport peer (`is_loopback_peer`,
+exact match), and never appear in `caddy.snippet`.** A proxy route to an operator surface is
+a defect.
+
+**Every route logs one `ladder.req` line through `log_request`, including refusals.** A
+response path that skips the log is a defect.
+
+**Every handler that consumes a request body checks `body_is_byte_faithful` before using the
+string view.** A body used without the NUL guard is a defect.
 
 ---
 
