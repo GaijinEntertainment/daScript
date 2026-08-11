@@ -82,10 +82,67 @@ knob → clamp).
    loopback admin: verify/delete. caddy.snippet routes + caps. Tests via with_test_server.
 5. **Site** — `site-dasllama/` three pages + news pipeline + feed + OG/sitemap/robots;
    pages.yml rsync step; playwright coverage (rig pattern from the playground).
-6. **Client integration** — dasllama-server startup sidecar lookup + consent-to-submit;
-   lcpp_bench/gen_bench_records stamped submission.
+6. **Client integration + watchdog** — per the settled spec below.
 7. **Deploy** — service to dasweb-1, Caddy vhost flip from mirror to real site, backups
    wired, live verification.
+
+## Slice 6 spec — exchange client + watchdog (Boris, 2026-08-11)
+
+**No console prompt anywhere; one code path.** Config is persistence only — the casual
+user (package-manager install, clicked `.sh`, tray icon in the corner) never sees toml.
+The layering: defaults that need no decision → balloon when a decision exists → control
+page where acting on it is one click → config remembers the choice (e.g. the "always
+share after a tune" checkbox writes `exchange.submit = always` through the existing
+POST /config rail).
+
+**Policy knobs** (dasllama-server config; exchange URL baked in, on by default):
+
+- `exchange.accept = verified | any | off`, default `verified`. At untuned boot a
+  verified hit → download, client-validate (schema; `DASLLAMA_VERSION` — the load-bearing
+  staleness gate, since the mtime rail reads any download as fresh; box match; unknown
+  kernel name → fallback, out-of-range knob → clamp), write the sidecar, print the
+  marker, **exit 3** — riding the existing tune-bootstrap rail. Lookup failure is NEVER
+  fatal: fall through to the local tune.
+- `exchange.submit = ask | always | never`, default `ask`. `ask` surfaces as a
+  pending-submit offer via watchdog balloon + control page, never a console question.
+
+**Unverified sidecars never auto-apply and are never a boot question** (after a
+successful own tune they have negative value). They surface exactly three ways: a manual
+pick on the control page's exchange card; a proactive offer after repeated noise-gate
+aborts (the noisy-box case); and DURING a tune via the live tray menu — where doing
+nothing means the tune just finishes.
+
+**Watchdog changes** (`utils/watchdog/watchdog.py`; backoff/health/crash logic UNCHANGED):
+
+- The tray menu becomes a pure function of STATE — pystray re-evaluates callables on
+  menu open, `icon.update_menu()` on transitions. Items: "Use available sidecar instead
+  (stops tuning)" [visible: tune in flight AND an offer exists], "Stop tuning, run
+  untuned" [tune in flight — untuned serving is legitimate], "Share this box's tune…"
+  [pending submit offer → opens the control page at the exchange card].
+- `@sidecar` structured events server→watchdog (same contract as `@tune`), folded into
+  STATE: offer / applied / pending_submit. Balloons stay announce-only (a PowerShell
+  balloon can't carry actions).
+- A **tune-control FILE** watchdog→server (the stop-file/env pattern): during a tune
+  there is NO HTTP (listening = stage 7, tuning = stage 3). The tuner polls it at kernel
+  boundaries (the `@tune step` points), so an interrupt takes effect within one kernel
+  and never mid-measurement.
+- Second exit-3 immediate-relaunch marker: `exchange: sidecar applied, restart to apply
+  the winners`.
+- `exchange_lookup` startup stage.
+
+**Control page** gets the exchange card: current sidecar (sha / source / verified /
+tier), the matches list, [apply this one] / [retune] / [submit mine], the always-share
+checkbox — all on the existing POST /config + exit-4 restart rails.
+
+**Privacy:** strip `binary` (a full local path with the username in it) and any other
+path-shaped provenance from submitted sidecars client-side; the ladder also
+refuses/strips server-side. Official records already publish cmd paths — Boris's call
+there, out of scope here.
+
+**Also in this slice:** lcpp_bench stamped record submission; a client-side `url_encode`
+(dasHV has none); the sidecars.html startup transcript re-verified verbatim against the
+real server — the current mock shows an interactive `[use/tune/skip]` prompt, which this
+spec removes, so the page gets rewritten to the real output.
 
 ## Follow-up ledger (documented, deliberately not this arc)
 
