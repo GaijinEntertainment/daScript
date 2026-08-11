@@ -196,7 +196,8 @@ def test_records_routes(t : T?) {
             }
             GET("{base_url}/api/submission/{sid}") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
-                tt |> equal(resp.body, doc)
+                // records are path-redacted server-side, so the stored receipt is the redacted form
+                tt |> equal(resp.body, redact_record_paths(doc))
             }
             GET("{base_url}/api/submission/0") $(resp) {
                 tt |> equal(int(resp.status_code), 400)
@@ -231,6 +232,22 @@ def test_policy_status_mapping(t : T?) {
             }
             POST("{base_url}/api/submit/records", "[]") $(resp) {
                 tt |> equal(int(resp.status_code), 429, "ceiling of one reached")
+            }
+        }
+    }
+    // the attempt limiter caps REJECTED traffic too — the accepted ceiling never fires on it
+    with_ladder_server(LadderPolicy(max_attempts_per_ip_hour = 2)) $(base_url) {
+        t |> run("invalid submissions are attempt-limited before parse") @(tt : T?) {
+            // two malformed bodies (400, never stored, so the accepted ceiling is untouched)
+            POST("{base_url}/api/submit/sidecar", "not json") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "first rejected")
+            }
+            POST("{base_url}/api/submit/sidecar", "not json") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "second rejected")
+            }
+            // the third attempt trips the transport-layer limiter regardless of validity
+            POST("{base_url}/api/submit/sidecar", sidecar_doc(BOX_A, "3", "vec8")) $(resp) {
+                tt |> equal(int(resp.status_code), 429, "attempt ceiling reached on rejected traffic")
             }
         }
     }

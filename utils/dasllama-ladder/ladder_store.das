@@ -155,6 +155,10 @@ struct LadderPolicy {
     max_records_bytes : int = 4194304
     max_sidecar_bytes : int = 1048576
     max_submissions_per_ip_hour : int = 20
+    // total submit ATTEMPTS (accepted or rejected) per IP per hour — the transport-layer gate
+    // that caps parse/validate work on the single tick thread; the accepted ceiling above
+    // counts only stored rows, so it never throttles a flood of invalid documents
+    max_attempts_per_ip_hour : int = 120
 }
 
 enum PutStatus {

@@ -2633,16 +2633,31 @@ def private exchange_policy_now : ExchangePolicy {
     return exchange_policy_from_config(g_config_save_path)
 }
 
+// The exchange control routes are an operator surface reached through the loopback control
+// page. The matching route does a blocking network call on the tick thread; apply/retune are
+// destructive; submit publishes. Gate them to the loopback peer so a LAN client (the inference
+// API deliberately binds every interface) cannot stall generation or trigger those actions.
+def private is_loopback_req(req : HttpRequest?) : bool {
+    let ip = client_ip(req)
+    return empty(ip) || ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+}
+
 def private handle_exchange_get(var resp : HttpResponse?) : http_status {
     return resp |> JSON(exchange_status_json(exchange_policy_now()))
 }
 
-def private handle_exchange_matches(var resp : HttpResponse?) : http_status {
+def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
     // a live exchange lookup — seconds on the tick thread; the page requests it explicitly
     return resp |> JSON(exchange_matches_json(exchange_policy_now()))
 }
 
 def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
     var jerr = ""
     var js = read_json(string(req.body), jerr)
     defer() {
@@ -2667,7 +2682,10 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     return resp |> JSON("\{\"ok\":true,\"restarting\":true}", http_status.OK)
 }
 
-def private handle_exchange_submit(var resp : HttpResponse?) : http_status {
+def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
     let err = exchange_submit_current(exchange_policy_now())
     if (!empty(err)) {
         return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
@@ -2676,8 +2694,15 @@ def private handle_exchange_submit(var resp : HttpResponse?) : http_status {
     return resp |> JSON("\{\"ok\":true}", http_status.OK)
 }
 
-def private handle_exchange_retune(var resp : HttpResponse?) : http_status {
-    exchange_request_retune()
+def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    let err = exchange_request_retune()
+    if (!empty(err)) {
+        // the marker write failed and the sidecar is untouched — do NOT drain/restart
+        return resp |> JSON(error_body(err, "server_error"), http_status.INTERNAL_SERVER_ERROR)
+    }
     to_log(LOG_INFO, "dasllama-server: re-tune armed (sidecar removed, exchange skipped once); draining for restart\n")
     g_shutdown_requested = true
     g_restart_requested = true
@@ -3019,16 +3044,16 @@ class OpenAiServer : HvWebServer {
             return handle_exchange_get(resp)
         }
         GET("/exchange/matches") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_matches(resp)
+            return handle_exchange_matches(req, resp)
         }
         POST("/exchange/apply") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_exchange_apply(req, resp)
         }
         POST("/exchange/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_submit(resp)
+            return handle_exchange_submit(req, resp)
         }
         POST("/exchange/retune") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_retune(resp)
+            return handle_exchange_retune(req, resp)
         }
         POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bench_start(resp)

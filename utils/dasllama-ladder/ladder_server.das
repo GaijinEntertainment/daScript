@@ -287,6 +287,30 @@ def private submit_body_of(var req : HttpRequest?; route : string; var resp : Ht
     return text
 }
 
+// In-memory attempt limiter (per process, resets on restart): the store's accepted ceiling
+// counts only STORED rows, so a caller sending invalid docs never trips it and can burn
+// parse+validate cycles unbounded on the single tick thread. This caps TOTAL submit attempts
+// (accepted or rejected) per IP per hour, checked BEFORE the body is parsed. A spoofed-source
+// flood can't complete the TCP handshake to reach here, so the table is bounded by real peers.
+var private g_attempts : table<string; array<int64>>
+let private ATTEMPT_WINDOW_S = 3600l
+
+def private attempt_exceeded(ip : string; now : int64) : bool {
+    var ts & = unsafe(g_attempts[ip])
+    var drop = 0
+    while (drop < length(ts) && now - ts[drop] >= ATTEMPT_WINDOW_S) {
+        drop++
+    }
+    if (drop > 0) {
+        ts |> erase(0, drop)
+    }
+    if (length(ts) >= g_policy.max_attempts_per_ip_hour) {
+        return true
+    }
+    ts |> push(now)
+    return false
+}
+
 def private put_status_of(status : PutStatus) : http_status {
     if (status == PutStatus.too_large) {
         return http_status.PAYLOAD_TOO_LARGE
@@ -303,6 +327,11 @@ def private put_status_of(status : PutStatus) : http_status {
 def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    if (attempt_exceeded(ip, current_unix_time())) {
+        let body = write_json(JV((error = "too many requests")))
+        log_request("POST", "/api/submit/sidecar", 429, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.TOO_MANY_REQUESTS)
+    }
     var early = http_status.OK
     let doc = submit_body_of(req, "/api/submit/sidecar", resp, early, t0)
     if (empty(doc)) {
@@ -325,6 +354,11 @@ def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpRespons
 def private handle_submit_records(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    if (attempt_exceeded(ip, current_unix_time())) {
+        let body = write_json(JV((error = "too many requests")))
+        log_request("POST", "/api/submit/records", 429, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.TOO_MANY_REQUESTS)
+    }
     var early = http_status.OK
     let doc = submit_body_of(req, "/api/submit/records", resp, early, t0)
     if (empty(doc)) {

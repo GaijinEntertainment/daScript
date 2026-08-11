@@ -55,6 +55,11 @@ def private sc_event(kind : string; kv : string) {
 
 // ===== transport =====
 
+// A valid sidecar/records response is small; a hostile or MITM'd exchange serving a giant body
+// would OOM the client at boot. libhv buffers the body before the callback, so this bounds the
+// second (das-heap) copy + the parse — the connect/read timeouts bound the wall-clock.
+let private MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
+
 def private http_get_body(url : string; timeout_s : int; var status : int&) : string {
     var body = ""
     status = 0
@@ -63,10 +68,15 @@ def private http_get_body(url : string; timeout_s : int; var status : int&) : st
         req.url := url
         req.connect_timeout = 5
         req.timeout = uint16(timeout_s)
+        allow_redirect(req, false)   // never follow the exchange to another host/scheme
         request(req) $(resp) {
             if (resp != null) {
                 status = int(resp.status_code)
-                body = string(resp.body)
+                if (resp.content_length > MAX_DOWNLOAD_BYTES) {
+                    status = -1   // refuse an oversized body before copying it into the das heap
+                } else {
+                    body = string(resp.body)
+                }
             }
         }
     }
@@ -83,10 +93,13 @@ def private http_post_body(url : string; payload : string; timeout_s : int; var 
         req.connect_timeout = 5
         req.timeout = uint16(timeout_s)
         set_content_type(req, "application/json")
+        allow_redirect(req, false)
         request(req) $(resp) {
             if (resp != null) {
                 status = int(resp.status_code)
-                body = string(resp.body)
+                if (resp.content_length <= MAX_DOWNLOAD_BYTES) {
+                    body = string(resp.body)
+                }
             }
         }
     }
@@ -485,12 +498,16 @@ def exchange_submit_current(policy : ExchangePolicy) : string {
 }
 
 //! Arm a local re-tune: the next boot skips the exchange once and races this box (~20 min,
-//! quiet machine). Removes the active sidecar — every past mint stays in the tune history
-//! archive — so the tune-bootstrap rail fires on the next start.
-def exchange_request_retune() {
+//! quiet machine). The marker is written FIRST and only then is the sidecar removed — a failed
+//! marker write leaves the sidecar intact and returns the error, so the box is never left with
+//! no sidecar AND no re-tune armed (which would silently fall back to the exchange). "" on success.
+def exchange_request_retune() : string {
     let manifest = tune_manifest_path()
-    fwrite("{manifest}.retune", "retune requested\n")
+    if (!fwrite("{manifest}.retune", "retune requested\n")) {
+        return "could not arm the re-tune (marker write failed) - the current sidecar is unchanged"
+    }
     remove(manifest)
+    return ""
 }
 
 // ===== the control-page surface =====

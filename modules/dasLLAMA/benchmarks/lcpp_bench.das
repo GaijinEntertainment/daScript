@@ -584,6 +584,12 @@ def main() : int {
         print("error: --submit needs -o json (the records rail; A/B levers cannot submit)\n")
         return 1
     }
+    if (cfg.submit && g_debug_run) {
+        // debug-jit numbers are stamped so no board mistakes them for measurement — they must
+        // not reach the public exchange either; a submission is the released exe's job
+        print("error: --submit refused on a debug -jit run - the numbers are debug-grade; submit from the released exe\n")
+        return 1
+    }
     // the standing per-box methodology, enforced here rather than left to the environment
     // (gen_profile's pattern): cap the future que's workers (computing main is the last lane) and
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
