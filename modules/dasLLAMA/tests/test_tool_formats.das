@@ -146,3 +146,40 @@ def test_llama_json_parse(t : T?) {
         delete r2
     }
 }
+
+[test]
+def test_gemma4_codecs(t : T?) {   // nolint:STYLE038 — one arm per DSL codec direction
+    t |> run("the call DSL parses to JSON args (quote tokens, bare keys, nesting)") @(t : T?) {
+        var r <- gemma4_parse("I will check.<|tool_call>call:get_weather\{city:<|\"|>London<|\"|>,days:3,opts:\{fast:true}}<tool_call|> Done.")
+        t |> equal(r.content, "I will check. Done.")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "get_weather")
+            t |> equal(r.calls[0].args, "\{\"city\":\"London\",\"days\":3,\"opts\":\{\"fast\":true}}")
+        }
+        delete r
+    }
+    t |> run("adjacent blocks are parallel calls; arrays and null parse") @(t : T?) {
+        var r <- gemma4_parse("<|tool_call>call:a\{xs:[1,2],n:null}<tool_call|><|tool_call>call:b\{}<tool_call|>")
+        t |> equal(length(r.calls), 2)
+        if (length(r.calls) == 2) {
+            t |> equal(r.calls[0].args, "\{\"xs\":[1,2],\"n\":null}")
+            t |> equal(r.calls[1].name, "b")
+        }
+        delete r
+    }
+    t |> run("replay + result DSL round-trips (dictsorted, quote-token strings)") @(t : T?) {
+        t |> equal(gemma4_call_dsl("get_weather", "\{\"unit\": \"C\", \"city\": \"Paris\"}"),
+                   "call:get_weather\{city:<|\"|>Paris<|\"|>,unit:<|\"|>C<|\"|>}")
+        t |> equal(gemma4_response_dsl("get_weather", "\{\"temp\": 21}"), "response:get_weather\{temp:21}")
+        t |> equal(gemma4_response_dsl("get_weather", "sunny"), "response:get_weather\{value:<|\"|>sunny<|\"|>}")
+    }
+    t |> run("the declaration DSL: fixed key order, UPPER types, dictsorted properties") @(t : T?) {
+        let got = gemma4_tool_declaration(WEATHER_TOOL)
+        let want = ("declaration:get_weather\{description:<|\"|>Get current weather<|\"|>," +
+                    "parameters:\{properties:\{city:\{description:<|\"|>The city name<|\"|>,type:<|\"|>STRING<|\"|>}," +
+                    "unit:\{enum:[<|\"|>celsius<|\"|>,<|\"|>fahrenheit<|\"|>],type:<|\"|>STRING<|\"|>}}," +
+                    "required:[<|\"|>city<|\"|>],type:<|\"|>OBJECT<|\"|>}}")
+        t |> equal(got, want)
+    }
+}

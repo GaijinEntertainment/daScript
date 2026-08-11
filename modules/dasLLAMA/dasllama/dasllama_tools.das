@@ -340,3 +340,258 @@ def llama_json_parse(reply : string) : ToolReply {
     }
     return <- out
 }
+
+// ===== gemma-4 — the bracketed DSL (unquoted keys, <|"|> string-quote token, dictsorted) =====
+
+let private G4Q = "<|\"|>"   // the family's string-quote TOKEN — DSL strings need no escaping
+
+// One DSL value at `pos` -> JSON text (recursive: string | dict | array | raw number/bool/null).
+def private gemma4_dsl_value(s : string; var pos : int&) : string { // nolint:STYLE037 — one arm per DSL value shape
+    let n = length(s)
+    if (starts_with(slice(s, pos, n), G4Q)) {
+        let e = find(s, G4Q, pos + length(G4Q))
+        let body = slice(s, pos + length(G4Q), e < 0 ? n : e)
+        pos = e < 0 ? n : e + length(G4Q)
+        var jv = JV(body)
+        let out = write_json_compact(jv)   // JSON-escaped "..."
+        unsafe {
+            delete jv
+        }
+        return out
+    }
+    if (starts_with(slice(s, pos, n), "\{")) {
+        pos ++
+        var parts : array<string>
+        while (pos < n && !starts_with(slice(s, pos, n), "}")) {
+            let c = find(s, ":", pos)
+            if (c < 0) {
+                break
+            }
+            let key = strip(slice(s, pos, c))
+            pos = c + 1
+            let v = gemma4_dsl_value(s, pos)
+            var kv = JV(key)
+            let kq = write_json_compact(kv)
+            unsafe {
+                delete kv
+            }
+            parts |> push("{kq}:{v}")
+            if (pos < n && starts_with(slice(s, pos, n), ",")) {
+                pos ++
+            }
+        }
+        if (pos < n) {
+            pos ++   // '}'
+        }
+        let joined = join(parts, ",")
+        delete parts
+        return "\{{joined}}"
+    }
+    if (starts_with(slice(s, pos, n), "[")) {
+        pos ++
+        var parts : array<string>
+        while (pos < n && !starts_with(slice(s, pos, n), "]")) {
+            parts |> push(gemma4_dsl_value(s, pos))
+            if (pos < n && starts_with(slice(s, pos, n), ",")) {
+                pos ++
+            }
+        }
+        if (pos < n) {
+            pos ++   // ']'
+        }
+        let joined = join(parts, ",")
+        delete parts
+        return "[{joined}]"
+    }
+    // raw token: number / true / false / null — up to the enclosing delimiter
+    var e = pos
+    while (e < n) {
+        let ch = slice(s, e, e + 1)
+        if (ch == "," || ch == "}" || ch == "]") {
+            break
+        }
+        e ++
+    }
+    let tok = strip(slice(s, pos, e))
+    pos = e
+    return tok
+}
+
+//! Parse the CONTENT half of a gemma-4 reply (reasoning already split by the asymmetric think
+//! matcher): text outside `<|tool_call>call:NAME\{...}<tool_call|>` blocks is content, each
+//! block one call with its DSL dict converted to JSON args. Adjacent blocks = parallel calls.
+def gemma4_parse(reply : string) : ToolReply {
+    var out = ToolReply()
+    var cparts : array<string>
+    var pos = 0
+    let n = length(reply)
+    while (pos < n) {
+        let b = find(reply, "<|tool_call>call:", pos)
+        if (b < 0) {
+            cparts |> push(slice(reply, pos, n))
+            break
+        }
+        cparts |> push(slice(reply, pos, b))
+        var p = b + length("<|tool_call>call:")
+        let brace = find(reply, "\{", p)
+        if (brace < 0) {
+            break
+        }
+        let name = strip(slice(reply, p, brace))
+        p = brace
+        let args = gemma4_dsl_value(reply, p)
+        out.calls |> push(ToolCall(name = name, args = args))
+        let close = find(reply, "<tool_call|>", p)
+        pos = close < 0 ? n : close + length("<tool_call|>")
+    }
+    out.content = strip(join(cparts, ""))
+    delete cparts
+    return <- out
+}
+
+// JSON value -> gemma-4 DSL text (dict keys bare + ALPHABETICAL, strings in quote tokens).
+def private gemma4_json_dsl(v : JsonValue?) : string { // nolint:STYLE037 — one arm per JSON value shape
+    if (v == null || v.value is _null) {
+        return "null"
+    }
+    if (v.value is _string) {
+        let sv = v ?? ""
+        return "{G4Q}{sv}{G4Q}"
+    }
+    if (v.value is _bool) {
+        return "{v ?? false}"
+    }
+    if (v.value is _number || v.value is _longint) {   // integer numbers parse as the _longint extension
+        return write_json_compact(v)
+    }
+    if (v.value is _array) {
+        var parts <- [for (e in (v.value as _array)); gemma4_json_dsl(e)]
+        let joined = join(parts, ",")
+        delete parts
+        return "[{joined}]"
+    }
+    var ks <- [for (k in keys(v.value as _object)); k]
+    sort(ks)
+    var parts <- [for (k in ks); "{k}:{gemma4_json_dsl(v?[k])}"]
+    let joined = join(parts, ",")
+    delete ks
+    delete parts
+    return "\{{joined}}"
+}
+
+//! One replayed gemma-4 call block: `<|tool_call>call:NAME\{dictsorted-DSL}<tool_call|>` —
+//! marker spellings resolve as vocab specials at render, the DSL body is text.
+def gemma4_call_dsl(name : string; args_json : string) : string {
+    var perr = ""
+    var js = read_json(empty(args_json) ? "\{}" : args_json, perr)
+    let body = js == null ? "\{}" : gemma4_json_dsl(js)
+    if (js != null) {
+        unsafe {
+            delete js
+        }
+    }
+    return "call:{name}{body}"
+}
+
+//! One tool-result block body: `response:NAME\{...}` — a JSON-object result renders dictsorted,
+//! anything else wraps as `\{value:<|"|>text<|"|>}` (the template's non-mapping rule).
+def gemma4_response_dsl(name : string; result : string) : string {
+    var perr = ""
+    var js = read_json(result, perr)
+    if (js != null && js.value is _object) {
+        let body = gemma4_json_dsl(js)
+        unsafe {
+            delete js
+        }
+        return "response:{name}{body}"
+    }
+    if (js != null) {
+        unsafe {
+            delete js
+        }
+    }
+    return "response:{name}\{value:{G4Q}{result}{G4Q}}"
+}
+
+//! One tool declaration for the system turn: `declaration:NAME\{description:...,parameters:
+//! \{properties:\{...},required:[...],type:<|"|>OBJECT<|"|>}}` — dictsorted properties, types
+//! UPPERCASED, the fixed per-property key order of the canonical template.
+def gemma4_tool_declaration(tool_json : string) : string { // nolint:STYLE037 — the template's fixed field order, one arm each
+    var perr = ""
+    var tv = read_json(tool_json, perr)
+    if (tv == null) {
+        return ""
+    }
+    let fv = tool_function_of(tv)
+    let name = fv?["name"] ?? ""
+    let desc = fv?["description"] ?? ""
+    let out = build_string() $(w) {
+        w |> write("declaration:{name}\{")
+        if (!empty(desc)) {
+            w |> write("description:{G4Q}{desc}{G4Q},")
+        }
+        w |> write("parameters:\{")
+        let params = fv?["parameters"]
+        let props = params?["properties"]
+        if (props != null && props.value is _object) {
+            w |> write("properties:\{")
+            var ks <- [for (k in keys(props.value as _object)); k]
+            sort(ks)
+            var first = true
+            for (k in ks) {
+                if (!first) {
+                    w |> write(",")
+                }
+                first = false
+                w |> write("{k}:\{")
+                gemma4_property_body(w, props?[k])
+                w |> write("}")
+            }
+            delete ks
+            w |> write("},")
+        }
+        let rv = params?["required"]
+        if (rv != null && rv.value is _array && !empty(rv.value as _array)) {
+            var rparts : array<string>
+            for (r in (rv.value as _array)) {
+                let rs = r ?? ""
+                rparts |> push("{G4Q}{rs}{G4Q}")
+            }
+            let joined = join(rparts, ",")
+            w |> write("required:[{joined}],")
+            delete rparts
+        }
+        w |> write("type:{G4Q}OBJECT{G4Q}}}")
+    }
+    unsafe {
+        delete tv
+    }
+    return out
+}
+
+// One property's body in the declaration DSL — the template's fixed key order:
+// description -> enum -> nullable -> type (UPPERCASED) LAST.
+def private gemma4_property_body(var w : StringBuilderWriter; pv : JsonValue?) {
+    let pdesc = pv?["description"] ?? ""
+    if (!empty(pdesc)) {
+        w |> write("description:{G4Q}{pdesc}{G4Q},")
+    }
+    let en = pv?["enum"]
+    if (en != null && en.value is _array) {
+        var parts : array<string>
+        parts |> reserve(length(en.value as _array))
+        for (e in (en.value as _array)) {
+            let ev = e ?? ""
+            parts |> push("{G4Q}{ev}{G4Q}")
+        }
+        let joined = join(parts, ",")
+        w |> write("enum:[{joined}],")
+        delete parts
+    }
+    if ((pv?["nullable"] ?? false)) {
+        w |> write("nullable:true,")
+    }
+    let pt = pv?["type"] ?? "string"
+    let ptu = to_upper(pt)
+    w |> write("type:{G4Q}{ptu}{G4Q}")
+}
