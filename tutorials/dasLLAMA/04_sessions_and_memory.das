@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // so Section 4's deletes really free (the default linear heap frees only at context teardown)
 
 require dasllama/dasllama
@@ -18,12 +19,6 @@ require math
 // Prerequisites: tutorial 01.
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/04_sessions_and_memory.das -- <path/to/model.gguf>
-//
-// Each section is its own function, and that's load-bearing, not just style: a daslang
-// function's stack frame is statically sized for ALL its locals, and the default 16KB
-// context stack must also fit the model's whole forward-pass call chain. Piling every
-// section's locals into one fat main() overflows it; per-section functions pop their
-// frames between sections. (The alternative is raising `options stack`.)
 
 let PROMPT = "Once upon a time"
 let CTX = 1024l
@@ -46,14 +41,15 @@ def mb(bytes : int64) : int {
 // ──────────────────────────────────────────────────────────────────────────
 //
 // A Session is one generation stream: the attention KV cache plus scratch buffers.
-// The KV cache is sized to config.seq_len AT create_session TIME — roughly
-// 2 * n_layers * seq_len * kv_dim floats. Models ship with big native contexts
-// (Llama-3's native seq_len is 131072 => tens of GB of fp32 KV), so cap seq_len
-// to the context you actually need BEFORE creating sessions.
+// The KV cache is sized to config.seq_len AT create_session TIME. It stores
+// codec-encoded bytes, not floats: f16 by default (2 bytes per value; KVDtype.q8_0
+// halves that, tq4 goes further). Models ship with big native contexts (Llama-3's
+// native seq_len is 131072 => gigabytes of KV per session), so cap seq_len to the
+// context you actually need BEFORE creating sessions.
 
 def section_kv_cache(var m : Model) {
     let c = m.config
-    let native_kv = 2l * c.n_layers * c.seq_len * c.kv_dim * 4l
+    let native_kv = 2l * c.n_layers * c.seq_len * c.kv_dim * 2l   // K + V planes at the default f16 codec, 2 bytes per value
     print("native ctx {c.seq_len} -> KV cache would be ~{mb(native_kv)} MB per session\n")
     m.config.seq_len = min(m.config.seq_len, CTX)
     var s = create_session(m)
@@ -131,6 +127,7 @@ def main() {
         return
     }
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     with_job_que() {
         setup_dasllama_jobque()
         section_kv_cache(m)

@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity; drop for bit-exact work
 
 require dasllama/dasllama
@@ -26,6 +26,8 @@ require math
 // The chat template picks the audio framing automatically (qwen2 family wraps the span
 // in <|audio_bos|>/<|audio_eos|>, llama-3 splices bare embeddings, voxtral opens with
 // [BEGIN_AUDIO]) — the calls below are identical for every pair.
+// Qwen3-Omni and Gemma-4 E-series audio are served too, but through the ASR surface
+// (tutorial 07's two-path load_asr_model), not load_audio_tower.
 //
 // Prerequisites: a decoder GGUF + its mmproj GGUF + a 16 kHz mono PCM16 WAV.
 //
@@ -99,6 +101,7 @@ def main {
     var m <- load_model(ggufs[0], QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 4096l)
     var tower <- load_audio_tower(ggufs[1])
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
     // caps(model) is the chat layer's honesty contract. First entry: gemma has no system
     // role — the chat layer folds the system prompt into the first user turn, and

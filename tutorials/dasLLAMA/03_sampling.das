@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // six fresh sessions below — their deletes must really free (tutorial 04 explains)
 
 require dasllama/dasllama
@@ -56,6 +56,7 @@ def main() {
         return
     }
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     m.config.seq_len = min(m.config.seq_len, 1024l)   // bound each session's KV cache (tutorial 04)
     let prompt <- encode(m, PROMPT)
 

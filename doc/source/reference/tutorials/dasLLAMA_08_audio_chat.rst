@@ -14,7 +14,10 @@ audio encoder — the *tower* — that turns 16 kHz PCM into soft tokens the
 decoder reads inline with text. Supported pairs (decoder + mmproj GGUF):
 Qwen2-Audio, Qwen2.5-Omni (audio side), Ultravox v0.5 (over *stock* Llama-3
 decoders), and Voxtral-Mini. The chat template picks the audio framing
-automatically — the code below is identical for every pair.
+automatically — the code below is identical for every pair. Qwen3-Omni and
+Gemma-4 E-series audio are served too, but through the ASR surface
+(:ref:`tutorial 07 <tutorial_dasLLAMA_speech_to_text>`'s two-path
+``load_asr_model``), not ``load_audio_tower``.
 
 Run::
 

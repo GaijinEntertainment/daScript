@@ -2,7 +2,9 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
+require dasllama/dasllama   // the facade fires the arch [init] registrations arch_chat reads
 require dasllama/dasllama_tools   // the per-ToolMode wire codecs under test — pure string+JSON, model-free
+require dasllama/dasllama_chat   // parse_calls_ — the family-dispatching reply parse over the registered templates
 require daslib/strings_boost
 
 // The per-family tool wire codecs against their verbatim formats (tool_formats_plan.md):
@@ -283,5 +285,83 @@ def test_harmony_no_end_token(t : T?) {
             t |> equal(r.calls[0].args, "\{\"city\":\"Paris\"}")
         }
         delete r
+    }
+}
+
+[test]
+def test_marker_parse(t : T?) {
+    t |> run("no markers - everything is content") @(t : T?) {
+        var r <- marker_parse("Just an answer.", "<tool_call>", "</tool_call>")
+        t |> equal(r.content, "Just an answer.")
+        t |> equal(length(r.calls), 0)
+        delete r
+    }
+    t |> run("empty open mark - no tool format, everything is content") @(t : T?) {
+        var r <- marker_parse("<tool_call>looks like one</tool_call>", "", "")
+        t |> equal(r.content, "<tool_call>looks like one</tool_call>")
+        t |> equal(length(r.calls), 0)
+        delete r
+    }
+    t |> run("one call, content before the opener") @(t : T?) {
+        var r <- marker_parse("Let me check.\n<tool_call>\n\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}\n</tool_call>",
+            "<tool_call>", "</tool_call>")
+        t |> equal(r.content, "Let me check.")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "get_weather")
+            t |> success(find(r.calls[0].args, "Paris") >= 0, "args carry the city")
+        }
+        delete r
+    }
+    t |> run("two calls parse in order") @(t : T?) {
+        var r <- marker_parse(("<tool_call>\{\"name\": \"a\", \"arguments\": \{}}</tool_call>" +
+                               "<tool_call>\{\"name\": \"b\", \"arguments\": \{}}</tool_call>"),
+            "<tool_call>", "</tool_call>")
+        t |> equal(length(r.calls), 2)
+        if (length(r.calls) == 2) {
+            t |> equal(r.calls[0].name, "a")
+            t |> equal(r.calls[1].name, "b")
+        }
+        delete r
+    }
+    t |> run("unterminated span ends the scan; nothing parsed keeps the whole reply as content") @(t : T?) {
+        var r <- marker_parse("Half a call<tool_call>\{\"name\": \"x\"", "<tool_call>", "</tool_call>")
+        t |> equal(length(r.calls), 0)
+        t |> equal(r.content, "Half a call<tool_call>\{\"name\": \"x\"")
+        delete r
+    }
+    t |> run("a nameless/garbage span skips; nothing parsed keeps the whole reply") @(t : T?) {
+        var r <- marker_parse("A<tool_call>not json</tool_call>B", "<tool_call>", "</tool_call>")
+        t |> equal(length(r.calls), 0)
+        t |> equal(r.content, "A<tool_call>not json</tool_call>B")
+        delete r
+    }
+}
+
+[test]
+def test_parse_calls_dispatch(t : T?) {
+    t |> run("hermes: think span + content + marker call classify into all three") @(t : T?) {
+        var c = ChatSession()
+        c.tmpl <- arch_chat("qwen3")
+        var r <- parse_calls_(c, ("<think>plan the call</think>Sure.\n" +
+            "<tool_call>\n\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}\n</tool_call>"))
+        t |> equal(r.reasoning, "plan the call")
+        t |> equal(r.content, "Sure.")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "get_weather")
+        }
+        delete r
+        delete c
+    }
+    t |> run("none mode: a plain-chat family returns the reply as content") @(t : T?) {
+        var c = ChatSession()
+        c.tmpl <- arch_chat("gemma2")   // no tool format declared
+        var r <- parse_calls_(c, "Just words.")
+        t |> equal(r.reasoning, "")
+        t |> equal(r.content, "Just words.")
+        t |> equal(length(r.calls), 0)
+        delete r
+        delete c
     }
 }

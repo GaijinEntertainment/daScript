@@ -30,9 +30,15 @@ Threads: the job queue
 ======================
 
 The matmul kernels split their rows across the job queue — they *require* one
-(model code outside ``with_job_que()`` panics). ``set_jobque_fork_pool(true,
-true)`` pools the per-job fork contexts: the kernels are pure data-parallel
-jobs, so their contexts can be reused and skip re-init.
+(model code outside ``with_job_que()`` panics). ``setup_dasllama_jobque()``
+configures the queue for this pure fork/join workload, and every dasLLAMA
+runner calls it. Its biggest setting is team dispatch
+(``set_jobque_team_mode``): the workers run as a standing team instead of
+paying fifo fork/join per job — an EPYC 9654 measured Llama-1B decode going
+from 7.6 to 43 t/s (5.7×) on this one switch. The rest: pooled fork contexts,
+batched dispatch, spin-before-park windows for the workers and the joining
+thread, and a raised priority for the dispatch caller (in team mode only the
+caller publishes work).
 
 The worker count is fixed when the queue is created; the
 ``DAS_JOBQUE_THREADS`` environment variable overrides the (deliberately
@@ -50,8 +56,8 @@ box is busy with anything else. Set ``0`` to switch it off.
 
 Both are daslang knobs rather than dasLLAMA ones — :ref:`the daslang environment
 variables <environment_variables>` page lists every one it reads. dasLLAMA has
-its own set, roughly 130 of them covering backend selection, GPU rails and the
-probe harnesses: see :ref:`the dasLLAMA knob reference <dasllama_env>`.
+its own set — over a hundred knobs covering backend selection, GPU rails and
+the probe harnesses: see :ref:`the dasLLAMA knob reference <dasllama_env>`.
 
 Prefill vs generation
 =====================
@@ -65,22 +71,28 @@ Quantization: memory vs fidelity
 ================================
 
 ``QuantMode`` picks the in-memory weight representation, whatever the GGUF
-stores. Measured on SmolLM2-135M (Apple M1 Max, 8 jobs):
+stores. Measured on SmolLM2-135M (Apple M1 Max, 7 jobs):
 
-=========  ==================  ====================================================
-Mode       Resident            Throughput
-=========  ==================  ====================================================
-``fp32``   546 MB              prefill 471 t/s, gen 86 t/s — the token-exact reference
-``q8``     241 MB              prefill 1391 t/s, gen 219 t/s — the everyday choice
-``q4``     189 MB              prefill 70 t/s, gen 69 t/s — smallest, scalar kernel only
-=========  ==================  ====================================================
+=========  ====================  ====================================================
+Mode       Resident              Throughput
+=========  ====================  ====================================================
+``fp32``   544 MB                prefill 905 t/s, gen 170 t/s — the token-exact reference
+``q8``     7 MB (+175 MB map)    prefill 2260 t/s, gen 441 t/s — the everyday choice
+``q4_0``   187 MB                prefill 281 t/s, gen 273 t/s — the legacy requant tier
+=========  ====================  ====================================================
+
+The q8 heap number is small because a q8 load rides the mmap'd *prepared
+image* minted beside the GGUF on the first load — the OS pages the weight
+planes in on demand, and later loads take milliseconds. ``DASLLAMA_IMAGE=0``
+disables the cache; fp32 and q4_0 requant from the GGUF on the heap.
 
 Generation is bandwidth-bound, so between fp32 and q8 smaller weights are also
-faster. ``q4`` currently has no batched prefill kernel — it's the smallest
-footprint, not the fastest path. For small *and* fast, prefer a K-quant GGUF
-(Q4_K_M / Q5_K_M / Q6_K): under ``QuantMode.q8`` those tensors keep their
-native K-quant format and run on dedicated kernels, so both phases stay at
-full speed with a q4-class footprint.
+faster. ``q4_0`` is the legacy requant tier — it squeezes *this* f32/q8 load
+down to 4-bit blocks through per-row kernels with no batched prefill, so it is
+the smallest footprint, not the fastest path. For small *and* fast, prefer a
+K-quant / mxfp4 / Q4_0 GGUF (Q4_K_M / Q5_K_M / Q6_K): under ``QuantMode.q8``
+those files keep their native 4-6 bit planes on the same fast rails, so both
+phases stay at full speed with a q4-class footprint.
 
 Where to go deeper: ``modules/dasLLAMA/tune_for_this_box.md`` covers kernel
 tuning (token-block size, unrolls, the ``[dasllama_grid]`` tuner) when you

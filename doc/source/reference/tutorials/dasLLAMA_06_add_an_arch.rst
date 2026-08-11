@@ -8,8 +8,8 @@ dasLLAMA-06 — The Architecture Registry
     single: Tutorial; dasLLAMA
     single: Tutorial; Architecture Registry
 
-How does one ``load_model`` run Llama, Qwen, Phi, Gemma, and gpt-oss? Through
-the architecture registry. This tutorial needs no model file and no ``-jit`` —
+How does one ``load_model`` run Llama, Mistral, Qwen, Phi, Gemma, GLM, and
+gpt-oss? Through the architecture registry. This tutorial needs no model file and no ``-jit`` —
 it's about the registry, not inference::
 
    daslang.exe tutorials/dasLLAMA/06_add_an_arch.das
@@ -27,7 +27,7 @@ wrong path.
 
    let names <- arch_names()
    print("{length(names)} registered architectures: {join(names, ", ")}\n")
-   // -> 9 registered architectures: qwen2, qwen2moe, llama, gemma2, gemma3, ...
+   // -> 18 registered architectures: glm4moe, qwen2vl, qwen3next, qwen2, llama, ...
 
 Anatomy of an ArchDesc
 ======================
@@ -41,7 +41,8 @@ An architecture is data, not a fork of the engine:
 
 ``blocks``
     The forward-pass kernels. ``std_blocks()`` is the standard attention +
-    FFN pair; MoE (qwen2moe) and gpt-oss swap in their own.
+    FFN pair; the MoE families (qwen2moe, qwen3moe, glm4moe), the Qwen3.5
+    DeltaNet hybrids, and gpt-oss swap in their own.
 
 ``chat``
     The chat template as data: per-turn part lists
@@ -93,3 +94,5 @@ MoE-with-sinks):
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/06_add_an_arch.das <../../../../tutorials/dasLLAMA/06_add_an_arch.das>`
+
+   Next tutorial: :ref:`tutorial_dasLLAMA_speech_to_text`

@@ -12,8 +12,9 @@ dasLLAMA-01 — Hello, Generation
 This tutorial introduces ``dasLLAMA`` — CPU large-language-model inference in
 pure daslang: load a GGUF model, tokenize, and stream a text continuation.
 Everything goes through the public facade, ``dasllama/dasllama``; requiring it
-also registers every supported architecture (Llama-2/3, Mistral, Qwen, Phi-3,
-Gemma-2/3/4, Qwen-MoE, gpt-oss), so the same program runs any of them.
+also registers every supported architecture (Llama-2/3, Mistral-3, the Qwen-2/3
+dense, VL and MoE families, the Qwen3.5/3.6 DeltaNet hybrids, GLM-4.5 MoE,
+Phi-3, Gemma-2/3/4, gpt-oss), so the same program runs any of them.
 
 The companion ``.das`` files are in ``tutorials/dasLLAMA/``. They need a GGUF
 model file on disk (models are not shipped with the repo) — a good tiny one is

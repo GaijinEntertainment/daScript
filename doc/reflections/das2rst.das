@@ -327,7 +327,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
         group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_assistant|render_turn|render_assistant|render_close|respond|set_thinking)$%%),
-        group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls)$%%),
+        group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids)$%%)
     )
     var hook = DocsHook()
@@ -346,9 +346,9 @@ def document_module_dasllama(_root : string) {
         dasllama_type_stanza(f, "struct-dasllama_prefix-PrefixCache", "PrefixCache",
             "A page-granular prefix cache over one pool's sessions (``create_prefix_cache``): finished streams donate their KV pages keyed by a chained page hash of the token history, and later requests attach the longest cached prefix instead of re-prefilling it. Pages are refcounted with the pool; an LRU budget bounds retention.")
         dasllama_type_stanza(f, "enum-dasllama_common-KVDtype", "KVDtype",
-            "Per-session KV-cache codec picked at ``create_session``/``create_chat``: ``f16`` — the default, half the KV bytes and faster deep-context decode (stores clamp to ±65504); ``f32`` — the bit-exact reference; ``q8_0`` — block-quantized (llama.cpp ``-ctk``/``-ctv q8_0``), half the f16 bytes again and near-lossless in practice; needs head_size and kv_dim to be multiples of 32 (checked at create).")
+            "Per-session KV-cache codec picked at ``create_session``/``create_chat``: ``f16`` — the default, half the KV bytes and faster deep-context decode (stores clamp to ±65504); ``f32`` — the bit-exact reference; ``q8_0`` — block-quantized (llama.cpp ``-ctk``/``-ctv q8_0``), half the f16 bytes again and near-lossless in practice; needs head_size and kv_dim to be multiples of 32 (checked at create); ``tq4`` — the FWHT-rotated ternary codec, smaller still.")
         dasllama_type_stanza(f, "enum-dasllama_common-QuantMode", "QuantMode",
-            "Weight representation picked at load: ``fp32`` — the token-exact reference; ``q8`` — int8 quantization, the fast CPU path; ``q4`` — 4-bit, smallest footprint.")
+            "Weight representation picked at load: ``fp32`` — the token-exact reference; ``q8`` — int8 quantization, the fast CPU path (K-quant/mxfp4/Q4_0 files keep their native planes on the same rails); ``q4_0`` — the legacy requant tier, 4-bit blocks, smallest footprint.")
         dasllama_type_stanza(f, "struct-dasllama_sampling-SamplingParams", "SamplingParams",
             "Sampling knobs: ``temp`` (<= 0 selects greedy argmax), ``top_k`` (0 = no cutoff), and repetition ``penalty`` (1.0 = none) applied over the last ``penalty_last_n`` generated tokens. The defaults are greedy — ``SamplingParams()`` reproduces argmax exactly.")
         dasllama_type_stanza(f, "struct-dasllama_sampling-Stats", "Stats",
@@ -361,6 +361,10 @@ def document_module_dasllama(_root : string) {
             "The incremental reasoning/content splitter for a streamed reply (``make_think_stream``): feed decoded pieces through ``think_feed``, flush with ``think_finish``. Holds partial reasoning markers back across chunk boundaries; a non-thinking family yields a pass-through stream.")
         dasllama_type_stanza(f, "struct-dasllama_chat-ThinkSplit", "ThinkSplit",
             "One reply split at its reasoning boundary, as returned by ``split_reasoning``: ``reasoning`` holds the thinking span (empty when the model answered directly), ``content`` the answer.")
+        dasllama_type_stanza(f, "struct-dasllama_tools-ToolReply", "ToolReply",
+            "A fully classified tool-capable reply, as returned by ``parse_calls``: the ``reasoning`` span, the ``content``, and the ``calls`` the model made (empty when it answered directly).")
+        dasllama_type_stanza(f, "struct-dasllama_tools-ToolCall", "ToolCall",
+            "One parsed tool call: the function ``name``, its ``args`` normalized to JSON object text, and the wire ``id`` where the family carries one (mistral; empty elsewhere).")
         dasllama_type_stanza(f, "struct-dasllama_audio-AudioTower", "AudioTower",
             "A loaded audio encoder: Whisper-family encoder weights plus the model-specific projector tail, as produced by ``load_audio_tower`` from an mmproj GGUF. Pass it to ``create_chat`` to enable ``add_user_audio`` turns.")
     }

@@ -25,7 +25,8 @@ The KV cache is sized to ``config.seq_len`` *at* ``create_session`` time — one
 key row and one value row per position per layer, so
 ``2 * n_layers * seq_len * kv_dim`` entries. ``create_session`` stores each
 entry as ``f16``, two bytes, unless you pass another ``kv_dtype``
-(``KVDtype.f32`` doubles the cache, ``KVDtype.q8_0`` roughly halves it).
+(``KVDtype.f32`` doubles the cache, ``KVDtype.q8_0`` roughly halves it,
+``KVDtype.tq4`` goes further still).
 Models ship with big native contexts (Llama-3's native ``seq_len`` is 131072,
 which means tens of GB of KV), so cap ``seq_len`` to the context you actually
 need **before** creating sessions:
@@ -37,7 +38,7 @@ need **before** creating sessions:
    var s = create_session(m)
 
 On SmolLM2-135M that's the difference between ~188 MB per session at the
-native 8192 and ~24 MB at 1024.
+native 8192 and ~23 MB at 1024.
 
 One model, many sessions
 ========================
@@ -89,12 +90,10 @@ ingredients:
    delete s
    delete m   // heap drops by the model's full footprint
 
-One practical note baked into the tutorial file itself: each section lives in
-its own function. A daslang function's stack frame is statically sized for
-*all* its locals, and the default 16 KB context stack must also fit the
-model's forward-pass call chain — piling every section's locals into one fat
-``main()`` overflows it. Keep model-driving ``main`` functions lean (or raise
-``options stack``).
+One practical note baked into the tutorial file itself: every dasLLAMA program
+root declares ``options stack = 524288``. The forward-pass call chain outgrows
+the 16 KB default, and a required module cannot raise the program's stack for
+you — the declaration has to be in *your* file.
 
 .. seealso::
 

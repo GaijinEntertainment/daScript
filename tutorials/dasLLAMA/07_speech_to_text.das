@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536     // ASR model structs (decoder + tower) need a deeper stack
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity; drop for bit-exact work
 
 require dasllama/dasllama
@@ -21,16 +21,19 @@ require math
 // The same verbs run every supported family; the loader tells them apart:
 //   - whisper.cpp ggml bins (ggml-tiny.bin ... ggml-large-v3-turbo.bin) — 100 languages,
 //     segment timestamps, translation:  https://huggingface.co/ggerganov/whisper.cpp
-//   - Qwen3-ASR GGUF decoder + its mmproj (pass both paths) — the model detects and
-//     reports the language itself, supports context biasing, no timestamps
-//   - Parakeet-TDT ggml bins (converted from the NVIDIA .nemo) — English, fast
+//   - Qwen3-ASR (and Qwen3-Omni) GGUF decoder + its mmproj (pass both paths) — the model
+//     detects and reports the language itself, supports context biasing, no timestamps
+//   - Gemma-4 E-series GGUF decoder + its Conformer mmproj — the same two-path shape
+//   - Canary-Qwen GGUF decoder + its "CNRY" FastConformer bin — the same two-path shape
+//   - Parakeet-TDT ggml bins (converted from the NVIDIA .nemo) — v2 English, v3 25-language
+// A prepared .dlim image loads by either route as well — it routes on its baked family tag.
 //
 // Prerequisites: an ASR model file and a 16 kHz mono PCM16 WAV (e.g. whisper.cpp's
 // samples/jfk.wav). For any-format decode or microphone capture, pair this with the
 // dasAudio tutorials (11_recording.das records straight to WAV).
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/07_speech_to_text.das -- <model> <audio.wav>
-//      (Qwen3-ASR: daslang.exe -jit ... -- <decoder.gguf> <mmproj.gguf> <audio.wav>)
+//      (two-file families: daslang.exe -jit ... -- <decoder.gguf> <mmproj> <audio.wav>)
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
@@ -92,6 +95,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     }
     let audio_path = paths[length(paths) - 1]
     var m <- (length(paths) >= 3 ? load_asr_model(paths[0], paths[1]) : load_asr_model(paths[0]))
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
     // ──────────────────────────────────────────────────────────────────────────
     // Section 2 — caps(): ask, don't assume

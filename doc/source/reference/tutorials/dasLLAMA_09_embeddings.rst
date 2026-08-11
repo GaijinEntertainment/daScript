@@ -87,4 +87,6 @@ OpenAI embeddings client talks to a loaded chat model unchanged.
 
    Previous tutorial: :ref:`tutorial_dasLLAMA_audio_chat`
 
+   Next tutorial: :ref:`tutorial_dasLLAMA_thinking`
+
    The embeddings server route: :ref:`utils_dasllama_server` (``POST /v1/embeddings``)

@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama
 require daslib/jobque_boost
@@ -57,6 +57,7 @@ def main() {
 
     print("loading {path}\n")
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let c = m.config
     print("arch={m.arch} dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size} ctx={c.seq_len}\n\n")
 

@@ -12,8 +12,9 @@ dasLLAMA-07 — Speech to Text
 dasLLAMA transcribes speech through one uniform surface: a single loader that
 sniffs the file format, one verb set, and a ``caps()`` call that tells you what
 the loaded model honestly supports. No family names appear in the API — the
-same program runs a whisper.cpp bin, a Qwen3-ASR GGUF pair, or a Parakeet-TDT
-bin.
+same program runs a whisper.cpp bin, a Qwen3-ASR (or Qwen3-Omni) GGUF pair, a
+Gemma-4 E-series GGUF pair, a Canary-Qwen decoder + "CNRY" bin, or a
+Parakeet-TDT bin.
 
 Run it with any supported model and a 16 kHz mono PCM16 WAV::
 
@@ -25,9 +26,12 @@ One loader, sniffed formats
 ===========================
 
 ``load_asr_model`` looks at the file, not the filename: a ggml bin routes to
-whisper or Parakeet by its vocabulary size; a GGUF decoder takes its
-audio-encoder mmproj as a second path. A mismatched or unsupported file panics
-with a message that says what to do instead.
+whisper or Parakeet by its vocabulary size; a GGUF decoder takes its audio
+front end as a second path — itself sniffed (a Qwen3-ASR/Qwen3-Omni AuT
+mmproj, a Gemma-4 Conformer mmproj, or a Canary-Qwen "CNRY" bin). A prepared
+``.dlim`` image loads by either route and routes on its baked family tag. A
+mismatched or unsupported file panics with a message that says what to do
+instead.
 
 .. code-block:: das
 
