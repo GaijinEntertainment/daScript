@@ -968,6 +968,15 @@ def private generate_synth_component(comp_rtti : string; synth_var : string; cas
     }
 }
 
+// `if (<cond var>) { <body> }` - the shape every folded / direct match arm appends
+def private guarded_block(at : LineInfo; cond_var : string; var stmts : array<Expression?>) : ExpressionPtr {
+    var blk = new ExprBlock(at = at)
+    for (stmt in stmts) {
+        blk.list |> emplace(stmt)
+    }
+    return new ExprIfThenElse(at = at, cond = make_var_ref(at, cond_var), if_true = blk)
+}
+
 [macro_function]
 def private generate_const_constructor_match(call : ExprCall?; folded_rtti : string; actual_var : string; var body : array<Expression?>&; var caps : QmCaptures&; var index : int&; at : LineInfo) {
     //! Handle constant constructor calls (range, int2, float3, etc.) that may be constant-folded.
@@ -1451,13 +1460,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             // If folded: match as constant constructor and continue
             var folded_body : array<Expression?>
             generate_const_constructor_match(call, folded_rtti, actual_var, folded_body, caps, index, at)
-            var folded_blk = new ExprBlock(at = at)
-            for (stmt in folded_body) {
-                folded_blk.list |> emplace(stmt)
-            }
-            var folded_cond = make_var_ref(at, is_folded_var)
-            var folded_if = new ExprIfThenElse(at = at, cond = folded_cond, if_true = folded_blk)
-            body |> emplace(folded_if)
+            body |> push(guarded_block(at, is_folded_var, folded_body))
             // Unfolded: match as ExprCall with one-value expansion (skip if folded matched)
             var unfolded_body : array<Expression?>
             unfolded_body |> push <| qm_rtti_guard(at, actual_var, "ExprCall")
@@ -1839,13 +1842,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             }
             direct_body |> push <| qmacro_expr(${return qm_ok(); })
             // Build: if (direct_var) { direct match + return }
-            var direct_blk = new ExprBlock(at = at)
-            for (stmt in direct_body) {
-                direct_blk.list |> emplace(stmt)
-            }
-            var direct_cond = make_var_ref(at, direct_var)
-            var direct_if = new ExprIfThenElse(at = at, cond = direct_cond, if_true = direct_blk)
-            body |> emplace(direct_if)
+            body |> push(guarded_block(at, direct_var, direct_body))
             // Fall through to block matching if it IS a block
         }
     }

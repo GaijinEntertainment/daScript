@@ -58,6 +58,25 @@ var PREVIEW_ERROR_FIX : ToggleState
 
 var INSPECTOR_ERROR_FIX : ToggleState
 
+// put the current hunk's first row at the top on the next frame
+def private scroll_to_current_hunk() : void {
+    let row = g_inspector.parsed.hunks[g_inspector.diff_current_hunk].row_start
+    g_inspector.diff_scroll_y = float(row) * max(
+        GetTextLineHeight(), g_inspector.new_view.key.line_height)
+    g_inspector.diff_scroll_jump_pending = true
+}
+
+// drive the pane's scroll from our own value while a jump is pending or the mouse is elsewhere,
+// otherwise let the user's wheel win and read the position back
+def private sync_diff_scroll() : void {
+    let hovered = IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
+    if (g_inspector.diff_scroll_jump_pending || !hovered) {
+        SetScrollY(g_inspector.diff_scroll_y)
+    } else {
+        g_inspector.diff_scroll_y = GetScrollY()
+    }
+}
+
 def draw_error_context(var popup_state : PopupContextItemState;
                        var copy_state : ToggleState;
                        var send_state : ToggleState;
@@ -234,10 +253,7 @@ def draw_side_by_side_diff() { // nolint:STYLE038
         g_inspector.diff_current_hunk = max(0,
             g_inspector.diff_current_hunk - 1)
         if (g_inspector.diff_current_hunk < hunk_count) {
-            let row = g_inspector.parsed.hunks[g_inspector.diff_current_hunk].row_start
-            g_inspector.diff_scroll_y = float(row) * max(
-                GetTextLineHeight(), g_inspector.new_view.key.line_height)
-            g_inspector.diff_scroll_jump_pending = true
+            scroll_to_current_hunk()
         }
     }
     same_line()
@@ -247,10 +263,7 @@ def draw_side_by_side_diff() { // nolint:STYLE038
             g_inspector.diff_current_hunk + 1)
         if (g_inspector.diff_current_hunk >= 0
                 && g_inspector.diff_current_hunk < hunk_count) {
-            let row = g_inspector.parsed.hunks[g_inspector.diff_current_hunk].row_start
-            g_inspector.diff_scroll_y = float(row) * max(
-                GetTextLineHeight(), g_inspector.new_view.key.line_height)
-            g_inspector.diff_scroll_jump_pending = true
+            scroll_to_current_hunk()
         }
     }
     same_line()
@@ -281,12 +294,7 @@ def draw_side_by_side_diff() { // nolint:STYLE038
         let window_size = GetWindowSize()
         g_inspector.diff_left_rect = float4(window_pos.x, window_pos.y,
             window_pos.x + window_size.x, window_pos.y + window_size.y)
-        let hovered = IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
-        if (g_inspector.diff_scroll_jump_pending || !hovered) {
-            SetScrollY(g_inspector.diff_scroll_y)
-        } else {
-            g_inspector.diff_scroll_y = GetScrollY()
-        }
+        sync_diff_scroll()
         text_disabled("BEFORE")
         separator()
         var style = source_view_style(CONTENT_DIFF, true)
@@ -318,12 +326,7 @@ def draw_side_by_side_diff() { // nolint:STYLE038
         g_inspector.diff_scrollbar_rect = float4(
             window_pos.x + window_size.x - scrollbar_width, window_pos.y,
             window_pos.x + window_size.x, window_pos.y + window_size.y)
-        let hovered = IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
-        if (g_inspector.diff_scroll_jump_pending || !hovered) {
-            SetScrollY(g_inspector.diff_scroll_y)
-        } else {
-            g_inspector.diff_scroll_y = GetScrollY()
-        }
+        sync_diff_scroll()
         text_disabled("AFTER")
         separator()
         var style = source_view_style(CONTENT_DIFF, true)

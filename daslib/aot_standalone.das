@@ -77,7 +77,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
     }
 }
 
-def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr) {
+def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr) {   // nolint:STYLE038 - flat emitter - one write per ctor section
     var lookupVariableTable : array<Variable?>;
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {

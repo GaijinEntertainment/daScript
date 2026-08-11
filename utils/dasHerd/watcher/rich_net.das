@@ -98,10 +98,8 @@ class WatcherRichClient : HvWebSocketClient {
         send("\{\"op\":\"list\"\}")
     }
 
-    def override onClose {
-        let was_connected = connected
-        connected = false
-        disconnect_count++
+    // forget the attached terminal: identity, control-retry backoff and the last sent geometry
+    def clear_attachment() : void {
         attached = false
         controls = false
         attached_id = ""
@@ -109,6 +107,13 @@ class WatcherRichClient : HvWebSocketClient {
         last_control_retry = 0l
         sent_columns = 0
         sent_rows = 0
+    }
+
+    def override onClose {
+        let was_connected = connected
+        connected = false
+        disconnect_count++
+        clear_attachment()
         last_review_identity = ""
         last_history_identity = ""
         last_refs_identity = ""
@@ -133,7 +138,7 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def override onMessage(message : string#) { // nolint:STYLE037
+    def override onMessage(message : string#) { // nolint:STYLE037,STYLE038
         message_count++
         var envelope : WatcherEnvelope
         let body = string(message)
@@ -417,13 +422,7 @@ class WatcherRichClient : HvWebSocketClient {
                 }
             }
         } elif (envelope._type == "detached") {
-            attached = false
-            controls = false
-            attached_id = ""
-            control_retry_started = 0l
-            last_control_retry = 0l
-            sent_columns = 0
-            sent_rows = 0
+            clear_attachment()
         } elif (envelope._type == "terminal_checkpoint") {
             var incoming : WatcherTerminalCheckpointMessage
             if (sscan_json(body, incoming)) {

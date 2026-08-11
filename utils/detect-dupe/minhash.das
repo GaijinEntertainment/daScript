@@ -72,8 +72,8 @@ def public minhash_signature(tokens : array<string>) : array<uint64> {
 def public jaccard_estimate(sig_a, sig_b : array<uint64>) : float {
     if (length(sig_a) != length(sig_b) || empty(sig_a)) return 0.0f
     var matches = 0
-    for (i in range(length(sig_a))) {
-        if (sig_a[i] == sig_b[i]) {
+    for (a, b in sig_a, sig_b) {
+        if (a == b) {
             matches++
         }
     }

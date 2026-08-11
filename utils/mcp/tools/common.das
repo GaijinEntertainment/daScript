@@ -239,16 +239,7 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
     var had_error = false
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            cop.ignore_shared_modules = true
-            cop.auto_inline_functions = false   // introspection describes the SOURCE - splices rewrite bodies/references
-            if (_export_all) {
-                cop.export_all = true
-            }
-            if (_no_opt) {
-                cop.no_optimizations = true
-                cop.no_infer_time_folding = true
-            }
+            setup_introspection_policies(cop, _export_all, _no_opt)
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"
@@ -269,6 +260,21 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
     return make_tool_result(result, had_error)
 }
 
+// policies every introspection compile shares. auto_inline_functions stays off because these
+// tools describe the SOURCE and splices rewrite bodies and references.
+def private setup_introspection_policies(var cop : CodeOfPolicies; _export_all, _no_opt : bool) : void {
+    cop.threadlock_context = true
+    cop.ignore_shared_modules = true
+    cop.auto_inline_functions = false
+    if (_export_all) {
+        cop.export_all = true
+    }
+    if (_no_opt) {
+        cop.no_optimizations = true
+        cop.no_infer_time_folding = true
+    }
+}
+
 def compile_only(file : string; _export_all : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     return compile_only(file, _export_all, false, project, false) <| blk
 }
@@ -281,16 +287,7 @@ def compile_only(file : string; _export_all : bool; _no_opt : bool; project : st
     var had_error = false
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            cop.ignore_shared_modules = true
-            cop.auto_inline_functions = false   // introspection describes the SOURCE - splices rewrite bodies/references
-            if (_export_all) {
-                cop.export_all = true
-            }
-            if (_no_opt) {
-                cop.no_optimizations = true
-                cop.no_infer_time_folding = true
-            }
+            setup_introspection_policies(cop, _export_all, _no_opt)
             if (_lint) {
                 cop.lint_check = true
             }

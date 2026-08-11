@@ -1238,6 +1238,19 @@ def is_class_method(value; fld : FieldDeclaration&) {
 }
     // return length(fld._type.argNames) > 0 && fld._type.argNames[0] == "self" && is_class_method(unsafe(reinterpret<StructurePtr> value), fld._type)
 
+// one documentation row per documented field, shared by the class and structure writers
+def private collect_field_rows(value : StructurePtr; hasValues : bool; var rows : array<array<string>>) : void {
+    for (fld in value.fields) {
+        if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
+            var line <- [string(fld.name), describe_type(fld._type)]
+            if (hasValues) {
+                push(line, fld.init != null ? describe(fld.init) : "")
+            }
+            emplace(rows, line)
+        }
+    }
+}
+
 def document_classes(doc_file : file; mods : array<Module?>) { // nolint:STYLE038 — one linear page-emission pass per class facet
     var any = false
     for (mod in mods) {
@@ -1288,15 +1301,7 @@ def document_classes(doc_file : file; mods : array<Module?>) { // nolint:STYLE03
                 }
             }
 
-            for (fld in value.fields) {
-                if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
-                    var line <- [string(fld.name), describe_type(fld._type)]
-                    if (hasValues) {
-                        push(line, fld.init != null ? describe(fld.init) : "")
-                    }
-                    emplace(fields, line)
-                }
-            }
+            collect_field_rows(value, hasValues, fields)
 
             document_topic("Fields", doc_file, topic("class", mod, string(value.name)), "class {value.name}", fields, is_nosearch(string(value.name)))
 
@@ -1406,15 +1411,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
             }
         }
     }
-    for (fld in value.fields) {
-        if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
-            var line <- [string(fld.name), describe_type(fld._type)]
-            if (hasValues) {
-                push(line, fld.init != null ? describe(fld.init) : "")
-            }
-            emplace(tab, line)
-        }
-    }
+    collect_field_rows(value, hasValues, tab)
     // fwrite(doc_file,"{value.name} fields are\n\n") fwrite(doc_file,make_table(tab))
     document_topic("Fields", doc_file, topic("structure", mod, string(value.name)), "struct {value.name}", tab, is_nosearch(string(value.name)))
 
@@ -1870,7 +1867,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr; dr
 }
 
 
-def document_functions(doc_file : file; mods : array<Module?>; var groups : array<DocGroup>) { // nolint:STYLE037 — grouping/uses/unused-doc bookkeeping in one pass
+def document_functions(doc_file : file; mods : array<Module?>; var groups : array<DocGroup>) { // nolint:STYLE037,STYLE038 — grouping/uses/unused-doc bookkeeping in one pass
     var tab : table<Function?>
     for (grp in groups) {
         if (!empty(grp.func)) {

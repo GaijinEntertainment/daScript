@@ -587,6 +587,14 @@ def have_formatter_token(ctx : FormatterCtx; command : string) {
 }
 
 
+// marks the type tokens after the `:` (or `=` for a typedef) that opens line `j`
+def private mark_type_after_separator(var ctx : FormatterCtx; i, j : int) : void {
+    let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
+    if (colonPos > 0) {
+        ctx |> mark_tokens_as_type(colonPos + 1)
+    }
+}
+
 def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat per-token-kind context classifier; splitting would hide the shape
     // don't format  require / expect / label
     for (i in range(0, length(ctx.tokens) - 1)) {
@@ -678,10 +686,7 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
             for (j in range(i + skip, length(ctx.tokens) - 3)) {
                 if (ctx |> new_line_before(j)) {
                     if (ctx |> eq(j, "def") || ctx.tokens[j].spaces <= ident) break
-                    let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
-                    if (colonPos > 0) {
-                        ctx |> mark_tokens_as_type(colonPos + 1)
-                    }
+                    ctx |> mark_type_after_separator(i, j)
                 }
             }
         }
@@ -692,10 +697,7 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         if (ctx |> new_line_before(i) && (ctx |> eq(i, "typedef") && !ctx |> new_line_before(i + 1))) {
             for (j in range(i + 1, length(ctx.tokens) - 3)) {
                 if (ctx |> new_line_before(j)) break
-                let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
-                if (colonPos > 0) {
-                    ctx |> mark_tokens_as_type(colonPos + 1)
-                }
+                ctx |> mark_type_after_separator(i, j)
             }
         }
     }

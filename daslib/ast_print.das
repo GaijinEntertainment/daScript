@@ -280,12 +280,17 @@ class PrintVisitor : AstVisitor {
         }
         write(*writer, "{isLet ? "let" : "var"} ");
     }
+    // `name : type` with the unused marker, shared by let-variable and global-variable printing
+    def write_variable_decl(arg : VariablePtr) : void {
+        if (arg.isAccessUnused) {
+            write(*writer, " /*unused*/ ")
+        }
+        write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}")
+    }
+
     def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) {
         //! Prints a let-variable name and its type.
-        if (arg.isAccessUnused) {
-            write(*writer, " /*unused*/ ");
-        }
-        write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}");
+        write_variable_decl(arg)
     }
     def override visitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) {
         //! Prints the separator between let-variable declarations.
@@ -308,10 +313,7 @@ class PrintVisitor : AstVisitor {
     def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
         //! Prints a global variable declaration with its type.
         write(*writer, "{arg._type.flags.constant ? "let" : "var"}{arg.flags.global_shared ? " shared" : ""}\n{ident(1)}");
-        if (arg.isAccessUnused) {
-            write(*writer, " /*unused*/ ");
-        }
-        write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}");
+        write_variable_decl(arg)
     }
     def override visitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
         //! Prints trailing newlines after a global variable.

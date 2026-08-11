@@ -916,6 +916,17 @@ def public create_entity(var blk : lambda<(eid : EntityId; var cmp : ComponentMa
     return eid
 }
 
+// copies one entity's component values into archetype storage at `index` and records its lookup
+def private store_entity_row(var arch : Archetype; var cmp : ComponentMap; index : int64;
+                             eid : EntityId; ahash : uint64) {
+    for (c, comp in arch.components, cmp) {
+        unsafe {
+            memcpy(addr(c.data[index * int64(c.stride)]), addr(comp.data), c.stride)
+        }
+    }
+    decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = index)
+}
+
 def public create_entities(count : int; blk : block<(eid : EntityId; i : int; var cmp : ComponentMap) : void>) {
     //! Creates `count` entities in bulk. All entities must have the same archetype (same set of components). This is much faster than calling `create_entity` in a loop because it does a single archetype lookup and a single resize per component array for the entire batch.
     if (count <= 0) return
@@ -939,12 +950,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
             c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
         }
         // Fill first entity
-        for (c, comp in arch.components, cmp) {
-            unsafe {
-                memcpy(addr(c.data[base * int64(c.stride)]), addr(comp.data), c.stride)
-            }
-        }
-        decsState.entityLookup[first_eid.id] = (generation = first_eid.generation, archetype = ahash, index = base)
+        store_entity_row(arch, cmp, base, first_eid, ahash)
         // Fill remaining entities (reuse cmp — set overwrites existing entries)
         for (i in range(1, count)) {
             var eid = new_entity_id()
@@ -955,12 +961,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
                 panic("decs: create_entities - all entities must have the same components (entity {i} differs from entity 0)")
             }
             let eidx = base + int64(i)
-            for (c, comp in arch.components, cmp) {
-                unsafe {
-                    memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
-                }
-            }
-            decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
+            store_entity_row(arch, cmp, eidx, eid, ahash)
         }
         arch.size += int64(count)
     }

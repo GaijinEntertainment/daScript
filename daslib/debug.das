@@ -56,6 +56,27 @@ let private {
     )
 }
 
+// one DAP Variable row, with the children reference the client uses to expand it
+def private push_dap_variable(var res : VariablesResponseBody; v : DAVariable; ctxAndFrame : uint64) : void {
+    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+    res.variables |> emplace(Variable(
+        name = v.name,
+        value = v.value,
+        _type = v._type,
+        indexedVariables = double(v.indexedVariables),
+        variablesReference = double(ref)
+    ))
+}
+
+// blocks until the client resumes, then consumes the continue request. NOTE: one call site
+// (the stepRequestedStack arm) runs afterPause() before clearing the flag and is left as-is.
+def private wait_for_resume(var ctxData : DAContext) : void {
+    while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
+        tick_debugger()
+    }
+    ctxData.continueRequested = false
+}
+
 def private ctx_at(var ctx : Context) : DAContextAt {
     unsafe {
         return intptr(addr(ctx))
@@ -229,8 +250,8 @@ class DAWalker : DapiDataWalker {
         popStack()
     }
 
-    def override afterStructure(ps : void?; si : StructInfo) : void {
-        //! Finalizes a structure after all fields are walked, building an inline preview.
+    // shared by afterStructure / afterStructureCancel: close the container and build its preview
+    def finish_structure_preview() : void {
         closeCont()
         let n = length(varsStack)
         if (n > 0) {
@@ -244,19 +265,14 @@ class DAWalker : DapiDataWalker {
         }
     }
 
+    def override afterStructure(ps : void?; si : StructInfo) : void {
+        //! Finalizes a structure after all fields are walked, building an inline preview.
+        finish_structure_preview()
+    }
+
     def override afterStructureCancel(ps : void?; si : StructInfo) : void {
         //! Handles cancelled structure walking, still building a preview from visited fields.
-        closeCont()
-        let n = length(varsStack)
-        if (n > 0) {
-            var v & = unsafe(varsStack[n - 1])
-            if (v.children != null) {
-                v.value = join_with_names(*v.children, inlinePreviewLimit)
-            }
-            if (empty(v.value)) {
-                v.value = v._type
-            }
-        }
+        finish_structure_preview()
     }
 
     def override canVisitArray(ps : void?; ti : TypeInfo) : bool {
@@ -292,20 +308,25 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
-        //! Finalizes an array element variable, printing its value if it has no children.
+    // a leaf element / value prints itself when the walker gave it no children
+    def finish_leaf_value(data : void?; ti : TypeInfo) : void {
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
             if (v.children == null) {
                 unsafe {
-                    v.value = sprint_data_fast(pe, addr(ti), print_flags_debug)
+                    v.value = sprint_data_fast(data, addr(ti), print_flags_debug)
                 }
             }
             if (empty(v.value)) {
                 v.value = v._type
             }
         }
+    }
+
+    def override afterArrayElement(ps : void?; ti : TypeInfo; pe : void?; index : uint64; last : bool) : void {
+        //! Finalizes an array element variable, printing its value if it has no children.
+        finish_leaf_value(pe, ti)
         popStack()
     }
 
@@ -365,18 +386,7 @@ class DAWalker : DapiDataWalker {
 
     def override afterTableValue(pa : DapiTable; ti : TypeInfo; pv : void?; kv : TypeInfo; index : uint64; last : bool) : void {
         //! Finalizes a table value variable, printing its value if it has no children.
-        let n = length(varsStack)
-        if (n > 0) {
-            var v & = unsafe(varsStack[n - 1])
-            if (v.children == null) {
-                unsafe {
-                    v.value = sprint_data_fast(pv, addr(kv), print_flags_debug)
-                }
-            }
-            if (empty(v.value)) {
-                v.value = v._type
-            }
-        }
+        finish_leaf_value(pv, kv)
         popStack()
     }
 
@@ -1147,16 +1157,13 @@ class private DAgent : DapiDebugAgent {
         getContextDataFor(ctx, $(var ctxData : DAContext) {
             ctx |> set_single_step(true)
             sendStopped(ctx, ctxData, path, at, reason, text, -1ul)
-            while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
-                tick_debugger()
-            }
-            ctxData.continueRequested = false
+            wait_for_resume(ctxData)
             afterPause()
             ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
         })
     }
 
-    def override onSingleStep(var ctx : Context; at : LineInfo) : void {
+    def override onSingleStep(var ctx : Context; at : LineInfo) : void {   // nolint:STYLE038 - one linear pause/step/resume sequence for a single stop event
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
         if (at.fileInfo == null || server == null) return
 
@@ -1191,10 +1198,7 @@ class private DAgent : DapiDebugAgent {
             if (ctxData.stepInRequested) {
                 ctxData.stepInRequested = false
                 sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
-                while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
-                    tick_debugger()
-                }
-                ctxData.continueRequested = false
+                wait_for_resume(ctxData)
                 afterPause()
             }
 
@@ -1234,10 +1238,7 @@ class private DAgent : DapiDebugAgent {
                         sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
 
                         ctxData.continueRequested = false
-                        while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
-                            tick_debugger()
-                        }
-                        ctxData.continueRequested = false
+                        wait_for_resume(ctxData)
                         afterPause()
                         break
                     }
@@ -1577,7 +1578,7 @@ class private DAServer : Server {
         }
     }
 
-    def override onData(message : uint8?; size : int) {
+    def override onData(message : uint8?; size : int) {   // nolint:STYLE037,STYLE038 - flat DAP request dispatch - one arm per command
         //! Parses incoming DAP protocol messages and dispatches them to request handlers.
         for (i in range(size)) {
             var uch : uint8
@@ -1731,18 +1732,20 @@ class private DAServer : Server {
         agent.walker.collectAllGlobals = collectAllGlobals
     }
 
-    def reqLaunch(seq : double; command : string; data : JsonValue?) {
-        //! Handles the DAP launch request, configuring paths and debugger settings.
+    def configureSession(seq : double; command : string; data : JsonValue?) : void {
         setPaths(data)
         setDebuggerSettings(data)
         sendSuccessResponse(seq, command, null)
     }
 
+    def reqLaunch(seq : double; command : string; data : JsonValue?) {
+        //! Handles the DAP launch request, configuring paths and debugger settings.
+        configureSession(seq, command, data)
+    }
+
     def reqAttach(seq : double; command : string; data : JsonValue?) {
         //! Handles the DAP attach request, configuring paths and debugger settings.
-        setPaths(data)
-        setDebuggerSettings(data)
-        sendSuccessResponse(seq, command, null)
+        configureSession(seq, command, data)
     }
 
     def reqDisconnect(seq : double; command : string; data : JsonValue?) {
@@ -1985,27 +1988,13 @@ class private DAServer : Server {
                         let varsNum = length(vars)
                         for (idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))) {
                             let v & = unsafe(vars[idx])
-                            let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                            res.variables |> emplace(Variable(
-                                name = v.name,
-                                value = v.value,
-                                _type = v._type,
-                                indexedVariables = double(v.indexedVariables),
-                                variablesReference = double(ref)
-                            ))
+                            push_dap_variable(res, v, ctxAndFrame)
                         }
                     } elif (kind >= STATE_VARS && kind <= BLOCKS_POOL) {
                         for (state in line.state) {
                             if (state.uid == kind) {
                                 for (v in state.vars) {
-                                    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                    res.variables |> emplace(Variable(
-                                        name = v.name,
-                                        value = v.value,
-                                        _type = v._type,
-                                        indexedVariables = double(v.indexedVariables),
-                                        variablesReference = double(ref)
-                                    ))
+                                    push_dap_variable(res, v, ctxAndFrame)
                                 }
                                 break
                             }
@@ -2016,14 +2005,7 @@ class private DAServer : Server {
                                 let varsNum = length(*child.children)
                                 for (idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))) {
                                     let v & = unsafe((*child.children)[idx])
-                                    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                    res.variables |> emplace(Variable(
-                                        name = v.name,
-                                        value = v.value,
-                                        _type = v._type,
-                                        indexedVariables = double(v.indexedVariables),
-                                        variablesReference = double(ref)
-                                    ))
+                                    push_dap_variable(res, v, ctxAndFrame)
                                 }
                             }
                         }
@@ -2085,7 +2067,7 @@ class private DAServer : Server {
         sendSuccessResponse(seq, command, null)
     }
 
-    def reqEvaluate(seq : double; command : string; data : JsonValue?) {
+    def reqEvaluate(seq : double; command : string; data : JsonValue?) {   // nolint:STYLE038 - one linear evaluate path: locate frame, bind locals, run
         //! Handles the DAP evaluate request, evaluating an expression in the context of a stack frame.
         var inscope ini <- EvaluateArguments(data)
 

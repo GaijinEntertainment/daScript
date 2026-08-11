@@ -2221,6 +2221,35 @@ def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
     }
 }
 
+// alias / fragment / type for a plain source column. Parallel arrays are always populated -
+// the emitter discriminates on emptiness, not on q.seenJoin.
+def private push_source_column(var q : SqlQuery; srcIdx : int; fieldName : string) : void {
+    q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
+    q.selectColSqlFragments |> push("")
+    let srcType = source_rootType_for_idx(q, srcIdx)
+    q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
+}
+
+// the five parallel projection arrays grow together; reserve them in one place
+def private reserve_projection(var q : SqlQuery; n : int) : void {
+    q.selectCols |> reserve(n)
+    q.selectColAliases |> reserve(n)
+    q.selectColTypes |> reserve(n)
+    q.selectColSqlFragments |> reserve(n)
+    q.projRecordNames |> reserve(n)
+}
+
+// outer-to-inner access chain as a column-out JSON path, dropping the column name itself
+def private reversed_json_path(chain : array<string>) : array<string> {
+    let nChain = length(chain)
+    var jsonPath : array<string>
+    jsonPath |> reserve(nChain - 1)
+    for (i in range(nChain - 1)) {
+        jsonPath |> push(chain[nChain - 2 - i])
+    }
+    return <- jsonPath
+}
+
 [macro_function]
 def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
                                          var outFrag : string&; var outLeafType : TypeDeclPtr&;
@@ -2264,11 +2293,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
         return -1
     }
     if (!has_field_annotation(srcType, colName, "sql_json")) return 0
-    var jsonPath : array<string>
-    jsonPath |> reserve(nChain - 1)
-    for (i in range(nChain - 1)) {
-        jsonPath |> push(chain[nChain - 2 - i])
-    }
+    let jsonPath <- reversed_json_path(chain)
     var leaf = resolve_nested_field_type(srcType, colName, jsonPath)
     if (leaf == null) {
         macro_error(prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
@@ -2386,11 +2411,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
         q.selectColTypes |> clear
         q.selectColSqlFragments |> clear
         q.projRecordNames |> clear
-        q.selectCols |> reserve(n)
-        q.selectColAliases |> reserve(n)
-        q.selectColTypes |> reserve(n)
-        q.selectColSqlFragments |> reserve(n)
-        q.projRecordNames |> reserve(n)
+        reserve_projection(q, n)
         let sourceAlias = source_alias_for_idx(q, srcIdx)
         for (field in srcType.structType.fields) {
             let fieldName = string(field.name)
@@ -2451,10 +2472,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
             q.selectColSqlFragments |> clear
             q.selectCols |> push(fieldName)
             // Parallel arrays always populated — emitter discriminates on emptiness, not q.seenJoin.
-            q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
-            q.selectColSqlFragments |> push("")
-            let srcType = source_rootType_for_idx(q, srcIdx)
-            q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
+            push_source_column(q, srcIdx, fieldName)
             q.proj = ProjectionShape.SingleColumn
             return true
         }
@@ -2507,10 +2525,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
                     if (srcIdx < 0) return false
                     q.selectCols |> push(fieldName)
                     q.projRecordNames |> push(string(tupT.argNames[i]))
-                    q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
-                    q.selectColSqlFragments |> push("")
-                    let srcType = source_rootType_for_idx(q, srcIdx)
-                    q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
+                    push_source_column(q, srcIdx, fieldName)
                     continue
                 }
                 // is_some / is_none on a LEFT JOIN's Option<TB> arg → bool computed projection.
@@ -2820,11 +2835,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
     q.projRecordNames |> clear
     q.projBindExprs |> clear
     let n = length(mkTup.values)
-    q.selectCols |> reserve(n)
-    q.selectColAliases |> reserve(n)
-    q.selectColTypes |> reserve(n)
-    q.selectColSqlFragments |> reserve(n)
-    q.projRecordNames |> reserve(n)
+    reserve_projection(q, n)
     for (i in range(n)) {
         var sqlFrag : string
         var resultType : TypeDeclPtr
@@ -3504,11 +3515,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     if (has_field_annotation(srcType, colName, "sql_blob")) return pred_fail(q, prog, at, "_sql: cannot descend into @sql_blob column '{colName}'; filter in daslang after round-trip, or use raw SQL")
                     if (has_field_annotation(srcType, colName, "sql_json")) {
                         // Reverse outer-to-inner chain into column-out path (drop the column name).
-                        var jsonPath : array<string>
-                        jsonPath |> reserve(nChain - 1)
-                        for (i in range(nChain - 1)) {
-                            jsonPath |> push(chain[nChain - 2 - i])
-                        }
+                        let jsonPath <- reversed_json_path(chain)
                         // Validate every path segment — the typer never sees `_where`'s lambda body so silent NULL-on-typo is the failure mode.
                         let leaf = resolve_nested_field_type(srcType, colName, jsonPath)
                         if (leaf == null) return pred_fail(q, prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")

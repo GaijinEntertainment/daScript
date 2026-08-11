@@ -486,14 +486,19 @@ def rename_line(var ren : Renamer; line : string) : string {
     return rename_line_ex(ren, line, true)
 }
 
+// a line declares either a type name or a list of variable names
+def private declare_line_names(var ren : Renamer; line : string) {
+    let tname = type_decl_name(line)
+    if (!empty(tname)) {
+        declare(ren, [tname])
+    } else {
+        declare(ren, var_decl_names(line))
+    }
+}
+
 def rename_line_ex(var ren : Renamer; line : string; declare_ok : bool) : string {
     if (declare_ok) {
-        let tname = type_decl_name(line)
-        if (!empty(tname)) {
-            declare(ren, [tname])
-        } else {
-            declare(ren, var_decl_names(line))
-        }
+        declare_line_names(ren, line)
     }
     return apply_renames(ren, line)
 }
@@ -768,12 +773,7 @@ def is_global_decl(line : string) : bool {
 
 def seed_renamer(var ren : Renamer; givens : array<string>) {
     for (g in givens) {
-        let tname = type_decl_name(g)
-        if (!empty(tname)) {
-            declare(ren, [tname])
-        } else {
-            declare(ren, var_decl_names(g))
-        }
+        declare_line_names(ren, g)
     }
 }
 
