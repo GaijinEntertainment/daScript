@@ -298,6 +298,46 @@ def render_assistant_calls(model : Model; var chat : ChatSession; text : string;
     render_assistant_calls_(model, chat, text, calls, out)
 }
 
+def effective_stop_ids(chat : ChatSession) : array<int64> {
+    //! The stop ids in force for the NEXT generation: the template's stops plus its thinking-off
+    //! extras while thinking is off. Schedulers that stop streams themselves read this, not
+    //! ``chat.stop_ids``, so an instruct-mode gemma-4 cuts at a stray channel marker.
+    return <- effective_stop_ids_(chat)
+}
+
+def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
+    //! Split a complete reply at its reasoning boundary per the model family's reply format
+    //! (``<think>`` pair, Harmony channels, gemma-4's thought channel). Both halves come back
+    //! stripped when a reasoning span is found; a reply with no reasoning passes through untouched.
+    return split_reasoning_(chat.tmpl, reply)
+}
+
+def make_think_stream(chat : ChatSession) : ThinkStream {
+    //! The incremental reasoning/content splitter for ``chat``'s next turn — feed streamed pieces
+    //! through ``think_feed``, flush with ``think_finish``. Armed only when the turn actually
+    //! thinks (toggle on, markers in the vocab, gate rendered) — else a pass-through stream.
+    return make_think_stream_(chat)
+}
+
+def think_drain(var ts : ThinkStream; full : string) : ThinkSplit {
+    //! Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule
+    //! (both halves strip when a reasoning span was consumed). The buffered-response twin of the
+    //! ``think_feed``/``think_finish`` streaming pair.
+    return think_drain_(ts, full)
+}
+
+def think_feed(var ts : ThinkStream; piece : string; var reasoning, content : string&) {
+    //! Feed one streamed piece through the splitter; the out-strings are OVERWRITTEN with this
+    //! piece's reasoning/content deltas (either may be empty while a partial marker is held).
+    think_feed_(ts, piece, reasoning, content)
+}
+
+def think_finish(var ts : ThinkStream; var reasoning, content : string&) {
+    //! Flush the splitter at end-of-generation (OVERWRITES the out-strings with the final deltas):
+    //! an unclosed reasoning span classifies as reasoning — the truncated-tail rule.
+    think_finish_(ts, reasoning, content)
+}
+
 def respond(model : Model; var chat : ChatSession; params : SamplingParams;
             blk : block<(piece : string) : bool>) : string {
     //! Generate the assistant's reply to the queued user message, streaming pieces through the

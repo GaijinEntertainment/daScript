@@ -32,6 +32,9 @@ def register_arch_glm4moe() {
     // the official Jinja also appends /nothink to the last user turn; the empty-block prefill
     // alone closes the think channel, so das renders just that half (same as the qwen3 family)
     d.chat.think_suppress.parts <- [chat_text("\n"), chat_special("<think>"), chat_special("</think>")]
+    d.chat.think_mode = ThinkMode.symmetric   // reply-side: shares Qwen's <think> literal pair
+    d.chat.think_open = "<think>"
+    d.chat.think_close = "</think>"
     d.chat.stop <- ["<|user|>", "<|observation|>", "<|endoftext|>"]
     register_arch("glm4moe", d)
 }

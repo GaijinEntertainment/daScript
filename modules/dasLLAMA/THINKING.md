@@ -1,85 +1,101 @@
 # Thinking-model support across architectures
 
-Working brief for the per-model thinking/parameters session. Today thinking works properly
-only on the `<think>` family (Qwen, GLM); everything else either leaks chain-of-thought as
-content or never gets its markers recognized. Live evidence: gemma-4-E4B on the control-page
-chat emitted bare chain-of-thought and leaked a `<channel|>` closer as text (its opener never
-recognized).
+How reasoning ("thinking") models work through the chat layer and the OpenAI server: the
+per-family mechanisms, the reply-side matcher, and the test map. Tool calling shares the reply
+pipeline (reasoning splits first, calls parse from the content half), so it is covered here too.
 
-## The two mechanisms today
+## The mechanisms
 
-1. **Prompt side — `think_suppress`** (`dasllama_chat.das::render_think_suppress`). Turns a
-   hybrid thinking model into an instruct model by prefilling an *empty, closed* thought block
-   on the generation prompt (Qwen3's `enable_thinking=false`). Declared per-arch as
-   `d.chat.think_suppress.parts`; renders only when `!enable_thinking` AND the vocab has the
-   specials (else silently skips). Replayed history carries no think blocks. This part is
-   already per-arch data and extensible.
-   - Server wiring: request `enable_thinking` (and `chat_template_kwargs.enable_thinking`) →
-     `set_thinking(chat, false)` → the suppress block. Default is thinking-ON.
+All per-family knowledge is ChatTemplate data declared in `dasllama_arch_*.das` /
+`dasllama_common.das` (`chatml_chat`, `hermes_tools`); the engine in `dasllama_chat.das` is
+family-blind.
 
-2. **Reply side — `strip_think`** (`dasllama_chat.das::strip_think`). Removes the thought
-   section from the *stored* assistant turn so history holds only the final answer. **This is
-   the piece that only handles Qwen**: hardcoded to `<think>` / `</think>`. Every other thinking
-   family uses different delimiters (below), so their thoughts leak into history or never strip.
+**Prompt side:**
 
-**The gap in one line:** `think_suppress` is per-arch data (extensible) but `strip_think` is a
-single hardcoded literal pair. The core of the arc is making the reply-side delimiters per-arch
-too, and exposing the reasoning span to the server as `reasoning_content` (OpenAI-compatible)
-instead of dropping it.
+1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss think unless told
+   otherwise; gemma-4 E-series is instruct unless asked. `create_chat_renderer_` seeds the
+   session's `enable_thinking` from it; the server's `enable_thinking` request field (either
+   spelling: top-level or `chat_template_kwargs`) is tri-state — ABSENT leaves the family
+   default in force, a present bool overrides.
+2. **`think_suppress`** (thinking → off, Qwen-shaped): prefills an empty, closed thought block
+   on the generation prompt (Qwen3's `enable_thinking=false`). Renders only when thinking is
+   off AND the vocab has the specials.
+3. **`think_gate` + `assistant_open_think`** (off → thinking, gemma-4-shaped): the gate
+   (`<|think|>`) opens the system turn — rendered even when no system prompt is set — and the
+   generation prompt switches to the bare `assistant_open_think` header so the model emits its
+   own thought channel. gemma-4's default `assistant_open` keeps the closed empty
+   `<|channel>thought\n<channel|>` prefill, so thinking-off renders the exact pre-arc tokens.
+4. **`stop_nothink`** — extra stop tokens in force whenever the next turn is NOT a thinking
+   turn, merged by `effective_stop_ids`. gemma-4 lists its channel markers: an instruct-mode
+   E-series model rambles past its answer through a stray `<channel|>` (observed live:
+   `…4.<channel|>4`), and in a non-thinking turn a channel marker is always framing noise — the
+   turn is over. Anything that generates from a ChatSession reads `effective_stop_ids(chat)`,
+   never `chat.stop_ids`.
+5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the reply matcher, the
+   alternate opener, and the stop merge all key on one predicate — toggle on, the reply markers
+   resolve in the vocab (an inert declaration like Qwen2.5's shared ChatML template never arms),
+   and a gate family's gate rendered on a consumed turn or renders this turn. A mid-conversation
+   `set_thinking(true)` on gemma-4 therefore stays instruct-shaped (the gate cannot enter an
+   already-rendered context) with the framing stops still armed.
 
-## Per-family wire formats
+**Reply side — the per-family matcher** (`think_mode` + `think_open`/`think_close`):
 
-| family | thinking default | opener | closer | delimiters | status |
-|---|---|---|---|---|---|
-| **Qwen 2/2.5/3/3.5, qwen*moe** | on (hybrid) | `<think>` | `</think>` | symmetric | **fully correct today** — both mechanisms match |
-| **GLM-4 MoE** | on | `<think>` | `</think>` | symmetric | `think_suppress` declared; shares Qwen's literal — should strip, VERIFY |
-| **gpt-oss (Harmony-lite)** | on | `<\|channel\|>analysis` | `<\|channel\|>final` (switch) | channel-switch | `strip_think` does NOT handle it |
-| **gemma-4 E-series** | **off** (gate `<\|think\|>` in system turn) | `<\|channel>thought` | `<channel\|>` | ASYMMETRIC (`<\|X>` / `<X\|>`) | arch prefills empty thought = its instruct default; reply-strip missing |
-| llama, phi3, gemma2/3, mistral3 | none | — | — | — | non-thinking; no work |
+- **symmetric** (Qwen, GLM): `<think>` … `</think>`.
+- **channel_switch** (gpt-oss Harmony): `<|channel|>analysis<|message|>` … reasoning … `<|end|>`
+  (repeatable; `commentary` counts as reasoning) → `<|channel|>final<|message|>` … content. The
+  Harmony markers are the mode's own grammar, not per-arch data.
+- **asymmetric** (gemma-4): `<|channel>thought` (trailing `\n` optional) … `<channel|>` …
+  content. Asymmetric brackets are the family design.
+- **truncated tail**: reasoning that never closed (budget cut) classifies as reasoning.
 
-### gemma-4 E-series specifics (2026-07-19 research pass)
+The engine is `split_reasoning_` (whole reply) and the incremental
+`make_think_stream_`/`think_feed_`/`think_finish_` (streaming; holds partial markers back across
+SSE chunk boundaries). `respond_` stores history reasoning-stripped through it; `strip_think`
+remains as the legacy symmetric-only helper.
 
-- Thinking is **off by default**, enabled by injecting `<|think|>` at the start of the SYSTEM
-  turn. Our arch's `assistant_open` already prefills `<|channel>thought\n<channel|>` (empty
-  closed block) — that IS the non-thinking default (instruct mode). Thinking-ON means NOT
-  prefilling the closer and letting the model emit thought text.
-- Generated (thinking on): after `<|turn>model\n` the MODEL emits
-  `<|channel>thought\n … reasoning … <channel|>` then the answer then `<turn|>`. Opener is
-  model-emitted in the normal case; three exceptions prefill it (tool-response continuation,
-  non-E sizes with thinking off, llama.cpp's bundled template) — so the reply parser must accept
-  the opener from either side.
-- Asymmetric brackets are the DESIGN, uniform across the family: `<|turn>`/`<turn|>`,
-  `<|channel>`/`<channel|>`, `<|tool_call>`/`<tool_call|>`. `thought` is the only reasoning
-  channel; tool calls have their own tags.
+**Server surface** (`utils/dasllama-server/openai_server.das`): the reasoning span rides
+`reasoning_content` — on the chat-completion message, and as streaming deltas (the
+DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
+`parse_tool_calls_auto` runs on the content half, so a thinking model that calls tools yields
+`reasoning_content` AND `tool_calls` in one response.
 
-## Target reply-side rules
+## Per-family status
 
-Generalize `strip_think` into a per-arch matcher carrying `(opener, closer, mode)`:
-- **symmetric** (`<think>`/`</think>`): current logic.
-- **channel-switch** (gpt-oss): reasoning = `analysis` open → `final` switch; content = after.
-- **asymmetric** (gemma-4): reasoning = `<|channel>thought` (trailing `\n` optional) →
-  `<channel|>`; content = after `<channel|>` (trim leading `\n`) until stop.
-- **truncated** (no closer before EOG / limit): classify the whole tail as reasoning.
-- **history**: strip prior-turn thoughts EXCEPT inside an in-flight tool-call chain (thoughts
-  between calls survive). gemma-4's canonical template does exactly this (`strip_thinking`
-  macro + a per-turn gate keyed on the last-user index).
-- **server**: expose the reasoning span as `reasoning_content` (streaming: buffer partial tags
-  across SSE chunks), not just drop it. llama.cpp's merged gemma-4 PEG parser
-  (`common_peg_gemma4_builder`, PR #21326) is the reference implementation.
+| family | thinking default | reply mode | tools | smallest local model |
+|---|---|---|---|---|
+| Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | Hermes | Qwen2.5-0.5B |
+| Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | Hermes | Qwen3-0.6B / Qwen3.5-0.8B |
+| GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local — zen2 leg pending, below** |
+| gpt-oss | on | channel_switch | none declared | gpt-oss-20b (11 GB, large-tier) |
+| gemma-4 E-series | **off** (`<|think|>` gate) | asymmetric | none declared | gemma-4-E2B |
+| llama, phi3, gemma2/3, mistral3 | none | none | none declared | — |
 
-## Where the work lands
+Tool formats for gpt-oss (`<|call|>` envelopes), gemma-4 (`<|tool_call>`), GLM, llama-3, and
+mistral-3 are NOT declared — the server answers `tools` on those families with an honest 400.
+Declaring one is follow-up work and takes the test obligations below with it.
 
-- `dasllama_chat.das` — generalize `strip_think` (per-arch delimiters + mode); keep `<think>`
-  as the symmetric case; the reasoning span becomes a return value, not a drop.
-- `dasllama_arch_*.das` — each thinking arch declares its reply delimiters beside its existing
-  `think_suppress` (gpt-oss channel-switch, gemma-4 asymmetric; Qwen/GLM already symmetric).
-- `utils/dasllama-server/openai_server.das` — carry `reasoning_content` through the
-  chat-completion + streaming surface; `enable_thinking` plumbing already exists.
-- Tests — a render + strip round-trip per family (`render_turn_` already covers the prompt side).
+## Test map
 
-## Sources (gemma-4 pass, 2026-07-19)
+- `modules/dasLLAMA/tests/test_think_split.das` — model-free: every family's exact wire shape
+  through the matcher, whole-string and per-chunk down to 1 byte.
+- `modules/dasLLAMA/tests/test_chat.das` — render side: gemma-4 default/thinking-ON prefills
+  token-for-token (`test_chat_gemma4_thinking`), Qwen think-suppress, Hermes tool blocks
+  (Qwen2.5 token-for-token, Qwen3.5 marker ids).
+- `utils/dasllama-server/test_openai_server_think.das` — live legs, model-gated: Qwen3-0.6B
+  (reasoning_content non-streaming + streaming order + tools-with-thinking compose),
+  gemma-4-E2B (off-default / thinking-ON pair), gpt-oss-20b (Harmony split;
+  `DASLLAMA_PARITY_FULL=1`).
 
-- Canonical template: https://huggingface.co/google/gemma-4-E4B-it/raw/main/chat_template.jinja
-- Google thinking docs: https://ai.google.dev/gemma/docs/capabilities/thinking
-- llama.cpp gemma-4 parser (merged): https://github.com/ggml-org/llama.cpp/pull/21326
-- disable-thinking discussion: https://github.com/ggml-org/llama.cpp/discussions/21338
+CODEREVIEW.md binds new families to this map: declaring `think_mode` or `tool_call_open` ships
+the wire-shape case and the live leg in the same change.
+
+## GLM-4 — the pending zen2 leg
+
+No small glm4moe model exists (the family starts at GLM-4.5-Air, ~106 B), so GLM has no local
+live leg here. The symmetric matcher it shares with Qwen is fully covered model-free. What
+remains is the live proof on the zen2 box (which stocks a GLM-4.5 gguf): run
+`test_openai_server_think.das`'s qwen3 arm pattern against the GLM model — default thinking
+produces `reasoning_content`, `enable_thinking=false` suppresses via its declared
+`think_suppress`, content clean of `<think>`. When that runs, record the result here; if GLM
+tool calling is wanted, its format declaration comes first and brings the test obligations
+with it.

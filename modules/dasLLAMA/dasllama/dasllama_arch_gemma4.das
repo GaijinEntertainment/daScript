@@ -40,7 +40,19 @@ def register_arch_gemma4() {
     d.chat.system.parts <- [chat_special("<|turn>"), chat_text("system\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.user.parts <- [chat_special("<|turn>"), chat_text("user\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.assistant_open.parts <- [chat_special("<|turn>"), chat_text("model\n"), chat_special("<|channel>"), chat_text("thought\n"), chat_special("<channel|>")]
+    // thinking is opt-in for the E-series: the <|think|> gate opens the system turn and the bare
+    // assistant header lets the model emit its own `thought` channel; the reply matcher accepts the
+    // asymmetric bracket pair (opener's trailing \n optional)
+    d.chat.think_default = false
+    d.chat.think_gate.parts <- [chat_special("<|think|>")]
+    d.chat.assistant_open_think.parts <- [chat_special("<|turn>"), chat_text("model\n")]
+    d.chat.think_mode = ThinkMode.asymmetric
+    d.chat.think_open = "<|channel>thought"
+    d.chat.think_close = "<channel|>"
     d.chat.stop <- ["<turn|>", "<eos>"]
+    // instruct mode closed the thought channel already — a channel marker after the answer is the
+    // model rambling past its turn (observed: "…4.<channel|>4"); cut generation there
+    d.chat.stop_nothink <- ["<|channel>", "<channel|>"]
     d.lcaps.system_prompt = false   // no system role — the chat layer folds it into the first user turn
     register_arch("gemma4", d)
 }

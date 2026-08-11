@@ -214,14 +214,22 @@ effect with `temperature > 0` — greedy short-circuits to argmax; the penalties
 mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_p": 0.8,
 "presence_penalty": 1.5`.
 
-### Thinking control
+### Thinking control and `reasoning_content`
 
-Hybrid thinking models (the Qwen3/Qwen3.6 family) reason in a `<think>` block by default. Set
-`"enable_thinking": false` (top-level, or the llama.cpp spelling
-`"chat_template_kwargs": {"enable_thinking": false}`) and the server appends the template's
-empty think block (`<think>\n\n</think>\n\n`) to the generation prompt — the model answers
-directly, matching the family Jinja's `enable_thinking=false` form. A no-op for models whose
-vocab has no think tokens.
+`enable_thinking` is tri-state: ABSENT leaves the family's own default in force (the
+Qwen3/3.5/3.6 and GLM families think by default; gemma-4 E-series is instruct unless asked;
+gpt-oss always thinks), and a present bool — top-level or the llama.cpp spelling
+`"chat_template_kwargs": {"enable_thinking": ...}` — overrides it. `false` on a
+`<think>`-family appends the template's empty think block so the model answers directly;
+`true` on gemma-4 opens the system turn with the `<|think|>` gate and lets the model emit its
+thought channel. A no-op for models whose vocab has no think tokens.
+
+A thinking reply's reasoning span comes back as **`reasoning_content`** (the
+DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the
+`chat.completion` message for buffered requests, and as `delta.reasoning_content` chunks —
+streamed before the `delta.content` chunks — for `stream: true`. Tool-calling replies split
+reasoning first, so a thinking model that calls tools returns `reasoning_content` AND
+`tool_calls` in one response. The field is absent (never empty) when the model did not think.
 
 ### Context truncation
 

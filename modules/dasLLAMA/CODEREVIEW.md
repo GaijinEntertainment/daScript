@@ -40,8 +40,11 @@ other suite — the vulkan ones included — runs under dastest directly.
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
 `-jit` is a defect even if it passes.
 
-**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, with one carve-out: a
-benchmark self-check may sit beside the bench it verifies (`benchmarks/matmul/test_matmul_par.das`).
+**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, with two carve-outs: a
+benchmark self-check may sit beside the bench it verifies (`benchmarks/matmul/test_matmul_par.das`),
+and the family live legs live with the server they exercise
+(`utils/dasllama-server/test_openai_server_think.das` — a server test that binds dasLLAMA
+families per the recognition-test rule below, following the server tests' own conventions).
 No dasLLAMA test is registered in any `CMakeLists.txt` — no AOT registration, no ctest wiring.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
@@ -81,6 +84,18 @@ and the arm then skips forever while the suite stays green.
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
+**A family that gains a live thinking or tool format ships recognition tests in the same
+change.** A chat template gaining `think_mode` or `tool_call_open` — declared in a
+`dasllama_arch_*.das` registration or armed through a shared helper (`chatml_chat`,
+`hermes_tools`) — adds, for a thinking format, the family's reply wire shape to
+`tests/test_think_split.das`; for a tool format, the marker/render pins to `tests/test_chat.das`;
+and for either, a live leg to `utils/dasllama-server/test_openai_server_think.das` gated on the
+family's smallest local GGUF. A family whose vocab lacks the markers is exempt (the declaration
+is inert — the matcher is vocab-gated); a family with no small-enough local model records its
+remote leg in `THINKING.md` instead. The live-leg file follows the server tests' conventions,
+not this file's suite rules: it loads through the serving rail, mirrors the large-model tier
+gate on `DASLLAMA_PARITY_FULL`, and reports model-gated skips explicitly.
+
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
@@ -118,7 +133,8 @@ carve-outs.
 
 **A new file under `dasllama/` ships with its rule here, its charter in `ARCHITECTURE.md` §1,
 and its tests, in the same change.** A file without its records is a defect. A new file under
-`tests/` registers in `tests/CLAUDE.md` (and in `tests/run.das` when it joins a suite) instead.
+`tests/` registers in `tests/CLAUDE.md` instead — in its suite's arm documentation (and
+`tests/run.das`) when it joins a suite, on the model-free/no-arm note otherwise.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
 `dasllama/dasllama_transformer`), never from the engine file that defines it.** An engine-level

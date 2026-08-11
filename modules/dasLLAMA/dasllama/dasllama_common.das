@@ -1012,6 +1012,15 @@ struct ChatTurn {
     parts : array<ChatPart>
 }
 
+//! How a thinking family marks its reasoning span in the DECODED reply (the reply-side matcher's
+//! mode; the prompt-side forms are `think_suppress` / `think_gate` / `assistant_open_think`).
+enum ThinkMode {
+    none            // non-thinking family, or no reply-side format declared
+    symmetric       // <think> ... </think> (Qwen, GLM)
+    channel_switch  // Harmony channels (gpt-oss): <|channel|>analysis ... <|channel|>final
+    asymmetric      // gemma-4: <|channel>thought ... <channel|> (asymmetric brackets by design)
+}
+
 //! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
 //! `stop` lists the special-token spellings that end a turn. `system` is empty for arches with no
 //! system role (folded into the first user turn, e.g. Gemma).
@@ -1024,9 +1033,17 @@ struct ChatTemplate {
     assistant_close : ChatTurn = ChatTurn()   // empty = derive from the user turn's tail parts
     think_suppress : ChatTurn = ChatTurn()    // appended to the generation prompt when thinking is off
                                               // (Qwen3-style empty think block; empty = no suppress form)
+    // reply-side reasoning format (split_reasoning_/think_feed_ in the chat layer)
+    think_mode : ThinkMode = ThinkMode.none
+    think_open : string = ""                  // reasoning opener as decoded in the reply (symmetric/asymmetric)
+    think_close : string = ""                 // closer; channel_switch carries Harmony's markers in the mode itself
+    think_default : bool = true               // the family's thinking default (gemma-4 E-series: off)
+    think_gate : ChatTurn = ChatTurn()        // spliced before the system content when thinking is ON (gemma-4 <|think|>)
+    assistant_open_think : ChatTurn = ChatTurn()   // replaces assistant_open when thinking is ON (gemma-4 bare header)
     audio_pre : ChatTurn = ChatTurn()
     audio_post : ChatTurn = ChatTurn()
     stop : array<string>
+    stop_nothink : array<string>   // extra stops when thinking is OFF (gemma-4: a channel marker in an instruct turn is framing noise — the turn is over)
     // tool-calling format (empty tool_call_open = the family declares none; see hermes_tools)
     tool_sys_prelude : string = ""    // opens the tool-definitions block in the system turn
     tool_sys_epilogue : string = ""   // closes the block + the call-format instructions
@@ -4370,6 +4387,9 @@ def chatml_chat(var ct : ChatTemplate) {
     ct.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
     ct.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
     ct.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
+    ct.think_mode = ThinkMode.symmetric   // reply-side: <think> ... </think>, thinking fine-tunes only
+    ct.think_open = "<think>"
+    ct.think_close = "</think>"
     ct.stop <- ["<|im_end|>", "<|endoftext|>"]
 }
 
