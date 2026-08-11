@@ -500,7 +500,8 @@ def tune_summary() : string {
 //! * **``DAS_TUNE_MANIFEST`` pinned**: stamps apply, status stays empty (framework gap,
 //!   ledgered) — gate on the FILE: present, newer than the binary, carrying kernels.
 //! * **plain script**: the policy rail ran, so every row must stamp a manifest winner.
-//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three.
+//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three (it also suppresses the
+//! auto-mint at ``[init]`` — see ``dasllama_math_gen_register`` — so the gate is reached at all).
 def tune_gate() : bool {
     var why = ""
     let mpath = g_env_core.tune_manifest

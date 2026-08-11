@@ -552,6 +552,13 @@ def tune_noise_threshold_pct(paranoid : bool) : double {
     return g_noise_thr > 0.0lf ? g_noise_thr : (paranoid ? 1.0lf : 2.0lf)
 }
 
+    //! True when `DAS_TUNE_NOISE_CV` recalibrated the gate — the announce hook for the
+    //! overrides-are-visible rule (a threshold line a recalibration shaped must say so).
+def tune_noise_threshold_overridden() : bool {
+    tune_noise_threshold_pct(false)   // force the lazy env read; the paranoid arg does not affect the override bit
+    return g_noise_thr > 0.0lf
+}
+
     //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to tune through a failing noise gate anyway.
     //! The tuner that honors it must stamp the sidecar `noise: overridden` — the escape leaves
     //! a mark, so a later regression hunt can see the mint was taken on a loud box.
@@ -1585,11 +1592,24 @@ def private run_scope_tuner(scope : TuneScope) : bool {
 var private g_tuned_scopes = 0
 var private g_reexec_code = 0
 
+var private g_mint_suppressed = ""
+
+//! Suppress the auto/restart mint for this process (a library's dev-run escape, e.g. dasLLAMA's
+//! ``DASLLAMA_ALLOW_UNTUNED=1``, called from an ``[init]``): an untuned scope keeps its fallback
+//! stamps instead of paying the minutes-long tune. An explicit ``--tune`` still wins.
+def public tune_suppress_mint(reason : string) {
+    g_mint_suppressed = reason
+}
+
     //! Runtime half of `[tune_policy(missing = "auto")]` / `--tune`, injected at the top of the
     //! app's `main` and followed by `tune_auto_reexec()`. Tuning happens at RUNTIME because the
     //! winners are compile-time stamps. An empty or corrupt sidecar reads as untuned, so it self-heals.
 def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string) {
     if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
+        return
+    }
+    if (!force && !empty(g_mint_suppressed)) {
+        print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
         return
     }
     announce_tuning(scopeName, force, true)
@@ -1643,6 +1663,11 @@ def tune_reexec_code() : int {
     //! immediately (the winners are compile-time stamps). False = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
+        return false
+    }
+    if (!empty(g_mint_suppressed)) {
+        // false = carry on with fallback stamps, do not tune and do not stop main
+        print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
         return false
     }
     if (empty(tunerPath)) {
@@ -1746,6 +1771,8 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
         let penv = get_env_variable("DAS_TUNE_POLICY")
         if (!empty(penv)) {
             policy = penv
+            // active overrides announce themselves: output shaped by an escape must say so
+            print("llvm_tune: policy '{policy}' set by DAS_TUNE_POLICY (declared/default '{declared}')\n")
         }
         if (policy != "fallback" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
             errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | warn | error | auto | restart"

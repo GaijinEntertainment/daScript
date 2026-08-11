@@ -1,0 +1,1 @@
+One line per dynamic module whose shared library failed to load during the module scan, with the loader error; empty when nothing is pending. Lets a library report why an optional native module is absent instead of silently dropping the capability.

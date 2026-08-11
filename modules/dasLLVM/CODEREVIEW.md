@@ -47,3 +47,11 @@ Leaving an aggregate label silently absorbing new sub-steps is a defect.
 or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`) — the DLL cache
 key folds AST hashes but cannot see emitter behavior, so changed emission without a bump
 silently serves stale code from cache (`ARCHITECTURE.md` §2).
+
+## Overrides
+
+**An active override announces itself in the run's output.** A knob that changes what the
+backend compiles, tunes, or emits beyond its defaults — a policy override, a gate escape, a
+threshold recalibration — prints one line naming the knob when it is set, and stays silent
+when it is not. Output that an unannounced override shaped is a defect of the change that
+added the knob or the read.

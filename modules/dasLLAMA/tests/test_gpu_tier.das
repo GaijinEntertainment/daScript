@@ -80,6 +80,7 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 256l, 1l, 4), -1l)
         t |> success(!moe_gpu_tier_arm(), "tier must start unarmed")
+        t |> success(!moe_gpu_backend_registered(), "no backend registered at start")
         delete wq
         delete ws
     }
@@ -122,11 +123,16 @@ def test_gpu_tier_contract(t : T?) {
         t |> equal(gpu_want_heat(), 5l)
         t |> success(gpu_want_qkv(), "qkv wanted")
         t |> success(!gpu_want_auto(), "auto not requested")
+        t |> success(gpu_want_any(), "any-want reflects the set state")
+        set_gpu_tier_want(GpuTierWant())
+        t |> success(!gpu_want_any(), "any-want resets with the want")
     }
     t |> run("arm gate reflects the registered hook; reset to unarmed") @(t : T?) {
         set_moe_gpu_arm("testtier", @@arm_on)
         t |> success(moe_gpu_tier_arm(), "armed through the double")
+        t |> success(moe_gpu_backend_registered(), "registration witness follows the arm hook")
         set_moe_gpu_arm("", @@arm_off)
         t |> success(!moe_gpu_tier_arm(), "reset to unarmed for the rest of the process")
+        t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
     }
 }

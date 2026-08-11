@@ -1456,11 +1456,24 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     return true
 }
 
+// GPU rails requested but no backend module ever registered: the `require ?vulkan` guard makes a
+// failed shared_module load VANISH — one loud line here instead of silent CPU resolution
+def private warn_gpu_backend_absent() {
+    if (!gpu_want_any() || moe_gpu_backend_registered()) {
+        return
+    }
+    let pending = describe_pending_dynamic_modules()
+    let detail = (empty(pending) ? "  no GPU backend module is installed (dasVulkan under modules/?)"
+        : "  shared modules that FAILED to load:\n{pending}")
+    to_log(LOG_ERROR, "dasLLAMA: GPU rails requested (DASLLAMA_GPU*) but NO GPU backend module is registered - the run stays on the CPU\n{detail}\n")
+}
+
 //! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
 //! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
 //! Call inside ``with_job_que()``.
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                       planar_only : bool = false; image_fp32 : bool = false) : Model {
+    warn_gpu_backend_absent()
     let qs = "{mode}"
     if (path |> ends_with(".dlim")) {
         // a prepared image named directly — first-class once the source gguf is gone. EXPECTED

@@ -97,7 +97,8 @@ env itself when unset, but the converter runs in step 4 need it exported in the 
 mtime-gated against the binary: a rebuild silently turns it stale and every kernel drops to
 its fallback winner — the m4 pilot pre-baked one identity, then swept a whole board on
 fallback kernels under a manifest one rebuild older. The bench cells REFUSE to measure on
-non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape).
+non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape — it also
+suppresses the auto-mint, so an untuned box runs fallback stamps instead of tuning first).
 
 Minting goes through the hardened wrapper — noise gates at start/mid/end (a refusal exits
 nonzero and writes NOTHING), median ranking with deterministic tie-breaks inside the noise

@@ -558,7 +558,7 @@ def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
 // save/restore pairing, so an unpaired restore would otherwise drop the old set unreleased.
 def private install_mark_table(var dst : table<auto(KT); auto(VT)>; var src : table<KT; VT>) {
     delete dst
-    dst <- src   // nolint:PERF030 — released on the line above; the rule has no delete tracking
+    dst <- src
 }
 
 //! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after).
@@ -772,12 +772,23 @@ def public gpu_want_cls : bool
 def public gpu_want_cls_upload : bool
     => g_env_gpu.gpu_cls ?? true
 
+//! Any explicit GPU-rail request (env or ``set_gpu_tier_want``) — the loud-failure checks key on
+//! this. Deliberately excludes the opt-OUT gates (dense_attn, cls upload) whose default is on.
+def public gpu_want_any : bool
+    => (gpu_want_auto() || gpu_want_moe_layers() != 0l || gpu_want_moe_stream() != 0l
+        || gpu_want_dn() || gpu_want_attn() || gpu_want_dense() || gpu_want_dnd()
+        || gpu_want_shexp() || gpu_want_qkv() || gpu_want_cls() || gpu_want_heat() != 0l)
+
 //! A GPU backend registers its arm probe here at ``[init]`` so config-driven arming works
 //! after module init (the env path arms at ``[init]`` directly).
 def public set_moe_gpu_arm(name : string; f : function<() : bool>) {
     g_moe_gpu_backend = name
     g_moe_gpu_arm = f
 }
+
+//! False = no GPU backend module ever registered an arm probe — distinct from registered-but-
+//! declined (device probe/VRAM); the loud-failure checks use it to say WHICH failure happened.
+def public moe_gpu_backend_registered : bool => !empty(g_moe_gpu_backend)
 
 //! (Re-)arm the GPU tier from the current want. False = no GPU backend in this build,
 //! nothing requested, or the device probe failed.

@@ -404,7 +404,7 @@ struct public HarnessEnv {
 
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public BenchmarkEnv {
-    @clarg_doc = "Let a bench cell measure on fallback/absent tune winners. The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published."
+    @clarg_doc = "Let a bench cell measure on fallback/absent tune winners, and skip the auto-tune mint entirely (untuned kernels keep fallback stamps instead of paying the minutes-long tune). The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published."
     allow_untuned : bool = false
 
     @clarg_doc = "Model name for the isolated GEMM bench."

@@ -156,7 +156,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_ALLOW_UNTUNED` | flag | off | Let a bench cell measure on fallback/absent tune winners. The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published. |
+| `DASLLAMA_ALLOW_UNTUNED` | flag | off | Let a bench cell measure on fallback/absent tune winners, and skip the auto-tune mint entirely (untuned kernels keep fallback stamps instead of paying the minutes-long tune). The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published. |
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |

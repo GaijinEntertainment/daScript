@@ -650,6 +650,14 @@ def main() : int {
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
         var t <- load_model_cached(mpath, cfg.quant)
+        // GPU rails requested via env but the tier resolved CPU: a GPU-flagged config line over
+        // CPU numbers poisons the whole board - fail the run, never silently mismeasure
+        if (gpu_want_any() && !moe_gpu_tier_installed()) {
+            let why = (moe_gpu_backend_registered()
+                ? "backend registered but the tier did not arm (device probe/VRAM - see the log above)"
+                : "no GPU backend module is registered (vulkan shared_module absent or failed to load - see the log above)")
+            panic("lcpp_bench: DASLLAMA_GPU* rails requested but the GPU tier is NOT installed - {why}")
+        }
         // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
         var inscope toks : array<array<int64>>
         if (real_row) {
@@ -677,7 +685,9 @@ def main() : int {
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
             panic("lcpp_bench: --mtp-ab needs a NextN draft head, and {mpath} has none")
         }
-        say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
+        // exec state is stamped so a dead jit can never hide behind a normal-looking config line
+        let exec_state = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "INTERPRETED")
+        say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | {exec_state} | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)

@@ -468,6 +468,12 @@ literal-name `env_config_*` anywhere else in the module is a defect. The sanctio
 tri-state knobs, dynamic names, pre-init foreign-library writes — are `ARCHITECTURE.md` §2.9,
 and `tests/test_env_registry.das` enforces the lot.
 
+**An active override announces itself in the run's output.** A knob that changes what a run
+measures, mints, or emits beyond its defaults — a gate escape, a policy override, a threshold
+recalibration — prints or logs one line naming the knob when it is set, and stays silent when
+it is not. Output that an unannounced override shaped is a defect of the change that added the
+knob or the read.
+
 
 ### Vulkan
 
