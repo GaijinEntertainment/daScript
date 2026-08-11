@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap        // models are loaded and freed per section (tutorial 04)
 options _jit_fast_math = true  // relaxed FP for the JIT'd kernels (non-bit-exact, ~+10%) — the parity tests stay bit-exact
 
@@ -60,6 +60,9 @@ def bench_gen(m : Model; tag : string) {
 // The matmul kernels split their rows across the job queue — they REQUIRE one
 // (running model code outside with_job_que panics). setup_dasllama_jobque() configures
 // the queue for this pure fork/join workload, and every dasLLAMA runner calls it:
+//   team dispatch (set_jobque_team_mode) — the big one: workers run as a standing team
+//     instead of paying fifo fork/join (~10us PER JOB) on every matmul; an EPYC 9654
+//     measured Llama-1B decode 7.6 -> 43 t/s (5.7x) from this one switch;
 //   fork-context pooling (set_jobque_fork_pool) — the kernels are pure data-parallel
 //     jobs, so their contexts are reused and skip re-init;
 //   batched dispatch (set_jobque_batch_dispatch) — each matmul's jobs publish under ONE
@@ -68,7 +71,9 @@ def bench_gen(m : Model; tag : string) {
 //     so a token's back-to-back matmuls never pay the OS thread-wake per dispatched job.
 //     The window ships at 30ms; box_profile.json's "runtime" `jobque_spin_us` tunes it per box.
 //   join poll (set_jobque_join_spin) — the joining thread polls the wait counter before
-//     parking (ships at level 50, ggml's --poll denomination; "runtime" `jobque_join_poll`).
+//     parking (ships at level 50, ggml's --poll denomination; "runtime" `jobque_join_poll`);
+//   and the caller's own thread priority — in team mode only the dispatch caller
+//     publishes work, so it claims the top notch (DASLLAMA_CALLER_PRIO is the A/B rail).
 //
 // The worker count is fixed when the queue is created — one worker per core minus one
 // by default; the DAS_JOBQUE_THREADS environment variable overrides it. To see what
@@ -94,6 +99,8 @@ def section_threads(m : Model) {
 //   q4_0 — the legacy requant tier: squeeze THIS f32/q8 load down to 4-bit blocks —
 //          per-row kernels, no batched prefill, so smallest footprint, not fastest
 // Generation is bandwidth-bound, so between fp32 and q8, smaller is also faster.
+// The q8 heap number prints small: a q8 load rides the mmap'd prepared image minted
+// beside the GGUF (see load_model), so the weight planes are file-mapped, not heap.
 
 def section_quant(path : string; mode : QuantMode; tag : string) {
     var m <- load_model(path, mode)
@@ -128,6 +135,7 @@ def main() {
     }
 
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     m.config.seq_len = min(m.config.seq_len, CTX)
     section_threads(m)
     delete m

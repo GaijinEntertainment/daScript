@@ -6,7 +6,7 @@ module dasllama_chat shared public
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
-require dasllama/dasllama_tools   // the per-ToolMode wire codecs (defs serializers, reply parsers)
+require dasllama/dasllama_tools public   // the per-ToolMode wire codecs; public: parse_calls_ returns its ToolReply
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 require math   // min/max in the reply-side reasoning matcher
 
@@ -1193,18 +1193,30 @@ def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
     return think_drain_(ts, reply)
 }
 
-// One reply parsed per the family's wire format (gemma-4 parses the content half of the split).
-def private parse_reply_(tmpl : ChatTemplate; reply : string) : ToolReply {
-    if (tmpl.tool_mode == ToolMode.harmony) {
+//! Parse a complete reply per the family's wire format into (reasoning, content, calls): harmony
+//! fills all three in one walk; hermes/none/gemma-4 split reasoning first and parse calls from the
+//! content half; mistral and llama-3 parse their JSON call shapes. Buffered twin of the server parse.
+def parse_calls_(c : ChatSession; reply : string) : ToolReply {
+    let mode = c.tmpl.tool_mode
+    if (mode == ToolMode.harmony) {
         return <- harmony_parse(reply)
     }
-    if (tmpl.tool_mode == ToolMode.gemma4) {
-        return <- gemma4_parse(split_reasoning_(tmpl, reply).content)
-    }
-    if (tmpl.tool_mode == ToolMode.mistral) {
+    if (mode == ToolMode.mistral) {
         return <- mistral_parse(reply)
     }
-    return <- llama_json_parse(reply)
+    if (mode == ToolMode.llama_json) {
+        return <- llama_json_parse(reply)
+    }
+    let sp = split_reasoning_(c.tmpl, reply)
+    if (mode == ToolMode.gemma4) {
+        var tr <- gemma4_parse(sp.content)
+        tr.reasoning = sp.reasoning
+        return <- tr
+    }
+    // hermes + none: the marker scan (none's empty markers = everything is content)
+    var tr <- marker_parse(sp.content, c.tmpl.tool_call_open, c.tmpl.tool_call_close)
+    tr.reasoning = sp.reasoning
+    return <- tr
 }
 
 // Extract the reply's calls per the family's wire format into last_call_names (the next result
@@ -1215,7 +1227,7 @@ def private track_reply_calls_(var c : ChatSession; reply : string) : bool {
     if (mode == ToolMode.none || mode == ToolMode.hermes) {
         return false
     }
-    var tr <- parse_reply_(c.tmpl, reply)
+    var tr <- parse_calls_(c, reply)
     c.last_call_names |> clear()
     c.last_call_names |> reserve(length(tr.calls))
     for (tc in tr.calls) {

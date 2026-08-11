@@ -4,9 +4,10 @@ options _comment_hygiene = true
 //! dasLLAMA — CPU LLM inference over GGUF models, in pure daslang. This module is the public API:
 //! ``load_model`` -> ``create_session`` -> ``encode`` / ``eval`` / ``sample`` (or the one-call
 //! streaming ``generate``), plus the chat layer (``create_chat`` / ``add_user`` / ``respond``).
-//! Requiring it also registers every supported architecture (Llama-2/3, Mistral, Qwen, Phi-3,
-//! Gemma-2/3/4, Qwen-MoE, gpt-oss) — ``load_model`` dispatches on GGUF metadata, so the same
-//! program runs any of them.
+//! Requiring it also registers every supported architecture (Llama-2/3, Mistral-3, the
+//! Qwen-2/3 dense, VL and MoE families, the Qwen3.5/3.6 DeltaNet hybrids, GLM-4.5 MoE,
+//! Phi-3, Gemma-2/3/4, gpt-oss) — ``load_model`` dispatches on GGUF metadata, so the same
+//! program runs any of them; ``arch_names()`` lists the live registry.
 //!
 //! Run model programs with ``-jit`` (interpreted inference is far too slow), wrap the
 //! generation in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread, and
@@ -290,6 +291,13 @@ def add_tool_results(var chat : ChatSession; results : array<string>; names : ar
     //! ``tool_call_id``) — the name-spelling framings (harmony, gemma-4) then pair results
     //! correctly even out of call order. An empty name slot falls back to the last call set.
     add_tool_results_(chat, results, names)
+}
+
+def parse_calls(chat : ChatSession; reply : string) : ToolReply {
+    //! Parse a complete reply per the model family's wire format into a ToolReply — the reasoning
+    //! span, the content, and the calls with arguments normalized to JSON object text. A family with
+    //! no tool format returns the reasoning/content split alone (safe on every reply); the buffered twin of the server's streaming parse.
+    return <- parse_calls_(chat, reply)
 }
 
 def set_thinking(var chat : ChatSession; on : bool) {

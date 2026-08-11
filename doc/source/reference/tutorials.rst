@@ -247,7 +247,9 @@ Tutorial 00 states the problem with a complete, minimal Llama-2 inference
 engine over a tiny llama2.c checkpoint. The remaining tutorials cover the
 ``dasllama`` module — CPU large-language-model inference in pure daslang:
 loading GGUF models, tokenization, streaming generation, chat with templates,
-sampling, sessions and memory, performance, and the architecture registry.
+sampling, sessions and memory, performance, the architecture registry,
+speech-to-text, audio chat, embeddings, thinking models, tool calling,
+voice-activity detection, and serving many conversations.
 Tutorial 01 onward is written against the public ``dasllama/dasllama`` facade.
 
 For tutorials 01 onward, you'll need a GGUF model file on disk (models are not
@@ -272,6 +274,10 @@ with ``-jit``::
    tutorials/dasLLAMA_07_speech_to_text.rst
    tutorials/dasLLAMA_08_audio_chat.rst
    tutorials/dasLLAMA_09_embeddings.rst
+   tutorials/dasLLAMA_10_thinking.rst
+   tutorials/dasLLAMA_11_tool_calling.rst
+   tutorials/dasLLAMA_12_voice_activity.rst
+   tutorials/dasLLAMA_13_serving.rst
 
 .. _tutorials_dasopenai:
 

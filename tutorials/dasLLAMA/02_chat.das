@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama
 require daslib/jobque_boost
@@ -50,6 +50,7 @@ def main() {
         return
     }
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
     with_job_que() {
         setup_dasllama_jobque()
@@ -83,8 +84,9 @@ def main() {
         // Section 3 — The transcript
         // ──────────────────────────────────────────────────────────────────────
         //
-        // chat.history records both sides of the conversation (for Qwen3-style
-        // thinking models, with the <think> block stripped per protocol).
+        // chat.history records both sides of the conversation. Replies are stored
+        // reasoning-stripped per the model family's format — a <think> pair, Harmony
+        // channels, or gemma-4's thought channel (tutorial 10 works with the reasoning).
 
         print("\ntranscript ({length(chat.history)} messages):\n")
         for (msg in chat.history) {

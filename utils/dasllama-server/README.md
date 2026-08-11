@@ -6,7 +6,7 @@ entirely in daslang over the public dasLLAMA facade + the `dasHV` HTTP layer. Po
 client (opencode, Open WebUI, the `llm` CLI, the `openai` Python SDK, …) at `http://127.0.0.1:<port>/v1`.
 
 It reaches **only** public facade verbs (`load_model` / `create_chat_renderer` / `add_user` /
-`render_assistant` / `render_turn` / `eval_batch` via `llm_scheduler` / `transcribe` / `embed`) —
+`render_assistant` / `render_turn` / `eval_batch` via `dasllama_scheduler` / `transcribe` / `embed`) —
 that is the point: the server is the acceptance test for the API rework. If it builds with no
 reach into engine internals, the facade is complete.
 
@@ -80,7 +80,7 @@ path = "D:/models/SmolLM2-135M-Instruct-Q8_0.gguf"
 backend = "cpu"    # never touches the device — alternating with the GPU slot costs nothing
 ```
 
-Chat and completion requests **batch continuously** (`llm_scheduler.das`): up to `--streams`
+Chat and completion requests **batch continuously** (`dasllama/dasllama_scheduler.das`): up to `--streams`
 generations run concurrently through one `eval_batch` decode step per tick, with long prompts
 prefilled in `--chunk`-token slices so a new arrival never stalls running streams for more than
 one chunk. Requests beyond `--streams` queue (up to 32; then 503). KV is **paged** by default —
@@ -310,7 +310,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_openai_server.das` — endpoint conformance (`/v1/models`, `/v1/embeddings`, buffered chat,
   the tools-unsupported 400, the unknown-endpoint 404) over the real dashv HTTP client, plus
   model-free `parse_tool_calls` unit tests; needs `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
-- `test_llm_scheduler.das` — the continuous-batching scheduler against `generate()` references
+- `modules/dasLLAMA/tests/test_scheduler.das` — the continuous-batching scheduler against `generate()` references (moved with the module)
   (bit-exact single stream, chunk invariance, staggered admits, eviction); needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
 - `test_openai_server_stream.das` — SSE chunk framing, the over-long-prompt 400, two concurrent

@@ -14,7 +14,10 @@ audio encoder — the *tower* — that turns 16 kHz PCM into soft tokens the
 decoder reads inline with text. Supported pairs (decoder + mmproj GGUF):
 Qwen2-Audio, Qwen2.5-Omni (audio side), Ultravox v0.5 (over *stock* Llama-3
 decoders), and Voxtral-Mini. The chat template picks the audio framing
-automatically — the code below is identical for every pair.
+automatically — the code below is identical for every pair. Qwen3-Omni and
+Gemma-4 E-series audio are served too, but through the ASR surface
+(:ref:`tutorial 07 <tutorial_dasLLAMA_speech_to_text>`'s two-path
+``load_asr_model``), not ``load_audio_tower``.
 
 Run::
 
@@ -71,6 +74,30 @@ a program finds out instead of being silently absorbed.
    if (!caps(m).system_prompt) {
        print("note: this model has no system role — the prompt is folded into turn 1\n")
    }
+
+Under the hood: the splice
+==========================
+
+``generate`` and ``generate_embd`` meet at the embedding rows: prefilling
+tokens *is* prefilling their embedding rows. The tutorial proves it by
+identity — same prompt, both roads, greedy, byte-identical output:
+
+.. code-block:: das
+
+   let prompt <- encode(m, "The capital of France is")
+   var embd : array<float>
+   embd |> resize(long_length(prompt) * m.config.dim)
+   embed_text_rows(m, prompt, embd, 0l)   // the rows generate() would prefill
+   var s2 = create_session(m)
+   generate_embd(m, s2, embd, long_length(prompt), SamplingParams(), 8l) $(_id, piece) {
+       print(piece)
+       return true
+   }
+   // -> " Paris. ..." — byte-identical to generate() on the same prompt
+
+An audio turn is this exact array with a span of rows replaced by the
+tower's soft tokens. ``add_user_audio`` builds it for you; a custom modality
+builds it by hand and hands it to ``generate_embd``.
 
 .. seealso::
 

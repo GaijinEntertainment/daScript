@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity; drop for bit-exact work
 
 require dasllama/dasllama
@@ -26,10 +26,45 @@ require math
 // The chat template picks the audio framing automatically (qwen2 family wraps the span
 // in <|audio_bos|>/<|audio_eos|>, llama-3 splices bare embeddings, voxtral opens with
 // [BEGIN_AUDIO]) — the calls below are identical for every pair.
+// Qwen3-Omni and Gemma-4 E-series audio are served too, but through the ASR surface
+// (tutorial 07's two-path load_asr_model), not load_audio_tower.
 //
 // Prerequisites: a decoder GGUF + its mmproj GGUF + a 16 kHz mono PCM16 WAV.
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/08_audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio.wav> [prompt]
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 3 — Under the hood: the splice
+// ──────────────────────────────────────────────────────────────────────────
+//
+// generate() and generate_embd() meet at the embedding rows: prefilling tokens
+// IS prefilling their embedding rows. Proof by identity — same prompt, both
+// roads, greedy, byte-identical output. An audio turn is this exact array with
+// a span of rows replaced by the tower's soft tokens; add_user_audio builds it
+// for you, and a custom modality builds it by hand.
+
+def section_splice(m : Model) {
+    let prompt <- encode(m, "The capital of France is")
+    let n = long_length(prompt)
+    var s1 = create_session(m)
+    var out1 = ""
+    generate(m, s1, prompt, SamplingParams(), 8l) $(_id, piece) {
+        out1 += piece
+        return true
+    }
+    var embd : array<float>
+    embd |> resize(n * m.config.dim)
+    embed_text_rows(m, prompt, embd, 0l)   // the rows generate() would prefill
+    var s2 = create_session(m)
+    var out2 = ""
+    generate_embd(m, s2, embd, n, SamplingParams(), 8l) $(_id, piece) {
+        out2 += piece
+        return true
+    }
+    print("generate:      \"{out1}\"\ngenerate_embd: \"{out2}\"\nidentical: {out1 == out2}\n")
+    delete s1
+    delete s2
+}
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
@@ -99,6 +134,7 @@ def main {
     var m <- load_model(ggufs[0], QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 4096l)
     var tower <- load_audio_tower(ggufs[1])
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
     // caps(model) is the chat layer's honesty contract. First entry: gemma has no system
     // role — the chat layer folds the system prompt into the first user turn, and
@@ -139,6 +175,8 @@ def main {
             print("{piece}")
             return true
         }
-        print("\n")
+        print("\n---\n")
+
+        section_splice(m)
     }
 }

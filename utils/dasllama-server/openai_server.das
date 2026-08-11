@@ -5,12 +5,11 @@ options fast_math = true   // ggml-parity FP laxity (non-bit-exact); inference t
 module openai_server
 
 require dasllama/dasllama       // the public facade — the main dasLLAMA surface this tool touches
-require llm_scheduler           // continuous-batching scheduler (sibling — bare require, hyphenated dir)
+require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 over the facade)
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
 require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
-require dasllama/dasllama_tools   // the per-ToolMode wire parsers (harmony/gemma4/mistral/llama_json)
 require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
 require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
 require ../../modules/dasLLAMA/performance/exchange_client.das   // the /exchange surface + submit rails
@@ -32,7 +31,7 @@ require dasllama/dasllama_gpu_resident   // multi-model slot switch (marks save/
 // surface builds without reaching into the engine, the facade is complete. (The dashboard-only
 // surfaces additionally read dasllama_math's tier-status getters — see the require above.)
 // Chat and completion requests batch continuously: handlers parse + render + register and return;
-// run_server's loop drives llm_scheduler (one eval_batch decode step over every live stream + one
+// run_server's loop drives dasllama_scheduler (one eval_batch decode step over every live stream + one
 // bounded prefill chunk per tick) and routes SchedEvents back to each request's writer. Streaming
 // and buffered responses both ride the deferred writer ops, so N streams generate concurrently.
 // ASR uploads are queued to long-lived new_thread workers, each with its own model/session/context;
@@ -1151,52 +1150,22 @@ def private send_chat_tool_calls_chunk(srv : WebSocketServer; var writer : HttpR
 
 //! Extract Hermes-style tool calls from a finished reply: every well-formed open…close span becomes
 //! one call; returns the content BEFORE the first opener (everything when nothing parses, so no
-//! reply text is silently dropped). Unparseable call JSON logs and is skipped; an unterminated
-//! span logs and ends the scan.
+//! reply text is silently dropped). The scan itself is dasllama_tools' ``marker_parse`` — this
+//! wrapper maps its calls onto the OpenAI wire shapes and logs when spans parse to nothing.
 def parse_tool_calls(full : string; open_mark, close_mark, id_base : string;
                      var calls : array<OaiToolCall>) : string {
-    var content_end = -1
-    var pos = 0
-    while (true) {
-        let o = find(full, open_mark, pos)
-        if (o < 0) {
-            break
-        }
-        if (content_end < 0) {
-            content_end = o
-        }
-        let bstart = o + length(open_mark)
-        let cl = find(full, close_mark, bstart)
-        if (cl < 0) {
-            to_log(LOG_WARNING, "dasllama-server: unterminated {open_mark} span (token budget cut?) — scan stopped\n")
-            break
-        }
-        let body = strip(slice(full, bstart, cl))
-        var perr = ""
-        var cjs = read_json(body, perr)
-        if (cjs == null) {
-            to_log(LOG_WARNING, "dasllama-server: unparseable tool-call JSON ({perr}): {body}\n")
-        } else {
-            let cname = cjs?["name"] ?? ""
-            let av = cjs?["arguments"]
-            var args = "\{}"
-            if (av != null && av.value is _string) {   // non-spec but seen: arguments emitted as a string
-                let s = av ?? ""
-                args = empty(s) ? "\{}" : s
-            } elif (av != null && !(av.value is _null)) {
-                args = write_json_compact(av)   // the OpenAI wire carries arguments as compact JSON text
-            }
-            if (!empty(cname)) {
-                calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
-                                          _function = OaiToolCallFn(name = cname, arguments = args)))
-            } else {
-                to_log(LOG_WARNING, "dasllama-server: tool call without a name — skipped: {body}\n")
-            }
-            unsafe { delete cjs }
-        }
-        pos = cl + length(close_mark)
+    var tr <- marker_parse(full, open_mark, close_mark)
+    if (empty(tr.calls) && !empty(open_mark) && find(full, open_mark) >= 0) {
+        to_log(LOG_WARNING, "dasllama-server: {open_mark} span(s) present but no calls parsed (unterminated or malformed JSON)\n")
     }
-    return (content_end < 0 || empty(calls)) ? full : strip(slice(full, 0, content_end))
+    calls |> reserve(length(calls) + length(tr.calls))
+    for (c in tr.calls) {
+        calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
+                                  _function = OaiToolCallFn(name = c.name, arguments = c.args)))
+    }
+    let content = tr.content
+    delete tr
+    return content
 }
 
 // Normalize one of the JSON call objects used by common model families. OpenAI/Hermes/Mistral

@@ -52,8 +52,9 @@ session's KV cache, so each ``respond`` only evaluates the new tokens.
 The transcript
 ==============
 
-``chat.history`` records both sides of the conversation (for Qwen3-style
-thinking models, with the ``<think>`` block stripped per protocol):
+``chat.history`` records both sides of the conversation. Replies are stored
+reasoning-stripped per the model family's format — a ``<think>`` pair, Harmony
+channels, or gemma-4's thought channel:
 
 .. code-block:: das
 

@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama
 require daslib/jobque_boost
@@ -46,7 +46,7 @@ def cosine(a, b : array<float>) : float {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section banners are its structure
     let path = model_path()
     if (empty(path)) {
         print("usage: daslang -jit tutorials/dasLLAMA/09_embeddings.das -- <model.gguf>\n")
@@ -68,6 +68,7 @@ def main() {
 
     print("loading {path}\n")
     var m <- load_model(path, QuantMode.q8)
+    allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     print("arch={m.arch} dim={m.config.dim}\n\n")
 
     // The forward pass splits its matmuls across the job queue, so embed() — like

@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama   // the facade require also fires every arch [init]; Section 1 needs the registry populated
 require daslib/strings_boost
@@ -46,7 +46,8 @@ def main() {
     //   configure — a function setting Config flags (see configure_my_llama above;
     //               the real qwen3 sets rope_neox + qk_norm and nothing else)
     //   blocks    — the forward-pass kernels. std_blocks() is the standard
-    //               attention + FFN pair; MoE (qwen2moe) and gpt-oss swap in their own
+    //               attention + FFN pair; the MoE families (qwen2moe, qwen3moe, glm4moe),
+    //               the Qwen3.5 DeltaNet hybrids, and gpt-oss swap in their own
     //   chat      — the chat template as data: per-turn part lists + stop tokens
     //
     // Most new model families are just Config flags over std_blocks — that's the

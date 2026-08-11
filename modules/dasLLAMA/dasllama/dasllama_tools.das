@@ -358,7 +358,14 @@ def mistral_parse(reply : string) : ToolReply {
 def private mistral_call_of(cv : JsonValue?) : ToolCall {
     var c = ToolCall(name = cv?["name"] ?? "", id = cv?["id"] ?? "")
     let av = cv?["arguments"]
-    c.args = av != null ? write_json_compact(av) : "\{}"
+    if (av != null && av.value is _string) {   // non-spec but seen: arguments emitted as a string pass through verbatim
+        let s = av ?? ""
+        c.args = empty(s) ? "\{}" : s
+    } elif (av != null && !(av.value is _null)) {
+        c.args = write_json_compact(av)
+    } else {
+        c.args = "\{}"
+    }
     return c
 }
 
@@ -481,6 +488,42 @@ def llama_json_parse(reply : string) : ToolReply {
     unsafe {
         delete js
     }
+    return <- out
+}
+
+// ===== hermes — marker-framed JSON calls (<tool_call> ... </tool_call>) =====
+
+//! Parse a marker-framed (hermes-style) reply: each well-formed ``open_mark``..``close_mark`` span
+//! parses as one JSON call object (nameless spans skip; an unterminated span ends the scan); content
+//! is the text before the first opener — the whole reply when nothing parses or ``open_mark`` is empty.
+def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
+    var out = ToolReply()
+    if (empty(open_mark)) {
+        out.content = reply
+        return <- out
+    }
+    var content_end = -1
+    var pos = 0
+    while (true) {
+        let o = find(reply, open_mark, pos)
+        if (o < 0) {
+            break
+        }
+        if (content_end < 0) {
+            content_end = o
+        }
+        let bstart = o + length(open_mark)
+        let cl = find(reply, close_mark, bstart)
+        if (cl < 0) {
+            break   // unterminated span (token budget cut mid-call) — scan stops
+        }
+        let c = tool_call_of_json(strip(slice(reply, bstart, cl)))
+        if (!empty(c.name)) {
+            out.calls |> push(c)
+        }
+        pos = cl + length(close_mark)
+    }
+    out.content = (content_end < 0 || empty(out.calls)) ? reply : strip(slice(reply, 0, content_end))
     return <- out
 }
 

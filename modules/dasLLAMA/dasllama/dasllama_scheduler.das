@@ -1,6 +1,6 @@
 options gen2
 
-module llm_scheduler
+module dasllama_scheduler shared public
 
 require dasllama/dasllama   // the public facade — the scheduler reaches no engine internals
 require math
@@ -168,13 +168,13 @@ def n_queued(sch : Scheduler) : int64 => long_length(sch.queue)
 def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     let np = long_length(req.prompt)
     if (np <= 0l) {
-        panic("llm_scheduler: empty prompt (stream {req.id}) — the wiring must reject it first")
+        panic("dasllama_scheduler: empty prompt (stream {req.id}) - the wiring must reject it first")
     }
     if (np + 1l > model.config.seq_len) {
-        panic("llm_scheduler: {np}-token prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) — the wiring must reject it first")
+        panic("dasllama_scheduler: {np}-token prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) - the wiring must reject it first")
     }
     if (req.max_new < 1l) {
-        panic("llm_scheduler: max_new {req.max_new} < 1 (stream {req.id}) — the wiring must clamp it first")
+        panic("dasllama_scheduler: max_new {req.max_new} < 1 (stream {req.id}) - the wiring must clamp it first")
     }
     if (long_length(sch.queue) >= sch.max_queue) {
         return false
@@ -303,7 +303,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 //! over every decoding stream, at most ONE chunk_tokens prefill chunk (FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
-def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037 - admit/decode/prefill/reap, one linear pass
+def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - admit/decode/prefill/reap, one linear pass
     // (0) drop finished-stream linger entries past their poll window (bounded backstop at 32).
     // get_time_nsec, NOT get_time_usec: the usec helper returns int and wraps at ~35.8 min,
     // which would freeze this comparison for any entry that survived a wrap

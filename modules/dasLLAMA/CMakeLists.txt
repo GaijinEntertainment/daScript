@@ -44,6 +44,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     ADD_MODULE_DAS(dasllama dasllama dasllama_tools)
     ADD_MODULE_DAS(dasllama dasllama dasllama_chat)
     ADD_MODULE_DAS(dasllama dasllama dasllama)
+    ADD_MODULE_DAS(dasllama dasllama dasllama_scheduler)
 
     # dasLLAMA IS NEVER AOT'D — -jit only; no AOT source/depends exports (see tests/aot/CMakeLists.txt).
 
@@ -58,6 +59,8 @@ IF(NOT DAS_LLAMA_INCLUDED)
     # checked-in Silero-VAD weights (MIT, see the LICENSE beside them) — ship with the SDK
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/models/silero_vad.bin
         ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/models/silero_vad.LICENSE
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/models/jfk_ask_not.wav
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/models/jfk_ask_not.LICENSE
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/models
     )
     # per-box tuning: the profile producer ([tuned] in the module is the consumer) + its doc
