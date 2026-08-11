@@ -2641,7 +2641,26 @@ def private is_loopback_req(req : HttpRequest?) : bool {
     let ip = client_ip(req)
     // an unknown/empty peer counts as remote (fail closed, like the ladder's is_loopback_peer):
     // this service binds every interface, so a LAN caller must not slip through on an unresolved peer
-    return ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+    let loopback = ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+    return loopback && same_origin_or_headerless(req)
+}
+
+// CSRF guard for the operator routes: allow_cors() is global and the peer is 127.0.0.1 for ANY
+// local browser, so a page the operator merely visits could POST to the destructive routes. Accept
+// only a same-origin request (the control page is served from here) or a header-less CLI client.
+def private same_origin_or_headerless(req : HttpRequest?) : bool {
+    let origin = get_header(req, "Origin")
+    if (empty(origin)) {
+        return true   // curl/CLI and same-origin navigations send no Origin; only a cross-site POST does
+    }
+    let sep = find(origin, "://")
+    let authority = sep >= 0 ? slice(origin, sep + 3) : origin
+    return authority == get_header(req, "Host")
+}
+
+// the forbidden reply shared by every operator/control route (the public inference API stays open)
+def private deny_operator(var resp : HttpResponse?) : http_status {
+    return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
 }
 
 def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -3044,6 +3063,7 @@ class OpenAiServer : HvWebServer {
             return handle_vad(req, resp)
         }
         POST("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_config_save(req, resp)
         }
         GET("/exchange") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -3062,12 +3082,14 @@ class OpenAiServer : HvWebServer {
             return handle_exchange_retune(req, resp)
         }
         POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_bench_start(resp)
         }
         GET("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bench_get(resp)
         }
         POST("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_bake_start(req, resp)
         }
         GET("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -3077,6 +3099,7 @@ class OpenAiServer : HvWebServer {
             return handle_images(resp)
         }
         POST("/restart") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
@@ -3087,6 +3110,7 @@ class OpenAiServer : HvWebServer {
             return resp |> JSON("\{\"ok\":true,\"draining\":true,\"restarting\":true}", http_status.OK)
         }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
@@ -3096,6 +3120,7 @@ class OpenAiServer : HvWebServer {
             return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
         }
         POST("/gc") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             let coalesced = g_gc_requested
             g_gc_requested = true
             to_log(LOG_INFO, "dasllama-server: GC requested via POST /gc (coalesced={coalesced})\n")
