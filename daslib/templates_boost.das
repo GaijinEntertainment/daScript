@@ -1586,6 +1586,7 @@ def public add_structure_field(var cls : StructurePtr; name : string; var t : Ty
     cls.fields[fi].name := name
     cls.fields[fi]._type = t
     cls.fields[fi].init = init
+    cls.fields[fi].at = t != null && t.at.fileInfo != null ? t.at : cls.at
     return fi
 }
 
