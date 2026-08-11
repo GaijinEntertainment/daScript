@@ -16,6 +16,7 @@ require math
 require daslib/strings_boost public
 require daslib/logger public              // structured, ISO-8601-timestamped ndjson event log
 require daslib/json public                // JV(...) for logger field payloads
+require daslib/json_boost                 // ?[] / ?? navigation — the sidecar provenance reader
 require dasllama/dasllama_common public   // QuantMode
 require dasllama/dasllama_math            // active_kernel_backend — the exec_fmt layout receipt
 require llvm/daslib/llvm_tune             // tune_status — stamp provenance for the platform block
@@ -898,6 +899,21 @@ def tune_manifest_sha() : string {
     return sidecar_generation_sha(tune_manifest_path())
 }
 
+//! The mint's noise verdict from the sidecar provenance ("ok" | "overridden"; "" when the
+//! sidecar or its provenance is absent) — records copy it so a mint taken through a failing
+//! noise gate is visible on the board, not only inside the sidecar.
+def tune_manifest_noise() : string {
+    let path = tune_manifest_path()
+    if (!stat(path).is_valid) {
+        return ""
+    }
+    var err = ""
+    var doc = read_json(fread(path), err)
+    let verdict = doc?["provenance"]?["noise"] ?? ""   // string-heap value; safe past delete_json (nodes only)
+    delete_json(doc)
+    return verdict
+}
+
     //! sha256 of an explicit sidecar file — the oracle's current-generation probe; "" when absent.
 def sidecar_generation_sha(path : string) : string {
     return stat(path).is_valid ? compute_sha256(path) : ""
@@ -1621,6 +1637,8 @@ struct BenchRun {
     @optional tune : string     // das gen-kernel stamp provenance — required for reproducibility
     @optional tune_sha : string // sha256 of the tune sidecar the exe shipped with — the sidecar
                                 // GENERATION; rows across generations are not comparable
+    @optional noise : string    // the mint's noise verdict from the sidecar provenance ("ok" |
+                                // "overridden") — an overridden mint shows on the board, not only in the sidecar
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor
