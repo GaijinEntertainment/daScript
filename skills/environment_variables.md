@@ -63,6 +63,7 @@ application directory is read-only.
 | `DAS_TUNE_NOISE_CV` | number | The noise gate's cv ceiling in percent, overriding the built-in 2% normal / 1% paranoid. A calibration lever; garbage reads as unset. |
 | `DAS_TUNE_NOISE_OVERRIDE` | flag | Mint through a refusal at either gate — a failing noise probe (stamped `noise: overridden`) or a failing validation verdict (stamped `validation: overridden`) — so the escape always leaves a mark. One flag by design: "mint no matter what". |
 | `DAS_TUNE_HISTORY` | path | Where mint archives land, overriding `<home>/.tune-history/<box>/`. Every mint archives (failures kept, marked `.FAILED.json`); the history is never deleted. |
+| `DAS_TUNE_CONTROL` | path | A supervisor's stop channel: while the named file exists, `tune_interrupt_requested()` is true and the dasLLAMA tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes. |
 
 `--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
 process chain — the measuring code is two `popen`s below the process the user typed the flag at.

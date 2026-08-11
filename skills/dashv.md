@@ -117,6 +117,10 @@ with_http_request() <| $(var req) {
 
 - `get_body_bytes(resp) : array<uint8>` extracts a binary body (empty if null / non-OK / no content).
 - `get_header(resp, "Content-Type")`, `resp.status_code`, `string(resp.body)`.
+- `url_encode(s)` percent-encodes a query-string component (RFC 3986 unreserved set kept
+  verbatim) — use it on any value interpolated into a URL query.
+- `req.timeout` / `req.connect_timeout` (seconds) on the builder request bound outbound calls —
+  set both on anything a server's tick thread waits on.
 
 ## Testing — `with_test_server` (runs the server on its own thread/context)
 

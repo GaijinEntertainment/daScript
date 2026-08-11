@@ -291,6 +291,12 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`performance/fetch_models.das`** — the committed model-provenance manifest: per catalog
   file, the exact HF repo + revision pin + sha256, or the on-box conversion recipe. Verify by
   default, `--fetch` downloads; it never converts, never benches. BRINGUP.md §2 is the runbook.
+- **`performance/exchange_schema.das`** — engine-free validation for exchange submissions
+  (record stores + tune sidecars); the dasllama.io ladder service builds on it.
+- **`performance/exchange_client.das`** — the sidecar-exchange client: the boot-time
+  lookup/apply (llvm_tune's scope resolver — a verified per-box match downloads instead of a
+  ~20-minute tune), the privacy-stripped submit rails, and the control-page surface
+  dasllama-server serves at `/exchange`.
 - **`benchmarks/asr/mem_census.sh`** — the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) — the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.

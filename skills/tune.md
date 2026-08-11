@@ -248,7 +248,21 @@ self-managed harnesses.
 A sidecar whose mtime **predates the running binary's** is stale: it reads as
 absent (stamps fall back, the policy rail re-tunes), and the first
 `tune_manifest_set` resets it to a fresh document. Measurements never
-outlive the binary that made them.
+outlive the binary that made them. A sidecar carrying another box's
+`provenance.box` identity is stale too — measurements are a property of the
+box — unless `provenance.applied_box` names this box, which is how a scope
+resolver (below) adopts a compatible sibling box's mint deliberately.
+
+Two seams let a supervisor or a network service participate:
+
+- `tune_set_scope_resolver(fn)` — registered from an `[init]`, consulted by
+  the auto/restart policy guards before spawning a scope's tuner. A resolver
+  that can satisfy the scope another way (dasLLAMA's exchange client downloads
+  a matching per-box sidecar from dasllama.io) returns true; completeness is
+  re-checked, never trusted, and `--tune` never consults it.
+- `tune_interrupt_requested()` — true while the file named by
+  `DAS_TUNE_CONTROL` exists. Tuners poll it between kernel families and abort
+  without minting; the measurement in flight always completes.
 
 ## Runtime status — `tune_status()`
 

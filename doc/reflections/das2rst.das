@@ -283,7 +283,7 @@ def document_module_dashv(_root : string) {
 def document_module_dashv_boost(_root : string) {
     var mod = find_module("dashv_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("HTTP request helpers", mod, %regex~(with_http_request|get_body_bytes)$%%)
+        group_by_regex("HTTP request helpers", mod, %regex~(with_http_request|get_body_bytes|url_encode)$%%)
     )
     document("High-level HTTP and WebSocket wrappers", mod, "dashv_boost.rst", groups)
 }

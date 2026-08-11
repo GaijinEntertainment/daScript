@@ -63,9 +63,10 @@ bin/Release/daslang.exe dastest/dastest.das -- --test utils/dasllama-ladder/test
 
 Plain dastest — the same lane `extended_checks` runs the dasweb-playground suites in.
 
-## 5. Follow-ups
+## 5. The client side
 
-The HTTP surface (routes, rate/size enforcement at the transport layer, admin levers over
-loopback), site wiring, and client integration are later slices of the arc plan; the
-follow-up ledger (partial re-race, cross-box matrix, version diff) is in
-`plans/dasllama_io_site.md`.
+The consuming half lives with dasLLAMA: `modules/dasLLAMA/performance/exchange_client.das`
+(boot-time sidecar lookup/apply as llvm_tune's scope resolver, the privacy-stripped submit
+rails, the control-page surface), wired into `utils/dasllama-server` (the `/exchange`
+endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. Deploy and the follow-up
+ledger (partial re-race, cross-box matrix, version diff) are in `plans/dasllama_io_site.md`.

@@ -161,6 +161,14 @@ require added to it (the ladder service must build without the engine), is a def
 to what the record or sidecar writers emit lands with `tests/test_exchange_schema.das` still
 green against the in-tree corpus.
 
+**`performance/exchange_client.das` is the single exchange client — every HTTP call to the
+sidecar exchange (lookup, download, submit) goes through it.** Its invariants: everything
+downloaded passes the full client-side gate (content sha, schema, `DASLLAMA_VERSION`) before
+it is written; every submission goes through `exchange_strip_private` (no `provenance.binary`,
+no path-shaped values leave the box); exchange-sourced and foreign-box sidecars are never
+submitted; a lookup failure is never fatal to a boot. A second HTTP path to the exchange, or
+a submission built around the strip, is a defect.
+
 **`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
 catalog file: the exact HF repo + revision pin, canonical bytes + sha256, or the conversion
 recipe where no registry serves the file. Verify is the default, `--fetch` downloads what is
