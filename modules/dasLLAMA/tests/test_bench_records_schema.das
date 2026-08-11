@@ -19,6 +19,7 @@ def private make_asr_run(engine, workload : string) : BenchRun {
         threads = 8,
         date = "2026-07-28",
         cmd = "test-cmd",
+        noise = engine == "das" ? "ok" : "",
         versions = engine == "das" ? "" : "whisper.cpp @ abcdef123")
     r.tests |> insert("asr:jfk.wav", BenchTest(ms = 197.1lf, audio_s = 11.0lf))
     r.tests |> insert("asr:gb1.wav", BenchTest(ms = 6585.0lf, audio_s = 198.7lf))
@@ -50,6 +51,8 @@ def test_asr_round_trip(t : T?) {
         t |> equal(back[0].runs[0].files[0].role, "weights")
         t |> equal(back[0].runs[0].files[0].bytes, 77704715l)
         t |> equal(back[0].runs[1].versions, "whisper.cpp @ abcdef123")
+        t |> equal(back[0].runs[0].noise, "ok")
+        t |> equal(back[0].runs[1].noise, "")
         remove(TMP)
     }
 }

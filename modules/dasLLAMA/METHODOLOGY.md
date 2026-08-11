@@ -126,6 +126,9 @@ touches it goes through the same schema.
   flavor (`clean-cpu`, `stock`, `metal`).
 - **`tune`** is required on das rows. Per-box tuning makes two identical machines legitimately
   differ, so a das number without its tune stamp is not reproducible and does not ship.
+- **`noise`** copies the mint's noise verdict out of the sidecar provenance (`ok` or
+  `overridden`): a row measured under a noise-overridden mint says so on the board, not only
+  inside the sidecar.
 - **`hardware`** is auto-probed on the box, never typed in — it is the block a reader has to be
   able to trust.
 - **`source`** is `official` or `community`.
