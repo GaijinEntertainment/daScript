@@ -128,3 +128,67 @@ llama_json = an `ipython`-header turn with the string-results-JSON-quoted quirk.
 **Server**: finish-path dispatch — harmony+tools = `harmony_parse` (one walk supersedes
 split-then-parse); gemma4 = think-split then `gemma4_parse`; mistral/llama_json = think-split
 (inert) then their parsers; hermes = as shipped.
+
+## Review round for PR #3691 — ALL items greenlit (no trims), fix before merge
+
+Sources: opus /code-review (10 confirmed), CODEREVIEW.md audit (4V/2U/4S), Copilot (2).
+
+**A. Severe:**
+1. role:"tool" + no tools on a none-mode family → render_tool_results' llama else-arm panics
+   render_parts → server death. FIX: mode==none routes to the pre-PR user-frame path; the
+   render_prompt gate becomes `mode != hermes && mode != none`.
+2. [INST]-sniffed templates without v0.3 tokens: ungated [TOOL_RESULTS] special panics; tools
+   no longer 400. FIX: resolve `tool_vocab_ok` per mode at create (mirror think_vocab);
+   effective mode falls to none when the mode's control specials are absent — the server 400s
+   honestly again (this also makes CODEREVIEW's inert-declaration exemption TRUE).
+3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results —
+   dropped on ALL families (partly pre-existing for hermes). FIX: flush the queued results
+   turn (render, no assistant_open) before add_user when both queue in render_chat_suffix's
+   walk — needs a chat-layer flush seam. (b) gemma4 close_turn=false leaks an open turn on
+   [user, asst(calls), user]. FIX: ChatSession.turn_open; the next render closes it
+   (close_parts) when not continuing with tool results.
+4. tool_call_id discarded; positional pairing misorders parallel results. FIX: server maps
+   tool_call_id -> function name via the assistant msg's tool_calls; results carry names
+   (extend add_tool_results with names).
+5. Live chat-layer flow: respond_ never sets last_call_names (harmony renders
+   functions.unknown); gemma4 live results render outside the closed turn. FIX: respond_
+   parses its own reply for calls (mode-dispatched), sets last_call_names, and for gemma4
+   suppresses close when the reply ended in a call (turn_open).
+6. gemma4 DSL parser unbounded: dict-key find(":") can cross the closing brace;
+   gemma4_parse's find("{") can grab a later block's brace. FIX: bound all scans by the
+   block's <tool_call|> closer / enclosing }.
+7. harmony_header recipient name unbounded in the role-header arm (and neither arm cuts at
+   "<|"). FIX: truncate the name at first space or "<|" in both arms.
+8. Streaming vs finish divergence: think_feed_channel TS_REASON needle "<|start|>" vs
+   harmony_parse "<|start|>assistant"; and TS_CONTENT is terminal passthrough so post-final
+   framing streams raw. FIX: align both on "<|start|>"; channel-mode TS_CONTENT stops at the
+   next "<|start|>"/"<|channel|>" header (drop the off-grammar tail); harmony_parse same.
+
+**B. Auditor:**
+- V1: render pins in tests/test_chat.das for the four modes — model-free tool_mode asserts
+  per family + ONE token-for-token pin on gemma-4-E2B (defs turn -> call replay -> result
+  turn). V2: pins for tool_call_of_json / json_value_or_quoted / json_quoted in
+  test_tool_formats.das. V3+S1: move the pure wire-text builders into dasllama_tools
+  (mistral_defs_text, llama_json_defs_text, llama_json_call_text, harmony result-header) and
+  sharpen the CODEREVIEW placement rule to "every byte that goes on the wire is produced by a
+  function in dasllama_tools.das; dasllama_chat.das assembles ChatParts and places them in
+  turns" + reconcile the section preamble with entries naming neighbours.
+- V4: THINKING.md test map — add test_tool_formats.das, the four tool live legs, and fix the
+  trigger spelling. S2: the recognition rule's trigger becomes "think_mode or tool_mode" in
+  CODEREVIEW.md AND THINKING.md. S3: reword the exemption per fix A2. S4: bind "smallest
+  local GGUF" to the fetch_models manifest.
+- U1: PR body gains the model-free -jit command line. U2: catalogue
+  Llama-3.2-3B-Instruct-Q4_K_M, Mistral-7B-Instruct-v0.3-Q4_K_M, gemma-4-E2B-it-Q4_K_M in
+  performance/fetch_models.das (repo+revision pin, bytes+sha256 — match the file's format).
+
+**C. Copilot + judgment:**
+- --border CSS var: verify it exists in control.html's :root; fix the chip style if not.
+- Stale comment above renderMsgContent (still describes the regex) — correct it.
+- CR10: mistral [AVAILABLE_TOOLS] renders INSIDE [INST]; canonical is BEFORE it. FIX: render
+  the defs block as its own segment before the user turn frame; note in this plan.
+- CR9: page-side fallback — when no reasoning_content arrived and content starts with
+  <think>, apply the old regex into the think span (R1-distill-class models).
+
+Process after fixes: focused gates (codec pins, test_chat, think e2e full-tier 21/21 rerun,
+server regressions), lint 3-rail, format, commit, push --no-verify, re-request Copilot,
+back into the babysit loop (~5 min cadence while a round is pending).
