@@ -327,10 +327,13 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 Flavor = r?["flavor"] ?? "",
                 Workload = r?["workload"] ?? "",
                 Box = r?["box"] ?? "",
-                Threads = r?["threads"] ?? 0,
+                // read through double: the schema accepts a JSON number OR longint, and the int
+                // `?? 0` coalesce silently yields 0 for a float form (3.0), which would drop the
+                // row into the un-versioned bucket and escape every ?version=N filter
+                Threads = int(r?["threads"] ?? 0.0lf),
                 RunDate = r?["date"] ?? "",
                 Version = r?["version"] ?? "",
-                DasllamaVersion = r?["dasllama_version"] ?? 0,
+                DasllamaVersion = int(r?["dasllama_version"] ?? 0.0lf),
                 EngineSha = r?["sha"] ?? "",
                 TuneSha = r?["tune_sha"] ?? "",
                 Source = source,

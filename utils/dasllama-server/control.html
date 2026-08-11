@@ -1802,6 +1802,13 @@ async function saveConfig() {
         $("cfg-note").textContent = "save blocked: " + rerr;
         return false;
     }
+    if (!exchangePolicy) {
+        // POST /config replaces the whole file; without the exchange policy loaded we would
+        // write it as blank and reset the sharing choice. Refuse until GET /exchange has landed.
+        $("cfg-note").textContent = "save blocked: exchange policy still loading — retry in a moment";
+        loadExchange();
+        return false;
+    }
     const body = JSON.stringify(gatherConfig());
     try {
         const r = await fetch("/config", {
@@ -2093,7 +2100,15 @@ $("b-ex-retune").addEventListener("click", async () => {
     if (!window.confirm("Re-tune this box? ~20 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
     $("b-ex-retune").disabled = true;
     try {
-        await fetch("/exchange/retune", { method: "POST" });
+        const r = await fetch("/exchange/retune", { method: "POST" });
+        if (!r.ok) {
+            // the marker write may have failed server-side (the sidecar is then untouched);
+            // do NOT show "armed" or start the restart wait on a refusal
+            const j = await r.json().catch(() => ({}));
+            $("ex-note").textContent = "re-tune refused: " + (j.error ? j.error.message : r.status);
+            $("b-ex-retune").disabled = false;
+            return;
+        }
         $("ex-note").textContent = "re-tune armed — the tune takes ~20 minutes; reload this page when the server is back";
         restartingSince = performance.now();
         setBadge("warn", "restarting");
@@ -2106,15 +2121,42 @@ $("b-ex-retune").addEventListener("click", async () => {
 
 $("ex-always").addEventListener("change", async () => {
     if (!exchangePolicy) {
+        $("ex-always").checked = !$("ex-always").checked;   // roll back the toggle
         $("ex-note").textContent = "exchange policy not loaded — try reloading the page";
         return;
     }
-    exchangePolicy.submit = $("ex-always").checked ? "always" : "ask";
-    // policy is read from the saved config on every use, so this is live without a restart
-    if (await saveConfig()) {
-        $("ex-note").textContent = $("ex-always").checked
+    const want = $("ex-always").checked ? "always" : "ask";
+    // Commit ONLY the policy, on top of the LAST SAVED config — NOT gatherConfig(), which would
+    // also persist any unsaved §08 edits just because the box was ticked. Roll the toggle back
+    // if the save fails so the UI never shows a state that was not written.
+    let body;
+    try { body = JSON.parse(savedSnapshot); } catch (_e) { body = null; }
+    if (!body || typeof body !== "object") {
+        $("ex-always").checked = !$("ex-always").checked;
+        $("ex-note").textContent = "config not loaded yet — try again in a moment";
+        return;
+    }
+    body.exchange_url = exchangePolicy.url || "";
+    body.exchange_accept = exchangePolicy.accept || "verified";
+    body.exchange_submit = want;
+    try {
+        const r = await fetch("/config", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!r.ok) {
+            $("ex-always").checked = !$("ex-always").checked;
+            $("ex-note").textContent = "could not save: " + (j.error ? j.error.message : r.status);
+            return;
+        }
+        exchangePolicy.submit = want;
+        savedSnapshot = JSON.stringify(body);
+        $("ex-note").textContent = want === "always"
             ? "every fresh tune on this box will be shared automatically"
             : "sharing goes back to asking first";
+    } catch (_e) {
+        $("ex-always").checked = !$("ex-always").checked;
+        $("ex-note").textContent = "save failed — server unreachable";
     }
     renderExchange();
 });
