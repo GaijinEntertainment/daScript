@@ -325,7 +325,7 @@ def exchange_register_resolver(app_config_name : string) {
     tune_set_scope_resolver(@@exchange_scope_resolver)
 }
 
-def private exchange_scope_resolver(scope_name : string; manifest_path : string; _fnames : string) : bool {   // nolint:STYLE037 — the boot ladder: one gate per refusal reason, in the order they must fire
+def private exchange_scope_resolver(scope_name : string; manifest_path : string; _fnames : string) : bool {
     // one lookup per process — a second scope re-checks completeness off the same applied file
     if (g_resolve_attempted) {
         return g_resolve_applied

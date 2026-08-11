@@ -40,7 +40,7 @@ struct AdminArgs {
 }
 
 [export]
-def main : int { // nolint:STYLE037 — flat CLI dispatch, one arm per --op
+def main : int {
     var r <- parse_args(type<AdminArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")

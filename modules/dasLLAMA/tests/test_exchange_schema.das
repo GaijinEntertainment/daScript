@@ -239,7 +239,7 @@ def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-ar
         t |> equal(info.kernel_count, 2)
         t |> equal(info.noise, "ok")
     }
-    t |> run("hostile sidecar shapes are rejected") @(t : T?) {   // nolint:STYLE038 - flat one-shape-per-arm rejection list; no arm stands alone
+    t |> run("hostile sidecar shapes are rejected") @(t : T?) {
         var errors : array<string>
         t |> success(!validate_sidecar("\{}", errors), "empty object")
         errors |> clear()

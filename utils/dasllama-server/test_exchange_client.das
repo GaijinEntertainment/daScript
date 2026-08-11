@@ -68,7 +68,7 @@ var private g_last_records = ""
 var private g_stop = false
 
 class FakeExchange : HvWebServer {
-    def override onInit {   // nolint:STYLE038 — the route table: one registration per endpoint
+    def override onInit {
         let vdoc = verified_doc()
         let xdoc = crossbox_doc()
         let odoc = oldversion_doc()
@@ -237,7 +237,7 @@ def test_lookup_and_pick(t : T?) {
 }
 
 [test]
-def test_fetch_and_apply(t : T?) {   // nolint:STYLE038 - flat scenario arms over one fake server
+def test_fetch_and_apply(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("exact verified hit applies clean") @(tt : T?) {
             let manifest = temp_manifest(tt, "exact")
@@ -328,7 +328,7 @@ def test_privacy_strip(t : T?) {
 }
 
 [test]
-def test_submit_rails(t : T?) {   // nolint:STYLE038 - flat scenario arms over one fake server
+def test_submit_rails(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("sidecar submit round-trips stripped") @(tt : T?) {
             let stripped = exchange_strip_private(verified_doc())

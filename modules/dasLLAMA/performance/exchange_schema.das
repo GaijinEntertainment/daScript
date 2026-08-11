@@ -468,7 +468,7 @@ def redact_record_paths(text : string) : string {
     if (doc == null || !(doc.value is _array)) {
         return ""
     }
-    var models & = unsafe(doc.value as _array)   // nolint:LINT003 — a var ref: the run objects below are mutated in place
+    var models & = unsafe(doc.value as _array)
     for (m in models) {
         var runs = m?["runs"]
         if (runs != null && runs.value is _array) {
