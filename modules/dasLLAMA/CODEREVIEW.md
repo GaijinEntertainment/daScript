@@ -54,10 +54,12 @@ model gate. A test that silently vanishes on one platform is a defect.
 under `DASLLAMA_PARITY_FULL=1` — a final pre-PR gate, never the iteration loop. Check what a
 test loads before launching it.
 
-**Every new, moved, or extracted function or data transform ships a test for the bit itself** —
-feed the function, check the bytes. "The model still runs" is not a test for a move. A
-platform-fixed predicate has no bytes to feed — test its observable (the argv it gates, the
-mode it selects) on the platform the test runs on.
+**Every new, moved, or extracted function, data transform, or `[init]` registration ships a
+test for the bit itself** — feed the function, check the bytes. "The model still runs" is not a
+test for a move. A platform-fixed predicate has no bytes to feed — test its observable (the
+argv it gates, the mode it selects) on the platform the test runs on. A moved registration's
+observable is its reachability: a program requiring the new home sees it registered, and its
+arm line still prints.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.
@@ -143,6 +145,12 @@ benchmarks may require internals — that is what they test. A split that adds f
 requires across the tree instead of fixing the facade re-export is a defect. Engine internals
 may require each other.
 
+**An `[init]`-only side-effect require lives in `dasllama_transformer.das`** — arch
+registrations, GPU tiers, and every module that requires the engine back (the umbrella breaks
+the cycle); it sits in `dasllama_common.das` only when the engine's own code needs the module.
+A diff that moves one restates, in the same change, every comment and `ARCHITECTURE.md` line
+that names its old home.
+
 **`dasllama_env.das` — every environment knob's single home.** All `[EnvConfig]` area structs
 and their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
 `tests/test_env_registry.das` enforces both directions. A knob declared anywhere else is a
@@ -163,10 +171,13 @@ provisioned box — BRINGUP.md §2 is the runbook.
 
 - `dasllama.das` — the public API surface and its re-exports.
 - `dasllama_common.das` — engine types, forward loops, override registries, runtime knobs. No
-  platform-specific code, and no load walk.
+  NEW platform-specific code or platform-guarded require (what sits here already is debt, not
+  precedent), and no load walk.
 - `dasllama_load.das` — the GGUF load walk: metadata to `Config`, plane layout, format detection,
   the eager and streamed conversion ladders, and the load entry points.
-- `dasllama_transformer.das` — block composition.
+- `dasllama_transformer.das` — block composition, and the require umbrella: the `[init]`-only
+  side-effect requires (arch registrations, GPU tiers, and any module that requires the engine
+  back and therefore cannot be required from `dasllama_common`).
 - `dasllama_blocks.das` — the std/dense/MoE block kernels and the default block sets. `forward()`
   reaches them only through the `ArchBlocks` pointers; a block kernel called by name from
   `dasllama_common.das` is a defect.
@@ -277,8 +288,9 @@ races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pai
 string-typed metal decline, or a counter beside the decline site, is a defect. (Vulkan decline
 typing is `followup_vulkan.md` item 1.)
 
-**The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that makes
-Metal and Vulkan differ in a new way lands with its entry there, or it is a defect.
+**The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that changes
+how Metal and Vulkan differ — adding an asymmetry or removing one — lands its §1.5 edit in the
+same change, or it is a defect.
 
 ### Model families
 

@@ -33,29 +33,40 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 **A diff that adds or moves work inside `run_jit` or `run_split_codegen` (`llvm_jit_run.das`)
 or the artifact emitters (`write_dll` / `write_exe` / `write_wasm` / `emit_object_only` /
 `link_dll_from_objects` in `llvm_jit_common.das`) keeps that work inside a timed phase of the
-`LLVM JIT time:` breakdown** — new work landing between phases, before the first timer, or
-after the last one is a defect; the phase inventory the breakdown must match is
-`ARCHITECTURE.md` §1 (§1.1 carries the split-mode mapping). A path that runs no pipeline
-phase and prints no breakdown (an early return, an empty function set) is out of scope, and
-a diagnostic log line is not work.
+`LLVM JIT time:` breakdown** — new work landing between phases or after the last timer is a
+defect; the phase inventory the breakdown must match is `ARCHITECTURE.md` §1 (§1.1 carries
+the split-mode mapping). Out of scope: a path that runs no pipeline phase and prints no
+breakdown (an early return, an empty function set), `run_jit`'s pre-timer option/policy
+resolution prologue, and a diagnostic log line.
 
 **A phase split stays split in the log.** When a diff extracts a timed phase into finer
 steps, each resulting step reports its own number under a `LLVM JIT time:` label; a parent
 entry may keep covering the sum only if the finer steps also print (`ARCHITECTURE.md` §1.1).
-Leaving an aggregate label silently absorbing new sub-steps is a defect.
+Leaving an aggregate label silently absorbing the finer steps of a split it just performed
+is a defect; new work added inside an existing phase reports its own number when the phase's
+doc names it as a separate step, and rides the aggregate otherwise.
 
 ## Codegen identity
 
 **A change under `daslib/` to IR generation, target-machine setup, `[llvm_code]` generators,
-or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`) — the DLL cache
-key folds AST hashes but cannot see emitter behavior, so changed emission without a bump
-silently serves stale code from cache (`ARCHITECTURE.md` §2).
+or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`) — the cache keys
+(the DLL key and the split obj-cache partition keys) fold AST hashes but cannot see emitter
+behavior, so changed emission without a bump silently serves stale code from cache
+(`ARCHITECTURE.md` §2, §2.1).
+
+**A new environment or config cache-key input folds inside `jit_env_salt`** (`llvm_jit_run.das`),
+never directly into `jit_dll_basename` or the partition-key chain in `run_split_codegen` — the
+helper is shared by both keys, and a config component folded into one key but not the other
+lets a config change link stale cached partition objects. Per-function-set inputs (AOT hashes,
+name folds, the hint folds) fold into each key directly; they are not salt.
 
 ## Overrides
 
-**An override announces itself where it changes the outcome.** The knobs this governs are the
-inventory in `ARCHITECTURE.md` §3 (the `DAS_TUNE_*` family, `--tune`, `tune_suppress_mint`,
-under `llvm_jit_run.das` / `llvm_jit_common.das` / `llvm_tune.das`); at the point one changes
+**An override announces itself where it changes the outcome.** The knobs this governs are
+those matching `ARCHITECTURE.md` §3's definition — an escape that changes what a run compiles,
+tunes, or emits beyond its defaults, under `llvm_jit_run.das` / `llvm_jit_common.das` /
+`llvm_tune.das` — and a diff introducing such a knob adds it to §3's inventory in the same
+change; at the point one changes
 what a run compiles, tunes, or emits, at least one line names the knob — set-but-inert stays
 silent, per-scope repeats are fine, and a diff that only exposes the override bit (a
 `*_overridden` query) discharges this when the announce lands at the consumer in the same

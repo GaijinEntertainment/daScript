@@ -679,8 +679,8 @@ def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_featu
 // per-module caches, and the full runtime-extern declaration set. init_jit guards + delegates here.
 // The --jit-split-modules driver calls it directly, once per partition, OVERWRITING the g_* state
 // WITHOUT disposal - the previous partition's state deliberately stays live in g_split_parts until
-// the driver's phase C (its module is still queued for the emit pool); partition 0 rides run_jit's
-// init_jit. Any other caller owns the previous state's teardown or leaks it.
+// the driver's phase C (its module is still queued for the emit pool); the first partition that
+// actually EMITS rides run_jit's init_jit. Any other caller owns the previous state's teardown or leaks it.
 [macro_function]
 def public init_jit_state(cg_opt_level : uint; target_triple : string; host_features : bool; module_name : string) {  // nolint:STYLE038 - flat one-call-per-item LLVM target/machine/pass setup; the calls are order-coupled and a split would only hide the sequence
     LLVMLinkInMCJIT()

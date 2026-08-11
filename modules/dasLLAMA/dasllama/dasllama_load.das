@@ -2256,6 +2256,11 @@ def quantize_weights_q4(var t : Model) {
 //! Applies the tune sidecar's "runtime" knobs first (see apply_box_profile_runtime).
 def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
+    // same guard rail as load_model_cached: a GPU-armed env whose backend never registered
+    // (tier module not required, shared_module load swallowed) says so instead of resolving CPU
+    if (get_metal_mode() == MetalMode.off) {
+        warn_gpu_backend_absent()
+    }
     var m <- load_gguf(path, mode)
     m.tok <- load_tokenizer_auto(path)
     return <- m

@@ -35,7 +35,11 @@ covers partitioning plus every partition's declare/irgen/ctor work, **optimize**
 plus the post-optimize verifies and the partition teardown, and **emit+link** is the
 `link_dll_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
 one `LLVM JIT time: job {obj} passes … emit …` line per partition (from the pool, under the
-same log option) and the `link … (N objects)` line under emit+link.
+same log option) and the `link … (N objects)` line under emit+link. With the obj cache on
+(`--jit-obj-cache`, default under split), cached partitions skip declare/irgen/optimize
+entirely: the key fold and probe cost lands in **irgen**, the `obj cache - K/N partitions
+cached` line prints unconditionally beside the split announce, and per-partition
+`obj cache hit` lines print under the log option.
 
 ### 1.2 The codegen tier
 
@@ -64,13 +68,35 @@ install phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_j
 hashes only, which is why the summary line asserts the opt-level tag only when the tier is
 actually known.
 
+### 2.1 The split obj cache — positional invalidation
+
+Under `--jit-split-modules`, each per-module partition object is content-addressed too
+(`--jit-obj-cache`, on by default under split): its key is the running fold of every module
+hash up to and including its own — symbol names, per-function AOT hashes, and the JIT-only
+hint folds — combined with `jit_env_salt`, the ONE helper both the DLL key and the partition
+keys fold their config/environment inputs through (a component folded into one key but not
+the other would let a config change link stale objects). The chained prefix makes
+invalidation **positional**: module order is topological, so a change in module j re-keys
+every partition from j on, while everything before j links its cached `.o` — the probe is
+bare file existence, before any per-partition LLVM state is created, so a hit skips
+declaration, irgen, and the optimize/emit pool outright. Three consequences for consumers:
+**require order is the cache layout** — a module you edit often belongs as late in the
+require chain as its dependencies allow (registration-only requires, like the dasLLAMA GPU
+tiers, belong at the END of an umbrella, not in a root module everything depends on); a
+rename-without-body change still re-keys, because the module hash folds symbol names, not
+just function hashes; and **the cache holds exactly one generation** — the GC keep-set is
+the current link set, so reverting an edit is an eviction, not a hit: the run after a revert
+re-emits from the reverted module on, same as the edit did.
+
 ## 3. Overrides and their announces
 
 The backend's override knobs — the escapes that change what a run compiles, tunes, or emits
 beyond its defaults — are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
 `DAS_TUNE_MODE` (grid/tuner compile modes), `DAS_TUNE_MANIFEST` (pins the sidecar),
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
-through a failing gate), `--tune` (forced re-mint), and the runtime escape API
+through a failing gate), `--tune` (forced re-mint), `--jit-obj-cache=0` (forces every split
+partition to re-emit, bypassing the obj cache), `DAS_JIT_PROBE_LTO` (split partitions emit
+bitcode and the link runs lld LTO — a dev probe artifact), and the runtime escape API
 `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
 passes the knob name it acts for). The announce contract: an override announces at the point
 it CHANGES THE OUTCOME — at least one line naming the knob (its env spelling, or the
