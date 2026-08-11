@@ -429,6 +429,14 @@ jobs:
           $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-playground/$suite.das
         done
 
+    - name: "Test dasllama-ladder"
+      # The dasllama.io exchange store (sidecars + ladder records). In-dir
+      # suite like the playground's; store-only, runs against :memory:.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-ladder/test_ladder_store.das
+
     - name: "Test dasweb-buildd"
       # The wasm build worker (compute-box side of the same pipeline). In-dir
       # suites like the playground's; the client suite runs a stub playground
