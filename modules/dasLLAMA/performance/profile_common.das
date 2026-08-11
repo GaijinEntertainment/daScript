@@ -909,7 +909,7 @@ def tune_manifest_noise() : string {
     }
     var err = ""
     var doc = read_json(fread(path), err)
-    let verdict = "{doc?["provenance"]?["noise"] ?? ""}"   // interpolation copies out of the doc before delete
+    let verdict = doc?["provenance"]?["noise"] ?? ""   // string-heap value; safe past delete_json (nodes only)
     delete_json(doc)
     return verdict
 }
