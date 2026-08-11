@@ -1,0 +1,20 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasllama-ladder")
+    package_description("dasllama.io exchange service: content-addressed sidecar + record ladder over dasHV + SQLite")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    release_name("dasllama-ladder")
+    release_include_if_missing("dasllama-ladder.toml") // initialize once; preserve deployed edits (paths, submit_open) on upgrades
+    release_include_from("utils/watchdog/watchdog.py")
+    release_include_if_missing("watchdog.json")        // carries the port + health/shutdown urls — an operator edit must survive upgrades
+    release_include("admin.das")                       // operator curation CLI; run with a daslang SDK on the box
+    release_include("caddy.snippet")                   // the public boundary, shipped beside the code so a route change reviews with it
+}
