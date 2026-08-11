@@ -637,7 +637,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     }
     // DAS_JIT_PROBE_LTO: bitcode partitions + lld-LTO link - the cross-module-inlining dev probe (env folds into the cache keys; ARCHITECTURE.md §3)
     if (!empty(get_env_variable("DAS_JIT_PROBE_LTO"))) {
-        if (cached != 0) {
+        // enforce the documented precondition outright - probe behavior must not depend on prior cache state
+        if (obj_cache || cached != 0) {
             reset_jit_globals_after_failure()
             panic("LLVM JIT: DAS_JIT_PROBE_LTO needs every partition live - rerun with --jit-obj-cache=0")
         }

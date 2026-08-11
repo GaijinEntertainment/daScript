@@ -105,7 +105,8 @@ def test_jit_obj_cache(t : T?) {
     t |> success(copy_fixture(fixtures, tmp, "_llvm_split_modules_mod_b.das"), "stage mod_b fixture")
     // child CWD = tmp so .jitted_scripts lands inside it; windows cd needs /d for cross-drive
     let cd_prefix = get_platform_name() == "windows" ? "cd /d \"{tmp |> replace("/", "\\")}\" && " : "cd \"{tmp}\" && "
-    let cmd = "{cd_prefix}\"{bin}\" -jit \"{tmp}/_llvm_split_modules_client.das\" -- --jit-split-modules=4"
+    // -dasroot pins module resolution: the child's CWD is the temp dir, not the tree
+    let cmd = "{cd_prefix}\"{bin}\" -dasroot \"{get_das_root()}\" -jit \"{tmp}/_llvm_split_modules_client.das\" -- --jit-split-modules=4"
     // round 1: cold - every partition emits
     expect_round(t, "round 1 cold", cmd, "obj cache - 0/3 partitions cached", "SPLIT_RESULT 340 19 36 33 -1")
     // round 2: DLL deleted, objects kept - the all-hit edge, a link-only build
