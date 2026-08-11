@@ -159,9 +159,29 @@ and their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
 `tests/test_env_registry.das` enforces both directions. A knob declared anywhere else is a
 defect.
 
+**A NEW `[EnvConfig]` area struct is wired into `env_markdown()` AND `registered_env_names()`
+in the same change, and `ENVIRONMENT.md` is regenerated.** Those two lists are hand-maintained,
+so a struct that is declared and `env_config`-instantiated but absent from them renders nowhere
+and the registry test passes vacuously (both generated and checked-in omit it). A new area
+struct whose knobs do not appear in `ENVIRONMENT.md` is a defect.
+
 **A new module file is registered in `.das_module` in the same change.** The install rule is a
 directory glob; `CMakeLists.txt`'s `ADD_MODULE_DAS` list is a subset and is touched only when a
 file joins it.
+
+**`performance/exchange_schema.das` is the single validator for exchange submissions — record
+stores and tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM
+require added to it (the ladder service must build without the engine), is a defect; a change
+to what the record or sidecar writers emit lands with `tests/test_exchange_schema.das` still
+green against the in-tree corpus.
+
+**`performance/exchange_client.das` is the single exchange client — every HTTP call to the
+sidecar exchange (lookup, download, submit) goes through it.** Its invariants: everything
+downloaded passes the full client-side gate (content sha, schema, `DASLLAMA_VERSION`) before
+it is written; every submission goes through `exchange_strip_private` (no `provenance.binary`,
+no path-shaped values leave the box); exchange-sourced and foreign-box sidecars are never
+submitted; a lookup failure is never fatal to a boot. A second HTTP path to the exchange, or
+a submission built around the strip, is a defect.
 
 **`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
 catalog file: the exact HF repo + revision pin, canonical bytes + sha256, or the conversion
@@ -173,6 +193,8 @@ provisioned box — BRINGUP.md §2 is the runbook.
 ### Engine
 
 - `dasllama.das` — the public API surface and its re-exports.
+- `dasllama_version.das` — the `DASLLAMA_VERSION` release counter, and nothing else. It requires
+  nothing, so the lightest harness can stamp it.
 - `dasllama_common.das` — engine types, forward loops, override registries, runtime knobs. No
   NEW platform-specific code or platform-guarded require (what sits here already is debt, not
   precedent), and no load walk.
@@ -409,6 +431,13 @@ not of the docs.
 string, and doc line that named the old value names the new one in the same diff.
 
 ## Implementation
+
+**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.**
+Kernel work is a diff that adds, removes, or edits any compute-kernel body or its variant set —
+the CPU tiers, the generated GEMM families, the GPU kernel classes, the KV-codec and convert
+kernels — or a tune family's registration. Equal versions must mean an equal kernel roster:
+the sidecar exchange keys validity on (version, box), so a kernel diff without the bump breaks
+that promise silently.
 
 **A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a
 given compiled kernel, can this value change between dispatches? If yes it is data and belongs in

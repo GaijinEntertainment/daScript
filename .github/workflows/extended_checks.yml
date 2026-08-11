@@ -409,12 +409,14 @@ jobs:
       # OpenAI-compatible server conformance test. Model-gated + JIT-only, so it
       # skips cleanly here (no GGUF, no -jit) — the value is the compile guard:
       # it exercises the dasHV + dasAudio + dasllama facade surface the server
-      # reaches, catching any API/module breakage in CI.
+      # reaches, catching any API/module breakage in CI. The exchange-client
+      # suite is model-free and runs fully (fake exchange on 127.0.0.1:18131).
       if: matrix.target == 'linux'
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_exchange_client.das
 
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a
@@ -427,6 +429,17 @@ jobs:
         set -eux
         for suite in test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints; do
           $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-playground/$suite.das
+        done
+
+    - name: "Test dasllama-ladder"
+      # The dasllama.io exchange service (sidecars + ladder records). In-dir
+      # suites like the playground's; the server suite binds 127.0.0.1:19015
+      # and shuts itself down, the store/config suites run against :memory:.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        for suite in test_ladder_store test_ladder_config test_ladder_server; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-ladder/$suite.das
         done
 
     - name: "Test dasweb-buildd"

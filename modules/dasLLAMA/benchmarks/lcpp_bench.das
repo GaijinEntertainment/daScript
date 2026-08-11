@@ -17,6 +17,7 @@ require daslib/module_path            // get_this_module_dir — the default pro
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
+require ../performance/exchange_client.das   // --submit: POST the stamped records to the exchange
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
@@ -89,6 +90,9 @@ struct Args {
     @clarg_name = "json-path"
     @clarg_doc = "With -o json: also write the records to this file — the machine rail (stdout carries engine logs too, and an untuned box's tune-relaunch merges stderr into it)"
     json_path : string
+
+    @clarg_doc = "With -o json: submit the records to the sidecar exchange (dasllama.io; DASLLAMA_EXCHANGE_URL overrides). Non-zero exit when the submit is refused"
+    submit : bool
 
     @clarg_short = "q"
     @clarg_doc = "Weight quant mode (default: q8)"
@@ -228,6 +232,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
+        dasllama_version = DASLLAMA_VERSION,
         tune = tune_summary(), tune_sha = tune_manifest_sha(), noise = tune_manifest_noise(),
         hardware = gather_hardware())
     run.files |> emplace(file_identity(model_path, "weights"))
@@ -575,6 +580,16 @@ def main() : int {
         print("warning: -o {cfg.output} with an A/B lever - records cover the plain protocol only, falling back to txt\n")
         fmt = OutFmt.txt
     }
+    if (cfg.submit && fmt != OutFmt.json) {
+        print("error: --submit needs -o json (the records rail; A/B levers cannot submit)\n")
+        return 1
+    }
+    if (cfg.submit && g_debug_run) {
+        // debug-jit numbers are stamped so no board mistakes them for measurement — they must
+        // not reach the public exchange either; a submission is the released exe's job
+        print("error: --submit refused on a debug -jit run - the numbers are debug-grade; submit from the released exe\n")
+        return 1
+    }
     // the standing per-box methodology, enforced here rather than left to the environment
     // (gen_profile's pattern): cap the future que's workers (computing main is the last lane) and
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
@@ -912,6 +927,7 @@ def main() : int {
         env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true),
         version = das_version(),
+        dasllama_version = DASLLAMA_VERSION,
         tune = tune_summary(),
         tune_sha = tune_manifest_sha(),
         noise = tune_manifest_noise(),
@@ -969,5 +985,14 @@ def main() : int {
         }
     }
     print("{text}\n")
+    if (cfg.submit) {
+        let url = empty(g_env_exchange.exchange_url) ? EXCHANGE_URL_DEFAULT : g_env_exchange.exchange_url
+        let serr = exchange_submit_records_doc(url, text)
+        if (!empty(serr)) {
+            say(fmt, "records NOT submitted to {url}: {serr}\n")
+            return 1
+        }
+        say(fmt, "records submitted to {url}\n")
+    }
     return 0
 }

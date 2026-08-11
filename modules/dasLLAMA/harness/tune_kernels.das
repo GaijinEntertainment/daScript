@@ -183,6 +183,7 @@ def screening_keep(best : array<double>; ok : array<bool>; i : int;
 }
 
 def private kernel_begin(name : string) : int64 {
+    interrupt_gate(name)   // between families only — the race in flight always completes
     delete g_samples
     tune_progress_kernel_begin(name, ROUNDS)
     return ref_time_ticks()

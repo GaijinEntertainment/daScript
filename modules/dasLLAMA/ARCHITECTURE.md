@@ -39,6 +39,11 @@ never hand-edit the tables).
 - **`dasllama.das`** — the public API facade and nothing else: `load_model` → `create_session` →
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
   in the module that owns the concern, and the facade re-exports it.
+- **`dasllama_version.das`** — `DASLLAMA_VERSION`, the module's own release counter, and nothing
+  else. Decoupled from the daslang version and from `LLVM_JIT_CODEGEN_VERSION`; ANY kernel work
+  bumps it (CODEREVIEW.md), so equal versions mean an equal kernel roster — the sidecar exchange
+  keys validity on (version, box). A zero-require leaf so the tuner's noise half, the benches,
+  and the facade chain (`dasllama_common` re-exports it) all reach it without weight.
 - **`dasllama_common.das`** — the engine: `Model`/`Session`/`Config`, the forward loops, the
   override registries, the runtime knobs. **Not** the load walk (§1.3) and **not** GPU residency
   (§1.5) — both left, and the seam each left behind is a registered hook, so neither comes back.
@@ -291,6 +296,12 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`performance/fetch_models.das`** — the committed model-provenance manifest: per catalog
   file, the exact HF repo + revision pin + sha256, or the on-box conversion recipe. Verify by
   default, `--fetch` downloads; it never converts, never benches. BRINGUP.md §2 is the runbook.
+- **`performance/exchange_schema.das`** — engine-free validation for exchange submissions
+  (record stores + tune sidecars); the dasllama.io ladder service builds on it.
+- **`performance/exchange_client.das`** — the sidecar-exchange client: the boot-time
+  lookup/apply (llvm_tune's scope resolver — a verified per-box match downloads instead of a
+  ~20-minute tune), the privacy-stripped submit rails, and the control-page surface
+  dasllama-server serves at `/exchange`.
 - **`benchmarks/asr/mem_census.sh`** — the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) — the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.

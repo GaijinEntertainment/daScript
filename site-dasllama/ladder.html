@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ladder — dasllama.io</title>
+<meta name="description" content="Every dasLLAMA measurement — official boards and community submissions, with receipts, hardware, and the llama.cpp reference run where one rode along."/>
+<meta property="og:title" content="dasLLAMA ladder"/>
+<meta property="og:description" content="Every measurement in the world — official and community — with receipts."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/ladder.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="index.html">home</a><a class="dio-tab is-active" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row" style="justify-content:flex-end">
+<div class="dio-head__aside" id="dio-ladder-stats"><b>—</b> rows · <b>—</b> boxes<br/><b>—</b> last submission<br/><a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a></div>
+</div></div></header>
+
+<div class="forge-container">
+
+<!-- filter selects are built by dasllama-io.js from the rows actually on the board -->
+<div class="dl-filters" id="ladder-filters"></div>
+
+<div class="dl-viewbar">
+<div class="dl-seg" id="view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
+<div class="dl-seg" id="metric" style="visibility:hidden"><button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button></div>
+</div>
+
+<!-- both views render from /api/runs joined with the verbatim /api/submission/:id documents -->
+<div class="dl-bars" id="bars" hidden></div>
+
+<div class="dl-table-wrap" id="table-wrap"><table class="dl-table dl-table--bench" id="ladder-table">
+<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
+</table></div>
+
+<div class="dl-caption" id="ladder-caption"></div>
+
+<div class="dl-legend">
+<span><span class="dl-src__dot dl-src__dot--ok"></span>verified — promoted by us</span>
+<span><span class="dl-src__dot dl-src__dot--un"></span>unverified — kept, not promoted</span>
+<span><span class="dl-src__badge dl-src__badge--official">official</span>measured by us</span>
+<span><span class="dl-src__badge">community</span>submitted</span>
+</div>
+<p class="dio-note">Rows render client-side from <span style="color:var(--fg-dim)">/api/runs</span>; every number and command line in a receipt comes from the verbatim submission document. · <a href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology ↗</a></p>
+</div>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="index.html">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+</div></div></footer>
+
+</div></body></html>

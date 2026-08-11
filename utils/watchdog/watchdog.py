@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Supervise dasllama-server under JIT, or a standalone program such as Cadmus.
 
-The first untuned invocation exits with code 3 after writing the tune sidecar;
-that is an expected bootstrap event and is relaunched immediately. Exit 4 is a
-config restart (the control page saved a new config and asked for a relaunch)
-and is also relaunched immediately. Exit 0 is an intentional shutdown. Other
-exits are reported, notified, and restarted with bounded exponential backoff. Standalone programs can use a stop-file handshake
+The first untuned invocation exits with code 3 after writing the tune sidecar —
+downloaded from the sidecar exchange when a verified match exists, else minted
+by the local tuner; both print a "restart to apply the winners" marker and are
+relaunched immediately. Exit 4 is a config restart (the control page saved a new
+config and asked for a relaunch) and is also relaunched immediately. Exit 0 is an
+intentional shutdown. Other exits are reported, notified, and restarted with
+bounded exponential backoff. Standalone programs can use a stop-file handshake
 to finish their current update and run shutdown before exiting.
+
+During a tune the tray menu can stop the race at the next kernel boundary (the
+DAS_TUNE_CONTROL file): adopt an offered unverified sidecar instead, or serve
+untuned for the rest of the session. @tune and @sidecar events from the child
+fold into STATE, which the tooltip, menu, and control plugin all read.
 """
 from __future__ import annotations
 
@@ -73,6 +80,9 @@ STATE: dict[str, object] = {
     # Progress of an in-flight tune, folded from llvm_tune's @tune events. Counters only —
     # nothing here is an estimate, because the tuner cannot know how long it has left.
     "tune": {},
+    # The exchange story of the current child, folded from dasllama's @sidecar events:
+    # state (lookup/none/offer/applied) + the pending-submit offer. Drives the tray menu.
+    "sidecar": {},
 }
 
 
@@ -557,16 +567,19 @@ def request_shutdown(url: str, logger: logging.Logger) -> None:
 # reported. `tune_restart` is the one legitimate rewind — the process restarts to apply the winners
 # — so it resets the rank and the sequence starts over.
 STARTUP_STAGES: list[tuple[str, int, str]] = [
-    ("jit_cached",   1, r"LLVM JIT: DLL cache hit"),
-    ("jit_codegen",  1, r"LLVM JIT: DLL cache miss, codegen for"),
-    ("jit_linked",   2, r"Library .+ linked - ok"),
-    ("tuning",       3, r"llvm_tune: tuning scope"),
-    ("tune_restart", 4, r"llvm_tune: restart to apply the winners"),
-    ("model_load",   5, r"dasLLAMA: prepared image mapped"),
-    ("asr_init",     6, r"starting \d+ asynchronous ASR worker"),
-    ("ready",        7, r"listening on http"),
+    ("jit_cached",      1, r"LLVM JIT: DLL cache hit"),
+    ("jit_codegen",     1, r"LLVM JIT: DLL cache miss, codegen for"),
+    ("jit_linked",      2, r"Library .+ linked - ok"),
+    ("exchange_lookup", 3, r"exchange: scope .+ looking up a sidecar"),
+    ("tuning",          4, r"llvm_tune: tuning scope"),
+    # both the tuner's marker and the exchange client's "sidecar applied" marker end in this
+    # phrase, and both mean the same thing: the process restarts to stamp fresh winners
+    ("tune_restart",    5, r"restart to apply the winners"),
+    ("model_load",      6, r"dasLLAMA: prepared image mapped"),
+    ("asr_init",        7, r"starting \d+ asynchronous ASR worker"),
+    ("ready",           8, r"listening on http"),
 ]
-TUNE_RESTART_RANK = 4
+TUNE_RESTART_RANK = 5
 
 
 def detect_stage(message: str) -> tuple[str, int] | None:
@@ -601,18 +614,24 @@ def advance_stage(stage: dict[str, object], message: str, now: float) -> dict[st
     return fields
 
 
-# llvm_tune emits structured progress as `@tune <kind> k=v ...` lines. A supervised child never
-# owns a terminal, so it forwards these instead of drawing a bar — that is exactly what makes
-# them ours to consume. Values never contain spaces (llvm_tune's contract), so a plain split is
-# enough. Consuming these is why the log no longer needs to infer structure from prose.
+# llvm_tune emits structured progress as `@tune <kind> k=v ...` lines, and dasllama's exchange
+# client emits `@sidecar <kind> k=v ...` on the same contract. A supervised child never owns a
+# terminal, so it forwards these instead of drawing a bar — that is exactly what makes them ours
+# to consume. Values never contain spaces (the emitters' contract), so a plain split is enough.
 TUNE_EVENT_PREFIX = "@tune "
+SIDECAR_EVENT_PREFIX = "@sidecar "
+
+# Balloons are announce-once per distinct sidecar sha, across restarts: an untuned noise-loop
+# re-emits the same `offer`/`pending_submit` on every boot, and a balloon per restart (each a
+# fresh 11 s PowerShell process on Windows) is pure spam. Persist across children in the process.
+_BALLOONED: set[str] = set()
 
 
-def parse_tune_event(message: str) -> tuple[str, dict[str, str]] | None:
-    """Return (kind, fields) for a `@tune ...` line, or None. Never raises on malformed input."""
-    if not message.startswith(TUNE_EVENT_PREFIX):
+def parse_child_event(message: str, prefix: str) -> tuple[str, dict[str, str]] | None:
+    """Return (kind, fields) for a `<prefix><kind> k=v ...` line, or None. Never raises."""
+    if not message.startswith(prefix):
         return None
-    parts = message[len(TUNE_EVENT_PREFIX):].split()
+    parts = message[len(prefix):].split()
     if not parts:
         return None
     fields = {}
@@ -643,6 +662,33 @@ def apply_tune_event(tune: dict[str, object], kind: str, fields: dict[str, str])
         # publishes an incoherent state (round=47 against rounds=0) that a status page renders
         tune["done"] = int(tune.get("done", 0)) + 1
         tune.update(round=0, rounds=0, phase="", live=0)
+    elif kind == "abort":
+        # a supervisor interrupt stopped the tune at a kernel boundary; drop the "total" that
+        # drives the "minting N/M" display so the status stops claiming a tune is in flight
+        tune.clear()
+        tune.update(aborted=True, at=fields.get("at", ""))
+
+
+def apply_sidecar_event(sidecar: dict[str, object], kind: str, fields: dict[str, str]) -> None:
+    """Fold one exchange event into the published sidecar state. `offer` persists through a
+    tune (the tray menu's adopt action reads it); `pending_submit` rides beside the state and
+    clears on `submitted`. A fresh `lookup` starts the story over."""
+    if kind == "lookup":
+        sidecar.clear()
+        sidecar["state"] = "lookup"
+    elif kind == "none":
+        sidecar.update(state="none", reason=fields.get("reason", ""))
+    elif kind == "offer":
+        sidecar.update(state="offer", sha=fields.get("sha", ""),
+                       tier=fields.get("tier", ""), count=fields.get("count", ""))
+    elif kind == "apply":
+        sidecar.update(state="applied", sha=fields.get("sha", ""),
+                       tier=fields.get("tier", ""), verified=fields.get("verified", ""))
+    elif kind == "pending_submit":
+        sidecar["pending_submit"] = fields.get("sha", "")
+    elif kind == "submitted":
+        sidecar.pop("pending_submit", None)
+        sidecar["submitted"] = fields.get("sha", "")
 
 
 def stream_child(
@@ -651,23 +697,25 @@ def stream_child(
     tune_restart_seen: threading.Event,
     jit_dlls: set[Path],
     stage: dict[str, object],
+    name: str,
 ) -> None:
     assert proc.stdout is not None
     # Per child, and published immediately: the tune-bootstrap restart is the normal first-run
     # path, and the relaunched child emits no tune events at all. Without clearing here, the
     # control page would keep showing the finished tune's counters for the rest of the run.
     tune: dict[str, object] = {}
-    set_state(tune={})
+    sidecar: dict[str, object] = {}
+    set_state(tune={}, sidecar={})
     for line in proc.stdout:
         message = line.rstrip("\r\n")
-        event = parse_tune_event(message)
+        event = parse_child_event(message, TUNE_EVENT_PREFIX)
         if event is not None:
             kind, fields = event
             apply_tune_event(tune, kind, fields)
             # A tune is hundreds of steps; publish every one for the control page but log only
             # the kernel boundaries, or the log becomes the flood these events exist to replace.
             set_state(tune=dict(tune))
-            if kind in ("plan", "end"):
+            if kind in ("plan", "end", "abort"):
                 # the child's stdout is arbitrary bytes, so a line could carry a field named
                 # like one of emit()'s own: "pid"/"kind" would be a duplicate kwarg (TypeError,
                 # killing this daemon thread and with it stage detection AND tune_restart_seen),
@@ -676,7 +724,31 @@ def stream_child(
                         if k not in ("pid", "kind", "ts", "event")}
                 emit(logger, "tune", pid=proc.pid, kind=kind, **safe)
             continue
-        if "llvm_tune: restart to apply the winners" in message:
+        event = parse_child_event(message, SIDECAR_EVENT_PREFIX)
+        if event is not None:
+            kind, fields = event
+            apply_sidecar_event(sidecar, kind, fields)
+            set_state(sidecar=dict(sidecar))
+            safe = {k: v for k, v in fields.items()
+                    if k not in ("pid", "kind", "ts", "event")}
+            emit(logger, "sidecar", pid=proc.pid, kind=kind, **safe)
+            # Balloons announce a DECISION the user can make; they never carry the action
+            # (a PowerShell balloon cannot) — the tray menu and the control page do. Announce
+            # once per distinct sha (a noise-abort loop re-emits the same offer every boot).
+            sha = fields.get("sha", "")
+            balloon_key = f"{kind}:{sha}"
+            if kind in ("offer", "pending_submit") and balloon_key not in _BALLOONED:
+                _BALLOONED.add(balloon_key)
+                if kind == "offer":
+                    notify(f"{name}: unverified sidecar available",
+                           "The tray menu can adopt it instead of finishing the tune")
+                else:
+                    notify(f"{name}: share this box's tune?",
+                           "Open the control page to submit it to the exchange")
+            continue
+        # both the tuner's marker and the exchange client's "sidecar applied" marker license
+        # the immediate exit-3 relaunch — the process restarts to stamp fresh winners
+        if "restart to apply the winners" in message:
             tune_restart_seen.set()
         match = re.search(
             r"LLVM JIT: DLL cache (?:hit |miss, codegen for )(.+\.dll)$",
@@ -845,6 +917,8 @@ def tray_state() -> tuple[str, str]:
         up = time.time() - since if since else 0.0
         hours, mins = int(up // 3600), int(up % 3600 // 60)
         line = f"serving · healthy {hours}h{mins:02d}m" if hours else f"serving · healthy {mins}m"
+        if s.get("tuning_disabled"):
+            line += " · tuning off"   # a 'run untuned' hold is active — visible, and revocable in the menu
         return line, "base"
     stage = s.get("stage")
     if healthy is False:
@@ -856,14 +930,94 @@ def tray_status() -> str:
     return tray_state()[0]
 
 
+def tune_control_path(args: argparse.Namespace) -> Path:
+    """The stop file the tuner polls at kernel-family boundaries (DAS_TUNE_CONTROL). Lives in
+    the logs dir — always writable, never inside the supervised bundle's sources."""
+    return args.log.parent / f"{args.name}.tune-stop"
+
+
+def tune_in_flight() -> bool:
+    s = read_state()
+    if not s.get("child_pid"):
+        return False
+    tune = s.get("tune")
+    return isinstance(tune, dict) and bool(tune.get("total"))
+
+
+def sidecar_state() -> dict[str, object]:
+    s = read_state().get("sidecar")
+    return s if isinstance(s, dict) else {}
+
+
+def take_tune_stop() -> dict[str, object] | None:
+    with STATE_LOCK:
+        action = STATE.pop("tune_stop", None)
+    return action if isinstance(action, dict) else None
+
+
+def take_resume_tuning() -> bool:
+    with STATE_LOCK:
+        return bool(STATE.pop("resume_tuning", None))
+
+
+def request_resume_tuning(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Tray action: undo a 'run untuned' hold so the next start tunes normally again."""
+    set_state(resume_tuning=True)
+    emit(logger, "tuning_resume_requested")
+    notify(f"{args.name}: tuning re-enabled", "The next start will tune this box normally")
+
+
+def request_tune_stop(args: argparse.Namespace, logger: logging.Logger, mode: str) -> None:
+    """Tray action: stop the in-flight tune at the next kernel boundary (the race in flight
+    always completes). `use_sidecar` arms a ONE-SHOT unverified-accept relaunch — precise
+    consent that must never outlive this click; `untuned` makes fallback stamps sticky for
+    the rest of this watchdog session (revocable via 'Resume tuning'), so a later crash-restart
+    cannot surprise the box with a 20-minute tune."""
+    if mode == "use_sidecar":
+        action: dict[str, object] = {
+            "mode": mode, "env": {"DASLLAMA_EXCHANGE_ACCEPT": "any"}, "sticky": False}
+    else:
+        action = {"mode": mode, "env": {"DAS_TUNE_POLICY": "fallback"}, "sticky": True}
+    # Arm STATE BEFORE writing the file: the supervision loop unlinks the control file and then
+    # take_tune_stop()s at each spawn — if the file were written first, that unlink could delete
+    # it and the take miss the action, letting a fresh child tune for the full ~20 minutes.
+    set_state(tune_stop=action)
+    path = tune_control_path(args)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("stop\n", encoding="ascii")
+    except OSError as exc:
+        # the file only interrupts the IN-FLIGHT tune; the armed policy still governs the
+        # relaunch, so a failed write still stops the box tuning on the next start
+        emit(logger, "tune_stop_failed", mode=mode, error=str(exc))
+    emit(logger, "tune_stop_requested", mode=mode, path=str(path))
+    notify(f"{args.name}: stopping the tune",
+           "The measurement in flight finishes first; the tune stops at the next kernel")
+
+
 def tray_tick(icon, name: str) -> None:
-    """Refresh the tooltip from live state. Called from the supervision loop's 0.25s tick;
-    writes only on change so the shell isn't spammed with NOTIFYICONDATA updates."""
+    """Refresh the tray from live state. Called from the supervision loop's 0.25s tick; writes
+    only on change so the shell isn't spammed with updates."""
     if icon is None:
         return
-    # AppKit objects serve only the process's main thread, and on macOS the supervision loop
-    # is NOT that thread (run_with_darwin_tray). The menu's status row is a callable the
-    # runloop re-evaluates on open, so live state stays visible without the tooltip write.
+    # Menu refresh runs on EVERY platform. pystray bakes each item's visible/enabled at build
+    # time and does NOT re-evaluate them when the menu opens, so this update_menu() on a STATE
+    # transition is the ONLY thing that makes the dynamic exchange items appear/disappear. The
+    # key must include every STATE field an item's predicate reads (healthy, tuning_disabled),
+    # or that item never refreshes. Wrapped so a backend that rejects a cross-thread rebuild
+    # (macOS AppKit off the main thread) degrades to a no-op rather than taking supervision down.
+    sc = sidecar_state()
+    st = read_state()
+    menu_key = (tune_in_flight(), str(sc.get("state") or ""), bool(sc.get("pending_submit")),
+                st.get("healthy") is True, bool(st.get("tuning_disabled")))
+    if getattr(icon, "_das_last_menu_key", None) != menu_key:
+        try:
+            icon.update_menu()
+            icon._das_last_menu_key = menu_key
+        except Exception:  # noqa: BLE001
+            pass
+    # Tooltip + icon image go through NOTIFYICONDATA-style writes; AppKit serves only the main
+    # thread and darwin runs this tick on a worker, so skip those there.
     if sys.platform == "darwin":
         return
     status, coarse = tray_state()
@@ -913,9 +1067,27 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
         emit(logger, "tray_shutdown_requested")
         stopping.set()
 
-    # Menu text/enabled are callables: pystray re-evaluates them each time the menu opens,
-    # so the menu is honest without an update pump. "Open" greys out until health is green —
-    # offering a page that isn't up is how a tray lies.
+    def on_use_sidecar(_icon, _item) -> None:
+        request_tune_stop(args, logger, "use_sidecar")
+
+    def on_run_untuned(_icon, _item) -> None:
+        request_tune_stop(args, logger, "untuned")
+
+    def on_resume_tuning(_icon, _item) -> None:
+        request_resume_tuning(args, logger)
+
+    def on_share(_icon, _item) -> None:
+        try:
+            webbrowser.open(f"{url}#exchange")
+        except Exception as exc:  # noqa: BLE001
+            emit(logger, "tray_open_failed", reason=repr(exc))
+
+    # Menu item visible/enabled are baked when the menu is BUILT — pystray does not re-evaluate
+    # them on open — so tray_tick's update_menu() on a STATE transition is what refreshes them,
+    # and its menu_key must name every STATE field these predicates read. The menu is a pure
+    # function of STATE. "Open" greys out until health is green. The exchange rows exist only
+    # while their action is real: adopting needs a live tune AND an offer; sharing needs a
+    # pending submit; "Resume tuning" only while a run-untuned hold is active.
     items = [pystray.MenuItem(lambda item: tray_status(), None, enabled=False)]
     if url:
         items.append(pystray.MenuItem(
@@ -923,6 +1095,29 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
             on_open,
             default=True,
             enabled=lambda item: read_state().get("healthy") is True,
+        ))
+    items.append(pystray.MenuItem(
+        "Use available sidecar instead (stops tuning)",
+        on_use_sidecar,
+        visible=lambda item: tune_in_flight() and sidecar_state().get("state") == "offer",
+    ))
+    items.append(pystray.MenuItem(
+        "Stop tuning, run untuned",
+        on_run_untuned,
+        visible=lambda item: tune_in_flight(),
+    ))
+    items.append(pystray.MenuItem(
+        "Resume tuning",
+        on_resume_tuning,
+        visible=lambda item: bool(read_state().get("tuning_disabled")),
+    ))
+    if url:
+        items.append(pystray.MenuItem(
+            "Share this box's tune…",
+            on_share,
+            # needs the control page, so it also needs the server up
+            visible=lambda item: (bool(sidecar_state().get("pending_submit"))
+                                  and read_state().get("healthy") is True),
         ))
     items.append(pystray.MenuItem("Shutdown", on_shutdown))
     try:
@@ -1312,6 +1507,13 @@ def supervise(
     child_env = os.environ.copy()
     if stop_file is not None:
         child_env[args.stop_env] = str(stop_file)
+    # daslang children get the tune-control channel: during a tune there is no HTTP (the
+    # server binds its port at stage "ready", the tune runs at stage "tuning"), so the tray's
+    # stop-the-tune actions write this file and the tuner polls it at kernel boundaries.
+    control_file: Path | None = None
+    if args.program is None:
+        control_file = tune_control_path(args)
+        child_env["DAS_TUNE_CONTROL"] = str(control_file)
     emit(logger, "watchdog_started", pid=os.getpid(), command=command, cwd=str(args.cwd))
 
     try:
@@ -1321,6 +1523,29 @@ def supervise(
                     stop_file.unlink()
                 except FileNotFoundError:
                     pass
+            if control_file is not None:
+                # a consumed (or stale) stop request must never kill the NEXT tune
+                try:
+                    control_file.unlink()
+                except FileNotFoundError:
+                    pass
+            # a "resume tuning" request (tray item, or reconciled by a config restart) clears the
+            # sticky untuned hold so the next start tunes normally again
+            if take_resume_tuning():
+                set_state(sticky_env=None, tuning_disabled=False)
+                emit(logger, "tuning_resumed")
+            # per-spawn env: base + the persistent sticky hold (run-untuned, in STATE so it is
+            # revocable) + a one-shot action (adopt-the-sidecar, consumed here and gone)
+            spawn_env = dict(child_env)
+            sticky = read_state().get("sticky_env")
+            if isinstance(sticky, dict):
+                spawn_env.update(sticky)
+            action = take_tune_stop()
+            if action is not None:
+                spawn_env.update(action.get("env") or {})
+                if action.get("sticky"):
+                    set_state(sticky_env=dict(action.get("env") or {}), tuning_disabled=True)
+                emit(logger, "tune_stop_consumed", mode=str(action.get("mode", "")))
             started_at = time.time()
             creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if IS_WINDOWS else 0
             try:
@@ -1334,7 +1559,7 @@ def supervise(
                     errors="replace",
                     bufsize=1,
                     creationflags=creationflags,
-                    env=child_env,
+                    env=spawn_env,
                 )
             except OSError as error:
                 emit(logger, "spawn_failed", error=str(error))
@@ -1350,7 +1575,7 @@ def supervise(
             stage: dict[str, object] = {"name": None, "rank": 0, "since": time.monotonic()}
             output = threading.Thread(
                 target=stream_child,
-                args=(child, logger, tune_restart_seen, jit_dlls, stage),
+                args=(child, logger, tune_restart_seen, jit_dlls, stage, args.name),
                 daemon=True,
             )
             output.start()
@@ -1436,9 +1661,19 @@ def supervise(
             if (args.program is None and return_code == TUNE_RESTART_EXIT and
                     tune_restart_seen.is_set()):
                 emit(logger, "tune_bootstrap_complete")
+                if take_tune_stop() is not None:
+                    # the tune finished before the stop landed — nothing to stop, and the
+                    # armed policy must not leak into a boot that no longer needs it
+                    emit(logger, "tune_stop_obsolete")
                 failures = 0
                 continue
             if args.program is None and return_code == TUNE_RESTART_EXIT:
+                if read_state().get("tune_stop") is not None:
+                    # the user stopped this tune from the tray; relaunch immediately — the
+                    # spawn consumes the armed policy (adopt the sidecar / serve untuned)
+                    emit(logger, "tune_stopped_by_request")
+                    failures = 0
+                    continue
                 # Exit 3 WITHOUT the restart marker: the tuner aborted before writing winners
                 # (llvm_tune's noise gate found the box too loud to trust measurements). Not a
                 # crash — no bundle, no balloon — but backoff still applies: an immediate
@@ -1452,6 +1687,12 @@ def supervise(
                 stopping.wait(delay)
                 continue
             if return_code == CONFIG_RESTART_EXIT:
+                # a config restart is the user actively reconfiguring — and a control-page
+                # re-tune rides this exit, so clear any sticky untuned hold that would otherwise
+                # inject DAS_TUNE_POLICY=fallback and silently defeat the re-tune
+                if read_state().get("sticky_env") is not None:
+                    set_state(sticky_env=None, tuning_disabled=False)
+                    emit(logger, "tuning_resumed", reason="config_restart")
                 emit(logger, "config_restart_relaunch")
                 failures = 0
                 continue
@@ -1518,6 +1759,11 @@ def supervise(
         if stop_file is not None:
             try:
                 stop_file.unlink()
+            except OSError:
+                pass
+        if control_file is not None:
+            try:
+                control_file.unlink()
             except OSError:
                 pass
         emit(logger, "watchdog_stopped")

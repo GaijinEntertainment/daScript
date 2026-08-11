@@ -151,49 +151,139 @@ def tune_manifest_path() : string {
 
 var private g_box_identity = ""
 
-    //! This box's tune identity: platform|arch|hardware|OS-build|cpu. Measurements are a
-    //! property of the box AND its OS (GPU fallback perf moves with macOS updates), so a
-    //! sidecar carrying a different identity reads as stale — the cross-box-copy hazard.
-def tune_box_identity() : string {
-    if (!empty(g_box_identity)) {
-        return g_box_identity
+def private all_digits(s : string) : bool {
+    if (empty(s)) {
+        return false
     }
-    var hw = ""
-    let plat = get_platform_name()
-    if (plat == "windows") {
-        hw = "{get_env_variable("PROCESSOR_IDENTIFIER")}|{get_env_variable("OS")}"
-    } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
-        unsafe {
-            popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
-                while (!feof(f)) {
-                    let ln = strip(fgets(f))
-                    if (!empty(ln)) {
-                        hw = empty(hw) ? ln : "{hw}|{ln}"
-                    }
-                }
+    var ok = true
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            ok = ok && is_number(int(b))
+        }
+    }
+    return ok
+}
+
+// the substring from the first digit to the end — locale-proof extraction of the version
+// number out of a `ver` banner whose leading word ("Version", "Versión", "Версия", …) varies
+def private digits_tail(s : string) : string {
+    var at = -1
+    peek_data(s) $(arr) {
+        for (i in range(length(arr))) {
+            if (is_number(int(arr[i]))) {
+                at = i
+                break
             }
         }
-    } else {
-        unsafe {
-            popen("uname -r 2>/dev/null") $(f) {
-                hw = strip(fgets(f))
-            }
-        }
+    }
+    return at >= 0 ? slice(s, at) : ""
+}
+
+// The CPU brand from /proc/cpuinfo — x86 has "model name", arm64 does not (it carries "Model" /
+// "Hardware" / "CPU part"); try the keys in order so the identity's cpu field is never empty
+def private linux_cpu_brand() : string {
+    var brand = ""
+    for (key in fixed_array("model name", "Model", "Hardware", "CPU part")) {
         fopen("/proc/cpuinfo", "rb") $(f) {
             if (f != null) {
                 while (!feof(f)) {
                     let ln = fgets(f)
-                    if (ln |> starts_with("model name")) {
+                    if (ln |> starts_with(key)) {
                         let ix = find(ln, ":")
-                        hw = "{hw}|{strip(slice(ln, ix + 1))}"
+                        if (ix >= 0) {
+                            brand = strip(slice(ln, ix + 1))
+                        }
                         break
                     }
                 }
             }
         }
+        break if (!empty(brand))
     }
-    g_box_identity = "{plat}|{get_architecture_name()}|{hw}"
+    return brand
+}
+
+    //! This box's tune identity: platform|arch|model_id|os_build|cpu — a sidecar carrying a
+    //! different identity reads as stale (the cross-box hazard). Always five fields, non-empty
+    //! cpu (the schema requires it); os_build keeps its full value, `box_match_key` folds it.
+def tune_box_identity() : string {
+    if (!empty(g_box_identity)) {
+        return g_box_identity
+    }
+    var model_id = ""
+    var os_build = ""
+    var cpu = ""
+    let plat = get_platform_name()
+    if (plat == "windows") {
+        var build = ""
+        unsafe {
+            popen("ver") $(f) {
+                if (f != null) {
+                    while (!feof(f)) {
+                        let ln = strip(fgets(f))
+                        if (!empty(ln)) {
+                            build = ln
+                        }
+                    }
+                }
+            }
+        }
+        let lb = find(build, "[")
+        let rb = find(build, "]")
+        // keep only the trailing [0-9.] version run, so a localized "Version" word (and its
+        // console-codepage bytes) never enters the identity
+        os_build = (lb >= 0 && rb > lb) ? digits_tail(strip(slice(build, lb + 1, rb))) : ""
+        if (empty(os_build)) {
+            os_build = get_env_variable("OS")
+        }
+        cpu = get_env_variable("PROCESSOR_IDENTIFIER")
+    } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
+        var lines : array<string>
+        unsafe {
+            popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
+                while (!feof(f)) {
+                    let ln = strip(fgets(f))
+                    if (!empty(ln)) {
+                        lines |> push(ln)
+                    }
+                }
+            }
+        }
+        // positional: a missing sysctl key blank-fills its field rather than collapsing the count
+        model_id = !empty(lines) ? lines[0] : ""
+        os_build = length(lines) > 1 ? lines[1] : ""
+        cpu = length(lines) > 2 ? lines[2] : ""
+        delete lines
+    } else {
+        unsafe {
+            popen("uname -r 2>/dev/null") $(f) {
+                os_build = strip(fgets(f))
+            }
+        }
+        cpu = linux_cpu_brand()
+    }
+    if (empty(cpu)) {
+        cpu = "unknown-cpu"   // the schema rejects an empty cpu field; never emit one
+    }
+    g_box_identity = "{plat}|{get_architecture_name()}|{model_id}|{os_build}|{cpu}"
     return g_box_identity
+}
+
+    //! Comparison key for a box identity — stored and shown verbatim, but staleness and same-box
+    //! tests fold the volatile Windows `os_build` UBR (4th dotted component) so a monthly patch
+    //! neither invalidates a sidecar nor blocks its resubmit. Lowercased; other builds unchanged.
+def box_match_key(box : string) : string {
+    let parts <- split(box, "|")
+    if (length(parts) != 5) {
+        return to_lower(box)
+    }
+    var osb = parts[3]
+    let dots <- split(osb, ".")
+    if (length(dots) == 4 && all_digits(dots[0]) && all_digits(dots[1])
+        && all_digits(dots[2]) && all_digits(dots[3])) {
+        osb = "{dots[0]}.{dots[1]}.{dots[2]}"   // drop the UBR
+    }
+    return to_lower("{parts[0]}|{parts[1]}|{parts[2]}|{osb}|{parts[4]}")
 }
 
 // provenance.box of the sidecar at `path`, "" when absent/unreadable — cached per path+mtime
@@ -211,7 +301,11 @@ def private sidecar_box(path : string; mkey : string) : string {
         var err = ""
         var doc = read_json(text, err)
         if (doc != null) {
-            box = doc?["provenance"]?["box"] ?? ""
+            // applied_box wins: a resolver-adopted cross-box sidecar records the ADOPTING box there; a hand-copy (no applied_box) still reads stale
+            box = doc?["provenance"]?["applied_box"] ?? ""
+            if (empty(box)) {
+                box = doc?["provenance"]?["box"] ?? ""
+            }
             delete_json(doc)
         }
     }
@@ -219,9 +313,9 @@ def private sidecar_box(path : string; mkey : string) : string {
     return box
 }
 
-    //! True when the sidecar predates the running binary OR carries a different box identity
-    //! (missing counts as different — pre-identity files re-tune once); a stale sidecar reads
-    //! as ABSENT everywhere, killing the copy-a-stale-file and copy-from-another-box traps.
+    //! True when the sidecar predates the running binary OR carries a different box identity —
+    //! the stale-file and cross-box-copy traps; stale reads as ABSENT everywhere. A
+    //! `provenance.applied_box` naming this box overrides the identity check (resolver adoption).
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
     return false if (!stat(path, sfs))   // absent is "missing", not "stale"
@@ -229,7 +323,7 @@ def tune_sidecar_stale(path : string) : bool {
     if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
         return true
     }
-    return sidecar_box(path, "{sfs.mtime}") != tune_box_identity()
+    return box_match_key(sidecar_box(path, "{sfs.mtime}")) != box_match_key(tune_box_identity())
 }
 
 // the sidecar's "kernels" section as a flat { function name : perm suffix } map;
@@ -274,9 +368,9 @@ def tune_manifest_get(fname : string) : string {
     return r
 }
 
-// the sidecar document for read-modify-write: parsed when fresh, a new empty object when
-// absent, unparsable, or STALE (stale measurements are invalid; the first save makes the
-// file newer than the binary so the rest of the run appends)
+// the sidecar document for read-modify-write: a new empty object when absent, unparsable,
+// STALE, or EXCHANGE-ADOPTED — a local tuner writing over an adopted file must not blend its
+// measured keys with the donor's (that yields a complete-looking, wrongly re-submittable mix).
 def private load_sidecar_doc(path : string) : JsonValue? {
     var doc : JsonValue?
     if (!tune_sidecar_stale(path)) {
@@ -284,6 +378,11 @@ def private load_sidecar_doc(path : string) : JsonValue? {
         if (!empty(text)) {
             var err = ""
             doc = read_json(text, err)
+            if (doc != null && doc.value is _object
+                && (doc?["provenance"]?["origin"] ?? "") == "exchange") {
+                delete_json(doc)
+                doc = null
+            }
         }
     }
     if (doc == null || !(doc.value is _object)) {
@@ -1152,6 +1251,25 @@ class private TuneAnnotation : AstFunctionAnnotation {
         if (manifestFound) {
             suffix = manifest?[fname] ?? ""
         }
+        // clear an adopted winner this box can't run (ISA-gated → would decline to reference; or not in this build's grid → would crash-loop) so the fallback ;-chain picks a legal perm and it boots
+        if (!empty(suffix) && suffix != "reference") {
+            var known = false
+            var eligible = true
+            for (p in perms) {
+                if (p.suffix == suffix) {
+                    known = true
+                    eligible = perm_requires_ok(p)
+                    break
+                }
+            }
+            if (!known || !eligible) {
+                if (tune_verbosity() != "silent") {
+                    let why = known ? "fails its requires= on this box" : "is not in this build's grid"
+                    print("llvm_tune: {fname} manifest winner '{suffix}' {why} - using the fallback chain\n")
+                }
+                suffix = ""
+            }
+        }
         let fromManifest = !empty(suffix)
         var ok = true
         if (empty(suffix)) {
@@ -1608,6 +1726,10 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
         return
     }
+    if (!force && scope_resolved_externally(scopeName, manifestPath, fnames)) {
+        g_tuned_scopes++   // the re-exec picks the resolved sidecar up like a fresh tune
+        return
+    }
     if (!force && !empty(g_mint_suppressed)) {
         if (tune_verbosity() != "silent") {
             print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
@@ -1660,12 +1782,56 @@ def tune_reexec_code() : int {
     return g_reexec_code
 }
 
-    //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of the
-    //! app's `main`. Runs the tuner, prints the restart banner, and returns true so main returns
-    //! immediately (the winners are compile-time stamps). False = scope complete, carry on.
+// the pre-tune scope resolver: consulted by the auto and restart guards before spawning the
+// tuner; an app registers one from an [init] (which runs before the guard at the top of main)
+var private g_scope_resolver : function<(scopeName : string; manifestPath : string; fnames : string) : bool>
+var private g_has_scope_resolver = false
+
+    //! Register a resolver the auto/restart guards consult before spawning a scope's tuner —
+    //! e.g. an exchange client downloading a matching sidecar. True = "the scope may now be
+    //! satisfied"; completeness is re-checked, never trusted. Never consulted under `--tune`.
+def tune_set_scope_resolver(resolver : function<(scopeName : string; manifestPath : string; fnames : string) : bool>) {
+    g_scope_resolver = resolver
+    g_has_scope_resolver = true
+}
+
+// resolver consult shared by both guards: true = the scope is complete now, skip the tuner
+// (the resolver prints its own restart marker — the guards add nothing on this path)
+def private scope_resolved_externally(scopeName : string; manifestPath : string; fnames : string) : bool {
+    if (!g_has_scope_resolver) {
+        return false
+    }
+    return (invoke(g_scope_resolver, scopeName, manifestPath, fnames)
+        && tune_sidecar_entries_complete(manifestPath, fnames))
+}
+
+var private g_tune_control_read = false
+var private g_tune_control_path = ""
+
+    //! True when the file named by `DAS_TUNE_CONTROL` exists — a supervisor's stop request.
+    //! Tuners poll at kernel-family boundaries and abort without minting, so the measurement
+    //! in flight always completes.
+def tune_interrupt_requested() : bool {
+    if (!g_tune_control_read) {
+        g_tune_control_read = true
+        g_tune_control_path = get_env_variable("DAS_TUNE_CONTROL")
+    }
+    if (empty(g_tune_control_path)) {
+        return false
+    }
+    var fs : FStat
+    return stat(g_tune_control_path, fs)
+}
+
+    //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of
+    //! the app's `main`: consults the scope resolver first, else runs the tuner; true = main
+    //! returns immediately (winners are compile-time stamps), false = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         return false
+    }
+    if (scope_resolved_externally(scopeName, manifestPath, fnames)) {
+        return true   // resolved without a tune; the resolver printed its own restart marker
     }
     if (!empty(g_mint_suppressed)) {
         // false = carry on with fallback stamps, do not tune and do not stop main

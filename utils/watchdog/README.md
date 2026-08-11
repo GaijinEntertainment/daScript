@@ -40,16 +40,21 @@ python utils/watchdog/watchdog.py --cwd utils/dasllama-server
 | code | meaning |
 |---|---|
 | 0 | intentional shutdown — the watchdog stops too |
-| 3 | tune bootstrap wrote the sidecar; relaunch immediately (JIT only) |
+| 3 | tune bootstrap wrote the sidecar (local tuner OR an exchange download — both print a "restart to apply the winners" marker); relaunch immediately (JIT only) |
 | 4 | config restart requested by a control page; relaunch immediately |
 | other | crash — report, notify, bundle, restart with bounded exponential backoff |
+
+Exit 3 *without* the marker is a tuner abort (noise gate, or a tray-requested stop). A noise
+abort restarts with backoff — an immediate relaunch on a loud box just aborts again. A
+tray-requested stop relaunches immediately with the policy the user picked (below).
 
 ## Startup stages
 
 A cold JIT start takes minutes (DLL cache miss, codegen, per-box tuning, model load), which used to
 look like a hang punctuated by health-check spam. The watchdog now tracks ranked, monotonic stages —
-`jit_cached`, `jit_codegen`, `jit_linked`, `tuning`, `tune_restart`, `model_load`, `asr_init`,
-`ready` — and logs a `stage` event on each forward move, with how long the previous stage took.
+`jit_cached`, `jit_codegen`, `jit_linked`, `exchange_lookup`, `tuning`, `tune_restart`,
+`model_load`, `asr_init`, `ready` — and logs a `stage` event on each forward move, with how long
+the previous stage took.
 
 Ranked and monotonic matters: a tune runs many codegen/link cycles, and a naive matcher flaps
 between stages once per kernel variant. Health is logged only on transition plus a heartbeat, so a
@@ -74,6 +79,36 @@ events**, where the whole raw tuner output used to be JSON-wrapped into the log 
 Every field is a counter. Nothing is an estimate: the tuner cannot know how long it has left, so
 no ETA is published and none should be synthesized from these numbers.
 
+### The exchange (`@sidecar` events, the tray's tune actions)
+
+dasllama's exchange client emits `@sidecar <kind> k=v ...` on the same contract (`lookup`,
+`none`, `offer`, `apply`, `pending_submit`, `submitted`); the watchdog folds them into
+`STATE["sidecar"]` and logs each one. Balloons announce a decision but never carry the action —
+the tray menu and the control page do:
+
+- **Use available sidecar instead (stops tuning)** — visible while a tune is in flight AND an
+  unverified offer exists. Writes the tune-control file (the tuner polls `DAS_TUNE_CONTROL` at
+  kernel-family boundaries, so the measurement in flight always completes), then relaunches with
+  a ONE-SHOT `DASLLAMA_EXCHANGE_ACCEPT=any` — consent that never outlives the click.
+- **Stop tuning, run untuned** — visible while a tune is in flight. Same stop file, then a
+  `DAS_TUNE_POLICY=fallback` hold kept in `STATE["sticky_env"]` and re-applied on every spawn,
+  so a later crash-restart cannot surprise the box with a 20-minute tune. The hold shows as
+  `· tuning off` in the tooltip and is revocable via **Resume tuning**; a control-page config
+  restart (which a re-tune rides) also clears it, so the re-tune is not silently defeated.
+- **Resume tuning** — visible only while a run-untuned hold is active; clears it so the next
+  start tunes normally again.
+- **Share this box's tune…** — visible while a `pending_submit` offer stands and the server is
+  healthy; opens the control page at the exchange card.
+
+Balloons fire once per distinct sidecar sha across restarts, so an untuned noise-abort loop does
+not re-announce the same offer every boot.
+
+The tray menu is a pure function of `STATE`, but note the mechanism: pystray bakes each item's
+`visible`/`enabled` when the menu is BUILT and does **not** re-evaluate them when the menu opens.
+The supervision tick's `update_menu()` on a `STATE` transition is therefore the only thing that
+refreshes the dynamic items — so its transition key must name every `STATE` field an item's
+predicate reads (health, the sidecar state, `tuning_disabled`), or that item never appears.
+
 ## Control plugin
 
 If a `watchdog_control.py` sits beside `watchdog.py`, the watchdog imports it and calls
@@ -87,7 +122,10 @@ in a supervisor. A plugin that fails to import is reported and skipped, never fa
 program alive outranks being able to reconfigure it.
 
 `host.read_state()` publishes supervision state (`child_pid`, `child_started_at`,
-`child_exit_code`, `restart_delay`, `stage`, `tune`) for the plugin's status route.
+`child_exit_code`, `restart_delay`, `stage`, `healthy`, `serving_since`, `tune`, `sidecar`,
+`tuning_disabled`) for the plugin's status route. Transient control keys (`tune_stop`,
+`sticky_env`, `resume_tuning`) also live in `STATE` but are consumed by the supervision loop —
+a status route should not surface them.
 
 ## Shipping it
 

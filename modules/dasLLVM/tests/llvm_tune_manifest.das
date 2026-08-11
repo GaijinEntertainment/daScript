@@ -7,6 +7,7 @@ require daslib/fio
 require strings
 require daslib/json
 require daslib/json_boost
+require llvm/daslib/llvm_tune   // tune_box_identity — the applied_box adoption arm
 
 // Per-app sidecar round-trip, declaration-free: copy the client template into a temp
 // directory (the sidecar resolves beside the ROOT SCRIPT — <client>.tune.json), spawn it
@@ -43,7 +44,7 @@ def private spawn_client(cmd : string; var lines : array<string>) : int {
 }
 
 [test]
-def test_llvm_tune_manifest_roundtrip(t : T?) {
+def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequential sidecar-state arms over shared child-spawn state; no arm stands alone
     if (!jit_enabled()) {
         // the generator only fires under the LLVM JIT; the child needs -jit too
         t |> success(true)
@@ -137,6 +138,33 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {
     t |> success(!foreignStampedK2)  // foreign-box winners must not stamp
     t |> success(foreignResult6)     // fallback tier again
     delete flines
+
+    // APPLIED-BOX adoption: the same foreign sidecar plus provenance.applied_box naming THIS
+    // box (what a scope resolver stamps when adopting a sibling box's mint) must stamp again,
+    // while provenance.box keeps naming the box that measured it.
+    var jerr2 = ""
+    var jdoc2 = read_json(fread(sidecarPath), jerr2)
+    t |> success(jdoc2 != null, "foreign sidecar parses: {jerr2}")
+    unsafe {
+        var prov2 = jdoc2?["provenance"]
+        if (prov2 != null) {
+            update(prov2, "applied_box", JV(tune_box_identity()))
+        }
+    }
+    fwrite(sidecarPath, write_json(jdoc2))
+    delete_json(jdoc2)
+    var alines : array<string>
+    let rca = spawn_client("\"{bin}\" -jit \"{clientPath}\"", alines)
+    t |> equal(rca, 0)
+    var adoptedStampedK2 = false
+    var adoptedResult7 = false
+    for (ln in alines) {
+        adoptedStampedK2 ||= ln |> starts_with("llvm_tune: man_add <- k2")
+        adoptedResult7 ||= ln == "RESULT 7"
+    }
+    t |> success(adoptedStampedK2)  // applied_box naming this box re-admits the winners
+    t |> success(adoptedResult7)
+    delete alines
 
     remove(sidecarPath)
     remove(clientPath)

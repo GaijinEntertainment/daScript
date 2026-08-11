@@ -1414,6 +1414,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     var pending : table<string; string>
     // q8q8 + four kq formats + q51 + the end-to-end confirm
     tune_progress_plan("dasllama_generators", 7)
+    interrupt_gate("q8q8_tile_gen")
     tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
     // batch shape: fat STREAMING ffn like the kq fixture — the old 2048x512x64 kv-projection was
     // L2-hot; divergent crowns still pass the e2e confirm gate before shipping
@@ -1604,6 +1605,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         return false
     }
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
+        interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
         tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
         var krows : table<string; JsonValue?>
@@ -1621,6 +1623,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
+    interrupt_gate("q51q8_tile_gen")
     let q51_t0 = ref_time_ticks()
     // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
     // the race still benches the gemv shape
@@ -1633,6 +1636,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     pending["q51q8_tile_gen"] = empty(qw) ? "reference" : qw
     g_rows["q51q8_tile_gen"] = JV(qrows)
     print("q51q8_tile_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
+    interrupt_gate("confirm_e2e_prefill")
     let confirm_t0 = ref_time_ticks()
     tune_progress_kernel_begin("confirm_e2e_prefill", 0)
     let cw = confirm_winner(vs[merged]._0)

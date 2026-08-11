@@ -15,8 +15,10 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //
 // Then point any OpenAI client at http://127.0.0.1:<port>/v1 (opencode, Open WebUI, the `llm` CLI, …).
 //
-// Per-box tuning: the first start on an untuned box runs the dasLLAMA kernel tuner and exits so the
-// watchdog can restart with the winners (missing = "restart"); `--tune` forces a re-tune. Set DAS_TUNE_POLICY=error
+// Per-box tuning: the first start on an untuned box consults the sidecar exchange (dasllama.io —
+// a verified match downloads instead of racing ~20 min; exchange_accept/exchange_submit in the
+// config), else runs the dasLLAMA kernel tuner; either way it exits so the watchdog can restart
+// with the winners (missing = "restart"); `--tune` forces a local re-tune. Set DAS_TUNE_POLICY=error
 // while developing to skip per-start tuning (it prints the tuner command instead). The winners live
 // at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box.
 
@@ -25,6 +27,7 @@ require dasllama/dasllama       // load_model / QuantMode / load_asr_model
 require dasllama/dasllama_image // dlim_clean — the startup dlim GC
 require dasllama/dasllama_math  // set_dispatch_worker_limit (engine-level knob, not re-exported)
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status (the injected guard resolves here)
+require ../../modules/dasLLAMA/performance/exchange_client.das   // the sidecar exchange: boot resolver + submit check
 require daslib/clargs
 require daslib/toml
 require daslib/json_boost
@@ -153,6 +156,13 @@ struct ModelEntry {
     prefix : int = -2       // -1 = unbounded is meaningful, -2 = inherit
     mtp : int = -1          // -1 inherit | 0 off | 1 on
     is_default : bool = false
+}
+
+// registered from [init] so it lands before the tune-policy guard at the top of main: an
+// untuned boot consults the exchange (verified matches only by default) before racing ~20 min
+[init]
+def register_exchange_resolver {
+    exchange_register_resolver("dasllama-server.toml")
 }
 
 // Lifecycle state is global: JIT heap collection cannot see ordinary stack locals as GC roots.
@@ -733,6 +743,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     to_log(LOG_INFO, "dasllama-server: logging to {get_das_root()}/logs/dasllama-server.log\n")
 
     log_tune_status("dasllama-server")
+    // a fresh local tune that has not been shared: submit now (always) or surface the offer
+    // (ask — the watchdog balloon + the control page's exchange card); quiet otherwise
+    exchange_boot_submit_check(exchange_policy_from_config(g_cfg.config))
     // GPU backend lands BEFORE the load: the metal mode pins the row-major backend the GPU
     // kernels read, and the vulkan tier want must be armed before the load walk uploads stacks
     let gpu = effective_gpu(g_cfg)

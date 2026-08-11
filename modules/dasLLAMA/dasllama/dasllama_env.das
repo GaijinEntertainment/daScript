@@ -606,6 +606,15 @@ struct public ExampleEnv {
 
 // ===== daslang core knobs dasLLAMA honours =====
 
+[EnvConfig(env_prefix = "DASLLAMA")]
+struct public ExchangeEnv {
+    @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io."
+    exchange_url : string = ""
+
+    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune."
+    exchange_accept : string = ""
+}
+
 [EnvConfig(env_prefix = "DAS")]
 struct public CoreEnv {
     @clarg_env = "HF_HOME"
@@ -659,6 +668,7 @@ let public g_env_harness = env_config(type<HarnessEnv>)
 let public g_env_bench = env_config(type<BenchmarkEnv>)
 let public g_env_prof = env_config(type<ProfilingEnv>)
 let public g_env_test = env_config(type<TestEnv>)
+let public g_env_exchange = env_config(type<ExchangeEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
 
 //! The ONE models-dir resolution (DASLLAMA_MODELS_DIR, else the primary rig's dir) with the
@@ -770,6 +780,8 @@ def public env_markdown() : string {
         write_info_rows(w, get_env_config_info(type<TestEnv>))
         write_section(w, "Examples and tutorials", "")
         write_info_rows(w, get_env_config_info(type<ExampleEnv>))
+        write_section(w, "Sidecar exchange", "Overrides for the dasllama.io exchange client.")
+        write_info_rows(w, get_env_config_info(type<ExchangeEnv>))
         write_section(w, "daslang core knobs dasLLAMA honours",
             "Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.")
         write_info_rows(w, get_env_config_info(type<CoreEnv>))
@@ -797,6 +809,7 @@ def public registered_env_names() : array<string> {
     push_info_names(out, get_env_config_info(type<ProfilingEnv>))
     push_info_names(out, get_env_config_info(type<TestEnv>))
     push_info_names(out, get_env_config_info(type<ExampleEnv>))
+    push_info_names(out, get_env_config_info(type<ExchangeEnv>))
     push_info_names(out, get_env_config_info(type<CoreEnv>))
     var extras <- core_extra_rows()
     for (e in extras) {

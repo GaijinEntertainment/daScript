@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_common shared public
 
 require daslib/fio
+require dasllama/dasllama_version public  // DASLLAMA_VERSION — re-exported so the facade chain carries the module's release counter
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
 require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum

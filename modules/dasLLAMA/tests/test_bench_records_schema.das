@@ -1,6 +1,7 @@
 options gen2
 require dastest/testing_boost public
 require ../performance/profile_common.das
+require dasllama/dasllama_version
 
 // The record store is the site's single source of truth; this is the net under its schema:
 // ASR-shaped runs (workload, ms/audio_s tests, files) must round-trip the JSON store, the
@@ -20,6 +21,7 @@ def private make_asr_run(engine, workload : string) : BenchRun {
         date = "2026-07-28",
         cmd = "test-cmd",
         noise = engine == "das" ? "ok" : "",
+        dasllama_version = engine == "das" ? DASLLAMA_VERSION : 0,
         versions = engine == "das" ? "" : "whisper.cpp @ abcdef123")
     r.tests |> insert("asr:jfk.wav", BenchTest(ms = 197.1lf, audio_s = 11.0lf))
     r.tests |> insert("asr:gb1.wav", BenchTest(ms = 6585.0lf, audio_s = 198.7lf))
@@ -53,6 +55,10 @@ def test_asr_round_trip(t : T?) {
         t |> equal(back[0].runs[1].versions, "whisper.cpp @ abcdef123")
         t |> equal(back[0].runs[0].noise, "ok")
         t |> equal(back[0].runs[1].noise, "")
+        // the engine's own release counter: stamped on das rows, absent (0) on reference rows
+        t |> equal(back[0].runs[0].dasllama_version, DASLLAMA_VERSION)
+        t |> success(back[0].runs[0].dasllama_version >= 1, "the counter starts at 1 - 0 means unstamped")
+        t |> equal(back[0].runs[1].dasllama_version, 0)
         remove(TMP)
     }
 }

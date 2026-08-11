@@ -216,6 +216,15 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 |---|---|---|---|
 | `DASLLAMA_MODEL` | path | unset | Model path for the dasLLAMA tutorials when none is passed on the command line. |
 
+## Sidecar exchange
+
+Overrides for the dasllama.io exchange client.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DASLLAMA_EXCHANGE_URL` | text | unset | Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. |
+| `DASLLAMA_EXCHANGE_ACCEPT` | text | unset | One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. |
+
 ## daslang core knobs dasLLAMA honours
 
 Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>dasllama.io — news, ladder, sidecars</title>
+<meta name="description" content="dasLLAMA — an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. News, the full measurement ladder, and the sidecar exchange."/>
+<meta property="og:title" content="dasllama.io"/>
+<meta property="og:description" content="LLM + speech-to-text inference written in daslang, JIT-compiled. News, ladder, sidecars."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab is-active" href="index.html">home</a><a class="dio-tab" href="ladder.html">ladder</a><a class="dio-tab" href="sidecars.html">sidecars</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-masthead"><div class="forge-container"><div class="dio-masthead__grid">
+<div>
+<h1>Local inference, <em>written in daslang.</em></h1>
+<p class="dio-masthead__lede">dasLLAMA is an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. It loads stock GGUF files and runs them on cpu, metal, or vulkan. Kernels are auto-tuned per box; the winning variants are saved as a sidecar you can pick up instead of tuning yourself.</p>
+<div class="dio-masthead__links"><a href="https://daslang.io">built on daslang →</a><a href="https://daslang.io/dasllama.html">the scoreboard →</a><span>official measurements live on daslang.io; the full ladder lives here</span></div>
+</div>
+<div class="dio-facts">
+<!-- archs/backends are hand-maintained capability facts (no id = not JS-rendered); the two below
+     carry ids and are filled live from the ladder API by mountHome -->
+<div class="dio-fact"><div class="dio-fact__n">12</div><div class="dio-fact__l">model architectures, stock GGUF</div></div>
+<div class="dio-fact"><div class="dio-fact__n">3</div><div class="dio-fact__l">backends — cpu · metal · vulkan</div></div>
+<div class="dio-fact"><div class="dio-fact__n" id="dio-fact-measurements">—</div><div class="dio-fact__l">measurements on the ladder</div></div>
+<div class="dio-fact"><div class="dio-fact__n" id="dio-fact-sidecars">—</div><div class="dio-fact__l">sidecars in the exchange</div></div>
+</div>
+</div></div></header>
+
+<section class="forge-section" style="padding:44px 0 52px;border-top:0">
+<div class="forge-container">
+<div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>get it</div>
+<div class="dio-get__steps" style="margin-top:22px;max-width:720px">
+<div class="dio-get__step"><i>01</i><span><a href="https://github.com/GaijinEntertainment/daScript">daslang on github ↗</a> — the language and SDK this runs on; pre-built binaries at <a href="https://daslang.io/downloads.html">daslang.io/downloads</a></span></div>
+<div class="dio-get__step"><i>02</i><span><a href="https://github.com/GaijinEntertainment/daScript/tree/master/modules/dasLLAMA">dasLLAMA on github ↗</a> — the engine, in-tree at <code class="forge-inline-code">modules/dasLLAMA</code></span></div>
+</div>
+</div>
+</section>
+
+<section class="forge-section forge-section--alt" style="padding:52px 0 64px">
+<div class="forge-container">
+<div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span>news</div>
+<div class="dio-feed">
+<div class="dio-feed__bar"><span class="dio-feed__count" id="dio-feed-count"></span><a class="dio-feed__feed" href="/feed.xml">atom feed</a></div>
+<div id="dio-feed-items">
+<!-- news:begin — everything between the markers is generated from _news/*.md by
+     build_news.py (run at deploy AND checked in, so preview matches production) -->
+<article class="dio-item dio-item--lead is-open" id="n-2026-08-10-dasllama-io-is-live" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-10</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Everything measured now lives here, community submissions included.
+<a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional
+scoreboard and carries official measurements only.</p></div>
+</article>
+<!-- news:end -->
+</div>
+</div>
+</div>
+</section>
+
+<section class="forge-section" style="padding:64px 0 20px">
+<div class="forge-container">
+<div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span>ladder</div>
+<h2 class="forge-h2">Latest measurements.</h2>
+<div class="dio-teaser">
+<div class="dio-teaser__head"><span id="dio-teaser-scope">newest first</span><a href="ladder.html">the whole ladder →</a></div>
+<!-- teaser rows render from /api/runs joined with the verbatim submission documents -->
+<div class="dl-bars" id="dio-teaser-bars"><div class="dl-empty">loading the ladder…</div></div>
+</div>
+<p class="dio-note">amber = dasLLAMA, teal = the llama.cpp run it was measured against — the same pair bars daslang.io uses. Rows compare only within one engine version.</p>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="index.html"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="index.html">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a><a class="dio-footer__link" href="https://daslang.io/playground/index.html">playground</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+</div></div></footer>
+
+</div></body></html>

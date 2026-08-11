@@ -160,12 +160,26 @@ Windows locks the DLLs.
 | `GET`  | `/config` | Effective config with per-key source (`default`/`cli`/`toml`), the `[[models]]` roster, model files beside the served one, active rail (gguf vs prepared `.dlim`), GPU tier status (`supported` + `reason` when the loaded model can't ride it) |
 | `POST` | `/config` | Validate a `{key: value}` JSON body and write it as an **authoritative** TOML (`authoritative = true`) to the config path (or `dasllama-server.toml` beside the program on a config-less start). Applies on the next restart |
 | `POST` | `/restart` | Drain like `/shutdown`, then exit with code **4** — the watchdog relaunches, picking up the saved config (3 stays the tune-restart code) |
+| `GET`  | `/exchange` | The sidecar-exchange surface: policy (url/accept/submit) + the current tune sidecar's identity and share state (sha, origin, box/applied_box, version gate, shared-yet) |
+| `GET`  | `/exchange/matches` | Live lookup of this box against the exchange (a network call — seconds; the control page requests it explicitly) |
+| `POST` | `/exchange/apply` | `{"sha": ...}`: download + validate (content sha, schema, `DASLLAMA_VERSION`) + adopt that sidecar, then drain and exit **4** so the relaunch stamps its winners |
+| `POST` | `/exchange/submit` | Privacy-strip and submit this box's own tune to the exchange (refuses exchange-sourced or foreign-box sidecars) |
+| `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts — the next boot races this box (~20 min, quiet machine) |
 | `POST` | `/gc` | Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce |
 | `POST` | `/shutdown` | Stop admitting new LLM/ASR work, drain accepted work, then exit |
 
 Config precedence: `defaults < config TOML < explicit CLI flags` — unless the TOML carries
 `authoritative = true` (what the control page saves), which flips the top: `defaults < CLI <
-authoritative TOML`. The `gpu` key (`off | metal | metal-required | vulkan`) is the first-class
+authoritative TOML`.
+
+The sidecar exchange rides three config-only keys (no CLI flags — one code path):
+`exchange_accept = verified | any | off` (default `verified` — at an untuned boot a verified
+match downloads and applies instead of racing ~20 minutes; unverified NEVER auto-applies),
+`exchange_submit = ask | always | never` (default `ask` — a fresh local tune surfaces as an
+offer on the control page and the watchdog balloon; `always` shares it automatically), and
+`exchange_url` (baked default `https://dasllama.io`). `DASLLAMA_EXCHANGE_URL` /
+`DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot watchdog relaunches. Lookup
+failure is never fatal — the boot falls through to the local tuner. The `gpu` key (`off | metal | metal-required | vulkan`) is the first-class
 backend selector; `gpu = vulkan` arms the MoE tier in its blessed shape — expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
 the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
@@ -303,6 +317,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
   eviction, and the prefix cache returning an identical completion for a repeated request; needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
+- `test_exchange_client.das` — the exception: model-free and runs everywhere. The sidecar
+  exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
+  gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).
 
 ```sh
 bin/daslang -jit dastest/dastest.das -- --test utils/dasllama-server/test_openai_server.das

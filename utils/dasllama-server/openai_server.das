@@ -13,6 +13,8 @@ require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
 require dasllama/dasllama_tools   // the per-ToolMode wire parsers (harmony/gemma4/mistral/llama_json)
 require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
 require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
+require ../../modules/dasLLAMA/performance/exchange_client.das   // the /exchange surface + submit rails
+require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require daslib/jobque_boost
 require daslib/rtti             // this_context().last_exception inside ASR worker recovery
@@ -2353,7 +2355,8 @@ let private CONFIG_KEY_KINDS <- {
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
-    "mtp" => "b", "lcpp_bin" => "s", "models" => "a"
+    "mtp" => "b", "lcpp_bin" => "s", "models" => "a",
+    "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
@@ -2620,6 +2623,115 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
     }
     to_log(LOG_INFO, "dasllama-server: authoritative config saved to {g_config_save_path} ({length(toml)} bytes)\n")
     return resp |> JSON("\{\"saved\":{json_str(g_config_save_path)},\"restart_required\":true}", http_status.OK)
+}
+
+// ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
+
+def private exchange_policy_now : ExchangePolicy {
+    // the save path covers every start shape: --config, auto-discovered, and config-less
+    // (where the file may not exist yet and the baked defaults stand)
+    return exchange_policy_from_config(g_config_save_path)
+}
+
+// The exchange control routes are an operator surface reached through the loopback control
+// page. The matching route does a blocking network call on the tick thread; apply/retune are
+// destructive; submit publishes. Gate them to the loopback peer so a LAN client (the inference
+// API deliberately binds every interface) cannot stall generation or trigger those actions.
+def private is_loopback_req(req : HttpRequest?) : bool {
+    let ip = client_ip(req)
+    // an unknown/empty peer counts as remote (fail closed, like the ladder's is_loopback_peer):
+    // this service binds every interface, so a LAN caller must not slip through on an unresolved peer
+    let loopback = ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+    return loopback && same_origin_or_headerless(req)
+}
+
+// CSRF guard for the operator routes: allow_cors() is global and the peer is 127.0.0.1 for ANY
+// local browser, so a page the operator merely visits could POST to the destructive routes. Accept
+// only a same-origin request (the control page is served from here) or a header-less CLI client.
+def private same_origin_or_headerless(req : HttpRequest?) : bool {
+    let origin = get_header(req, "Origin")
+    if (empty(origin)) {
+        return true   // curl/CLI and same-origin navigations send no Origin; only a cross-site POST does
+    }
+    let sep = find(origin, "://")
+    let authority = sep >= 0 ? slice(origin, sep + 3) : origin
+    return authority == get_header(req, "Host")
+}
+
+// the forbidden reply shared by every operator/control route (the public inference API stays open)
+def private deny_operator(var resp : HttpResponse?) : http_status {
+    return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+}
+
+def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        // the status carries the local sidecar path (username in it) — operator-only, like the rest
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    return resp |> JSON(exchange_status_json(exchange_policy_now()))
+}
+
+def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    // a live exchange lookup — seconds on the tick thread; the page requests it explicitly
+    return resp |> JSON(exchange_matches_json(exchange_policy_now()))
+}
+
+def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    var jerr = ""
+    var js = read_json(string(req.body), jerr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    let sha : string = js?["sha"] ?? ""
+    if (empty(sha)) {
+        return resp |> JSON(error_body("body must carry the sidecar sha", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    // the listing box the page picked: passed through so the downloaded sidecar is verified to
+    // match what the exchange listed — the same lying-exchange gate the boot resolver applies
+    let box : string = js?["box"] ?? ""
+    let err = exchange_fetch_and_apply(exchange_policy_now().url, sha, tune_manifest_path(), box)
+    if (!empty(err)) {
+        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
+    g_shutdown_requested = true
+    g_restart_requested = true
+    return resp |> JSON("\{\"ok\":true,\"restarting\":true}", http_status.OK)
+}
+
+def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    let err = exchange_submit_current(exchange_policy_now())
+    if (!empty(err)) {
+        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    to_log(LOG_INFO, "dasllama-server: this box's tune submitted to the exchange\n")
+    return resp |> JSON("\{\"ok\":true}", http_status.OK)
+}
+
+def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    let err = exchange_request_retune()
+    if (!empty(err)) {
+        // the marker write failed and the sidecar is untouched — do NOT drain/restart
+        return resp |> JSON(error_body(err, "server_error"), http_status.INTERNAL_SERVER_ERROR)
+    }
+    to_log(LOG_INFO, "dasllama-server: re-tune armed (sidecar removed, exchange skipped once); draining for restart\n")
+    g_shutdown_requested = true
+    g_restart_requested = true
+    return resp |> JSON("\{\"ok\":true,\"restarting\":true,\"tune\":true}", http_status.OK)
 }
 
 def private emit_asr_event(events : Channel?; event : AsrEvent) {
@@ -2951,15 +3063,33 @@ class OpenAiServer : HvWebServer {
             return handle_vad(req, resp)
         }
         POST("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_config_save(req, resp)
         }
+        GET("/exchange") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_get(req, resp)
+        }
+        GET("/exchange/matches") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_matches(req, resp)
+        }
+        POST("/exchange/apply") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_apply(req, resp)
+        }
+        POST("/exchange/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_submit(req, resp)
+        }
+        POST("/exchange/retune") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_retune(req, resp)
+        }
         POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_bench_start(resp)
         }
         GET("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bench_get(resp)
         }
         POST("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_bake_start(req, resp)
         }
         GET("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -2969,6 +3099,7 @@ class OpenAiServer : HvWebServer {
             return handle_images(resp)
         }
         POST("/restart") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
@@ -2979,6 +3110,7 @@ class OpenAiServer : HvWebServer {
             return resp |> JSON("\{\"ok\":true,\"draining\":true,\"restarting\":true}", http_status.OK)
         }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
@@ -2988,6 +3120,7 @@ class OpenAiServer : HvWebServer {
             return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
         }
         POST("/gc") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
             let coalesced = g_gc_requested
             g_gc_requested = true
             to_log(LOG_INFO, "dasllama-server: GC requested via POST /gc (coalesced={coalesced})\n")

@@ -9,6 +9,7 @@ module tuner_noise shared public
 //! A noisy end-probe means the sidecar is not written at all.
 
 require llvm/daslib/llvm_tune
+require dasllama/dasllama_version  // DASLLAMA_VERSION — stamped into sidecar provenance (zero-require leaf)
 require daslib/strings_boost
 require daslib/fio            // popen + get_das_root — the engine-sha probe
 require math
@@ -133,6 +134,19 @@ def noise_gate(tag : string) : bool {
     return false
 }
 
+//! Hard-stop when the supervisor requested it (the `DAS_TUNE_CONTROL` file exists). Both
+//! tuner halves poll this between kernel families, so the measurement in flight always
+//! completes; minting is end-gated, so an interrupted run writes nothing. Exits 1 — the
+//! policy guard then reports the scope incomplete and the supervisor owns what happens next.
+def interrupt_gate(at : string) {
+    if (tune_interrupt_requested()) {
+        tune_progress_finish()
+        print("@tune abort reason=interrupted at={at}\n")
+        print("tuner: supervisor interrupt at '{at}' - stopping, no sidecar written\n")
+        unsafe(exit(1))
+    }
+}
+
 //! Record this run's noise verdict into the sidecar provenance. Call once, right before the
 //! sidecar write, after the end-of-run gate passed.
 def noise_provenance_stamp() {
@@ -141,6 +155,7 @@ def noise_provenance_stamp() {
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
     tune_provenance_note("mode", g_paranoid ? "paranoid" : "normal")
     tune_provenance_note("engine_sha", engine_sha())
+    tune_provenance_note("dasllama_version", "{DASLLAMA_VERSION}")
 }
 
 // the engine commit this mint measured, "unknown" outside a repo (the shipped SDK)

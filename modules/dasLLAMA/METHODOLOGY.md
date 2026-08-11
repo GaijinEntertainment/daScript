@@ -119,7 +119,10 @@ Each run is one record, and das and reference runs are siblings in the same stor
 ratios are derived when the site renders, never stored. The store lives at
 `performance/records/<box>.json`; `performance/profile_common.das` is its authoritative reader
 and writer (`BenchRun`, `read_bench_records` / `write_bench_records`), so every tool that
-touches it goes through the same schema.
+touches it goes through the same schema. Documents arriving from outside — community
+submissions to the ladder service — are gated by `performance/exchange_schema.das`, an
+engine-free validator of the same record shape plus the tune-sidecar form;
+`tests/test_exchange_schema.das` keeps it pinned to what the writers emit.
 
 - **`flavor`** names what that engine got, so two rows from one box can never be confused: das
   is `tuned` or `accel` (the +AMX tier over the tuned stack); a reference row carries its build
@@ -131,6 +134,10 @@ touches it goes through the same schema.
   inside the sidecar.
 - **`hardware`** is auto-probed on the box, never typed in — it is the block a reader has to be
   able to trust.
+- **`dasllama_version`** rides das rows only: dasLLAMA's own release counter
+  (`dasllama/dasllama_version.das`), bumped by any kernel work, decoupled from the daslang
+  version in `version`. Sidecar provenance carries the same counter, which is what lets a
+  sidecar's validity be judged as (version, box) without opening it.
 - **`source`** is `official` or `community`.
 - The identity is **`(gguf, box, engine, backend, flavor, workload)`**. A re-measure replaces
   its row in place with a fresh date and commit; git history is the archive. There are no

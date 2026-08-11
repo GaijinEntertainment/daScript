@@ -380,8 +380,24 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
+    <div class="sec" id="exchange"><span>§ 11</span><span class="rule"></span><span>sidecar exchange</span></div>
+    <div class="panel">
+        <div class="cfg-file" id="ex-current">loading…</div>
+        <div class="controls" style="margin:10px 0">
+            <button id="b-ex-check" type="button">check the exchange</button>
+            <button id="b-ex-submit" type="button" style="display:none">share this box's tune</button>
+            <button id="b-ex-retune" class="danger" type="button">re-tune this box</button>
+            <label class="ctl-note" style="cursor:pointer"><input type="checkbox" id="ex-always"/> always share after a tune</label>
+            <span class="ctl-note" id="ex-note"></span>
+        </div>
+        <table class="ctable" id="ex-matches" style="display:none">
+            <thead><tr><th>box</th><th>tier</th><th>status</th><th>kernels</th><th>written</th><th></th></tr></thead>
+            <tbody id="ex-matches-body"></tbody>
+        </table>
+    </div>
+
     <footer class="reveal">
-        <div class="sec"><span>§ 11</span><span class="rule"></span><span>how this works</span></div>
+        <div class="sec"><span>§ 12</span><span class="rule"></span><span>how this works</span></div>
         <p>
             Everything above — the tokenizer, every matmul kernel, the continuous-batching
             scheduler, the paged KV cache, this HTTP server — is written in
@@ -1770,6 +1786,13 @@ function gatherConfig() {
         else out[f.k] = el.value;
     }
     out.models = gatherModels();
+    // the exchange policy rides EVERY save — POST /config replaces the whole file, and a
+    // config save that silently dropped exchange_submit would reset the sharing choice
+    if (exchangePolicy) {
+        out.exchange_url = exchangePolicy.url || "";
+        out.exchange_accept = exchangePolicy.accept || "verified";
+        out.exchange_submit = exchangePolicy.submit || "ask";
+    }
     return out;
 }
 
@@ -1777,6 +1800,13 @@ async function saveConfig() {
     const rerr = rosterError();
     if (rerr) {
         $("cfg-note").textContent = "save blocked: " + rerr;
+        return false;
+    }
+    if (!exchangePolicy) {
+        // POST /config replaces the whole file; without the exchange policy loaded we would
+        // write it as blank and reset the sharing choice. Refuse until GET /exchange has landed.
+        $("cfg-note").textContent = "save blocked: exchange policy still loading — retry in a moment";
+        loadExchange();
         return false;
     }
     const body = JSON.stringify(gatherConfig());
@@ -1935,8 +1965,204 @@ $("b-bench").addEventListener("click", async () => {
 
 fetch("/bench", { cache: "no-store" }).then(r => r.json()).then(renderBench).catch(() => {});
 
+// ===== § 11 sidecar exchange =====
+
+let exchangeState = null;    // the GET /exchange document
+let exchangePolicy = null;   // its policy — merged into every config save (gatherConfig)
+
+const exShort = sha => (sha || "").slice(0, 12);
+
+function exLine(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div;
+}
+
+function renderExchange() {
+    if (!exchangeState) return;
+    const c = exchangeState.current || {};
+    const pol = exchangeState.policy || {};
+    const box = $("ex-current");
+    box.replaceChildren();
+    if (!c.present) {
+        box.appendChild(exLine("no tune sidecar on this box yet — the first start picks one up from the exchange (verified match) or tunes locally"));
+    } else {
+        const origin = c.origin === "exchange" ? ("from the exchange (" + exShort(c.exchange_sha) + ")") : "tuned on this box";
+        box.appendChild(exLine("current: " + exShort(c.sha) + " · " + origin + " · " + (c.kernel_count || 0) + " kernel families · engine v" + c.dasllama_version
+            + (c.version_ok ? "" : " — this build is v" + exchangeState.engine_version + ", re-tune due") + (c.stale ? " · STALE" : "")));
+        box.appendChild(exLine("box: " + (c.box || "") + (c.applied_box ? "  →  applied on " + c.applied_box : "")));
+        box.appendChild(exLine("written " + (c.written || "?") + " · noise " + (c.noise || "?") + " · engine sha " + (c.engine_sha || "?")
+            + (c.local ? (c.shared ? " · shared with the exchange" : " · not shared yet") : "")));
+    }
+    box.appendChild(exLine("exchange " + (pol.url || "") + " · accept " + (pol.accept || "verified") + " · share " + (pol.submit || "ask")));
+    $("ex-always").checked = pol.submit === "always";
+    $("b-ex-submit").style.display = (c.present && c.local && !c.shared) ? "" : "none";
+}
+
+async function loadExchange() {
+    try {
+        const r = await fetch("/exchange", { cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        exchangeState = await r.json();
+        exchangePolicy = exchangeState.policy || null;
+        renderExchange();
+    } catch (_e) {
+        $("ex-note").textContent = "could not load /exchange";
+    }
+}
+
+function renderMatches(doc) {
+    const table = $("ex-matches");
+    const body = $("ex-matches-body");
+    body.replaceChildren();
+    if (!doc.reachable) {
+        $("ex-note").textContent = "the exchange is unreachable";
+        table.style.display = "none";
+        return;
+    }
+    const hits = doc.hits || [];
+    if (!hits.length) {
+        $("ex-note").textContent = "nobody has shared a sidecar for this box yet (version " + doc.version + ")";
+        table.style.display = "none";
+        return;
+    }
+    $("ex-note").textContent = hits.length + " match(es) for this box at version " + doc.version;
+    for (const h of hits) {
+        const tr = document.createElement("tr");
+        for (const text of [h.box, h.tier, h.verified ? "verified" : "unverified", String(h.kernel_count), h.written]) {
+            const td = document.createElement("td");
+            td.textContent = text;
+            tr.appendChild(td);
+        }
+        const td = document.createElement("td");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "mini";
+        btn.textContent = "apply " + exShort(h.sha);
+        btn.addEventListener("click", async () => {
+            const what = (h.verified ? "verified" : "UNVERIFIED") + " sidecar " + exShort(h.sha) + " (" + h.tier + " match)";
+            if (!window.confirm("Apply " + what + " and restart to stamp its winners?\n(needs the watchdog running — exit code 4 relaunches)")) return;
+            btn.disabled = true;
+            try {
+                const r = await fetch("/exchange/apply", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sha: h.sha, box: h.box }),
+                });
+                const j = await r.json();
+                if (!r.ok) {
+                    $("ex-note").textContent = "apply refused: " + (j.error ? j.error.message : r.status);
+                    btn.disabled = false;
+                    return;
+                }
+                $("ex-note").textContent = "sidecar applied — draining, then relaunching to stamp the winners";
+                restartingSince = performance.now();
+                setBadge("warn", "restarting");
+                waitForRestart();
+            } catch (_e) {
+                $("ex-note").textContent = "apply request failed";
+                btn.disabled = false;
+            }
+        });
+        td.appendChild(btn);
+        tr.appendChild(td);
+        body.appendChild(tr);
+    }
+    table.style.display = "";
+}
+
+$("b-ex-check").addEventListener("click", async () => {
+    $("b-ex-check").disabled = true;
+    $("ex-note").textContent = "asking the exchange…";
+    try {
+        const r = await fetch("/exchange/matches", { cache: "no-store" });
+        renderMatches(await r.json());
+    } catch (_e) {
+        $("ex-note").textContent = "the exchange lookup failed";
+    }
+    $("b-ex-check").disabled = false;
+});
+
+$("b-ex-submit").addEventListener("click", async () => {
+    $("b-ex-submit").disabled = true;
+    try {
+        const r = await fetch("/exchange/submit", { method: "POST" });
+        const j = await r.json();
+        $("ex-note").textContent = r.ok ? "shared — thank you" : ("refused: " + (j.error ? j.error.message : r.status));
+    } catch (_e) {
+        $("ex-note").textContent = "submit request failed";
+    }
+    $("b-ex-submit").disabled = false;
+    loadExchange();
+});
+
+$("b-ex-retune").addEventListener("click", async () => {
+    if (!window.confirm("Re-tune this box? ~20 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
+    $("b-ex-retune").disabled = true;
+    try {
+        const r = await fetch("/exchange/retune", { method: "POST" });
+        if (!r.ok) {
+            // the marker write may have failed server-side (the sidecar is then untouched);
+            // do NOT show "armed" or start the restart wait on a refusal
+            const j = await r.json().catch(() => ({}));
+            $("ex-note").textContent = "re-tune refused: " + (j.error ? j.error.message : r.status);
+            $("b-ex-retune").disabled = false;
+            return;
+        }
+        $("ex-note").textContent = "re-tune armed — the tune takes ~20 minutes; reload this page when the server is back";
+        restartingSince = performance.now();
+        setBadge("warn", "restarting");
+        waitForRestart();
+    } catch (_e) {
+        $("ex-note").textContent = "re-tune request failed";
+        $("b-ex-retune").disabled = false;
+    }
+});
+
+$("ex-always").addEventListener("change", async () => {
+    if (!exchangePolicy) {
+        $("ex-always").checked = !$("ex-always").checked;   // roll back the toggle
+        $("ex-note").textContent = "exchange policy not loaded — try reloading the page";
+        return;
+    }
+    const want = $("ex-always").checked ? "always" : "ask";
+    // Commit ONLY the policy, on top of the LAST SAVED config — NOT gatherConfig(), which would
+    // also persist any unsaved §08 edits just because the box was ticked. Roll the toggle back
+    // if the save fails so the UI never shows a state that was not written.
+    let body;
+    try { body = JSON.parse(savedSnapshot); } catch (_e) { body = null; }
+    if (!body || typeof body !== "object") {
+        $("ex-always").checked = !$("ex-always").checked;
+        $("ex-note").textContent = "config not loaded yet — try again in a moment";
+        return;
+    }
+    body.exchange_url = exchangePolicy.url || "";
+    body.exchange_accept = exchangePolicy.accept || "verified";
+    body.exchange_submit = want;
+    try {
+        const r = await fetch("/config", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!r.ok) {
+            $("ex-always").checked = !$("ex-always").checked;
+            $("ex-note").textContent = "could not save: " + (j.error ? j.error.message : r.status);
+            return;
+        }
+        exchangePolicy.submit = want;
+        savedSnapshot = JSON.stringify(body);
+        $("ex-note").textContent = want === "always"
+            ? "every fresh tune on this box will be shared automatically"
+            : "sharing goes back to asking first";
+    } catch (_e) {
+        $("ex-always").checked = !$("ex-always").checked;
+        $("ex-note").textContent = "save failed — server unreachable";
+    }
+    renderExchange();
+});
+
 poll();
-loadConfig();
+loadExchange().then(loadConfig);
 refreshImages();
 </script>
 </body>
