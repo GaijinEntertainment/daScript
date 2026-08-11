@@ -13,6 +13,8 @@ require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
 require dasllama/dasllama_tools   // the per-ToolMode wire parsers (harmony/gemma4/mistral/llama_json)
 require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
 require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
+require ../../modules/dasLLAMA/performance/exchange_client.das   // the /exchange surface + submit rails
+require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require daslib/jobque_boost
 require daslib/rtti             // this_context().last_exception inside ASR worker recovery
@@ -2353,7 +2355,8 @@ let private CONFIG_KEY_KINDS <- {
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
-    "mtp" => "b", "lcpp_bin" => "s", "models" => "a"
+    "mtp" => "b", "lcpp_bin" => "s", "models" => "a",
+    "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
@@ -2620,6 +2623,62 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
     }
     to_log(LOG_INFO, "dasllama-server: authoritative config saved to {g_config_save_path} ({length(toml)} bytes)\n")
     return resp |> JSON("\{\"saved\":{json_str(g_config_save_path)},\"restart_required\":true}", http_status.OK)
+}
+
+// ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
+
+def private exchange_policy_now : ExchangePolicy {
+    // the save path covers every start shape: --config, auto-discovered, and config-less
+    // (where the file may not exist yet and the baked defaults stand)
+    return exchange_policy_from_config(g_config_save_path)
+}
+
+def private handle_exchange_get(var resp : HttpResponse?) : http_status {
+    return resp |> JSON(exchange_status_json(exchange_policy_now()))
+}
+
+def private handle_exchange_matches(var resp : HttpResponse?) : http_status {
+    // a live exchange lookup — seconds on the tick thread; the page requests it explicitly
+    return resp |> JSON(exchange_matches_json(exchange_policy_now()))
+}
+
+def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    var jerr = ""
+    var js = read_json(string(req.body), jerr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    let sha : string = js?["sha"] ?? ""
+    if (empty(sha)) {
+        return resp |> JSON(error_body("body must carry the sidecar sha", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    let err = exchange_fetch_and_apply(exchange_policy_now().url, sha, tune_manifest_path())
+    if (!empty(err)) {
+        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
+    g_shutdown_requested = true
+    g_restart_requested = true
+    return resp |> JSON("\{\"ok\":true,\"restarting\":true}", http_status.OK)
+}
+
+def private handle_exchange_submit(var resp : HttpResponse?) : http_status {
+    let err = exchange_submit_current(exchange_policy_now())
+    if (!empty(err)) {
+        return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    to_log(LOG_INFO, "dasllama-server: this box's tune submitted to the exchange\n")
+    return resp |> JSON("\{\"ok\":true}", http_status.OK)
+}
+
+def private handle_exchange_retune(var resp : HttpResponse?) : http_status {
+    exchange_request_retune()
+    to_log(LOG_INFO, "dasllama-server: re-tune armed (sidecar removed, exchange skipped once); draining for restart\n")
+    g_shutdown_requested = true
+    g_restart_requested = true
+    return resp |> JSON("\{\"ok\":true,\"restarting\":true,\"tune\":true}", http_status.OK)
 }
 
 def private emit_asr_event(events : Channel?; event : AsrEvent) {
@@ -2952,6 +3011,21 @@ class OpenAiServer : HvWebServer {
         }
         POST("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_config_save(req, resp)
+        }
+        GET("/exchange") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_get(resp)
+        }
+        GET("/exchange/matches") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_matches(resp)
+        }
+        POST("/exchange/apply") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_apply(req, resp)
+        }
+        POST("/exchange/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_submit(resp)
+        }
+        POST("/exchange/retune") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_retune(resp)
         }
         POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bench_start(resp)

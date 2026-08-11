@@ -296,6 +296,13 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
         return g_resolve_applied
     }
     g_resolve_attempted = true
+    // the one-shot re-tune marker (exchange_request_retune): tune locally this boot
+    let skip = "{manifest_path}.retune"
+    if (stat(skip).is_valid) {
+        remove(skip)
+        print("exchange: re-tune requested from the control page - tuning locally this boot\n")
+        return false
+    }
     let policy = exchange_policy_from_config(exchange_discover_config(g_resolver_config))
     if (policy.accept == "off") {
         return false
@@ -501,6 +508,81 @@ def exchange_submit_current(policy : ExchangePolicy) : string {
     state_write_submitted(manifest, sha256_hex(text), ladder_sha)
     sc_event("submitted", "sha={ladder_sha}")
     return ""
+}
+
+//! Arm a local re-tune: the next boot skips the exchange once and races this box (~20 min,
+//! quiet machine). Removes the active sidecar — every past mint stays in the tune history
+//! archive — so the tune-bootstrap rail fires on the next start.
+def exchange_request_retune() {
+    let manifest = tune_manifest_path()
+    fwrite("{manifest}.retune", "retune requested\n")
+    remove(manifest)
+}
+
+// ===== the control-page surface =====
+
+//! Policy + the current sidecar's identity and share state, one JSON document. No network —
+//! the matches list is a separate, explicitly-requested call (exchange_matches_json).
+def exchange_status_json(policy : ExchangePolicy) : string {
+    let manifest = tune_manifest_path()
+    let text = fread(manifest)
+    var cur_tab : table<string; JsonValue?>
+    if (empty(text)) {
+        cur_tab |> insert("present", JV(false))
+    } else {
+        var info : SidecarInfo
+        let parsed = parse_sidecar_info(text, info)
+        cur_tab |> insert("present", JV(true))
+        cur_tab |> insert("stale", JV(tune_sidecar_stale(manifest)))
+        cur_tab |> insert("sha", JV(sha256_hex(text)))
+        cur_tab |> insert("box", JV(info.box))
+        cur_tab |> insert("engine_sha", JV(info.engine_sha))
+        cur_tab |> insert("written", JV(info.written))
+        cur_tab |> insert("noise", JV(info.noise))
+        cur_tab |> insert("kernel_count", JV(int64(info.kernel_count)))
+        cur_tab |> insert("dasllama_version", JV(int64(info.dasllama_version)))
+        var jerr = ""
+        var doc = read_json(text, jerr)
+        if (doc != null) {
+            cur_tab |> insert("origin", JV("{doc?["provenance"]?["origin"] ?? ""}"))
+            cur_tab |> insert("exchange_sha", JV("{doc?["provenance"]?["exchange_sha"] ?? ""}"))
+            cur_tab |> insert("applied_box", JV("{doc?["provenance"]?["applied_box"] ?? ""}"))
+            delete_json(doc)
+        }
+        cur_tab |> insert("shared", JV(state_submitted_for(manifest) == sha256_hex(text)))
+        cur_tab |> insert("local", JV(parsed && info.box == tune_box_identity() && sidecar_origin(text) != "exchange"))
+        cur_tab |> insert("version_ok", JV(info.dasllama_version == DASLLAMA_VERSION))
+    }
+    var top <- {
+        "policy" => JV((url = policy.url, accept = policy.accept, submit = policy.submit)),
+        "engine_version" => JV(int64(DASLLAMA_VERSION)),
+        "box" => JV(tune_box_identity()),
+        "manifest" => JV(manifest),
+        "current" => JV(cur_tab)
+    }
+    var docj = JV(top)
+    let out = write_json_compact(docj)
+    delete_json(docj)
+    return out
+}
+
+//! The on-demand matches list for the control page — a NETWORK call (seconds; the caller
+//! owns when that is acceptable). `{reachable, version, hits:[...]}` in the ladder's order.
+def exchange_matches_json(policy : ExchangePolicy) : string {
+    var hits : array<ExchangeHit>
+    let ok = exchange_lookup(policy.url, DASLLAMA_VERSION, tune_box_identity(), hits)
+    var arr : array<JsonValue?>
+    arr |> reserve(length(hits))
+    for (h in hits) {
+        arr |> push(JV((sha = h.sha, box = h.box, tier = h.tier, verified = h.verified,
+            noise = h.noise, written = h.written, kernel_count = int64(h.kernel_count),
+            engine_sha = h.engine_sha, dasllama_version = int64(h.dasllama_version))))
+    }
+    var doc = JV((reachable = ok, version = int64(DASLLAMA_VERSION), hits = JV(arr)))
+    let out = write_json_compact(doc)
+    delete_json(doc)
+    delete hits
+    return out
 }
 
 //! The boot-time submit check (call once the app is up): a fresh LOCAL tune that has not been
