@@ -12,6 +12,7 @@ MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
 MAKE_TYPE_FACTORY(LockBox, LockBox)
 MAKE_TYPE_FACTORY(Stream, Stream)
+MAKE_TYPE_FACTORY(SeqBox, SeqBox)
 
 MAKE_TYPE_FACTORY(Atomic32, AtomicTT<int32_t>)
 MAKE_TYPE_FACTORY(Atomic64, AtomicTT<int64_t>)
@@ -505,6 +506,60 @@ namespace das {
     struct JobStatusAnnotation : ManagedStructureAnnotation<JobStatus,false> {
         JobStatusAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("JobStatus", ml) {
             addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
+            addProperty<DAS_BIND_MANAGED_PROP(isValid)>("isValid");
+        }
+    };
+
+    SeqBox * seqBoxCreate( Context *, LineInfoArg * at ) {
+        SeqBox * box = new SeqBox();
+        if ( at ) box->mCreatedAt = at->describe();
+        box->addRef(at);
+        return box;
+    }
+
+    // Release, and whoever drops the last reference deletes. Deliberately not the
+    // create/remove-with-rc==1 shape the other primitives use: a status box is shared with the
+    // audio thread, and requiring the owner to remove it last is exactly what forced callers to
+    // block on join() first — the wait this box exists to remove.
+    // The last drop deletes on whichever thread releases last, possibly a realtime one; that is
+    // a teardown-only cost (a tracker unlink under mutex plus one free) and an accepted trade.
+    void seqBoxRelease( SeqBox * & box, Context * context, LineInfoArg * at ) {
+        if ( !box ) context->throw_error_at(at, "seqBoxRelease: box is null");
+        if (!box->isValid()) context->throw_error_at(at, "seq box is invalid (already deleted?)");
+        if ( box->releaseRef(at)==0 ) delete box;
+        box = nullptr;
+    }
+
+    void withSeqBox ( const TBlock<void,SeqBox *> & blk, Context * context, LineInfoArg * at ) {
+        SeqBox box;
+        AddReleaseGuard<SeqBox> guard(&box, context, at);
+        das_invoke<void>::invoke<SeqBox *>(context, at, blk, &box);
+    }
+
+    // Size comes from the das side (typeinfo sizeof), so the box never needs the value's TypeInfo —
+    // it is a byte buffer with a version, and the size is all it can validate.
+    bool seqBoxPublish ( SeqBox * box, void * data, int32_t size, Context * context, LineInfoArg * at ) {
+        if ( !box ) context->throw_error_at(at, "seqBoxPublish: box is null");
+        if ( size <= 0 || uint32_t(size) > uint32_t(SeqBox::PAYLOAD_BYTES) )
+            context->throw_error_at(at, "seqBoxPublish: value does not fit the box payload");
+        return box->publish(data, uint32_t(size));
+    }
+
+    bool seqBoxRead ( SeqBox * box, void * out, int32_t size, Context * context, LineInfoArg * at ) {
+        if ( !box ) context->throw_error_at(at, "seqBoxRead: box is null");
+        if ( size <= 0 || uint32_t(size) > uint32_t(SeqBox::PAYLOAD_BYTES) )
+            context->throw_error_at(at, "seqBoxRead: value does not fit the box payload");
+        return box->read(out, uint32_t(size));
+    }
+
+    void seqBoxClear ( SeqBox * box, Context * context, LineInfoArg * at ) {
+        if ( !box ) context->throw_error_at(at, "seqBoxClear: box is null");
+        box->clear();
+    }
+
+    struct SeqBoxAnnotation : ManagedStructureAnnotation<SeqBox,false> {
+        SeqBoxAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("SeqBox", ml) {
+            addProperty<DAS_BIND_MANAGED_PROP(hasValue)>("hasValue");
             addProperty<DAS_BIND_MANAGED_PROP(isValid)>("isValid");
         }
     };
@@ -1116,7 +1171,7 @@ namespace das {
     }
 
     uint64_t count_jobque_leaks () {
-        // Number of live JobStatus/Channel/LockBox/Stream + Feature objects globally.
+        // Number of live JobStatus/Channel/LockBox/SeqBox/Stream + Feature objects globally.
         // Tests compare before/after a teardown to assert no net leak (dastest's own
         // infrastructure may hold some, so an absolute count is not meaningful).
         return JobStatus::CountJobQueLeaks();
@@ -1337,6 +1392,9 @@ namespace das {
             auto stra = new StreamAnnotation(lib);
             stra->from("JobStatus");
             addAnnotation(stra);
+            auto sqb = new SeqBoxAnnotation(lib);
+            sqb->from("JobStatus");
+            addAnnotation(sqb);
             auto a32 = new AtomicAnnotation<int32_t>("Atomic32",lib);
             addAnnotation(a32);
             auto a64 = new AtomicAnnotation<int64_t>("Atomic64",lib);
@@ -1410,6 +1468,30 @@ namespace das {
             addExtern<DAS_BIND_FUN(lockBoxGrab)>(*this, lib,  "_builtin_lockbox_grab",
                 SideEffects::modifyArgumentAndExternal, "lockBoxGrab")
                     ->args({"box","block","context","line"});
+            // seq box
+            // Neither create nor release is unsafe: the box cannot be deleted while another
+            // holder still references it, so there is no lifetime hazard to gate.
+            // seq_box_release is the only deleter: the family JobStatus `release` (like on every
+            // other primitive) only drops a share, so a last reference dropped through it leaks.
+            addConstant<int>(*this, "SEQ_BOX_PAYLOAD", SeqBox::PAYLOAD_BYTES);
+            addExtern<DAS_BIND_FUN(seqBoxCreate)>(*this, lib, "seq_box_create",
+                SideEffects::invoke, "seqBoxCreate")
+                    ->args({ "context","line" });
+            addExtern<DAS_BIND_FUN(seqBoxRelease)>(*this, lib, "seq_box_release",
+                SideEffects::modifyArgumentAndAccessExternal, "seqBoxRelease")
+                    ->args({ "box", "context","line" });
+            addExtern<DAS_BIND_FUN(withSeqBox)>(*this, lib,  "with_seq_box",
+                SideEffects::invoke, "withSeqBox")
+                    ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(seqBoxPublish)>(*this, lib,  "_builtin_seq_box_publish",
+                SideEffects::modifyArgumentAndExternal, "seqBoxPublish")
+                    ->args({"box","data","size","context","line"});
+            addExtern<DAS_BIND_FUN(seqBoxRead)>(*this, lib,  "_builtin_seq_box_read",
+                SideEffects::modifyArgumentAndExternal, "seqBoxRead")
+                    ->args({"box","out","size","context","line"});
+            addExtern<DAS_BIND_FUN(seqBoxClear)>(*this, lib,  "clear",
+                SideEffects::modifyArgumentAndExternal, "seqBoxClear")
+                    ->args({"box","context","line"});
             // channel
             addInterop<channelPush,void,Channel *,vec4f>(*this, lib,  "_builtin_channel_push",
                 SideEffects::modifyArgumentAndExternal, "channelPush")

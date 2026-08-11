@@ -66,7 +66,7 @@ enum public AudioChannelState {
     //! Channel has been created but has not started playing yet.
 }
 
-//! Concurrent status snapshot for a playing sound, readable via LockBox.
+//! Concurrent status snapshot for a playing sound, published into a ``SeqBox``.
 struct public AudioChannelStatus {
     state : AudioChannelState
     //! Current playback state.
@@ -78,7 +78,7 @@ struct public AudioChannelStatus {
     //! Number of pending PCM chunks in the stream queue.
 }
 
-//! Snapshot of the audio system's recent CPU utilization and HRTF/simulated routing split, published to a caller-provided LockBox.
+//! Snapshot of the audio system's recent CPU utilization and HRTF/simulated routing split, published to a caller-provided ``SeqBox``.
 struct public AudioSystemStats {
     utilization_pct : float
     //! Mixer CPU utilization over the last ~1 second, in percent (0..100+).
@@ -149,7 +149,7 @@ class AudioSource {
     def set_position(pos : uint64) : uint64 {
         return 0ul
     }
-    def update_status(var status : AudioChannelStatus#) {
+    def update_status(var status : AudioChannelStatus) {
         status.stream_que_length = 0
     }
 }
@@ -177,7 +177,7 @@ class AudioChannel {
     is3D : bool = false
     is_hrtf : bool = true      // runtime per-channel mode; rewritten each frame by update_hrtf's budget
     setup3D : bool = true
-    @do_not_delete status : LockBox? = null
+    @do_not_delete status : SeqBox? = null
     @do_not_delete reverb : I3DL2Reverb?
     @do_not_delete chorus : ma_chorus?
     hrtf : ma_hrtf
@@ -244,8 +244,7 @@ class AudioChannel {
         }
         ma_resampler_uninit(unsafe(addr(resampler)))
         if (status != null) {
-            status |> notify_and_release
-            status = null
+            status |> seq_box_release
         }
         if (reverb != null) {
             unsafe {
@@ -261,23 +260,21 @@ class AudioChannel {
             ma_hrtf_uninit(unsafe(addr(hrtf)))
         }
     }
+    def publish_status(state : AudioChannelState) {
+        // Wait-free: build the snapshot on the audio stack and hand the bytes to the box. Nothing
+        // here can block, allocate, or run code belonging to whoever is reading.
+        return if (status == null)
+        var snapshot = AudioChannelStatus(state = state, playback_position = playback_position)
+        source->update_status(snapshot)
+        status |> publish(snapshot)
+    }
     def report_eos {
-        if (status != null) {
-            status |> update() $(var data : AudioChannelStatus#) {
-                data = AudioChannelStatus(state = AudioChannelState.stopped)
-            }
-        }
+        publish_status(AudioChannelState.stopped)
     }
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037 - one DSP stage per branch, linear pipeline
         if (!source->ready() || g_pitch == 0.) return true
         if (paused) {
-            if (status != null) {
-                status |> update() $(var status_channel : AudioChannelStatus#) {
-                    status_channel.state = AudioChannelState.paused
-                    status_channel.playback_position = playback_position
-                    source->update_status(status_channel)
-                }
-            }
+            publish_status(AudioChannelState.paused)
             return true
         }
         if (stop && volume_mixer.volume == 0.) return false
@@ -387,13 +384,7 @@ class AudioChannel {
         // update position
         playback_position += inputFrames
         // update status
-        if (status != null) {
-            status |> update() $(var status_channel : AudioChannelStatus#) {
-                status_channel.state = paused ? AudioChannelState.paused : (stop ? AudioChannelState.stopping : AudioChannelState.playing)
-                status_channel.playback_position = playback_position
-                source->update_status(status_channel)
-            }
-        }
+        publish_status(paused ? AudioChannelState.paused : (stop ? AudioChannelState.stopping : AudioChannelState.playing))
         return true
     }
 }
@@ -495,7 +486,7 @@ class AudioSourcePCMStream : AudioSource {
         consumed += uint64(ofs / channels)
         return <- data
     }
-    def override update_status(var status : AudioChannelStatus#) {
+    def override update_status(var status : AudioChannelStatus) {
         status.stream_que_length = length(chunks)
         status.consumed_position = consumed
     }
@@ -796,7 +787,7 @@ struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream {
 
 struct AudioCommandStatus {
     sid : SID
-    status : uint64       //! opaque LockBox? (archive-safe)
+    status : uint64       //! opaque SeqBox? (archive-safe)
 }
 
 struct AudioCommandSoundPosition3D {
@@ -846,7 +837,7 @@ variant AudioCommand {
     global_volume           : float
     ignore_global_volume    : tuple<sid : SID; value : bool>
     hrtf_budget             : int
-    system_stats_box        : uint64       //! opaque LockBox? (archive-safe)
+    system_stats_box        : uint64       //! opaque SeqBox? (archive-safe)
 }
 
 var g_command_stream : Stream?
@@ -891,10 +882,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
             g_sid_2_channel |> clear()
             if (g_stats_box != null) {
-                // stats box is a read-only long-lived publication target, not a one-shot;
-                // never `notify_and_release` (the caller's `get()` doesn't consume notifications).
-                g_stats_box |> release
-                g_stats_box = null
+                g_stats_box |> seq_box_release
             }
             g_command_stream |> release
         } elif (cmd is add_decoder) {
@@ -1016,14 +1004,13 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
         } elif (cmd is system_stats_box) {
             let sbox = cmd as system_stats_box
             if (g_stats_box != null) {
-                g_stats_box |> release
-                g_stats_box = null
+                g_stats_box |> seq_box_release
             }
             // Reset the rolling window so a re-registered box starts with a clean accumulator
             // instead of inheriting partial data from the previous registration.
             g_stats_window_time_ms = 0.0lf
             g_stats_window_samples = 0ul
-            g_stats_box = unsafe(reinterpret<LockBox?>(sbox))
+            g_stats_box = unsafe(reinterpret<SeqBox?>(sbox))
         } elif (cmd is stop) {
             let scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
@@ -1049,22 +1036,19 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
         } elif (cmd is status) {
             assume scmd = cmd as status
-            var scmd_status = unsafe(reinterpret<LockBox?>(scmd.status))
+            var scmd_status = unsafe(reinterpret<SeqBox?>(scmd.status))
             let found = g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
+                // Re-registering simply swaps the box: the old one is released, and a caller that
+                // races another has a losing box rather than a dead process.
                 if (ch.status != null) {
-                    if (scmd_status != null) {
-                        panic("audio: status already set for {scmd.sid}")
-                    }
-                    ch.status |> notify_and_release
+                    ch.status |> seq_box_release
                 }
                 ch.status = scmd_status
             }
             if (!found) {
                 if (scmd_status != null) {
-                    scmd_status |> update() $(var data : AudioChannelStatus#) {
-                        data = AudioChannelStatus(state = AudioChannelState.stopped)
-                    }
-                    scmd_status |> notify_and_release
+                    scmd_status |> publish(AudioChannelStatus(state = AudioChannelState.stopped))
+                    scmd_status |> seq_box_release
                 }
             }
         } elif (cmd is reverb) {
@@ -1102,7 +1086,7 @@ var g_pause : bool = false
 var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 = mute)
 
 // AudioSystemStats publication state (audio-context-side; main side holds the LockBox handle and read-grabs it).
-var g_stats_box : LockBox? = null
+var g_stats_box : SeqBox? = null
 var g_stats_window_time_ms = 0.0lf      // accumulated mixer wall time over the current window
 var g_stats_window_samples = 0ul        // accumulated audio frames over the current window (flush gate: realTimeMs >= 1000)
 var g_stats_recent_util_pct : float = 0.0
@@ -1164,11 +1148,7 @@ def private publish_audio_stats(dt_ms : double; frames : uint64) {
     let snap = g_stats_recent_util_pct
     let hrtfCount = g_stats_hrtf_count
     let total3D = g_stats_3d_count
-    g_stats_box |> update() $(var s : AudioSystemStats#) {
-        s.utilization_pct = snap
-        s.hrtf_count = hrtfCount
-        s.total_3d = total3D
-    }
+    g_stats_box |> publish(AudioSystemStats(utilization_pct = snap, hrtf_count = hrtfCount, total_3d = total3D))
 }
 
 [init]
@@ -1500,17 +1480,17 @@ def public set_hrtf_budget(n : int) {
     push_cmd(AudioCommand(hrtf_budget = n))
 }
 
-def public set_audio_stats_box(var box : LockBox?) {
-    //! Register a LockBox to receive periodic AudioSystemStats updates from the audio thread.
-    //! The audio thread writes one snapshot per ~1-second window; the caller reads it on demand
-    //! via ``box |> get() $(var s : AudioSystemStats) { ... }`` (read-only — keeps the box alive
-    //! across multiple reads). Pass null to clear. Do NOT use ``grab()``: that's a one-shot consume.
+def public set_audio_stats_box(var box : SeqBox?) {
+    //! Register a box to receive periodic AudioSystemStats updates from the audio thread.
+    //! The audio thread publishes one snapshot per ~1-second window; read it on demand with
+    //! ``box |> read() $(s : AudioSystemStats) { ... }``. Reading consumes nothing, so the same
+    //! box serves any number of reads. Pass null to stop.
     if (box == null) {
         push_cmd(AudioCommand(system_stats_box = 0ul))
         return
     }
     box |> add_ref
-    box |> set() <| new AudioSystemStats(utilization_pct = 0.0, hrtf_count = 0, total_3d = 0)
+    box |> publish(AudioSystemStats(utilization_pct = 0.0, hrtf_count = 0, total_3d = 0))
     push_cmd(AudioCommand(system_stats_box = intptr(box)))
 }
 
@@ -1531,18 +1511,20 @@ def public set_position(sid : SID; pos : float3; dir : float3 = float3(0.)) {
     return sid
 }
 
-def public set_status_update(sid : SID; var status : LockBox?) {
-    //! set status for sound
+def public set_status_update(sid : SID; var status : SeqBox?) {
+    //! Publish this sound's status into ``status`` until ``unset_status_update``.
+    //! The box is seeded with ``starting`` here, on the calling thread, so it reads sensibly the
+    //! instant this returns. Reading it never makes the mixer wait, and releasing it needs no
+    //! ordering with the audio thread — see ``seq_box_release``.
     status |> add_ref
-    status |> append(1)
-    status |> set() <| new AudioChannelStatus(state = AudioChannelState.starting)
+    status |> publish(AudioChannelStatus(state = AudioChannelState.starting))
     push_cmd(AudioCommand(status = AudioCommandStatus(sid = sid, status = intptr(status))))
     return sid
 }
 
-def public clear_status(var status : LockBox?) {
-    //! clear status for sound
-    status |> clear(type <AudioChannelStatus>)
+def public clear_status(var status : SeqBox?) {
+    //! Drop the stored snapshot; the box reads back empty until the next publish.
+    status |> clear
 }
 
 def public unset_status_update(sid : SID) {

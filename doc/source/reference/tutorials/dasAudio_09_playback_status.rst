@@ -8,19 +8,21 @@ AUDIO-09 — Playback Status
     single: Tutorial; Playback Status
     single: Tutorial; AudioChannelStatus
     single: Tutorial; set_status_update
+    single: Tutorial; SeqBox
     single: Tutorial; dasAudio
 
-This tutorial covers monitoring a playing sound. Audio runs on its own thread,
-so status is published through a ``LockBox``: the audio thread writes a snapshot
-each mix, and the main thread reads it on demand. This is how you detect when a
-one-shot sound has finished, or how full a streaming queue is.
+This tutorial covers monitoring a playing sound. Audio runs on its own thread, so
+status is published through a ``SeqBox``: the audio thread writes a snapshot each
+mix, and the main thread reads it on demand. Neither side ever waits for the
+other. This is how you detect when a one-shot sound has finished, or how full a
+streaming queue is.
 
 Registering a Status Box
 ========================
 
-Create a ``LockBox`` with ``lock_box_create`` and attach it to a sound with
+Create a ``SeqBox`` with ``seq_box_create`` and attach it to a sound with
 ``set_status_update``. The call seeds the box with state ``starting``; the audio
-thread updates it from then on:
+thread publishes into it from then on:
 
 .. das-doc: given var tone : array<float>
 
@@ -30,20 +32,20 @@ thread updates it from then on:
    require daslib/jobque_boost
 
    let sid = play_sound_from_pcm(MA_SAMPLE_RATE, 1, tone)
-   var status_box <- lock_box_create()
+   var status_box = seq_box_create()
    set_status_update(sid, status_box)
 
 Reading the Snapshot
 ====================
 
-Read the current ``AudioChannelStatus`` with ``box |> get()`` — a read-only peek
-that keeps the box alive across reads (do not use ``grab``, which is a one-shot
-consume). The snapshot carries the playback state, frame positions, and the
-streaming queue depth:
+Read the current ``AudioChannelStatus`` with ``box |> read()``. It copies the
+snapshot out and consumes nothing, so the same box serves any number of reads —
+and it never makes the mixer wait. The snapshot carries the playback state, frame
+positions, and the streaming queue depth:
 
 .. code-block:: das
 
-   status_box |> get() $(s : AudioChannelStatus#) {
+   status_box |> read() $(s : AudioChannelStatus) {
        // s.state              : AudioChannelState
        // s.playback_position  : frames played
        // s.consumed_position  : frames of real audio consumed
@@ -58,7 +60,7 @@ you watch a one-shot sound run to completion:
 
    var done = false
    for (i in range(100)) {
-       status_box |> get() $(s : AudioChannelStatus#) {
+       status_box |> read() $(s : AudioChannelStatus) {
            done = s.state == AudioChannelState.stopped
        }
        break if (done)
@@ -68,15 +70,14 @@ you watch a one-shot sound run to completion:
 Releasing the Box
 =================
 
-Order matters — stop the updates, clear the stored value, join, then remove the
-box, or the ``LockBox`` leaks:
+Stop the updates and drop your reference. There is no order to get right and
+nothing to wait for: the audio thread holds a reference of its own, and whichever
+side drops the last one deletes the box.
 
 .. code-block:: das
 
    unset_status_update(sid)
-   clear_status(status_box)
-   status_box |> join()
-   unsafe(lock_box_remove(status_box))
+   status_box |> seq_box_release
 
 .. seealso::
 

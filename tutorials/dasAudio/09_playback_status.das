@@ -1,14 +1,15 @@
 // Tutorial AUDIO-09: Playback Status
 //
 // This tutorial covers:
-//   - Registering a status LockBox with set_status_update
+//   - Registering a status SeqBox with set_status_update
 //   - Reading the AudioChannelStatus snapshot (state, position, queue depth)
 //   - Watching a sound advance through its AudioChannelState lifecycle
-//   - Releasing the status box cleanly (unset_status_update + lock_box_remove)
+//   - Releasing the box with seq_box_release, in any order you like
 //
-// The audio thread publishes a snapshot into a LockBox once per mix; the main
-// thread reads it on demand with `box |> get()`. This is how you detect when a
-// one-shot sound has finished, or how full a streaming queue is.
+// The audio thread publishes a snapshot into a SeqBox once per mix; the main
+// thread reads it on demand with `box |> read()`. Neither side ever waits for the
+// other. This is how you detect when a one-shot sound has finished, or how full a
+// streaming queue is.
 //
 // Run: daslang.exe tutorials/dasAudio/09_playback_status.das
 
@@ -41,9 +42,9 @@ def main() {
 
         // ──────────────────────────────────────────────────────────────────
         // Register a status box. set_status_update seeds it with state
-        // `starting`; the audio thread then updates it as the sound plays.
+        // `starting`; the audio thread then publishes into it as the sound plays.
         // ──────────────────────────────────────────────────────────────────
-        var status_box <- lock_box_create()
+        var status_box = seq_box_create()
         set_status_update(sid, status_box)
 
         // Poll until the sound reports `stopped` (or we time out after ~2s),
@@ -52,7 +53,7 @@ def main() {
         var saw_read = false
         var reached_stopped = false
         for (_i in range(100)) {
-            status_box |> get() $(s : AudioChannelStatus#) {
+            status_box |> read() $(s : AudioChannelStatus) {
                 saw_read = true
                 if (s.state != last_state) {
                     print("  state: {s.state}  (position={int(s.playback_position)} frames, queue={s.stream_que_length})\n")
@@ -73,13 +74,12 @@ def main() {
         assert(reached_stopped, "sound never reached the stopped state within the poll window")
 
         // ──────────────────────────────────────────────────────────────────
-        // Release the status box. Order matters: stop the updates, clear the
-        // stored value, join, then remove — otherwise the LockBox leaks.
+        // Release the box. No ordering to get right and nothing to wait for:
+        // the audio thread also holds a reference, and whichever side drops the
+        // last one deletes it.
         // ──────────────────────────────────────────────────────────────────
         unset_status_update(sid)
-        clear_status(status_box)
-        status_box |> join()
-        unsafe(lock_box_remove(status_box))
+        status_box |> seq_box_release
 
         print("\nDone!\n")
     }

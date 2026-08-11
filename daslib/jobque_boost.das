@@ -330,6 +330,31 @@ def grab(box : LockBox?; blk : block<(var res : auto(TT)) : void>) : bool {
     return res
 }
 
+def publish(box : SeqBox?; value : auto(TT)) : bool {
+    //! Publishes a snapshot of ``value``, replacing whatever was there; false when another writer holds
+    //! the box, or ``TT`` (raw POD — no array/table/string/pointer) exceeds ``SEQ_BOX_PAYLOAD`` bytes.
+    //! Wait-free — but publish through a reference you HOLD; a last ``seq_box_release`` elsewhere frees it.
+    concept_assert(typeinfo is_pod(type<TT>) && typeinfo is_raw(type<TT>),
+        "SeqBox payload must be raw POD - the value is copied byte-wise, heap references would dangle")
+    concept_assert(typeinfo sizeof(type<TT>) <= SEQ_BOX_PAYLOAD, "SeqBox payload is at most 64 bytes")
+    return _builtin_seq_box_publish(box, unsafe(addr<void?>(value)), typeinfo sizeof(type<TT>))
+}
+
+def read(box : SeqBox?; blk : block<(value : auto(TT)) : void>) : bool {
+    //! Copies the latest snapshot out and invokes the block on the copy; consumes nothing and blocks no
+    //! one; false when nothing was published or the size differs — size is the box's only identity, so an
+    //! equal-size type reads back reinterpreted. Read through a reference you HOLD, never a borrowed one.
+    concept_assert(typeinfo is_pod(type<TT>) && typeinfo is_raw(type<TT>),
+        "SeqBox payload must be raw POD - the value is copied byte-wise, heap references would dangle")
+    concept_assert(typeinfo sizeof(type<TT>) <= SEQ_BOX_PAYLOAD, "SeqBox payload is at most 64 bytes")
+    var value : TT = default<TT>
+    if (!_builtin_seq_box_read(box, unsafe(addr<void?>(value)), typeinfo sizeof(type<TT>))) {
+        return false
+    }
+    invoke(blk, value)
+    return true
+}
+
 [template(tinfo), deprecated(message="use `each_clone` instead")]
 def each(var channel : Channel?; tinfo : auto(TT)) {
     //! this iterator is used to iterate over the channel in order it was pushed.
@@ -740,6 +765,12 @@ def public capture_jobque_stream(var s : Stream?) : Stream? {
     return s
 }
 
+def public capture_jobque_seq_box(var box : SeqBox?) : SeqBox? {
+    //! this function is used to capture a seq box that is used by the jobque.
+    box |> add_ref
+    return box
+}
+
 def public release_capture_jobque_channel(ch : Channel?) {
     //! this function is used to release a channel that is used by the jobque.
     if (ch != null) {
@@ -765,6 +796,15 @@ def public release_capture_jobque_stream(s : Stream?) {
     //! this function is used to release a stream that is used by the jobque.
     if (s != null) {
         panic("Stream has not been released. missing stream|>release or stream|>notify_and_release")
+    }
+}
+
+def public release_capture_jobque_seq_box(box : SeqBox?) {
+    //! this function is used to release a seq box that is used by the jobque.
+    // seq_box_release, not the family `release` - the latter only drops a share, so the last
+    // reference dropped through it leaks the box
+    if (box != null) {
+        panic("SeqBox has not been released. missing box|>seq_box_release")
     }
 }
 
@@ -797,7 +837,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         )
         return <- pCall
     }
-    //! This macro implements capturing of the `jobque::Channel`, `jobque::JobStatus`, `jobque::LockBox`, and `jobque::Stream` types.
+    //! This macro implements capturing of the `jobque::Channel`, `jobque::JobStatus`, `jobque::LockBox`, `jobque::SeqBox`, and `jobque::Stream` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; typ : TypeDeclPtr) : ExpressionPtr {
         //! Implementation details for the capture macro.
@@ -807,6 +847,8 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
             return <- make_capture_call(expr, "jobque_boost::capture_jobque_job_status")
         } elif (typ |> isPtrToJQ("LockBox")) {
             return <- make_capture_call(expr, "jobque_boost::capture_jobque_lock_box")
+        } elif (typ |> isPtrToJQ("SeqBox")) {
+            return <- make_capture_call(expr, "jobque_boost::capture_jobque_seq_box")
         } elif (typ |> isPtrToJQ("Stream")) return <- make_capture_call(expr, "jobque_boost::capture_jobque_stream")
         return null
     }
@@ -822,6 +864,9 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             } elif (fld._type |> isPtrToJQ("LockBox")) {
                 var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_lock_box")
+                (fun.body as ExprBlock).finalList |> emplace(pCall)
+            } elif (fld._type |> isPtrToJQ("SeqBox")) {
+                var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_seq_box")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             } elif (fld._type |> isPtrToJQ("Stream")) {
                 var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_stream")

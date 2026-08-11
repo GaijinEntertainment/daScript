@@ -830,7 +830,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     let TARGET_CHUNKS = 4
     let LOW_WATERMARK = 2
     var tracks : array<MidiPlaybackState?>
-    var status_box <- lock_box_create()
+    var status_box = seq_box_create()
     set_status_update(sid, status_box)
     var pcm_box <- lock_box_create()
     // initialize reverb (convolution: 2s decay, 15kHz→1kHz lowpass sweep)
@@ -969,7 +969,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
         }
         // adaptive buffering
         var que_len = 0
-        status_box |> get() $(st : AudioChannelStatus#) {
+        status_box |> read() $(st : AudioChannelStatus) {
             que_len = st.stream_que_length
         }
         if (que_len >= TARGET_CHUNKS) {
@@ -989,9 +989,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     pcm_box |> join()
     unsafe(lock_box_remove(pcm_box))
     unset_status_update(sid)
-    clear_status(status_box)
-    status_box |> join()
-    unsafe(lock_box_remove(status_box))
+    status_box |> seq_box_release
     unsafe {
         set_audio_thread_command_stream(null)
     }

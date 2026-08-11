@@ -67,7 +67,7 @@ var private g_playback_box : LockBox?
 var private g_tracks : array<StrudelTrack?>
 var private g_look_ahead : float = 0.1
 var private g_chunk_seconds : float = 0.05
-var private g_tick_status_box : LockBox?  // buffer level feedback for strudel_tick
+var private g_tick_status_box : SeqBox?   // buffer level feedback for strudel_tick
 var private g_tick_pcm_box : LockBox?    // lock box for append_box_to_pcm in main-thread mode
 
 //! Per-track PCM output written by strudel_tick (main-thread mode only), indexed by track index.
@@ -122,7 +122,7 @@ def public strudel_get_playback_time() : tuple<double; double> {
         // main-thread mode — use consumed_position once audio device starts,
         // fall back to g_wall_time during startup (before device begins consuming)
         var consumed = 0ul
-        g_tick_status_box |> get() $(st : AudioChannelStatus#) {
+        g_tick_status_box |> read() $(st : AudioChannelStatus) {
             consumed = st.consumed_position
         }
         wt = consumed > 0ul ? double(consumed) / double(SAMPLE_RATE) : g_wall_time
@@ -486,8 +486,7 @@ def public strudel_create_channel() {
     //! Create the PCM stream for main-thread playback. Call once after audio_system_create() and before strudel_tick.
     if (g_sid == 0ul) {
         g_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
-        g_tick_status_box = lock_box_create()
-        g_tick_status_box |> add_ref()
+        g_tick_status_box = seq_box_create()
         set_status_update(g_sid, g_tick_status_box)
         g_tick_pcm_box = lock_box_create()
         // memory tracking baseline
@@ -507,7 +506,7 @@ def public strudel_tick() {
     // check buffer level — skip if we're ahead enough
     if (g_tick_status_box != null) {
         var que_len = 0
-        g_tick_status_box |> get() $(st : AudioChannelStatus#) {
+        g_tick_status_box |> read() $(st : AudioChannelStatus) {
             que_len = st.stream_que_length
         }
         if (que_len >= 4) return
@@ -688,7 +687,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var total_time = 0.lf
     var total_samples = 0ul
     var max_chunk_usec = 0.0lf
-    var status_box <- lock_box_create()
+    var status_box = seq_box_create()
     set_status_update(g_sid, status_box)
     var pcm_box <- lock_box_create()
     var mixer : ma_volume_mixer
@@ -777,7 +776,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         }
         // buffer level feedback
         var que_len = 0
-        status_box |> get() $(st : AudioChannelStatus#) {
+        status_box |> read() $(st : AudioChannelStatus) {
             que_len = st.stream_que_length
         }
         if (que_len >= TARGET_CHUNKS) {
@@ -799,9 +798,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     unsafe(lock_box_remove(pcm_box))
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(g_sid)
-    clear_status(status_box)
-    status_box |> join()
-    unsafe(lock_box_remove(status_box))
+    status_box |> seq_box_release
     delete output
     // release thread-local tracks so sample voices and orbit buses are freed
     // before the leak-check below (and before the context dies).
@@ -908,26 +905,11 @@ def public strudel_shutdown() {
         unsafe(lock_box_remove(g_tick_pcm_box))
         g_tick_pcm_box = null
     }
-    // status box (main-thread mode: created in strudel_create_channel)
+    // status box (main-thread mode: created in strudel_create_channel). No ordering with the
+    // audio thread: whichever side drops the last reference deletes the box.
     if (g_tick_status_box != null) {
         unset_status_update(g_sid)
-        // set_status_update added a ref released only when the audio command processor
-        // handles this status=0 command (notify_and_release). In single-threaded mode
-        // there is no audio thread to do it (and the join below is a no-op, job_que.cpp),
-        // so we drain the queue ourselves — SAFE because nothing else is in the mixer
-        // context. In the threaded build we must NOT drain here: the audio thread is
-        // running command_processor concurrently and the mixer context is not
-        // thread-safe (verySafeContext=false) — racing it corrupts the heap. There the
-        // audio thread processes the command and the join below fences (original path).
-        if (audio_is_single_threaded()) {
-            audio_system_release_context()
-        }
-        clear_status(g_tick_status_box)
-        var tick_ptr = g_tick_status_box
-        g_tick_status_box |> release()
-        tick_ptr |> join()
-        unsafe(lock_box_remove(tick_ptr))
-        g_tick_status_box = null
+        g_tick_status_box |> seq_box_release
     }
     // release tracks and buffers before measuring memory
     for (t in g_tracks) {
