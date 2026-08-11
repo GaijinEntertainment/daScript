@@ -504,6 +504,10 @@ def set_sidecar_verified(db : SqlRunner; sha : string; verified : bool) : bool {
 
 def delete_sidecar(db : SqlRunner; sha : string) : bool {
     let n = db |> _sql_delete(type<SidecarRow>, _.Sha == sha)
+    // the sidecar is content-addressed, so its Sha IS the submission's DocSha: drop the
+    // verbatim submission copy too, or GET /api/submission/:id keeps serving a "deleted"
+    // sidecar AND its orphaned DocSha (unique) makes the content permanently unresubmittable
+    db |> _sql_delete(type<Submission>, _.Kind == "sidecar" && _.DocSha == sha)
     if (n > 0) {
         logger_info("ladder.store", "delete sidecar", JV((sha = sha)))
     }

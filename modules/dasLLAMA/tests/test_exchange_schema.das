@@ -239,7 +239,7 @@ def test_hostile_sidecars(t : T?) {
         t |> equal(info.kernel_count, 2)
         t |> equal(info.noise, "ok")
     }
-    t |> run("hostile sidecar shapes are rejected") @(t : T?) {
+    t |> run("hostile sidecar shapes are rejected") @(t : T?) {   // nolint:STYLE038 - flat one-shape-per-arm rejection list; no arm stands alone
         var errors : array<string>
         t |> success(!validate_sidecar("\{}", errors), "empty object")
         errors |> clear()
@@ -275,6 +275,33 @@ def test_hostile_sidecars(t : T?) {
         }
         %%
         t |> success(!validate_sidecar(write_json(badbox), errors), "box string with three fields")
+        errors |> clear()
+        // an unknown top-level section would bypass the privacy strip (it only walks provenance)
+        var extra = %json~
+        {
+            "kernels" : { "dot" : "vec8" },
+            "provenance" : { "box" : "a|b|c|d|e", "engine_sha" : "x" },
+            "notes" : { "binary" : "/Users/victim/bin/daslang" }
+        }
+        %%
+        t |> success(!validate_sidecar(write_json(extra), errors), "unknown top-level section")
+        errors |> clear()
+        // a provenance value carrying markup: the charset is the injection guard for the page
+        var xss = %json~
+        {
+            "kernels" : { "dot" : "vec8" },
+            "provenance" : { "box" : "linux|x86_64|<img src=x onerror=alert(1)>|b|cpu", "engine_sha" : "x" }
+        }
+        %%
+        t |> success(!validate_sidecar(write_json(xss), errors), "markup in a provenance value")
+        errors |> clear()
+        var badsha = %json~
+        {
+            "kernels" : { "dot" : "vec8" },
+            "provenance" : { "box" : "a|b|c|d|e", "engine_sha" : "<svg onload=alert(1)>" }
+        }
+        %%
+        t |> success(!validate_sidecar(write_json(badsha), errors), "non-identifier engine_sha")
         delete errors
     }
 }

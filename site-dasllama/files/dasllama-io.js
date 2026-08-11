@@ -17,9 +17,17 @@
   function tps(v) { return v > 0 ? fmt(v, 1) : '-'; }
   function ratio(das, ref) { return (ref > 0 && das > 0) ? das / ref : null; }
 
-  // community rows are third-party text — escape everything that reaches innerHTML
+  // community rows are third-party text — escape everything that reaches innerHTML.
+  // Quotes are escaped too: these values land inside quoted attributes (option value,
+  // data-*), where a bare " closes the attribute and injects a new one (onfocus=…).
   function esc(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  // a community-supplied string is safe as an href only if it is one of OUR api paths;
+  // anything else (javascript:, //evil, data:) becomes '#' rather than a live sink
+  function safeApiHref(u) {
+    return /^\/api\/[A-Za-z0-9_./-]+$/.test(String(u)) ? String(u) : '#';
   }
   function boxLabel(cpu, fallback) {
     return cpu ? String(cpu).replace('64-Core Processor', '').trim() : fallback;
@@ -148,7 +156,8 @@
     if (r.ref) sideLines('reference', r.ref, lines);
     else lines.push('<b>reference</b>  none rode along — the absolute numbers stand alone, no parity claimed.');
     lines.push('');
-    lines.push('<a href="/api/submission/' + r.submissionId + '">verbatim submission #' + r.submissionId + ' ↗</a>');
+    var subId = Number(r.submissionId) || 0;   // numeric by construction; coerce so it can never carry markup
+    lines.push('<a href="/api/submission/' + subId + '">verbatim submission #' + subId + ' ↗</a>');
     return lines.join('\n');
   }
 
@@ -647,10 +656,10 @@
           '<div class="dio-sc__row">' +
           '<span class="dio-status"><span class="dio-dot ' + (r.verified ? 'dio-dot--ok' : 'dio-dot--un') + '"></span>' + (r.verified ? 'verified' : 'unverified') + '</span>' +
           '<span class="dio-sc__box">' + esc(r.box) + '</span>' +
-          '<span class="dio-cell" data-l="engine sha">' + esc(r.engineSha || '?') + ' <span style="color:var(--fg-faint)">· v' + r.version + '</span></span>' +
+          '<span class="dio-cell" data-l="engine sha">' + esc(r.engineSha || '?') + ' <span style="color:var(--fg-faint)">· v' + Number(r.version || 0) + '</span></span>' +
           '<span class="dio-cell" data-l="date">' + esc(r.date) + '</span>' +
-          '<span class="dio-cell" data-l="noise">' + esc(r.noise || '?') + ' <span style="color:var(--fg-faint)">· ' + r.kernels + ' families</span></span>' +
-          '<a class="dio-dl" href="' + esc(r.url) + '" download>download</a>' +
+          '<span class="dio-cell" data-l="noise">' + esc(r.noise || '?') + ' <span style="color:var(--fg-faint)">· ' + Number(r.kernels || 0) + ' families</span></span>' +
+          '<a class="dio-dl" href="' + safeApiHref(r.url) + '" download>download</a>' +
           '<span class="dio-chev">▾</span>' +
           '</div>' +
           '<div class="dio-panel"><div class="dio-more">loading…</div></div>' +
@@ -665,9 +674,9 @@
           entry.dataset.loaded = '1';
           var r = show[Number(entry.dataset.sc)];
           var panel = entry.querySelector('.dio-panel');
-          api(r.url).then(function (doc) {
+          api(safeApiHref(r.url)).then(function (doc) {
             panel.innerHTML = kernelPanel(doc) +
-              '<div class="dio-cmd" style="margin-top:14px"><a href="' + esc(r.url) + '" download style="color:var(--amber)">raw ' + esc(r.sha.slice(0, 12)) + '….tune.json ↓</a></div>';
+              '<div class="dio-cmd" style="margin-top:14px"><a href="' + safeApiHref(r.url) + '" download style="color:var(--amber)">raw ' + esc(r.sha.slice(0, 12)) + '….tune.json ↓</a></div>';
           }).catch(function () {
             panel.innerHTML = '<div class="dio-more">could not load the sidecar document.</div>';
           });

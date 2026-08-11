@@ -122,6 +122,24 @@ def private selection_ok(s : string) : bool {
     return true
 }
 
+// Safe for verbatim rendering on a public page: printable ASCII only, excluding the bytes
+// that break out of an HTML text or quoted-attribute context. Permissive enough for CPU brand
+// strings ("AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD", "Apple M1 Max") and the noise
+// probe log; strict enough that no provenance value can inject a tag or close an attribute.
+// The client escapes too — this is the fail-closed server half of that guard (a hostile or
+// non-browser client cannot land markup in a stored column).
+def private render_safe_ok(s : string) : bool {
+    var ok = true
+    peek_data(s) $(arr) {
+        for (b in arr) {
+            let c = int(b)
+            ok = ok && (c >= 0x20 && c <= 0x7E
+                && c != '<' && c != '>' && c != '"' && c != '\'' && c != '\\' && c != '`')
+        }
+    }
+    return ok
+}
+
 def private hex_ok(s : string; want_len : int) : bool {
     if (length(s) != want_len) {
         return false
@@ -464,6 +482,10 @@ def private validate_provenance(doc : JsonValue const?; var errors : array<strin
             err(errors, "provenance[{k}]", "not a string")
         } elif (length(f as _string) > MAX_PROV_VALUE) {
             err(errors, "provenance[{k}]", "longer than {MAX_PROV_VALUE}")
+        } elif (!render_safe_ok(f as _string)) {
+            // every provenance value can reach a public page verbatim — the charset is the
+            // injection guard, not a style preference
+            err(errors, "provenance[{k}]", "carries a byte unsafe to render")
         }
     }
     let box = chk_str(prov, "box", true, MAX_NAME, "provenance", errors)
@@ -471,7 +493,10 @@ def private validate_provenance(doc : JsonValue const?; var errors : array<strin
     if (!empty(box) && !parse_box_string(box, ident)) {
         err(errors, "provenance.box", "not the five-field platform|arch|model_id|os_build|cpu form")
     }
-    chk_str(prov, "engine_sha", true, MAX_SHORT, "provenance", errors)
+    let engine_sha = chk_str(prov, "engine_sha", true, MAX_SHORT, "provenance", errors)
+    if (!empty(engine_sha) && !ident_ok(engine_sha)) {
+        err(errors, "provenance.engine_sha", "not an identifier")   // a git short sha or 'unknown'
+    }
 }
 
 def private validate_runtime(doc : JsonValue const?; var errors : array<string>) {
@@ -573,9 +598,14 @@ def private validate_sidecar_doc(doc : JsonValue const?; submission : bool; var 
         err(errors, "$", "root is not an object")
         return false
     }
-    if (length(doc as _object) > 16) {
-        err(errors, "$", "too many top-level sections")
-        return false
+    // allow-list the four known sections: an unknown top-level key is stored verbatim, served
+    // by /api/sidecar/:sha, and written into an adopter's local manifest — and the privacy
+    // strip only walks `provenance`, so `notes: {binary: "/home/..."}` would leak straight
+    // through. Reject the whole document rather than store an un-validated section.
+    for (k in keys(doc as _object)) {
+        if (k != "kernels" && k != "runtime" && k != "provenance" && k != "race") {
+            err(errors, "$", "unknown top-level section '{k}'")
+        }
     }
     validate_kernels(doc, errors)
     validate_provenance(doc, errors)

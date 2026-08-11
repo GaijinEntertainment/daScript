@@ -129,6 +129,18 @@ def test_sidecar_ladder(t : T?) {
             tt |> equal(length(hits), 3)
             tt |> success(!delete_sidecar(db, arch_hit.sha), "second delete finds nothing")
         }
+        t |> run("delete also drops the verbatim submission, so the content can be resubmitted") @(tt : T?) {
+            let doc = sidecar_doc(BOX_C, "3", "vec8_solo")
+            let first = put_sidecar(db, doc, "10.1.9.1", pol, 5000l)
+            tt |> success(first.created, "stored")
+            // no orphaned submission row: the DocSha is gone, so the unique index is clear
+            tt |> success(delete_sidecar(db, first.sha), "deleted")
+            let orphans <- _sql(db |> select_from(type<Submission>) |> _where(_.DocSha == first.sha) |> _select(_.Id))
+            tt |> equal(length(orphans), 0, "no orphaned submission")
+            // the exact same content resubmits cleanly instead of panicking the unique index
+            let again = put_sidecar(db, doc, "10.1.9.2", pol, 6000l)
+            tt |> success(again.created, "resubmit succeeds after delete")
+        }
     }
 }
 
