@@ -191,7 +191,9 @@ def test_put_records(t : T?) {
             tt |> equal(das_rows[0].Engine, "das")
             tt |> equal(das_rows[0].TuneSha, "cafe0123beef")
             tt |> equal(das_rows[0].Threads, 8)
-            tt |> equal(get_submission_doc(db, put.submission_id), doc)
+            // put_records redacts paths, which re-serializes the JSON — so the stored copy is
+            // the redacted form (records_doc carries no paths, so redaction only normalizes it)
+            tt |> equal(get_submission_doc(db, put.submission_id), redact_record_paths(doc))
         }
         t |> run("a byte-identical resubmit dedups") @(tt : T?) {
             let put = put_records(db, records_doc(), "10.2.0.9", test_policy(), 1100l)
@@ -210,6 +212,29 @@ def test_put_records(t : T?) {
             let put = put_records(db, write_json(bad), "10.2.0.2", test_policy(), 1200l)
             tt |> success(put.status == PutStatus.invalid, "refused")
             tt |> success(!empty(put.error), "error named")
+        }
+    }
+}
+
+[test]
+def test_records_redacted_server_side(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("submitted records lose their home-layout paths") @(tt : T?) {
+            // inject a home path into the das run's cmd, then submit
+            var jerr = ""
+            var jdoc = read_json(records_doc(), jerr)   // top is [ {model} ]
+            var models & = unsafe(jdoc.value as _array)   // nolint:LINT003 — mutated in place below
+            var model = models[0]
+            var mruns = model?["runs"]
+            var rarr & = unsafe(mruns.value as _array)
+            update(rarr[0], "cmd", JV("/home/boris/llama.cpp/bin/llama-bench -m /home/boris/models/x.gguf"))
+            let dirty = write_json(jdoc)
+            delete_json(jdoc)
+            let put = put_records(db, dirty, "10.2.9.1", test_policy(), 5000l)
+            tt |> success(put.status == PutStatus.ok, "accepted ({put.error})")
+            let stored = get_submission_doc(db, put.submission_id)
+            tt |> success(find(stored, "boris") < 0, "no username in the stored record")
+            tt |> success(find(stored, "llama-bench -m x.gguf") >= 0, "cmd redacted to basenames")
         }
     }
 }

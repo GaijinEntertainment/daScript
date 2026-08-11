@@ -6,6 +6,7 @@ module exchange_schema shared public
 require daslib/json_boost
 require daslib/strings_boost      // split — the box identity parse
 require daslib/strings_convert    // try_to_int — provenance version is validated, never trusted
+require daslib/fio                // base_name — the record path redactor (engine-free)
 require strings                   // peek_data — charset checks
 
 // Engine-free validation for exchange submissions (bench-record stores + tune sidecars): the
@@ -413,6 +414,73 @@ def private validate_store_doc(doc : JsonValue const?; submission : bool; var er
         err(errors, "$", "a submission carries at least one das run")
     }
     return empty(errors)
+}
+
+// a path-bearing string loses its leading directories; a KEY=path token keeps its key
+def private redact_bare(s : string) : string {
+    return (find(s, "/") >= 0 || find(s, "\\") >= 0) ? base_name(s) : s
+}
+
+def private redact_token(tok : string) : string {
+    let eq = find(tok, "=")
+    if (eq >= 0) {
+        return "{slice(tok, 0, eq)}={redact_bare(slice(tok, eq + 1))}"
+    }
+    return redact_bare(tok)
+}
+
+def private redact_cmd(s : string) : string {
+    let toks <- split(s, " ")
+    return join([for (tok in toks); redact_token(tok)], " ")
+}
+
+def private redact_run(var r : JsonValue?) {
+    if (r == null || !(r.value is _object)) {
+        return
+    }
+    for (key in fixed_array("cmd", "env")) {
+        let v : string = r?[key] ?? ""
+        if (!empty(v)) {
+            update(r, key, JV(redact_cmd(v)))
+        }
+    }
+    var files = r?["files"]
+    if (files != null && files.value is _array) {
+        var farr & = unsafe(files.value as _array)
+        for (f in farr) {
+            if (f != null && f.value is _object) {
+                let nm : string = f?["name"] ?? ""
+                if (!empty(nm)) {
+                    update(f, "name", JV(base_name(nm)))
+                }
+            }
+        }
+    }
+}
+
+//! Redact absolute paths from a community record store: each run's `cmd` / `env` token that
+//! carries a path separator loses its leading directories (basename), and each `files[].name`
+//! is reduced to its basename — the receipt keeps its flags and model name, drops the username
+//! and home layout. Idempotent (client redacts, server redacts again). "" if it does not parse.
+def redact_record_paths(text : string) : string {
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    if (doc == null || !(doc.value is _array)) {
+        return ""
+    }
+    var models & = unsafe(doc.value as _array)   // nolint:LINT003 — a var ref: the run objects below are mutated in place
+    for (m in models) {
+        var runs = m?["runs"]
+        if (runs != null && runs.value is _array) {
+            var rarr & = unsafe(runs.value as _array)
+            for (r in rarr) {
+                redact_run(r)
+            }
+        }
+    }
+    let out = write_json(doc)
+    delete_json(doc)
+    return out
 }
 
 //! Shape-level validation of a bench-record store (the `performance/records/<box>.json` form:

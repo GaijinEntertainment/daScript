@@ -210,7 +210,7 @@ def test_hostile_records(t : T?) {
 }
 
 [test]
-def test_hostile_sidecars(t : T?) {
+def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-arm rejection list; no arm stands alone
     t |> run("a minimal versioned sidecar passes both grades") @(t : T?) {
         var good = %json~
         {
@@ -303,6 +303,35 @@ def test_hostile_sidecars(t : T?) {
         %%
         t |> success(!validate_sidecar(write_json(badsha), errors), "non-identifier engine_sha")
         delete errors
+    }
+}
+
+[test]
+def test_record_redaction(t : T?) {
+    t |> run("cmd/env/file paths lose their leading directories") @(t : T?) {
+        var store = %json~
+        [ {
+            "gguf" : "x-Q8_0.gguf",
+            "runs" : [ {
+                "engine" : "das", "backend" : "cpu", "flavor" : "tuned", "box" : "b",
+                "cmd" : "/home/boris/llama.cpp/build/bin/llama-bench -m /home/boris/models/x.gguf -t 8",
+                "env" : "DAS_TUNE_MANIFEST=/home/boris/x.tune.json DAS_JOBQUE_THREADS=16",
+                "date" : "2026-08-11", "threads" : 8,
+                "hardware" : { "cpu" : "Test" }, "tests" : { "pp512" : { "tok_s" : 1.0 } },
+                "files" : [ { "role" : "weights", "name" : "/home/boris/models/x.gguf" } ]
+            } ]
+        } ]
+        %%
+        let red = redact_record_paths(write_json(store))
+        t |> success(find(red, "boris") < 0, "no username anywhere")
+        t |> success(find(red, "/home/") < 0, "no home path")
+        t |> success(find(red, "llama-bench -m x.gguf -t 8") >= 0, "cmd keeps flags + model basename")
+        t |> success(find(red, "DAS_TUNE_MANIFEST=x.tune.json") >= 0, "env keeps the key, redacts the value")
+        t |> success(find(red, "models") < 0, "the file name lost its directory")
+        t |> success(find(red, "x.gguf") >= 0, "the file basename survives")
+        // idempotent: redacting the redacted store is a no-op
+        t |> equal(redact_record_paths(red), red, "idempotent")
+        t |> equal(redact_record_paths("not json"), "", "unparseable returns empty")
     }
 }
 

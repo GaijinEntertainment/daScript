@@ -369,13 +369,15 @@ def test_submit_rails(t : T?) {   // nolint:STYLE038 - flat scenario arms over o
             remove("{slice(manifest, 0, length(manifest) - 5)}.exchange.json")
             remove(manifest)
         }
-        t |> run("records submit validates then posts") @(tt : T?) {
+        t |> run("records submit redacts paths then posts") @(tt : T?) {
             let doc = fixture_records()
             tt |> equal(exchange_submit_records_doc(base_url, doc), "")
             GET("{base_url}/last/records") $(resp) {
-                tt |> equal(string(resp.body), doc)
+                // the client redacts before POST, so the wire form is the redacted doc
+                tt |> equal(string(resp.body), redact_record_paths(doc))
             }
-            tt |> success(find(exchange_submit_records_doc(base_url, "\{}"), "not submission-grade") >= 0)
+            tt |> success(find(exchange_submit_records_doc(base_url, "[]"), "not submission-grade") >= 0, "empty store refused")
+            tt |> success(find(exchange_submit_records_doc(base_url, "\{}"), "does not parse") >= 0, "non-array refused")
         }
     }
 }

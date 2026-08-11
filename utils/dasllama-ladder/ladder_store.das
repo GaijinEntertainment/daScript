@@ -344,7 +344,7 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
 
 //! Accept a community bench-record submission (the lcpp_bench `-o json` document).
 //! Source is stamped "community" and rows enter unverified regardless of the payload.
-def put_records(db : SqlRunner; doc : string; client_ip : string; policy : LadderPolicy; now : int64) : PutRecordsResult {
+def put_records(db : SqlRunner; var doc : string; client_ip : string; policy : LadderPolicy; now : int64) : PutRecordsResult {
     if (empty(doc)) {
         return PutRecordsResult(status = PutStatus.empty_doc)
     }
@@ -353,6 +353,13 @@ def put_records(db : SqlRunner; doc : string; client_ip : string; policy : Ladde
     }
     if (rate_exceeded(db, client_ip, policy, now)) {
         return PutRecordsResult(status = PutStatus.rate_limited)
+    }
+    // redact home-layout paths from cmd/env/files server-side too (the submitting client does
+    // it as well; idempotent, so a clean upload round-trips and dedups) — the STORED text is
+    // the redacted one, validated/hashed below
+    doc = redact_record_paths(doc)
+    if (empty(doc)) {
+        return PutRecordsResult(status = PutStatus.invalid, error = "json parse failed")
     }
     var errors : array<string>
     if (!validate_record_submission(doc, errors)) {

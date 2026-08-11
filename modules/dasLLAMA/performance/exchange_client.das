@@ -422,16 +422,22 @@ def exchange_submit_sidecar_doc(base_url : string; text : string; var out_sha : 
 }
 
 //! POST a stamped bench-record store (the lcpp_bench shape) to the exchange. "" on success.
+//! The cmd/env/file paths are redacted to basenames first — a community record must not carry
+//! the submitter's home layout (the server redacts again; the two agree by construction).
 def exchange_submit_records_doc(base_url : string; text : string) : string {
+    let redacted = redact_record_paths(text)
+    if (empty(redacted)) {
+        return "record store does not parse"
+    }
     var errs : array<string>
-    if (!validate_record_submission(text, errs)) {
+    if (!validate_record_submission(redacted, errs)) {
         let r = "not submission-grade: {errs[0]}"
         delete errs
         return r
     }
     delete errs
     var status = 0
-    let body = http_post_body("{base_url}/api/submit/records", text, 30, status)
+    let body = http_post_body("{base_url}/api/submit/records", redacted, 30, status)
     if (status == 0) {
         return "{base_url} is unreachable"
     }

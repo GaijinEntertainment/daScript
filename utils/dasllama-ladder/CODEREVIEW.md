@@ -103,10 +103,11 @@ skips validation is a defect.
 **`Source` and `Verified` are written only from store code.** A submitter-supplied value
 reaching either column is a defect.
 
-**A sidecar submission is privacy-stripped (`exchange_strip_private`) before validation,
-hashing, and storage — the stripped text IS the document; record submissions are stored
-verbatim. After insert no document is ever mutated.** Derived columns may be recomputed; the
-document itself may only be inserted or deleted with its submission.
+**A community submission is privacy-cleaned before validation, hashing, and storage — the
+cleaned text IS the document: a sidecar through `exchange_strip_private`, a record store
+through `redact_record_paths`. After insert no document is ever mutated.** Derived columns may
+be recomputed; the document itself may only be inserted or deleted with its submission. Official
+imports (the admin lever) are trusted and neither cleaned nor redacted.
 
 **A shipped `[sql_migration]` body is never edited.** Schema change means a new, higher
 version in the same stream.
