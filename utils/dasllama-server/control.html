@@ -149,6 +149,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .msg.user { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--amber-dim); }
 .msg.assistant { align-self: flex-start; background: var(--bg-3); border: 1px solid var(--rule); }
 .msg .think { font-family: Georgia, "Times New Roman", serif; font-style: italic; color: var(--fg-dim); }
+.msg .toolcall { display: block; font-family: ui-monospace, monospace; font-size: 12px; color: var(--fg-dim); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; margin: 4px 0; }
 .msg .meta { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin-top: 6px; }
 .chat-input { display: flex; gap: 10px; align-items: stretch; }
 .chat-input textarea {
@@ -1026,19 +1027,24 @@ let chatBusy = false;
 }
 
 // render a message's content with <think>…</think> spans in the serif think font
-function renderMsgContent(el, text) {
+function renderMsgContent(el, text, think, calls) {
+    // reasoning arrives separated as delta.reasoning_content; calls as the tool_calls chunk
     el.textContent = "";
-    const re = /<think>([\s\S]*?)(<\/think>|$)/g;
-    let idx = 0, m;
-    while ((m = re.exec(text)) !== null) {
-        if (m.index > idx) el.append(document.createTextNode(text.slice(idx, m.index)));
+    if (think) {
         const sp = document.createElement("span");
         sp.className = "think";
-        sp.textContent = m[1];
+        sp.textContent = think;
         el.append(sp);
-        idx = m.index + m[0].length;
+        if (text || (calls && calls.length)) el.append(document.createElement("br"));
     }
-    if (idx < text.length) el.append(document.createTextNode(text.slice(idx)));
+    if (text) el.append(document.createTextNode(text));
+    for (const c of calls || []) {
+        const f = c["function"] || {};
+        const chip = document.createElement("span");
+        chip.className = "toolcall";
+        chip.textContent = "\u2192 " + (f.name || "?") + "(" + (f.arguments || "") + ")";
+        el.append(chip);
+    }
 }
 
 function addBubble(role) {
@@ -1069,6 +1075,8 @@ async function sendChat() {
     body.enable_thinking = $("kn-thinking").checked;
     const el = addBubble("assistant");
     let acc = "";
+    let accThink = "";
+    let accCalls = [];
     const t0 = performance.now();
     try {
         const r = await fetch("/v1/chat/completions", {
@@ -1098,9 +1106,11 @@ async function sendChat() {
                         try {
                             const j = JSON.parse(data);
                             const d = j.choices && j.choices[0] && j.choices[0].delta;
-                            if (d && d.content) {
-                                acc += d.content;
-                                renderMsgContent(el, acc);
+                            if (d && (d.content || d.reasoning_content || d.tool_calls)) {
+                                if (d.reasoning_content) accThink += d.reasoning_content;
+                                if (d.content) acc += d.content;
+                                if (d.tool_calls) accCalls = accCalls.concat(d.tool_calls);
+                                renderMsgContent(el, acc, accThink, accCalls);
                                 $("chat-log").scrollTop = $("chat-log").scrollHeight;
                             }
                         } catch (_e) { /* keep-alive or partial frame */ }
@@ -1112,8 +1122,11 @@ async function sendChat() {
         acc = acc || "[request failed]";
         renderMsgContent(el, acc);
     }
-    // history carries the reply WITHOUT the think trace (it is not part of the conversation)
-    chatMsgs.push({ role: "assistant", content: acc.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim() });
+    // history carries the answer only — reasoning is not part of the conversation; a tool-call
+    // reply records its calls so the transcript stays honest on the next resend
+    const histMsg = { role: "assistant", content: acc.trim() };
+    if (accCalls.length) histMsg.tool_calls = accCalls;
+    chatMsgs.push(histMsg);
     const meta = document.createElement("span");
     meta.className = "meta";
     meta.textContent = ((performance.now() - t0) / 1000).toFixed(1) + "s";
