@@ -42,6 +42,8 @@ struct ChatSession {
     tools_json : array<string>      // verbatim tool JSONs; non-empty => the family's defs block renders on the first turn
     last_call_names : array<string> // the last replayed/emitted call names — pairs results to calls positionally
     pending_results : array<string> // raw tool results awaiting the next render (non-hermes modes frame at render)
+    pending_result_names : array<string> // each pending result's function name (tool_call_id mapped back); empty/missing slot falls back to last_call_names
+    turn_open : bool = false        // gemma4: the model turn is open after a call — results continue it; anything else closes it first
     pending : string = ""           // the user text awaiting the next respond()
     has_pending : bool = false
     pending_is_tool : bool = false  // pending is a tool-results block: marker-split at render
@@ -70,6 +72,7 @@ def finalize(var c : ChatSession) {
     delete c.tools_json
     delete c.last_call_names
     delete c.pending_results
+    delete c.pending_result_names
     delete c.history
     delete c.tower
     delete c.enc
@@ -252,6 +255,33 @@ def private think_vocab_ok(m : Model; tmpl : ChatTemplate) : bool {
     return special_id(m, tmpl.think_close) >= 0l   // asymmetric: the closer special fingerprints the family
 }
 
+// The tool mode's CONTROL specials resolve in the vocab — once at create (think_vocab_ok's twin).
+// Missing ones (a v0.1 [INST] tune without the v0.3 [TOOL_CALLS] family) demote to ToolMode.none:
+// renders would panic, the server 400s honestly. Hermes needs none — its markers degrade to text.
+def private tool_vocab_ok(m : Model; tmpl : ChatTemplate) : bool {
+    let mode = tmpl.tool_mode
+    if (mode == ToolMode.harmony) {
+        return (special_id(m, "<|start|>") >= 0l && special_id(m, "<|channel|>") >= 0l
+            && special_id(m, "<|message|>") >= 0l && special_id(m, "<|end|>") >= 0l
+            && special_id(m, "<|call|>") >= 0l)
+    }
+    if (mode == ToolMode.gemma4) {
+        return (special_id(m, "<|tool>") >= 0l && special_id(m, "<tool|>") >= 0l
+            && special_id(m, "<|tool_call>") >= 0l && special_id(m, "<tool_call|>") >= 0l
+            && special_id(m, "<|tool_response>") >= 0l && special_id(m, "<tool_response|>") >= 0l)
+    }
+    if (mode == ToolMode.mistral) {
+        return (special_id(m, "[TOOL_CALLS]") >= 0l && special_id(m, "[TOOL_RESULTS]") >= 0l
+            && special_id(m, "[/TOOL_RESULTS]") >= 0l && special_id(m, "[AVAILABLE_TOOLS]") >= 0l
+            && special_id(m, "[/AVAILABLE_TOOLS]") >= 0l)
+    }
+    if (mode == ToolMode.llama_json) {
+        return (special_id(m, "<|start_header_id|>") >= 0l && special_id(m, "<|end_header_id|>") >= 0l
+            && special_id(m, "<|eot_id|>") >= 0l)
+    }
+    return true
+}
+
 def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool {
     for (p in tmpl.think_gate.parts) {
         if (p.kind == ChatPartKind.special && special_id(m, p.s) < 0l) {
@@ -307,15 +337,6 @@ def private system_content(c : ChatSession) : string {
     return s
 }
 
-// The canonical Harmony system body when tools are declared: identity + reasoning effort +
-// the channel declaration + the commentary routing line. No live date line — a cache-stable
-// deviation from the canonical template, noted in tool_formats_plan.md.
-let private HARMONY_SYSTEM_BODY = ("You are ChatGPT, a large language model trained by OpenAI.\n" +
-    "Knowledge cutoff: 2024-06\n\n" +
-    "Reasoning: medium\n\n" +
-    "# Valid channels: analysis, commentary, final. Channel must be included for every message.\n" +
-    "Calls to these tools must go to the commentary channel: 'functions'.")
-
 // The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
 // before the content, tool markers split where declared. Returns the text to FOLD into the user
 // turn instead when the family has no system role (gemma-2/3); "" = rendered or nothing to do.
@@ -369,7 +390,21 @@ def private render_system_turn(m : Model; c : ChatSession; var out : array<int64
     return ""
 }
 
-// Render this turn's prefill: (first turn) BOS + system, then the user turn and the generation prompt.
+// The hermes user-turn framing of the queued results (what add_tool_results_ puts in c.pending).
+def private hermes_results_text(c : ChatSession) : string {
+    var parts : array<string>
+    parts |> reserve(length(c.pending_results))
+    for (r in c.pending_results) {
+        parts |> push("{c.tmpl.tool_resp_open}\n{r}\n{c.tmpl.tool_resp_close}")
+    }
+    let s = join(parts, "\n")
+    delete parts
+    return s
+}
+
+// Render this turn's prefill: (first turn) BOS + system, then the user turn and the generation
+// prompt. Deliberately CONST on `c` — render_turn_ inspects through it, so repeated renders must
+// be identical; the displaced-results / open-turn state clears at consumption (consume_pending_).
 def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
         out |> push(bos_id(m))
@@ -378,38 +413,45 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
         render_parts(m, c.tmpl.prelude.parts, "", out)
     }
     var user_content = c.pending
-    var user_markers = false   // the user content carries vocab markers — render marker-split
     if (c.first) {
         let fold = render_system_turn(m, c, out)
         if (!empty(fold)) {
             user_content = "{fold}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
         }
         if (!empty(c.tools_json)) {
-            // defs prefix the FIRST user turn (canonical mistral uses the LAST — deviation noted in tool_formats_plan.md)
             if (c.tmpl.tool_mode == ToolMode.mistral) {
-                let defs = join(c.tools_json, ", ")
-                user_content = "[AVAILABLE_TOOLS][{defs}][/AVAILABLE_TOOLS]{user_content}"
-                user_markers = true
+                // defs segment BEFORE the first [INST] (canonical: before the LAST — see tool_formats_plan.md)
+                var dp : array<ChatPart>
+                split_on_markers(m, mistral_defs_text(c.tools_json), fixed_array("[AVAILABLE_TOOLS]", "[/AVAILABLE_TOOLS]"), dp)
+                render_parts(m, dp, "", out)
+                delete dp
             } elif (c.tmpl.tool_mode == ToolMode.llama_json) {
-                let defs = join(c.tools_json, "\n\n")
-                user_content = ("Given the following functions, please respond with a JSON for a function call " +
-                    "with its proper arguments that best answers the given prompt.\n\n" +
-                    "Respond in the format \{\"name\": function name, \"parameters\": dictionary of argument name and its value}." +
-                    "Do not use variables.\n\n{defs}\n\n{user_content}")
+                user_content = "{llama_json_defs_text(c.tools_json)}\n\n{user_content}"
             }
         }
     }
     let mode = c.tmpl.tool_mode
-    if (c.pending_is_tool && mode != ToolMode.hermes) {
-        render_tool_results(m, c, out)   // non-hermes results have their own framing, no user turn
-    } elif (c.pending_is_tool || user_markers) {
-        // hermes results / marker-carrying defs ride the user turn frames, marker-split
-        var tp : array<ChatPart>
-        if (mode == ToolMode.mistral) {
-            split_on_markers(m, user_content, fixed_array("[AVAILABLE_TOOLS]", "[/AVAILABLE_TOOLS]"), tp)
+    // results a later add_user displaced ([…, tool, user]): their turn renders first, in transcript order
+    if (!empty(c.pending_results) && !c.pending_is_tool) {
+        if (mode == ToolMode.hermes || mode == ToolMode.none) {
+            var rp : array<ChatPart>
+            split_on_tool_markers(m, c, hermes_results_text(c), rp)
+            render_parts_spliced(m, c.tmpl.user.parts, rp, out)
+            delete rp
         } else {
-            split_on_tool_markers(m, c, user_content, tp)
+            render_tool_results(m, c, out)
         }
+    }
+    // an open model turn not continued by results (gemma4 calls answered with user text) closes now
+    if (c.turn_open && !c.pending_is_tool) {
+        render_parts(m, c.close_parts, "", out)
+    }
+    if (c.pending_is_tool && mode != ToolMode.hermes && mode != ToolMode.none) {
+        render_tool_results(m, c, out)   // these modes frame their own results turn, no user frame
+    } elif (c.pending_is_tool) {
+        // hermes/none results ride the user turn frames, marker-split (none: empty markers = plain text)
+        var tp : array<ChatPart>
+        split_on_tool_markers(m, c, user_content, tp)
         render_parts_spliced(m, c.tmpl.user.parts, tp, out)
         delete tp
     } else {
@@ -428,18 +470,23 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
 }
 
 // The pending tool results in the family's own framing (everything but hermes): harmony/llama
-// result turns, gemma-4's in-turn response blocks, mistral's bracket pair. Names pair to the
-// last call set positionally; a missing name renders as `unknown`.
+// result turns, gemma-4's in-turn response blocks, mistral's bracket pair. Explicit names
+// (tool_call_id mapped back) win; missing ones pair to the last call set positionally, then `unknown`.
 def private render_tool_results(m : Model; c : ChatSession; var out : array<int64>) {
     var bp : array<ChatPart>
     bp |> reserve(length(c.pending_results) * 8)
     var idx = 0
     for (r in c.pending_results) {
-        let name = idx < length(c.last_call_names) ? c.last_call_names[idx] : "unknown"
+        var name = "unknown"
+        if (idx < length(c.pending_result_names) && !empty(c.pending_result_names[idx])) {
+            name = c.pending_result_names[idx]
+        } elif (idx < length(c.last_call_names)) {
+            name = c.last_call_names[idx]
+        }
         idx ++
         if (c.tmpl.tool_mode == ToolMode.harmony) {
             bp |> push(chat_special("<|start|>"))
-            bp |> push(chat_text("functions.{name} to=assistant"))
+            bp |> push(chat_text(harmony_result_header(name)))
             bp |> push(chat_special("<|channel|>"))
             bp |> push(chat_text("commentary"))
             bp |> push(chat_special("<|message|>"))
@@ -519,6 +566,9 @@ def private consume_pending_(var c : ChatSession) {
     c.has_pending = false
     c.pending = ""
     c.pending_is_tool = false
+    c.pending_results |> clear()       // the render this consumption follows included them
+    c.pending_result_names |> clear()
+    c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
 //! `create_chat_`'s RENDER-ONLY twin: resolves the chat template, stop ids, and turn close
@@ -529,6 +579,9 @@ def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 =
     c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
     c.think_vocab = think_vocab_ok(model, c.tmpl)
     c.gate_ok = gate_specials_ok(model, c.tmpl)
+    if (!tool_vocab_ok(model, c.tmpl)) {
+        c.tmpl.tool_mode = ToolMode.none   // missing control specials: the honest declaration is none
+    }
     for (sp in c.tmpl.stop) {
         let id = special_id(model, sp)
         if (id >= 0l) {
@@ -685,19 +738,24 @@ def set_tools_(var c : ChatSession; var tools : array<string>) {
 //! llama use their own result turns, gemma-4 continues the model turn, mistral its brackets.
 def add_tool_results_(var c : ChatSession; results : array<string>) {
     c.pending_results |> clear()
+    c.pending_result_names |> clear()
     c.pending_results |> reserve(length(results))
     c.history |> reserve(length(c.history) + length(results))
-    var parts : array<string>
-    parts |> reserve(length(results))
     for (r in results) {
-        parts |> push("{c.tmpl.tool_resp_open}\n{r}\n{c.tmpl.tool_resp_close}")   // the hermes frame (unused elsewhere)
         c.pending_results |> push(r)
         c.history |> push(Message(role = Role.tool, content = r))
     }
-    c.pending = join(parts, "\n")
+    c.pending = hermes_results_text(c)   // the hermes user-turn frame (unused by the other modes)
     c.has_pending = true
     c.pending_is_tool = true
-    delete parts
+}
+
+//! ``add_tool_results_`` with each result's function NAME known (the server maps ``tool_call_id``
+//! back to the assistant turn's call names): the name-spelling framings (harmony, gemma-4) pair
+//! results correctly even out of call order. An empty name slot falls back to the last call set.
+def add_tool_results_(var c : ChatSession; results : array<string>; names : array<string>) {
+    add_tool_results_(c, results)
+    c.pending_result_names := names
 }
 
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
@@ -723,7 +781,7 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
     if (mode == ToolMode.harmony) {
         // ` to=functions.NAME<|channel|>commentary json<|message|>{args}` closed by <|call|>
         for (tc in tcs) {
-            bp |> push(chat_text(" to=functions.{tc.name}"))
+            bp |> push(chat_text(harmony_call_header(tc.name)))
             bp |> push(chat_special("<|channel|>"))
             bp |> push(chat_text("commentary json"))
             bp |> push(chat_special("<|message|>"))
@@ -746,8 +804,7 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
     } elif (mode == ToolMode.llama_json) {
         // the whole turn body is the ONE call object (content on a call message drops, per canonical)
         if (!empty(tcs)) {
-            let a = empty(tcs[0].args) ? "\{}" : tcs[0].args
-            bp |> push(chat_text("\{\"name\": \"{tcs[0].name}\", \"parameters\": {a}}"))
+            bp |> push(chat_text(llama_json_call_text(tcs[0].name, tcs[0].args)))
         }
     } else {
         // hermes: marker-wrapped verbatim call JSONs, content alongside
@@ -768,6 +825,8 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
     consume_pending_(c)
     if (close_turn) {
         render_parts(m, c.close_parts, "", out)
+    } elif (mode == ToolMode.gemma4) {
+        c.turn_open = true   // the open model turn: results continue it, anything else closes it first
     }
     var hist : array<string>
     hist |> reserve(length(calls) + 1)
@@ -1026,10 +1085,40 @@ def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, 
             ts.state = TS_HEADER
             ts.hdr = ""
         } else {
-            cp |> push(work)
-            return
+            if (!channel_content_arm(ts, work, cp)) {
+                return
+            }
         }
     }
+}
+
+// TS_CONTENT (channel mode): content runs to the NEXT header, so post-final framing re-enters the
+// grammar instead of streaming raw — the finish parser segments on the same "<|start|>" needle.
+// False = the tail is held back, stop feeding.
+def private channel_content_arm(var ts : ThinkStream; var work : string&; var cp : array<string>) : bool {
+    let fs = find(work, "<|start|>")
+    let fc = find(work, HARMONY_CH)
+    var f = fs
+    if (fc >= 0 && (f < 0 || fc < f)) {
+        f = fc
+    }
+    if (f < 0) {
+        let h = max(tail_prefix_len(work, "<|start|>"), tail_prefix_len(work, HARMONY_CH))
+        let n = length(work)
+        cp |> push(slice(work, 0, n - h))
+        ts.hold = slice(work, n - h, n)
+        return false
+    }
+    cp |> push(slice(work, 0, f))
+    if (f == fc) {
+        work = slice(work, f + length(HARMONY_CH), length(work))
+        ts.state = TS_HEADER
+        ts.hdr = ""
+    } else {
+        work = slice(work, f + length("<|start|>"), length(work))
+        ts.state = TS_BETWEEN   // the role token is framing glue up to the next <|channel|>
+    }
+    return true
 }
 
 //! Feed one decoded piece through the splitter. The out-strings are OVERWRITTEN with this piece's
@@ -1104,6 +1193,39 @@ def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
     return think_drain_(ts, reply)
 }
 
+// One reply parsed per the family's wire format (gemma-4 parses the content half of the split).
+def private parse_reply_(tmpl : ChatTemplate; reply : string) : ToolReply {
+    if (tmpl.tool_mode == ToolMode.harmony) {
+        return <- harmony_parse(reply)
+    }
+    if (tmpl.tool_mode == ToolMode.gemma4) {
+        return <- gemma4_parse(split_reasoning_(tmpl, reply).content)
+    }
+    if (tmpl.tool_mode == ToolMode.mistral) {
+        return <- mistral_parse(reply)
+    }
+    return <- llama_json_parse(reply)
+}
+
+// Extract the reply's calls per the family's wire format into last_call_names (the next result
+// turn pairs to them). Returns true when a gemma-4 reply ENDED in a call block — the model turn
+// stays open awaiting the responses. Hermes results ride user turns: no name pairing needed.
+def private track_reply_calls_(var c : ChatSession; reply : string) : bool {
+    let mode = c.tmpl.tool_mode
+    if (mode == ToolMode.none || mode == ToolMode.hermes) {
+        return false
+    }
+    var tr <- parse_reply_(c.tmpl, reply)
+    c.last_call_names |> clear()
+    c.last_call_names |> reserve(length(tr.calls))
+    for (tc in tr.calls) {
+        c.last_call_names |> push(tc.name)
+    }
+    let open = mode == ToolMode.gemma4 && !empty(tr.calls) && ends_with(strip(reply), "<tool_call|>")
+    delete tr
+    return open
+}
+
 //! Generate the assistant's reply to the queued user message: render the turn, prefill it, then
 //! stream tokens through `blk(piece)` (return false to stop early) until a stop token or the
 //! budget. Terminates the turn; history stores the reply reasoning-stripped (split_reasoning_).
@@ -1154,11 +1276,18 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         }
     }
     consume_pending_(c)
-    // close the assistant turn so the next turn continues cleanly
-    var close : array<int64>
-    render_parts(m, c.close_parts, "", close)
-    eval_(m, c.session, close)
     let reply = join(reply_parts, "")
+    // a tool conversation tracks its own reply's calls (the next result turn pairs names to them);
+    // a gemma-4 reply ENDING in a call leaves the model turn open — the responses continue it
+    let reply_ends_open = empty(c.tools_json) ? false : track_reply_calls_(c, reply)
+    if (reply_ends_open) {
+        c.turn_open = true
+    } else {
+        // close the assistant turn so the next turn continues cleanly
+        var close : array<int64>
+        render_parts(m, c.close_parts, "", close)
+        eval_(m, c.session, close)
+    }
     // history holds only the answer — the per-arch reasoning span strips; families with no
     // declared reply format keep the legacy unconditional <think> strip (a thinking fine-tune
     // served under a non-thinking arch — R1-distills on `llama` — must not bloat history)

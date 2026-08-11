@@ -285,6 +285,13 @@ def add_tool_results(var chat : ChatSession; results : array<string>) {
     add_tool_results_(chat, results)
 }
 
+def add_tool_results(var chat : ChatSession; results : array<string>; names : array<string>) {
+    //! ``add_tool_results`` with each result's function NAME known (e.g. mapped back from its
+    //! ``tool_call_id``) — the name-spelling framings (harmony, gemma-4) then pair results
+    //! correctly even out of call order. An empty name slot falls back to the last call set.
+    add_tool_results_(chat, results, names)
+}
+
 def set_thinking(var chat : ChatSession; on : bool) {
     //! Toggle reasoning for a hybrid thinking model (Qwen3 family): ``false`` appends the
     //! template's empty think block so the model answers directly. No-op without a suppress

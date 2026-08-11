@@ -149,7 +149,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .msg.user { align-self: flex-end; background: var(--bg-3); border: 1px solid var(--amber-dim); }
 .msg.assistant { align-self: flex-start; background: var(--bg-3); border: 1px solid var(--rule); }
 .msg .think { font-family: Georgia, "Times New Roman", serif; font-style: italic; color: var(--fg-dim); }
-.msg .toolcall { display: block; font-family: ui-monospace, monospace; font-size: 12px; color: var(--fg-dim); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; margin: 4px 0; }
+.msg .toolcall { display: block; font-family: ui-monospace, monospace; font-size: 12px; color: var(--fg-dim); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; margin: 4px 0; }
 .msg .meta { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin-top: 6px; }
 .chat-input { display: flex; gap: 10px; align-items: stretch; }
 .chat-input textarea {
@@ -1026,10 +1026,16 @@ let chatBusy = false;
     box.append(think);
 }
 
-// render a message's content with <think>…</think> spans in the serif think font
+// render one message: think span (serif), content text, tool-call chips
 function renderMsgContent(el, text, think, calls) {
     // reasoning arrives separated as delta.reasoning_content; calls as the tool_calls chunk
     el.textContent = "";
+    // fallback for families the server doesn't split (R1-distill-class fine-tunes): a literal
+    // leading <think> block in the content renders as the think span
+    if (!think && text && text.startsWith("<think>")) {
+        const m = text.match(/^<think>([\s\S]*?)(?:<\/think>\s*([\s\S]*))?$/);
+        if (m) { think = m[1].trim(); text = (m[2] || "").trim(); }
+    }
     if (think) {
         const sp = document.createElement("span");
         sp.className = "think";

@@ -85,16 +85,19 @@ and the arm then skips forever while the suite stays green.
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
 **A family that gains a live thinking or tool format ships recognition tests in the same
-change.** A chat template gaining `think_mode` or `tool_call_open` — declared in a
+change.** A chat template gaining `think_mode` or `tool_mode` — declared in a
 `dasllama_arch_*.das` registration or armed through a shared helper (`chatml_chat`,
 `hermes_tools`) — adds, for a thinking format, the family's reply wire shape to
-`tests/test_think_split.das`; for a tool format, the marker/render pins to `tests/test_chat.das`;
-and for either, a live leg to `utils/dasllama-server/test_openai_server_think.das` gated on the
-family's smallest local GGUF. A family whose vocab lacks the markers is exempt (the declaration
-is inert — the matcher is vocab-gated); a family with no small-enough local model records its
-remote leg in `THINKING.md` instead. The live-leg file follows the server tests' conventions,
-not this file's suite rules: it loads through the serving rail, mirrors the large-model tier
-gate on `DASLLAMA_PARITY_FULL`, and reports model-gated skips explicitly.
+`tests/test_think_split.das`; for a tool format, the wire-codec pins to
+`tests/test_tool_formats.das` and the render pins to `tests/test_chat.das`; and for either, a
+live leg to `utils/dasllama-server/test_openai_server_think.das` gated on the family's smallest
+GGUF catalogued in `performance/fetch_models.das`. A family whose vocab lacks the markers is
+exempt — the declaration is inert: the reply matcher and the tool mode are both vocab-gated at
+session create, and a tool mode whose control specials are missing demotes to none there. A
+family with no small-enough local model records its remote leg in `THINKING.md` instead. The
+live-leg file follows the server tests' conventions, not this file's suite rules: it loads
+through the serving rail, mirrors the large-model tier gate on `DASLLAMA_PARITY_FULL`, and
+reports model-gated skips explicitly.
 
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
@@ -127,9 +130,9 @@ in `PERF_LEDGER.md`, never in the record stores.
 ## Placement — one file, one rule
 
 Every file states what it holds. Code that belongs to a file and is written anywhere else is a
-defect, and this section is the whole test — a rule here names only its own file's contents,
-never where a neighbouring concern lives. `ARCHITECTURE.md` §1 carries the boundaries and the
-carve-outs.
+defect, and this section is the whole test — a rule names its own file's contents; where two
+files share a seam, the entry may name the other side of that seam to make the boundary
+decidable, and nothing else. `ARCHITECTURE.md` §1 carries the boundaries and the carve-outs.
 
 **A new file under `dasllama/` ships with its rule here, its charter in `ARCHITECTURE.md` §1,
 and its tests, in the same change.** A file without its records is a defect. A new file under
@@ -180,9 +183,10 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity
   formatter.
 - `dasllama_chat.das` — conversation turns and chat-template application.
-- `dasllama_tools.das` — the per-ToolMode wire codecs: tool-definition serializers and reply
-  parsers, pure string+JSON. Prompt orchestration stays in `dasllama_chat.das`; a codec written
-  there, or render logic written here, is a defect.
+- `dasllama_tools.das` — the per-ToolMode wire codecs, pure string+JSON: every byte of tool
+  wire text — definition serializers, replay/result text builders, reply parsers — is produced
+  by a function here. `dasllama_chat.das` assembles ChatParts and places them in turns; a
+  wire-text literal written there, or ChatPart/render logic written here, is a defect.
 - `dasllama_par.das` — the parallel-for macro.
 - `dasllama_prefix.das` — the prefix cache for evaluated token history.
 - `dasllama_parity.das` — CPU reference caches for parity instruments.

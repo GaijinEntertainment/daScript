@@ -238,4 +238,16 @@ def test_split_gptoss_no_end(t : T?) {
             "Deep thought.", "The answer.")
         delete ct
     }
+    t |> run("post-final framing re-enters the grammar instead of streaming raw") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        // an off-grammar segment AFTER the final channel classifies by its own header ...
+        check_all_chunkings(t, ct,
+            "<|channel|>final<|message|>Done.<|start|>assistant<|channel|>analysis<|message|>stray",
+            "stray", "Done.")
+        // ... and a bare trailing re-header with nothing behind it drops as framing glue
+        check_all_chunkings(t, ct,
+            "<|channel|>final<|message|>Done.<|start|>assistant",
+            "", "Done.")
+        delete ct
+    }
 }

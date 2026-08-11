@@ -109,8 +109,10 @@ shipped); harmony = canonical system body (identity + `Reasoning: medium` + chan
 + commentary-routing line; no live date — noted deviation) then a DEVELOPER turn
 `# Instructions\n\n{system}\n\n# Tools\n\n{namespace}`; gemma4 = `<|tool>decl<tool|>` blocks
 spliced after the system content (markers + `<|"|>` are vocab specials — marker-split);
-mistral + llama_json = defs block prefixed into the FIRST user turn (deviation: canonical
-mistral puts them before the LAST user turn — identical for single-turn requests; note it).
+mistral = the `[AVAILABLE_TOOLS][…][/AVAILABLE_TOOLS]` block rendered as its OWN segment
+BEFORE the first `[INST]` (canonical places it before the LAST user turn — identical for
+single-turn requests; the review round moved it out of the [INST] frame, CR10); llama_json =
+defs block prefixed into the FIRST user turn.
 
 **Replay per mode** (render_assistant_calls_): harmony = ` to=functions.NAME` + `<|channel|>`
 `commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` —
@@ -192,3 +194,10 @@ Sources: opus /code-review (10 confirmed), CODEREVIEW.md audit (4V/2U/4S), Copil
 Process after fixes: focused gates (codec pins, test_chat, think e2e full-tier 21/21 rerun,
 server regressions), lint 3-rail, format, commit, push --no-verify, re-request Copilot,
 back into the babysit loop (~5 min cadence while a round is pending).
+
+**Status: IMPLEMENTED (all of A, B, C — no trims).** Notes from the round: A2's demotion is
+pinned model-free (a vocab-less synthetic Model with an [INST] template demotes to none);
+A3's flush seam + A3b's `turn_open` close are CONSUMPTION-cleared (render_prompt stays const
+so `render_turn` inspection is idempotent); the local Llama-3.2-3B-Q4_K_M had an
+unknown-provenance sha (same size as bartowski's, different bytes) — replaced with the
+canonical bartowski file, which is what U2 catalogues.

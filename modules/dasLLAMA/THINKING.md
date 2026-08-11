@@ -81,15 +81,21 @@ undeclared (an honest 400) pending the zen2 leg.
 
 - `modules/dasLLAMA/tests/test_think_split.das` — model-free: every family's exact wire shape
   through the matcher, whole-string and per-chunk down to 1 byte.
+- `modules/dasLLAMA/tests/test_tool_formats.das` — model-free: every ToolMode's wire codec
+  (defs serializers, call parsers, replay/result builders) against verbatim fixtures, plus the
+  hardening pins (bounded gemma-4 DSL scans, harmony recipient clipping, post-final framing).
 - `modules/dasLLAMA/tests/test_chat.das` — render side: gemma-4 default/thinking-ON prefills
   token-for-token (`test_chat_gemma4_thinking`), Qwen think-suppress, Hermes tool blocks
-  (Qwen2.5 token-for-token, Qwen3.5 marker ids).
+  (Qwen2.5 token-for-token, Qwen3.5 marker ids), the per-family ToolMode declarations + the
+  missing-specials demotion (`test_chat_tool_modes`), and the gemma-4 tool wire token-for-token
+  — defs/replay/result turns, displaced-results + open-turn healing (`test_chat_gemma4_tool_wire`).
 - `utils/dasllama-server/test_openai_server_think.das` — live legs, model-gated: Qwen3-0.6B
   (reasoning_content non-streaming + streaming order + tools-with-thinking compose),
-  gemma-4-E2B (off-default / thinking-ON pair), gpt-oss-20b (Harmony split;
-  `DASLLAMA_PARITY_FULL=1`).
+  gemma-4-E2B (off-default / thinking-ON pair + tools + the call→result→answer round-trip),
+  Llama-3.2-3B (llama_json), Mistral-7B-v0.3 (mistral), gpt-oss-20b (Harmony split + harmony
+  tools; `DASLLAMA_PARITY_FULL=1`).
 
-CODEREVIEW.md binds new families to this map: declaring `think_mode` or `tool_call_open` ships
+CODEREVIEW.md binds new families to this map: declaring `think_mode` or `tool_mode` ships
 the wire-shape case and the live leg in the same change.
 
 ## GLM-4 — the pending zen2 leg

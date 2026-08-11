@@ -203,6 +203,76 @@ def test_mistral_markerless(t : T?) {
 }
 
 [test]
+def test_shared_codec_helpers(t : T?) {
+    t |> run("tool_call_of_json normalizes the replay shape; garbage yields the empty call") @(t : T?) {
+        let c = tool_call_of_json("\{\"name\": \"f\", \"arguments\": \{\"a\":1}, \"id\": \"xyz\"}")
+        t |> equal(c.name, "f")
+        t |> equal(c.args, "\{\"a\": 1}")   // write_json_compact keeps one space after : and ,
+        t |> equal(c.id, "xyz")
+        let bad = tool_call_of_json("not json")
+        t |> equal(bad.name, "")
+    }
+    t |> run("json_quoted escapes; json_value_or_quoted passes JSON through and quotes prose") @(t : T?) {
+        t |> equal(json_quoted("say \"hi\"\n"), "\"say \\\"hi\\\"\\n\"")
+        t |> equal(json_value_or_quoted("\{\"temp\":21}"), "\{\"temp\": 21}")
+        t |> equal(json_value_or_quoted("[1,2]"), "[1, 2]")
+        t |> equal(json_value_or_quoted("sunny, mild"), "\"sunny, mild\"")
+        // a JSON STRING input re-quotes: the wire carries it as a JSON string literal either way
+        t |> equal(json_value_or_quoted("\"x\""), "\"\\\"x\\\"\"")
+    }
+    t |> run("the wire-text builders: mistral defs, llama defs + call, harmony headers") @(t : T?) {
+        var tools : array<string>
+        tools |> push("\{\"a\": 1}")
+        tools |> push("\{\"b\": 2}")
+        t |> equal(mistral_defs_text(tools), "[AVAILABLE_TOOLS][\{\"a\": 1}, \{\"b\": 2}][/AVAILABLE_TOOLS]")
+        t |> success(find(llama_json_defs_text(tools), "\{\"a\": 1}\n\n\{\"b\": 2}") >= 0, "defs joined")
+        t |> success(starts_with(llama_json_defs_text(tools), "Given the following functions"), "canonical prompt text")
+        delete tools
+        t |> equal(llama_json_call_text("f", "\{\"x\": 1}"), "\{\"name\": \"f\", \"parameters\": \{\"x\": 1}}")
+        t |> equal(llama_json_call_text("f", ""), "\{\"name\": \"f\", \"parameters\": \{}}")
+        t |> equal(harmony_call_header("get_weather"), " to=functions.get_weather")
+        t |> equal(harmony_result_header("get_weather"), "functions.get_weather to=assistant")
+    }
+}
+
+[test]
+def test_review_round_hardening(t : T?) {
+    t |> run("harmony recipient names truncate at space and at <| in both header arms") @(t : T?) {
+        // role-header arm with no <|channel|>: the recipient runs to <|message|> and carries junk
+        var r <- harmony_parse(" to=functions.ping json<|message|>\{}")
+        t |> equal(length(r.calls), 1)
+        t |> equal(r.calls[0].name, "ping")
+        delete r
+        // channel-header arm: <|constrain|> butts against the name with no space
+        var r2 <- harmony_parse("<|channel|>commentary to=functions.lookup<|constrain|>json<|message|>\{\"q\": 1}")
+        t |> equal(length(r2.calls), 1)
+        t |> equal(r2.calls[0].name, "lookup")
+        delete r2
+    }
+    t |> run("a malformed gemma4 block never grabs a later block's brace") @(t : T?) {
+        // first block has NO args dict — it must drop, and block b must still parse cleanly
+        var r <- gemma4_parse("<|tool_call>call:a<tool_call|><|tool_call>call:b\{x:1}<tool_call|>")
+        t |> equal(length(r.calls), 1)
+        if (length(r.calls) == 1) {
+            t |> equal(r.calls[0].name, "b")
+            t |> equal(r.calls[0].args, "\{\"x\":1}")
+        }
+        delete r
+        // a key with no separator resyncs at the dict closer instead of scanning past the block
+        var r2 <- gemma4_parse("<|tool_call>call:c\{flag}<tool_call|> tail")
+        t |> equal(length(r2.calls), 1)
+        t |> equal(r2.content, "tail")
+        delete r2
+    }
+    t |> run("post-final framing drops: a bare <|start|> tail after the final channel") @(t : T?) {
+        var r <- harmony_parse("<|channel|>final<|message|>Done.<|start|>assistant<|channel|>analysis<|message|>stray")
+        t |> equal(r.content, "Done.")
+        t |> equal(r.reasoning, "stray")   // segmented, not streamed raw into content
+        delete r
+    }
+}
+
+[test]
 def test_harmony_no_end_token(t : T?) {
     t |> run("the live wire: <|end|> suppressed, segments split on bare <|start|>assistant") @(t : T?) {
         var r <- harmony_parse("<|channel|>analysis<|message|>We need to call get_weather.<|start|>assistant<|channel|>commentary to=functions.get_weather <|constrain|>json<|message|>\{\"city\":\"Paris\"}")

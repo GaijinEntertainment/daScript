@@ -147,6 +147,36 @@ def harmony_tools_namespace(tools_json : array<string>) : string {
     }
 }
 
+//! The canonical Harmony system body when tools are declared: identity + reasoning effort + the
+//! channel declaration + the commentary routing line. No live date line — a cache-stable deviation
+//! from the canonical template, noted in tool_formats_plan.md.
+let HARMONY_SYSTEM_BODY = ("You are ChatGPT, a large language model trained by OpenAI.\n" +
+    "Knowledge cutoff: 2024-06\n\n" +
+    "Reasoning: medium\n\n" +
+    "# Valid channels: analysis, commentary, final. Channel must be included for every message.\n" +
+    "Calls to these tools must go to the commentary channel: 'functions'.")
+
+//! The role-header recipient text of one replayed Harmony CALL turn (before its <|channel|>).
+def harmony_call_header(name : string) : string => " to=functions.{name}"
+
+//! The role-header text of one Harmony tool-RESULT turn (between <|start|> and <|channel|>).
+def harmony_result_header(name : string) : string => "functions.{name} to=assistant"
+
+// A recipient's function name cut at the first space or "<|" — role-header recipients run to the
+// channel marker, and channel-header ones can butt against <|constrain|> with no space between.
+def private clip_recipient(s : string) : string {
+    var e = length(s)
+    let sp = find(s, " ")
+    if (sp >= 0 && sp < e) {
+        e = sp
+    }
+    let lt = find(s, "<|")
+    if (lt >= 0 && lt < e) {
+        e = lt
+    }
+    return strip(slice(s, 0, e))
+}
+
 // One Harmony header at `pos` -> kind (reasoning|content|preamble|call|drop, name set for calls); advances pos to the body.
 def private harmony_header(s : string; var pos : int&; var name : string&) : string {
     name = ""
@@ -160,7 +190,7 @@ def private harmony_header(s : string; var pos : int&; var name : string&) : str
         let rcpt = slice(s, pos + length(" to="), ch >= 0 && ch < msg ? ch : msg)
         pos = msg + length("<|message|>")
         if (starts_with(rcpt, "functions.")) {
-            name = strip(slice(rcpt, length("functions."), length(rcpt)))
+            name = clip_recipient(slice(rcpt, length("functions."), length(rcpt)))
             return "call"
         }
         return "drop"
@@ -189,7 +219,7 @@ def private harmony_header(s : string; var pos : int&; var name : string&) : str
         let rsp = find(rcpt, " ")
         let rname = rsp < 0 ? rcpt : slice(rcpt, 0, rsp)
         if (starts_with(rname, "functions.")) {
-            name = slice(rname, length("functions."), length(rname))
+            name = clip_recipient(slice(rname, length("functions."), length(rname)))
             return "call"
         }
         return cname == "commentary" && rname == "assistant" ? "preamble" : "drop"
@@ -218,14 +248,15 @@ def harmony_parse(reply : string) : ToolReply {
     while (pos < n) {
         var name = ""
         let kind = harmony_header(reply, pos, name)
-        // segment boundary: <|end|>, or a bare <|start|>assistant re-header — the stream can
-        // suppress the <|end|> control token entirely (observed live on gpt-oss-20b)
+        // segment boundary: <|end|>, or a bare <|start|> re-header — the stream can suppress the
+        // <|end|> control token entirely (observed live on gpt-oss-20b). The needle is the SAME
+        // "<|start|>" the streaming splitter cuts on, so finish and stream never diverge.
         var bend = find(reply, "<|end|>", pos)
         var blen = length("<|end|>")
-        let bstart = find(reply, "<|start|>assistant", pos)
+        let bstart = find(reply, "<|start|>", pos)
         if (bstart >= 0 && (bend < 0 || bstart < bend)) {
             bend = bstart
-            blen = length("<|start|>assistant")
+            blen = length("<|start|>")
         }
         let body = slice(reply, pos, bend < 0 ? n : bend)
         if (kind == "reasoning") {
@@ -239,8 +270,11 @@ def harmony_parse(reply : string) : ToolReply {
             break
         }
         pos = bend + blen
-        if (starts_with(slice(reply, pos, n), "<|start|>assistant")) {
-            pos += length("<|start|>assistant")
+        if (starts_with(slice(reply, pos, n), "<|start|>")) {
+            pos += length("<|start|>")
+        }
+        if (starts_with(slice(reply, pos, n), "assistant")) {
+            pos += length("assistant")   // the re-header's role token; the recipient/channel follow
         }
     }
     out.reasoning = strip(join(rparts, ""))
@@ -251,6 +285,13 @@ def harmony_parse(reply : string) : ToolReply {
 }
 
 // ===== Mistral v0.3/Nemo — [TOOL_CALLS] + JSON array =====
+
+//! The `[AVAILABLE_TOOLS]` definitions segment preceding a Mistral user turn: the verbatim tool
+//! JSONs joined into the bracketed array (the bracket markers resolve as vocab specials at render).
+def mistral_defs_text(tools_json : array<string>) : string {
+    let defs = join(tools_json, ", ")
+    return "[AVAILABLE_TOOLS][{defs}][/AVAILABLE_TOOLS]"
+}
 
 //! Parse a Mistral reply: free content up to `[TOOL_CALLS]`, then a JSON array of
 //! `\{"name","arguments"[,"id"]}` objects (id genuinely optional and order-tolerant — we do
@@ -392,6 +433,22 @@ def mistral_calls_text(calls : array<ToolCall>) : string {
 
 // ===== Llama-3.x — the whole reply is one JSON object =====
 
+//! The llama-3 custom-functions instruction block prefixed to the first user turn: the canonical
+//! prompt text + the verbatim tool JSONs. The chat layer appends the user's message after it.
+def llama_json_defs_text(tools_json : array<string>) : string {
+    let defs = join(tools_json, "\n\n")
+    return ("Given the following functions, please respond with a JSON for a function call " +
+        "with its proper arguments that best answers the given prompt.\n\n" +
+        "Respond in the format \{\"name\": function name, \"parameters\": dictionary of argument name and its value}." +
+        "Do not use variables.\n\n{defs}")
+}
+
+//! One replayed llama-3 call turn's body — the whole turn is this one JSON object.
+def llama_json_call_text(name : string; args : string) : string {
+    let a = empty(args) ? "\{}" : args
+    return "\{\"name\": \"{name}\", \"parameters\": {a}}"
+}
+
 //! Parse a llama-3 reply: content up to the first `\{`; the remainder must parse as
 //! `\{["type":"function",]"name":...,"parameters":...}` to be a call (structural acceptance).
 //! A reply with no parseable call object is pure content.
@@ -450,7 +507,9 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
         var parts : array<string>
         while (pos < n && !starts_with(slice(s, pos, n), "}")) {
             let c = find(s, ":", pos)
-            if (c < 0) {
+            let eb = find(s, "}", pos)
+            if (c < 0 || (eb >= 0 && eb < c)) {
+                pos = eb < 0 ? n : eb   // no key separator before the dict closes — resync at the closer
                 break
             }
             let key = strip(slice(s, pos, c))
@@ -518,16 +577,21 @@ def gemma4_parse(reply : string) : ToolReply {
             break
         }
         cparts |> push(slice(reply, pos, b))
-        var p = b + length("<|tool_call>call:")
+        let p = b + length("<|tool_call>call:")
+        // every scan inside the block is bounded by ITS closer — a malformed body can never grab
+        // a later block's brace or run the walk past the closer
+        let close = find(reply, "<tool_call|>", p)
+        let bend = close < 0 ? n : close
         let brace = find(reply, "\{", p)
-        if (brace < 0) {
-            break
+        if (brace < 0 || brace >= bend) {
+            pos = close < 0 ? n : close + length("<tool_call|>")   // no args dict in this block — drop it
+            continue
         }
         let name = strip(slice(reply, p, brace))
-        p = brace
-        let args = gemma4_dsl_value(reply, p)
+        let body = slice(reply, brace, bend)
+        var bp = 0
+        let args = gemma4_dsl_value(body, bp)
         out.calls |> push(ToolCall(name = name, args = args))
-        let close = find(reply, "<tool_call|>", p)
         pos = close < 0 ? n : close + length("<tool_call|>")
     }
     out.content = strip(join(cparts, ""))

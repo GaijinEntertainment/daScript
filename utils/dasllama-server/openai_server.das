@@ -1607,10 +1607,30 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         delete render_tools
     }
 
+    // tool_call_id -> function name over the WHOLE transcript: results carry their names, so the
+    // name-spelling framings (harmony, gemma-4) pair correctly even out of call order
+    var id2name : table<string; string>
+    defer() { delete id2name }
+    for (av in (msgs_v.value as _array)) {
+        let tcv = av?["tool_calls"]
+        if (((av?["role"] ?? "") == "assistant") && tcv != null && tcv.value is _array) {
+            for (tcall in (tcv.value as _array)) {
+                let cid = tcall?["id"] ?? ""
+                let cnm = tcall?["function"]?["name"] ?? ""
+                if (!empty(cid) && !empty(cnm)) {
+                    id2name[cid] = cnm
+                }
+            }
+        }
+    }
     var rendered : array<int64>
     var pending = false
     var tool_results : array<string>
-    defer() { delete tool_results }
+    var tool_names : array<string>
+    defer() {
+        delete tool_results
+        delete tool_names
+    }
     for (i in range(length(msgs_v.value as _array))) {
         let mv = (msgs_v.value as _array)[i]
         let role = mv?["role"] ?? ""
@@ -1619,8 +1639,9 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         }
         let content = message_text(mv, "/v1/chat/completions")
         if (role != "tool" && !empty(tool_results)) {
-            add_tool_results(chat, tool_results)
+            add_tool_results(chat, tool_results, tool_names)
             tool_results |> clear()
+            tool_names |> clear()
             pending = true
         }
         if (role == "user") {
@@ -1661,13 +1682,15 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
             }
             delete calls
         } elif (role == "tool") {
+            let tcid = mv?["tool_call_id"] ?? ""
             tool_results |> push(content)
+            tool_names |> push(id2name?[tcid] ?? "")   // "" falls back to positional pairing
         } elif (role != "system") {
             to_log(LOG_WARNING, "/v1/chat/completions: dropping message with unsupported role '{role}'\n")
         }
     }
     if (!empty(tool_results)) {
-        add_tool_results(chat, tool_results)
+        add_tool_results(chat, tool_results, tool_names)
         pending = true
     }
     if (!pending) {
