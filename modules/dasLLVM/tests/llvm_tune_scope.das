@@ -134,6 +134,26 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> equal(spawn_child("{tune_env("restart")}\"{bin}\" \"{client}\"", l6c), 0)
     t |> success(l6c |> has("RESULT 5"))
 
+    // 6b. policy=restart + a registered scope resolver: the guard consults it INSTEAD of
+    //     spawning the tuner — the resolver writes the winner (the exchange-client shape),
+    //     prints its own restart marker, and the next start stamps what it wrote
+    let resolverClient = "{get_this_module_dir()}/llvm_tune_scope_client_resolver.das"
+    let resolverSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_resolver.tune.json"
+    remove(resolverSidecar)
+    var l6r : array<string>
+    t |> equal(spawn_child("{tune_env("restart")}\"{bin}\" \"{resolverClient}\"", l6r), 0)
+    t |> success(l6r |> has("RESOLVER llvm_tune_scope_probe ->"))
+    t |> success(!(l6r |> has("FAKE TUNER")))
+    t |> success(l6r |> has("exchange: sidecar applied, restart to apply the winners"))
+    t |> success(!(l6r |> has("RESULT")))
+    var l6s : array<string>
+    t |> equal(spawn_child("{tune_env("restart")}\"{bin}\" \"{resolverClient}\"", l6s), 0)
+    t |> success(l6s |> has("STATUS scope_add|llvm_tune_scope_probe|k2|manifest"))
+    t |> success(l6s |> has("RESULT 5"))   // interp = reference body; the STATUS row is the stamp proof
+    remove(resolverSidecar)
+    delete l6r
+    delete l6s
+
     // 7. AOT gate: policy=error + missing sidecar must stay COMPLETELY silent
     remove(sidecar)
     let outRes = create_temp_file_result("llvm_tune_scope_aot_", ".cpp")

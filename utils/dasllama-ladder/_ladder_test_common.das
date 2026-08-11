@@ -4,34 +4,11 @@ options indenting = 4
 module _ladder_test_common public
 
 require daslib/json_boost public
-require strings   // peek_data + to_char — the url encoder
 
 // Shared test fixtures (the leading _ keeps dastest's walker away). The
 // records/official documents are %json~ literals — daScript#3690 collapses
 // array-bearing literals under -jit, so these suites run interpreted (the
-// extended_checks utils lane).
-
-//! Percent-encode a query-string value (RFC 3986 unreserved set kept verbatim) —
-//! box strings carry '|', ',' and spaces, which are not URL-legal raw.
-def url_encode(s : string) : string {
-    return build_string() $(w) {
-        peek_data(s) $(arr) {
-            for (b in arr) {
-                let c = int(b)
-                if (is_alpha(c) || is_number(c)
-                        || c == '-' || c == '_' || c == '.' || c == '~') {
-                    w |> write(to_char(c))
-                } else {
-                    let hi = (c >> 4) & 15
-                    let lo = c & 15
-                    w |> write("%")
-                    w |> write(to_char(hi < 10 ? '0' + hi : 'A' + (hi - 10)))
-                    w |> write(to_char(lo < 10 ? '0' + lo : 'A' + (lo - 10)))
-                }
-            }
-        }
-    }
-}
+// extended_checks utils lane). url_encode comes from dashv_boost via ladder_server.
 
 let BOX_A = "darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max"
 let BOX_B = "darwin|arm64|Macmini9,1|25F84|Apple M1 Max"      // same cpu, another machine

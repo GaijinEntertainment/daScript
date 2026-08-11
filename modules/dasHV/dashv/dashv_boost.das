@@ -16,6 +16,7 @@ module dashv_boost shared public
 require dashv public
 
 require daslib/rtti
+require strings   // peek_data + to_char — the url encoder
 
 
 class HvWebSocketClient {
@@ -232,4 +233,26 @@ def get_body_bytes(resp : HttpResponse?) : array<uint8> {
         }
     }
     return <- bytes
+}
+
+def url_encode(s : string) : string {
+    //! Percent-encodes a query-string component (RFC 3986: the unreserved set stays verbatim,
+    //! everything else becomes ``%XX``). Use on any value interpolated into a URL query.
+    return build_string() $(w) {
+        peek_data(s) $(arr) {
+            for (b in arr) {
+                let c = int(b)
+                if (is_alpha(c) || is_number(c)
+                        || c == '-' || c == '_' || c == '.' || c == '~') {
+                    w |> write(to_char(c))
+                } else {
+                    let hi = (c >> 4) & 15
+                    let lo = c & 15
+                    w |> write("%")
+                    w |> write(to_char(hi < 10 ? '0' + hi : 'A' + (hi - 10)))
+                    w |> write(to_char(lo < 10 ? '0' + lo : 'A' + (lo - 10)))
+                }
+            }
+        }
+    }
 }

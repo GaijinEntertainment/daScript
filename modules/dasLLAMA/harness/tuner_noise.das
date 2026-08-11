@@ -134,6 +134,19 @@ def noise_gate(tag : string) : bool {
     return false
 }
 
+//! Hard-stop when the supervisor requested it (the `DAS_TUNE_CONTROL` file exists). Both
+//! tuner halves poll this between kernel families, so the measurement in flight always
+//! completes; minting is end-gated, so an interrupted run writes nothing. Exits 1 — the
+//! policy guard then reports the scope incomplete and the supervisor owns what happens next.
+def interrupt_gate(at : string) {
+    if (tune_interrupt_requested()) {
+        tune_progress_finish()
+        print("@tune abort reason=interrupted at={at}\n")
+        print("tuner: supervisor interrupt at '{at}' - stopping, no sidecar written\n")
+        unsafe(exit(1))
+    }
+}
+
 //! Record this run's noise verdict into the sidecar provenance. Call once, right before the
 //! sidecar write, after the end-of-run gate passed.
 def noise_provenance_stamp() {

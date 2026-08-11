@@ -211,7 +211,11 @@ def private sidecar_box(path : string; mkey : string) : string {
         var err = ""
         var doc = read_json(text, err)
         if (doc != null) {
-            box = doc?["provenance"]?["box"] ?? ""
+            // applied_box wins: a resolver-adopted cross-box sidecar records the ADOPTING box there; a hand-copy (no applied_box) still reads stale
+            box = doc?["provenance"]?["applied_box"] ?? ""
+            if (empty(box)) {
+                box = doc?["provenance"]?["box"] ?? ""
+            }
             delete_json(doc)
         }
     }
@@ -219,9 +223,9 @@ def private sidecar_box(path : string; mkey : string) : string {
     return box
 }
 
-    //! True when the sidecar predates the running binary OR carries a different box identity
-    //! (missing counts as different — pre-identity files re-tune once); a stale sidecar reads
-    //! as ABSENT everywhere, killing the copy-a-stale-file and copy-from-another-box traps.
+    //! True when the sidecar predates the running binary OR carries a different box identity —
+    //! the stale-file and cross-box-copy traps; stale reads as ABSENT everywhere. A
+    //! `provenance.applied_box` naming this box overrides the identity check (resolver adoption).
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
     return false if (!stat(path, sfs))   // absent is "missing", not "stale"
@@ -1608,6 +1612,10 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
         return
     }
+    if (!force && scope_resolved_externally(scopeName, manifestPath, fnames)) {
+        g_tuned_scopes++   // the re-exec picks the resolved sidecar up like a fresh tune
+        return
+    }
     if (!force && !empty(g_mint_suppressed)) {
         if (tune_verbosity() != "silent") {
             print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
@@ -1660,12 +1668,56 @@ def tune_reexec_code() : int {
     return g_reexec_code
 }
 
-    //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of the
-    //! app's `main`. Runs the tuner, prints the restart banner, and returns true so main returns
-    //! immediately (the winners are compile-time stamps). False = scope complete, carry on.
+// the pre-tune scope resolver: consulted by the auto and restart guards before spawning the
+// tuner; an app registers one from an [init] (which runs before the guard at the top of main)
+var private g_scope_resolver : function<(scopeName : string; manifestPath : string; fnames : string) : bool>
+var private g_has_scope_resolver = false
+
+    //! Register a resolver the auto/restart guards consult before spawning a scope's tuner —
+    //! e.g. an exchange client downloading a matching sidecar. True = "the scope may now be
+    //! satisfied"; completeness is re-checked, never trusted. Never consulted under `--tune`.
+def tune_set_scope_resolver(resolver : function<(scopeName : string; manifestPath : string; fnames : string) : bool>) {
+    g_scope_resolver = resolver
+    g_has_scope_resolver = true
+}
+
+// resolver consult shared by both guards: true = the scope is complete now, skip the tuner
+// (the resolver prints its own restart marker — the guards add nothing on this path)
+def private scope_resolved_externally(scopeName : string; manifestPath : string; fnames : string) : bool {
+    if (!g_has_scope_resolver) {
+        return false
+    }
+    return (invoke(g_scope_resolver, scopeName, manifestPath, fnames)
+        && tune_sidecar_entries_complete(manifestPath, fnames))
+}
+
+var private g_tune_control_read = false
+var private g_tune_control_path = ""
+
+    //! True when the file named by `DAS_TUNE_CONTROL` exists — a supervisor's stop request.
+    //! Tuners poll at kernel-family boundaries and abort without minting, so the measurement
+    //! in flight always completes.
+def tune_interrupt_requested() : bool {
+    if (!g_tune_control_read) {
+        g_tune_control_read = true
+        g_tune_control_path = get_env_variable("DAS_TUNE_CONTROL")
+    }
+    if (empty(g_tune_control_path)) {
+        return false
+    }
+    var fs : FStat
+    return stat(g_tune_control_path, fs)
+}
+
+    //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of
+    //! the app's `main`: consults the scope resolver first, else runs the tuner; true = main
+    //! returns immediately (winners are compile-time stamps), false = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         return false
+    }
+    if (scope_resolved_externally(scopeName, manifestPath, fnames)) {
+        return true   // resolved without a tune; the resolver printed its own restart marker
     }
     if (!empty(g_mint_suppressed)) {
         // false = carry on with fallback stamps, do not tune and do not stop main
