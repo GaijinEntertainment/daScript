@@ -183,7 +183,7 @@ modules/dasLLAMA/
   harness/                    # verification / eval test beds, per-box tuners, GGUF inspection tools
   tests/                      # dastest [test] suites (model-gated ones self-skip)
 examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL), audio_chat.das (audio chat), transcribe.das (speech-to-text), dictate.das (live mic -> text)
-tutorials/dasLLAMA/           # the guided series — 00 problem statement, 01 generate ... 09 embeddings, 10 thinking, 11 tool calling
+tutorials/dasLLAMA/           # the guided series — 00 problem statement, 01 generate ... 11 tool calling, 12 voice activity, 13 serving
 ```
 
 One require is the whole public API (docs: the `dasllama` page in the stdlib reference):

@@ -248,7 +248,8 @@ engine over a tiny llama2.c checkpoint. The remaining tutorials cover the
 ``dasllama`` module — CPU large-language-model inference in pure daslang:
 loading GGUF models, tokenization, streaming generation, chat with templates,
 sampling, sessions and memory, performance, the architecture registry,
-speech-to-text, audio chat, embeddings, thinking models, and tool calling.
+speech-to-text, audio chat, embeddings, thinking models, tool calling,
+voice-activity detection, and serving many conversations.
 Tutorial 01 onward is written against the public ``dasllama/dasllama`` facade.
 
 For tutorials 01 onward, you'll need a GGUF model file on disk (models are not
