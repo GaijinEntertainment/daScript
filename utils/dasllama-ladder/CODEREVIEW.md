@@ -53,7 +53,8 @@ creates; store tests run against `:memory:`.** A test writing into the repo tree
 Every file states what it holds. Code that belongs to a file and is written anywhere else is a
 defect, and this section is the whole test.
 
-**A new file ships with its rule here and its tests, in the same change.**
+**A new file ships with its rule here in the same change; a new `.das` source ships its tests
+too.**
 
 - `main.das` — the launcher: argv parsing into globals, logger init, the exported
   `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
@@ -62,9 +63,11 @@ defect, and this section is the whole test.
   per-key provenance, and the startup banner payload. No HTTP, no SQL, no filesystem beyond
   reading the config file.
 - `ladder_server.das` — the `HvWebServer` class: the route table and handlers, plus the
-  startup official-dir import. A handler validates transport-level shape, translates HTTP to
-  one store call, and formats the response. A SQL statement, a hash computation, or a policy
-  decision (size, rate, source) in this file is a defect.
+  startup official-dir import. A handler validates transport-level shape, gates the request
+  (loopback, submit-open, attempt-limit), translates HTTP to one store call, and formats the
+  response. A SQL statement, a hash computation, or a store policy decision (size caps, rate
+  ceiling, source stamping, document validation) in this file is a defect — those live in
+  `ladder_store.das`.
 - `ladder_store.das` — the store: schema structs, migrations, content hashing, and every
   policy decision (size caps, rate ceiling, source stamping, the sidecar lookup ladder). Zero
   HTTP: a require of `dashv` here is a defect.
@@ -73,6 +76,15 @@ defect, and this section is the whole test.
 - `caddy.snippet` — the authoritative copy of the public route boundary; the deployed
   Caddyfile is edited to match it, never the reverse. A route added to `ladder_server.das`
   that a public caller needs lands here in the same change.
+- `.das_package` — the daspkg release manifest: the package/release names and the
+  `release_include*` set of operator files carried onto the box. A new operator-edited file the
+  box runs from is added to `release()` here in the same change.
+- `dasllama-deploy.sh` — the box-side deploy tool (`provision`/`caddy`/`install`/`open-submit`/
+  `close-submit`/`status`), installed root-owned as the one privileged surface. A privileged
+  (root) deploy action performed anywhere else is a defect.
+- `dasllama-deploy.sudoers` — the drop-in that scopes that privilege. It grants NOPASSWD for
+  exactly `/usr/local/sbin/dasllama-deploy.sh` and nothing else; a second command, a wildcard
+  target, a bare `ALL`, or a shell is a defect.
 
 ---
 
@@ -90,6 +102,15 @@ response path that skips the log is a defect.
 
 **Every handler that consumes a request body checks `body_is_byte_faithful` before using the
 string view.** A body used without the NUL guard is a defect.
+
+**Public submissions default closed: `submit_open` is false in both `LadderArgs` and
+`LadderPolicy`, the `/api/submit/sidecar` and `/api/submit/records` handlers return 403 while it
+is false, and only the loopback `/admin/submit` route flips it.** A default of true, or an opener
+reachable from any non-loopback path, is a defect.
+
+**In `caddy.snippet` the large-body allowance appears on the `/api/submit/records` and
+`/api/submit/sidecar` matcher only; every other proxied route carries the small read cap.** A
+large cap on any other route, or a read cap on a submit route, is a defect.
 
 ---
 

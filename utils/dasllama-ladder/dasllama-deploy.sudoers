@@ -1,0 +1,15 @@
+# dasllama-ladder deploy privilege — scoped NOPASSWD for the vetted deploy script only.
+#
+# Install once, as root, with validation (never edit /etc/sudoers.d by hand):
+#   sudo install -o root -g root -m 0755 dasllama-deploy.sh /usr/local/sbin/dasllama-deploy.sh
+#   sudo install -o root -g root -m 0440 dasllama-deploy.sudoers /etc/sudoers.d/dasllama-deploy
+#   sudo visudo -cf /etc/sudoers.d/dasllama-deploy   # must print "parsed OK"
+#
+# This grants passwordless sudo for ONLY /usr/local/sbin/dasllama-deploy.sh, not a root
+# shell. It is close to root in practice (the `install` verb unpacks a tarball as root), so
+# the real protections are: the key never gets an interactive root shell, every run is in the
+# sudo audit log, and the whole privileged surface is this one reviewed script.
+#
+# `boris` is the dasweb-1 operator account. On any other box, replace it with that box's
+# deploying user (this file is box-specific, not a drop-in-anywhere template).
+boris ALL=(root) NOPASSWD: /usr/local/sbin/dasllama-deploy.sh

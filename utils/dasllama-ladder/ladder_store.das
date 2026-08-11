@@ -159,6 +159,10 @@ struct LadderPolicy {
     // that caps parse/validate work on the single tick thread; the accepted ceiling above
     // counts only stored rows, so it never throttles a flood of invalid documents
     max_attempts_per_ip_hour : int = 120
+    // public submissions accepted only when true; default closed = read-only board. The server
+    // flips this at runtime via the loopback /admin/submit route (no restart), and a restart
+    // re-reads the config, so closed is the fail-safe resting state
+    submit_open : bool = false
 }
 
 enum PutStatus {

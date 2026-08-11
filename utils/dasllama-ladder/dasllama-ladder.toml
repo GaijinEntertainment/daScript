@@ -11,6 +11,7 @@ db = "ladder.db"
 max_records_bytes = 4194304
 max_sidecar_bytes = 1048576
 max_submissions_per_ip_hour = 20
-# the deployed toml points this at the release's records/ copy so the official
-# boards import (and refresh) at every service start; empty = no import
+# Set on the box to a directory of official record stores (records/<box>.json) staged during
+# deploy; they import (and refresh) at every service start. Empty (the default) = no import;
+# a board is seeded by staging that dir and pointing this at it, or via loopback admin import.
 official_dir = ""

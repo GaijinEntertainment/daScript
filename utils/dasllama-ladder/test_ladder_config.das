@@ -14,6 +14,7 @@ def test_defaults(t : T?) {
         t |> equal(cfg.port, 8201)
         t |> equal(cfg.db, "ladder.db")
         t |> equal(cfg.max_submissions_per_ip_hour, 20)
+        t |> equal(cfg.submit_open, false, "public submissions closed by default")
         t |> equal(cfg.official_dir, "")
     }
 }
@@ -74,5 +75,38 @@ def test_toml_merge(t : T?) {
         let banner = write_json(config_banner(cfg, sources))
         t |> success(find(banner, "9301") >= 0, "value present")
         t |> success(find(banner, "toml") >= 0, "provenance present")
+    }
+}
+
+[test]
+def test_submit_open_config(t : T?) {
+    t |> run("submit_open flips via toml, with provenance") @(t : T?) {
+        var cfg = LadderArgs()
+        var sources : table<string; string>
+        var err = ""
+        let no_args : array<string>
+        t |> equal(cfg.submit_open, false, "closed by default")
+        t |> success(apply_config_text(cfg, "submit_open = true\n", no_args, sources, err), "merge ok ({err})")
+        t |> success(cfg.submit_open, "toml opened it")
+        t |> equal(sources?["submit_open"] ?? "", "toml")
+    }
+    t |> run("explicit --submit-open beats a non-authoritative toml") @(t : T?) {
+        var cfg = LadderArgs()
+        cfg.submit_open = true   // as if clargs parsed --submit-open
+        var sources : table<string; string>
+        var err = ""
+        let args <- ["--submit-open"]
+        mark_cli_sources(args, sources)
+        t |> success(apply_config_text(cfg, "submit_open = false\n", args, sources, err), "merge ok")
+        t |> success(cfg.submit_open, "cli open wins over a non-authoritative toml false")
+        t |> equal(sources?["submit_open"] ?? "", "cli")
+    }
+    t |> run("a wrong-typed submit_open is refused, never coerced") @(t : T?) {
+        var cfg = LadderArgs()
+        var sources : table<string; string>
+        var err = ""
+        let no_args : array<string>
+        t |> success(!apply_config_text(cfg, "submit_open = \"yes\"\n", no_args, sources, err), "string submit_open refused")
+        t |> success(find(err, "submit_open") >= 0, "error names the key")
     }
 }
