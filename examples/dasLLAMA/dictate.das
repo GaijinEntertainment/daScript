@@ -66,6 +66,7 @@ def main {  // nolint:STYLE038 - one linear record/VAD/transcribe session
 
     print("loading ASR  {model_path}\n")
     var m <- load_asr_model(model_path)
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let c <- caps(m)
     let lang = !empty(c.languages) && length(c.languages) == 1 ? c.languages[0] : "auto"
     print("loading VAD  {vad_bin_default()}\n")

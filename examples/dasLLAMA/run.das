@@ -29,6 +29,7 @@ def main {
     }
     print("loading {model}\n")
     var m <- load_model(model, QuantMode.q8)
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     m.config.seq_len = min(m.config.seq_len, CTX)
     let c = m.config
     print("config: dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} vocab={c.vocab_size} arch={m.arch}\n")

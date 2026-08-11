@@ -102,6 +102,7 @@ def main {
 
     print("loading {model_path}\n")
     var w <- (empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path))
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let c <- caps(w)
     print("model: {length(c.languages)} language(s), translate {c.translate ? "yes" : "no"}, {c.timestamps} timestamps\n")
     let samples <- load_audio_16k_mono(audio_path)

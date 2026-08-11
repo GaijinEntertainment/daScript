@@ -75,6 +75,30 @@ a program finds out instead of being silently absorbed.
        print("note: this model has no system role — the prompt is folded into turn 1\n")
    }
 
+Under the hood: the splice
+==========================
+
+``generate`` and ``generate_embd`` meet at the embedding rows: prefilling
+tokens *is* prefilling their embedding rows. The tutorial proves it by
+identity — same prompt, both roads, greedy, byte-identical output:
+
+.. code-block:: das
+
+   let prompt <- encode(m, "The capital of France is")
+   var embd : array<float>
+   embd |> resize(long_length(prompt) * m.config.dim)
+   embed_text_rows(m, prompt, embd, 0l)   // the rows generate() would prefill
+   var s2 = create_session(m)
+   generate_embd(m, s2, embd, long_length(prompt), SamplingParams(), 8l) $(_id, piece) {
+       print(piece)
+       return true
+   }
+   // -> " Paris. ..." — byte-identical to generate() on the same prompt
+
+An audio turn is this exact array with a span of rows replaced by the
+tower's soft tokens. ``add_user_audio`` builds it for you; a custom modality
+builds it by hand and hands it to ``generate_embd``.
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/08_audio_chat.das <../../../../tutorials/dasLLAMA/08_audio_chat.das>`

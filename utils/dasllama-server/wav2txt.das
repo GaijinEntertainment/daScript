@@ -79,6 +79,7 @@ def main : int {
     let audio_s = double(length(samples)) / 16000.0lf   // 16 kHz mono
 
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.asr) : load_asr_model(cfg.asr, cfg.mmproj)
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let lang = empty(cfg.lang) ? "en" : cfg.lang
 
     var text = ""

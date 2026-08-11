@@ -80,6 +80,7 @@ def main {
     m.config.seq_len = min(m.config.seq_len, CTX)
     print("loading {mmproj_path}\n")
     var tower <- load_audio_tower(mmproj_path)
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let samples <- load_audio_16k_mono(audio_path)
     print("audio: {length(samples)} samples ({float(length(samples)) / float(int(AUDIO_SAMPLE_RATE))} s)\n")
 

@@ -220,6 +220,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
     }
     print("loading {cfg.model}\n")
     var m <- load_model(cfg.model, cfg.quant)
+    allow_cpu_prefill()   // a CPU-serving bench, said explicitly; DASLLAMA_PIN_PREFILL=metal is the GPU arm
     // every arm must fit: the B sweep (p+n), the interference arm (64 + long_p of A-budget), warm TTFT
     let need = max(p + n + 8l, max(long_p + 16l, 64l + long_p + 8l))
     m.config.seq_len = min(m.config.seq_len, need)

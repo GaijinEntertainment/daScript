@@ -103,6 +103,7 @@ def main : int {
     let max_new = cfg.max_tokens > 0 ? int64(cfg.max_tokens) : 256l
 
     var m <- load_model(cfg.model, pick_quant(cfg.quant))
+    allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let toks <- encode(m, cfg.prompt, true, false)
     var params = SamplingParams()
     params.temp = cfg.temp
