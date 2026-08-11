@@ -285,7 +285,7 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
 // declared and the family has a tool format — the tool block wrapping the verbatim tool JSONs
 // (one per line, the Qwen/Hermes shape).
 def private system_content(c : ChatSession) : string {
-    if (empty(c.tools_json) || empty(c.tmpl.tool_call_open)) {
+    if (empty(c.tools_json) || c.tmpl.tool_mode == ToolMode.none) {
         return c.system
     }
     var parts : array<string>

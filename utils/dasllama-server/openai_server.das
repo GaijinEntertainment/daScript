@@ -1594,7 +1594,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         set_thinking(chat, think_val)
     }
     if (!empty(tools)) {
-        if (empty(chat.tmpl.tool_call_open)) {
+        if (chat.tmpl.tool_mode == ToolMode.none) {
             return "'tools' is not supported: the {cur_name()} chat template declares no tool-call format"
         }
         var render_tools <- [for (tool in tools); tool]
