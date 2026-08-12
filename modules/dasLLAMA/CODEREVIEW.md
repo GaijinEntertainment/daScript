@@ -104,7 +104,8 @@ reports model-gated skips explicitly.
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
-run under one tune state by construction, so the comparison holds untuned.
+run under one tune state by construction, so the comparison holds untuned. The `--tok` tokenizer
+cell in `lcpp_bench.das` is exempt as well: it dispatches no tuned kernel.
 
 **No new record-grade timing harness is written.** Model-level time is measured by the rigs
 `PROFILE.md` documents — `performance/gen_profile.das` (the routine check) and

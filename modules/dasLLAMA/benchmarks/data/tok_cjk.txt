@@ -1,0 +1,69 @@
+# zh.wikipedia 編譯器 rev 92827968 plain-text extract (CC BY-SA 4.0). Frozen tokenizer-bench corpus - loaders skip #-lines.
+編譯器（compiler）是一種電腦程式，它會將某種程式語言寫成的原始碼（原始語言）轉換成另一種程式語言（目標語言）。
+它主要的目的是將便于人编写、阅读、维护的高级计算机语言所寫作的原始碼程式，翻译为计算机能解读、运行的低阶机器语言的程序，也就是執行檔。编译器将原始程序（source program）作为输入，翻译产生使用目标语言（target language）的等价程序。源代码一般为高阶语言（High-level language），如Pascal、C、C++、C# 、Java等，而目标语言则是汇编语言或目标机器的目标代码（Object code），有时也称作机器代码（Machine code）。
+一个现代编译器的主要工作流程如下：
+源代码（source code）→ 预处理器（preprocessor）→ 编译器（compiler）→ 汇编程序（assembler）→ 目标代码（object code）→ 链接器（linker）→ 執行檔（executables），最後打包好的檔案就可以給電腦去判讀執行了。
+
+
+== 历史 ==
+早期的计算机软件都是用汇编语言直接编写的，这种状况持续了数年。当人们发现为不同类型的中央处理器（CPU）编写可重用软件的开销要明显高于编写编译器时，人们发明了高级编程语言。由于早期的计算机的内存很少，当大家实现编译器时，遇到了许多技术难题。
+大约在20世纪50年代末期，与机器无关的编程语言被首次提出。随后，人们开发了几种实验性质的编译器。第一个编译器是由美國女性電腦科學家葛麗絲·霍普（Grace Murray Hopper）于1952年为A-0 系統编写的。但是1957年由任職於IBM的美國電腦科學家约翰·巴科斯（John Warner Backus）领导的FORTRAN則是第一個被實作出具備完整功能的编译器。1960年，COBOL成为一种较早的能在多种架构下被编译的语言。
+高级语言在许多领域流行起来。由于新的编程语言支持的功能越来越多，计算机的架构越来越复杂，这使得编译器也越来越复杂。
+早期的编译器是用汇编语言编写的。首个能编译自己源程序的编译器是在1962年由麻省理工学院的Hart和Levin制作的。从20世纪70年代起，实现能编译自己源程序的编译器变得越来越可行，不过还是用Pascal和C语言来实现编译器更加流行。制作某种语言的第一个能编译器，要么需要用其它语言来编写，要么就像Hart和Levin制作Lisp编译器那样，用解释器来运行编译器。
+
+
+=== 教学用的编译器 ===
+编译器的构造与优化是计算机专业的大学课程，课程名称一般为「编译原理」或「編譯器」。通常在课程中包含了如何实现一种教学用程序语言的编译器。一个著名的例子是20世纪70年代，瑞士計算機科學家尼克劳斯·维尔特（Niklaus Emil Wirth）用于讲解编译器的构造时使用的PL/0编译器。尽管它很简单，PL/0编译器介绍了这个领域的几个有影响的概念：
+
+逐步求精的程序开发（也是 1971年 Wirth 的论文的标题）
+使用递归下降解析器
+使用EBNF指定语言的语法。
+代码生成器产生便携P-code
+在自举问题的正式描述中使用T-diagram。
+
+
+== 分类 ==
+编译器的一种分类方式是按照生成代码所运行的系统平台划分，这个平台称为目标平台。
+有一些编译器输出的代码，将运行于与编译器所在相同类型的计算机和操作系统之上，这种编译器叫做本地编译器。输出可以运行于不同的平台之上的编译器，叫做交叉编译器。由于嵌入式系统通常没有软件开发环境，因此，为这类系统开发软件时，通常需要使用交叉编译器。
+编译器所输出于虚拟机上运行之代码，编译器和编译器输出的运行平台有可能相同，也有可能不同。因此，对于这类编译器，不去区分它是本地编译器还是交叉编译器。
+
+
+== 參考文獻 ==
+
+
+== 延伸阅读 ==
+LLVM community. The LLVM Target-Independent Code Generator. LLVM Documentation.   [17 June 2016]. （原始内容存档于2021-05-01）. 
+Compiler textbook references A collection of references to mainstream Compiler Construction Textbooks
+Aho, Alfred V.; Sethi, Ravi; Ullman, Jeffrey D. Compilers: Principles, Techniques, and Tools 1st. Addison-Wesley. 1986. ISBN 9780201100884. 
+Allen, Frances E. A History of Language Processor Technology in IBM. IBM Journal of Research and Development (IBM). September 1981, 25 (5): 535–548. doi:10.1147/rd.255.0535. 
+Allen, Randy; Kennedy, Ken. Optimizing Compilers for Modern Architectures. Morgan Kaufmann Publishers. 2001. ISBN 978-1-55860-286-1. 
+Appel, Andrew Wilson. Modern Compiler Implementation in Java 2nd. Cambridge University Press. 2002. ISBN 978-0-521-82060-8. 
+Appel, Andrew Wilson. Modern Compiler Implementation in ML. Cambridge University Press. 1998  [2020-01-11]. ISBN 978-0-521-58274-2. （原始内容存档于2021-04-27）. 
+Bornat, Richard. Understanding and Writing Compilers: A Do It Yourself Guide (PDF). Macmillan Publishing. 1979  [2020-01-11]. ISBN 978-0-333-21732-0. （原始内容 (PDF)存档于2007-06-15）. 
+Cooper, Keith Daniel; Torczon, Linda. Engineering a compiler 2nd. Amsterdam: Elsevier/Morgan Kaufmann. 2012: 8. ISBN 9780120884780. OCLC 714113472. 
+McKeeman, William Marshall; Horning, James J.; Wortman, David B. A Compiler Generator. Englewood Cliffs, NJ: Prentice-Hall. 1970. ISBN 978-0-13-155077-3. 
+Muchnick, Steven. Advanced Compiler Design and Implementation. Morgan Kaufmann Publishers. 1997  [2020-01-11]. ISBN 978-1-55860-320-2. （原始内容存档于2021-02-23）. 
+Scott, Michael Lee. Programming Language Pragmatics 2nd. Morgan Kaufmann. 2005  [2020-01-11]. ISBN 978-0-12-633951-2. （原始内容存档于2021-04-27）. 
+Srikant, Y. N.; Shankar, Priti. The Compiler Design Handbook: Optimizations and Machine Code Generation. CRC Press. 2003  [2020-01-11]. ISBN 978-0-8493-1240-3. （原始内容存档于2021-04-27）. 
+Terry, Patrick D. Compilers and Compiler Generators: An Introduction with C++. International Thomson Computer Press. 1997  [2020-01-11]. ISBN 978-1-85032-298-6. （原始内容存档于2015-09-14）. 
+Wirth, Niklaus. Compiler Construction (PDF). Addison-Wesley. 1996  [2020-01-11]. ISBN 978-0-201-40353-4. （原始内容 (PDF)存档于2017-02-17）. 
+
+
+== 参见 ==
+
+链接器
+直译器
+自举 (编译器)
+
+
+== 外部連結 ==
+
+开放目录项目中的“Compilers”
+Incremental Approach to Compiler Construction （页面存档备份，存于互联网档案馆） – a PDF tutorial
+Compile-Howto （页面存档备份，存于互联网档案馆）
+Basics of Compiler Design，存档于互联网档案馆（存檔日期 2018-05-15）
+YouTube上的Short animation explaining the key conceptual difference between compilers and interpreters
+YouTube上的Syntax Analysis & LL1 Parsing
+Let's Build a Compiler （页面存档备份，存于互联网档案馆）, by Jack Crenshaw
+Forum about compiler development，存档于互联网档案馆（存檔日期 2014-10-10）
+Difference Between Compiler and Interpreter （页面存档备份，存于互联网档案馆）
