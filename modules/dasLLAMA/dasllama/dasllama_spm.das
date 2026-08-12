@@ -20,9 +20,10 @@ struct SpmTokenizer {
     // DERIVED (build_spm_derived), never serialized: packed (left<<32)|right -> merged id for
     // every vocab piece that splits into two vocab pieces — the no-allocation merge probe
     pair_merge : table<int64; int64>
-    // DERIVED: codepoint -> id of its single-codepoint vocab piece — the encode init loop's
-    // no-allocation probe (a per-cpt slice + string-keyed lookup degrades superlinearly)
-    cpt_id : table<int; int64>
+    // DERIVED: a short (1-4 byte) vocab piece's raw bytes packed little-endian into a uint -> id.
+    // The encode init loop's no-allocation probe: byte-packed keys equal string equality exactly
+    // (per-cpt slice + string-keyed lookup strlens the whole source per call — O(n^2) loops)
+    bkey_id : table<uint; int64>
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
     bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
@@ -34,7 +35,7 @@ struct SpmTokenizer {
 //! maps to exactly the id the concat-string lookup would find (last duplicate wins in both).
 def build_spm_derived(var tk : SpmTokenizer) {
     tk.pair_merge |> clear()
-    tk.cpt_id |> clear()
+    tk.bkey_id |> clear()
     for (m, piece in count(), tk.vocab) {
         for (k in range(1, length(piece))) {
             let l = tk.lookup?[slice(piece, 0, k)] ?? -1l
@@ -44,58 +45,22 @@ def build_spm_derived(var tk : SpmTokenizer) {
                 tk.pair_merge[(l << 32l) | r] = int64(m)
             }
         }
-        let c = single_cpt_of(piece)
-        if (c >= 0) {
-            tk.cpt_id[c] = int64(m)   // last duplicate wins, same as lookup
+        if (!empty(piece) && length(piece) <= 4) {
+            tk.bkey_id[pack_piece_key(piece)] = int64(m)   // last duplicate wins, same as lookup
         }
     }
 }
 
-// the codepoint of a piece that is EXACTLY one UTF-8 codepoint, else -1
-def private single_cpt_of(piece : string) : int {
-    var cpt = -1
+// the 1-4 raw bytes of a short piece packed little-endian; strings carry no NUL, so
+// zero-padding the high bytes cannot collide across lengths
+def private pack_piece_key(piece : string) : uint {
+    var k = 0u
     peek_data(piece) $(d : array<uint8> const#) {
-        let n = length(d)
-        if (n >= 1 && n <= 4) {
-            let c0 = int(d[0])
-            if (n == 1 && c0 < int(0x80)) {
-                cpt = c0
-            } elif (n == 2 && (c0 & int(0xE0)) == int(0xC0)) {
-                let v = ((c0 & 31) << 6) | (int(d[1]) & 63)
-                cpt = v >= int(0x80) ? v : -1   // reject overlong — the string lookup would miss it too
-            } elif (n == 3 && (c0 & int(0xF0)) == int(0xE0)) {
-                let v = ((c0 & 15) << 12) | ((int(d[1]) & 63) << 6) | (int(d[2]) & 63)
-                cpt = v >= int(0x800) ? v : -1
-            } elif (n == 4 && (c0 & int(0xF8)) == int(0xF0)) {
-                let v = ((c0 & 7) << 18) | ((int(d[1]) & 63) << 12) | ((int(d[2]) & 63) << 6) | (int(d[3]) & 63)
-                cpt = v >= int(0x10000) ? v : -1
-            }
+        for (b in range(length(d))) {
+            k |= uint(d[b]) << uint(b * 8)
         }
     }
-    return cpt
-}
-
-// single_cpt_of's byte-window twin, for the encode init loop: decode d[i..j) as exactly one
-// codepoint, -1 on malformed/overlong (where the old string lookup would miss).
-def private cpt_in_window(d : array<uint8> const#; i, j : int) : int {
-    let n = j - i
-    let c0 = int(d[i])
-    if (n == 1) {
-        return c0 < int(0x80) ? c0 : -1
-    }
-    if (n == 2 && (c0 & int(0xE0)) == int(0xC0)) {
-        let v = ((c0 & 31) << 6) | (int(d[i + 1]) & 63)
-        return v >= int(0x80) ? v : -1
-    }
-    if (n == 3 && (c0 & int(0xF0)) == int(0xE0)) {
-        let v = ((c0 & 15) << 12) | ((int(d[i + 1]) & 63) << 6) | (int(d[i + 2]) & 63)
-        return v >= int(0x800) ? v : -1
-    }
-    if (n == 4 && (c0 & int(0xF8)) == int(0xF0)) {
-        let v = ((c0 & 7) << 18) | ((int(d[i + 1]) & 63) << 12) | ((int(d[i + 2]) & 63) << 6) | (int(d[i + 3]) & 63)
-        return v >= int(0x10000) ? v : -1
-    }
-    return -1
+    return k
 }
 
 //! Load tokenizer.bin. vocab_size comes from the model Config (it isn't stored in the file).
@@ -295,17 +260,19 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
     if (tk.add_space_prefix && !empty(text)) {
         tokens |> push(tk.lookup?[" "] ?? -1l)
     }
-    // split into UTF-8 codepoints; each -> its vocab token via the int-keyed cpt_id table (a
-    // per-cpt slice + string-keyed lookup here degraded superlinearly), or byte fallback (byte + 3)
+    // split into UTF-8 codepoints; each window's raw bytes pack into the uint bkey_id probe —
+    // byte-equality semantics, zero allocation (a slice + string-keyed lookup here strlens the
+    // whole source per call, O(n^2) over the text) — or byte fallback (byte + 3)
     peek_data(text) $(d : array<uint8> const#) {
         var i = 0
         while (i < length(d)) {
             var j = i + 1
+            var k = uint(d[i])
             while (j < length(d) && (int(d[j]) & int(0xC0)) == int(0x80) && j - i < 4) {
+                k |= uint(d[j]) << uint((j - i) * 8)
                 j++
             }
-            let cpt = cpt_in_window(d, i, j)
-            let id = cpt >= 0 ? tk.cpt_id?[cpt] ?? -1l : -1l
+            let id = tk.bkey_id?[k] ?? -1l
             if (id >= 0l) {
                 tokens |> push(id)
             } else {
