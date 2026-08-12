@@ -65,7 +65,7 @@ def public text_find_close(var state : TextFindState) {
 
 def public text_find_dispose(var state : TextFindState) {
     delete state.matches
-    state = TextFindState()
+    state = TextFindState()   // nolint:PERF030 - the delete above releases the only heap-carrying field
 }
 
 def public text_find_current(state : TextFindState const) : TextSourceRange {
