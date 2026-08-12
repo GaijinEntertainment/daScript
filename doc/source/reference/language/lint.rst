@@ -1382,9 +1382,15 @@ PERF031 — ``slice``/``chop`` on a loop-invariant string inside a loop
 ``slice(s, i, j)`` and ``chop(s, i, n)`` call ``strlen`` on the WHOLE source
 string on every call (strings carry no cached length), and each call allocates
 a fresh heap string nothing frees. Slicing the same string once per iteration
-is therefore O(length × iterations) — quadratic. Walk the bytes through
-``peek_data`` (one ``strlen`` up front, O(1) reads), or hoist the slice out of
-the loop.
+costs O(length × iterations) — quadratic.
+
+The fix is mechanical. Wrap the loop in ``peek_data``, then pass the view
+everywhere the string used to go: ``slice``, ``chop``, ``find``, ``rfind``,
+``starts_with``, ``ends_with``, ``strip``, ``trim`` and the parse family each
+have a byte-view form that takes an ``array<uint8>`` — the view ``peek_data``
+hands to its block. A view carries its own length, so the ``strlen`` happens
+once, at ``peek_data``, and the loop is linear. When the window never changes,
+hoisting the slice out of the loop works too.
 
 .. code-block:: das
 
@@ -1400,9 +1406,11 @@ the loop.
 
     def perf031_good(text : string) : int {
         var total = 0
-        peek_data(text) $(d : array<uint8> const#) {  // one strlen up front
-            for (i in range(min(8, length(d)))) {
-                total += int(d[i])
+        peek_data(text) $(d : array<uint8> const#) {   // one strlen up front
+            var i = 0
+            while (i < min(8, length(d))) {
+                total += length(slice(d, i, i + 2))    // the view carries its length
+                i++
             }
         }
         return total
@@ -1412,8 +1420,10 @@ The receiver must be defined *outside* the loop to fire — ``slice(p, 0, 1)``
 where ``p`` is the loop variable stays silent (that cost is bounded by the
 element, not an invariant source). Block arguments run inline in the loop, so
 the rule deliberately looks inside them (``peek_data`` blocks and friends).
-The repo ``.lint_config`` keeps PERF031 off until the in-tree hits are swept;
-it is on by default outside this repo.
+A view receiver never fires: the byte-view forms take their length from the
+view, so there is nothing to re-scan.
+The repo ``.lint_config`` keeps PERF031 off until the in-tree hits are swept
+onto the byte-view forms; it is on by default outside this repo.
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================

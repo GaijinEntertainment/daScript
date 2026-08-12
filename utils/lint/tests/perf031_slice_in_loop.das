@@ -14,8 +14,8 @@ options _enable_default_off_rules = true   // fixture mode: immune to repo .lint
 //   }
 //
 // Good pattern:
-//   peek_data(text) $(d) {           // one strlen up front
-//       ... d[i] ...                 // O(1) reads
+//   peek_data(text) $(d) {                // one strlen up front
+//       let cp = slice(d, i, j)           // the view carries its length
 //   }
 
 expect 31208:6

@@ -1,0 +1,1 @@
+Returns a substring of `str` beginning at index `start` with the specified `length`. The `bytes` overload reads a byte view (`array<uint8>`, as handed to a `peek_data` block) and copies that window out as a new string.

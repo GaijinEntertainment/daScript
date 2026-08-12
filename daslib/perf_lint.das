@@ -31,7 +31,7 @@ module perf_lint shared private
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'; also urange/range64/urange64 + long_length
 //!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y); same range/length variants as PERF018
 //!   PERF030 — move-assign onto a live heap-carrying variable drops old contents — delete first or force_inscope_pod
-//!   PERF031 — slice/chop on a loop-invariant string inside a loop — each call strlens the whole source (O(n²))
+//!   PERF031 — slice/chop on a loop-invariant string inside a loop — each call strlens the whole source (O(n²)); slice the peek_data view instead
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast (non-generic bodies only)
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
@@ -2073,7 +2073,7 @@ class PerfLintVisitor : AstVisitor {
         var spath = ""
         let srv = find_expr_path(expr.arguments[0], spath)
         if (srv != null && !srv.flags.generated && is_defined_outside_loop31(srv)) {
-            perf_warning("PERF031: {expr.func.name} re-strlens its source string on every call; in a loop over the same string this is O(n^2) - hoist it, or walk bytes via peek_data", expr.at)
+            perf_warning("PERF031: {expr.func.name} re-strlens its source string on every call; in a loop over the same string this is O(n^2) - wrap the loop in peek_data(s) $(d) and {expr.func.name}(d, ...) the view, or hoist it", expr.at)
         }
     }
 

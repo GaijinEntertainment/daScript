@@ -1,0 +1,1 @@
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found. The `bytes` overloads search a byte view (`array<uint8>`, as handed to a `peek_data` block); on both forms a character code matches as an unsigned byte value, so a code outside 0..255 matches nothing.

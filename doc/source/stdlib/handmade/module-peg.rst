@@ -35,7 +35,7 @@ Terminal                          Description
 ``"literal"``                     Exact text match
 ``EOF``                           End of input
 ``EOL``                           End of line (``\n`` or ``\r\n``)
-``WS``                            Zero or more whitespace (including newlines)
+``WS``                            Zero or more whitespace: space, tab, CR, LF, FF, VT
 ``TS``                            Zero or more tabs/spaces (no newlines)
 ``any``                           Any single character
 ``number``                        Decimal integer (returns ``int``)

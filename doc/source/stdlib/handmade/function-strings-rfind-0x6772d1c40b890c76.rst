@@ -1,0 +1,1 @@
+Returns the index of the last occurrence of ``substr`` in ``str``, or -1 if not found. Searches backwards from the end of the string, or from ``start`` when it is given; the ``bytes`` overloads search a byte view (``array<uint8>``, as handed to a ``peek_data`` block) the same way.
