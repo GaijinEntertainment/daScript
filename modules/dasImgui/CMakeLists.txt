@@ -367,6 +367,25 @@ IF(COMMAND ADD_MODULE_CPP)
         # down (libglfw.so vs libglfw.so.3.4 broke the doc lane).
         TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${DAS_GLFW_DYN_PATH})
         ADD_DEPENDENCIES(imguiApp GLFW3_DYN)
+        # The NEEDED entry that link records is the plain SONAME (libglfw.so.3) — the same
+        # name a system GLFW 3.3 provides. The startup module scan dlopens .shared_modules
+        # in readdir order, and whichever libglfw.so.3 enters the process FIRST is stuck:
+        # if imguiApp loads before dasModuleGlfw and resolves the system 3.3, dasModuleGlfw
+        # then fails dlopen on its 3.4-only symbols and the glfw module silently never
+        # registers (every bundled daslang exits "Unable to initialize some modules").
+        # Point imguiApp's installed artifact at the bundled 3.4 explicitly, mirroring
+        # dasModuleGlfw's own INSTALL_RPATH, so enumeration order stops deciding which
+        # GLFW wins. APPEND: the ADD_DAS_SHARED_MODULE_LIB macro already contributes
+        # $ORIGIN / @loader_path.
+        IF(APPLE)
+            SET_PROPERTY(TARGET imguiApp APPEND PROPERTY
+                INSTALL_RPATH "@loader_path/../dasGlfw/glfw_dyn/Release/lib"
+            )
+        ELSEIF(UNIX)
+            SET_PROPERTY(TARGET imguiApp APPEND PROPERTY
+                INSTALL_RPATH "\$ORIGIN/../dasGlfw/glfw_dyn/Release/lib"
+            )
+        ENDIF()
         SETUP_CPP11(imguiApp)
 
         ADD_DAS_SHARED_MODULE_LIB(imguiAppHeadless ${DAS_IMGUI_DIR}/src/module_imgui_app_headless.cpp)
