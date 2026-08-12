@@ -78,8 +78,7 @@ def private resolve_level(category : string) : int {
     var level = 0
     peek_data(category) $(d) {
         var end = length(d)
-        // `end == 0` stops the walk: rfind clamps a negative start to 0, so a leading '.' would repeat forever
-        while (end > 0) {
+        while (true) {
             let dot = rfind(d, ".", end - 1)
             break if (dot < 0)
             let probe = slice(d, 0, dot)

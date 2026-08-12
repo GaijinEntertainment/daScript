@@ -128,8 +128,9 @@ def test_pin_rfind(t : T?) {
     t |> equal(rfind(s, "bc", 3), 1, "rfind-from below the last hit")
     t |> equal(rfind(s, "bc", 0), -1, "rfind-from 0 only tests offset 0")
     t |> equal(rfind(s, "bc", 100), 4, "rfind-from past length clamps to the last fitting offset")
-    t |> equal(rfind(s, "bc", -1), -1, "rfind-from clamps a negative start to 0")
-    t |> equal(rfind(s, "abc", -1), 0, "rfind-from clamped to 0 still matches at 0")
+    // ruling: a negative start is -1 in both forms - "search backward from before the start" has no answer
+    t |> equal(rfind(s, "bc", -1), -1, "rfind-from a negative start is -1")
+    t |> equal(rfind(s, "abc", -1), -1, "rfind-from a negative start is -1 even where offset 0 matches")
     t |> equal(rfind(s, "", 3), -1, "rfind-from with empty needle is -1")
 }
 

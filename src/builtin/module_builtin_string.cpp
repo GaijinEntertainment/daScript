@@ -252,7 +252,9 @@ namespace das
         return f ? int((const char *)f - str) : -1;
     }
 
+    // a negative `from` is -1, not a clamp to 0 - "search backward from before the start" has no answer
     static int rfind_sub_core ( const char * str, uint32_t strLen, const char * sub, uint32_t subLen, int from ) {
+        if ( from < 0 ) return -1;
         if ( !subLen || subLen>strLen ) return -1;
         const int last = int(strLen) - int(subLen);
         if ( from > last ) from = last;
@@ -277,8 +279,7 @@ namespace das
 
     int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
-        return rfind_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ),
-            clamp_int(start, 0, int(strLen)));
+        return rfind_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ), start);
     }
 
     int builtin_string_rfind2 (const char *str, const char *substr) {
@@ -305,8 +306,7 @@ namespace das
 
     int builtin_view_rfind_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at ) {
         const uint32_t len = view_size(bytes, context, at);
-        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr),
-            clamp_int(start, 0, int(len)));
+        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr), start);
     }
 
     static char * chop_core ( const char * str, uint32_t strLength, int start, int length, Context * context, LineInfoArg * at ) {
