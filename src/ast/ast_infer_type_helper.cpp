@@ -1075,11 +1075,13 @@ namespace das {
                         resType->constant = true;
                     }
                     resType->sanitize();
+                    if ( !resType->at.fileInfo ) resType->at = expr->at;
                     reportAstChanged();
                     return true;
                 }
             } else {
                 resType = new TypeDecl(Type::tVoid);
+                resType->at = expr->at;
                 reportAstChanged();
                 return true;
             }

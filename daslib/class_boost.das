@@ -29,7 +29,7 @@ class ClassMethodMacro : AstFunctionAnnotation {
             errors := "class_method can be applied only to static class methods"
             return false
         }
-        var tt = new TypeDecl(baseType = Type.tStructure, structType = func.classParent)
+        var tt = new TypeDecl(at = func.at, baseType = Type.tStructure, structType = func.classParent)
         if (explicitConstClassMethod) {
             tt.flags.explicitConst = true
         }

@@ -186,10 +186,10 @@ let managed_types = [
     "rtti_core::LineInfo",
 ];
 
-def private get_dst_type(src_tp : TypeDecl?) {
+def private get_dst_type(src_tp : TypeDecl?; at : LineInfo) {
     let tstr = describe(src_tp);
     if (tstr |> starts_with("$::das_string")) {
-        return new TypeDecl(baseType = Type.tString);
+        return new TypeDecl(at = at, baseType = Type.tString);
     } elif (tstr |> starts_with("ast_core::CaptureEntry")) {
         return typeinfo ast_typedecl(type<CaptureEntryInitData>);
     } elif (tstr |> starts_with("ast_core::EnumEntry")) {
@@ -253,10 +253,10 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
     var src_tp = get_handled_type_index_type_declaration(xtype.annotation,
                              default<Expression?>, default<Expression?>);
     src_tp.flags.ref = false; // vec type has ref, we don't need it
-    var dst_tp = get_dst_type(clone(src_tp));
+    var dst_tp = get_dst_type(clone(src_tp), at);
     var args : array<Expression?>;
 
-    if (get_vector_length(field_values, src_tp) == 0) return new ExprMakeStruct(at = at, makeType = new TypeDecl(baseType = Type.tArray, firstType = clone_type(dst_tp)),
+    if (get_vector_length(field_values, src_tp) == 0) return new ExprMakeStruct(at = at, makeType = new TypeDecl(at = at, baseType = Type.tArray, firstType = clone_type(dst_tp)),
                                      makeStructFlags = ExprMakeStructFlags.canShadowBlock);
     for (idx in range(get_vector_length(field_values, src_tp))) {
         {
@@ -351,7 +351,7 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
             emplace(*mkS1, mkFld);
         }
     }
-    var mkStr = new ExprMakeStruct(makeType = get_dst_type(clone_type(info)), at = at)
+    var mkStr = new ExprMakeStruct(makeType = get_dst_type(clone_type(info), at), at = at)
     emplace(mkStr.structs, mkS1)
     mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer | ExprMakeStructFlags.canShadowBlock;
     if (describe(info) == "rtti_core::FileInfo") return new ExprCall(at = at, name := "resolve_file_info",
@@ -387,7 +387,7 @@ def private convert_pointer_expr(mod; data; info; at) : Expression? {
     var final_type = clone_type(info.firstType);
     if (first_tstr == "ast_core::Expression") {
         assume annotation = mod |> module_find_type_annotation(unsafe(reinterpret<Expression?>(pdata)).__rtti);
-        final_type = new TypeDecl(baseType = Type.tHandle, annotation = annotation)
+        final_type = new TypeDecl(at = at, baseType = Type.tHandle, annotation = annotation)
     }
     var subexpr = convert_quote_expr(mod, pdata, final_type, at);
 
@@ -453,7 +453,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
 def convert_quote_to_expression(var arg_expr : Expression?; at : LineInfo) : Expression? {
     let mod = get_module("ast_core");
     assume annotation = mod |> module_find_type_annotation(arg_expr.__rtti);
-    var tp = new TypeDecl(baseType = Type.tHandle, annotation = annotation);
+    var tp = new TypeDecl(at = at, baseType = Type.tHandle, annotation = annotation);
     tp.flags.smartPtr = true;
     return new ExprAscend(subexpr = convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr)), tp, at), at = at);
 }
@@ -476,7 +476,7 @@ class QuoteConverter : AstVisitor {
         var fn = new Function(at = expr.at, atDecl = expr.at, name := fname,
             flags = FunctionFlags.generated | FunctionFlags.privateFunction)
         // preserve the raw quote's static type (Expression?) — autoinfer would leak the concrete node type (e.g. ExprConstInt?) and break consumers that need type identity, e.g. `cond ? clone_expression(x) : quote(0)`
-        fn.result = expr._type != null ? clone_type(expr._type) : new TypeDecl(baseType = Type.autoinfer)
+        fn.result = expr._type != null ? clone_type(expr._type) : new TypeDecl(at = expr.at, baseType = Type.autoinfer)
         var blk = new ExprBlock(at = expr.at)
         emplace_new(blk.list) <| new ExprReturn(at = expr.at, subexpr = conv)
         fn.body = blk

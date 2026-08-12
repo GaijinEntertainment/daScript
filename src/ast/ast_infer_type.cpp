@@ -309,6 +309,7 @@ namespace das {
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   decl.at, CompilationError::internal_field);
             decl.type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            decl.type->at = decl.at;
         }
         if (decl.type->isAuto() && !decl.init) {
             error("structure field type can't be inferred, it needs an initializer", "", "",
@@ -370,6 +371,7 @@ namespace das {
             } else {
                 TypeDecl::applyAutoContracts(varT, decl.type);
                 decl.type = varT;
+                if ( !decl.type->at.fileInfo ) decl.type->at = decl.at;
                 decl.type->ref = false;
                 decl.type->sanitize();
                 reportAstChanged();
@@ -492,6 +494,7 @@ namespace das {
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
             var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type->at = var->at;
         }
         if (noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit()) {
             if (!hasSafeWhenUninitialized(var->annotation)) {
@@ -559,6 +562,7 @@ namespace das {
                     }
                 }
                 var->type = varT;
+                if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
                 reportAstChanged();
             }
@@ -698,6 +702,7 @@ namespace das {
                   "likely a macro-generated function; set result to auto to request inference", "",
                   f->at, CompilationError::internal_function);
             f->result = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            f->result->at = f->at;
         }
         for (auto it = f->arguments.begin(); it != f->arguments.end();) {
             if (*it == nullptr) {
@@ -738,6 +743,7 @@ namespace das {
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
             var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type->at = var->at;
         }
         if (var->type->isAlias()) {
             if (auto aT = inferAlias(var->type)) {
@@ -776,6 +782,7 @@ namespace das {
             } else {
                 TypeDecl::applyAutoContracts(varT, arg->type);
                 arg->type = varT;
+                if ( !arg->type->at.fileInfo ) arg->type->at = arg->at;
                 arg->type->ref = false; // so that def ( a = VAR ) infers as def ( a : var_type ), not as def ( a : var_type & )
                 reportAstChanged();
                 return Visitor::visitArgumentInit(f, arg, that);
@@ -804,6 +811,7 @@ namespace das {
         if (!func->hasReturn && canFoldResult) {
             if (func->result->isAuto()) {
                 func->result = new TypeDecl(Type::tVoid);
+                func->result->at = func->at;
                 reportAstChanged();
             } else if (!func->result->isVoid()) {
                 error("function does not return a value", "", "",
@@ -1179,10 +1187,13 @@ namespace das {
             expr->func->addr = true;
             expr->func->fastCall = false;
             expr->type = new TypeDecl(Type::tFunction);
+            expr->type->at = expr->at;
             expr->type->firstType = new TypeDecl(*expr->func->result);
+            if ( !expr->type->firstType->at.fileInfo ) expr->type->firstType->at = expr->at;
             expr->type->argTypes.reserve(expr->func->arguments.size());
             for (auto &arg : expr->func->arguments) {
                 auto at = new TypeDecl(*arg->type);
+                if ( !at->at.fileInfo ) at->at = expr->at;
                 expr->type->argTypes.push_back(at);
                 expr->type->argNames.push_back(arg->name);
             }
@@ -1521,7 +1532,9 @@ namespace das {
         }
         // infer
         expr->type = new TypeDecl(Type::tPointer);
+        expr->type->at = expr->at;
         expr->type->firstType = new TypeDecl(Type::tHandle);
+        expr->type->firstType->at = expr->at;
         expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression");
         // mark quote as noAot, unless daslib/quote lowering will replace it
         // (aot_macros or jit_enabled policy, or per-module `options aot_macros` — same gate
@@ -3231,6 +3244,7 @@ namespace das {
         if (expr->typeexpr->isAlias()) {
             if (auto aT = findAlias(expr->typeexpr->alias)) {
                 TypeDecl::clone(expr->typeexpr, aT);
+                if ( !expr->typeexpr->at.fileInfo ) expr->typeexpr->at = expr->at;
                 expr->typeexpr->ref = false;      // drop a ref
                 expr->typeexpr->constant = false; // drop a const
                 expr->typeexpr->sanitize();
@@ -3264,13 +3278,17 @@ namespace das {
                       expr->at, CompilationError::invalid_new_class_syntax);
             }
             auto pt = new TypeDecl(Type::tPointer);
+            pt->at = expr->at;
             pt->firstType = new TypeDecl(*baseT);
+            if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
             expr->name = baseT->structType->getMangledName();
         } else if (baseT->baseType == Type::tHandle) {
             if (baseT->annotation->canNew()) {
                 auto pt = new TypeDecl(Type::tPointer);
+                pt->at = expr->at;
                 pt->firstType = new TypeDecl(*baseT);
+                if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
                 pt->smartPtr = baseT->annotation->isSmart();
                 expr->type = wrapNewDimChain(pt);
                 expr->name = baseT->annotation->module->name + "::" + baseT->annotation->name;
@@ -3285,7 +3303,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto pt = new TypeDecl(Type::tPointer);
+            pt->at = expr->at;
             pt->firstType = new TypeDecl(*baseT);
+            if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
             expr->name = baseT->getMangledName();
         } else if (baseT->baseType == Type::tVariant) {
@@ -3295,7 +3315,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto pt = new TypeDecl(Type::tPointer);
+            pt->at = expr->at;
             pt->firstType = new TypeDecl(*baseT);
+            if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
             expr->name = baseT->getMangledName();
         } else {
@@ -3711,6 +3733,7 @@ namespace das {
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
             var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type->at = var->at;
         }
         if (!var->can_shadow && !program->policies.allow_block_variable_shadowing) {
             if (func) {
@@ -3845,7 +3868,9 @@ namespace das {
             }
             if (!block->hasReturn && canFoldResult && block->type->isAuto()) {
                 block->returnType = new TypeDecl(Type::tVoid);
+                block->returnType->at = block->at;
                 block->type = new TypeDecl(Type::tVoid);
+                block->type->at = block->at;
                 setBlockCopyMoveFlags(block);
                 reportAstChanged();
             }
@@ -5361,6 +5386,7 @@ namespace das {
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
             var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type->at = var->at;
         }
         if (var->type && var->type->isExprType()) {
             return;
@@ -5601,6 +5627,7 @@ namespace das {
                     }
                 }
                 var->type = varT;
+                if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
                 reportAstChanged();
             }
@@ -6101,6 +6128,8 @@ namespace das {
                     } else {
                         auto mks = new ExprMakeStruct(expr->at);
                         mks->makeType = new TypeDecl(*aliasT);
+                    if ( !mks->makeType->at.fileInfo ) mks->makeType->at = expr->at;
+                        if ( !mks->makeType->at.fileInfo ) mks->makeType->at = expr->at;
                         return mks;
                     }
                 } else if (aliasT->isDistinct()) {
@@ -6131,6 +6160,7 @@ namespace das {
                     reportAstChanged();
                     auto mks = new ExprMakeStruct(expr->at);
                     mks->makeType = new TypeDecl(*aliasT);
+                    if ( !mks->makeType->at.fileInfo ) mks->makeType->at = expr->at;
                     mks->useInitializer = true;
                     mks->alwaysUseInitializer = true;
                     return mks;

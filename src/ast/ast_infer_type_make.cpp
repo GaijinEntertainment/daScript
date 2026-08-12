@@ -85,13 +85,16 @@ namespace das {
                             auto yva = new Variable();
                             if (expr->iterType->ref) {
                                 yva->type = new TypeDecl(Type::tPointer);
+                                yva->type->at = block->at;
                                 yva->type->firstType = new TypeDecl(*expr->iterType);
+                                if ( !yva->type->firstType->at.fileInfo ) yva->type->firstType->at = block->at;
                                 yva->type->firstType->ref = false;
                                 yva->type->constant = false;
                                 yva->type->ref = true;
                                 makeRef = true;
                             } else {
                                 yva->type = new TypeDecl(*expr->iterType);
+                                if ( !yva->type->at.fileInfo ) yva->type->at = block->at;
                                 yva->type->constant = false;
                                 yva->type->ref = !expr->iterType->isRefType();
                             }
@@ -801,6 +804,7 @@ namespace das {
             if (!mkt->values[i]) {
                 auto mks = new ExprMakeStruct(at);
                 mks->makeType = new TypeDecl(*makeType->argTypes[i]);
+                if ( !mks->makeType->at.fileInfo ) mks->makeType->at = at;
                 mkt->values[i] = mks;
             }
         }
@@ -1292,6 +1296,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto mkt = new TypeDecl(Type::tTuple);
+            mkt->at = expr->at;
             for (size_t ai = 0; ai != argCount; ++ai) {
                 const auto &val = expr->values[ai];
                 const auto &argT = expr->recordType->argTypes[ai];
@@ -1302,6 +1307,7 @@ namespace das {
                           expr->at, CompilationError::invalid_tuple_argument_type);
                 }
                 auto valT = new TypeDecl(*argT);
+                valT->at = expr->at;
                 valT->ref = false;
                 valT->constant = false;
                 mkt->argTypes.push_back(valT);
@@ -1315,6 +1321,7 @@ namespace das {
             mkt->at = expr->at;
             for (auto &val : expr->values) {
                 auto valT = new TypeDecl(*val->type);
+                valT->at = expr->at;
                 if (valT->isVoid()) {
                     error("tuple element type can't be void", "", "",
                           val->at, CompilationError::invalid_tuple);
@@ -1424,6 +1431,7 @@ namespace das {
                             return Visitor::visitMakeArrayIndex(expr, index, init, last);
                         }
                         expr->makeType = mkt;
+                        if ( !expr->makeType->at.fileInfo ) expr->makeType->at = expr->at;
                         reportAstChanged();
                         return Visitor::visitMakeArrayIndex(expr, index, init, last);
                     }

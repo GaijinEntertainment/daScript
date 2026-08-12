@@ -28,6 +28,9 @@ def get_value_and_clone_type(var tab : table<auto(kT); TypeDeclPtr>; key : kT) :
 }
 
 struct ParserGenerator {
+    // the macro call the grammar was written at - every node the generator builds reports there
+    @safe_when_uninitialized at : LineInfo
+
     // Provides information to generate unique names
     rule_counter : table<string; int>
 
@@ -259,6 +262,7 @@ def generate_wrapper_leftrec(var gen : ParserGenerator) {
 
 def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     var s : StructurePtr <- new Structure(uninitialized)
+    s.at = gen.at
 
     // jsonParser, expressionParser, dasParser
     s.name := "{parser_name}Parser`id_{gen.id}"
@@ -293,7 +297,7 @@ def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     s |> add_structure_field_new("errors", qmacro_type(type<array<ParsingError>>))
 
     // Save constructed parser type for later
-    gen.parser_type = new TypeDecl(baseType = Type.tStructure, structType = s)
+    gen.parser_type = new TypeDecl(at = gen.at, baseType = Type.tStructure, structType = s)
 
     compiling_module() |> add_structure(s)
 }
@@ -311,6 +315,7 @@ def add_structure_field(var struct_ : StructurePtr; name : string; var t : TypeD
 
     struct_.fields[fi].name := name
     struct_.fields[fi]._type = t
+    struct_.fields[fi].at = struct_.at
 }
 
 

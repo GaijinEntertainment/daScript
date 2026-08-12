@@ -389,6 +389,16 @@ namespace das
 
     struct LineInfoArg : LineInfo {};
 
+    // A type or function registered from C++ has no source of its own. It reports at this
+    // shared location instead of an unset one, so `at` is never null and the origin stays
+    // visible: diagnostics over it read "<c++ binding>". The FileInfo carries a name and no
+    // source, and outlives every Program - it is never owned by a FileAccess.
+    // `name` is the binding it came from - the registered type or annotation name - so the
+    // location reads "<c++ binding: rtti_core::Expression>". Omit it for an anonymous binding.
+    DAS_API FileInfo * cppBindingFileInfo ( const char * name = nullptr );
+    DAS_API const LineInfo & cppBindingLineInfo ( const char * name = nullptr );
+    DAS_API bool isCppBindingAt ( const LineInfo & at );
+
     struct DAS_API TypeInfo {
         enum {
             flag_ref = 1<<0,

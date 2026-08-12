@@ -809,6 +809,37 @@ namespace das
 
     LineInfo LineInfo::g_LineInfoNULL;
 
+    // One FileInfo per binding name, keyed by the display name so a deserialized location maps
+    // back to the same singleton. Intentionally never freed - these outlive every Program, and
+    // no FileAccess owns them.
+    static LineInfo & cppBindingLineInfoNamed ( const string & display ) {
+        static das_map<string, LineInfo> * infos = new das_map<string, LineInfo>();
+        static mutex * infosMutex = new mutex();
+        lock_guard<mutex> guard(*infosMutex);
+        auto it = infos->find(display);
+        if ( it != infos->end() ) return it->second;
+        auto fi = new FileInfo();
+        fi->name = display;
+        return (*infos)[display] = LineInfo(fi, 0, 0, 0, 0);
+    }
+
+    static string cppBindingDisplayName ( const char * name ) {
+        return (name && *name) ? ("<c++ binding: " + string(name) + ">") : string("<c++ binding>");
+    }
+
+    const LineInfo & cppBindingLineInfo ( const char * name ) {
+        return cppBindingLineInfoNamed(cppBindingDisplayName(name));
+    }
+
+    FileInfo * cppBindingFileInfo ( const char * name ) {
+        return cppBindingLineInfo(name).fileInfo;
+    }
+
+    bool isCppBindingAt ( const LineInfo & at ) {
+        return at.fileInfo && at.fileInfo->name.compare(0, 12, "<c++ binding") == 0;
+    }
+
+
     string LineInfo::describe(bool fully) const {
         if ( fileInfo ) {
             TextWriter ss;

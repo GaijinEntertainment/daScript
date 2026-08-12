@@ -366,7 +366,7 @@ class ParseMacro : AstCallMacro {
 
         var gram : array<Definition>
 
-        var gen <- ParserGenerator(id = times_invoked++)
+        var gen <- ParserGenerator(id = times_invoked++, at = expr.at)
 
         gram |> reserve(length(rules_))
         for (mrule in rules_) {

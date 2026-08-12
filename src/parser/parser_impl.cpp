@@ -414,6 +414,7 @@ namespace das {
                             }
                             if ( pDecl->isStatic ) {
                                 auto pVar = new Variable();
+                                pVar->at = name_at.at;
                                 pVar->name = pStruct->name + "`" + name_at.name;
                                 pVar->type = td;
                                 pVar->init = init;
@@ -741,6 +742,7 @@ namespace das {
                 funcType->argTypes.reserve ( func->arguments.size() );
                 if ( yyextra->g_thisStructure->isClass ) {
                     auto selfType = new TypeDecl(yyextra->g_thisStructure);
+                    selfType->at = func->at;
                     selfType->constant = cnst;
                     funcType->argTypes.push_back(selfType);
                     funcType->argNames.push_back("self");
