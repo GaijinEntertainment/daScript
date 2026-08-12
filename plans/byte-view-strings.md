@@ -54,24 +54,64 @@ lifecycle/builder ops. daslib sugar (`split(d)`, `contains`, `count`, `last_inde
 `trim_prefix/suffix`, `is_null_or_whitespace`) is phase-2-if-a-site-demands, das-side atop
 the A set.
 
-## Phase 0 — pin & audit (no behavior change)
+## Phase 0 — pin & audit (no behavior change) — DONE 2026-08-12
 
-1. Pin tests for the current string-side behavior of every function getting a twin or a
-   semantic change: slice/chop negative-wrap + clamp, find/rfind returns incl. empty-needle
-   convention, all four starts_with overloads, strip null-on-all-space + FF/VT set, trim
-   4-char set + passthrough, replace passthrough, parse-at-offset ConversionResult/offset on
-   garbage/overflow/hex/trailing, `string(d)` with interior NUL. These are the refactor's
-   regression net; the pins that phase 1 consciously flips get flipped with a comment.
-2. Whitespace-set evidence: enumerate `is_space` / `is_white_space` definitions, every C++
-   caller, and every das-side caller of the exposed `is_white_space(int)` classifier
-   (daslib lexers/parsers included — toml, clargs, json, lint internals). Deliverable: the
-   convergence direction (default proposal: C `isspace` 6-set everywhere, classifier included)
-   plus the explicit list of user-visible changes. **Top risk of the arc lives here** — the
-   classifier is called from daslib parsers whose tests must stay green or change consciously.
-3. Identity-reliance audit: in-tree uses of `replace`/`rtrim`/`trim` results that depend on
-   pointer identity or delete the result (expect none).
-4. ABI note: result temp-ness changes on `replace`/`rtrim`/`trim` — check external-canary
-   exposure per `skills/abi_break_sweep.md` (expected: recompile-clean, no spelling change).
+1. Pin tests: `tests/strings/strings_core_pins.das` — 20 `[test]` functions, 172 pins, green
+   interp + `-jit`, AOT TU compiles; no registration needed (`tests/strings/` already globbed
+   in `tests/aot/CMakeLists.txt`). Flip candidates carry `// PHASE1-FLIP:` tail comments
+   (6 markers: trim FF/VT ×2, strip FF/VT ×2 for the reversed direction, one over the five
+   aliasing pins). All haystacks go through a non-foldable `heap_str()` helper — literal
+   inputs const-fold the builtin away and pin the folder against itself.
+2. Whitespace direction: **C `isspace` 6-set everywhere, classifier included**, with ONE
+   carve-out — `daslib/json.das`'s lexer (line 198) gets a private spec-exact
+   `is_json_white_space` (RFC 8259 ws is exactly the 4-set; the lexer is spec-correct today
+   and nothing pins it — add the FF/VT-rejection pin). Evidence: 4-set direction touches 428
+   `strip*` sites; 6-set touches 3 trim builtins (~70 no-arg call sites), 30 parse builtins
+   (provably monotonic — FF/VT can't start a number, so no currently-succeeding parse
+   changes), and the classifier (14 files, no correctness dependence outside json). It also
+   fixes the dasLLAMA `strip_think` divergence (its gate rides the 4-set, its tail and the
+   splitter the 6-set). Conscious updates owed in later phases:
+   `daslib/strings_boost.das:378` docstring (names the 4-set; flows into RST),
+   `tests/strings/test_cpp_functions.das:241` stale comment, FF/VT pins added to
+   `strings_traits.das` / `test_new_string_functions.das` / `test_think_split.das` parity
+   table, dasPEG `WS` widening documented. `linq_das.das` is safe (das source can't carry
+   FF/VT — lexer rejects them outside literals).
+3. Identity-reliance: **zero** (class-b and class-c empty). `delete_string` is the only
+   string-free path; all 17 sites free builder/fread results, never a trim/replace result.
+   `daslib/temp_strings.das` rejects non-builder args at compile time. `replace`'s flip is
+   near-unobservable in-tree — every real site passes a non-empty needle.
+4. ABI note: **GO — recompile-clean, no spelling change, no serializer bump**
+   (`tempStringResult` already serializes). daspkg-universe GitHub sweep: zero observers.
+   Two AOT caveats: every caller of replace/rtrim/trim re-hashes (wipe `_aot_generated`
+   before the phase-6 preflight — preflight does not wipe it), and `is_white_space` is
+   `__forceinline` in the public AOT header, so prebuilt AOT artifacts keep the inlined
+   4-set until recompiled — name the mandatory-recompile in the PR body.
+
+### Phase 0 corrections to this plan
+
+- **`ltrim` needs no phase-1 change** — it already always-allocates and is temp-marked.
+  The passthrough set is **5 cases across 3 functions**: `rtrim(s)` exact alias,
+  `rtrim(s,chars)` on nothing-trimmed AND on empty/null `chars` (line 763 — reachable from
+  das), `trim(s)` exact alias, `trim(s)` **interior alias** (`s + k` after leading-ws skip —
+  `delete_string(trim(s))` frees mid-buffer), `replace(s,"",x)` empty-pattern alias.
+  `replace` has NO no-match passthrough (line 606 allocates on miss).
+- **Atomicity constraint**: `MarkTempStrings`/`WrapLetTempStrings`
+  (`ast_allocate_stack.cpp:1160,1239`) use `!tempStringResult` as the guard refusing to
+  queue temps through a possible-passthrough callee — setting the flag before removing the
+  passthrough is a use-after-free. Passthrough removal + the `setTempStringResult` calls
+  land in ONE commit. Source-compat proven by a 14-shape A/B probe against already-marked
+  `strip`/`ltrim` — marking cannot newly reject anything.
+- **Parse-family warts found by the pins — phase-1 decisions (defaults below, Boris to
+  veto)**: (a) `ConversionResult` is never written on SUCCESS (stale value survives; every
+  caller must pre-init) — default: set `ok` on success in both string and view forms, flip
+  the pin; (b) failure-`offset` is asymmetric (integer parse leaves 0, real parse keeps the
+  whitespace count) — default: unify on the integer behavior (offset written on success
+  only), flip the real-side pin. Parity oracle requires string and view to agree either way.
+- Two tests flip consciously in phase 1: `tests/strings/temp_string_reclaim.das:167-209`
+  (premise "trim returns an interior pointer" dies — repoint at the das-side `wrap_pass`);
+  `tests-cpp/small/test_temp_wrap_fixture.das` re-hashes (stays green; it's the canary).
+- Phase-3 trap: the parity harness must build inputs at runtime (`heap_str` pattern) or it
+  compares the const-folder against itself.
 
 ## Phase 1 — C++ core unification + semantic fixes
 
