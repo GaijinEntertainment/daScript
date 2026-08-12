@@ -155,11 +155,13 @@ def load_sound_data() {
     var f = fopen(fname, "rb")
     if (f == null) {
         // Fallback: generate a 440Hz sine tone
+        delete sound_data
         sound_data <- [for (x in range(MA_SAMPLE_RATE * 2)); sin(2.0 * PI * 440.0 * float(x) / float(MA_SAMPLE_RATE))]
         sound_channels = 1
         sound_rate = MA_SAMPLE_RATE
         return
     }
+    delete sound_data
     fmap(f) $(data) {
         sound_data <- decode_audio(data, sound_channels, sound_rate)
     }
@@ -188,7 +190,7 @@ var window : GLFWwindow?
 var solid_program : uint
 var line_program : uint
 var sphere : OpenGLGeometryFragment
-var stats_box : LockBox?
+var stats_box : SeqBox?
 var asch : AudioSystemChannels
 var last_time = 0.0lf
 var n_was_pressed = false
@@ -263,11 +265,9 @@ def init {
     // Load sound
     load_sound_data()
 
-    // Stats LockBox for per-second utilization + HRTF/simulated split readout.
-    // Lifecycle wraps the audio system: the audio thread releases its share-ref during
-    // audio_system_finalize, THEN shutdown calls lock_box_remove to do the final delete.
-    // `release` alone never deletes.
-    stats_box = lock_box_create()
+    // Stats box for per-second utilization + HRTF/simulated split readout. Both this scope and
+    // the audio thread hold a reference; whichever drops the last one deletes it.
+    stats_box = seq_box_create()
 
     // Audio system — all audio API calls happen between here and audio_system_finalize in shutdown
     asch = audio_system_create()
@@ -344,11 +344,11 @@ def update { // nolint:STYLE038 — linear per-frame UI flow
     }
     b_was_pressed = b_pressed
 
-    // Per-second audio-system stats line. `get` is read-only — keeps the box alive across reads.
-    // `grab` would consume the notification and break the periodic publish/poll loop.
+    // Per-second audio-system stats line. Reading consumes nothing, so the same box serves
+    // every poll.
     since_stats_print += dt
     if (since_stats_print >= 1.0) {
-        stats_box |> get() $(s : AudioSystemStats#) {
+        stats_box |> read() $(s : AudioSystemStats) {
             print("audio: util={s.utilization_pct}%, hrtf={s.hrtf_count}/{s.total_3d} (budget={HRTF_BUDGETS[hrtf_budget_idx]})\n")
         }
         since_stats_print = 0.0
@@ -402,8 +402,7 @@ def update { // nolint:STYLE038 — linear per-frame UI flow
 def shutdown {
     audio_system_finalize(asch.command, asch.next_sid)
     if (stats_box != null) {
-        unsafe(lock_box_remove(stats_box))
-        stats_box = null
+        stats_box |> seq_box_release
     }
     if (window != null) {
         glfwDestroyWindow(window)

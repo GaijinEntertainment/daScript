@@ -613,11 +613,12 @@ def document_module_apply(_root : string) {
 def document_module_jobque(_root : string) {
     var mod = find_module("jobque")
     var groups <- array<DocGroup>(
-        group_by_regex("Channel, JobStatus, Lockbox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%),
+        group_by_regex("Channel, JobStatus, Lockbox, SeqBox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove|seq_box_create|seq_box_release)$%%),
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|get_total_hw_cores|is_job_que_shutting_down|is_job_que_available|count_jobque_leaks)$%%),
         group_by_regex("Event tracing", mod, %regex~(jobque_trace_start|jobque_trace_stop|jobque_trace_save|jobque_trace_tag|jobque_trace_category|jobque_trace_marker_name|jobque_trace_marker)$%%),
-        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|set_jobque_threads_cap|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one)$%%),
-        group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|create_job_que|destroy_job_que)$%%),
+        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|set_jobque_threads_cap|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one|_builtin_seq_box_publish|_builtin_seq_box_read)$%%),
+        group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|with_seq_box|create_job_que|destroy_job_que)$%%),
+        group_by_regex("SeqBox operations", mod, %regex~(clear)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     )
     document("Jobs and threads", mod, "jobque.rst", groups)
@@ -633,7 +634,8 @@ def document_module_jobque_boost(_root : string) {
         group_by_regex("Synchronization", mod, %regex~(with_wait_group|done)$%%),
         group_by_regex("Parallel execution", mod, %regex~(_parallel_for|parallel_for|team_parallel_for|team_parallel_for_indexed|team_parallel_stages|_parallel_for_each|parallel_for_each|_parallel_map|parallel_map)$%%),
         group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear|fill|grab)$%%),
-        group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status|capture_jobque_lock_box|release_capture_jobque_lock_box|capture_jobque_stream|release_capture_jobque_stream)$%%)
+        group_by_regex("SeqBox operations", mod, %regex~(publish|read)$%%),
+        group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status|capture_jobque_lock_box|release_capture_jobque_lock_box|capture_jobque_stream|release_capture_jobque_stream|capture_jobque_seq_box|release_capture_jobque_seq_box)$%%)
     )
     document("Boost package for jobs and threads", mod, "jobque_boost.rst", groups)
 }

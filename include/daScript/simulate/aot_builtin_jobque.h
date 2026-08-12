@@ -59,6 +59,76 @@ namespace das {
         Feature box;
     };
 
+    // Lock-free snapshot box: one writer publishes a POD value, any number of readers copy the
+    // latest one. Where LockBox holds a mutex for the whole duration of the block it invokes, this
+    // is a seqlock — the writer bumps a version, stores the payload and bumps again; a reader that
+    // catches a write in progress retries. Neither side can ever wait for the other, which is what
+    // makes it safe to publish from a realtime thread (an audio mix callback) that must never
+    // block on a game thread.
+    //
+    // The value is copied byte-wise, so it must be POD with no heap references, and both sides
+    // must agree on its type — the box validates only the size. Payload words are atomic so the
+    // deliberate read/write race the version resolves is not also a data race under TSAN.
+    class SeqBox : public JobStatus {
+    public:
+        enum { PAYLOAD_WORDS = 8, PAYLOAD_BYTES = PAYLOAD_WORDS * 8 };
+        SeqBox() { mTrackMagic = TRACK_SEQBOX; }
+        virtual ~SeqBox() {}
+        // The odd/even counter is a seqlock, which admits exactly one writer: two writers bumping it
+        // concurrently can leave it EVEN while the payload is half-written, and a reader accepts that
+        // as a stable snapshot. So a writer CLAIMS the box with a CAS from even to odd instead.
+        // publish never waits for the claim - it is the realtime side, and a dropped status snapshot
+        // is replaced by the next one a block later, which is cheaper than any wait.
+        bool publish ( const void * data, uint32_t size ) {
+            if ( !size || size > PAYLOAD_BYTES ) return false;
+            uint64_t words[PAYLOAD_WORDS] = {};
+            memcpy(words, data, size);
+            uint32_t s0 = mSeq.load(std::memory_order_acquire);
+            if ( (s0 & 1u) || !mSeq.compare_exchange_strong(s0, s0+1,
+                    std::memory_order_acq_rel, std::memory_order_relaxed) ) return false;  // odd: writing
+            for ( uint32_t w=0; w!=PAYLOAD_WORDS; ++w ) mPayload[w].store(words[w], std::memory_order_relaxed);
+            mSize.store(size, std::memory_order_relaxed);
+            mSeq.store(s0+2, std::memory_order_release);        // even: stable
+            return true;
+        }
+        bool read ( void * out, uint32_t size ) const {
+            if ( !size || size > PAYLOAD_BYTES ) return false;
+            // The write is a handful of stores, so needing more than a couple of retries is already
+            // pathological; give up rather than spin unboundedly on a caller's thread.
+            for ( int attempt=0; attempt!=16; ++attempt ) {
+                uint32_t s0 = mSeq.load(std::memory_order_acquire);
+                if ( s0 & 1u ) continue;
+                if ( mSize.load(std::memory_order_relaxed)!=size ) return false;    // empty, or another type
+                uint64_t words[PAYLOAD_WORDS];
+                for ( uint32_t w=0; w!=PAYLOAD_WORDS; ++w ) words[w] = mPayload[w].load(std::memory_order_relaxed);
+                std::atomic_thread_fence(std::memory_order_acquire);
+                if ( mSeq.load(std::memory_order_relaxed)!=s0 ) continue;
+                memcpy(out, words, size);
+                return true;
+            }
+            return false;
+        }
+        // clear is the control side, so it waits for the claim rather than dropping the request. The
+        // wait is bounded in practice: a claim is held for a handful of stores and never across a call.
+        void clear () {
+            for ( ;; ) {
+                uint32_t s0 = mSeq.load(std::memory_order_acquire);
+                if ( s0 & 1u ) continue;
+                if ( mSeq.compare_exchange_weak(s0, s0+1,
+                        std::memory_order_acq_rel, std::memory_order_relaxed) ) {
+                    mSize.store(0, std::memory_order_relaxed);
+                    mSeq.store(s0+2, std::memory_order_release);
+                    return;
+                }
+            }
+        }
+        bool hasValue () const { return mSize.load(std::memory_order_acquire)!=0; }
+    protected:
+        mutable atomic<uint32_t> mSeq { 0 };
+        atomic<uint32_t> mSize { 0 };
+        atomic<uint64_t> mPayload[PAYLOAD_WORDS] = {};
+    };
+
     template <typename TT>
     class AtomicTT {
     public:
@@ -285,6 +355,12 @@ namespace das {
     DAS_API vec4f lockBoxFill ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API void lockBoxGrab ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     DAS_API void lockBoxUpdate ( LockBox * ch, TypeInfo * ti, const TBlock<void *,void*> & blk, Context * context, LineInfoArg * at );
+    DAS_API SeqBox * seqBoxCreate( Context *, LineInfoArg * );
+    DAS_API void seqBoxRelease( SeqBox * & box, Context * context, LineInfoArg * at );
+    DAS_API void withSeqBox ( const TBlock<void,SeqBox *> & blk, Context * context, LineInfoArg * at );
+    DAS_API bool seqBoxPublish ( SeqBox * box, void * data, int32_t size, Context * context, LineInfoArg * at );
+    DAS_API bool seqBoxRead ( SeqBox * box, void * out, int32_t size, Context * context, LineInfoArg * at );
+    DAS_API void seqBoxClear ( SeqBox * box, Context * context, LineInfoArg * at );
 
     template <typename TT>
     AtomicTT<TT> * atomicCreate( Context *, LineInfoArg * ) {

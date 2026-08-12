@@ -61,6 +61,7 @@ namespace das {
         static constexpr uint32_t TRACK_CHANNEL    = 0xDA5CA002;
         static constexpr uint32_t TRACK_LOCKBOX    = 0xDA5CA003;
         static constexpr uint32_t TRACK_STREAM     = 0xDA5CA004;
+        static constexpr uint32_t TRACK_SEQBOX     = 0xDA5CA005;
         // Join poll level (0 = park on the condvar immediately, the default). Wait() polls
         // mRemaining for level*1024*128 relax-rounds before blocking — the ggml hybrid-poll shape
         // and denomination (their --poll 0..100; 50 = their default ≈ 6.5M rounds). With the
