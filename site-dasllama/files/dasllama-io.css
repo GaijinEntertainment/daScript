@@ -17,6 +17,10 @@
 .dio-nav__back{display:inline-flex;align-items:center;gap:7px;color:var(--fg-dim);border-bottom:1px solid var(--rule);padding-bottom:1px}
 .dio-nav__back:hover{color:var(--amber);border-bottom-color:var(--amber-dim)}
 .dio-nav__back b{color:var(--fg);font-weight:400}
+/* GitHub star chip — count filled by files/github-star.js (shared from site/files) */
+.dio-nav__gh{display:inline-flex;align-items:center;gap:7px;padding:3px 9px;border:1px solid var(--rule);border-radius:6px;color:var(--fg-dim);text-decoration:none}
+.dio-nav__gh:hover{color:var(--amber);border-color:var(--amber-dim)}
+.dio-nav__gh [data-github-star]:empty{display:none}
 .dio-nav__burger{display:none;cursor:pointer;background:transparent;border:1px solid var(--rule);color:var(--fg-dim);font-family:var(--font-mono);font-size:17px;line-height:1;padding:5px 11px;border-radius:4px}
 
 /* ── page head strip (ladder / sidecars) ─────────────────────── */

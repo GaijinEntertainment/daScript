@@ -123,6 +123,20 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-nav__version { color: var(--fg-faint); }
 
+/* GitHub star chip — count filled by files/github-star.js */
+.forge-nav__gh {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 9px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    color: var(--fg-dim);
+    text-decoration: none;
+}
+.forge-nav__gh:hover { color: var(--amber); border-color: var(--amber-dim); }
+.forge-nav__gh-stars:empty { display: none; }
+
 /* "N NEW" blog chip injected by files/blog-counter.js */
 .forge-nav__links a.forge-blog-link {
     display: inline-flex;
