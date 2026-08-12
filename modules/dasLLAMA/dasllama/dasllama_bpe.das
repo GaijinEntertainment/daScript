@@ -226,6 +226,83 @@ def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = 
     return <- offs
 }
 
+// gpt-2 pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT2). Differs from llama3: lowercase-only
+// contractions, the optional run prefix is exactly one space (not any non-letter), digit runs
+// are UNBOUNDED and space-attached, and no newline special-casing on punct/whitespace arms.
+def private pretok_split_gpt2(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the gpt2 pre-tokenizer regex; splitting hides the regex shape
+    var offs : array<int>
+    let n = length(cpts)
+    var prev_end = 0
+    var pos = 0
+    while (pos < n) {
+        let cpt = cpts[pos]
+
+        // 's|'t|'re|'ve|'m|'ll|'d (lowercase only — gpt2's alternation carries no (?i:))
+        if (cpt == 39 && pos + 1 < n) {
+            let c1 = cpts[pos + 1]
+            if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
+                pos += 2
+                offs |> push(pos - prev_end); prev_end = pos
+                continue
+            }
+            if (pos + 2 < n) {
+                let c2 = cpts[pos + 2]
+                if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
+                    pos += 3
+                    offs |> push(pos - prev_end); prev_end = pos
+                    continue
+                }
+            }
+        }
+
+        // <space>?\p{L}+
+        let probe = (cpt == 32) ? pos + 1 : pos
+        if (uL(cpts, probe)) {
+            pos = probe + 1
+            while (uL(cpts, pos)) {
+                pos++
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // <space>?\p{N}+ (unbounded, space attached — where gpt2 diverges observably from llama3)
+        if (uN(cpts, probe)) {
+            pos = probe + 1
+            while (uN(cpts, pos)) {
+                pos++
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // <space>?[^\s\p{L}\p{N}]+
+        if (probe < n && !(uW(cpts, probe) || uL(cpts, probe) || uN(cpts, probe))) {
+            pos = probe + 1
+            while (pos < n && !(uW(cpts, pos) || uL(cpts, pos) || uN(cpts, pos))) {
+                pos++
+            }
+            offs |> push(pos - prev_end); prev_end = pos
+            continue
+        }
+
+        // \s+(?!\S) | \s+
+        var num_ws = 0
+        while (uW(cpts, pos + num_ws)) {
+            num_ws++
+        }
+        if (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
+            pos += num_ws - 1
+        } elif (num_ws > 0) {
+            pos += num_ws
+        } else {
+            pos++  // no match — consume one codepoint
+        }
+        offs |> push(pos - prev_end); prev_end = pos
+    }
+    return <- offs
+}
+
 // llama.cpp GPT4O letter-case classes: "uppercase" = \p{L} minus ASCII a-z, "lowercase" = \p{L}
 // minus ASCII A-Z (its regex spells (?=[\p{L}])[^a-z] / (?=[\p{L}])[^A-Z]), so non-cased scripts
 // (CJK, ...) land in BOTH classes. We match llama.cpp — the oracle — not tiktoken's true \p{Lu}/\p{Ll}.
@@ -550,6 +627,8 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     var offs : array<int>
     if (tk.pre == "gpt-4o") {
         offs <- pretok_split_gpt4o(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
+    } elif (tk.pre == "gpt-2") {
+        offs <- pretok_split_gpt2(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "tekken") {
         offs <- pretok_split_tekken(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "qwen35") {
