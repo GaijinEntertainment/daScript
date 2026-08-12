@@ -17,8 +17,9 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 - **One rule is one short paragraph.** An entry that needs more than that is describing how
   to write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything
-  that needs a stable reference lives in `ARCHITECTURE.md`, which is numbered for that purpose.
+- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
+  citation. Anything that needs a stable reference lives in `ARCHITECTURE.md`, which is
+  numbered for that purpose.
 - **Cite files by name; cite `ARCHITECTURE.md` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.** A rule governing specific
   functions or files must name them or it cannot be checked — that name is the criterion. An
@@ -49,11 +50,9 @@ doc names it as a separate step, and rides the aggregate otherwise.
 ## Codegen identity
 
 **A change under `modules/dasLLVM/daslib/` to IR generation, target-machine setup, `[llvm_code]`
-generators, or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`) — the
-cache keys (the DLL key and the split obj-cache partition keys) fold per-function simulated-code
-hashes (SimNode ops and stack offsets), which are blind to what these files emit, so changed
-emission without a bump silently serves stale code from cache; a C++-side change that reshapes
-simulated code re-keys itself and needs no bump (`ARCHITECTURE.md` §2, §2.1).
+generators, or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`). The JIT
+cache key folds each function's compiled-code hash, so it self-invalidates when the program
+changes; it cannot see changes to the emitter (`ARCHITECTURE.md` §2, §2.1).
 
 **A new environment or config cache-key input folds inside `jit_env_salt`** (`llvm_jit_run.das`),
 never directly into `jit_dll_basename` or the partition-key chain in `run_split_codegen` — the
