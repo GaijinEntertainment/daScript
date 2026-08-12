@@ -111,7 +111,7 @@ def test_split_symmetric(t : T?) {
         var ct <- arch_chat("qwen3")
         for (reply in ["<think>\nr\n</think>\n\nThe answer is 42.", "  \n<think>r</think>answer",
                        "<think>never closed", "The answer is 42.", "", "use the <think> tag like this",
-                       "<think></think>The answer.\n"]) {
+                       "<think></think>The answer.\n", "\f\v<think>r</think>answer"]) {
             t |> equal(split_reasoning_(ct, reply).content, strip_think(reply), "parity on '{reply}'")
         }
         delete ct

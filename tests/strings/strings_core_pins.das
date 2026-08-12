@@ -2,8 +2,7 @@ options gen2
 require dastest/testing_boost
 require strings
 
-// Phase-0 regression pins for the byte-view string surface (plans/byte-view-strings.md).
-// PHASE1-FLIP marks a pin phase 1 changes on purpose; every other pin is permanent.
+// Regression pins for the byte-view string surface (plans/byte-view-strings.md).
 
 // Every haystack goes through heap_str: with all-constant arguments the optimizer const-folds
 // the whole call away, so the pin would freeze the folder instead of the runtime builtin.
@@ -197,8 +196,8 @@ def test_pin_strip_whitespace_set(t : T?) {
     pin_strip_removes(t, "\t", "tab")
     pin_strip_removes(t, "\n", "newline")
     pin_strip_removes(t, "\r", "carriage return")
-    pin_strip_removes(t, "\f", "form feed")     // PHASE1-FLIP: only if the sets converge on the 4-char trim set
-    pin_strip_removes(t, "\v", "vertical tab")  // PHASE1-FLIP: only if the sets converge on the 4-char trim set
+    pin_strip_removes(t, "\f", "form feed")
+    pin_strip_removes(t, "\v", "vertical tab")
 }
 
 [test]
@@ -224,21 +223,15 @@ def private pin_trim_removes(t : T?; ch, what : string) {
     t |> equal(rtrim(s), "{ch}ab", "rtrim removes trailing {what}")
 }
 
-def private pin_trim_keeps(t : T?; ch, what : string) {
-    let s = heap_str("{ch}ab{ch}")
-    t |> equal(trim(s), s, "trim keeps {what}")
-    t |> equal(ltrim(s), s, "ltrim keeps {what}")
-    t |> equal(rtrim(s), s, "rtrim keeps {what}")
-}
-
 [test]
 def test_pin_trim_whitespace_set(t : T?) {
+    // the trim family strips the same C isspace 6-set as the strip family
     pin_trim_removes(t, " ", "space")
     pin_trim_removes(t, "\t", "tab")
     pin_trim_removes(t, "\n", "newline")
     pin_trim_removes(t, "\r", "carriage return")
-    pin_trim_keeps(t, "\f", "form feed")     // PHASE1-FLIP: trim gains \f when the whitespace sets converge
-    pin_trim_keeps(t, "\v", "vertical tab")  // PHASE1-FLIP: trim gains \v when the whitespace sets converge
+    pin_trim_removes(t, "\f", "form feed")
+    pin_trim_removes(t, "\v", "vertical tab")
 }
 
 [test]
@@ -246,9 +239,13 @@ def test_pin_trim_degenerate(t : T?) {
     let ws = heap_str("   ")
     let none = heap_str("")
     let plain = heap_str("abc")
+    let ffvt = heap_str("\f\v")
     t |> success(is_null_str(trim(ws)), "trim of all-whitespace is null")
     t |> success(is_null_str(ltrim(ws)), "ltrim of all-whitespace is null")
     t |> success(is_null_str(rtrim(ws)), "rtrim of all-whitespace is null")
+    t |> success(is_null_str(trim(ffvt)), "trim of all-FF/VT is null")
+    t |> success(is_null_str(ltrim(ffvt)), "ltrim of all-FF/VT is null")
+    t |> success(is_null_str(rtrim(ffvt)), "rtrim of all-FF/VT is null")
     t |> success(is_null_str(trim(none)), "trim of empty is null")
     t |> success(is_null_str(ltrim(none)), "ltrim of empty is null")
     t |> success(is_null_str(rtrim(none)), "rtrim of empty is null")
@@ -266,13 +263,12 @@ def test_pin_result_passthrough(t : T?) {
     let clean = heap_str("abc")
     let lead = heap_str("  abc")
     let trail = heap_str("abc  ")
-    // PHASE1-FLIP: rtrim/trim lose the return-the-input passthrough and always allocate
-    t |> equal(ptr_of(rtrim(clean)), ptr_of(clean), "rtrim returns the INPUT pointer when nothing is trimmed")
-    t |> equal(ptr_of(trim(clean)), ptr_of(clean), "trim returns the INPUT pointer when nothing is trimmed")
-    t |> equal(ptr_of(rtrim(clean, "x")), ptr_of(clean), "rtrim chars returns the INPUT pointer when nothing is trimmed")
-    t |> equal(ptr_delta(lead, trim(lead)), 2l, "trim returns an INTERIOR pointer when only leading space is trimmed")
-    t |> equal(ptr_of(replace(clean, "", "y")), ptr_of(clean), "replace with an empty pattern returns the INPUT pointer")
-    // permanent: these always allocate
+    // there is no return-the-input passthrough left: every one of these allocates
+    t |> success(ptr_of(rtrim(clean)) != ptr_of(clean), "rtrim allocates when nothing is trimmed")
+    t |> success(ptr_of(trim(clean)) != ptr_of(clean), "trim allocates when nothing is trimmed")
+    t |> success(ptr_of(rtrim(clean, "x")) != ptr_of(clean), "rtrim chars allocates when nothing is trimmed")
+    t |> success(ptr_delta(lead, trim(lead)) != 2l, "trim allocates instead of returning an interior pointer")
+    t |> success(ptr_of(replace(clean, "", "y")) != ptr_of(clean), "replace with an empty pattern allocates")
     t |> success(ptr_of(rtrim(trail)) != ptr_of(trail), "rtrim allocates when it trims")
     t |> success(ptr_of(ltrim(clean)) != ptr_of(clean), "ltrim always allocates")
     t |> success(ptr_of(ltrim(lead)) != ptr_of(lead), "ltrim allocates when it trims")
@@ -357,10 +353,10 @@ def test_pin_parse_int_offset_and_hex(t : T?) {
     t |> equal(hexOff.v, 0, "int parse without the hex flag stops at the x")
     t |> equal(hexOff.cr, ConversionResult.ok, "int parse without the hex flag still succeeds on the leading 0")
     t |> equal(hexOff.off, 1, "int parse without the hex flag consumes just the 0")
-    // the parse NEVER writes ConversionResult.ok - a stale caller value survives a success
+    // a successful parse writes ConversionResult.ok over whatever the caller left there
     let stale = parse_int("5", false, ConversionResult.out_of_range)
     t |> equal(stale.v, 5, "int parse succeeds with a stale preset result")
-    t |> equal(stale.cr, ConversionResult.out_of_range, "a successful parse does NOT reset ConversionResult to ok")
+    t |> equal(stale.cr, ConversionResult.ok, "a successful parse resets ConversionResult to ok")
 }
 
 [test]
@@ -429,10 +425,10 @@ def test_pin_parse_real(t : T?) {
     let led = parse_float("  2.25")
     t |> equal(led.v, 2.25lf, "float parse skips leading whitespace")
     t |> equal(led.off, 6, "float parse offset counts the skipped whitespace")
-    // unlike the integer parse, the real parse LEAVES the whitespace count in offset on failure
+    // like the integer parse, the real parse leaves offset 0 on failure - whitespace or not
     let ledBad = parse_float("  xyz")
     t |> equal(ledBad.cr, ConversionResult.invalid_argument, "float parse of leading-space garbage")
-    t |> equal(ledBad.off, 2, "float parse failure offset keeps the whitespace count")
+    t |> equal(ledBad.off, 0, "float parse failure offset stays 0, whitespace or not")
     let over = parse_float("1e400")
     t |> equal(over.v, 0.0lf, "float parse overflow value is 0")
     t |> equal(over.cr, ConversionResult.out_of_range, "float parse overflow result")

@@ -64,53 +64,61 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
-    bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
+    static inline int clamp_int(int v, int minv, int maxv) {
+        return (v < minv) ? minv : (v > maxv) ? maxv : v;
+    }
+
+    // Every string entry below is stringLengthSafe + a length-bounded core, so the same core
+    // serves a byte view that carries its own length and never scans for a terminator.
+    // A bounded core treats an interior NUL as data.
+
+    static bool ends_with_core ( const char * str, uint32_t strLen, const char * cmp, uint32_t cmpLen ) {
         return cmpLen == 0 || ((cmpLen <= strLen) && memcmp(&str[strLen - cmpLen], cmp, cmpLen) == 0);
     }
 
-    bool builtin_string_startswith ( const char * str, const char * cmp, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
+    static bool starts_with_core ( const char * str, uint32_t strLen, const char * cmp, uint32_t cmpLen ) {
         return cmpLen == 0 || ((cmpLen <= strLen) && memcmp(str, cmp, cmpLen) == 0);
+    }
+
+    static bool starts_with_at_core ( const char * str, uint32_t strLen, int32_t offset, const char * cmp, uint32_t cmpLen ) {
+        if ( offset<0 || uint32_t(offset)>=strLen ) return false;
+        return starts_with_core(str + offset, strLen - uint32_t(offset), cmp, cmpLen);
+    }
+
+    bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
+        return ends_with_core(str, stringLengthSafe(*context, str), cmp, stringLengthSafe(*context, cmp));
+    }
+
+    bool builtin_string_startswith ( const char * str, const char * cmp, Context * context ) {
+        return starts_with_core(str, stringLengthSafe(*context, str), cmp, stringLengthSafe(*context, cmp));
     }
 
     // das_string overload: prefix-test the das_string in place (no allocation),
     // sibling to builtin_string_ends_with. Lets AST/lint passes that hold names as
     // das_string do `name |> starts_with("...")` without materializing a string.
     bool builtin_string_starts_with ( const string & str, const char * cmp, Context * context ) {
-        const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
-        return cmpLen == 0 || ((cmpLen <= str.length()) && memcmp(str.data(), cmp, cmpLen) == 0);
+        return starts_with_core(str.data(), uint32_t(str.length()), cmp, stringLengthSafe(*context, cmp));
     }
 
     bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
-        return cmpLen == 0 || ((cmpLen <= strLen) && memcmp(str, cmp, cmpLen) == 0);
+        return starts_with_core(str, stringLengthSafe(*context, str), cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
     }
 
     bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
-        const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
-        return cmpLen == 0 || ((cmpLen <= strLen - uint32_t(offset)) && memcmp(str + offset, cmp, cmpLen) == 0);
+        return starts_with_at_core(str, stringLengthSafe(*context, str), offset, cmp, stringLengthSafe(*context, cmp));
     }
 
     bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
-        cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
-        return cmpLen == 0 || ((cmpLen <= strLen - uint32_t(offset)) && memcmp(str + offset, cmp, cmpLen) == 0);
+        return starts_with_at_core(str, stringLengthSafe(*context, str), offset, cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
     }
 
     __forceinline bool is_space ( char c ) {
         return c==' ' || c=='\t' || c=='\r' || c=='\n' || c=='\f' || c=='\v';
     }
 
-    static inline const char* strip_l(const char *str) {
-        const char *t = str;
-        while (((*t) != '\0') && is_space(*t))
+    static inline const char* strip_l(const char *str, uint32_t len) {
+        const char *t = str, *e = str + len;
+        while (t != e && is_space(*t))
             t++;
         return t;
     }
@@ -124,96 +132,116 @@ namespace das
         return t + 1;
     }
 
-    char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+    static char * strip_core ( const char * str, uint32_t strLen, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
-        const char *start = strip_l(str);
+        const char *start = strip_l(str, strLen);
         const char *end = strip_r(str, strLen);
         return end > start ? context->allocateString(start, uint32_t(end-start), at) : nullptr;
     }
 
-    char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+    static char * strip_left_core ( const char * str, uint32_t strLen, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
-        const char *start = strip_l(str);
+        const char *start = strip_l(str, strLen);
         return uint32_t(start-str) < strLen ? context->allocateString(start, strLen-uint32_t(start-str), at) : nullptr;
     }
 
-    char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+    static char * strip_right_core ( const char * str, uint32_t strLen, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
         const char *end = strip_r(str, strLen);
         return end != str ? context->allocateString(str, uint32_t(end-str), at) : nullptr;
     }
 
-    static inline int clamp_int(int v, int minv, int maxv) {
-        return (v < minv) ? minv : (v > maxv) ? maxv : v;
+    char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at ) {
+        return strip_core(str, stringLengthSafe(*context, str), context, at);
+    }
+
+    char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at ) {
+        return strip_left_core(str, stringLengthSafe(*context, str), context, at);
+    }
+
+    char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at ) {
+        return strip_right_core(str, stringLengthSafe(*context, str), context, at);
+    }
+
+    // memchr narrows to the candidate first byte, then one memcmp confirms the rest
+    static int find_sub_core ( const char * str, uint32_t strLen, const char * sub, uint32_t subLen, uint32_t from ) {
+        if ( !subLen || subLen>strLen ) return -1;
+        const uint32_t last = strLen - subLen;
+        if ( from > last ) return -1;
+        const char * p = str + from;
+        const char * lastP = str + last;
+        while ( p <= lastP ) {
+            auto f = memchr(p, int(uint8_t(sub[0])), size_t(lastP - p) + 1);
+            if ( !f ) return -1;
+            p = (const char *) f;
+            if ( subLen==1 || memcmp(p+1, sub+1, subLen-1)==0 ) return int(p - str);
+            p ++;
+        }
+        return -1;
+    }
+
+    // Ch is matched against a char, so a value outside the char range matches nothing;
+    // memchr alone would match it modulo 256, hence the explicit reject
+    static int find_char_core ( const char * str, uint32_t strLen, int Ch, uint32_t from ) {
+        if ( Ch != int(char(Ch)) ) return -1;
+        if ( from >= strLen ) return -1;
+        auto f = memchr(str + from, int(uint8_t(char(Ch))), strLen - from);
+        return f ? int((const char *)f - str) : -1;
+    }
+
+    static int rfind_sub_core ( const char * str, uint32_t strLen, const char * sub, uint32_t subLen, int from ) {
+        if ( !subLen || subLen>strLen ) return -1;
+        const int last = int(strLen) - int(subLen);
+        if ( from > last ) from = last;
+        for ( int i = from; i >= 0; --i ) {
+            if ( memcmp(str + i, sub, subLen) == 0 )
+                return i;
+        }
+        return -1;
     }
 
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context ) {
-        if (!str || !substr || !*str || !*substr)
-            return -1;
         const uint32_t strLen = stringLengthSafe ( *context, str );
-        if (!strLen)
-            return -1;
-        const char *ret = strstr(&str[clamp_int(start, 0, strLen)], substr);
-        return ret ? int(ret-str) : -1;
+        return find_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ),
+            uint32_t(clamp_int(start, 0, int(strLen))));
     }
 
     int builtin_string_find2 (const char *str, const char *substr) {
-        if (!str || !substr || !*str || !*substr)
+        if (!str || !substr)
             return -1;
-        const char *ret = strstr(str, substr);
-        return ret ? int(ret-str) : -1;
+        return find_sub_core(str, uint32_t(strlen(str)), substr, uint32_t(strlen(substr)), 0);
     }
 
     int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context ) {
-        if (!str || !substr || !*str || !*substr)
-            return -1;
         const uint32_t strLen = stringLengthSafe ( *context, str );
-        if (!strLen)
-            return -1;
-        const uint32_t subLen = uint32_t(strlen(substr));
-        if (!subLen)
-            return -1;
-        int from = clamp_int(start, 0, strLen);
-        if ( from + int(subLen) > int(strLen) )
-            from = int(strLen) - int(subLen);
-        for ( int i = from; i >= 0; --i ) {
-            if ( memcmp(str + i, substr, subLen) == 0 )
-                return i;
-        }
-        return -1;
+        return rfind_sub_core(str, strLen, substr, stringLengthSafe ( *context, substr ),
+            clamp_int(start, 0, int(strLen)));
     }
 
     int builtin_string_rfind2 (const char *str, const char *substr) {
-        if (!str || !substr || !*str || !*substr)
+        if (!str || !substr)
             return -1;
         const uint32_t strLen = uint32_t(strlen(str));
-        const uint32_t subLen = uint32_t(strlen(substr));
-        if (!strLen || !subLen || subLen > strLen)
-            return -1;
-        for ( int i = int(strLen) - int(subLen); i >= 0; --i ) {
-            if ( memcmp(str + i, substr, subLen) == 0 )
-                return i;
-        }
-        return -1;
+        return rfind_sub_core(str, strLen, substr, uint32_t(strlen(substr)), int(strLen));
     }
 
-    char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
-        if ( !str || length<=0 ) return nullptr;
-        const int32_t strLen = int32_t(stringLengthSafe(*context, str));
+    static char * chop_core ( const char * str, uint32_t strLength, int start, int length, Context * context, LineInfoArg * at ) {
+        if ( length<=0 ) return nullptr;
+        const int32_t strLen = int32_t(strLength);
         if ( start < 0 ) start = 0;
         if ( start >= strLen ) return nullptr;
         if ( length > strLen - start ) length = strLen - start;
         return context->allocateString(str + start, length, at);
     }
 
-    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+    char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
+        return chop_core(str, stringLengthSafe(*context, str), start, length, context, at);
+    }
+
+    static char * slice_core ( const char * str, uint32_t strLen, int start, int end, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
@@ -221,12 +249,19 @@ namespace das
         return end > start ? context->allocateString(str + start, uint32_t(end-start), at) : nullptr;
     }
 
-    char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
+    static char * slice_core ( const char * str, uint32_t strLen, int start, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
         return strLen > uint32_t(start) ? context->allocateString(str + start, uint32_t(strLen-start), at) : nullptr;
+    }
+
+    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context, LineInfoArg * at ) {
+        return slice_core(str, stringLengthSafe ( *context, str ), start, end, context, at);
+    }
+
+    char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at ) {
+        return slice_core(str, stringLengthSafe ( *context, str ), start, context, at);
     }
 
     char* builtin_string_reverse ( const char *str, Context * context, LineInfoArg * at ) {
@@ -595,28 +630,31 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
-    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at ) {
-        auto toSearchSize = stringLengthSafe(*context, toSearch);
-        if ( !toSearchSize ) return (char *) str;
-        auto replaceStrSize = stringLengthSafe(*context,replaceStr);
-        const char * repl = replaceStr ? replaceStr : "";
-        const char * toss = toSearch ? toSearch : "";
-        string source = str ? str : "";
-        size_t pos = source.find(toss);
-        if ( pos == string::npos ) return context->allocateString(source, at);
+    static char * replace_core ( const char * str, uint32_t strLen, const char * toSearch, uint32_t toSearchLen,
+            const char * replaceStr, uint32_t replaceStrLen, Context * context, LineInfoArg * at ) {
+        if ( !strLen ) return nullptr;
+        if ( !toSearchLen ) return context->allocateString(str, strLen, at);
+        int pos = find_sub_core(str, strLen, toSearch, toSearchLen, 0);
+        if ( pos < 0 ) return context->allocateString(str, strLen, at);
         // append-only rebuild: an in-place replace() shifts the whole tail per occurrence,
         // which is quadratic in occurrence count whenever the replacement size differs
         string data;
-        data.reserve(source.size());
-        size_t begin = 0;
-        while ( pos != string::npos ) {
-            data.append(source.c_str() + begin, pos - begin);
-            data.append(repl, replaceStrSize);
-            begin = pos + toSearchSize;
-            pos = source.find(toss, begin);
+        data.reserve(strLen);
+        uint32_t begin = 0;
+        while ( pos >= 0 ) {
+            data.append(str + begin, uint32_t(pos) - begin);
+            if ( replaceStrLen ) data.append(replaceStr, replaceStrLen);
+            begin = uint32_t(pos) + toSearchLen;
+            pos = find_sub_core(str, strLen, toSearch, toSearchLen, begin);
         }
-        data.append(source.c_str() + begin, source.size() - begin);
+        data.append(str + begin, strLen - begin);
         return context->allocateString(data, at);
+    }
+
+    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at ) {
+        return replace_core(str, stringLengthSafe(*context, str),
+            toSearch, stringLengthSafe(*context, toSearch),
+            replaceStr, stringLengthSafe(*context, replaceStr), context, at);
     }
 
     class StrdupDataWalker : public DataWalker {
@@ -652,24 +690,13 @@ namespace das
     }
 
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
-        uint32_t strlen = stringLengthSafe ( *context, str );
-        for ( uint32_t o=0; o!=strlen; ++o ) {
-            if ( str[o]==Ch ) {
-                return o;
-            }
-        }
-        return -1;
+        return find_char_core(str, stringLengthSafe ( *context, str ), Ch, 0);
     }
 
     int builtin_find_first_char_of2 ( const char * str, int Ch, int start, Context * context ) {
-        uint32_t strlen = stringLengthSafe ( *context, str );
-        start = clamp_int((start < 0) ? (strlen + start) : start, 0, strlen);
-        for ( uint32_t o=start; o!=strlen; ++o ) {
-            if ( str[o]==Ch ) {
-                return o;
-            }
-        }
-        return -1;
+        uint32_t strLen = stringLengthSafe ( *context, str );
+        start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
+        return find_char_core(str, strLen, Ch, uint32_t(start));
     }
 
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
@@ -716,41 +743,6 @@ namespace das
         return buf;
     }
 
-    char * builtin_string_trim ( char* s, Context * context, LineInfoArg * at ) {
-        if ( !s ) return nullptr;
-        while ( is_white_space(*s) ) s++;
-        if ( *s ) return builtin_string_rtrim(s, context, at);
-        return nullptr;
-    }
-
-    char * builtin_string_ltrim ( char* s, Context * context, LineInfoArg * at ) {
-        if ( !s ) return nullptr;
-        while ( is_white_space(*s) ) s++;
-        if ( *s ) {
-            return context->allocateString(s, uint32_t(strlen(s)), at);
-        } else  {
-            return nullptr;
-        }
-    }
-
-    char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at ) {
-        if ( !s ) return nullptr;
-        char * str_end_o = s + strlen(s);
-        char * str_end = str_end_o;
-        while ( str_end > s && is_white_space(str_end[-1]) ) str_end--;
-        if ( str_end==s ) {
-            return nullptr;
-        } else if ( str_end!=str_end_o ) {
-            auto len = str_end - s;
-            char * res = context->allocateString(nullptr, int32_t(len), at);
-            memcpy ( res, s, len );
-            res[len] = 0;
-            return res;
-        } else {
-            return s;
-        }
-    }
-
     bool is_char_in_string ( char c, const char * str ) {
         while ( *str ) {
             if ( *str++==c ) return true;
@@ -758,23 +750,49 @@ namespace das
         return false;
     }
 
+    static char * trim_core ( const char * str, uint32_t len, Context * context, LineInfoArg * at ) {
+        if ( !len ) return nullptr;
+        const char * b = str, * e = str + len;
+        while ( b!=e && is_white_space(*b) ) b++;
+        while ( e>b && is_white_space(e[-1]) ) e--;
+        return e>b ? context->allocateString(b, uint32_t(e-b), at) : nullptr;
+    }
+
+    static char * ltrim_core ( const char * str, uint32_t len, Context * context, LineInfoArg * at ) {
+        if ( !len ) return nullptr;
+        const char * b = str, * e = str + len;
+        while ( b!=e && is_white_space(*b) ) b++;
+        return e>b ? context->allocateString(b, uint32_t(e-b), at) : nullptr;
+    }
+
+    static char * rtrim_core ( const char * str, uint32_t len, Context * context, LineInfoArg * at ) {
+        if ( !len ) return nullptr;
+        const char * e = str + len;
+        while ( e>str && is_white_space(e[-1]) ) e--;
+        return e>str ? context->allocateString(str, uint32_t(e-str), at) : nullptr;
+    }
+
+    static char * rtrim_chars_core ( const char * str, uint32_t len, const char * chars, Context * context, LineInfoArg * at ) {
+        if ( !len ) return nullptr;
+        const char * e = str + len;
+        while ( e>str && is_char_in_string(e[-1],chars) ) e--;
+        return e>str ? context->allocateString(str, uint32_t(e-str), at) : nullptr;
+    }
+
+    char * builtin_string_trim ( char* s, Context * context, LineInfoArg * at ) {
+        return trim_core(s, stringLengthSafe(*context, s), context, at);
+    }
+
+    char * builtin_string_ltrim ( char* s, Context * context, LineInfoArg * at ) {
+        return ltrim_core(s, stringLengthSafe(*context, s), context, at);
+    }
+
+    char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at ) {
+        return rtrim_core(s, stringLengthSafe(*context, s), context, at);
+    }
+
     char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context, LineInfoArg * at ) {
-        if ( !s ) return nullptr;
-        if ( !ts ) return s;
-        char * str_end_o = s + strlen(s);
-        char * str_end = str_end_o;
-        while ( str_end > s && is_char_in_string(str_end[-1],ts) ) str_end--;
-        if ( str_end==s ) {
-            return nullptr;
-        } else if ( str_end!=str_end_o ) {
-            auto len = str_end - s;
-            char * res = context->allocateString(nullptr, int32_t(len), at);
-            memcpy ( res, s, len );
-            res[len] = 0;
-            return res;
-        } else {
-            return s;
-        }
+        return rtrim_chars_core(s, stringLengthSafe(*context, s), ts ? ts : "", context, at);
     }
 
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * at ) {
@@ -807,42 +825,57 @@ namespace das
         return hash_blockz64((const uint8_t *)writer.c_str());
     }
 
+    // both cores write `result` on success as well as on failure, and leave `offset` at 0
+    // whenever the parse failed - the string and byte-view entries must agree on both
     template <typename TT>
-    TT convert_from_string ( const char * str, ConversionResult & result, int32_t & offset ) {
+    TT convert_real_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset ) {
         offset = 0;
         if ( !str ) {
             result = ConversionResult::invalid_argument;
             return TT();
         }
+        const char * b = str, * e = str + len;
+        while ( b!=e && is_white_space(*b) ) b++;
         TT value = 0;
-        while ( is_white_space(str[offset]) ) offset++;
-        auto res = fast_float::from_chars(str+offset, str+strlen(str), value);
+        auto res = fast_float::from_chars(b, e, value);
         if (res.ec != std::errc()) {
             result = ConversionResult(res.ec);
             return TT();
         }
+        result = ConversionResult::ok;
         offset = int32_t(res.ptr - str);
         return value;
     }
 
     template <typename TT>
-    TT convert_int_from_string ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+    TT convert_int_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset, bool hex ) {
         offset = 0;
         if ( !str ) {
             result = ConversionResult::invalid_argument;
             return TT();
         }
+        const char * b = str, * e = str + len;
+        while ( b!=e && is_white_space(*b) ) b++;
+        if ( hex && (e-b)>=2 && b[0]=='0' && (b[1]=='x' || b[1]=='X') ) b += 2;
         TT value = 0;
-        const char * original = str;
-        while ( is_white_space(*str) ) str++;
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str, str+strlen(str), value, hex ? 16 : 10);
+        auto res = fast_float::from_chars(b, e, value, hex ? 16 : 10);
         if (res.ec != std::errc()) {
             result = ConversionResult(res.ec);
             return TT();
         }
-        offset = int32_t(res.ptr - original);
+        result = ConversionResult::ok;
+        offset = int32_t(res.ptr - str);
         return value;
+    }
+
+    template <typename TT>
+    TT convert_from_string ( const char * str, ConversionResult & result, int32_t & offset ) {
+        return convert_real_core<TT>(str, str ? uint32_t(strlen(str)) : 0, result, offset);
+    }
+
+    template <typename TT>
+    TT convert_int_from_string ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_core<TT>(str, str ? uint32_t(strlen(str)) : 0, result, offset, hex);
     }
 
     int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
@@ -1090,17 +1123,16 @@ namespace das
                 SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
                 SideEffects::none, "builtin_string_safe_unescape")->args({"str","context","at"})->setTempStringResult();
-            // NOT setTempStringResult: replace/rtrim/trim return the INPUT string when there is nothing to do (passthrough)
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
-                SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context","at"});
+                SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
-                SideEffects::none, "builtin_string_rtrim")->args({"str","context","at"});
+                SideEffects::none, "builtin_string_rtrim")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
-                SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context","at"});
+                SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_ltrim)>(*this, lib, "ltrim",
                 SideEffects::none, "builtin_string_ltrim")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
-                SideEffects::none, "builtin_string_trim")->args({"str","context","at"});
+                SideEffects::none, "builtin_string_trim")->args({"str","context","at"})->setTempStringResult();
             // format (deprecated)
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();

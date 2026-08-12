@@ -375,7 +375,7 @@ def public capitalize(str : string) : string {
 }
 
 def public is_null_or_whitespace(str : string) : bool {
-    //! Returns true if the string is null, empty, or contains only whitespace characters (space, tab, CR, LF).
+    //! Returns true if the string is null, empty, or contains only whitespace characters (space, tab, CR, LF, FF, VT).
     if (str |> empty()) return true
     var result = true
     peek_data(str) $(data) {

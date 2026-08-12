@@ -254,6 +254,19 @@ def test_parse_errors(t : T?) {
         var js = read_json("   ", error)
         t |> equal(js == null, true)
     }
+    t |> run("RFC 8259 whitespace between tokens is accepted") @(t : T?) {
+        for (name, ws in ["space", "tab", "newline", "carriage return"], [" ", "\t", "\n", "\r"]) {
+            var error : string
+            var js = read_json("[1,{ws}2]", error)
+            t |> success(js != null, "{name} separates tokens")
+            t |> equal(error, "")
+        }
+    }
+    t |> run("form feed and vertical tab are NOT json whitespace") @(t : T?) {
+        // the shared is_white_space classifier accepts both; the json lexer must not
+        parse_expect_fail("[1,\f2]", t)
+        parse_expect_fail("[1,\v2]", t)
+    }
     t |> run("unterminated string") @(t : T?) {
         parse_expect_fail("\"hello", t)
     }
@@ -547,7 +560,7 @@ def test_from_jv(t : T?) {
         let input = "\{ \"name\": \"test\", \"value\": 42, \"score\": 3.14 \}"
         var error : string
         var js = read_json(input, error)
-        var result = from_JV(js, type<TestStruct>)
+        let result = from_JV(js, type<TestStruct>)
         t |> equal(result.name, "test")
         t |> equal(result.value, 42)
         t |> equal(result.score > 3.0, true)
@@ -555,7 +568,7 @@ def test_from_jv(t : T?) {
     t |> run("from_JV array") @(t : T?) {
         var error : string
         var js = read_json("[1, 2, 3]", error)
-        var result = from_JV(js, type<array<int>>)
+        let result = from_JV(js, type<array<int>>)
         t |> equal(length(result), 3)
         t |> equal(result[0], 1)
         t |> equal(result[1], 2)
@@ -572,17 +585,17 @@ def test_jv_complex(t : T?) {
     t |> run("JV struct roundtrip") @(t : T?) {
         let s = TestStruct(name = "test", value = 42, score = 1.5)
         var js = JV(s)
-        var result = from_JV(js, type<TestStruct>)
+        let result = from_JV(js, type<TestStruct>)
         t |> equal(result, s)
     }
     t |> run("JV array") @(t : T?) {
-        var arr <- array<int>(1, 2, 3)
+        let arr <- array<int>(1, 2, 3)
         var js = JV(arr)
         t |> equal(js is _array, true)
         t |> equal(length(js as _array), 3)
     }
     t |> run("JV table") @(t : T?) {
-        var tab <- {"one" => 1, "two" => 2}
+        let tab <- {"one" => 1, "two" => 2}
         var js = JV(tab)
         t |> equal(js is _object, true)
     }
@@ -797,13 +810,13 @@ def test_variant_json(t : T?) {
         let s = Shape(circle = 5.0)
         var js = JV(s)
         t |> equal(js is _object, true)
-        var result = from_JV(js, type<Shape>)
+        let result = from_JV(js, type<Shape>)
         t |> equal(result, s)
     }
     t |> run("variant rect roundtrip") @(t : T?) {
         let s = Shape(rect = float2(3.0, 4.0))
         var js = JV(s)
-        var result = from_JV(js, type<Shape>)
+        let result = from_JV(js, type<Shape>)
         t |> equal(result, s)
     }
 }
