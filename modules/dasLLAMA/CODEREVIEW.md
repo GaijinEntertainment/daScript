@@ -33,10 +33,12 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 ## Tests
 
-**Run `modules/dasLLAMA/tests` before any PR.** The suites `run.das` lists
+**Every PR runs the model-free tests under `modules/dasLLAMA/tests/`, plus each suite whose
+surface the change reaches — nothing runs the whole directory.** The suites `run.das` lists
 (`--suite decode|prefill|matrix|kernels|image|image-vulkan|coverage`) are invoked only through
-`modules/dasLLAMA/tests/run.das`; dastest run directly on one of those is a defect. Every
-other suite — the vulkan ones included — runs under dastest directly.
+`modules/dasLLAMA/tests/run.das`, scoped by `--arm` to what the change can affect, and `run.das`
+refuses `--full`; dastest run directly on one of those suites is a defect. Every other test —
+the model-free files and the vulkan ones included — runs under dastest directly.
 
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
 `-jit` is a defect even if it passes.
@@ -55,8 +57,9 @@ model gate. A test that silently vanishes on one platform is a defect.
 under `DASLLAMA_PARITY_FULL=1` — a final pre-PR gate, never the iteration loop. Check what a
 test loads before launching it.
 
-**Every new, moved, or extracted function, data transform, or `[init]` registration ships a
-test for the bit itself** — feed the function, check the bytes. "The model still runs" is not a
+**Every new, moved, extracted, or rewritten-in-place function, data transform, or `[init]`
+registration ships a test for the bit itself** — feed the function, check the bytes; a function
+whose body or signature changes ships a test for the changed bit. "The model still runs" is not a
 test for a move. A platform-fixed predicate has no bytes to feed — test its observable (the
 argv it gates, the mode it selects) on the platform the test runs on. A moved registration's
 observable is its reachability: a program requiring the new home sees it registered, and its
@@ -103,7 +106,9 @@ through the serving rail, mirrors the large-model tier gate on `DASLLAMA_PARITY_
 reports model-gated skips explicitly.
 
 **A change in `dasllama_tokenizer.das`, `dasllama_spm.das`, `dasllama_bpe.das`, or
-`dasllama_pretok.das` — pre-tokenizer arm, merge loop, vocab load, decode — records a
+`dasllama_pretok.das` — pre-tokenizer arm, merge loop, vocab load, decode — or in what those
+files call for their string work (the daslang `find` / `slice` / `starts_with` / `strip` /
+`peek_data` builtin cores, or a `daslib/strings*` module) records a
 `tests/test_tokenizer.das` run with its cases EXECUTED, not skipped (fixtures are machine-local,
 so an all-skip run is green and proves nothing), and a new pre-tokenizer family or backend ships
 its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture in the same change.** A corpus case
@@ -233,9 +238,9 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_tools.das` — the per-ToolMode wire codecs, pure string+JSON: every byte of tool
   wire text — definition serializers, replay/result text builders, reply parsers — is produced
   by a function here. `dasllama_chat.das` assembles ChatParts and places them in turns; a
-  wire-text literal written there, or ChatPart/render logic written here, is a defect. Carve-out:
-  the think-stream splitter's framing needles (`HARMONY_CH`, `HARMONY_MSG`, `HARMONY_END`,
-  `<|start|>`) live in `dasllama_chat.das` — reply framing the splitter scans, not tool wire text.
+  wire-text literal written there, or ChatPart/render logic written here, is a defect. Which side
+  a literal belongs to: one handed to `chat_special` / `chat_text` as turn framing, or scanned as
+  reply framing, is chat's; text assembled into a tool definition, result, or call body is tools'.
 - `dasllama_scheduler.das` — the continuous-batching serving layer OVER the facade: stream
   admission, the batched decode step, bounded prefill chunks, prefix-page donation, results
   as `SchedEvent`s. Its one engine require is `dasllama/dasllama`; engine logic written here,
@@ -561,9 +566,11 @@ backend entry: kernel-backend override, batch donor) carries the annotation itse
 transitive-arming model and the `@scratch` / `[cold_path]` companions are `ARCHITECTURE.md` §2.11.
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
-`dasllama_bpe.das` / `dasllama_pretok.das` ships its before/after `--tok` rows for the affected
-backend, and a change that turns an encode direction superlinear on the size ladder is a
-defect.** A change to the `--tok` cell's own corpus input in `benchmarks/lcpp_bench.das`
+`dasllama_bpe.das` / `dasllama_pretok.das` — the daslang `find` / `slice` / `starts_with` /
+`strip` / `peek_data` builtin cores and the `daslib/strings*` modules those files call
+included — ships its before/after `--tok` rows for the affected backend, and a change that
+turns an encode direction superlinear on the size ladder is a defect.** A change to the `--tok`
+cell's own corpus input in `benchmarks/lcpp_bench.das`
 (`tok_read_seed` and the `TokCorpus` seeds it fills) decides the bytes every row measures, so it
 ships the same before/after rows or an explicit statement that the rows are unaffected. Decode
 rows ride along; the scaling ratio, not any single throughput number, is the instrument.

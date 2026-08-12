@@ -1423,8 +1423,8 @@ element, not an invariant source). Block arguments run inline in the loop, so
 the rule deliberately looks inside them (``peek_data`` blocks and friends).
 A view receiver never fires: the byte-view forms take their length from the
 view, so there is nothing to re-scan.
-The repo ``.lint_config`` keeps PERF031 off until the in-tree hits are swept
-onto the byte-view forms; it is on by default outside this repo.
+PERF031 is on everywhere, this repo included: the byte-view sweep rewrote the
+in-tree hits onto ``peek_data`` views.
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================

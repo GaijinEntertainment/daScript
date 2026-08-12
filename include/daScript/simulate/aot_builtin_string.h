@@ -93,6 +93,7 @@ namespace das {
     DAS_API void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     DAS_API char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
+    DAS_API TArray<uint8_t> builtin_string_to_bytes ( const char * str, Context * context, LineInfoArg * at );
     DAS_API char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at );
     DAS_API char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at );
     DAS_API char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context, LineInfoArg * at );

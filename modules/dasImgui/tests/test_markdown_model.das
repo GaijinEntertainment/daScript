@@ -59,6 +59,24 @@ def test_non_markdown_producer_uses_shared_rich_document(t : T?) {
 }
 
 [test]
+def test_empty_source_inline_content_keeps_its_run(t : T?) {
+    var document <- rich_plain_document("")
+    t |> success(document.ok, "empty plain source is a valid rich document")
+    let paragraph = document.nodes[document.root].first_child
+    let content <- md_inline_content(document, paragraph)
+    t |> equal(content.text, "", "empty source carries no display text")
+    t |> equal(length(content.runs), 1,
+               "URI splitting on empty display text drops no run")
+    if (length(content.runs) == 1) {
+        t |> equal(content.runs[0].display.start_byte, 0,
+                   "the surviving run starts at the source head")
+        t |> equal(content.runs[0].display.end_byte, 0,
+                   "the surviving run spans no display bytes")
+    }
+    rich_document_dispose(document)
+}
+
+[test]
 def test_tight_list_direct_inline_content(t : T?) {
     let source = "- **Parent** item\n  - nested item\n- second item\n"
     let doc <- md_parse(source)

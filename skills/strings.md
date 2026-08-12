@@ -159,6 +159,7 @@ peek_data(line) $(d) {
 | whitespace cursor | `skip_white_space(d, from)` | offset of the first non-whitespace byte at or after `from` — `strip_left` as a cursor, no allocation; `skip_white_space(s, from)` is the string form |
 | parse | `int(d, res, cursor, hex)` — same shape for `int8`/`uint8`/`int16`/`uint16`/`uint`/`int64`/`uint64`; `float(d, res, cursor)` / `double(d, res, cursor)` | `cursor` is IN and OUT |
 | writer | `write_string(w, d)`, `write_string(w, d, a, b)` | writes view bytes straight into a `build_string` writer |
+| materialize | `to_bytes(s)` → owned `array<uint8>` | the inverse direction: `string(d)` makes a string out of bytes, `to_bytes(s)` makes bytes out of a string. A fresh owned copy (no terminator appended), so it outlives the `peek_data` block a view is confined to |
 
 - **Only the haystack becomes a view** — needles stay `string` (`find(d, "foo")`, `rtrim(d, " \t")`).
 - **`length(d)`, `empty(d)`, `d[i]` are the array builtins** and need no twin; `string(d)` materializes the whole view.

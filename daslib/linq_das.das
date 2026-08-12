@@ -253,8 +253,8 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                 let c = int(arr[i])
                 // Plain string content (not in an interpolation): copy verbatim; `{` opens interpolation, `"` closes the string.
                 if (inStr && interp == 0) {
-                    if (c == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
-                    w |> write(slice(text, i, i + 1))
+                    if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
+                    w |> write_string(arr, i, i + 1)
                     if (c == '"') { inStr = false; prevSig = c }
                     elif (c == '{') { interp = 1; prevSig = 0 }
                     i++
@@ -263,23 +263,23 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                 // Code mode — top-level, or inside a string interpolation.
                 if (c == '"') {
                     if (interp > 0) {   // nested string inside interpolation — copy verbatim, no rewrite
-                        w |> write(slice(text, i, i + 1)); i++
+                        w |> write_string(arr, i, i + 1); i++
                         while (i < n) {
                             let cc = int(arr[i])
-                            if (cc == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
-                            w |> write(slice(text, i, i + 1)); i++
+                            if (cc == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
+                            w |> write_string(arr, i, i + 1); i++
                             if (cc == '"') break
                         }
                         prevSig = '"'
                         continue
                     }
-                    inStr = true; prevSig = c; w |> write(slice(text, i, i + 1)); i++
+                    inStr = true; prevSig = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write(slice(text, i, i + 1)); prevSig = c; i++; continue }
+                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); prevSig = c; i++; continue }
                 if (interp > 0 && c == '}') {
                     interp --
-                    w |> write(slice(text, i, i + 1))
+                    w |> write_string(arr, i, i + 1)
                     prevSig = interp == 0 ? '"' : c   // back to plain string content when the interpolation closes
                     i++
                     continue
@@ -288,13 +288,13 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                 if (atWordStart) {
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
-                    let word = slice(text, i, j)
+                    let word = slice(arr, i, j)
                     w |> write(prevSig != '.' ? (subs?[word] ?? word) : word)
                     prevSig = int(arr[j - 1])
                     i = j
                     continue
                 }
-                w |> write(slice(text, i, i + 1))
+                w |> write_string(arr, i, i + 1)
                 if (!is_white_space(c)) { prevSig = c }
                 i++
             }
@@ -830,8 +830,8 @@ def private rewrite_group_var(text : string; gname : string) : string {
             while (i < n) {
                 let c = int(arr[i])
                 if (inStr && interp == 0) {
-                    if (c == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
-                    w |> write(slice(text, i, i + 1))
+                    if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
+                    w |> write_string(arr, i, i + 1)
                     if (c == '"') { inStr = false; prevSig = c }
                     elif (c == '{') { interp = 1; prevSig = 0 }
                     i++
@@ -839,23 +839,23 @@ def private rewrite_group_var(text : string; gname : string) : string {
                 }
                 if (c == '"') {
                     if (interp > 0) {
-                        w |> write(slice(text, i, i + 1)); i++
+                        w |> write_string(arr, i, i + 1); i++
                         while (i < n) {
                             let cc = int(arr[i])
-                            if (cc == '\\' && i + 1 < n) { w |> write(slice(text, i, i + 2)); i += 2; continue }
-                            w |> write(slice(text, i, i + 1)); i++
+                            if (cc == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
+                            w |> write_string(arr, i, i + 1); i++
                             if (cc == '"') break
                         }
                         prevSig = '"'
                         continue
                     }
-                    inStr = true; prevSig = c; w |> write(slice(text, i, i + 1)); i++
+                    inStr = true; prevSig = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write(slice(text, i, i + 1)); prevSig = c; i++; continue }
+                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); prevSig = c; i++; continue }
                 if (interp > 0 && c == '}') {
                     interp --
-                    w |> write(slice(text, i, i + 1))
+                    w |> write_string(arr, i, i + 1)
                     prevSig = interp == 0 ? '"' : c
                     i++
                     continue
@@ -864,7 +864,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                 if (atWordStart) {
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
-                    let word = slice(text, i, j)
+                    let word = slice(arr, i, j)
                     if (prevSig != '.' && word == gname) {
                         // `g.key` → `g._0`; truly bare `g` → `g._1` (the members array). Any other `g.<member>` (explicit `g._0` / `g._1`, or an invalid `g.foo`) is left untouched so raw tuple access keeps working and invalid members error naturally — never rewrite `g._0` into `g._1._0`.
                         let dotFollows = j < n && int(arr[j]) == '.'
@@ -872,7 +872,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                         if (dotFollows) {
                             var k = j + 1
                             while (k < n && is_ident_byte(int(arr[k]))) { k++ }
-                            if (slice(text, j + 1, k) == "key") { keyEnd = k }
+                            if (slice(arr, j + 1, k) == "key") { keyEnd = k }
                         }
                         if (keyEnd >= 0) {
                             w |> write("{gname}._0")
@@ -892,7 +892,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                     i = j
                     continue
                 }
-                w |> write(slice(text, i, i + 1))
+                w |> write_string(arr, i, i + 1)
                 if (!is_white_space(c)) { prevSig = c }
                 i++
             }

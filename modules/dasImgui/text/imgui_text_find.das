@@ -232,42 +232,45 @@ def private expand_match_template(re : Regex; source, replacement : string;
     return build_string() $(var writer) {
         let replacement_length = length(replacement)
         peek_data(replacement) $(bytes) {
-            var i = 0
-            while (i < replacement_length) {
-                let c = int(bytes[i])
-                if (c != '$' || i + 1 >= replacement_length) {
-                    writer |> write_char(c)
-                    i++
-                    continue
-                }
-                let next = int(bytes[i + 1])
-                if (next == '$') {
-                    writer |> write_char('$')
-                    i += 2
-                } elif (next == '&' || next == '0') {
-                    writer |> write(slice(source, match_start, match_end))
-                    i += 2
-                } elif (next >= '1' && next <= '9') {
-                    let group = next - '0'
-                    if (group < length(re.groups)) {
-                        let span = re.groups[group]._0
-                        writer |> write(slice(source, span.x, span.y))
-                    }
-                    i += 2
-                } elif (next == '{') {
-                    let close = find(replacement, "}", i + 2)
-                    if (close < 0) {
+            // only called for a live match in `source`, so the view is never skipped
+            peek_data(source) $(sbytes) {
+                var i = 0
+                while (i < replacement_length) {
+                    let c = int(bytes[i])
+                    if (c != '$' || i + 1 >= replacement_length) {
                         writer |> write_char(c)
                         i++
-                    } else {
-                        let name = slice(replacement, i + 2, close)
-                        writer |> write(group_by_reference(re, source, name,
-                            match_start, match_end))
-                        i = close + 1
+                        continue
                     }
-                } else {
-                    writer |> write_char(c)
-                    i++
+                    let next = int(bytes[i + 1])
+                    if (next == '$') {
+                        writer |> write_char('$')
+                        i += 2
+                    } elif (next == '&' || next == '0') {
+                        writer |> write(slice(sbytes, match_start, match_end))
+                        i += 2
+                    } elif (next >= '1' && next <= '9') {
+                        let group = next - '0'
+                        if (group < length(re.groups)) {
+                            let span = re.groups[group]._0
+                            writer |> write(slice(sbytes, span.x, span.y))
+                        }
+                        i += 2
+                    } elif (next == '{') {
+                        let close = find(bytes, "}", i + 2)
+                        if (close < 0) {
+                            writer |> write_char(c)
+                            i++
+                        } else {
+                            let name = slice(bytes, i + 2, close)
+                            writer |> write(group_by_reference(re, source, name,
+                                match_start, match_end))
+                            i = close + 1
+                        }
+                    } else {
+                        writer |> write_char(c)
+                        i++
+                    }
                 }
             }
         }

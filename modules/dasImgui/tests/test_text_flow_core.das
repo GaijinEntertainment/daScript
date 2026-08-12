@@ -172,6 +172,29 @@ def test_text_flow_leading_and_trailing_controls(t : T?) {
 }
 
 [test]
+def test_text_flow_empty_source_control_only_span(t : T?) {
+    // an image-only paragraph has no display text, so the placeholder is the whole line
+    let spans = [TextFlowSpan(
+        source = TextSourceRange(start_byte = 0, end_byte = 0),
+        style_id = 9, semantic_id = 23,
+        leading_control_id = 5, leading_control_kind = 2,
+        leading_control_size = float2(12.0f, 16.0f))]
+    let layout <- layout_text_flow("", spans, 100.0f, 18.0f,
+        $(s : string) : float {
+            return float(length(text_graphemes(s))) * 8.0f
+        })
+    t |> equal(length(layout.fragments), 1,
+               "control-only span on empty source still emits its control fragment")
+    if (length(layout.fragments) != 1) return
+    let control = layout.fragments[0]
+    t |> success(control.is_control && control.control_id == 5,
+                 "empty-source control keeps its identity")
+    t |> equal(control.control_kind, 2, "empty-source control keeps its consumer kind")
+    t |> equal(control.source.start_byte, 0, "empty-source control anchors at source start")
+    t |> equal(control.source.end_byte, 0, "empty-source control consumes no source bytes")
+}
+
+[test]
 def test_plain_text_uri_detection(t : T?) {
     let source = "See https://example.com/文档/naïve/é?q=👩‍💻, editor://workspace/文档 and WWW.Example.org/path. Note: ordinary text."
     let uris <- text_uris(source)

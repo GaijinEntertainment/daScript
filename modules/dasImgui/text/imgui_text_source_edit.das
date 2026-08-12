@@ -3708,11 +3708,13 @@ def public text_edit_color_text(value : float4; digits : int) : string {
     let hex_chars = "0123456789ABCDEF"
     return build_string() $(var writer) {
         writer |> write("0x")
-        var shift = (digits - 1) * 4
-        while (shift >= 0) {
-            let nibble = int((packed >> uint(shift)) & 0xF)
-            writer |> write(slice(hex_chars, nibble, nibble + 1))
-            shift -= 4
+        peek_data(hex_chars) $(hex) {
+            var shift = (digits - 1) * 4
+            while (shift >= 0) {
+                let nibble = int((packed >> uint(shift)) & 0xF)
+                writer |> write_char(int(hex[nibble]))
+                shift -= 4
+            }
         }
     }
 }

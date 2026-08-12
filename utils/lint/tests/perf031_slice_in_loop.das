@@ -18,7 +18,7 @@ options _enable_default_off_rules = true   // fixture mode: immune to repo .lint
 //       let cp = slice(d, i, j)           // the view carries its length
 //   }
 
-expect 31208:6
+expect 31208:9
 
 require daslib/perf_lint
 require strings
@@ -67,6 +67,39 @@ def bad_slice_in_block_loop(text : string) : int {
         }
     }
     return total
+}
+
+def bad_tail_return_in_block(text : string) : int {
+    var total = 0
+    for (_i in range(4)) {
+        peek_data(text) $(d : array<uint8> const#) {
+            total += length(slice(text, 0, length(d) % 3 + 1))   // PERF031: the return ends the block invocation, not the loop
+            return
+        }
+    }
+    return total
+}
+
+def with_length(nm : string; blk : block<(s : string) : int>) : int {
+    return invoke(blk, nm)
+}
+
+def bad_return_slice_in_block(names : array<string>; text : string) : int {
+    var total = 0
+    for (nm in names) {
+        total += with_length(nm) $(s) {
+            return length(slice(text, 0, length(s) % 3 + 1))     // PERF031: same - a block return does not leave the loop
+        }
+    }
+    return total
+}
+
+def bad_slice_in_returned_block(parts : array<string>; text : string) : string {
+    return build_string() $(var w) {
+        for (i in range(length(parts))) {
+            w |> write(slice(text, i, i + 1))                    // PERF031: the loop lives inside the returned expression, so the return bounds nothing
+        }
+    }
 }
 
 def bad_tail_break_nested(lines : array<string>; text : string) : int {
@@ -131,6 +164,17 @@ def good_extract_and_return(text : string) : string {
         }
     }
     return found
+}
+
+def good_block_loop_return(text : string) : int {
+    var total = 0
+    peek_data(text) $(d : array<uint8> const#) {
+        for (i in range(length(d))) {
+            total += length(slice(text, i, i + 2))  // the block runs once and the return leaves its only loop
+            return
+        }
+    }
+    return total
 }
 
 def good_extract_and_break(text : string) : string {

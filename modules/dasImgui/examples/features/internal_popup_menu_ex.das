@@ -32,9 +32,11 @@ def private hex8(v : uint) : string {
     let digits = "0123456789abcdef"
     return build_string() $(var writer) {
         writer |> write("0x")
-        for (i in range(8)) {
-            let nib = int((v >> uint((7 - i) * 4)) & 0xfu)
-            writer |> write(slice(digits, nib, nib + 1))
+        peek_data(digits) $(d) {
+            for (i in range(8)) {
+                let nib = int((v >> uint((7 - i) * 4)) & 0xfu)
+                writer |> write_char(int(d[nib]))
+            }
         }
     }
 }

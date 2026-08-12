@@ -10,7 +10,9 @@ one ``strlen`` at ``peek_data`` covers the whole loop, and a NUL inside the byte
 like any other byte. The forms that produce text (``slice``, ``chop``, ``strip``, ``trim``,
 ``write_string``) copy the bytes out, so the result is an ordinary temporary string.
 Offsets are ``int``, so a view longer than ``INT_MAX`` bytes panics instead of answering
-with a wrapped offset.
+with a wrapped offset. The two conversions between the surfaces are ``string(bytes)``, which
+materializes a whole view, and ``to_bytes(str)``, which copies a string's bytes into an array
+the caller owns — unlike a view, that array outlives the ``peek_data`` block.
 
 Whitespace means the C ``isspace`` set throughout this module — space, tab, CR, LF, FF and
 VT. ``strip``, ``trim``, the parse functions and ``is_white_space`` all use that one set.

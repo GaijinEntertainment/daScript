@@ -59,6 +59,14 @@ require daslib/lint_config
 // Visitor
 // ---------------------------------------------------------------------------
 
+struct Perf031Return {
+    // what an active `return` can prove: loops deeper than `loop31` sit inside the returned
+    // expression and still repeat, and loops at or below `barrier` - the p31 depth of the innermost
+    // inline block-argument body it unwinds to - re-invoke the block, so only barrier 0 bounds all
+    loop31 : int
+    barrier : int
+}
+
 struct VarStackEntry {
     @do_not_delete v : Variable?
     depth : int
@@ -395,11 +403,15 @@ class PerfLintVisitor : AstVisitor {
     // deferred - the other loop rules' contract), `in_deferred`/`p31_loop_depth` treat inline
     // block-argument bodies as running in place, deferring only lambda/local-fn/generator/generated
     @do_not_delete inline_blocks : array<ExprBlock?>
+    // p31 loop depth at each inline-block push, in lockstep with inline_blocks: a return inside the
+    // body unwinds to that depth, so loops at or below it keep re-invoking the block
+    inline_block_loop31 : array<int>
     in_deferred : int = 0
     p31_loop_depth : int = 0
     // innermost enclosing block's tail statement: 0 none, 1 return, 2 break
     block_tail_exit : array<int>
-    in_return : int = 0
+    // active returns, innermost last - what each one proves is decided in check_perf031_slice_in_loop
+    return_frames : array<Perf031Return>
     // while tracking
     in_while_cond : bool = false
     // counter-based detection state
@@ -532,24 +544,20 @@ class PerfLintVisitor : AstVisitor {
         return false
     }
 
-    def is_defined_outside_loop(v : Variable?) : bool {
-        if (v == null || loop_depth == 0 || is_loop_variable(v)) return false
+    // one walk, two loop spaces: `use31` picks the entry depth recorded in PERF031's space
+    def outside_loop(v : Variable?; depth : int; use31 : bool) : bool {
+        if (v == null || depth == 0 || is_loop_variable(v)) return false
         for (entry in var_stack) {
-            if (entry.v == v) return entry.depth < loop_depth
+            if (entry.v == v) return (use31 ? entry.depth31 : entry.depth) < depth
         }
         // not on stack — function argument or global — outside any loop
         return true
     }
 
+    def is_defined_outside_loop(v : Variable?) : bool => outside_loop(v, loop_depth, false)
+
     // PERF031's loop space (see p31_loop_depth): inline block-argument interiors count
-    def is_defined_outside_loop31(v : Variable?) : bool {
-        if (v == null || p31_loop_depth == 0 || is_loop_variable(v)) return false
-        for (entry in var_stack) {
-            if (entry.v == v) return entry.depth31 < p31_loop_depth
-        }
-        // not on stack — function argument or global — outside any loop
-        return true
-    }
+    def is_defined_outside_loop31(v : Variable?) : bool => outside_loop(v, p31_loop_depth, true)
 
     // --- expression helpers ---
 
@@ -918,6 +926,7 @@ class PerfLintVisitor : AstVisitor {
                 && !expr.mmFlags.isLambda && !expr.mmFlags.isLocalFunction && !expr.genFlags.generated
                 && !(expr._block as ExprBlock).genFlags.generated) {
             inline_blocks |> push(expr._block as ExprBlock)
+            inline_block_loop31 |> push(p31_loop_depth)
         }
     }
 
@@ -925,9 +934,13 @@ class PerfLintVisitor : AstVisitor {
         if (!empty(inline_blocks) && expr._block != null && expr._block is ExprBlock
                 && inline_blocks |> back() == expr._block as ExprBlock) {
             inline_blocks |> pop()
+            inline_block_loop31 |> pop()
         }
         return <- expr
     }
+
+    // p31 loop depth of the innermost inline block-argument body we are inside; 0 when there is none
+    def p31_inline_barrier() : int => empty(inline_block_loop31) ? 0 : inline_block_loop31 |> back()
 
     def tail_exit_kind(blk : ExprBlock?) : int {
         if (blk == null || empty(blk.list)) return 0
@@ -980,11 +993,13 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprReturn(expr : ExprReturn?) : void {
-        in_return++
+        return_frames |> push(Perf031Return(loop31 = p31_loop_depth, barrier = p31_inline_barrier()))
     }
 
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
-        in_return--
+        if (!empty(return_frames)) {
+            return_frames |> pop()
+        }
         return <- expr
     }
 
@@ -2060,12 +2075,16 @@ class PerfLintVisitor : AstVisitor {
     // Inline block args (peek_data et al.) run in place, so their interiors are analyzed as part of the
     // enclosing function; lambda/local-function bodies run deferred and are skipped like every loop rule.
     def check_perf031_slice_in_loop(var expr : ExprCall?) {
-        // in_return: `return slice(...)` leaves the loop - at most one call per function entry
-        if (in_deferred > 0 || p31_loop_depth <= 0 || in_return > 0 || !(expr.func.name == "slice" || expr.func.name == "chop") || expr.func._module.name != "strings"
+        if (in_deferred > 0 || p31_loop_depth <= 0 || !(expr.func.name == "slice" || expr.func.name == "chop") || expr.func._module.name != "strings"
                 || empty(expr.arguments) || expr.arguments[0]._type == null || expr.arguments[0]._type.baseType != Type.tString) {
             return
         }
-        if (!empty(block_tail_exit)) {
+        // `return slice(...)` runs once per entry only if no counted loop outlives the return (Perf031Return)
+        if (!empty(return_frames)) {
+            let rf = return_frames |> back()
+            if (rf.barrier == 0 && rf.loop31 == p31_loop_depth) return
+        }
+        if (!empty(block_tail_exit) && p31_inline_barrier() == 0) {
             // a block that ends by leaving the function (or the only loop) runs its slice at most once
             let tail = block_tail_exit |> back()
             if (tail == 1 || (tail == 2 && p31_loop_depth == 1)) return

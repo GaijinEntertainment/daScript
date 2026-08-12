@@ -256,29 +256,9 @@ def private percent_decode(value : string) : string {
     return string(decoded)
 }
 
-def private query_value(url, key : string) : string {
-    let query = find(url, "?")
-    if (query < 0) return ""
-    let wanted = key + "="
-    let wanted_length = length(wanted)
-    var value = ""
-    peek_data(url) $(d) {
-        let url_length = length(d)
-        var position = query + 1
-        while (position < url_length) {
-            let amp = find(d, "&", position)
-            let end = amp < 0 ? url_length : amp
-            let value_start = position + wanted_length
-            if (value_start <= end && starts_with(d, position, wanted)) {
-                value = percent_decode(slice(d, value_start, end))
-                break
-            }
-            if (amp < 0) break
-            position = amp + 1
-        }
-    }
-    return value
-}
+// percent_decode of a miss is the miss itself - decoding "" yields "" - so the decoded form is
+// exactly the raw one run through the decoder
+def private query_value(url, key : string) : string => percent_decode(query_value_raw(url, key))
 
 def private query_value_raw(url, key : string) : string {
     let query = find(url, "?")

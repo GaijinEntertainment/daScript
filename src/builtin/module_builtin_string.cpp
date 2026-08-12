@@ -826,6 +826,19 @@ namespace das
         return context->allocateString(bytes.data, view_size(bytes, context, at), at);
     }
 
+    // the materializing inverse of string(array<uint8>): a fresh owned copy of the bytes, no
+    // terminator appended, so string(to_bytes(s)) round-trips every NUL-free string
+    TArray<uint8_t> builtin_string_to_bytes ( const char * str, Context * context, LineInfoArg * at ) {
+        TArray<uint8_t> bytes;
+        das_zero(bytes);
+        uint32_t len = stringLengthSafe(*context, str);
+        if ( len ) {
+            array_resize(*context, bytes, len, uint32_t(sizeof(uint8_t)), false, at);
+            memcpy(bytes.data, str, len);
+        }
+        return bytes;
+    }
+
     bool delete_string ( char * & str, Context * context, LineInfoArg * at ) {
         if ( !str ) return false;
         uint32_t len = stringLengthSafe(*context, str);
@@ -1187,6 +1200,8 @@ namespace das
                 SideEffects::modifyExternal, "format_and_write<double>")->args({"writer","format","value"})->setDeprecated("use fmt() instead");
             addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
                 SideEffects::none, "builtin_string_from_array")->args({"bytes","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_string_to_bytes),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "to_bytes",
+                SideEffects::none, "builtin_string_to_bytes")->args({"str","context","at"});
             // dup
             addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;

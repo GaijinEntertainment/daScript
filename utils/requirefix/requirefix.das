@@ -391,23 +391,25 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; var cop : C
 // Build source text from lines, commenting out the specified line (lines are 1-based).
 def comment_out_src_line(source : string; skip_line : int) : string {
     return build_string() $(str) {
-        var line_num = 1
-        var i = 0
-        let src_len = length(source)
-        while (i < src_len) {
-            var eol = i
-            while (eol < src_len && character_at(source, eol) != '\n') {  // nolint:PERF003 — cold path: source-insertion runs once per fix
-                eol++
+        peek_data(source) $(d) {
+            var line_num = 1
+            var i = 0
+            let src_len = length(d)
+            while (i < src_len) {
+                var eol = i
+                while (eol < src_len && int(d[eol]) != '\n') {
+                    eol++
+                }
+                if (eol < src_len) {
+                    eol++ // Include the newline
+                }
+                if (line_num == skip_line) {
+                    str |> write("// REMOVED: ")
+                }
+                str |> write_string(d, i, eol)
+                line_num++
+                i = eol
             }
-            if (eol < src_len) {
-                eol++ // Include the newline
-            }
-            if (line_num == skip_line) {
-                str |> write("// REMOVED: ")
-            }
-            str |> write(slice(source, i, eol))
-            line_num++
-            i = eol
         }
     }
 }

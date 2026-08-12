@@ -532,3 +532,21 @@ def test_pin_string_from_array(t : T?) {
     }
     t |> equal(seen, 1, "an interior NUL truncates the peek_data view")
 }
+
+[test]
+def test_pin_to_bytes(t : T?) {
+    var inscope none <- to_bytes(heap_str(""))
+    t |> equal(length(none), 0, "to_bytes of an empty string is an empty array")
+    var inscope plain <- to_bytes(heap_str("abc"))
+    t |> equal(length(plain), 3, "to_bytes copies the bytes and appends no terminator")
+    t |> equal(int(plain[0]), 'a', "to_bytes byte 0")
+    t |> equal(int(plain[1]), 'b', "to_bytes byte 1")
+    t |> equal(int(plain[2]), 'c', "to_bytes byte 2")
+    t |> equal(string(plain), "abc", "string(to_bytes(s)) round-trips")
+    // the array owns its bytes, so writing it cannot reach back into the source string
+    let src = heap_str("hello")
+    var inscope owned <- to_bytes(src)
+    owned[0] = uint8('H')
+    t |> equal(src, "hello", "to_bytes returns an owned copy")
+    t |> equal(string(owned), "Hello", "and the copy carries the write")
+}

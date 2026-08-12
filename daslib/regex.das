@@ -1690,50 +1690,53 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
     if (empty(str)) return ""
     unsafe {
         return build_string() $(writer) {
-            regex.match = reinterpret<uint8 const?>(str)
-            var root = regex.root
-            var pstr = reinterpret<uint8 const?>(str)
-            var cstr = pstr
-            if (regex.canEarlyOut) {
-                // lets try if it helps
-                while (true) {
-                    let Ch = int(*cstr)
-                    if (Ch == 0) break
-                    if (is_char_in_set(Ch, regex.earlyOut)) {
-                        let om = invoke(root.fun2, regex, root, cstr)
-                        if (om != null) {
-                            let repl = invoke(blk, slice(str, int(cstr - pstr), int(om - pstr)))
-                            writer |> write(repl)
-                            if (om == cstr) {
+            // str is non-empty here (guarded above), so the view is always handed to the block
+            peek_data(str) $(sdata) {
+                regex.match = reinterpret<uint8 const?>(str)
+                var root = regex.root
+                var pstr = reinterpret<uint8 const?>(str)
+                var cstr = pstr
+                if (regex.canEarlyOut) {
+                    // lets try if it helps
+                    while (true) {
+                        let Ch = int(*cstr)
+                        if (Ch == 0) break
+                        if (is_char_in_set(Ch, regex.earlyOut)) {
+                            let om = invoke(root.fun2, regex, root, cstr)
+                            if (om != null) {
+                                let repl = invoke(blk, slice(sdata, int(cstr - pstr), int(om - pstr)))
+                                writer |> write(repl)
+                                if (om == cstr) {
+                                    writer |> write_char(Ch)
+                                    cstr++
+                                } else {
+                                    cstr = om
+                                }
+                            } else {
                                 writer |> write_char(Ch)
                                 cstr++
-                            } else {
-                                cstr = om
                             }
                         } else {
                             writer |> write_char(Ch)
                             cstr++
                         }
-                    } else {
-                        writer |> write_char(Ch)
-                        cstr++
                     }
-                }
-            } else {
-                while (int(*cstr) != 0) {
-                    let om = invoke(root.fun2, regex, root, cstr)
-                    if (om != null) {
-                        let repl = invoke(blk, slice(str, int(cstr - pstr), int(om - pstr)))
-                        writer |> write(repl)
-                        if (om == cstr) {
-                            writer |> write_char(int(*cstr))
-                            cstr++
+                } else {
+                    while (int(*cstr) != 0) {
+                        let om = invoke(root.fun2, regex, root, cstr)
+                        if (om != null) {
+                            let repl = invoke(blk, slice(sdata, int(cstr - pstr), int(om - pstr)))
+                            writer |> write(repl)
+                            if (om == cstr) {
+                                writer |> write_char(int(*cstr))
+                                cstr++
+                            } else {
+                                cstr = om
+                            }
                         } else {
-                            cstr = om
+                            writer |> write_char(int(*cstr))
+                            cstr ++
                         }
-                    } else {
-                        writer |> write_char(int(*cstr))
-                        cstr ++
                     }
                 }
             }
@@ -1746,52 +1749,58 @@ def private expand_replacement(regex : Regex; str : string; replacement : string
     return build_string() $(writer) {
         let rlen = length(replacement)
         peek_data(replacement) $(rdata) {
-            var i = 0
-            while (i < rlen) {
-                let ch = int(rdata[i])
-                if (ch == '$' && i + 1 < rlen) {
-                    let nch = int(rdata[i + 1])
-                    if (nch == '$') {
-                        writer |> write_char('$')
-                        i += 2
-                    } elif (nch == '&' || nch == '0') {
-                        writer |> write(slice(str, match_start, match_end))
-                        i += 2
-                    } elif (nch >= '1' && nch <= '9') {
-                        let group_num = nch - '0'
-                        if (group_num < length(regex.groups)) {
-                            let grng = regex.groups[group_num]._0
-                            writer |> write(slice(str, grng.x, grng.y))
-                        }
-                        i += 2
-                    } elif (nch == '{') {
-                        let close = find(replacement, "}", i + 2)
-                        if (close != -1) {
-                            let name = slice(replacement, i + 2, close)
-                            // try numeric group reference first (${0}, ${1}, ...)
-                            var is_numeric = !empty(name)
-                            for (nc in name) {
-                                if (!is_number(nc)) {
-                                    is_numeric = false
-                                    break
-                                }
+            // both regex_replace overloads guard on empty(str), so the subject view is never skipped
+            peek_data(str) $(sdata) {
+                var i = 0
+                while (i < rlen) {
+                    let ch = int(rdata[i])
+                    if (ch == '$' && i + 1 < rlen) {
+                        let nch = int(rdata[i + 1])
+                        if (nch == '$') {
+                            writer |> write_char('$')
+                            i += 2
+                        } elif (nch == '&' || nch == '0') {
+                            writer |> write(slice(sdata, match_start, match_end))
+                            i += 2
+                        } elif (nch >= '1' && nch <= '9') {
+                            let group_num = nch - '0'
+                            if (group_num < length(regex.groups)) {
+                                let grng = regex.groups[group_num]._0
+                                writer |> write(slice(sdata, grng.x, grng.y))
                             }
-                            if (is_numeric) {
-                                var group_num = 0
+                            i += 2
+                        } elif (nch == '{') {
+                            let close = find(rdata, "}", i + 2)
+                            if (close != -1) {
+                                let name = slice(rdata, i + 2, close)
+                                // try numeric group reference first (${0}, ${1}, ...)
+                                var is_numeric = !empty(name)
                                 for (nc in name) {
-                                    group_num = group_num * 10 + (nc - '0')
+                                    if (!is_number(nc)) {
+                                        is_numeric = false
+                                        break
+                                    }
                                 }
-                                if (group_num == 0) {
-                                    writer |> write(slice(str, match_start, match_end))
-                                } elif (group_num < length(regex.groups)) {
-                                    let grng = regex.groups[group_num]._0
-                                    writer |> write(slice(str, grng.x, grng.y))
+                                if (is_numeric) {
+                                    var group_num = 0
+                                    for (nc in name) {
+                                        group_num = group_num * 10 + (nc - '0')
+                                    }
+                                    if (group_num == 0) {
+                                        writer |> write(slice(sdata, match_start, match_end))
+                                    } elif (group_num < length(regex.groups)) {
+                                        let grng = regex.groups[group_num]._0
+                                        writer |> write(slice(sdata, grng.x, grng.y))
+                                    }
+                                } else {
+                                    let grp = regex_group_by_name(regex, name, str)
+                                    writer |> write(grp)
                                 }
+                                i = close + 1
                             } else {
-                                let grp = regex_group_by_name(regex, name, str)
-                                writer |> write(grp)
+                                writer |> write_char(ch)
+                                i++
                             }
-                            i = close + 1
                         } else {
                             writer |> write_char(ch)
                             i++
@@ -1800,9 +1809,6 @@ def private expand_replacement(regex : Regex; str : string; replacement : string
                         writer |> write_char(ch)
                         i++
                     }
-                } else {
-                    writer |> write_char(ch)
-                    i++
                 }
             }
         }

@@ -13,33 +13,19 @@ require strings
 // here: tripping it takes a >2GB array. It holds by inspection instead: every view entry sizes
 // itself through view_size, which throws before the uint32 truncation can happen.
 
-def private push_text(var buf : array<uint8>; src : string) {
-    peek_data(src) $(d) {
-        for (b in d) {
-            buf |> push(b)
-        }
-    }
-}
-
-def private buf_of(text : string) : array<uint8> {
-    var b : array<uint8>
-    push_text(b, text)
-    return <- b
-}
-
+// a NUL cannot arrive through to_bytes - the source string ends there - so the hole is punched
+// between two conversions
 def private with_nul(head, tail : string) : array<uint8> {
-    var b : array<uint8>
-    push_text(b, head)
+    var b <- to_bytes(head)
     b |> push(uint8(0))
-    push_text(b, tail)
+    b |> push_from(to_bytes(tail))
     return <- b
 }
 
 // bytes of `text` with the view shortened to `n` - the dropped bytes stay in the buffer, so a
 // core that scans for a terminator instead of honouring `size` would walk straight into them
 def private truncated(text : string; n : int) : array<uint8> {
-    var b : array<uint8>
-    push_text(b, text)
+    var b <- to_bytes(text)
     b |> resize(n)
     return <- b
 }
@@ -199,7 +185,7 @@ def test_bounded_find(t : T?) {
     t |> equal(find(cut, 'd'), -1, "find char never reads past size")
     t |> equal(rfind(cut, "cd"), -1, "rfind never reads past size")
     t |> equal(find(cut, "bc"), 1, "a match fully inside the view still hits")
-    var inscope edge <- buf_of("abcdef")
+    var inscope edge <- to_bytes("abcdef")
     t |> equal(find(edge, "ef"), 4, "a needle ending exactly at the boundary hits")
     t |> equal(rfind(edge, "ef"), 4, "rfind agrees")
     t |> equal(find(edge, "f"), 5, "a one-byte needle at the last offset hits")
@@ -214,7 +200,7 @@ def test_bounded_find(t : T?) {
 
 [test]
 def test_bounded_rfind_clamp(t : T?) {
-    var inscope d <- buf_of("abcabc")
+    var inscope d <- to_bytes("abcabc")
     t |> equal(rfind(d, "bc"), 4, "rfind returns the last offset")
     t |> equal(rfind(d, "bc", 6), 4, "start == size clamps to the last fitting offset")
     t |> equal(rfind(d, "bc", 5), 4, "start above the last fitting offset clamps down")
@@ -230,14 +216,14 @@ def test_bounded_rfind_clamp(t : T?) {
 
 [test]
 def test_bounded_strip_and_trim(t : T?) {
-    var inscope ws <- buf_of(" \t\n\r\f\v ")
+    var inscope ws <- to_bytes(" \t\n\r\f\v ")
     t |> success(is_null_str(strip(ws)), "an all-whitespace view strips to null")
     t |> success(is_null_str(strip_left(ws)), "strip_left agrees")
     t |> success(is_null_str(strip_right(ws)), "strip_right agrees")
     t |> success(is_null_str(trim(ws)), "trim agrees")
     t |> success(is_null_str(ltrim(ws)), "ltrim agrees")
     t |> success(is_null_str(rtrim(ws)), "rtrim agrees")
-    var inscope both <- buf_of("  a  ")
+    var inscope both <- to_bytes("  a  ")
     t |> equal(strip(both), "a", "a whitespace run on both boundaries strips to the middle")
     t |> equal(trim(both), "a", "trim agrees")
     t |> equal(strip_left(both), "a  ", "strip_left leaves the trailing run")
@@ -275,7 +261,7 @@ def test_bounded_parse(t : T?) {
 
 [test]
 def test_bounded_parse_cursor_walk(t : T?) {
-    var inscope csv <- buf_of("10,20,30")
+    var inscope csv <- to_bytes("10,20,30")
     var cr = ConversionResult.ok
     var off = 0
     var inscope seen : array<int>
@@ -294,7 +280,7 @@ def test_bounded_parse_cursor_walk(t : T?) {
 
 [test]
 def test_parse_offset_clamp(t : T?) {
-    var inscope d <- buf_of("42")
+    var inscope d <- to_bytes("42")
     var cr = ConversionResult.ok
     var off = 0
     t |> equal(int(d, cr, off), 42, "offset 0 parses the whole view")

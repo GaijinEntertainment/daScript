@@ -418,15 +418,16 @@ def cpp_extract_template_args(full_text : string; kind : string; name : string) 
 // (e.g. operator overloads with `+` / `<` characters).
 def cpp_regex_escape(s : string) : string {
     return build_string() $(var w) {
-        let n = length(s)
-        for (i in range(n)) {
-            let c = character_at(s, i) // nolint:PERF003
-            if (c == '.' || c == '+' || c == '*' || c == '?' || c == '(' || c == ')'
-                || c == '[' || c == ']' || c == '{' || c == '}' || c == '|'
-                || c == '^' || c == '$' || c == '\\') {
-                w |> write("\\")
+        peek_data(s) $(d) {
+            for (c in d) {
+                let ch = int(c)
+                if (ch == '.' || ch == '+' || ch == '*' || ch == '?' || ch == '(' || ch == ')'
+                    || ch == '[' || ch == ']' || ch == '{' || ch == '}' || ch == '|'
+                    || ch == '^' || ch == '$' || ch == '\\') {
+                    w |> write("\\")
+                }
+                w |> write_char(ch)
             }
-            w |> write(slice(s, i, i + 1))
         }
     }
 }

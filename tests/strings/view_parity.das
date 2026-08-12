@@ -22,29 +22,19 @@ struct private Case {
     bytes : array<uint8>
 }
 
-def private push_text(var buf : array<uint8>; src : string) {
-    peek_data(src) $(d) {
-        for (b in d) {
-            buf |> push(b)
-        }
-    }
-}
-
 def private add_text(var cases : array<Case>; name, text : string) {
-    var b : array<uint8>
-    push_text(b, text)
+    var b <- to_bytes(text)
     cases |> emplace(Case(name = name, bytes <- b))
 }
 
 // high bytes cannot be written as das literals, so they arrive as raw byte values
 def private add_raw(var cases : array<Case>; name, head : string; mid : array<int>; tail : string) {
-    var b : array<uint8>
-    push_text(b, head)
+    var b <- to_bytes(head)
     b |> reserve(length(b) + length(mid))
     for (v in mid) {
         b |> push(uint8(v))
     }
-    push_text(b, tail)
+    b |> push_from(to_bytes(tail))
     cases |> emplace(Case(name = name, bytes <- b))
 }
 
@@ -235,6 +225,20 @@ def private check_write(t : T?; name : string; d : array<uint8>) {
     }
 }
 
+// to_bytes has no string counterpart either - it is the materializing inverse of string(d),
+// so its oracle is the round trip: over NUL-free bytes it must reproduce the view exactly
+def private check_to_bytes(t : T?; name : string; d : array<uint8>) {
+    let s = string(d)
+    var inscope b <- to_bytes(s)
+    t |> equal(length(b), length(d), "to_bytes({name}) length")
+    var same = length(b) == length(d)
+    for (x, y in b, d) {
+        same = same && x == y
+    }
+    t |> success(same, "to_bytes({name}) reproduces the view byte for byte")
+    t |> equal(string(b), s, "string(to_bytes({name})) round-trips")
+}
+
 [test]
 def test_parity_slice_and_chop(t : T?) {
     var inscope cases <- text_cases()
@@ -290,6 +294,14 @@ def test_parity_write_string(t : T?) {
     var inscope cases <- text_cases()
     for (c in cases) {
         check_write(t, c.name, c.bytes)
+    }
+}
+
+[test]
+def test_parity_to_bytes(t : T?) {
+    var inscope cases <- text_cases()
+    for (c in cases) {
+        check_to_bytes(t, c.name, c.bytes)
     }
 }
 
