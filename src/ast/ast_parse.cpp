@@ -874,7 +874,10 @@ namespace das {
         TextWriter * logs = nullptr;
         explicit ModuleGcFinalize ( Program * p ) : prog(p) {}
         ~ModuleGcFinalize() {
-            if ( prog ) {
+            // thisModule is legitimately null while a deserialize is in flight: Program::serialize
+            // releases it for the whole module-read loop and only restores it at the end, so an
+            // exception unwinding out of that loop reaches here with no module to collect
+            if ( prog && prog->thisModule ) {
                 auto m = prog->thisModule.get();
                 gc_root * oldRoot = m->module_gc_root.get();
                 auto fresh = make_unique<gc_root>();

@@ -1172,14 +1172,27 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( Module & module ) {
-        thisModule = &module;
-        module.serialize(*this, /*already_exists*/false);
-        return *this;
+        return serializeModule(module, /*already_exists*/false);
     }
 
     AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
         thisModule = &module;
-        module.serialize(*this, already_exists);
+        if ( writing ) {
+            module.serialize(*this, already_exists);
+            return *this;
+        }
+        // reading: Module::serialize restores moduleFlags - builtIn among them - before the body
+        // is read, so a record that throws partway would leave a module flagged builtIn that was
+        // never linked into the environment's module list, where ~Module's unlink walk finds
+        // nothing and asserts. Put the flag back before the exception reaches a caller that
+        // disposes of the module; the callers that keep it re-establish builtIn via promoteToBuiltin
+        const bool wasBuiltIn = module.builtIn;
+        try {
+            module.serialize(*this, already_exists);
+        } catch ( ... ) {
+            module.builtIn = wasBuiltIn;
+            throw;
+        }
         return *this;
     }
 
