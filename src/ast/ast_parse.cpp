@@ -581,6 +581,11 @@ namespace das {
         gc_root::gc_get_active_root() = program->thisModule->module_gc_root.get();
     }
 
+    // module-cache stream magic: one header at the head of the whole storage. Lets a new
+    // reader reject a cache written by a different protocol/version cleanly, instead of
+    // desyncing on a layout difference mid-record.
+    static constexpr uint32_t SER_MODULE_STREAM_MAGIC = 0x4D534144u;    // 'DASM'
+
     bool trySerializeProgramModule (
             ProgramPtr          & program,
             const FileAccessPtr & access,
@@ -594,30 +599,45 @@ namespace das {
             return false;
         }
 
-        int64_t file_mtime = access->getFileMtime(fileName.c_str());
         // The serializer module owns the exception boundary. This parser module is
         // also built in configurations where exception handling is disabled.
+
+        // stream header: checked once, and only when this serializer starts at the head of
+        // the storage (a persistent serializer appends several compiles into one stream -
+        // later compiles begin mid-stream, past the header)
+        if ( !serializer_read->checkedStreamHeader ) {
+            serializer_read->checkedStreamHeader = true;
+            if ( serializer_read->buffer->bufferPos == 0 ) {
+                uint32_t magic = 0, version = 0;
+                if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
+                    serializer << magic;
+                    serializer << version;
+                }) || magic != SER_MODULE_STREAM_MAGIC || version != AstSerializer::getVersion() ) {
+                    serializer_read->seenNewModule = true;
+                    serializer_read->failed = true;
+                    logs << "ser: read failed (stale or foreign module cache stream)\n";
+                    return false;
+                }
+            }
+        }
+
+        int64_t file_mtime = access->getFileMtime(fileName.c_str());
         int64_t saved_mtime = 0;
         string saved_filename{};
-        bool header_mismatch = false;
+        uint64_t payload_size = 0;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_mtime;
             serializer << saved_filename;
-            header_mismatch = saved_filename != fileName || file_mtime != saved_mtime;
-            if ( header_mismatch ) {
-                return;
-            }
-            LOG(LogLevel::debug) << "das: serialize: read program '" << fileName << "' epoch " << (unsigned long long)(serializer.epoch + 1) << "\n";
-            serializer.thisModuleGroup = &libGroup;
-            serializer.serializeProgram(program, libGroup);
+            serializer << payload_size;
         }) ) {
             serializer_read->seenNewModule = true;
-            replaceProgramKeepGcRootValid(program);
             logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
 
-        if ( header_mismatch ) {
+        if ( saved_filename != fileName || file_mtime != saved_mtime ) {
+            // a CHANGED (or added/removed) module invalidates everything after it - das
+            // modules depend on earlier ones (macros), so this stays the prefix cutoff
             serializer_read->seenNewModule = true;
             serializer_read->failed = true;
             if (saved_filename != fileName) {
@@ -629,28 +649,47 @@ namespace das {
             return false;
         }
 
-        if ( program->failed()) {
-            serializer_read->seenNewModule = true;
-            serializer_read->failed = true;
-            replaceProgramKeepGcRootValid(program);
+        size_t payload_start = serializer_read->buffer->bufferPos;
+        bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
+            LOG(LogLevel::debug) << "das: serialize: read program '" << fileName << "' epoch " << (unsigned long long)(serializer.epoch + 1) << "\n";
+            serializer.thisModuleGroup = &libGroup;
+            serializer.serializeProgram(program, libGroup);
+        });
+
+        if ( read_ok && !program->failed() && !serializer_read->failed ) {
+            program->thisModuleGroup = &libGroup;
+            if ( serializer_write != nullptr ) {
+                serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
+            }
+            return true;
+        }
+
+        if ( !read_ok ) {
+            logs << "ser: read failed '" << fileName << "'\n";
+        } else if ( program->failed() ) {
             logs << "ser: program failed '" << fileName << "'\n";
-            return false;
-        }
-
-        program->thisModuleGroup = &libGroup;
-
-        if ( serializer_read->failed ) {
-            serializer_read->seenNewModule = true;
-            replaceProgramKeepGcRootValid(program);
+        } else {
             logs << "ser: serialization failed. Internal issue.\n";
+        }
+        replaceProgramKeepGcRootValid(program);
+
+        // the record failed but the FILE is unchanged (header matched) - environment drift
+        // (e.g. a lazily populated builtin like dasbind, whose registrations only exist
+        // after its registrar module compiles) or a corrupt record. Reparsing the unchanged
+        // file reproduces the write-run state, registrations included, so later records
+        // stay valid: skip to the record end and keep serving them. A zero length (writer's
+        // storage could not backpatch) or an out-of-range one keeps the legacy cutoff.
+        size_t record_end = payload_start + size_t(payload_size);
+        if ( payload_size != 0 && record_end <= serializer_read->buffer->buffer.size() ) {
+            serializer_read->buffer->bufferPos = record_end;
+            serializer_read->failed = false;            // per-record failure; the stream is still aligned
+            serializer_read->resumedModules ++;
+            logs << "ser: reparsing in place '" << fileName << "'\n";
             return false;
         }
-
-        if ( serializer_write != nullptr ) {
-            serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
-        }
-
-        return true;
+        serializer_read->seenNewModule = true;
+        serializer_read->failed = true;
+        return false;
     }
 
     bool detectGen2Syntax ( const char * text, uint32_t length, bool& value ) {
@@ -1292,10 +1331,25 @@ namespace das {
 
     void writebackModules ( ModuleGroup & libGroup ) {
         auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
+        // stream header once, at the head of the storage (a persistent serializer appends
+        // several compiles into one stream - only the first one carries the header)
+        if ( serializer_write->buffer->writingSize() == 0 ) {
+            uint32_t magic = SER_MODULE_STREAM_MAGIC;
+            uint32_t version = AstSerializer::getVersion();
+            *serializer_write << magic;
+            *serializer_write << version;
+        }
         for ( auto & parsedModule : serializer_write->parsedModules ) {
             auto & [fileName, fileMtime, program, thisModule] = parsedModule; // parsedModule is tuple<string, int64_t, ProgramPtr, Module *>
             *serializer_write << fileMtime;
             *serializer_write << const_cast<string &>(fileName);
+            // record length, backpatched after the payload: lets the reader skip a record
+            // that fails to deserialize for an UNCHANGED file and keep serving later ones.
+            // Fixed-width u64 on purpose - an adaptive size could not be patched in place.
+            uint64_t payload_size = 0;
+            size_t len_at = serializer_write->buffer->writingSize();
+            *serializer_write << payload_size;
+            size_t payload_start = serializer_write->buffer->writingSize();
             if ( program->thisModule && program->thisModule->name.empty() )  {
                 serializer_write->serializeProgram(program, libGroup);
             } else {
@@ -1304,6 +1358,8 @@ namespace das {
                 serializer_write->serializeProgram(program, libGroup);
                 program->thisModule.release();
             }
+            payload_size = uint64_t(serializer_write->buffer->writingSize() - payload_start);
+            serializer_write->buffer->patch(len_at, &payload_size, sizeof(payload_size));
         }
     }
 

@@ -40,6 +40,7 @@ environment wins over both, which is what makes them usable for an A/B without t
 | `DAS_JIT_X64_FORCE_FEATURES` | text | Comma-separated x64 CPU features to force on (e.g. `avx2,f16c`), bypassing detection. |
 | `DAS_JIT_ARM64_FORCE_FEATURES` | text | The arm64 twin (e.g. `dotprod,i8mm`). |
 | `DAS_JIT_PROBE_LTO` | flag | Split-JIT LTO probe: partitions emit bitcode instead of objects and the link runs lld LTO (pass `/opt:lldlto=2` + CRT `/LIBPATH`s via `--jit-linker-string`). Dev instrument for measuring cross-module-inlining recovery; needs `--jit-split-modules` + `--jit-obj-cache=0`, announces itself, and folds into the cache keys so the probe artifact never serves a normal run. |
+| `DAS_JIT_DUMP_HASHES` | flag | Split-JIT key forensics: log every `(partition, mangled name, aot hash)` the obj-cache chain folds. Diff two runs to locate WHERE a key diverged — distinguishes "a function's hash changed" from "same hashes, different fold order" (the class of bug an AST-cache or module-order change introduces). |
 
 Both exist to reproduce another box's codegen locally, or to check that a feature-gated kernel is
 actually the one being measured. Forcing a feature the CPU lacks produces an illegal instruction at

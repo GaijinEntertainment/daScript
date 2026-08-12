@@ -7,6 +7,7 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/job_que.h"
 #if defined(_WIN32) && defined(_DEBUG)
@@ -49,6 +50,9 @@ static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static bool jitNoCache = false; // -jit-no-cache: bypass DLL-cache path, run in-memory.
 static bool jitStack = false; // -jit-stack: retain every generated call in the logical das stack.
 static string jitOutPath = ""; // Empty, JIT module will choose default.
+static string serFile = "";   // -ser <path>: write the AST module cache (env serializer rail) after compile
+static string deserFile = ""; // -deser <path>: read the AST module cache during compile instead of parsing
+static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 
 static bool noDynamicModules = false;
 static bool noLint = false;
@@ -431,7 +435,39 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.log_module_compile_time = logModuleCompileTime;
     policies.building_documentation = buildingDocumentation;
     policies.persistent_heap = true;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+    // The AST module-cache rail (env serializer): -ser captures every parsed module as the
+    // compile runs, -deser feeds them back in the same order instead of parsing (loud
+    // verdict below - the silent fallback-to-parse must not fake a cache hit). -module-cache
+    // is the self-maintaining composition: read the file when present, keep a writer armed,
+    // and save only when the writeback fired (first run, or a changed module cut the
+    // stream). serialize_main_module defaults true, so the whole program rides the cache.
+    ModuleFileCache moduleCache;
+    const string & cacheWritePath = !serFile.empty() ? serFile : moduleCacheFile;
+    moduleCache.install(!deserFile.empty() ? deserFile : moduleCacheFile, cacheWritePath);
+    auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
+    {
+        auto cres = moduleCache.finish();
+        switch ( cres.verdict ) {
+        case ModuleFileCache::ReadVerdict::fallback:
+            tout << "deser: FALLBACK - modules reparsed from source (stale, truncated, or version-mismatched cache)\n";
+            break;
+        case ModuleFileCache::ReadVerdict::partial:
+            // records for unchanged files that failed to deserialize (e.g. a lazily
+            // populated builtin such as dasbind) - reparsed in place, the rest served
+            tout << "deser: partial - " << cres.resumed << " module(s) reparsed in place, rest from cache\n";
+            break;
+        case ModuleFileCache::ReadVerdict::clean:
+            tout << "deser: clean - all modules from cache\n";
+            break;
+        default: break;
+        }
+        if ( cres.wrote ) {
+            tout << "ser: wrote " << cres.wroteBytes << " bytes to '" << cacheWritePath << "'\n";
+        } else if ( cres.saveFailed ) {
+            tout << "ser: cannot write '" << cacheWritePath << "'\n";
+        }
+    }
+    if ( program ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
@@ -582,6 +618,11 @@ void print_help() {
         << "    -output <path> set JIT output path\n"
         << "    --list-shared-modules <path> with -exe: write JSON describing the program's shared modules and daspkg-package .das module sources to <path>\n"
         << "    --force-shared-module <name> with -exe: force-include a shared module by daslang or package name (repeatable)\n"
+        << "    -module-cache <path> self-maintaining AST module cache: read <path> when present\n"
+        << "                (prints 'deser: clean'/'partial'/'FALLBACK'), rewrite it when the compile diverged\n"
+        << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
+        << "    -deser <path> read the AST module cache from <path> during compile instead of parsing;\n"
+        << "                prints 'deser: clean' when every module came from the cache, 'deser: FALLBACK' otherwise\n"
         << "    -use-aot    enable AOT linking (requires AOT stubs linked into the binary)\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -project_root <path> root directory of the project (used for dyn modules)\n"
@@ -736,6 +777,30 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="exe") {
                 jitEnabled = JitMode::Executable;
                 dryRun = true;
+            } else if ( cmd=="ser" ) {
+                if ( i+1 >= argc ) {
+                    printf("-ser requires path argument\n");
+                    print_help();
+                    return -1;
+                }
+                serFile = argv[i+1];
+                i += 1;
+            } else if ( cmd=="deser" ) {
+                if ( i+1 >= argc ) {
+                    printf("-deser requires path argument\n");
+                    print_help();
+                    return -1;
+                }
+                deserFile = argv[i+1];
+                i += 1;
+            } else if ( cmd=="module-cache" ) {
+                if ( i+1 >= argc ) {
+                    printf("-module-cache requires path argument\n");
+                    print_help();
+                    return -1;
+                }
+                moduleCacheFile = argv[i+1];
+                i += 1;
             } else if ( cmd=="-list-shared-modules" ) {
                 // script will pick up next argument by itself (read from llvm_exe.das via get_command_line_arguments())
                 if ( i+1 >= argc ) {
@@ -913,6 +978,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     if (files.empty()) {
         print_help();
+        return -1;
+    }
+    if ( !moduleCacheFile.empty() && (!serFile.empty() || !deserFile.empty()) ) {
+        printf("-module-cache already reads and writes; do not combine it with -ser/-deser\n");
         return -1;
     }
     // register modules

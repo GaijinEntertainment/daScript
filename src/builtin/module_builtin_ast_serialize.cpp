@@ -2847,8 +2847,28 @@ namespace das {
 
         if ( writing ) {
             moduleLibrary = &program->library;  // Module::serialize binds *moduleLibrary (finalizeModule)
-            TopSort ts(program->library.getModules());
-            auto modules = ts.getDependecyOrdered(program->thisModule.get());
+            vector<Module *> modules;
+            if ( !program->isDependency ) {
+                // MAIN record: this list becomes the deserialized program's library
+                // insertion order, which drives foreach_in_order - module [init] order at
+                // runtime and the jit's partition/chain order. Write the LIVE library order
+                // (thisModule moved last: the reader takes the record's final entry as the
+                // program's own module), NOT a re-derived TopSort - any other valid
+                // topological order still reorders [init]s and re-keys every jit obj
+                // partition. The live order also already carries the ambient extra modules
+                // (-jit's just_in_time chain, the profiler) that a reachability walk drops -
+                // their simulate macros (the jit hook) ride the library walk at simulate.
+                for ( auto m : program->library.getModules() ) {
+                    if ( m != program->thisModule.get() ) modules.push_back(m);
+                }
+                modules.push_back(program->thisModule.get());
+            } else {
+                // dependency record: the reachable closure only. The full library here would
+                // make the FIRST record mentioning a later module embed its whole payload
+                // early, dragging not-yet-valid state (lazy builtin hashes) into the record.
+                TopSort ts(program->library.getModules());
+                modules = ts.getDependecyOrdered(program->thisModule.get());
+            }
 
             uint64_t size = modules.size(); *this << size;
 
@@ -3156,6 +3176,84 @@ namespace das {
         removeUnusedSymbols();
         TextWriter logs;
         allocateStack(logs,true,false);
+    }
+
+    void ModuleFileCache::install ( const string & readFrom, const string & writeTo ) {
+        requested = !readFrom.empty() || !writeTo.empty();
+#if !DAS_NO_FILEIO
+        writePath = writeTo;
+        auto & env = *daScriptEnvironment::getBound();
+        if ( !readFrom.empty() ) {
+            if ( FILE * f = fopen(readFrom.c_str(), "rb") ) {
+                fseek(f, 0, SEEK_END);
+                long size = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                if ( size > 0 ) {
+                    readStorage.buffer.resize(size_t(size));
+                    if ( fread(readStorage.buffer.data(), 1, size_t(size), f) != size_t(size) ) {
+                        readStorage.buffer.clear();     // short read - treat as no cache
+                    }
+                }
+                fclose(f);
+            }
+            if ( !readStorage.buffer.empty() ) {
+                reader = make_unique<AstSerializer>(&readStorage, false);
+                env.serializer_read = reader.get();
+            }
+        }
+        if ( !writePath.empty() ) {
+            writer = make_unique<AstSerializer>(&writeStorage, true);
+            env.serializer_write = writer.get();
+        }
+#endif
+    }
+
+    ModuleFileCache::Result ModuleFileCache::finish () {
+        Result res;
+#if DAS_NO_FILEIO
+        // no filesystem on this target: install() bound nothing and the compile parsed
+        // from source - answer 'unavailable' rather than a silent 'none'
+        if ( requested ) res.verdict = ReadVerdict::unavailable;
+#else
+        auto & env = *daScriptEnvironment::getBound();
+        // the debugger path (disableSerializationOnDebugger) may have cleared these
+        // mid-compile; clearing again is harmless, leaving them dangling is not
+        env.serializer_read = nullptr;
+        env.serializer_write = nullptr;
+        if ( reader ) {
+            if ( !reader->checkedStreamHeader ) {
+                res.verdict = ReadVerdict::none;    // nothing was ever read (rail disabled mid-compile)
+            } else if ( reader->failed || reader->seenNewModule ) {
+                res.verdict = ReadVerdict::fallback;
+            } else if ( reader->resumedModules != 0 ) {
+                res.verdict = ReadVerdict::partial;
+            } else {
+                res.verdict = ReadVerdict::clean;
+            }
+            res.resumed = reader->resumedModules;
+            reader->moduleLibrary = nullptr;    // not ours to free
+            // claim the FileInfos the reader created that no module took ownership of -
+            // ~AstSerializer would DELETE them, and the deserialized AST's LineInfos still
+            // point at them (the crash is deferred to the first LineInfo::describe)
+            reader->collectFileInfo(orphanedFileInfos);
+            reader.reset();
+        }
+        if ( writer ) {
+            writer->moduleLibrary = nullptr;
+            writer.reset();     // releases the parsedModules program refs before the program runs
+            if ( !writeStorage.buffer.empty() ) {
+                if ( FILE * f = fopen(writePath.c_str(), "wb") ) {
+                    res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
+                    fclose(f);
+                    res.wrote = res.wroteBytes == uint64_t(writeStorage.buffer.size());
+                    res.saveFailed = !res.wrote;
+                } else {
+                    res.saveFailed = true;
+                }
+            }
+        }
+#endif
+        return res;
     }
 
     AstSerializerState * rtti_create_ast_serializer () {

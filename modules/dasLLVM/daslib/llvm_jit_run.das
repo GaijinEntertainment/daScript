@@ -532,6 +532,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     // obj cache key = env salt + the RUNNING chained fold of module hashes: positional invalidation (ARCHITECTURE.md §2.1); probe = file existence on key-named objs
     var chain = LLVM_JIT_CODEGEN_VERSION
     let env_salt = jit_env_salt(opt_level, size_level, jit_flags.emit_prologue, debug_info, target_triple, true, use_host_cpu)
+    // DAS_JIT_DUMP_HASHES: per-function fold forensics - diff two runs to locate a key divergence
+    let dump_hashes = !empty(get_env_variable("DAS_JIT_DUMP_HASHES"))
     var objs : array<string>
     objs |> reserve(length(order))
     var cached = 0
@@ -539,6 +541,9 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     for (pname, pi in order, count()) {
         let ptag = empty(pname) ? "main" : pname
         for (fun in buckets[pname]) {
+            if (dump_hashes) {
+                to_log(LOG_INFO, "HASHDUMP {ptag} {get_mangled_name(fun)} {get_function_aot_hash(fun)}\n")
+            }
             chain = (chain ^ hash(get_mangled_name(fun))) * JIT_FNV_PRIME   // a rename must re-key: the symbol lives in the .o
             chain = (chain ^ get_function_aot_hash(fun)) * JIT_FNV_PRIME
         }

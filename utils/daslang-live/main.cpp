@@ -12,6 +12,7 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/ast/dyn_modules.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/job_que.h"
 #include <sys/stat.h>
@@ -49,6 +50,7 @@ das::FileAccessPtr get_file_access( char * pak );
 static TextPrinter tout;
 static string projectFile;
 static string project_root;
+static string moduleCacheFile;  // -module-cache <path>: AST module cache, read+refreshed per (re)compile
 static vector<string> load_modules;
 static bool version2syntax = true;
 static bool trackAllocations = false;
@@ -185,6 +187,9 @@ static void auto_tick_agents() {
 // --- Compilation ---
 
 struct CompileResult {
+    // moduleCache owns deserialized-AST FileInfos (LineInfos point at them) — must
+    // outlive everything below. Declared first → destroyed last.
+    ModuleFileCache moduleCache;
     // moduleGroup owns the non-builtin dep modules (deletes them on reset()).
     // Program/Context hold raw Module* into it via library.modules, so it must
     // outlive program+ctx. Declared first → destroyed last.
@@ -212,7 +217,30 @@ static CompileResult compile_script(const string & fn) {
     policies.track_allocations = trackAllocations;
 
     double t_compile = get_time_sec();
+    // AST module cache: live recompiles the whole graph on every reload (shared modules are
+    // not promoted - ignore_shared_modules above), so the cache pays per reload, not just
+    // on the cold start. Same file is read and refreshed: a clean or resumed-only read
+    // writes nothing, an edit rewrites the stream from the changed module's cutoff. The
+    // cache lives in CompileResult - it owns deserialized FileInfos past this return.
+    result.moduleCache.install(moduleCacheFile, moduleCacheFile);
     result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
+    {
+        auto cres = result.moduleCache.finish();
+        switch (cres.verdict) {
+        case ModuleFileCache::ReadVerdict::fallback:
+            tout << "daslang-live: module cache stale - recompiled from source\n";
+            break;
+        case ModuleFileCache::ReadVerdict::partial:
+            tout << "daslang-live: module cache partial - " << cres.resumed << " module(s) reparsed in place\n";
+            break;
+        case ModuleFileCache::ReadVerdict::clean:
+            tout << "daslang-live: module cache clean\n";
+            break;
+        default: break;
+        }
+        if (cres.wrote) tout << "daslang-live: module cache refreshed (" << cres.wroteBytes << " bytes)\n";
+        else if (cres.saveFailed) tout << "daslang-live: module cache write FAILED '" << moduleCacheFile << "'\n";
+    }
     if (!result.program) {
         result.errors = "failed to compile " + fn;
         tout << "ERROR: " << result.errors << "\n";
@@ -722,6 +750,7 @@ static void print_help() {
     tout << "  -project <file>    - project file (.das_project)\n";
     tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
     tout << "  -load_module <path> - directly load a single dynamic-module folder (the one containing .das_module); repeatable. Shadows same-basename entries from dasroot/project_root.\n";
+    tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
     tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
@@ -854,6 +883,8 @@ int main(int argc, char * argv[]) {
             project_root = argv[++i];
         } else if ((arg == "-load_module" || arg == "-load-module") && i + 1 < argc) {
             load_modules.push_back(argv[++i]);
+        } else if (arg == "-module-cache" && i + 1 < argc) {
+            moduleCacheFile = argv[++i];
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {

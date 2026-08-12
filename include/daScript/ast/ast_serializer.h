@@ -44,6 +44,10 @@ namespace das {
         virtual bool readOverflow ( void * data, size_t size ) = 0;
         virtual void write ( const void * data, size_t size ) = 0;
         virtual size_t writingSize() const = 0;
+        // overwrite already-written bytes (record-length backpatch). A storage that cannot
+        // seek keeps the default false — record lengths then stay 0 and the reader falls
+        // back to the legacy stop-at-first-failure cutoff instead of skip-and-resume.
+        virtual bool patch ( size_t /*at*/, const void * /*data*/, size_t /*size*/ ) { return false; }
         virtual ~SerializationStorage() {}
     };
 
@@ -61,6 +65,11 @@ namespace das {
             auto at = buffer.size();
             buffer.resize(at + size);
             memcpy(buffer.data() + at, data, size);
+        }
+        virtual bool patch ( size_t at, const void * data, size_t size ) override {
+            if ( at + size > buffer.size() ) return false;
+            memcpy(buffer.data() + at, data, size);
+            return true;
         }
     };
 
@@ -107,6 +116,9 @@ namespace das {
         size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
         bool                seenNewModule = false;
+    // module-cache resume state (trySerializeProgramModule)
+        bool                checkedStreamHeader = false;
+        uint64_t            resumedModules = 0;     // records skipped + reparsed in place
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -221,7 +233,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 109;   // 109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags (108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
+            return 110;   // 110: module-cache stream header + per-record payload length (resume-on-unchanged) (109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags, 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -329,6 +341,41 @@ namespace das {
                 baseType = (EnumType) bt;
             }
         }
+    };
+
+    // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
+    // / serializer_write): install() binds a reader (when the file exists and is non-empty)
+    // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
+    // and saves the refreshed stream when the writeback fired (ast_parse only writes back
+    // when there was no usable reader or the stream went stale, so an empty write buffer
+    // means the cache on disk is already current). Pass the same path as both readFrom and
+    // writeTo for a self-maintaining cache. Under DAS_NO_FILEIO the cache degrades to a
+    // stub: install() binds nothing and finish() answers 'unavailable'.
+    struct DAS_API ModuleFileCache {
+        enum class ReadVerdict {
+            none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
+            clean,      // every module came from the cache
+            partial,    // resumed: N unchanged-file records reparsed in place, the rest served
+            fallback,   // stale/truncated/foreign stream - modules reparsed from source
+            unavailable // DAS_NO_FILEIO build - a file-backed cache cannot exist on this target
+        };
+        struct Result {
+            ReadVerdict verdict = ReadVerdict::none;
+            uint64_t    resumed = 0;
+            bool        wrote = false;          // refreshed stream saved to writeTo
+            bool        saveFailed = false;     // had bytes to save but could not write the file
+            uint64_t    wroteBytes = 0;
+        };
+        void install ( const string & readFrom, const string & writeTo );
+        Result finish ();
+        SerializationStorageVector  readStorage, writeStorage;
+        unique_ptr<AstSerializer>   reader, writer;
+        string                      writePath;
+        bool                        requested = false;  // install() was asked to read or write
+        // deserialized FileInfos not claimed by any module (collectFileInfo): LineInfos in
+        // the deserialized AST point at them, so this cache object MUST outlive the program
+        // it fed - declare it before the program/context in the embedding scope
+        vector<FileInfoPtr>         orphanedFileInfos;
     };
 
     // Opaque handle to expose serializer to daslang.
