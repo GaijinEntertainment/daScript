@@ -570,23 +570,32 @@ def private tok_dec_row(tk : Tokenizer; corpus, text : string; reps : int; fmt :
 // interleaved, best of `reps` each. A process-subtraction ESTIMATE — both raw walls print beside
 // it, and no estimate is claimed when tokenize does not dominate the process wall.
 def private tok_ref_row(ref_bin, gguf, corpus, text : string; reps : int; fmt : OutFmt) {
-    let dir = get_this_module_dir()
-    let big_path = path_join(dir, ".tok_ref_input.txt")
-    let base_path = path_join(dir, ".tok_ref_base.txt")
-    var wrote = false
-    fopen(big_path, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, text)
-            wrote = true
+    // unique OS-temp inputs (a fixed name beside the bench assumes a writable tree and collides
+    // across concurrent runs), and the run is gated on BOTH writes — a silently missing baseline
+    // file would skew the subtraction while printing as a valid estimate
+    var terr = ""
+    let big_path = create_temp_file("tok_ref_input", "txt", terr)
+    let base_path = create_temp_file("tok_ref_base", "txt", terr)
+    var wrote_big = false
+    var wrote_base = false
+    if (!empty(big_path) && !empty(base_path)) {
+        fopen(big_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, text)
+                wrote_big = true
+            }
+        }
+        fopen(base_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, "a")
+                wrote_base = true
+            }
         }
     }
-    fopen(base_path, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, "a")
-        }
-    }
-    if (!wrote) {
-        say(fmt, "tok ref {corpus}: cannot write {big_path} - skipped\n")
+    if (!wrote_big || !wrote_base) {
+        say(fmt, "tok ref {corpus}: cannot write temp inputs ({terr}) - reference leg skipped\n")
+        remove(big_path) if (!empty(big_path))
+        remove(base_path) if (!empty(base_path))
         return
     }
     let devnull = get_platform_name() == "windows" ? "NUL" : "/dev/null"
