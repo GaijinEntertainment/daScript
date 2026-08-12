@@ -145,6 +145,8 @@ class private TemplateVisitor : AstVisitor {
                 if (key_exists(rules.tag2expr, tn)) {
                     var rexpr = clone_expression(unsafe(rules.tag2expr[tn]))
                     rexpr.at = expr.at
+                    // qmacro applies with forceAt = false, so a $v() subtree gets no other location
+                    stamp_missing_at(rexpr, expr.at)
                     return rexpr
                 }
             }

@@ -401,7 +401,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         var body = func.body as ExprBlock
         body.list.clear()
         // add template_type
-        var aliasT = new TypeDecl(baseType = Type.alias, alias := template_type_name)
+        var aliasT = new TypeDecl(at = func.at, baseType = Type.alias, alias := template_type_name)
         body.list |> emplace_new <| qmacro_expr() {
             var template_type = typeinfo ast_typedecl(type<$t(aliasT)>)
         }
@@ -489,12 +489,12 @@ class TemplateStructure : AstStructureAnnotation {
                     at = st.at
                 )
                 if (arg.basicType == Type.tBool) {
-                    argVar._type  = new TypeDecl(baseType = Type.alias, alias := "TypeDeclPtr")
+                    argVar._type  = new TypeDecl(at = st.at, baseType = Type.alias, alias := "TypeDeclPtr")
                 } elif (arg.basicType == Type.tInt) {
-                    argVar._type  = new TypeDecl(baseType = Type.tInt)
+                    argVar._type  = new TypeDecl(at = st.at, baseType = Type.tInt)
                     argVar.init = qmacro($v(arg.iValue))
                 } elif (arg.basicType == Type.tString) {
-                    argVar._type  = new TypeDecl(baseType = Type.tString)
+                    argVar._type  = new TypeDecl(at = st.at, baseType = Type.tString)
                     argVar.init = qmacro($v(string(arg.sValue)))
                 } else {
                     errors := "unsupported template argument {arg.name} type {arg.basicType}"
@@ -545,13 +545,13 @@ class TemplateTuple : AstStructureAnnotation {
             }
             argNames |> push(string(arg.name))
             var argVar <- new Variable(name := string(arg.name), at = st.at)
-            argVar._type = new TypeDecl(baseType = Type.alias, alias := "TypeDeclPtr")
+            argVar._type = new TypeDecl(at = st.at, baseType = Type.alias, alias := "TypeDeclPtr")
             ctxFnArguments.emplace(argVar)
         }
         let typeMacroFunctionName = string(st.name)
         let nFields = length(st.fields)
         // Alias TypeDecl for the source struct — at typemacro-execution time ``typeinfo ast_typedecl(type<$t(aliasT)>)`` resolves through the module-scoped alias to the source struct, giving us its field list (with template aliases like ``T`` / ``array<T>`` preserved).
-        var aliasT = new TypeDecl(baseType = Type.alias, alias := string(st.name))
+        var aliasT = new TypeDecl(at = st.at, baseType = Type.alias, alias := string(st.name))
         // Per-field argName checks — guard the generic path before the recursive unifier runs.
         var perFieldArgNameChecks : array<ExpressionPtr>
         for (i, fld in iter_range(st.fields), st.fields) {

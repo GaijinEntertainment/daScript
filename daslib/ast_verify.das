@@ -84,6 +84,11 @@ let private UNARY_OPS <- { "-", "+", "~", "!", "++", "--", "+++", "---" }
 // from source, but a macro-built one reaches the string-builder fold with func still null
 let private LVALUE_OPS <- { "++", "--", "+++", "---" }
 
+// a type registered from C++ reports at the shared <c++ binding> location
+def private is_cpp_binding_at(at : LineInfo) : bool {
+    return at.fileInfo != null && starts_with(string(at.fileInfo.name), "<c++ binding")
+}
+
 def private is_enum_type(bt : Type) : bool {
     return (bt == Type.tEnumeration || bt == Type.tEnumeration8
         || bt == Type.tEnumeration16 || bt == Type.tEnumeration64)
@@ -928,12 +933,11 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
         current_fn = fun
-    }
-
-    // a `return` inside a closure returns from the BLOCK, not the function
-    def override preVisitExprBlock(var expr : ExprBlock?) : void {
-        if (expr.blockFlags.isClosure) {
-            closure_depth++
+        need_at(fun.at, "function '{fun.name}'")
+        need_slot(fun.result, "function '{fun.name}' result type", fun.at)
+        if (fun.body == null) {
+            report(fun.at, "function '{fun.name}' has no body after inference")
+            fun.body = placeholder_block(fun.at)
         }
     }
 
@@ -958,7 +962,8 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     // Inference is done, so an operand with no type never got one, and lint / folding /
     // codegen all dereference it unguarded.
     def need_typed(var slot : ExpressionPtr; what : string; at : LineInfo) : void {
-        if (slot == null || slot._type != null || slot.genFlags.generated) {
+        // a statement is not a value - inference never gives it a type
+        if (slot == null || slot._type != null || slot.genFlags.generated || is_stmt_node(slot)) {
             return
         }
         report(at, "{what} ({slot.__rtti}) has no type after inference")
@@ -975,14 +980,124 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 
     // A node with no location makes every later diagnostic over it point at nothing. No
     // kind is exempt: a value from a C++ binding gets the call site stamped by infer.
-    def override preVisitExpression(var expr : ExpressionPtr) : void {
-        if (expr == null || expr.at.fileInfo != null) {
+    def need_at(var at : LineInfo&; what : string) : void {
+        if (at.fileInfo != null) {
             return
         }
-        report(expr.at, "{expr.__rtti} has no source location (at is unset)")
-        if (current_fn != null) {
-            expr.at = current_fn.at
+        // the node has no location, so the report is anchored to the enclosing function
+        let ctx = current_fn != null ? " in '{current_fn.name}'" : ""
+        let anchor = current_fn != null && current_fn.at.fileInfo != null ? current_fn.at : at
+        report(anchor, "{what} has no source location (at is unset){ctx}")
+        if (current_fn != null && current_fn.at.fileInfo != null) {
+            at = current_fn.at
         }
+    }
+
+    // TypeDecl::visit preVisits firstType / secondType / argTypes, so one hook covers the tree
+    def need_type_at(var typ : TypeDeclPtr; what : string) : void {
+        if (typ != null) {
+            need_at(typ.at, "{what} {describe(typ)}")
+        }
+    }
+
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        if (expr != null) {
+            need_at(expr.at, "{expr.__rtti}")
+            need_typed(expr, "{expr.__rtti}", expr.at)
+        }
+    }
+
+    // Inference is done, so a null in a slot codegen dereferences is never filled in later.
+    // A repaired slot keeps the remaining passes alive; the report already failed the compile.
+    def need_slot(var slot : TypeDeclPtr&; what : string; at : LineInfo) : void {
+        if (slot != null) {
+            return
+        }
+        report(at, "{what} is null after inference")
+        slot = new TypeDecl(at = at, baseType = Type.tInt)
+    }
+
+    def verify_type_slots(var typ : TypeDeclPtr) : void {
+        if (is_cpp_binding_at(typ.at)) {
+            return
+        }
+        let bt = typ.baseType
+        let what = "TypeDecl {describe(typ)}"
+        // only these lack an untyped spelling; bare Func / pointer / iterator carry no firstType
+        if (bt == Type.tArray || bt == Type.tFixedArray) {
+            need_slot(typ.firstType, "{what}: element type (firstType)", typ.at)
+        } elif (bt == Type.tTable) {
+            need_slot(typ.firstType, "{what}: key type (firstType)", typ.at)
+            need_slot(typ.secondType, "{what}: value type (secondType)", typ.at)
+        } elif (bt == Type.tDistinct) {
+            need_slot(typ.firstType, "{what}: underlying type (firstType)", typ.at)
+        }
+        for (i in range(length(typ.argTypes))) {
+            need_slot(typ.argTypes[i], "{what}: argTypes[{i}]", typ.at)
+        }
+        if (bt == Type.tStructure && typ.structType == null) {
+            report(typ.at, "{what}: tStructure with a null structType")
+        } elif (is_enum_type(bt) && typ.enumType == null) {
+            report(typ.at, "{what}: {bt} with a null enumType")
+        } elif ((bt == Type.tHandle || bt == Type.tDistinct) && typ.annotation == null) {
+            report(typ.at, "{what}: {bt} with a null annotation")
+        }
+    }
+
+    def override preVisitTypeDecl(var typ : TypeDeclPtr) : void {
+        need_type_at(typ, "TypeDecl")
+        if (typ != null) {
+            verify_type_slots(typ)
+        }
+    }
+
+    def override preVisitAlias(var typ : TypeDeclPtr; name : das_string) : void {
+        need_type_at(typ, "alias '{name}'")
+    }
+
+    def override preVisitFunctionArgument(var fun : FunctionPtr; var arg : VariablePtr; _last : bool) : void {
+        need_at(arg.at, "function '{fun.name}' argument '{arg.name}'")
+        need_slot(arg._type, "function '{fun.name}' argument '{arg.name}' type", arg.at)
+    }
+
+    def override preVisitExprLetVariable(var _expr : ExprLet?; var arg : VariablePtr; _last : bool) : void {
+        need_at(arg.at, "let variable '{arg.name}'")
+        need_slot(arg._type, "let variable '{arg.name}' type", arg.at)
+    }
+
+    def override preVisitExprBlockArgument(var _blk : ExprBlock?; var arg : VariablePtr; _last : bool) : void {
+        need_at(arg.at, "block argument '{arg.name}'")
+        need_slot(arg._type, "block argument '{arg.name}' type", arg.at)
+    }
+
+    def override preVisitGlobalLetVariable(var arg : VariablePtr; _last : bool) : void {
+        need_at(arg.at, "global '{arg.name}'")
+        need_slot(arg._type, "global '{arg.name}' type", arg.at)
+    }
+
+    def override preVisitStructure(var str : StructurePtr) : void {
+        need_at(str.at, "structure '{str.name}'")
+    }
+
+    def override preVisitStructureField(var str : StructurePtr; var decl : FieldDeclaration; _last : bool) : void {
+        need_at(decl.at, "field '{str.name}.{decl.name}'")
+        need_slot(decl._type, "field '{str.name}.{decl.name}' type", decl.at)
+    }
+
+    def override preVisitEnumeration(var enu : EnumerationPtr) : void {
+        need_at(enu.at, "enumeration '{enu.name}'")
+    }
+
+    def override preVisitExprMakeStructField(var _expr : ExprMakeStruct?; _index : int; var decl : MakeFieldDeclPtr; _last : bool) : void {
+        need_at(decl.at, "make-struct field '{decl.name}'")
+    }
+
+    def override preVisitExprMakeVariantField(var _expr : ExprMakeVariant?; _index : int; var decl : MakeFieldDeclPtr; _last : bool) : void {
+        need_at(decl.at, "make-variant field '{decl.name}'")
+    }
+
+    def override preVisitExprNamedCallArgument(var _expr : ExprNamedCall?; var arg : MakeFieldDeclPtr; _last : bool) : void {
+        need_at(arg.at, "named-call argument '{arg.name}'")
     }
 
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
@@ -1033,6 +1148,168 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 
     def override preVisitExprMakeArrayIndex(var expr : ExprMakeArray?; index : int; var init : ExpressionPtr; _last : bool) : void {
         need_typed(init, "ExprMakeArray.values[{index}]", expr.at)
+    }
+
+    // Null-slot rules mirror the pre-infer pass, which asserts the same invariants but skips
+    // generated functions - so a null child inside a lambda / generator / class-generated body
+    // was checked by nothing. This pass does visit them.
+    def need_expr(var slot : ExpressionPtr&; what : string; at : LineInfo) : void {
+        if (slot != null) {
+            return
+        }
+        report(at, "{what} is null after inference")
+        slot = placeholder(at)
+    }
+
+    def need_stmt(var slot : ExpressionPtr&; what : string; at : LineInfo) : void {
+        if (slot != null) {
+            return
+        }
+        report(at, "{what} is null after inference")
+        slot = placeholder_block(at)
+    }
+
+    def need_elements(var list : dasvector`ptr`Expression; what : string; at : LineInfo) : void {
+        for (i in range(length(list))) {
+            need_expr(list[i], "{what}[{i}]", at)
+        }
+    }
+
+    def override preVisitExprField(var expr : ExprField?) : void {
+        need_expr(expr.value, "ExprField.value (field '{expr.name}')", expr.at)
+    }
+
+    def override preVisitExprSafeField(var expr : ExprSafeField?) : void {
+        need_expr(expr.value, "ExprSafeField.value (field '{expr.name}')", expr.at)
+    }
+
+    def override preVisitExprIsVariant(var expr : ExprIsVariant?) : void {
+        need_expr(expr.value, "ExprIsVariant.value (field '{expr.name}')", expr.at)
+    }
+
+    def override preVisitExprAsVariant(var expr : ExprAsVariant?) : void {
+        need_expr(expr.value, "ExprAsVariant.value (field '{expr.name}')", expr.at)
+    }
+
+    def override preVisitExprSafeAsVariant(var expr : ExprSafeAsVariant?) : void {
+        need_expr(expr.value, "ExprSafeAsVariant.value (field '{expr.name}')", expr.at)
+    }
+
+    def override preVisitExprCopy(var expr : ExprCopy?) : void {
+        need_expr(expr.left, "ExprCopy.left", expr.at)
+        need_expr(expr.right, "ExprCopy.right", expr.at)
+    }
+
+    def override preVisitExprMove(var expr : ExprMove?) : void {
+        need_expr(expr.left, "ExprMove.left", expr.at)
+        need_expr(expr.right, "ExprMove.right", expr.at)
+    }
+
+    def override preVisitExprClone(var expr : ExprClone?) : void {
+        need_expr(expr.left, "ExprClone.left", expr.at)
+        need_expr(expr.right, "ExprClone.right", expr.at)
+    }
+
+    def override preVisitExprRef2Ptr(var expr : ExprRef2Ptr?) : void {
+        need_expr(expr.subexpr, "ExprRef2Ptr.subexpr", expr.at)
+    }
+
+    def override preVisitExprRef2Value(var expr : ExprRef2Value?) : void {
+        need_expr(expr.subexpr, "ExprRef2Value.subexpr", expr.at)
+    }
+
+    def override preVisitExprPtr2Ref(var expr : ExprPtr2Ref?) : void {
+        need_expr(expr.subexpr, "ExprPtr2Ref.subexpr", expr.at)
+    }
+
+    def override preVisitExprYield(var expr : ExprYield?) : void {
+        need_expr(expr.subexpr, "ExprYield.subexpr", expr.at)
+    }
+
+    def override preVisitExprIs(var expr : ExprIs?) : void {
+        need_expr(expr.subexpr, "ExprIs.subexpr", expr.at)
+    }
+
+    def override preVisitExprCast(var expr : ExprCast?) : void {
+        need_expr(expr.subexpr, "ExprCast.subexpr", expr.at)
+    }
+
+    def override preVisitExprAt(var expr : ExprAt?) : void {
+        need_expr(expr.subexpr, "ExprAt.subexpr", expr.at)
+        need_expr(expr.index, "ExprAt.index", expr.at)
+    }
+
+    def override preVisitExprSafeAt(var expr : ExprSafeAt?) : void {
+        need_expr(expr.subexpr, "ExprSafeAt.subexpr", expr.at)
+        need_expr(expr.index, "ExprSafeAt.index", expr.at)
+    }
+
+    def override preVisitExprWhile(var expr : ExprWhile?) : void {
+        need_expr(expr.cond, "ExprWhile.cond", expr.at)
+        need_stmt(expr.body, "ExprWhile.body", expr.at)
+    }
+
+    def override preVisitExprIfThenElse(var expr : ExprIfThenElse?) : void {
+        need_expr(expr.cond, "ExprIfThenElse.cond", expr.at)
+        need_stmt(expr.if_true, "ExprIfThenElse.if_true", expr.at)
+        // if_false is legitimately null - an `if` with no `else`
+    }
+
+    def override preVisitExprTryCatch(var expr : ExprTryCatch?) : void {
+        need_stmt(expr.try_block, "ExprTryCatch.try_block", expr.at)
+        need_stmt(expr.catch_block, "ExprTryCatch.catch_block", expr.at)
+    }
+
+    def override preVisitExprWith(var expr : ExprWith?) : void {
+        // `with (module x)` has no subject - ast_expressions.h documents with==nullptr
+        if (empty(expr.moduleName)) {
+            need_expr(expr._with, "ExprWith.with", expr.at)
+        }
+        need_stmt(expr.body, "ExprWith.body", expr.at)
+    }
+
+    def override preVisitExprUnsafe(var expr : ExprUnsafe?) : void {
+        need_stmt(expr.body, "ExprUnsafe.body", expr.at)
+    }
+
+    def override preVisitExprNullCoalescing(var expr : ExprNullCoalescing?) : void {
+        need_expr(expr.subexpr, "ExprNullCoalescing.subexpr", expr.at)
+        need_expr(expr.defaultValue, "ExprNullCoalescing.defaultValue", expr.at)
+    }
+
+    def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
+        need_stmt(expr._block, "ExprMakeBlock.block", expr.at)
+    }
+
+    def override preVisitExprStringBuilder(var expr : ExprStringBuilder?) : void {
+        need_elements(expr.elements, "ExprStringBuilder.elements", expr.at)
+    }
+
+    def override preVisitExprMakeArray(var expr : ExprMakeArray?) : void {
+        need_elements(expr.values, "ExprMakeArray.values", expr.at)
+    }
+
+    def override preVisitExprMakeTuple(var expr : ExprMakeTuple?) : void {
+        need_elements(expr.values, "ExprMakeTuple.values", expr.at)
+    }
+
+    def override preVisitExprFor(var expr : ExprFor?) : void {
+        need_elements(expr.sources, "ExprFor.sources", expr.at)
+        need_stmt(expr.body, "ExprFor.body", expr.at)
+    }
+
+    def override preVisitExprBlock(var expr : ExprBlock?) : void {
+        if (expr.blockFlags.isClosure) {
+            closure_depth++
+        }
+        need_elements(expr.list, "ExprBlock.list", expr.at)
+        need_elements(expr.finalList, "ExprBlock.finalList", expr.at)
+    }
+
+    def check_make_field_value(var decl : MakeFieldDeclPtr; kind : string) : void {
+        if (decl != null) {
+            need_expr(decl.value, "{kind}.value (field '{decl.name}')", decl.at)
+        }
     }
 
     def override preVisitExprReturn(var expr : ExprReturn?) : void {

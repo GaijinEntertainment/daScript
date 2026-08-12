@@ -350,6 +350,31 @@ jobs:
         $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet
         $BIN/das-lint.exe "${CHANGED[@]}" --quiet
 
+    - name: "Run ast-verify on changed .das files"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
+        BASE_REF="${BASE_REF:-master}"
+        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
+        if [ ${#CHANGED[@]} -eq 0 ]; then
+          echo "no .das files changed; skipping ast-verify"
+          exit 0
+        fi
+        rc=0
+        for f in "${CHANGED[@]}"; do
+          case "$(basename "$f")" in
+            cant_*|failed_*|invalid_*) continue ;;   # negative tests compile-fail by design
+          esac
+          # -dry-run: compile and simulate, never execute. Only an `AST verify` line is a failure;
+          # a compile error here belongs to whatever gate owns that file.
+          if $BIN/daslang -dry-run --ast-verify "$f" 2>&1 | grep -F "AST verify"; then
+            echo "ast-verify reported on $f"
+            rc=1
+          fi
+        done
+        exit $rc
+
     - name: "Test daslang_static"
       run: |
         set -eux

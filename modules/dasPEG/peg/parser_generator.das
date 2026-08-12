@@ -4,6 +4,8 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
+options _cyclomatic_complexity = 0
+options _function_length = 0
 
 module parser_generator shared
 
@@ -17,7 +19,7 @@ require daslib/macro_boost
 require daslib/templates_boost
 
 require peg/meta_ast
-require detail/helpers
+require detail/helpers public
 
 def get_value_and_clone_type(var tab : table<auto(kT); TypeDeclPtr>; key : kT) : TypeDeclPtr {
     unsafe {
@@ -26,6 +28,9 @@ def get_value_and_clone_type(var tab : table<auto(kT); TypeDeclPtr>; key : kT) :
 }
 
 struct ParserGenerator {
+    // the macro call the grammar was written at - every node the generator builds reports there
+    @safe_when_uninitialized at : LineInfo
+
     // Provides information to generate unique names
     rule_counter : table<string; int>
 
@@ -198,7 +203,7 @@ def generate_wrapper_leftrec(var gen : ParserGenerator) {
 
         with (parser) {
             if ($i(cache_table) |> key_exists(index)) {// For reft-recursive rules memoization must be enabled
-                var result = $i(cache_table)[index] // nolint:LINT003
+                var result = $i(cache_table)[index] // nolint:LINT003 nolint:LINT019
                 if (result.success) {// Change the state only on success
                     parser.index = result.endpos
                 }
@@ -223,8 +228,8 @@ def generate_wrapper_leftrec(var gen : ParserGenerator) {
             while (true) {
                 parser.index = mark
 
-                var newres = $c(inner_parsing_fun)(parser) // nolint:LINT003
-                var endpos = parser.index // nolint:LINT003
+                var newres = $c(inner_parsing_fun)(parser) // nolint:LINT003 nolint:LINT019
+                var endpos = parser.index // nolint:LINT003 nolint:LINT019
 
                 // Break if no movement
                 if ($v(gen.debug)) {
@@ -257,6 +262,7 @@ def generate_wrapper_leftrec(var gen : ParserGenerator) {
 
 def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     var s : StructurePtr <- new Structure(uninitialized)
+    s.at = gen.at
 
     // jsonParser, expressionParser, dasParser
     s.name := "{parser_name}Parser`id_{gen.id}"
@@ -291,7 +297,7 @@ def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     s |> add_structure_field_new("errors", qmacro_type(type<array<ParsingError>>))
 
     // Save constructed parser type for later
-    gen.parser_type = new TypeDecl(baseType = Type.tStructure, structType = s)
+    gen.parser_type = new TypeDecl(at = gen.at, baseType = Type.tStructure, structType = s)
 
     compiling_module() |> add_structure(s)
 }
@@ -309,6 +315,7 @@ def add_structure_field(var struct_ : StructurePtr; name : string; var t : TypeD
 
     struct_.fields[fi].name := name
     struct_.fields[fi]._type = t
+    struct_.fields[fi].at = struct_.at
 }
 
 
@@ -536,7 +543,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
                 if (!$i(varname).success) {
                     return <- default<$t(return_type)>
                 }
-                var $i(result_name) <- $i(varname).value // nolint:LINT002 nolint:LINT003
+                var $i(result_name) <- $i(varname).value // nolint:LINT002 nolint:LINT003 nolint:LINT019
             }
 
             return flatten_block(t as ExprBlock)
@@ -552,7 +559,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
                 let $i("ext_pos_{i}") = parser.index
                 $b(subrule_)
                 let $i("str_{i}") = string(parser.input)
-                var $i(result_handle) : string = $i("str_{i}") |> slice($i("ext_pos_{i}"), parser.index) // nolint:LINT003
+                var $i(result_handle) : string = $i("str_{i}") |> slice($i("ext_pos_{i}"), parser.index) // nolint:LINT003 nolint:LINT019
                 if ($v(gen.tracing)) {
                     parser |> log_info <| "Extracted text from the stream: '{$i(result_handle) |> escape}'"
                 }
@@ -670,7 +677,7 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
             parser |> log_plain <| "Saved the state for negative assertion"
         }
 
-        var $i(success_name) = invoke() { // nolint:LINT003
+        var $i(success_name) = invoke() { // nolint:LINT003 nolint:LINT019
             $b(rule_code)
         }
 
@@ -687,7 +694,7 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
 
             return <- default<$t(return_type)>
 
-            if ($v(gen.tracing)) { // nolint:LINT001
+            if ($v(gen.tracing)) { // nolint:LINT001 nolint:LINT019
                 parser |> log_success <| "Assertion failed; continuing"
             }
         }
@@ -715,7 +722,7 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     var t <- qmacro_block() {
         let $i(mark_name) = parser.index
 
-        var $i(success_name) = invoke() { // nolint:LINT003
+        var $i(success_name) = invoke() { // nolint:LINT003 nolint:LINT019
             $b(rule_code)
         }
 
@@ -760,10 +767,10 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
             if (!$i(first_result_name).success) {
                 if (parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix) {
-                    var error = "Error: Expected the rule `" |> red_str($v(gen.color_output)) // nolint:LINT003
-                    var terminal = "{$v(rule_ |> describe_rule)}" |> bold // nolint:LINT003
-                    var rest = "` at {parser.index}" |> red_str($v(gen.color_output)) // nolint:LINT003
-                    var complete_message = "{error}{terminal}{rest}" // nolint:LINT003
+                    var error = "Error: Expected the rule `" |> red_str($v(gen.color_output)) // nolint:LINT003 nolint:LINT019
+                    var terminal = "{$v(rule_ |> describe_rule)}" |> bold // nolint:LINT003 nolint:LINT019
+                    var rest = "` at {parser.index}" |> red_str($v(gen.color_output)) // nolint:LINT003 nolint:LINT019
+                    var complete_message = "{error}{terminal}{rest}" // nolint:LINT003 nolint:LINT019
                     parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                 }
 
@@ -1019,7 +1026,7 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
 
         parser.tabs++
 
-        var cut = false // nolint:LINT003
+        var cut = false // nolint:LINT003 nolint:LINT019
 
         var $i(result) <- invoke() {
             $b(block_contents)
@@ -1066,7 +1073,7 @@ def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen 
             parser |> log_plain <| "Executing action"
         }
 
-        var val : $t(action_type) <- invoke() $() : $t(action_type) { // nolint:LINT003
+        var val : $t(action_type) <- invoke() $() : $t(action_type) { // nolint:LINT003 nolint:LINT019
             $b(action_block)
         }
 
@@ -1074,7 +1081,7 @@ def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen 
             parser |> log_plain <| "Returning result at index {parser.index}"
         }
 
-        var result : $t(return_type) <- (success = true, value <- val, endpos = parser.index) // nolint:PERF009 macro-generated tuple
+        var result : $t(return_type) <- (success = true, value <- val, endpos = parser.index) // nolint:PERF009 macro-generated tuple nolint:LINT019
         return <- result
     }
 
@@ -1190,7 +1197,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                     parser |> log_success <| "Matched a decimal number {$i(name).value}"
                 }
 
-                var $i(handle) = $i(name).value // nolint:LINT003
+                var $i(handle) = $i(name).value // nolint:LINT003 nolint:LINT019
             }
         }
 
@@ -1296,7 +1303,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 if ($v(gen.tracing)) {
                     parser |> log_success <| "Matched a string {$i(name).value}"
                 }
-                var $i(handle) : string = $i(name).value // nolint:LINT003
+                var $i(handle) : string = $i(name).value // nolint:LINT003 nolint:LINT019
             }
         }
 
@@ -1319,7 +1326,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 }
 
                 if ($v(gen.tracing)) parser |> log_success <| "Matched a double {$i(name).value}"
-                var $i(handle) = $i(name).value // nolint:LINT003
+                var $i(handle) = $i(name).value // nolint:LINT003 nolint:LINT019
             }
         }
     }

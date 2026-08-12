@@ -1940,12 +1940,14 @@ namespace das {
                                 arg->init = arg->init->visit(*this);
                                 if (arg->init->type && !arg->init->type->isAutoOrAlias()) {
                                     arg->type = new TypeDecl(*arg->init->type);
+                                    if ( !arg->type->at.fileInfo ) arg->type->at = arg->at;
                                     continue;
                                 }
                             }
                             auto argT = inferPartialAliases(arg->type, arg->type, clone, &aliases);
                             if ( !argT->isAutoOrAlias() ) {
                                 arg->type = argT;
+                                if ( !arg->type->at.fileInfo ) arg->type->at = arg->at;
                                 continue;
                             }
                             error("unknown type of argument " + clone->arguments[ai]->name + "; can't instance " + describeFunction(oneGeneric), "",

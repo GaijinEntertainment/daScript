@@ -1196,6 +1196,7 @@ namespace das {
             var->at = at;
             var->generated = true;
             var->type = new TypeDecl(Type::autoinfer);
+            var->type->at = at;
             var->type->constant = isConst;
             // autoinfer inherits constness from the init; a mutable temp initialized
             // from a constant must strip it (the `-const` operator) or writes fail
@@ -1217,6 +1218,7 @@ namespace das {
             var->at = at;
             var->generated = true;
             var->type = new TypeDecl(*type);
+            if ( !var->type->at.fileInfo ) var->type->at = at;
             var->type->constant = false;
             var->type->ref = false;
             var->type->safeWhenUninitialized = true;    // assigned before any read by construction

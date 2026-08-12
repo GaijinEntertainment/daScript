@@ -139,6 +139,8 @@ namespace das {
             return nullptr;
         }
         res->enumType = const_cast<Enumeration*>(this);
+        // a das enum knows where it was declared; a C++-registered one has no source at all
+        res->at = at.fileInfo ? at : cppBindingLineInfo();
         return res;
     }
 
@@ -229,7 +231,10 @@ namespace das {
         auto cs = new Structure(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
-            cs->fields.emplace_back(fd.name, new TypeDecl(*fd.type), fd.init ? fd.init->clone() : nullptr, fd.annotation, fd.moveSemantics, fd.at);
+            // the copied field type inherits the field's own location when it has none
+            auto fdT = new TypeDecl(*fd.type);
+            if ( !fdT->at.fileInfo ) fdT->at = fd.at;
+            cs->fields.emplace_back(fd.name, fdT, fd.init ? fd.init->clone() : nullptr, fd.annotation, fd.moveSemantics, fd.at);
             cs->fields.back().flags = fd.flags;
         }
         aliases.foreach([&](const TypeDeclPtr & atype) -> bool {
@@ -1814,14 +1819,19 @@ namespace das {
     }
 
     TypeDeclPtr ExprBlock::makeBlockType () const {
+        // the block's own location stands for every slot copied here - an inferred block type
+        // or argument type has none of its own, and this is where the copy is allocated
         auto eT = new TypeDecl(Type::tBlock);
+        eT->at = at;
         eT->constant = true;
         if ( type ) {
             eT->firstType = new TypeDecl(*type);
+            if ( !eT->firstType->at.fileInfo ) eT->firstType->at = at;
         }
         for ( auto & arg : arguments ) {
             if ( arg->type ) {
                 eT->argTypes.push_back(new TypeDecl(*arg->type));
+                if ( !eT->argTypes.back()->at.fileInfo ) eT->argTypes.back()->at = at;
                 eT->argNames.push_back(arg->name);
             }
         }
