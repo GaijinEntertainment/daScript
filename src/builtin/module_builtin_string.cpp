@@ -68,6 +68,21 @@ namespace das
         return (v < minv) ? minv : (v > maxv) ? maxv : v;
     }
 
+    // an empty view has a null data pointer, which the cores would read as "no string at all"
+    static __forceinline const char * view_data ( const TArray<uint8_t> & bytes ) {
+        return bytes.data ? (const char *) bytes.data : "";
+    }
+
+    // every view entry sizes itself here: the find/slice family returns int offsets, so a view
+    // past INT_MAX has no representable answer and stops like length() instead of wrapping
+    static inline uint32_t view_size ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        if ( bytes.size > uint64_t(INT32_MAX) ) {
+            context->throw_error_at(at, "byte view size %llu exceeds INT_MAX; string view operations return int offsets "
+                "and are not supported on views this large", (unsigned long long)bytes.size);
+        }
+        return uint32_t(bytes.size);
+    }
+
     // Every string entry below is stringLengthSafe + a length-bounded core, so the same core
     // serves a byte view that carries its own length and never scans for a terminator.
     // A bounded core treats an interior NUL as data.
@@ -112,13 +127,29 @@ namespace das
         return starts_with_at_core(str, stringLengthSafe(*context, str), offset, cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
     }
 
-    __forceinline bool is_space ( char c ) {
-        return c==' ' || c=='\t' || c=='\r' || c=='\n' || c=='\f' || c=='\v';
+    bool builtin_view_endswith ( const TArray<uint8_t> & bytes, const char * cmp, Context * context, LineInfoArg * at ) {
+        return ends_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLengthSafe(*context, cmp));
+    }
+
+    bool builtin_view_startswith ( const TArray<uint8_t> & bytes, const char * cmp, Context * context, LineInfoArg * at ) {
+        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, stringLengthSafe(*context, cmp));
+    }
+
+    bool builtin_view_startswith2 ( const TArray<uint8_t> & bytes, const char * cmp, uint32_t cmpLen, Context * context, LineInfoArg * at ) {
+        return starts_with_core(view_data(bytes), view_size(bytes, context, at), cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
+    }
+
+    bool builtin_view_startswith3 ( const TArray<uint8_t> & bytes, int32_t offset, const char * cmp, Context * context, LineInfoArg * at ) {
+        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, stringLengthSafe(*context, cmp));
+    }
+
+    bool builtin_view_startswith4 ( const TArray<uint8_t> & bytes, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context, LineInfoArg * at ) {
+        return starts_with_at_core(view_data(bytes), view_size(bytes, context, at), offset, cmp, min(cmpLen, stringLengthSafe(*context, cmp)));
     }
 
     static inline const char* strip_l(const char *str, uint32_t len) {
         const char *t = str, *e = str + len;
-        while (t != e && is_space(*t))
+        while (t != e && is_white_space(*t))
             t++;
         return t;
     }
@@ -127,7 +158,7 @@ namespace das
         if (len == 0)
             return str;
         const char *t = &str[len-1];
-        while (t >= str && is_space(*t))
+        while (t >= str && is_white_space(*t))
             t--;
         return t + 1;
     }
@@ -166,6 +197,18 @@ namespace das
         return strip_right_core(str, stringLengthSafe(*context, str), context, at);
     }
 
+    char* builtin_view_strip ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return strip_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    char* builtin_view_strip_left ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return strip_left_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    char* builtin_view_strip_right ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return strip_right_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
     // memchr narrows to the candidate first byte, then one memcmp confirms the rest
     static int find_sub_core ( const char * str, uint32_t strLen, const char * sub, uint32_t subLen, uint32_t from ) {
         if ( !subLen || subLen>strLen ) return -1;
@@ -183,12 +226,12 @@ namespace das
         return -1;
     }
 
-    // Ch is matched against a char, so a value outside the char range matches nothing;
-    // memchr alone would match it modulo 256, hence the explicit reject
+    // Ch is matched as an unsigned byte value; anything outside 0..255 is not a byte and
+    // matches nothing (memchr alone would match it modulo 256, hence the explicit reject)
     static int find_char_core ( const char * str, uint32_t strLen, int Ch, uint32_t from ) {
-        if ( Ch != int(char(Ch)) ) return -1;
+        if ( Ch < 0 || Ch > 255 ) return -1;
         if ( from >= strLen ) return -1;
-        auto f = memchr(str + from, int(uint8_t(char(Ch))), strLen - from);
+        auto f = memchr(str + from, Ch, strLen - from);
         return f ? int((const char *)f - str) : -1;
     }
 
@@ -228,6 +271,27 @@ namespace das
         return rfind_sub_core(str, strLen, substr, uint32_t(strlen(substr)), int(strLen));
     }
 
+    int builtin_view_find ( const TArray<uint8_t> & bytes, const char * substr, Context * context, LineInfoArg * at ) {
+        return find_sub_core(view_data(bytes), view_size(bytes, context, at), substr, stringLengthSafe(*context, substr), 0);
+    }
+
+    int builtin_view_find_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        return find_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr),
+            uint32_t(clamp_int(start, 0, int(len))));
+    }
+
+    int builtin_view_rfind ( const TArray<uint8_t> & bytes, const char * substr, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr), int(len));
+    }
+
+    int builtin_view_rfind_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        return rfind_sub_core(view_data(bytes), len, substr, stringLengthSafe(*context, substr),
+            clamp_int(start, 0, int(len)));
+    }
+
     static char * chop_core ( const char * str, uint32_t strLength, int start, int length, Context * context, LineInfoArg * at ) {
         if ( length<=0 ) return nullptr;
         const int32_t strLen = int32_t(strLength);
@@ -241,11 +305,20 @@ namespace das
         return chop_core(str, stringLengthSafe(*context, str), start, length, context, at);
     }
 
+    char* builtin_view_chop ( const TArray<uint8_t> & bytes, int start, int length, Context* context, LineInfoArg * at ) {
+        return chop_core(view_data(bytes), view_size(bytes, context, at), start, length, context, at);
+    }
+
+    // negative indices wrap from the end, then both ends clamp into [0,len] - the slice convention
+    static inline void slice_range ( uint32_t strLen, int & start, int & end ) {
+        start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
+        end = clamp_int((end < 0) ? (strLen + end) : end, 0, strLen);
+    }
+
     static char * slice_core ( const char * str, uint32_t strLen, int start, int end, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
-        start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
-        end = clamp_int((end < 0) ? (strLen + end) : end, 0, strLen);
+        slice_range(strLen, start, end);
         return end > start ? context->allocateString(str + start, uint32_t(end-start), at) : nullptr;
     }
 
@@ -262,6 +335,14 @@ namespace das
 
     char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at ) {
         return slice_core(str, stringLengthSafe ( *context, str ), start, context, at);
+    }
+
+    char* builtin_view_slice1 ( const TArray<uint8_t> & bytes, int start, int end, Context * context, LineInfoArg * at ) {
+        return slice_core(view_data(bytes), view_size(bytes, context, at), start, end, context, at);
+    }
+
+    char* builtin_view_slice2 ( const TArray<uint8_t> & bytes, int start, Context * context, LineInfoArg * at ) {
+        return slice_core(view_data(bytes), view_size(bytes, context, at), start, context, at);
     }
 
     char* builtin_string_reverse ( const char *str, Context * context, LineInfoArg * at ) {
@@ -508,6 +589,20 @@ namespace das
         return writer;
     }
 
+    StringBuilderWriter & builtin_view_write_string ( StringBuilderWriter & writer, const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        if ( len ) writer.writeStr(view_data(bytes), size_t(len));
+        return writer;
+    }
+
+    StringBuilderWriter & builtin_view_write_string_range ( StringBuilderWriter & writer, const TArray<uint8_t> & bytes, int start, int end, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        if ( !len ) return writer;
+        slice_range(len, start, end);
+        if ( end > start ) writer.writeStr(view_data(bytes) + start, size_t(end - start));
+        return writer;
+    }
+
     StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str ) {
         if ( !str ) return writer;
         auto estr = escapeString(str,false);
@@ -699,6 +794,16 @@ namespace das
         return find_char_core(str, strLen, Ch, uint32_t(start));
     }
 
+    int builtin_view_find_char_of ( const TArray<uint8_t> & bytes, int Ch, Context * context, LineInfoArg * at ) {
+        return find_char_core(view_data(bytes), view_size(bytes, context, at), Ch, 0);
+    }
+
+    int builtin_view_find_char_of2 ( const TArray<uint8_t> & bytes, int Ch, int start, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        start = clamp_int((start < 0) ? (len + start) : start, 0, len);
+        return find_char_core(view_data(bytes), len, Ch, uint32_t(start));
+    }
+
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
         if ( !bytes.size ) return nullptr;
         return context->allocateString(bytes.data, bytes.size, at);
@@ -795,6 +900,22 @@ namespace das
         return rtrim_chars_core(s, stringLengthSafe(*context, s), ts ? ts : "", context, at);
     }
 
+    char * builtin_view_trim ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return trim_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    char * builtin_view_ltrim ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return ltrim_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    char * builtin_view_rtrim ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
+        return rtrim_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    char * builtin_view_rtrim_ts ( const TArray<uint8_t> & bytes, char * ts, Context * context, LineInfoArg * at ) {
+        return rtrim_chars_core(view_data(bytes), view_size(bytes, context, at), ts ? ts : "", context, at);
+    }
+
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * at ) {
         if ( !str ) return;
         Array arr;
@@ -825,16 +946,18 @@ namespace das
         return hash_blockz64((const uint8_t *)writer.c_str());
     }
 
-    // both cores write `result` on success as well as on failure, and leave `offset` at 0
-    // whenever the parse failed - the string and byte-view entries must agree on both
+    // both cores write `result` on success as well as on failure, and leave `offset` at the
+    // starting position whenever the parse failed - the string and byte-view entries must agree
+    // on both. The string entries always start at 0; a view entry starts wherever its caller's
+    // cursor is, which is what makes the view `offset` an in/out parameter.
     template <typename TT>
-    TT convert_real_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset ) {
-        offset = 0;
+    TT convert_real_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset, uint32_t from = 0 ) {
+        offset = int32_t(from);
         if ( !str ) {
             result = ConversionResult::invalid_argument;
             return TT();
         }
-        const char * b = str, * e = str + len;
+        const char * b = str + from, * e = str + len;
         while ( b!=e && is_white_space(*b) ) b++;
         TT value = 0;
         auto res = fast_float::from_chars(b, e, value);
@@ -848,13 +971,13 @@ namespace das
     }
 
     template <typename TT>
-    TT convert_int_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset, bool hex ) {
-        offset = 0;
+    TT convert_int_core ( const char * str, uint32_t len, ConversionResult & result, int32_t & offset, bool hex, uint32_t from = 0 ) {
+        offset = int32_t(from);
         if ( !str ) {
             result = ConversionResult::invalid_argument;
             return TT();
         }
-        const char * b = str, * e = str + len;
+        const char * b = str + from, * e = str + len;
         while ( b!=e && is_white_space(*b) ) b++;
         if ( hex && (e-b)>=2 && b[0]=='0' && (b[1]=='x' || b[1]=='X') ) b += 2;
         TT value = 0;
@@ -918,6 +1041,68 @@ namespace das
         return convert_from_string<double>(str, result, offset);
     }
 
+    // the view forms take `offset` in and out: in is where to start parsing, out is where the
+    // parse stopped. A start outside [0,size] is rejected without touching the cursor.
+    template <typename TT>
+    TT convert_real_from_view ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        if ( offset<0 || uint32_t(offset)>len ) {
+            result = ConversionResult::invalid_argument;
+            return TT();
+        }
+        return convert_real_core<TT>(view_data(bytes), len, result, offset, uint32_t(offset));
+    }
+
+    template <typename TT>
+    TT convert_int_from_view ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        const uint32_t len = view_size(bytes, context, at);
+        if ( offset<0 || uint32_t(offset)>len ) {
+            result = ConversionResult::invalid_argument;
+            return TT();
+        }
+        return convert_int_core<TT>(view_data(bytes), len, result, offset, hex, uint32_t(offset));
+    }
+
+    int8_t convert_from_view_int8 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<int8_t>(bytes, result, offset, hex, context, at);
+    }
+
+    uint8_t convert_from_view_uint8 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<uint8_t>(bytes, result, offset, hex, context, at);
+    }
+
+    int16_t convert_from_view_int16 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<int16_t>(bytes, result, offset, hex, context, at);
+    }
+
+    uint16_t convert_from_view_uint16 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<uint16_t>(bytes, result, offset, hex, context, at);
+    }
+
+    int32_t convert_from_view_int32 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<int32_t>(bytes, result, offset, hex, context, at);
+    }
+
+    uint32_t convert_from_view_uint32 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<uint32_t>(bytes, result, offset, hex, context, at);
+    }
+
+    int64_t convert_from_view_int64 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<int64_t>(bytes, result, offset, hex, context, at);
+    }
+
+    uint64_t convert_from_view_uint64 ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, bool hex, Context * context, LineInfoArg * at ) {
+        return convert_int_from_view<uint64_t>(bytes, result, offset, hex, context, at);
+    }
+
+    float convert_from_view_float ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, Context * context, LineInfoArg * at ) {
+        return convert_real_from_view<float>(bytes, result, offset, context, at);
+    }
+
+    double convert_from_view_double ( const TArray<uint8_t> & bytes, ConversionResult & result, int32_t & offset, Context * context, LineInfoArg * at ) {
+        return convert_real_from_view<double>(bytes, result, offset, context, at);
+    }
+
     class Module_Strings : public Module {
     public:
         Module_Strings() : Module("strings") {
@@ -945,6 +1130,10 @@ namespace das
                 SideEffects::modifyExternal, "write_string_chars")->args({"writer","ch","count"});
             addExtern<DAS_BIND_FUN(write_escape_string),SimNode_ExtFuncCallRef>(*this, lib, "write_escape_string",
                 SideEffects::modifyExternal, "write_escape_string")->args({"writer","str"});
+            addExtern<DAS_BIND_FUN(builtin_view_write_string),SimNode_ExtFuncCallRef>(*this, lib, "write_string",
+                SideEffects::modifyExternal, "builtin_view_write_string")->args({"writer","bytes","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_write_string_range),SimNode_ExtFuncCallRef>(*this, lib, "write_string",
+                SideEffects::modifyExternal, "builtin_view_write_string_range")->args({"writer","bytes","start","end","context","at"});
             // fmt
             addExtern<DAS_BIND_FUN(fmt_and_write_i8),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
                 SideEffects::modifyExternal, "fmt_and_write_i8")->args({"writer","format","value","context","lineinfo"});
@@ -1013,18 +1202,42 @@ namespace das
                 SideEffects::none, "builtin_string_startswith4")->args({"str","offset","cmp","cmpLen","context"});
             addExtern<DAS_BIND_FUN(builtin_string_starts_with)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_starts_with")->args({"str","cmp","context"});
+            // byte-view twins: the view param is array<uint8> const implicit, so it binds both
+            // a plain array<uint8> and the temporary view peek_data yields
+            addExtern<DAS_BIND_FUN(builtin_view_endswith)>(*this, lib, "ends_with",
+                SideEffects::none, "builtin_view_endswith")->args({"bytes","cmp","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_startswith)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_view_startswith")->args({"bytes","cmp","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_startswith2)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_view_startswith2")->args({"bytes","cmp","cmpLen","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_startswith3)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_view_startswith3")->args({"bytes","offset","cmp","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_startswith4)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_view_startswith4")->args({"bytes","offset","cmp","cmpLen","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_string_strip")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
                 SideEffects::none, "builtin_string_strip_right")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
                 SideEffects::none, "builtin_string_strip_left")->args({"str","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_strip)>(*this, lib, "strip",
+                SideEffects::none, "builtin_view_strip")->args({"bytes","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_strip_right)>(*this, lib, "strip_right",
+                SideEffects::none, "builtin_view_strip_right")->args({"bytes","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_strip_left)>(*this, lib, "strip_left",
+                SideEffects::none, "builtin_view_strip_left")->args({"bytes","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_string_chop")->args({"str","start","length","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_chop)>(*this, lib, "chop",
+                SideEffects::none, "builtin_view_chop")->args({"bytes","start","length","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice2")->args({"str","start","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_slice1)>(*this, lib, "slice",
+                SideEffects::none, "builtin_view_slice1")->args({"bytes","start","end","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_slice2)>(*this, lib, "slice",
+                SideEffects::none, "builtin_view_slice2")->args({"bytes","start","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find",
                 SideEffects::none, "builtin_string_find1")->args({"str","substr","start","context"});
             addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find",
@@ -1033,10 +1246,22 @@ namespace das
                 SideEffects::none, "builtin_find_first_char_of")->args({"str","substr","context"});
             addExtern<DAS_BIND_FUN(builtin_find_first_char_of2)>(*this, lib, "find",
                 SideEffects::none, "builtin_find_first_char_of2")->args({"str","substr", "start", "context"});
+            addExtern<DAS_BIND_FUN(builtin_view_find)>(*this, lib, "find",
+                SideEffects::none, "builtin_view_find")->args({"bytes","substr","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_find_from)>(*this, lib, "find",
+                SideEffects::none, "builtin_view_find_from")->args({"bytes","substr","start","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_find_char_of)>(*this, lib, "find",
+                SideEffects::none, "builtin_view_find_char_of")->args({"bytes","substr","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_find_char_of2)>(*this, lib, "find",
+                SideEffects::none, "builtin_view_find_char_of2")->args({"bytes","substr","start","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_rfind1)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_string_rfind1")->args({"str","substr","start","context"});
             addExtern<DAS_BIND_FUN(builtin_string_rfind2)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_string_rfind2")->args({"str","substr"});
+            addExtern<DAS_BIND_FUN(builtin_view_rfind)>(*this, lib, "rfind",
+                SideEffects::none, "builtin_view_rfind")->args({"bytes","substr","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_view_rfind_from)>(*this, lib, "rfind",
+                SideEffects::none, "builtin_view_rfind_from")->args({"bytes","substr","start","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
                 SideEffects::none, "builtin_string_reverse")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
@@ -1116,6 +1341,28 @@ namespace das
                 SideEffects::modifyArgument, "convert_from_string_float")->args({"str","result","offset"});
             addExtern<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
                 SideEffects::modifyArgument, "convert_from_string_double")->args({"str","result","offset"});
+            // byte-view twins of the conversion family - here `offset` is in and out, so the
+            // same call can walk a view left to right
+            addExtern<DAS_BIND_FUN(convert_from_view_int8)>(*this, lib, "int8",
+                SideEffects::modifyArgument, "convert_from_view_int8")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_uint8)>(*this, lib, "uint8",
+                SideEffects::modifyArgument, "convert_from_view_uint8")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_int16)>(*this, lib, "int16",
+                SideEffects::modifyArgument, "convert_from_view_int16")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_uint16)>(*this, lib, "uint16",
+                SideEffects::modifyArgument, "convert_from_view_uint16")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_int32)>(*this, lib, "int",
+                SideEffects::modifyArgument, "convert_from_view_int32")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_uint32)>(*this, lib, "uint",
+                SideEffects::modifyArgument, "convert_from_view_uint32")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_int64)>(*this, lib, "int64",
+                SideEffects::modifyArgument, "convert_from_view_int64")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_uint64)>(*this, lib, "uint64",
+                SideEffects::modifyArgument, "convert_from_view_uint64")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
+            addExtern<DAS_BIND_FUN(convert_from_view_float)>(*this, lib, "float",
+                SideEffects::modifyArgument, "convert_from_view_float")->args({"bytes","result","offset","context","at"});
+            addExtern<DAS_BIND_FUN(convert_from_view_double)>(*this, lib, "double",
+                SideEffects::modifyArgument, "convert_from_view_double")->args({"bytes","result","offset","context","at"});
             // escaping etc
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context","at"})->setTempStringResult();
@@ -1133,6 +1380,14 @@ namespace das
                 SideEffects::none, "builtin_string_ltrim")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
                 SideEffects::none, "builtin_string_trim")->args({"str","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_rtrim)>(*this, lib, "rtrim",
+                SideEffects::none, "builtin_view_rtrim")->args({"bytes","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_rtrim_ts)>(*this, lib, "rtrim",
+                SideEffects::none, "builtin_view_rtrim_ts")->args({"bytes","chars","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_ltrim)>(*this, lib, "ltrim",
+                SideEffects::none, "builtin_view_ltrim")->args({"bytes","context","at"})->setTempStringResult();
+            addExtern<DAS_BIND_FUN(builtin_view_trim)>(*this, lib, "trim",
+                SideEffects::none, "builtin_view_trim")->args({"bytes","context","at"})->setTempStringResult();
             // format (deprecated)
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();

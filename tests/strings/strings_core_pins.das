@@ -77,6 +77,25 @@ def test_pin_find_substring(t : T?) {
     t |> equal(find(s, "", 2), -1, "find-from with empty needle is -1")
 }
 
+// a high byte cannot be written as a das literal, so it is assembled through the writer
+def private heap_high_byte() : string {
+    return build_string() $(var w) {
+        w |> write("ab")
+        w |> write_char(195)
+        w |> write("cd")
+    }
+}
+
+[test]
+def test_pin_find_char_byte_value(t : T?) {
+    // the char form matches an UNSIGNED byte value: 195 is byte 0xC3, and -61 - which is that
+    // same byte read as a signed char - matches nothing
+    let s = heap_high_byte()
+    t |> equal(find(s, 195), 2, "find char matches the unsigned byte value")
+    t |> equal(find(s, -61), -1, "find char does not match the signed reading of that byte")
+    t |> equal(find(s, 256), -1, "find char above the byte range is -1")
+}
+
 [test]
 def test_pin_find_char(t : T?) {
     let s = heap_str("abcabc")

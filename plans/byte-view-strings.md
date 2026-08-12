@@ -27,7 +27,14 @@ four negative-controlled test gates, and the CODEREVIEW wording fixes (salvaged 
   `s` when the passthrough fired.)
 - Writer range-copy is named `write_string` (`write(w, d, …)` would be obscure; `write(w, d)`
   already means "print an array").
-- Parse-at-offset family ships now, not phase-2 ("might as well").
+- Parse-at-offset family ships now, not phase-2 ("might as well"). The view forms take
+  `offset` as IN/OUT (entry = start position, leading whitespace skipped from there; exit =
+  consumed-through position on success, unchanged on failure) — the cursor form is the point;
+  the string counterparts keep their out-only offset. Parity oracle compares at offset 0.
+- `find(s, ch)` / `find(d, ch)` char form: **unsigned-byte matching both sides** (Boris,
+  2026-08-12). `ch` matches as a byte value; outside 0..255 returns -1. `find(s, 195)` now
+  hits byte 0xC3, `find(s, -61)` no longer does — conscious string-side flip, pins updated.
+  (Phase 1 had preserved the historical signed-char matching; phase 2 flips it.)
 
 ## Surface (from the v1 111-site inventory)
 
