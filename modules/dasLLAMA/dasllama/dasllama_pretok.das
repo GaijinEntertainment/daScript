@@ -134,7 +134,7 @@ def pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) :
 // gpt-2 pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT2). Differs from llama3: lowercase-only
 // contractions, the optional run prefix is exactly one space (not any non-letter), digit runs
 // are UNBOUNDED and space-attached, and no newline special-casing on punct/whitespace arms.
-def pretok_split_gpt2(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the gpt2 pre-tokenizer regex; splitting hides the regex shape
+def pretok_split_gpt2(cpts : array<int>) : array<int> {
     var offs : array<int>
     let n = length(cpts)
     var prev_end = 0
