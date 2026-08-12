@@ -16,7 +16,11 @@ require strings
 struct BpeTokenizer {
     vocab : array<string>             // id -> piece (byte-unicode alphabet)
     lookup : table<string; int64>     // piece -> id
-    merge_rank : table<string; int64> // "left right" -> rank (lower merges first)
+    merge_rank : table<string; int64> // "left right" -> rank (lower merges first; the image serialization source)
+    // DERIVED (build_bpe_derived), never serialized: the no-allocation merge engine — packed
+    // (left<<32)|right -> (rank<<32)|merged — and the per-byte alphabet-piece ids
+    pair_merge : table<int64; int64>
+    byte_id : array<int64>
     token_type : array<int64>         // id -> GGUF token type (3 = control/special)
     pre : string                      // pre-tokenizer name, e.g. "llama-bpe"
     bos_id : int64
@@ -74,7 +78,30 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         }
     }
     fclose(f)
+    build_bpe_derived(tk)
     return <- tk
+}
+
+//! Build the DERIVED merge engine from the primal fields (vocab/lookup/merge_rank) — called by
+//! the GGUF loader and the image reader, never serialized. A pair probe replaces the
+//! concat-and-hash rank lookup byte-identically.
+def build_bpe_derived(var tk : BpeTokenizer) {
+    tk.byte_id |> resize(256)
+    for (b in range(256)) {
+        tk.byte_id[b] = tk.lookup?[BYTE2UNI[b]] ?? -1l
+    }
+    tk.pair_merge |> clear()
+    for (k, v in keys(tk.merge_rank), values(tk.merge_rank)) {
+        let sp = find(k, " ")
+        continue if (sp < 0)
+        let l = tk.lookup?[slice(k, 0, sp)] ?? -1l
+        continue if (l < 0l)
+        let r = tk.lookup?[slice(k, sp + 1)] ?? -1l
+        let mid = tk.lookup?[slice(k, 0, sp) + slice(k, sp + 1)] ?? -1l
+        if (r >= 0l && mid >= 0l) {
+            tk.pair_merge[(l << 32l) | r] = (v << 32l) | mid
+        }
+    }
 }
 
 // ===== GPT-2 byte <-> unicode alphabet =====
@@ -103,35 +130,29 @@ def init_byte2uni() {
 
 // ===== merge-rank BPE =====
 
-// Greedily merge the lowest-rank adjacent pair (leftmost on ties), in byte-unicode space.
-def private bpe_merge(tk : BpeTokenizer; var symbols : array<string>) {
-    while (length(symbols) > 1) {
+// Greedily merge the lowest-rank adjacent pair (leftmost on ties), over symbol IDS — one packed
+// pair_merge probe per candidate, no allocation (the concat-per-probe was the dominant cost).
+def private bpe_merge_ids(tk : BpeTokenizer; var syms : array<int64>) {
+    while (length(syms) > 1) {
         var best_rank = -1l
         var best_i = -1
-        for (i in range(length(symbols) - 1)) {
-            let r = tk.merge_rank?[symbols[i] + " " + symbols[i + 1]] ?? -1l
-            if (r >= 0l && (best_i == -1 || r < best_rank)) {
-                best_rank = r
-                best_i = i
+        var best_id = -1l
+        for (i in range(length(syms) - 1)) {
+            let pm = tk.pair_merge?[(syms[i] << 32l) | syms[i + 1]] ?? -1l
+            if (pm >= 0l) {
+                let r = pm >> 32l
+                if (best_i == -1 || r < best_rank) {
+                    best_rank = r
+                    best_i = i
+                    best_id = pm & ((1l << 32l) - 1l)
+                }
             }
         }
         if (best_i == -1) {
             break
         }
-        symbols[best_i] = symbols[best_i] + symbols[best_i + 1]
-        symbols |> erase(best_i + 1)
-    }
-}
-
-// Defensive fallback: a symbol that didn't resolve as a token is split back into its
-// base byte-unicode chars (each is always in the vocab). Rarely fires for valid merges.
-def private emit_chars(tk : BpeTokenizer; s : string; var ids : array<int64>) {
-    let scpts <- utf8_to_cpts(s)
-    for (c in scpts) {
-        let id = tk.lookup?[cpt_to_utf8(c)] ?? -1l
-        if (id >= 0l) {
-            ids |> push(id)
-        }
+        syms[best_i] = best_id
+        syms |> erase(best_i + 1)
     }
 }
 
@@ -174,13 +195,11 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
         while (e < n && (cpts[e] == '\n') == is_nl) {
             e++
         }
-        var symbols <- [for (i in range(pos, e)); cpt_to_utf8(cpts[i])]
-        pos = e
         var done = false
         if (is_nl) {
             let run = build_string() $(var wr) {
-                for (s in symbols) {
-                    write(wr, s)
+                for (i in range(pos, e)) {
+                    write(wr, cpt_to_utf8(cpts[i]))
                 }
             }
             let rid = tk.lookup?[run] ?? -1l
@@ -190,17 +209,23 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
             }
         }
         if (!done) {
-            bpe_merge(tk, symbols)
-            for (s in symbols) {
-                let id = tk.lookup?[s] ?? -1l
-                if (id >= 0l) {
-                    ids |> push(id)
+            var syms : array<int64>
+            syms |> reserve(e - pos)
+            for (i in range(pos, e)) {
+                let cu = cpt_to_utf8(cpts[i])
+                let cid = tk.lookup?[cu] ?? -1l
+                if (cid >= 0l) {
+                    syms |> push(cid)
                 } else {
-                    emit_byte_fallback(tk, s, ids)
+                    // unknown cpt: eager <0xXX> fallback — byte tokens never merge, so pre-merge expansion is byte-identical
+                    emit_byte_fallback(tk, cu, syms)
                 }
             }
+            bpe_merge_ids(tk, syms)
+            ids |> push_from(syms)
+            delete syms
         }
-        delete symbols
+        pos = e
     }
     return <- ids
 }
@@ -229,36 +254,40 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     }
     var pos = 0
     for (off in offs) {
-        var symbols : array<string>
+        var syms : array<int64>
+        var has_unk = false
         for (i in range(pos, pos + off)) {
             peek_data(cpt_to_utf8(cpts[i])) $(d : array<uint8> const#) {
                 for (k in range(length(d))) {
-                    symbols |> push(BYTE2UNI[int(d[k])])
+                    let bid = tk.byte_id[int(d[k])]
+                    syms |> push(bid)
+                    if (bid < 0l) {
+                        has_unk = true
+                    }
                 }
             }
         }
         pos += off
-        // ignore_merges: a word that is already a single token is emitted as-is
-        let word = build_string() $(var wr) {
-            for (s in symbols) {
-                write(wr, s)
+        // ignore_merges: a word that is already a single token is emitted as-is (the one
+        // remaining per-word string build; a word with an unknown byte piece can't be one)
+        var wid = -1l
+        if (!has_unk) {
+            let word = build_string() $(var wr) {
+                for (s in syms) {
+                    write(wr, tk.vocab[s])
+                }
             }
+            wid = tk.lookup?[word] ?? -1l
         }
-        let wid = tk.lookup?[word] ?? -1l
         if (wid >= 0l) {
             ids |> push(wid)
         } else {
-            bpe_merge(tk, symbols)
-            for (s in symbols) {
-                let id = tk.lookup?[s] ?? -1l
-                if (id >= 0l) {
-                    ids |> push(id)
-                } else {
-                    emit_chars(tk, s, ids)
-                }
+            bpe_merge_ids(tk, syms)
+            for (s in syms) {
+                ids |> push(s) if (s >= 0l)   // a negative survivor is an absent byte piece — dropped, as before
             }
         }
-        delete symbols
+        delete syms
     }
     return <- ids
 }

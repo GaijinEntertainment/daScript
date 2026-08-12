@@ -594,6 +594,8 @@ def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
         for (i, v in count(), merges) {
             tk.bpe.merge_rank[v] = int64(i)
         }
+        build_spm_derived(tk.spm)   // the pair-merge engines are derived state, same as the lookups
+        build_bpe_derived(tk.bpe)
     }
     delete merges
 }

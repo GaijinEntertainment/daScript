@@ -17,10 +17,30 @@ struct SpmTokenizer {
     vocab : array<string>
     scores : array<float>
     lookup : table<string; int64>  // piece text -> id, for encode
+    // DERIVED (build_spm_derived), never serialized: packed (left<<32)|right -> merged id for
+    // every vocab piece that splits into two vocab pieces — the no-allocation merge probe
+    pair_merge : table<int64; int64>
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
     bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
     eos_id : int64 = 2l            // EOS token id from GGUF metadata (Llama-2/TinyLlama 2, Gemma 1)
+}
+
+//! Build the DERIVED merge-pair table from vocab/lookup — called by both loaders and the image
+//! reader. A pair probe replaces the llama2.c concat-and-hash byte-identically: pack(left, right)
+//! maps to exactly the id the concat-string lookup would find (last duplicate wins in both).
+def build_spm_derived(var tk : SpmTokenizer) {
+    tk.pair_merge |> clear()
+    for (m, piece in count(), tk.vocab) {
+        for (k in range(1, length(piece))) {
+            let l = tk.lookup?[slice(piece, 0, k)] ?? -1l
+            continue if (l < 0l)
+            let r = tk.lookup?[slice(piece, k)] ?? -1l
+            if (r >= 0l) {
+                tk.pair_merge[(l << 32l) | r] = int64(m)
+            }
+        }
+    }
 }
 
 //! Load tokenizer.bin. vocab_size comes from the model Config (it isn't stored in the file).
@@ -48,6 +68,7 @@ def load_tokenizer(path : string; vocab_size : int64) : SpmTokenizer {
         }
     }
     fclose(f)
+    build_spm_derived(tk)
     return <- tk
 }
 
@@ -85,6 +106,7 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
         }
     }
     fclose(f)
+    build_spm_derived(tk)
     return <- tk
 }
 
@@ -135,14 +157,14 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
             i = j
         }
     }
-    // greedy BPE merge: repeatedly fuse the best-scoring adjacent pair present in vocab
+    // greedy BPE merge: repeatedly fuse the best-scoring adjacent pair present in vocab — one
+    // packed pair_merge probe per candidate (the old concat-per-probe allocated quadratically)
     while (true) {
         var best_score = -1.0e10
         var best_id = -1l
         var best_idx = -1
         for (i in range(length(tokens) - 1)) {
-            let merged = tk.vocab[tokens[i]] + tk.vocab[tokens[i + 1]]
-            let id = tk.lookup?[merged] ?? -1l
+            let id = tk.pair_merge?[(tokens[i] << 32l) | tokens[i + 1]] ?? -1l
             if (id >= 0l && tk.scores[id] > best_score) {
                 best_score = tk.scores[id]
                 best_id = id
