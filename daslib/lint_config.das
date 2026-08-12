@@ -151,8 +151,12 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
         seed_default_disabled(disabled)
     }
     ensure_cache_loaded()
-    for (code in keys(_cache_off)) {
-        if (!key_exists(disabled, code)) disabled |> insert(code)
+    // fixture mode (_enable_default_off_rules) also skips the repo config's off directives —
+    // repo policy must not silence the rule a lint fixture exists to exercise
+    if (!force_default_off) {
+        for (code in keys(_cache_off)) {
+            if (!key_exists(disabled, code)) disabled |> insert(code)
+        }
     }
     for (code in keys(_cache_on)) {
         if (key_exists(disabled, code)) disabled |> erase(code)
