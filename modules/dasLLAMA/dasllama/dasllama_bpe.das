@@ -154,7 +154,9 @@ struct private BpeBigram {
     mid : int64
 }
 
-// min-heap priority: lowest rank, then leftmost — exactly the rescan's selection order
+// min-heap priority: lowest rank, then leftmost — exactly the rescan's selection order.
+// The sg_* heap in dasllama_spm is a deliberate twin: different key struct and comparator,
+// and the two backends share no module to host a generic heap.
 def private bg_before(a, b : BpeBigram) : bool => a.rank < b.rank || (a.rank == b.rank && a.li < b.li)
 
 def private bg_push(var h : array<BpeBigram>; bg : BpeBigram) {

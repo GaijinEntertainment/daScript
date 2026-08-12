@@ -139,7 +139,9 @@ struct private SpmBigram {
     mid : int64
 }
 
-// heap priority: highest score, then leftmost — exactly the llama2.c scan's selection order
+// heap priority: highest score, then leftmost — exactly the llama2.c scan's selection order.
+// The bg_* heap in dasllama_bpe is a deliberate twin: different key struct and comparator,
+// and the two backends share no module to host a generic heap.
 def private sg_before(a, b : SpmBigram) : bool => a.score > b.score || (a.score == b.score && a.li < b.li)
 
 def private sg_push(var h : array<SpmBigram>; bg : SpmBigram) {
