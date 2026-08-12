@@ -19,9 +19,9 @@ options _comment_hygiene = true
 module dasllama_env shared public
 
 require daslib/clargs
+require daslib/env_registry public
 require daslib/option public
 require daslib/rtti
-require daslib/fio
 require strings
 
 // ===== Engine =====
@@ -682,61 +682,15 @@ def public models_dir_resolved() : string {
     return ends_with(env, "/") || ends_with(env, "\\") ? env : "{env}/"
 }
 
-// ===== dynamic-name reads (the ONE sanctioned escape hatch) =====
-// For names known only at runtime: the bench repro-line forwarder, lever env names from data,
-// lab filter variables. Same set-but-empty-is-unset rule as the loaders. Not for hot paths.
-
-def public env_is_set(name : string) : bool {
-    return has_env_variable(name) && !empty(get_env_variable(name))
-}
-
-def public env_value_of(name : string) : string {
-    return get_env_variable(name)
-}
-
-// ===== the generated documentation (ENVIRONMENT.md) =====
+// Dynamic-name reads (`env_is_set` / `env_value_of` — the ONE sanctioned escape hatch: the
+// bench repro-line forwarder, lever env names from data, lab filter variables) and the doc
+// renderers both come from daslib/env_registry, re-exported public above.
 
 // Compile-time knobs are not runtime config — no struct field would tell the truth about them —
 // so their doc rows are declared here and appended to their section.
-struct private ExtraDocRow {
-    name : string
-    kind : string
-    dflt : string
-    doc : string
-}
-
-def private core_extra_rows() : array<ExtraDocRow> {
-    return <- [ExtraDocRow(name = "JOBQUE_PROFILING", kind = "flag", dflt = "off",
+def private core_extra_rows() : array<EnvDocRow> {
+    return <- [EnvDocRow(name = "JOBQUE_PROFILING", kind = "flag", dflt = "off",
         doc = "Compile the jobque marker rail in (read at COMPILE time by daslib/build_const). Without it trace_tag/trace_marker erase from the program; decode_prof --trace refuses on a build without it.")]
-}
-
-def private write_row(var w : StringBuilderWriter; name, kind, dflt, doc : string) {
-    w |> write("| `{name}` | {kind} | {empty(dflt) ? "unset" : dflt} | {doc} |\n")
-}
-
-def private write_info_rows(var w : StringBuilderWriter; info : CommandInfo) {
-    for (a in info.args) {
-        var kind = "number"
-        if (a.value_type == Type.tBool) {
-            kind = "flag"
-        } elif (a.value_type == Type.tString) {
-            kind = a.is_path ? "path" : "text"
-        }
-        // flags document as on/off, matching how the knobs are described everywhere else
-        var dflt = a.default_doc
-        if (a.value_type == Type.tBool) {
-            dflt = dflt == "true" ? "on" : (dflt == "false" ? "off" : dflt)
-        }
-        write_row(w, a.env_name, kind, dflt, a.doc_string)
-    }
-}
-
-def private write_section(var w : StringBuilderWriter; title, note : string) {
-    w |> write("\n## {title}\n\n")
-    if (!empty(note)) {
-        w |> write("{note}\n\n")
-    }
-    w |> write("| Variable | Type | Default | Effect |\n|---|---|---|---|\n")
 }
 
 //! Renders every declared knob as the `ENVIRONMENT.md` body, grouped by area. `modules/dasLLAMA/
@@ -748,46 +702,41 @@ def public env_markdown() : string {
         w |> write("GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` - do not edit\n")
         w |> write("by hand. Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read\n")
         w |> write("anywhere in the tree without a declaration fails `tests/test_env_registry.das`.\n\n")
-        w |> write("Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is false and\n")
-        w |> write("anything else true; **number** falls back to the default when unset or unparseable, with\n")
-        w |> write("a logged warning on garbage; **text** and **path** are taken verbatim. A SET-BUT-EMPTY\n")
-        w |> write("variable counts as unset everywhere. Every knob loads ONCE, at context init, into the\n")
-        w |> write("`g_env_*` globals - hot code reads struct fields, and `set_env_variable` after startup\n")
-        w |> write("is invisible (arm a child process's environment instead).\n")
-        write_section(w, "Engine",
+        write_env_doc_semantics(w)
+        write_env_section(w, "Engine",
             "Read by the inference engine itself, so these affect any program that loads a model.")
-        write_info_rows(w, get_env_config_info(type<EngineEnv>))
-        write_info_rows(w, get_env_config_info(type<GpuTierEnv>))
-        write_section(w, "Metal backend",
+        write_env_info_rows(w, get_env_config_info(type<EngineEnv>))
+        write_env_info_rows(w, get_env_config_info(type<GpuTierEnv>))
+        write_env_section(w, "Metal backend",
             "Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.")
-        write_info_rows(w, get_env_config_info(type<MetalEnv>))
-        write_section(w, "Vulkan backend",
+        write_env_info_rows(w, get_env_config_info(type<MetalEnv>))
+        write_env_section(w, "Vulkan backend",
             "Vulkan GPU backend. Present only where the dasVulkan package is installed.")
-        write_info_rows(w, get_env_config_info(type<VulkanEnv>))
-        write_section(w, "MoltenVK (macOS)",
+        write_env_info_rows(w, get_env_config_info(type<VulkanEnv>))
+        write_env_section(w, "MoltenVK (macOS)",
             "MoltenVK's own configuration - listed because the vulkan tier arms it on Apple.")
-        write_info_rows(w, get_env_config_info(type<MoltenVkEnv>))
-        write_section(w, "Accelerate / AMX backend",
+        write_env_info_rows(w, get_env_config_info(type<MoltenVkEnv>))
+        write_env_section(w, "Accelerate / AMX backend",
             "Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.")
-        write_info_rows(w, get_env_config_info(type<AccelerateEnv>))
-        write_section(w, "Harness - tuner and probes", "")
-        write_info_rows(w, get_env_config_info(type<HarnessEnv>))
-        write_section(w, "Benchmarks", "")
-        write_info_rows(w, get_env_config_info(type<BenchmarkEnv>))
-        write_section(w, "Profiling and baselines", "")
-        write_info_rows(w, get_env_config_info(type<ProfilingEnv>))
-        write_section(w, "Tests", "")
-        write_info_rows(w, get_env_config_info(type<TestEnv>))
-        write_section(w, "Examples and tutorials", "")
-        write_info_rows(w, get_env_config_info(type<ExampleEnv>))
-        write_section(w, "Sidecar exchange", "Overrides for the dasllama.io exchange client.")
-        write_info_rows(w, get_env_config_info(type<ExchangeEnv>))
-        write_section(w, "daslang core knobs dasLLAMA honours",
+        write_env_info_rows(w, get_env_config_info(type<AccelerateEnv>))
+        write_env_section(w, "Harness - tuner and probes", "")
+        write_env_info_rows(w, get_env_config_info(type<HarnessEnv>))
+        write_env_section(w, "Benchmarks", "")
+        write_env_info_rows(w, get_env_config_info(type<BenchmarkEnv>))
+        write_env_section(w, "Profiling and baselines", "")
+        write_env_info_rows(w, get_env_config_info(type<ProfilingEnv>))
+        write_env_section(w, "Tests", "")
+        write_env_info_rows(w, get_env_config_info(type<TestEnv>))
+        write_env_section(w, "Examples and tutorials", "")
+        write_env_info_rows(w, get_env_config_info(type<ExampleEnv>))
+        write_env_section(w, "Sidecar exchange", "Overrides for the dasllama.io exchange client.")
+        write_env_info_rows(w, get_env_config_info(type<ExchangeEnv>))
+        write_env_section(w, "daslang core knobs dasLLAMA honours",
             "Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends on them. `DAS_TUNE_*` is covered in `skills/tune.md`.")
-        write_info_rows(w, get_env_config_info(type<CoreEnv>))
+        write_env_info_rows(w, get_env_config_info(type<CoreEnv>))
         var extras <- core_extra_rows()
         for (e in extras) {
-            write_row(w, e.name, e.kind, e.dflt, e.doc)
+            write_env_row(w, e)
         }
         delete extras
     }
@@ -817,11 +766,4 @@ def public registered_env_names() : array<string> {
     }
     delete extras
     return <- out
-}
-
-def private push_info_names(var out : array<string>; info : CommandInfo) {
-    out |> reserve(length(out) + length(info.args))
-    for (a in info.args) {
-        out |> push(a.env_name)
-    }
 }

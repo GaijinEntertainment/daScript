@@ -18,6 +18,7 @@ require strings
 require math
 require llvm/daslib/llvm_code public
 require llvm/daslib/llvm_jit_cli
+require llvm/daslib/llvm_env
 
 //! Generalized tune framework (gemm_generator_plan.md part 2). `[tune_perm(...), ...,
 //! tune(gen="key", fallback="suffix")]` — perm rows first, `tune` last — turns one reference
@@ -54,7 +55,7 @@ require llvm/daslib/llvm_jit_cli
 
 //! Compile-time tune mode from the `DAS_TUNE_MODE` env var: "normal" (default), "tune", "test".
 def tune_mode() : string {
-    let m = get_env_variable("DAS_TUNE_MODE")
+    let m = env_value_of("DAS_TUNE_MODE")
     return empty(m) ? "normal" : m
 }
 
@@ -142,7 +143,7 @@ def set_tune_manifest_runtime_path(p : string) {
     //! `<app>.tune.json` beside the app (the root script, or the binary when there is none).
     //! Never "" — every app has a sidecar location.
 def tune_manifest_path() : string {
-    let env = get_env_variable("DAS_TUNE_MANIFEST")
+    let env = env_value_of("DAS_TUNE_MANIFEST")
     if (!empty(env)) return env
     if (!empty(g_runtime_manifest)) return g_runtime_manifest
     let app = tune_app_script()
@@ -234,9 +235,9 @@ def tune_box_identity() : string {
         // console-codepage bytes) never enters the identity
         os_build = (lb >= 0 && rb > lb) ? digits_tail(strip(slice(build, lb + 1, rb))) : ""
         if (empty(os_build)) {
-            os_build = get_env_variable("OS")
+            os_build = env_value_of("OS")
         }
-        cpu = get_env_variable("PROCESSOR_IDENTIFIER")
+        cpu = env_value_of("PROCESSOR_IDENTIFIER")
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         var lines : array<string>
         unsafe {
@@ -510,14 +511,14 @@ def tune_history_dir() : string {
     if (!empty(g_history_dir)) {
         return g_history_dir
     }
-    let env = get_env_variable("DAS_TUNE_HISTORY")
+    let env = env_value_of("DAS_TUNE_HISTORY")
     if (!empty(env)) {
         g_history_dir = env
         return g_history_dir
     }
-    var home = get_env_variable("HOME")
+    var home = env_value_of("HOME")
     if (empty(home)) {
-        home = get_env_variable("USERPROFILE")
+        home = env_value_of("USERPROFILE")
     }
     var san = ""
     peek_data(tune_box_identity()) $(bytes) {
@@ -538,9 +539,9 @@ def tune_history_dir() : string {
     //! `.FAILED.json` stub carrying `verdict`/`note`. Best-effort — never fails the mint.
 def tune_history_archive(path : string; verdict : string; note : string) : string {
     let dir = tune_history_dir()
-    var home = get_env_variable("HOME")
+    var home = env_value_of("HOME")
     if (empty(home)) {
-        home = get_env_variable("USERPROFILE")
+        home = env_value_of("USERPROFILE")
     }
     mkdir("{home}/.tune-history")   // best-effort parents; mkdir on an existing dir is a no-op failure
     mkdir(dir)
@@ -645,7 +646,7 @@ var private g_noise_ovr = -1
     //! else 2% normal / 1% paranoid — confirmed empirically on the quiet boxes during rollout.
 def tune_noise_threshold_pct(paranoid : bool) : double {
     if (g_noise_thr < 0.0lf) {
-        let v = to_float(get_env_variable("DAS_TUNE_NOISE_CV"))
+        let v = to_float(env_value_of("DAS_TUNE_NOISE_CV"))
         g_noise_thr = v > 0.0f ? double(v) : 0.0lf
     }
     return g_noise_thr > 0.0lf ? g_noise_thr : (paranoid ? 1.0lf : 2.0lf)
@@ -663,7 +664,7 @@ def tune_noise_threshold_overridden() : bool {
     //! a mark, so a later regression hunt can see the mint was taken on a loud box.
 def tune_noise_override() : bool {
     if (g_noise_ovr < 0) {
-        let v = get_env_variable("DAS_TUNE_NOISE_OVERRIDE")
+        let v = env_value_of("DAS_TUNE_NOISE_OVERRIDE")
         g_noise_ovr = (!empty(v) && v != "0") ? 1 : 0
     }
     return g_noise_ovr == 1
@@ -903,10 +904,10 @@ struct private TunePerm {
     // selection only; the generator's own decline predicate stays the emission truth.
 def private fallback_feature_ok(name : string) : bool {
     if (cpu_supports(name)) return true
-    for (part in split(get_env_variable("DAS_JIT_X64_FORCE_FEATURES"), ",")) {
+    for (part in split(g_env_jit.jit_x64_force_features, ",")) {
         if (part == name) return true
     }
-    for (part in split(get_env_variable("DAS_JIT_ARM64_FORCE_FEATURES"), ",")) {
+    for (part in split(g_env_jit.jit_arm64_force_features, ",")) {
         if (part == name) return true
     }
     return false
@@ -1444,7 +1445,7 @@ var private g_verbosity = ""
 //! display). Anything unrecognized reads as `normal`, so a typo never silences the tune.
 def tune_verbosity() : string {
     if (empty(g_verbosity)) {
-        let v = get_env_variable("DAS_TUNE_VERBOSITY")
+        let v = env_value_of("DAS_TUNE_VERBOSITY")
         g_verbosity = v == "silent" ? "silent" : (v == "verbose" ? "verbose" : "normal")
     }
     return g_verbosity
@@ -1897,7 +1898,7 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
     // still owes the status [init], so its call sites re-admit it via exe_status_report().
 def private tune_policy_gated() : bool {
     return (tune_stamp_free_gate() || tune_mode() != "normal"
-        || !empty(get_env_variable("DAS_TUNE_MANIFEST")))
+        || !empty(env_value_of("DAS_TUNE_MANIFEST")))
 }
 
     // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy —
@@ -1938,7 +1939,7 @@ def private emit_status_init(var errors : string&) {
 def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool { // nolint:STYLE037,STYLE038 — the policy dispatch ladder: one arm per flavor and gate
     var policy = declared
     {
-        let penv = get_env_variable("DAS_TUNE_POLICY")
+        let penv = env_value_of("DAS_TUNE_POLICY")
         // announce deferred to the first INCOMPLETE scope - a fully-tuned start stays silent
         var envNote = ""
         if (!empty(penv)) {

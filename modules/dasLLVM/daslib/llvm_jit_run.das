@@ -11,6 +11,7 @@ require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_cli
+require llvm/daslib/llvm_env
 
 require daslib/ast_boost
 require daslib/strings_boost
@@ -192,7 +193,7 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
         LLVMDisposeMessage(host_features)
     }
     // DAS_JIT_PROBE_LTO artifacts (bitcode + lld-LTO link) must never serve a normal run
-    if (!empty(get_env_variable("DAS_JIT_PROBE_LTO"))) {
+    if (g_env_jit.jit_probe_lto) {
         h = (h ^ hash("lto_probe")) * JIT_FNV_PRIME
     }
     // options jit_vec3_ldu selects the vector-load emission shape
@@ -229,12 +230,12 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
         isa |= 32ul
     }
     h = (h ^ isa) * JIT_FNV_PRIME
-    let forced = get_env_variable("DAS_JIT_X64_FORCE_FEATURES")
+    let forced = g_env_jit.jit_x64_force_features
     if (!empty(forced)) {
         h = (h ^ hash(forced)) * JIT_FNV_PRIME
     }
     // aarch64 twin (DAS_JIT_ARM64_FORCE_FEATURES, e.g. "i8mm"): a forced artifact must not cache-hit a normal run
-    let forced_arm = get_env_variable("DAS_JIT_ARM64_FORCE_FEATURES")
+    let forced_arm = g_env_jit.jit_arm64_force_features
     if (!empty(forced_arm)) {
         h = (h ^ hash(forced_arm)) * JIT_FNV_PRIME
     }
@@ -533,7 +534,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     var chain = LLVM_JIT_CODEGEN_VERSION
     let env_salt = jit_env_salt(opt_level, size_level, jit_flags.emit_prologue, debug_info, target_triple, true, use_host_cpu)
     // DAS_JIT_DUMP_HASHES: per-function fold forensics - diff two runs to locate a key divergence
-    let dump_hashes = !empty(get_env_variable("DAS_JIT_DUMP_HASHES"))
+    let dump_hashes = g_env_jit.jit_dump_hashes
     var objs : array<string>
     objs |> reserve(length(order))
     var cached = 0
@@ -641,7 +642,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         }
     }
     // DAS_JIT_PROBE_LTO: bitcode partitions + lld-LTO link - the cross-module-inlining dev probe (env folds into the cache keys; ARCHITECTURE.md §3)
-    if (!empty(get_env_variable("DAS_JIT_PROBE_LTO"))) {
+    if (g_env_jit.jit_probe_lto) {
         // enforce the documented precondition outright - probe behavior must not depend on prior cache state
         if (obj_cache || cached != 0) {
             reset_jit_globals_after_failure()
@@ -927,7 +928,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             // partition objects are named by partition key, not the dll hash - the GC keep-set
             // preserves exactly the current link set. The LTO probe's artifact set is one-off:
             // skip its GC so a probe run cannot evict the normal cache generation.
-            let lto_probe = !empty(get_env_variable("DAS_JIT_PROBE_LTO"))
+            let lto_probe = g_env_jit.jit_probe_lto
             reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)

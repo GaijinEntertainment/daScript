@@ -1,0 +1,46 @@
+# dasLLVM environment variables
+
+GENERATED from the `[EnvConfig]` declarations in `daslib/llvm_env.das` - do not edit by
+hand. Regenerate with `daslang modules/dasLLVM/harness/gen_env_doc.das`; a variable read
+anywhere in the module without a declaration fails `tests/llvm_env_registry.das`.
+
+Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is false and
+anything else true; **number** falls back to the default when unset or unparseable, with
+a logged warning on garbage; **text** and **path** are taken verbatim. A SET-BUT-EMPTY
+variable counts as unset everywhere. Every knob loads ONCE, at context init, into the
+`g_env_*` globals - hot code reads struct fields, and `set_env_variable` after startup
+is invisible (arm a child process's environment instead).
+
+## JIT
+
+Loaded once at context init into `g_env_jit`. The force-features pair exists to reproduce another box's codegen locally or check that a feature-gated kernel is the one being measured; both override `cpu_supports`, which `requires=` on a `[tune_perm]` and `suffix:requires` fallback entries match against.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DAS_JIT_PROBE_LTO` | flag | off | Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO. Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run. |
+| `DAS_JIT_DUMP_HASHES` | flag | off | Split-JIT key forensics: log every (partition, mangled name, aot hash) the obj-cache chain folds. Diff two runs to locate WHERE a key diverged - distinguishes a changed hash from a changed fold order. |
+| `DAS_JIT_X64_FORCE_FEATURES` | text | unset | Comma-separated x64 CPU features to force on (e.g. avx2,f16c), bypassing detection; LLVM target-feature spellings. Also satisfies cpu_supports-based tune eligibility. Executing a forced instruction the host lacks is an illegal instruction, not a diagnostic. |
+| `DAS_JIT_ARM64_FORCE_FEATURES` | text | unset | The arm64 twin (e.g. dotprod,i8mm). |
+
+## Kernel tuning
+
+LIVE-READ, not context-init loaded: the tuner's set-then-latch contract lets a harness `set_env_variable` a knob in-process before the first read latches it. The framework itself is documented in `skills/llvm_tune.md`.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `DAS_TUNE_MODE` | text | normal | Compile-time tune mode: normal, tune, or test. |
+| `DAS_TUNE_MANIFEST` | path | <app>.tune.json beside the app | The tune sidecar to read and write - how you tune when the application directory is read-only. Setting it also gates the tune policy off (a redirect means manual). |
+| `DAS_TUNE_HISTORY` | path | <home>/.tune-history/<box>/ | Where mint archives land. Every mint archives (failures kept, marked .FAILED.json); the history is never deleted. |
+| `DAS_TUNE_NOISE_CV` | number | 2 normal / 1 paranoid | The noise gate's probe-cv ceiling in percent - a calibration lever. Garbage or <= 0 reads as unset. |
+| `DAS_TUNE_NOISE_OVERRIDE` | flag | off | Mint through a refusal at either gate - a failing noise probe or a failing validation verdict. The sidecar is stamped overridden, so the escape always leaves a mark. |
+| `DAS_TUNE_VERBOSITY` | text | normal | What a tune shows: silent, normal, or verbose. Anything unrecognized reads as normal, so a typo never silences a tune. |
+| `DAS_TUNE_POLICY` | text | declared by [tune_policy] | Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy. |
+
+## Ambient variables dasLLVM reads but does not own
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `HOME` | path | unset | The tune-history home (USERPROFILE on Windows when unset). |
+| `USERPROFILE` | path | unset | Windows fallback for the tune-history home. |
+| `PROCESSOR_IDENTIFIER` | text | unset | Half of the Windows tune box identity (measurements are a property of the box AND its OS). |
+| `OS` | text | unset | The other half of the Windows tune box identity. |

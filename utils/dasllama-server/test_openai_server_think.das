@@ -9,7 +9,7 @@ require dasllama/dasllama                               // load_model / QuantMod
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
 require daslib/json_boost                               // read_json / from_JV
 require daslib/strings_boost                            // split / trim_prefix / to_lower
-require daslib/fio                                      // get_env_variable / stat / path_join / sleep
+require daslib/fio                                      // stat / path_join / sleep
 require strings                                         // find / starts_with
 require math                                            // min
 require dasllama/dasllama_env
@@ -309,7 +309,7 @@ def test_think_gemma4(t : T?) {
 
 [test]
 def test_think_gptoss(t : T?) {
-    if (get_env_variable("DASLLAMA_PARITY_FULL") != "1") {
+    if (!g_env_test.parity_full) {
         t |> success(true, "skipped: gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
         return
     }
@@ -402,7 +402,7 @@ def test_tools_gemma4(t : T?) {
 
 [test]
 def test_tools_gptoss(t : T?) {
-    if (get_env_variable("DASLLAMA_PARITY_FULL") != "1") {
+    if (!g_env_test.parity_full) {
         t |> success(true, "skipped: gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
         return
     }

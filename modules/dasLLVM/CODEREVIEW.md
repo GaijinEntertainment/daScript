@@ -72,3 +72,12 @@ silent, per-scope repeats are fine, and a diff that only exposes the override bi
 `*_overridden` query) discharges this when the announce lands at the consumer in the same
 change. A diff that adds a knob to that surface, or gives one a new effect, without its
 announce is a defect.
+
+**No raw environment access outside `llvm_env.das`.** An environment knob is an `[EnvConfig]`
+field there: JIT knobs read as `g_env_jit` fields; tune knobs (live-read by the set-then-latch
+contract) and ambient names go through `env_value_of` / `env_is_set`, with a declaration or an
+`ambient_rows` entry backing every literal name. `get_env_variable` / `has_env_variable` /
+literal-name `env_config_*` anywhere else in the module is a defect. `ENVIRONMENT.md` is
+generated from the declarations (`harness/gen_env_doc.das`) — hand-editing it is a defect, and
+a declaration change regenerates it in the same change; `tests/llvm_env_registry.das` enforces
+the lot.

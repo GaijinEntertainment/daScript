@@ -15,6 +15,7 @@ require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_targets
 
 require llvm/daslib/llvm_dsl
+require llvm/daslib/llvm_env
 require daslib/ast_boost
 require daslib/strings
 require daslib/strings_boost
@@ -470,7 +471,7 @@ var public g_target_arm64_i8mm = false
 var public g_target_arm64_fullfp16 = false
 
 def private arm64_forced_feature(name : string) : bool {
-    for (part in split(get_env_variable("DAS_JIT_ARM64_FORCE_FEATURES"), ",")) {
+    for (part in split(g_env_jit.jit_arm64_force_features, ",")) {
         if (part == name) {
             return true
         }
@@ -491,7 +492,7 @@ def private host_llvm_feature(name : string) : bool {
 }
 
 def private x64_forced_feature(name : string) : bool {
-    for (part in split(get_env_variable("DAS_JIT_X64_FORCE_FEATURES"), ",")) {
+    for (part in split(g_env_jit.jit_x64_force_features, ",")) {
         if (part == name) {
             return true
         }
@@ -514,7 +515,7 @@ def private x64_tier_feature(name : string; cross : bool) : bool {
 // (avx2, avxvnni, avx512f/bw/vl/vnni, avxvnniint8) are spelled identically in cpuid and LLVM.
 // Empty when the env is unset.
 def public x64_forced_plus_features() : string {
-    let plus <- [for (part in split(get_env_variable("DAS_JIT_X64_FORCE_FEATURES"), ",")); "+{part}"; where !empty(part)]
+    let plus <- [for (part in split(g_env_jit.jit_x64_force_features, ",")); "+{part}"; where !empty(part)]
     return join(plus, ",")
 }
 
@@ -956,7 +957,7 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
         // DLL-cache key folds the string, so a forced artifact never cache-hits a normal run, and
         // the same-env run on the target box cache-hits it without needing a linker there).
         // Executing forced instructions on this host SIGILLs — pair with a skip-execution gate.
-        let forced_arm <- [for (part in split(get_env_variable("DAS_JIT_ARM64_FORCE_FEATURES"), ",")); "+{part}"; where !empty(part)]
+        let forced_arm <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
         if (!empty(forced_arm)) {
             feats = "{feats},{join(forced_arm, ",")}"
         }
