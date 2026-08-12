@@ -17,8 +17,9 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 - **One rule is one short paragraph.** An entry that needs more than that is describing how to
   write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
-  needs a stable reference lives in `ARCHITECTURE.md`, which is numbered for that purpose.
+- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
+  citation. Anything that needs a stable reference lives in `ARCHITECTURE.md`, which is numbered
+  for that purpose.
 - **Cite files by name; cite `ARCHITECTURE.md` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.** A rule governing specific
   functions or files must name them or it cannot be checked — that name is the criterion. An
@@ -101,7 +102,8 @@ live-leg file follows the server tests' conventions, not this file's suite rules
 through the serving rail, mirrors the large-model tier gate on `DASLLAMA_PARITY_FULL`, and
 reports model-gated skips explicitly.
 
-**A tokenizer change — pre-tokenizer arm, merge loop, vocab load, decode — records a
+**A change in `dasllama_tokenizer.das`, `dasllama_spm.das`, `dasllama_bpe.das`, or
+`dasllama_pretok.das` — pre-tokenizer arm, merge loop, vocab load, decode — records a
 `tests/test_tokenizer.das` run with its cases EXECUTED, not skipped (fixtures are machine-local,
 so an all-skip run is green and proves nothing), and a new pre-tokenizer family or backend ships
 its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture in the same change.** A corpus case
@@ -231,7 +233,9 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_tools.das` — the per-ToolMode wire codecs, pure string+JSON: every byte of tool
   wire text — definition serializers, replay/result text builders, reply parsers — is produced
   by a function here. `dasllama_chat.das` assembles ChatParts and places them in turns; a
-  wire-text literal written there, or ChatPart/render logic written here, is a defect.
+  wire-text literal written there, or ChatPart/render logic written here, is a defect. Carve-out:
+  the think-stream splitter's framing needles (`HARMONY_CH`, `HARMONY_MSG`, `HARMONY_END`,
+  `<|start|>`) live in `dasllama_chat.das` — reply framing the splitter scans, not tool wire text.
 - `dasllama_scheduler.das` — the continuous-batching serving layer OVER the facade: stream
   admission, the batched decode step, bounded prefill chunks, prefix-page donation, results
   as `SchedEvent`s. Its one engine require is `dasllama/dasllama`; engine logic written here,
@@ -559,8 +563,10 @@ transitive-arming model and the `@scratch` / `[cold_path]` companions are `ARCHI
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
 `dasllama_bpe.das` / `dasllama_pretok.das` ships its before/after `--tok` rows for the affected
 backend, and a change that turns an encode direction superlinear on the size ladder is a
-defect.** Decode rows ride along; the scaling ratio, not any single throughput number, is the
-instrument.
+defect.** A change to the `--tok` cell's own corpus input in `benchmarks/lcpp_bench.das`
+(`tok_read_seed` and the `TokCorpus` seeds it fills) decides the bytes every row measures, so it
+ships the same before/after rows or an explicit statement that the rows are unaffected. Decode
+rows ride along; the scaling ratio, not any single throughput number, is the instrument.
 
 **No raw environment access outside `dasllama_env.das`.** A knob is an `[EnvConfig]` field
 there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /

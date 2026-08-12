@@ -415,7 +415,8 @@ def private tok_synth_longword() : string {
 }
 
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
-def private tok_read_seed(path : string) : string {
+// Non-private: tests/test_tok_seed.das gates the header walk.
+def tok_read_seed(path : string) : string {
     var text = ""
     fopen(path, "rb") $(f) {
         if (f != null) {

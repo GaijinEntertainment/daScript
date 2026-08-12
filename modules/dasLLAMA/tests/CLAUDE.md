@@ -113,6 +113,14 @@ serializers and call parsers for harmony/gemma4/mistral/llama_json against verba
 `test_program_roots.das` — model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
+`test_asr_verbs.das` — model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
+`asr_encode_bucket`) over constructed structs, parakeet's SPM detokenizer over a toy vocab, and
+the `fetch_models.das` provenance-manifest invariants.
+`test_run_summary.das` — model-free: `run.das`'s own `log_summary` log scraper (last terminated
+marker line wins, an unterminated final line is invisible, doubled marker yields one line), fed
+synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
+`test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
+by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 
 ## Model loads — never the image rail (CODEREVIEW: "A test suite loads models with load_model_")
 

@@ -17,8 +17,8 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 - **One rule is one short paragraph.** An entry that needs more than that is describing how to
   write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
-  needs a stable reference lives in `README.md`.
+- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
+  citation. Anything that needs a stable reference lives in `README.md`.
 - **Cite files by name; cite `README.md` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.**
 - **No history, no rationale, no direction of travel.** The reason lives in `README.md` or the
@@ -148,8 +148,9 @@ under its configured directory before it is read.** `path_join` discards the bas
 side is absolute, so an unchecked manifest path reads any file the service user can — and the
 importer publishes what it reads.
 
-**No `unsafe` in any route handler.** An `unsafe` elsewhere takes a same-line reason comment;
-one without the comment is a defect.
+**No `unsafe` in any route handler.** An `unsafe` elsewhere carries a reason comment on the line
+of the unsafe operation itself — the `unsafe(...)` expression, or the operation line inside an
+`unsafe { }` block; one without the comment is a defect.
 
 **`POST /shutdown` and every admin operation stay unrouted in `caddy.snippet`.** Forwarding one
 there, or adding an admin endpoint to the public route set, is a defect.

@@ -83,8 +83,8 @@ def private suite_files(name : string) : array<string> {
 }
 
 // the trailing "N tests, ..." summary line of a completed dastest log ("" when the run died
-// before printing one — crash, kill, or compile error)
-def private log_summary(log_path : string) : string {
+// before printing one — crash, kill, or compile error). Non-private: test_run_summary.das gates it.
+def log_summary(log_path : string) : string {
     var summary = ""
     fopen(log_path, "rb") $(f) {
         if (f != null) {

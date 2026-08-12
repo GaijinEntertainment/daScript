@@ -31,8 +31,9 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 - **One rule is one short paragraph.** An entry that needs more than that is describing how
   to write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything
-  that needs a stable reference lives in `<ARCH-DOC>`, which is numbered for that purpose.
+- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
+  citation. Anything that needs a stable reference lives in `<ARCH-DOC>`, which is numbered
+  for that purpose.
 - **Cite files by name; cite `<ARCH-DOC>` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.** A rule governing specific
   functions or files must name them or it cannot be checked — that name is the criterion. An
