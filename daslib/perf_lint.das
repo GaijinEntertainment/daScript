@@ -1033,16 +1033,7 @@ class PerfLintVisitor : AstVisitor {
             if (current_for_known_length) {
                 known_length_loop_depth--
             }
-            if (!empty(scope_stack)) {
-                var_stack |> resize(scope_stack |> back())
-                scope_stack |> pop()
-            }
-            if (!empty(if_depth_stack)) {
-                if_depth_stack |> pop()
-            }
-            if (!empty(loop_has_early_exit)) {
-                loop_has_early_exit |> pop()
-            }
+            pop_loop_scope()
         }
         return <- expr
     }
@@ -1385,19 +1376,24 @@ class PerfLintVisitor : AstVisitor {
         in_while_cond = false
     }
 
+    // shared loop-exit bookkeeping for visitExprFor / visitExprWhile
+    def pop_loop_scope() : void {
+        if (!empty(scope_stack)) {
+            var_stack |> resize(scope_stack |> back())
+            scope_stack |> pop()
+        }
+        if (!empty(if_depth_stack)) {
+            if_depth_stack |> pop()
+        }
+        if (!empty(loop_has_early_exit)) {
+            loop_has_early_exit |> pop()
+        }
+    }
+
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
         if (in_closure == 0) {
             loop_depth--
-            if (!empty(scope_stack)) {
-                var_stack |> resize(scope_stack |> back())
-                scope_stack |> pop()
-            }
-            if (!empty(if_depth_stack)) {
-                if_depth_stack |> pop()
-            }
-            if (!empty(loop_has_early_exit)) {
-                loop_has_early_exit |> pop()
-            }
+            pop_loop_scope()
         }
         in_while_cond = false
         return <- expr

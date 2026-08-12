@@ -33,7 +33,7 @@ def public utf8_encode(var dest_array : array<uint8>&; ch : uint) {
         dest_array |> push(uint8(0x80 + (ch & 0x3F)))
     } elif (ch < 0x10000) {
         dest_array |> push(uint8(0xE0 + (ch >> 12u)))
-        dest_array |> push(uint8(0x80 + ((ch >> 6u) & 0x3F)))
+        dest_array |> push(uint8(0x80 + ((ch >> 6u) & 0x3F)))   // nolint:STYLE040 - tail shared with the 4-byte arm; the branches mirror the UTF-8 spec table
         dest_array |> push(uint8(0x80 + (ch & 0x3F)))
     } else {
         dest_array |> push(uint8(0xF0 + (ch >> 18u)))

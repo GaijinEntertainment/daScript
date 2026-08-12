@@ -33,6 +33,17 @@ enum public InspectorContentState {
     failed
 }
 
+// flush the pending +/- run into rows, then size the hunk that just ended
+def private close_current_hunk(var result : GitParsedPatch; var removed_text : array<string>;
+                               var removed_lines : array<int>; var added_text : array<string>;
+                               var added_lines : array<int>) : void {
+    append_change_rows(result, removed_text, removed_lines, added_text, added_lines)
+    if (!empty(result.hunks)) {
+        let last = length(result.hunks) - 1
+        result.hunks[last].row_count = length(result.rows) - result.hunks[last].row_start
+    }
+}
+
 def private strip_local_suffix(path : string) : string {
     let lower = to_lower(path)
     if (ends_with(lower, ".local")) {
@@ -177,7 +188,7 @@ def public git_parsed_patch_dispose(var patch : GitParsedPatch) {
     delete patch.old_changed_lines
     delete patch.new_changed_lines
     delete patch.new_deleted_anchors
-    patch = GitParsedPatch()
+    patch = GitParsedPatch()   // nolint:PERF030 - every field was just deleted; nothing left to release
 }
 
 def public trim_cr(value : string) : string {
@@ -416,12 +427,7 @@ def public git_parse_unified_patch(patch : string) : GitParsedPatch { // nolint:
             result.binary = true
         }
         if (starts_with(line, "@@")) {
-            append_change_rows(result, removed_text, removed_lines,
-                added_text, added_lines)
-            if (!empty(result.hunks)) {
-                let previous = length(result.hunks) - 1
-                result.hunks[previous].row_count = length(result.rows) - result.hunks[previous].row_start
-            }
+            close_current_hunk(result, removed_text, removed_lines, added_text, added_lines)
             if (!parse_hunk_starts(line, old_line, new_line)) {
                 result.error = "invalid unified diff hunk header"
                 return <- result
@@ -461,12 +467,7 @@ def public git_parse_unified_patch(patch : string) : GitParsedPatch { // nolint:
             new_line++
         }
     }
-    append_change_rows(result, removed_text, removed_lines,
-        added_text, added_lines)
-    if (!empty(result.hunks)) {
-        let last = length(result.hunks) - 1
-        result.hunks[last].row_count = length(result.rows) - result.hunks[last].row_start
-    }
+    close_current_hunk(result, removed_text, removed_lines, added_text, added_lines)
     if (!in_hunk && !result.binary && !saw_diff_header) {
         result.error = "diff contains no text hunks"
         return <- result

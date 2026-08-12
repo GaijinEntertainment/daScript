@@ -450,62 +450,6 @@ def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
     return td
 }
 
-def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
-    ok = true
-    var stmt_count = 0
-    let sql = build_string() $(var w) {
-        for (ann in st.annotations) {
-            if (ann.annotation.name != "sql_index") continue
-            let idx_name_arg = find_annotation(ann.arguments, "name", "")
-            let is_unique = find_annotation(ann.arguments, "unique", false)
-            let cols = find_string_array_annotation(ann.arguments, "fields")
-            if (empty(cols)) {
-                errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
-                ok = false
-                return
-            }
-            for (col in cols) {
-                var found = false
-                for (fn in field_names) {
-                    if (fn == col) {
-                        found = true
-                    }
-                }
-                if (!found) {
-                    errors := "[sql_index]: field '{col}' is not a column of struct '{st.name}'. Available: {field_names}"
-                    ok = false
-                    return
-                }
-            }
-            let auto_name = build_string() $(var w2) {
-                w2 |> write("idx_")
-                w2 |> write(table_name)
-                for (col in cols) {
-                    w2 |> write("_")
-                    w2 |> write(col)
-                }
-            }
-            let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
-            let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
-            if (stmt_count > 0) {
-                w |> write("; ")
-            }
-            stmt_count++
-            w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
-            for (j in range(length(cols))) {
-                if (j > 0) {
-                    w |> write(", ")
-                }
-                w |> write("\"")
-                w |> write(cols[j])
-                w |> write("\"")
-            }
-            w |> write(")")
-        }
-    }
-    return sql
-}
-
 def private extract_string_return(var fn : FunctionPtr) : string {
     if (fn == null || fn.body == null || !(fn.body is ExprBlock)) return ""
     let blk = fn.body as ExprBlock
@@ -530,6 +474,36 @@ def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPt
         }
     }
     return found
+}
+
+// CREATE [UNIQUE] INDEX ... ON ... (cols) - emitted by both the annotation and the call macro
+// comma-separated, double-quoted SQL column list
+def private quoted_column_list(fields : array<FieldInfo>) : string {
+    return build_string() $(var w) {
+        for (i in range(length(fields))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(fields[i].col_name)
+            w |> write("\"")
+        }
+    }
+}
+
+def private index_ddl(kind, idx_name, table_name : string; sql_cols : array<string>) : string {
+    return build_string() $(var w) {
+        w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
+        for (j in range(length(sql_cols))) {
+            if (j > 0) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(sql_cols[j])
+            w |> write("\"")
+        }
+        w |> write(")")
+    }
 }
 
 def private derive_index_name(table_name : string; sql_cols : array<string>) : string {
@@ -621,18 +595,7 @@ class SqlIndexMacro : AstStructureAnnotation {
         let auto_name = derive_index_name(table_name, sql_cols)
         let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
         let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
-        let this_stmt = build_string() $(var w) {
-            w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
-            for (j in range(length(sql_cols))) {
-                if (j > 0) {
-                    w |> write(", ")
-                }
-                w |> write("\"")
-                w |> write(sql_cols[j])
-                w |> write("\"")
-            }
-            w |> write(")")
-        }
+        let this_stmt = index_ddl(kind, idx_name, table_name, sql_cols)
 
         // Append this statement to whatever earlier [sql_index] siblings already accumulated.
         let prev_sql = extract_string_return(idx_fn)
@@ -1394,16 +1357,7 @@ class SqlTableMacro : AstStructureAnnotation {
 
     def make_select_all_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
         // 2-arg form: column list is baked at macro time; table identifier is the runtime parameter.
-        let col_list = build_string() $(var w) {
-            for (i in range(length(fields))) {
-                if (i > 0) {
-                    w |> write(", ")
-                }
-                w |> write("\"")
-                w |> write(fields[i].col_name)
-                w |> write("\"")
-            }
-        }
+        let col_list = quoted_column_list(fields)
         let prefix = "SELECT {col_list} FROM "
         var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st); name : string) : string {
             return $v(prefix) + sql_quote_id(name)
@@ -1940,16 +1894,7 @@ def private make_view_drop_sql_fn(var st : StructurePtr; view_name : string) : F
 }
 
 def private make_view_select_all_sql_fn(var st : StructurePtr; view_name : string; fields : array<FieldInfo>) : FunctionPtr {
-    let col_list = build_string() $(var w) {
-        for (i in range(length(fields))) {
-            if (i > 0) {
-                w |> write(", ")
-            }
-            w |> write("\"")
-            w |> write(fields[i].col_name)
-            w |> write("\"")
-        }
-    }
+    let col_list = quoted_column_list(fields)
     let sql = "SELECT {col_list} FROM \"{view_name}\""
     var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st)) : string {
         return $v(sql)
@@ -2275,18 +2220,7 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
         idx_name = nameRes.value
     }
     let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
-    let ddl = build_string() $(var w) {
-        w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
-        for (j in range(length(sql_cols))) {
-            if (j > 0) {
-                w |> write(", ")
-            }
-            w |> write("\"")
-            w |> write(sql_cols[j])
-            w |> write("\"")
-        }
-        w |> write(")")
-    }
+    let ddl = index_ddl(kind, idx_name, table_name, sql_cols)
     var res = qmacro(_::exec($e(call.arguments[0]), $v(ddl)))
     res.force_at(call.at)
     return res

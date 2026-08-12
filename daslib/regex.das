@@ -198,12 +198,6 @@ def private set_or_range(var cset : CharSet; bits : range) {
     }
 }
 
-def private set_invert(var cset : CharSet) {
-    for (x in cset) {
-        x ^= 0xffffffff
-    }
-}
-
 def private set_or_set(var cset : CharSet; eset : CharSet) {
     for (x, y in cset, eset) {
         x |= y

@@ -154,6 +154,20 @@ var ACTIVITY_ERROR_SEND : ToggleState
 
 var ACTIVITY_ERROR_FIX : ToggleState
 
+def private request_worktree_refresh(repository : RepositorySnapshot; worktree : WorktreeState) : void {
+    g_client->refresh_repository(repository.record.id)
+    g_client->request_repository_review(repository.record.id, worktree.path)
+}
+
+// SHA / Title / Author header row shared by the PR-commit and history-commit tables
+def private setup_commit_table_columns(sha_width : float) : void {
+    table_setup_scroll_freeze(0, 1)
+    table_setup_column("SHA", ImGuiTableColumnFlags.WidthFixed, sha_width)
+    table_setup_column("Title", ImGuiTableColumnFlags.WidthStretch, 0.72f)
+    table_setup_column("Author", ImGuiTableColumnFlags.WidthStretch, 0.28f)
+    table_headers_row()
+}
+
 // Index of a non-closed herd session claiming this worktree, or -1. A running
 // session prefers over an exited one so the marker reflects the live claimant.
 def private active_herd_for_worktree(worktree_path : string) : int {
@@ -224,7 +238,7 @@ def private navigate_to_herd(record_index : int) {
     }
 }
 
-def draw_repositories_window() { // nolint:STYLE037
+def draw_repositories_window() { // nolint:STYLE037,STYLE038
     text_disabled("Target: Local")
     separator()
     input_text_growable(ADD_REPOSITORY_PATH, (text = "Repository checkout"))
@@ -313,9 +327,7 @@ def draw_repositories_window() { // nolint:STYLE037
                     g_selected_repository_id = repository.record.id
                     g_selected_worktree_path = worktree.path
                     g_selection_explicit = true
-                    g_client->refresh_repository(repository.record.id)
-                    g_client->request_repository_review(
-                        repository.record.id, worktree.path)
+                    request_worktree_refresh(repository, worktree)
                     GIT_CHANGELIST_WIN.open = true
                     GIT_CHANGELIST_WIN.pending_raise = true
                     GIT_ACTIVITY_WIN.open = true
@@ -732,7 +744,7 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
     }
 }
 
-def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE037
+def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE037,STYLE038
                         worktree : WorktreeState const;
                         group : int; var file_row : int&) : int {
     let comparison = git_group_scope(group)
@@ -1108,11 +1120,7 @@ def draw_pr_review(repository : RepositorySnapshot const;
     data_table(GIT_PR_COMMIT_TABLE, (text = "##pr-commits", columns = 3,
             flags = table_flags, outer_size = float2(0.0f, 0.0f),
             inner_width = 0.0f)) {
-        table_setup_scroll_freeze(0, 1)
-        table_setup_column("SHA", ImGuiTableColumnFlags.WidthFixed, sha_width)
-        table_setup_column("Title", ImGuiTableColumnFlags.WidthStretch, 0.72f)
-        table_setup_column("Author", ImGuiTableColumnFlags.WidthStretch, 0.28f)
-        table_headers_row()
+        setup_commit_table_columns(sha_width)
         for (commit in repository.review_commits) {
             if (commit.worktree_path != worktree.path) continue
             table_next_row()
@@ -1235,11 +1243,7 @@ def draw_history_commits(repository : RepositorySnapshot const; // nolint:STYLE0
     data_table(GIT_HISTORY_COMMIT_TABLE, (text = "##history-commits", columns = 3,
             flags = table_flags, outer_size = float2(0.0f, 0.0f),
             inner_width = 0.0f)) {
-        table_setup_scroll_freeze(0, 1)
-        table_setup_column("SHA", ImGuiTableColumnFlags.WidthFixed, sha_width)
-        table_setup_column("Title", ImGuiTableColumnFlags.WidthStretch, 0.72f)
-        table_setup_column("Author", ImGuiTableColumnFlags.WidthStretch, 0.28f)
-        table_headers_row()
+        setup_commit_table_columns(sha_width)
         list_clipper(total) $(start, end_) {
             for (row in range(start, end_)) {
                 if (boundary_row >= 0 && row == boundary_row) {
@@ -1693,7 +1697,7 @@ def draw_changelist_network_row(repository : RepositorySnapshot const;
     }
 }
 
-def draw_git_changelist_window() { // nolint:STYLE038
+def draw_git_changelist_window() {
     var status = GitWindowStatus(text = "No worktree selected")
     var found = false
     child(GIT_CHANGELIST_CONTENT, (text = "changelist content",
@@ -1715,9 +1719,7 @@ def draw_git_changelist_window() { // nolint:STYLE038
                             tip = "Refresh the worktree status and PR review",
                             size = GetTextLineHeight()))
                             && !repository.refreshing) {
-                        g_client->refresh_repository(repository.record.id)
-                        g_client->request_repository_review(
-                            repository.record.id, worktree.path)
+                        request_worktree_refresh(repository, worktree)
                         g_client->request_repository_history(
                             repository.record.id, worktree.path, worktree.branch)
                         g_client->request_repository_refs(

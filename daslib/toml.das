@@ -101,10 +101,6 @@ struct private LexState {
     row  : int       //! 0-based column on current line
 }
 
-def private at(data : array<uint8>&; st : LexState) : int {
-    return st.pos < st.n ? int(data[st.pos]) : -1
-}
-
 def private peek(data : array<uint8>&; st : LexState; offset : int) : int {
     let p = st.pos + offset
     return p < st.n ? int(data[p]) : -1
@@ -137,17 +133,6 @@ def private starts_with_at(data : array<uint8>&; pos : int; s : string) : bool {
         }
     }
     return ok
-}
-
-def private skip_inline_ws(data : array<uint8>&; var st : LexState&) : void {
-    while (st.pos < st.n) {
-        let c = int(data[st.pos])
-        if (c == ' ' || c == '\t') {
-            advance(data, st)
-        } else {
-            break
-        }
-    }
 }
 
 def private skip_comment_to_eol(data : array<uint8>&; var st : LexState&) : void {
@@ -395,6 +380,22 @@ def private looks_like_time(data : array<uint8>&; pos : int) : bool {
             is_number(int(data[pos + 6])) && is_number(int(data[pos + 7])))
 }
 
+// HH:MM:SS plus optional fractional seconds - the tail of a date-time and of a local-time
+def private take_time_of_day(var buf : array<uint8>; data : array<uint8>&; var st : LexState&; n : int) : void {
+    for (_ in range(8)) {
+        push(buf, data[st.pos])   // nolint:PERF006 - read_datetime reserves the whole 40-byte buffer up front
+        advance(data, st)
+    }
+    if (st.pos < n && int(data[st.pos]) == '.') {
+        push(buf, data[st.pos])
+        advance(data, st)
+        while (st.pos < n && is_number(int(data[st.pos]))) {
+            push(buf, data[st.pos])
+            advance(data, st)
+        }
+    }
+}
+
 def private read_datetime(data : array<uint8>&; var st : LexState&; allow_time : bool) : string {
     // Consume a TOML date-time / local-date / local-time. Max length is ~35 (date+T+time+frac+offset); reserve once to avoid PERF006 churn.
     var buf : array<uint8>
@@ -413,19 +414,7 @@ def private read_datetime(data : array<uint8>&; var st : LexState&; allow_time :
             if (next_is_time && looks_like_time(data, st.pos + 1)) {
                 push(buf, data[st.pos])
                 advance(data, st)
-                for (_ in range(8)) {
-                    push(buf, data[st.pos])
-                    advance(data, st)
-                }
-                // Optional fractional seconds.
-                if (st.pos < n && int(data[st.pos]) == '.') {
-                    push(buf, data[st.pos])
-                    advance(data, st)
-                    while (st.pos < n && is_number(int(data[st.pos]))) {
-                        push(buf, data[st.pos])
-                        advance(data, st)
-                    }
-                }
+                take_time_of_day(buf, data, st, n)
                 // Optional offset: Z or +/-HH:MM.
                 if (st.pos < n) {
                     let oc = int(data[st.pos])
@@ -449,18 +438,7 @@ def private read_datetime(data : array<uint8>&; var st : LexState&; allow_time :
         }
     } else {
         // Local-time only: HH:MM:SS[.frac]
-        for (_ in range(8)) {
-            push(buf, data[st.pos])
-            advance(data, st)
-        }
-        if (st.pos < n && int(data[st.pos]) == '.') {
-            push(buf, data[st.pos])
-            advance(data, st)
-            while (st.pos < n && is_number(int(data[st.pos]))) {
-                push(buf, data[st.pos])
-                advance(data, st)
-            }
-        }
+        take_time_of_day(buf, data, st, n)
     }
     return string(buf)
 }

@@ -31,10 +31,6 @@ def public extract_expression(method_name : string; expr) {
     return expr
 }
 
-def log_range(at : LineInfo) {
-    return "{describe(at)}-{int(at.last_line)}:{int(at.last_column)}"
-}
-
 struct ExtractMethodDesc {
     //! Descriptor for extract-method refactoring.
     call_name : string

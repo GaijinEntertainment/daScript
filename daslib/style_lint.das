@@ -45,9 +45,11 @@ module style_lint shared private
 //!   STYLE036 — type contract ('-const', '-&', '-[]', '-#', '==const', '==&') on an already-resolved cast/reinterpret/upcast/addr target does nothing — drop it
 //!   STYLE037 — function or closure cyclomatic complexity exceeds the limit (override per module with 'options _cyclomatic_complexity = N'; 0 disables) — split it into smaller functions
 //!   STYLE038 — function exceeds the line-count limit (physical lines; override per module with 'options _function_length = N'; 0 disables) — split it into smaller functions
+//!   STYLE040 — a run of statements duplicated elsewhere in the module that a helper function could absorb (on by default under daslib/ and utils/, override per module with 'options _duplicate_regions'; thresholds via 'options _dupe_min_nodes' / '_dupe_min_statements'; suppress with '// nolint:STYLE040' on the reported line)
 //!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
 
 require daslib/ast_boost
+require daslib/dupe_detect
 require daslib/is_local
 require daslib/lint_config
 require math
@@ -2271,6 +2273,21 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    // --- STYLE040: duplicated statement region that a helper could absorb ---
+
+    // post-walk pass (like st029): the engine needs the whole module at once
+    def st040_check_duplicates(prog : ProgramPtr) : void {
+        return if (key_exists(disabled_codes, "STYLE040")
+                   || (!empty(enabled_codes) && !key_exists(enabled_codes, "STYLE040"))
+                   || !duplicate_regions_for(prog))
+        var found <- find_extractable_dupes(prog)
+        for (f in found) {
+            if (f.anchor != null) {
+                style_warning(f.message, f.anchor.at)
+            }
+        }
+    }
+
     def has_nolint_directive(first_line : string) : bool {
         // Positional check — `@nolint` MUST be the first token after `//`/`//!` (and optional whitespace) so we don't mis-match URLs/prose that happen to contain the literal `@nolint`.
         var rest = first_line
@@ -2668,6 +2685,14 @@ def private ascii_strings_for(prog : ProgramPtr) : bool {
     return is_shipped_library_source(prog)
 }
 
+def private duplicate_regions_for(prog : ProgramPtr) : bool {
+    // tri-state: module option wins; '.lint_config' STYLE040=true means everywhere; else path default
+    let configured = prog._options |> find_arg("_duplicate_regions")
+    if (configured is tBool) return configured as tBool
+    if (lint_config_forces_on("STYLE040")) return true
+    return is_core_library_source(prog)
+}
+
 def private max_complexity_for(prog : ProgramPtr) : int {
     // 0 (or negative) disables STYLE037 for the module
     let configured = prog._options |> find_arg("_cyclomatic_complexity") ?as tInt ?? STYLE037_DEFAULT_MAX
@@ -2708,6 +2733,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
         astVisitor->scan_long_comment_blocks(prog)
     }
     astVisitor->st029_check_requires(prog)
+    astVisitor->st040_check_duplicates(prog)
     // STYLE024/025 stack-balance sanity check.
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
@@ -2746,6 +2772,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
         astVisitor->scan_long_comment_blocks(prog)
     }
     astVisitor->st029_check_requires(prog)
+    astVisitor->st040_check_duplicates(prog)
     // STYLE024/025 stack-balance sanity check.
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
@@ -2777,6 +2804,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
         astVisitor->scan_long_comment_blocks(prog)
     }
     astVisitor->st029_check_requires(prog)
+    astVisitor->st040_check_duplicates(prog)
     // STYLE024/025 stack-balance sanity check.
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")

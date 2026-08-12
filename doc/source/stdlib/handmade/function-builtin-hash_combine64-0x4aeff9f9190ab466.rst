@@ -1,0 +1,1 @@
+Folds ``value`` into the running ``hash`` and returns the new accumulator, i.e. ``HashBuilder::update`` with an explicit seed. Order-sensitive, so it suits a Merkle fold over a tree or a rolling hash over a sequence. Safe for any accumulator including ``0``, which a bare ``_wymix`` is not.

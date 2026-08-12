@@ -831,6 +831,90 @@ nanosecond timestamp is shape-identical to ``int(max(keep, 0l))``. The rule
 cannot tell them apart; ``// nolint:LINT021`` on the declaration line is the
 answer there.
 
+LINT022 — private declaration is never used
+============================================
+
+A ``private`` declaration is reachable only from its own module, so if nothing
+in that module references it the declaration is dead code — it still compiles,
+formats and lints clean while nothing outside can ever reach it. The rule
+covers functions, structures, classes and enumerations. The same applies to
+every symbol of a ``private`` module, where the module declaration makes the
+whole surface private.
+
+.. code-block:: das
+
+    def private rollback(var st : State) {       // LINT022 — no caller anywhere
+        st.claimed |> resize(st.mark)
+    }
+
+    struct private Bucket {                      // LINT022 — no type mentions it
+        lo, hi : int
+    }
+
+    def private commit(var st : State) {         // fine — called below
+        st.mark = length(st.claimed)
+    }
+
+    def scan(var st : State) {
+        commit(st)
+    }
+
+Function references are collected from resolved calls, ``@@fn`` function
+pointers, ``new`` constructors and operator sites, and — for generic bodies,
+which are never inferred and therefore resolve nothing — by call name.
+Structures and enumerations are referenced through *types* rather than
+expressions, so they are marked from every type the walk touches: the type of
+every expression, every function signature (generics included), every
+structure field, every global and every ``typedef``. A generic body carries no
+inferred types at all, so the extra sweep over generics matches by *spelled
+name* — the declared type of every local and argument, every cast target and
+every ``new`` — which is the only trace a private type leaves there. A string literal matching
+a declaration's name counts as a reference, which is what makes a name-based
+lookup (``find_structure``, RTTI, a macro registry) safe.
+
+**Global variables are deliberately not checked.** Const folding and
+``static_if`` erase the very references the check would need: a debug flag read
+only in ``static_if (log_enabled) { ... }`` leaves no trace of itself once the
+branch is elided, and a const global's uses are replaced by its value. Both
+shapes are common and deliberate — a family of ``typeinfo variant_index``
+constants, a phase ladder, a switched-off trace scaffold — so a global check
+reports code that is neither dead nor removable.
+
+Three self-reference shapes deliberately do **not** count as a use, or nothing
+would ever report: a structure field of the structure's own type (a linked list
+keeping itself alive), a class referenced by its own method fields or by
+``self`` inside its own methods, and a compiler-generated body naming its own
+subject type — a constructor, finalizer or clone mentions it by construction.
+That last exclusion is scoped to the one subject type on purpose: a lambda body
+also compiles to a generated function, so skipping generated bodies wholesale
+would blind the rule to every type used only inside a lambda.
+
+A declaration of any kind — function, structure, class or enumeration — stays
+silent when it carries **any** annotation (``[export]``, ``[init]``,
+``[test]``, ``[enum_total]``, any macro hook: those are entry points nothing
+references from das source, and a macro often consumes the declaration without
+ever naming it), when it is a class method (virtual dispatch), or when it is
+generic, template-flavoured or compiler-generated.
+
+The rule is **on by default under ``daslib/`` and ``utils/``** and off
+elsewhere: in other trees an unreferenced private declaration is a cleanup
+backlog rather than a gate, and a type-matrix overload family (three ``kv_dot``
+overloads covering three element types, say) has members that are legitimately
+unreferenced today. Override per module with ``options _unused_private = true``
+(or ``false``), or everywhere with ``LINT022 = true`` in ``.lint_config``.
+
+One driver-dependent gap is worth knowing. The **function** half stands down
+when heuristic auto-inlining is active (``auto_inline_functions``, on by
+default in optimized builds): that tier splices a small private callee into
+its call sites *before* lint runs and leaves an unreferenced husk behind,
+indistinguishable from dead code. Types survive that tier untouched, so they
+are always checked. The lint runner compiles with ``no_optimizations``, so it
+checks everything; a fixture or module that wants the function half under a
+plain compile sets ``options auto_inline_functions = false``.
+
+``// nolint:LINT022`` on the declaration line is the answer for a symbol kept
+on purpose — a debug helper behind a commented-out call, say.
+
 .. _perf_lint:
 
 -----------------
@@ -2672,6 +2756,69 @@ disables the rule for the module — the right escape for a legitimately dense
 file such as a code emitter or a ported kernel. Suppress a single deliberate
 keep with ``// nolint:STYLE038`` on the ``def`` line.
 
+STYLE040 — duplicated statement region a helper could absorb
+=============================================================
+
+A run of statements that appears verbatim somewhere else in the same module,
+where a helper function could absorb it as-is. Variable names may differ —
+structure, types, called functions and literal values may not.
+
+.. code-block:: das
+
+    // Bad — the same four statements twice, only the names differ
+    def alpha(var acc : array<int>; base : int) {    // STYLE040
+        acc |> push(base * 2)
+        acc |> push(base + 7)
+        acc |> push(base - 1)
+        acc |> push(base * base)
+    }
+
+    def beta(var out : array<int>; seed : int) {
+        out |> push(seed * 2)
+        out |> push(seed + 7)
+        out |> push(seed - 1)
+        out |> push(seed * seed)
+    }
+
+    // Good — one helper, two calls
+    def spread(var dst : array<int>; n : int) {
+        dst |> push(n * 2)
+        dst |> push(n + 7)
+        dst |> push(n - 1)
+        dst |> push(n * n)
+    }
+
+Detection is the classic AST clone algorithm: a Merkle hash per node picks
+candidate pairs, and each pair is then confirmed by an exact lockstep walk that
+compares node class, payload text and type text under a variable bijection — so
+a hash collision can never produce a finding, and an AST class the engine does
+not know is treated as opaque and never matches.
+
+The rule fires only when the extraction is mechanically valid. It stays silent
+when the region declares a local that is read after it (that needs a return
+value, a different refactor), when a ``return`` / ``break`` / ``continue`` /
+``goto`` would escape the region, when it contains an ``assume`` alias the rest
+of the block consumes, when a ``var inscope`` inside it would have its
+finalization moved, when a written free variable is not a ref or ref type (the
+write would not survive the call), and when any statement performs an operation
+whose ``unsafe`` authorization comes from an enclosing scope — a ``reinterpret``
+or ``upcast`` cast, a ``delete``, an ``addr``, an unsafe deref, or a call the
+compiler marks unsafe — because the same statements inside a plain helper fail
+to compile. The message lists the suggested parameter list, derived from the
+region's free variables and spelled without alias decoration so it can be
+pasted straight into a ``def``.
+
+The rule is **on by default under ``daslib/`` and ``utils/``** — the trees this
+repo keeps free of duplicated regions — and off elsewhere, so a PR touching an
+unrelated file never inherits findings it did not create. Override per module
+with ``options _duplicate_regions = true`` (or ``false``), or everywhere with
+``STYLE040 = true`` in ``.lint_config``. It walks and hashes the whole module
+once per compile, which measures under 1% of a lint pass even on the largest
+modules in this tree. Tune the thresholds per module with ``options _dupe_min_nodes = N``
+(default 20 AST nodes) and ``options _dupe_min_statements = N`` (default 2);
+``0`` on either leaves the default in place. Suppress a deliberate repetition
+with ``// nolint:STYLE040``.
+
 -----
 Tests
 -----
@@ -2685,4 +2832,5 @@ Lint tests are in ``utils/lint/tests/``::
     ``daslib/lint.das`` (paranoid lint source),
     ``daslib/perf_lint.das`` (performance lint source),
     ``daslib/style_lint.das`` (style lint source),
+    ``daslib/dupe_detect.das`` (STYLE040 duplicate-region engine),
     ``utils/lint/main.das`` (unified standalone utility)

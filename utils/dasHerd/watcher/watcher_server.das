@@ -1447,7 +1447,20 @@ class DasHerdWatcherServer : HvWebServer {
         print("dasHerd watcher: client {client_id} disconnected\n")
     }
 
-    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037
+    // the changelist_action_result frame every changelist op answers with. `action` is the raw
+    // action name; the four call sites differ only in whether it comes from the request.
+    def send_changelist_action_result(channel : WebSocketChannel; start_error, action : string;
+                                      incoming : WatcherWsMessage const) : void {
+        let ok = empty(start_error)
+        send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+            "\"detail\":{sprint_json(start_error, false)}," +
+            "\"action\":{sprint_json(action, false)}," +
+            "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+            "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
+    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037,STYLE038
         let index = find_client(channel)
         if (index < 0) return
         var inscope incoming = WatcherWsMessage()
@@ -1711,46 +1724,22 @@ class DasHerdWatcherServer : HvWebServer {
             let start_error = repository_operation_changelist(
                 incoming.repository_id, incoming.worktree_path,
                 incoming.action, incoming.worktree_paths)
-            let ok = empty(start_error)
-            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
-                "\"detail\":{sprint_json(start_error, false)}," +
-                "\"action\":{sprint_json(incoming.action, false)}," +
-                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
-                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
-                ws_opcode.WS_OPCODE_TEXT, true)
+            send_changelist_action_result(channel, start_error, incoming.action, incoming)
         } elif (incoming.op == "changelist_discard") {
             let start_error = repository_operation_discard(
                 incoming.repository_id, incoming.worktree_path,
                 incoming.worktree_paths, incoming.staged_paths,
                 incoming.untracked_paths)
-            let ok = empty(start_error)
-            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
-                "\"detail\":{sprint_json(start_error, false)}," +
-                "\"action\":\"discard\"," +
-                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
-                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
-                ws_opcode.WS_OPCODE_TEXT, true)
+            send_changelist_action_result(channel, start_error, "discard", incoming)
         } elif (incoming.op == "changelist_commit") {
             let start_error = repository_operation_commit(
                 incoming.repository_id, incoming.worktree_path, incoming.text)
-            let ok = empty(start_error)
-            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
-                "\"detail\":{sprint_json(start_error, false)}," +
-                "\"action\":\"commit\"," +
-                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
-                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
-                ws_opcode.WS_OPCODE_TEXT, true)
+            send_changelist_action_result(channel, start_error, "commit", incoming)
         } elif (incoming.op == "changelist_network") {
             let start_error = repository_operation_network(
                 incoming.repository_id, incoming.worktree_path,
                 incoming.action)
-            let ok = empty(start_error)
-            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
-                "\"detail\":{sprint_json(start_error, false)}," +
-                "\"action\":{sprint_json(incoming.action, false)}," +
-                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
-                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
-                ws_opcode.WS_OPCODE_TEXT, true)
+            send_changelist_action_result(channel, start_error, incoming.action, incoming)
         } elif (incoming.op == "worktree_commit_wip") {
             let detail = repository_operation_commit_wip(incoming.repository_id,
                 incoming.worktree_path, incoming.text)

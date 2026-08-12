@@ -82,6 +82,21 @@ struct DaspkgArgs {
     wasm_lib_dir : string
 }
 
+// undo a failed install: drop the directory, then the lock entry it referred to (only if one
+// was there, so a first-time failure does not rewrite the lock file for nothing)
+def private rollback_partial_install(root, target, pkg_name : string; var lf : LockFile; is_global : bool) : void {
+    log("Install failed for '{pkg_name}' — removing partial install\n")
+    force_rmdir(target)
+    if (has_package(lf, pkg_name)) {
+        remove_package(lf, pkg_name)
+        if (is_global) {
+            write_global_lock_file(lf)
+        } else {
+            write_lock_file(root, lf)
+        }
+    }
+}
+
 // Apply parsed flags that flip module-level globals.  Called by main after
 // a successful parse so the rest of daspkg sees the right state.
 def public apply_global_flags(args : DaspkgArgs) {
@@ -176,32 +191,13 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
     // install dependencies before build (matches install_git ordering)
     let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global)
     if (dep_rc != 0) {
-        log("Install failed for '{pkg_name}' — removing partial install\n")
-        force_rmdir(target)
-        if (has_package(lf, pkg_name)) {
-            remove_package(lf, pkg_name)
-            if (is_global) {
-                write_global_lock_file(lf)
-            } else {
-                write_lock_file(root, lf)
-            }
-        }
+        rollback_partial_install(root, target, pkg_name, lf, is_global)
         return dep_rc
     }
 
     let build_rc = try_build_package(target, pkg_name, is_global)
     if (build_rc != 0) {
-        log("Install failed for '{pkg_name}' — removing partial install\n")
-        force_rmdir(target)
-        // drop any prior lock entry — the directory it referred to is gone
-        if (has_package(lf, pkg_name)) {
-            remove_package(lf, pkg_name)
-            if (is_global) {
-                write_global_lock_file(lf)
-            } else {
-                write_lock_file(root, lf)
-            }
-        }
+        rollback_partial_install(root, target, pkg_name, lf, is_global)
         return build_rc
     }
 
@@ -490,17 +486,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     log_debug("checking dependencies for '{pkg_name}'")
     let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global)
     if (dep_rc != 0) {
-        log("Install failed for '{pkg_name}' — removing partial install\n")
-        force_rmdir(target_dir)
-        // only touch the lock file if we'd actually be removing a prior entry
-        if (has_package(lf, pkg_name)) {
-            remove_package(lf, pkg_name)
-            if (is_global) {
-                write_global_lock_file(lf)
-            } else {
-                write_lock_file(root, lf)
-            }
-        }
+        rollback_partial_install(root, target_dir, pkg_name, lf, is_global)
         return dep_rc
     }
 
@@ -508,16 +494,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     log_debug("checking build for '{pkg_name}'")
     let build_rc = try_build_package(target_dir, pkg_name, is_global)
     if (build_rc != 0) {
-        log("Install failed for '{pkg_name}' — removing partial install\n")
-        force_rmdir(target_dir)
-        if (has_package(lf, pkg_name)) {
-            remove_package(lf, pkg_name)
-            if (is_global) {
-                write_global_lock_file(lf)
-            } else {
-                write_lock_file(root, lf)
-            }
-        }
+        rollback_partial_install(root, target_dir, pkg_name, lf, is_global)
         return build_rc
     }
 

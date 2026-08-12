@@ -194,7 +194,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_building_documentation|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
         group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
-        group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
+        group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|hash_combine64|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime|iso8601_now|format_time|clock)$%%),
@@ -1336,7 +1336,7 @@ def document_module_lint_config(_root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
         group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled|lint_config_forces_on)$%%),
-        group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source)$%%),
+        group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)

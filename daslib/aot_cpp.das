@@ -228,18 +228,8 @@ enum CpptSubstitureRef {
     no
     yes
 };
-enum CpptSkipRef {
-    //! Controls whether references are skipped in C++ type printing.
-    no
-    yes
-};
 enum CpptSkipConst {
     //! Controls whether const qualifiers are skipped in C++ type printing.
-    no
-    yes
-};
-enum CpptRedundantConst {
-    //! Controls whether redundant const qualifiers are emitted in C++ type printing.
     no
     yes
 };
@@ -689,9 +679,6 @@ def enumInfoName(info : EnumInfo?) {
 def public funcInfoName(info : FuncInfo?) {
     //! Returns the C++ identifier name for a function's runtime info based on its hash.
     return "__func_info__{info.hash:x}";
-}
-def varInfoName(info : VarInfo?) {
-    return "__var_info__{info.hash:x}";
 }
 def structInfoName(info : StructInfo?) {
     return "__struct_info__{info.hash:x}";
@@ -1311,9 +1298,6 @@ class public BlockVariableCollector : AstVisitor {
     tempCounter : uint64 = uint64(0)
 };
 
-def collect_block_variables() {
-}
-
 def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
     //! Returns the C++ function signature string for an AOT-compiled function.
     return build_string() $(writer) {
@@ -1523,14 +1507,18 @@ class public CppAot : AstVisitor {
         write(*ss, "\n");
     }
 // global let body
+    def write_local_temp_type(tmp : Expression?) : void {
+        write(*ss, tabs())
+        describeVarLocalCppType(ss, tmp._type, cross_platform)
+    }
+
     def override preVisitGlobalLet(prog : ProgramPtr) {
         write(*ss, "void __init_script ( Context * __context__, bool __init_shared )\n\{\n");
         tab ++;
         // pre-declare locals
         assume temps = collector.localTemps[null];
         for (tmp in temps) {
-            write(*ss, tabs());
-            describeVarLocalCppType(ss, tmp._type, cross_platform);
+            write_local_temp_type(tmp)
             write(*ss, " {makeLocalTempName(tmp)};\n");
         }
     }
@@ -1685,8 +1673,7 @@ class public CppAot : AstVisitor {
         // pre-declare locals
         collector.localTemps.get(blk) $(temps) {
             for (tmp in temps) {
-                write(*ss, tabs());
-                describeVarLocalCppType(ss, tmp._type, cross_platform);
+                write_local_temp_type(tmp)
                 let tempName = makeLocalTempName(tmp);
                 write(*ss, " {tempName}; {tempName};\n");
             }
@@ -2486,6 +2473,17 @@ class public CppAot : AstVisitor {
             }
         }
     }
+    // trailing parens a handled-type field access needs, shared by the value and pointer arms
+    def write_field_access_suffix(var sb : StringBuilderWriter?; field : ExprField?) : void {
+        write(*sb, " /*{field.name}*/")
+        if (field._type.isString) {
+            write(*sb, "))")
+        }
+        if (field._type.flags.isNativeDim) {
+            write(*sb, ")")
+        }
+    }
+
     def override visitExprField(var field : ExprField?) : ExpressionPtr {
         if (field.value._type.isBitfield) {
             write(*ss, ",1u << {field.fieldIndex})");
@@ -2495,23 +2493,11 @@ class public CppAot : AstVisitor {
             write(*ss, ")");
         } elif (field.value._type.isHandle) {
             aot_visit_get_field(field.value._type.annotation, ss, string(field.name));
-            write(*ss, " /*{field.name}*/");
-            if (field._type.isString) {
-                write(*ss, "))");
-            }
-            if (field._type.flags.isNativeDim) {
-                write(*ss, ")");
-            }
+            write_field_access_suffix(ss, field);
         } elif (field.value._type.baseType == Type.tPointer) {
             if (field.value._type.firstType.isHandle) {
                 aot_type_ann_get_field_ptr(field.value._type.firstType.annotation, ss, string(field.name));
-                write(*ss, " /*{field.name}*/");
-                if (field._type.isString) {
-                    write(*ss, "))")
-                }
-                if (field._type.flags.isNativeDim) {
-                    write(*ss, ")");
-                }
+                write_field_access_suffix(ss, field);
             } elif (field.value._type.firstType.isTuple) {
                 write(*ss, ")");
             } elif (field.value._type.firstType.isVariant) {

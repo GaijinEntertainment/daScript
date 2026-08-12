@@ -423,16 +423,21 @@ def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var 
     var expr = clone_expression(value)
     unsafe {
         expr = apply_template(expr) $(rules) {
-            for (dv, dn in keys(to.declarations), values(to.declarations)) {
-                rules |> replaceVariable(dv) <| clone_expression(dn)
-            }
-            rules |> replaceVarTag("_") <| clone_expression(access)
+            bind_match_rules(rules, to, access)
         }
     }
     var cond = qmacro($e(access) == $e(expr))
     cond |> force_at(value.at)
     to.conditions |> emplace(cond)
     return true
+}
+
+// substitution rules every match arm applies: the collected declarations plus the `_` var tag
+def private bind_match_rules(var rules : Template; var to : MatchTo; access : Expression?) {
+    for (dv, dn in keys(to.declarations), values(to.declarations)) {
+        rules |> replaceVariable(dv) <| clone_expression(dn)
+    }
+    rules |> replaceVarTag("_") <| clone_expression(access)
 }
 
 [macro_function]
@@ -442,10 +447,7 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var t
         var guards = clone_expression(wth.right)
         unsafe {
             guards = apply_template(guards) $(rules) {
-                for (dv, dn in keys(to.declarations), values(to.declarations)) {
-                    rules |> replaceVariable(dv) <| clone_expression(dn)
-                }
-                rules |> replaceVarTag("_") <| clone_expression(access)
+                bind_match_rules(rules, to, access)
             }
         }
         to.conditions |> emplace(guards)
@@ -554,7 +556,7 @@ def is_to_array_move_call(wth : Expression?) {
 }
 
 [macro_function]
-def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
+def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     if (LOG_MATCH) {
         log_m("match {describe(what)} {debug_expression(wth)}:\n")
     }
@@ -674,7 +676,7 @@ class MatchMacro : AstCallMacro {
             }
         }
     }
-    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : Expression? {
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037,STYLE038 - exact-type `is` ladder over pattern node classes
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match (what) <| block")
         assume what = expr.arguments[0]
         assume blk = expr.arguments[1]
