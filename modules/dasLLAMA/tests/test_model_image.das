@@ -434,6 +434,13 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     let cfg_diff = config_diff_field(cfg_a, b.config)
     t |> success(empty(cfg_diff), "config round-trips exactly ({cfg_diff})")
     delete cfg_a
+    // the image reader rebuilds the tokenizer's DERIVED tables (pair_merge / byte_id / bkey_id);
+    // if either build_*_derived call were dropped, encode would silently emit fallback ids while
+    // the forced-feed compares below stay green — so encode through the image-loaded model itself
+    var pb <- encode(b, "Once upon a time")
+    t |> success(long_length(pb) == long_length(prompt) && count_mismatch(prompt, pb) == 0l,
+        "image-loaded tokenizer encodes byte-identically to the gguf-loaded one")
+    delete pb
     if (b.config.seq_len > 2048l) {
         b.config.seq_len = 2048l
     }

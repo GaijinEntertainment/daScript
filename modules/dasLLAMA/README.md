@@ -200,8 +200,8 @@ Engine internals remain reachable for tools and kernel work:
 
 ```das
 require dasllama/dasllama_transformer    // engine spellings (load_model_, eval_, ...) + raw load_gguf / forward
-require dasllama/dasllama_tokenizer      // SentencePiece
-require dasllama/dasllama_bpe            // byte-level BPE (Llama-3 / Qwen2)
+require dasllama/dasllama_tokenizer      // tokenizer facade (re-exports the SPM + BPE backends)
+require dasllama/dasllama_bpe            // byte-level BPE backend (Llama-3 / Qwen2; pretok arms in dasllama_pretok)
 require dasllama/dasllama_math           // matmul / rmsnorm / softmax / silu / rope / dot
 ```
 

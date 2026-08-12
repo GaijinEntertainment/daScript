@@ -133,7 +133,9 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
 - **`dasllama_pretok.das`** — the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine — the two change for different reasons (new model family
-  vs. algorithm work), and every arm is gated by its llama.cpp corpus case in `test_tokenizer.das`.
+  vs. algorithm work). Every arm with an on-disk llama.cpp corpus vocab is gated by its case in
+  `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
+  pinned by frozen ids in `test_parity.das` only.
 
 ### 1.3 The load and image rail
 
