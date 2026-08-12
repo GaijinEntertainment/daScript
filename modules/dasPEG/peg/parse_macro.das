@@ -9,14 +9,11 @@ options no_global_variables = false
 module parse_macro shared
 
 require daslib/templates_boost
-require daslib/strings_boost
 require daslib/macro_boost
 require daslib/ast_boost
 require daslib/defer
 require math
 
-require detail/helpers
-require detail/colors
 
 require peg/parser_generator
 require peg/meta_ast
@@ -25,6 +22,8 @@ require math
 
 // To avoid overflow during template expansion
 options stack = 10000000
+options _cyclomatic_complexity = 0
+options _function_length = 0
 
 var times_invoked : uint64 = 0 |> uint64()
 
@@ -36,7 +35,7 @@ struct MacroRule {
 
 
 [macro_function]
-def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; prog : ProgramPtr) {
+def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; _prog : ProgramPtr) {
     let call_name = expr.name |> string()
 
     if (call_name == "rule") {
@@ -228,11 +227,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         var set = expr as ExprCall
         let inverting = set.name == "not_set"
 
-        var terms : array<tuple<from : int; to : int>>
-
-        for (arg in set.arguments) {
-            terms |> push(arg |> into_terminal)
-        }
+        let terms <- [for (arg in set.arguments); arg |> into_terminal]
 
         return <- new Rule_(rule <- Rule(terminal <- Terminal(charset <- flatten_intervals(terms, inverting))))
     } elif (expr is ExprCall && (expr as ExprCall).name == "log") {
@@ -278,16 +273,14 @@ def transform(var rule : MacroRule) : Definition {
     // Transform array<ExprCall?> into an array of Rules
 
     var alternatives : array<Alternative>
+    alternatives |> reserve(length(rule.alternatives))
 
     for (alt in rule.alternatives) {
         {// creates scope for inscope
             var blk = clone_expression(alt.arguments |> back)
 
-            var sequence : array<Rule_?>
-
-            for (sequence_elem, _ in alt.arguments, range(length(alt.arguments) - 1)) {
-                sequence |> push <| into_rule_(sequence_elem)
-            }
+            var sequence <- [for (sequence_elem, _ in alt.arguments, range(length(alt.arguments) - 1));
+                into_rule_(sequence_elem)]
 
             alternatives |> emplace <| Alternative(
                                     rule <- new Rule_(rule <- Rule(seq <- sequence)),
@@ -352,7 +345,7 @@ class ParseMacro : AstCallMacro {
         let name = (expr.arguments[0] as ExprVar).name |> string()
         var expression_block = (expr.arguments[1] as ExprMakeBlock)._block as ExprBlock
 
-        macro_verify(length(expression_block.finalList) == 0, prog, expr.at, "parse `block` argument can't have finally section")
+        macro_verify(empty(expression_block.finalList), prog, expr.at, "parse `block` argument can't have finally section")
         macro_verify(expression_block.list[0] is ExprLet, prog, expr.at, "parse `block` argument should begin with let expression")
 
         // Collect
@@ -375,6 +368,7 @@ class ParseMacro : AstCallMacro {
 
         var gen <- ParserGenerator(id = times_invoked++)
 
+        gram |> reserve(length(rules_))
         for (mrule in rules_) {
             gram |> emplace(mrule |> transform)
         }
