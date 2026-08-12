@@ -196,6 +196,9 @@ namespace das {
         void serialize ( void * data, size_t size );
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
+        // reject a deserialized element count that exceeds the bytes left in the stream
+        // BEFORE it gates an allocation (throws; reading only)
+        void verifyLength ( uint64_t size );
         void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
         void getCompiledModules ( );
         void patch ();
@@ -272,6 +275,7 @@ namespace das {
             } else {
                 uint64_t size = 0;
                 serializeAdaptiveSize64(size);
+                verifyLength(size);
                 value.resize(size);
             }
             for ( TT & v : value ) {

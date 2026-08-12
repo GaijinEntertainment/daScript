@@ -217,13 +217,19 @@ namespace das {
                 uint32_t sz = 0; *this << sz;
                 size = sz;
             }
-            // a serialized length can never exceed the bytes left (every element costs at
-            // least one byte) - a corrupted length must fail HERE, as a recoverable throw,
-            // not as a layout-dependent wild allocation later (SIGSEGV under one allocator,
-            // clean bad_alloc under another - the module-cache corruption CI red)
-            SERIALIZER_VERIFYF(uint64_t(size) <= buffer->readRemaining(),
-                "corrupt stream: size %u exceeds remaining bytes", size);
         }
+    }
+
+    // a stream-backed length can never exceed the bytes left (every element costs at
+    // least one byte) - a corrupted length must fail HERE, as a recoverable throw,
+    // not as a layout-dependent wild allocation later (SIGSEGV under one allocator,
+    // clean bad_alloc under another - the module-cache corruption CI red). Called at
+    // the sites that ALLOCATE from a deserialized count - not inside the varint codec,
+    // which also carries plain values (line diffs, sourceLength of a file that is not
+    // in the stream) where the invariant does not hold
+    void AstSerializer::verifyLength ( uint64_t size ) {
+        SERIALIZER_VERIFYF(size <= buffer->readRemaining(),
+            "corrupt stream: size %llu exceeds remaining bytes", (unsigned long long)size);
     }
 
     void AstSerializer::serializeAdaptiveSize64 ( uint64_t & size ) {
@@ -302,6 +308,7 @@ namespace das {
         } else {
             uint64_t size = 0;
             serializeAdaptiveSize64(size);
+            verifyLength(size);
             str.resize(size);
             read(&str[0], size);
         }
@@ -323,6 +330,7 @@ namespace das {
         } else {
             uint64_t len = 0;
             serializeAdaptiveSize64(len);
+            verifyLength(len);
             auto data = new char [len + 1]();
             read(static_cast<void*>(data), len);
             data[len] = '\0';
@@ -363,6 +371,7 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
+        verifyLength(size);
         das_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -392,6 +401,7 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
+        verifyLength(size);
         das_insert_only_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -2508,6 +2518,7 @@ namespace das {
         } else {
             uint64_t size = 0;
             ser.serializeAdaptiveSize64(size);
+            ser.verifyLength(size);
             functions.resize(size);
             for ( auto & f : functions ) ser.serializePointer(f);
         }
@@ -2528,6 +2539,9 @@ namespace das {
         } else {
             uint32_t capacity = 0; ser << capacity;
             uint32_t size = 0; ser << size;
+            // capacity is deliberately NOT length-checked: an over-reserved table's bucket
+            // count can legitimately exceed the bytes left; size is a true element count
+            ser.verifyLength(size);
             functionsByName.reserve(capacity);
             for ( uint32_t i = 0; i < size; i++ ) {
                 uint64_t nameHash = 0; ser << nameHash;
