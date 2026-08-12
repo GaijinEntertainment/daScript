@@ -124,6 +124,28 @@ bin/daslang modules/dasLLAMA/performance/gen_site_records.das
 
 ---
 
+## The tokenizer cell (`--tok`)
+
+Encode/decode throughput of a GGUF's tokenizer, from the same rig — no weights are loaded, so the
+tiny `ggml-vocab-*.gguf` fixtures work as `-m`:
+
+```sh
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --tok -m <model.gguf> --for-debug-purposes
+```
+
+- Five corpora (prose, code, cjk, digits, longword) x a 4x size ladder up to `--tok-max-kb`
+  (default 1024). The instrument is the printed per-step **scaling ratio** (linear = 4x time per
+  step, quadratic = 16x); the ladder stops itself past a time budget instead of sitting inside a
+  quadratic encode. `--tok-corpus` narrows corpora; `--prompts` swaps the prose seed file.
+- `tok enc` rows are MB/s of input text; `tok dec` is the full-sequence decode; `tok piece` is the
+  streaming per-token path. Every corpus round-trip-gates (`decode(encode(x)) == x`) before timing.
+- `--ref <llama-tokenize>` adds a llama.cpp encode estimate on the same bytes and vocab (process
+  wall minus a 1-byte baseline — an estimate; both raw walls print beside it).
+- Single-threaded by nature, txt output only, no records rail: a decision instrument for tokenizer
+  work, not a board row.
+
+---
+
 ## The tune generation — session cadence
 
 Every measurement above runs under a sidecar GENERATION, and the rails enforce it:

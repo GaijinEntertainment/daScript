@@ -122,9 +122,20 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
 - **`dasllama_layout.das`** — disk-format → compute-layout transforms at LOAD scope: the blob
   transform, the CPU repack walkers, the GPU tier gathers, and the refusal half (`can this model
   take the blob form`) split out so the image writer can commit without loading.
-- **`dasllama_tokenizer.das`** — SentencePiece (Llama-2 family, Phi-3, Gemma).
-- **`dasllama_bpe.das`** — byte-level BPE / tiktoken (Llama-3, Qwen2 pre-tokenizers). Two files
-  because the two algorithms share no state; a third tokenizer family gets a third file.
+- **`dasllama_tokenizer.das`** — the tokenizer facade: backend selection off the GGUF metadata and
+  the one encode/decode/piece surface models and the chat layer call. Re-exports both backends, so
+  a consumer requires this file and never picks a backend by hand.
+- **`dasllama_spm.das`** — the SentencePiece backend (Llama-2 family, Phi-3, Gemma): score-greedy
+  merges over vocab pieces, `<0xXX>` byte fallback.
+- **`dasllama_bpe.das`** — the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
+  GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
+  share no state; a third merge algorithm gets a fourth file.
+- **`dasllama_pretok.das`** — the pre-tokenizer: one hand-compiled split function per family
+  (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
+  lands here, never in the merge engine — the two change for different reasons (new model family
+  vs. algorithm work). Every arm with an on-disk llama.cpp corpus vocab is gated by its case in
+  `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
+  pinned by frozen ids in `test_parity.das` only.
 
 ### 1.3 The load and image rail
 

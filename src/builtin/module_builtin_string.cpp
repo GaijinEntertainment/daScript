@@ -598,15 +598,24 @@ namespace das
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at ) {
         auto toSearchSize = stringLengthSafe(*context, toSearch);
         if ( !toSearchSize ) return (char *) str;
-        string data = str ? str : "";
         auto replaceStrSize = stringLengthSafe(*context,replaceStr);
         const char * repl = replaceStr ? replaceStr : "";
         const char * toss = toSearch ? toSearch : "";
-        size_t pos = data.find(toss);
+        string source = str ? str : "";
+        size_t pos = source.find(toss);
+        if ( pos == string::npos ) return context->allocateString(source, at);
+        // append-only rebuild: an in-place replace() shifts the whole tail per occurrence,
+        // which is quadratic in occurrence count whenever the replacement size differs
+        string data;
+        data.reserve(source.size());
+        size_t begin = 0;
         while ( pos != string::npos ) {
-            data.replace(pos, toSearchSize, repl);
-            pos = data.find(toss, pos + replaceStrSize);
+            data.append(source.c_str() + begin, pos - begin);
+            data.append(repl, replaceStrSize);
+            begin = pos + toSearchSize;
+            pos = source.find(toss, begin);
         }
+        data.append(source.c_str() + begin, source.size() - begin);
         return context->allocateString(data, at);
     }
 

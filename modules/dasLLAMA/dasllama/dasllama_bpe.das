@@ -6,16 +6,23 @@ module dasllama_bpe shared public
 require daslib/fio
 require dasllama/dasllama_gguf
 require dasllama/dasllama_unicode
+require dasllama/dasllama_pretok
 require strings
 
 //! Byte-level BPE tokenizer (Llama-3 / tiktoken family), loaded from a GGUF.
-//! Distinct from the SentencePiece path in dasllama_tokenizer: merges are *ranked*
+//! Distinct from the SentencePiece path in dasllama_spm: merges are *ranked*
 //! (lowest rank merges first, not score-based), pieces live in the GPT-2
-//! byte->unicode alphabet, and a unicode-aware pre-tokenizer splits text before BPE.
+//! byte->unicode alphabet, and a pre-tokenizer (dasllama_pretok) splits text before BPE.
 struct BpeTokenizer {
     vocab : array<string>             // id -> piece (byte-unicode alphabet)
     lookup : table<string; int64>     // piece -> id
-    merge_rank : table<string; int64> // "left right" -> rank (lower merges first)
+    merge_rank : table<string; int64> // "left right" -> rank (lower merges first; the image serialization source)
+    // DERIVED (build_bpe_derived), never serialized: the no-allocation merge engine — packed
+    // (left<<32)|right -> (rank<<32)|merged — the per-byte alphabet-piece ids, and (spm_space)
+    // codepoint -> single-codepoint-piece id for the gemma4 init loop
+    pair_merge : table<int64; int64>
+    byte_id : array<int64>
+    cpt_id : table<int; int64>
     token_type : array<int64>         // id -> GGUF token type (3 = control/special)
     pre : string                      // pre-tokenizer name, e.g. "llama-bpe"
     bos_id : int64
@@ -73,7 +80,40 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         }
     }
     fclose(f)
+    build_bpe_derived(tk)
     return <- tk
+}
+
+//! Build the DERIVED merge engine from the primal fields (vocab/lookup/merge_rank) — called by
+//! the GGUF loader and the image reader, never serialized. A pair probe replaces the
+//! concat-and-hash rank lookup byte-identically.
+def build_bpe_derived(var tk : BpeTokenizer) {
+    tk.byte_id |> resize(256)
+    for (b in range(256)) {
+        tk.byte_id[b] = tk.lookup?[BYTE2UNI[b]] ?? -1l
+    }
+    tk.cpt_id |> clear()
+    if (tk.spm_space) {
+        // gemma4 init probes per codepoint — int-keyed, so the hot loop allocates nothing
+        for (m, piece in count(), tk.vocab) {
+            var inscope pc <- utf8_to_cpts(piece)
+            if (length(pc) == 1) {
+                tk.cpt_id[pc[0]] = int64(m)
+            }
+        }
+    }
+    tk.pair_merge |> clear()
+    for (k, v in keys(tk.merge_rank), values(tk.merge_rank)) {
+        let sp = find(k, " ")
+        continue if (sp < 0)
+        let l = tk.lookup?[slice(k, 0, sp)] ?? -1l
+        continue if (l < 0l)
+        let r = tk.lookup?[slice(k, sp + 1)] ?? -1l
+        let mid = tk.lookup?[slice(k, 0, sp) + slice(k, sp + 1)] ?? -1l
+        if (r >= 0l && mid >= 0l) {
+            tk.pair_merge[(l << 32l) | r] = (v << 32l) | mid
+        }
+    }
 }
 
 // ===== GPT-2 byte <-> unicode alphabet =====
@@ -100,370 +140,140 @@ def init_byte2uni() {
     }
 }
 
-// ===== BPE pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3 / _qwen2 / _qwen35) =====
-// llama3 chunks digits \p{N}{1,3}, qwen2 emits one digit per token — `group_digits` selects between
-// them; qwen35 = qwen2 digits plus marks absorbed into letter runs ([\p{L}\p{M}]+).
-
-def private tolower_ascii(c : int) : int {
-    return (c >= 'A' && c <= 'Z') ? c + 32 : c
-}
-
-def private uL(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_letter(cpts[pos])
-}
-// letter-or-mark: the qwen35 letter class [\p{L}\p{M}] when marks, plain \p{L} otherwise
-def private is_lm(cpt : int; marks : bool) : bool {
-    return cpt_is_letter(cpt) || (marks && cpt_is_mark(cpt))
-}
-def private uLM(cpts : array<int>; pos : int; marks : bool) : bool {
-    return pos >= 0 && pos < length(cpts) && is_lm(cpts[pos], marks)
-}
-def private uN(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_number(cpts[pos])
-}
-def private uW(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_whitespace(cpts[pos])
-}
-def private uC(cpts : array<int>; pos : int) : int {
-    return (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
-}
-
-def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the llama3 pre-tokenizer regex; splitting hides the regex shape
-    var offs : array<int>
-    let n = length(cpts)
-    var prev_end = 0
-    var pos = 0
-    while (pos < n) {
-        let cpt = cpts[pos]
-
-        // (?i:'s|'t|'re|'ve|'m|'ll|'d)
-        if (cpt == 39 && pos + 1 < n) {
-            let c1 = tolower_ascii(cpts[pos + 1])
-            if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
-                pos += 2
-                offs |> push(pos - prev_end); prev_end = pos
-                continue
-            }
-            if (pos + 2 < n) {
-                let c2 = tolower_ascii(cpts[pos + 2])
-                if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
-                    pos += 3
-                    offs |> push(pos - prev_end); prev_end = pos
-                    continue
-                }
-            }
-        }
-
-        // [^\r\n\p{L}\p{N}]?\p{L}+ (marks widens run class to [\p{L}\p{M}]+)
-        if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
-            if (is_lm(cpt, marks) || uLM(cpts, pos + 1, marks)) {
-                pos++
-                while (uLM(cpts, pos, marks)) {
-                    pos++
-                }
-                offs |> push(pos - prev_end); prev_end = pos
-                continue
-            }
-        }
-
-        // \p{N}{1,3} (llama3, chunks of up to three) | \p{N} (qwen2, one digit per token)
-        if (cpt_is_number(cpt)) {
-            if (group_digits) {
-                var ini = pos
-                while (uN(cpts, pos)) {
-                    pos++
-                    if (pos - ini >= 3) {
-                        offs |> push(pos - prev_end); prev_end = pos
-                        ini = pos
-                    }
-                }
-            } else {
-                pos++
-            }
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // <space>?[^\s\p{L}\p{N}]+[\r\n]* (marks also excludes \p{M} from the run class)
-        let probe = (cpt == 32) ? pos + 1 : pos
-        if (!(uW(cpts, probe) || uLM(cpts, probe, marks) || uN(cpts, probe))) {
-            if (cpt == 32) {
-                pos++
-            }
-            while (!(uW(cpts, pos) || uLM(cpts, pos, marks) || uN(cpts, pos)) && pos < n) {
-                pos++
-            }
-            var c2 = uC(cpts, pos)
-            while (c2 == 13 || c2 == 10) {
-                pos++
-                c2 = uC(cpts, pos)
-            }
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // remaining whitespace rules: \s*[\r\n]+ | \s+(?!\S) | \s+
-        var num_ws = 0
-        var last_rn = 0
-        while (uW(cpts, pos + num_ws)) {
-            let c2 = uC(cpts, pos + num_ws)
-            if (c2 == 13 || c2 == 10) {
-                last_rn = pos + num_ws + 1
-            }
-            num_ws++
-        }
-        if (last_rn > 0) {
-            pos = last_rn
-        } elif (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
-            pos += num_ws - 1
-        } elif (num_ws > 0) {
-            pos += num_ws
-        } else {
-            pos++  // no match — consume one codepoint
-        }
-        offs |> push(pos - prev_end); prev_end = pos
-    }
-    return <- offs
-}
-
-// llama.cpp GPT4O letter-case classes: "uppercase" = \p{L} minus ASCII a-z, "lowercase" = \p{L}
-// minus ASCII A-Z (its regex spells (?=[\p{L}])[^a-z] / (?=[\p{L}])[^A-Z]), so non-cased scripts
-// (CJK, ...) land in BOTH classes. We match llama.cpp — the oracle — not tiktoken's true \p{Lu}/\p{Ll}.
-def private uUp(cpts : array<int>; pos : int) : bool {
-    if (pos < 0 || pos >= length(cpts)) {
-        return false
-    }
-    let c = cpts[pos]
-    return cpt_is_letter(c) && !(c >= 'a' && c <= 'z')
-}
-def private uLo(cpts : array<int>; pos : int) : bool {
-    if (pos < 0 || pos >= length(cpts)) {
-        return false
-    }
-    let c = cpts[pos]
-    return cpt_is_letter(c) && !(c >= 'A' && c <= 'Z')
-}
-
-// gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3:
-// contractions suffix letter runs (no standalone arm), letter runs are case-structured
-// (upper* lower+ | upper+ lower*), and punctuation runs may also trail '/'.
-def private pretok_split_gpt4o(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the o200k pre-tokenizer regex; splitting hides the regex shape
-    var offs : array<int>
-    let n = length(cpts)
-    var prev_end = 0
-    var pos = 0
-    while (pos < n) {
-        let cpt = cpts[pos]
-
-        // [^\r\n\p{L}\p{N}]?(upper* lower+ | upper+ lower*) then optional contraction suffix
-        if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
-            if (cpt_is_letter(cpt) || uL(cpts, pos + 1)) {
-                if (!cpt_is_letter(cpt)) {
-                    pos++   // the optional one-char non-letter prefix
-                }
-                while (uUp(cpts, pos)) {
-                    pos++
-                }
-                while (uLo(cpts, pos)) {
-                    pos++
-                }
-                if (uC(cpts, pos) == 39 && pos + 1 < n) {   // contraction suffix, case-insensitive
-                    let c1 = tolower_ascii(cpts[pos + 1])
-                    if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
-                        pos += 2
-                    } elif (pos + 2 < n) {
-                        let c2 = tolower_ascii(cpts[pos + 2])
-                        if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
-                            pos += 3
-                        }
-                    }
-                }
-                offs |> push(pos - prev_end); prev_end = pos
-                continue
-            }
-        }
-
-        // \p{N}{1,3} (chunks of up to three, same as llama3)
-        if (cpt_is_number(cpt)) {
-            var ini = pos
-            while (uN(cpts, pos)) {
-                pos++
-                if (pos - ini >= 3) {
-                    offs |> push(pos - prev_end); prev_end = pos
-                    ini = pos
-                }
-            }
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // <space>?[^\s\p{L}\p{N}]+[\r\n/]*  (the '/' in the trailing run is gpt-4o's addition)
-        let probe = (cpt == 32) ? pos + 1 : pos
-        if (!(uW(cpts, probe) || uL(cpts, probe) || uN(cpts, probe))) {
-            if (cpt == 32) {
-                pos++
-            }
-            while (!(uW(cpts, pos) || uL(cpts, pos) || uN(cpts, pos)) && pos < n) {
-                pos++
-            }
-            var c2 = uC(cpts, pos)
-            while (c2 == 13 || c2 == 10 || c2 == 47) {
-                pos++
-                c2 = uC(cpts, pos)
-            }
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // remaining whitespace rules: \s*[\r\n]+ | \s+(?!\S) | \s+ (same as llama3)
-        var num_ws = 0
-        var last_rn = 0
-        while (uW(cpts, pos + num_ws)) {
-            let c2 = uC(cpts, pos + num_ws)
-            if (c2 == 13 || c2 == 10) {
-                last_rn = pos + num_ws + 1
-            }
-            num_ws++
-        }
-        if (last_rn > 0) {
-            pos = last_rn
-        } elif (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
-            pos += num_ws - 1
-        } elif (num_ws > 0) {
-            pos += num_ws
-        } else {
-            pos++  // no match — consume one codepoint
-        }
-        offs |> push(pos - prev_end); prev_end = pos
-    }
-    return <- offs
-}
-
-// tekken pre-split (Mistral/Voxtral). llama.cpp has no custom splitter — it runs generic std::wregex
-// TRUE ECMAScript alternation with greedy backtracking (up*lo+ tried first), so "你A" splits "你"|"A"
-// unlike gpt-4o's merged-run reduction. No contraction arm; single-digit \p{N}; '/' in punct tail.
-def private pretok_split_tekken(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the tekken pre-tokenizer regex; splitting hides the regex shape
-    var offs : array<int>
-    let n = length(cpts)
-    var prev_end = 0
-    var pos = 0
-    while (pos < n) {
-        let cpt = cpts[pos]
-
-        // [^\r\n\p{L}\p{N}]?(up* lo+ | up+ lo*)
-        if (!(cpt == 13 || cpt == 10 || cpt_is_number(cpt))) {
-            if (cpt_is_letter(cpt) || uL(cpts, pos + 1)) {
-                var q = pos
-                if (!cpt_is_letter(cpt)) {
-                    q++   // the optional one-char non-letter prefix
-                }
-                var up = 0
-                while (uUp(cpts, q + up)) {
-                    up++
-                }
-                // alt1 up* lo+: greedy up-run backtracks until a lo char can start lo+
-                var split = up
-                while (split >= 0 && !uLo(cpts, q + split)) {
-                    split--
-                }
-                var e = q
-                if (split >= 0) {
-                    e = q + split
-                    while (uLo(cpts, e)) {
-                        e++
-                    }
-                } else {   // alt2 up+ lo*: up >= 1 guaranteed (first letter failed uLo => it's up)
-                    e = q + up
-                    while (uLo(cpts, e)) {
-                        e++
-                    }
-                }
-                pos = e
-                offs |> push(pos - prev_end); prev_end = pos
-                continue
-            }
-        }
-
-        // \p{N} — one digit per token
-        if (cpt_is_number(cpt)) {
-            pos++
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // <space>?[^\s\p{L}\p{N}]+[\r\n/]*
-        let probe = (cpt == 32) ? pos + 1 : pos
-        if (!(uW(cpts, probe) || uL(cpts, probe) || uN(cpts, probe))) {
-            if (cpt == 32) {
-                pos++
-            }
-            while (!(uW(cpts, pos) || uL(cpts, pos) || uN(cpts, pos)) && pos < n) {
-                pos++
-            }
-            var c2 = uC(cpts, pos)
-            while (c2 == 13 || c2 == 10 || c2 == 47) {
-                pos++
-                c2 = uC(cpts, pos)
-            }
-            offs |> push(pos - prev_end); prev_end = pos
-            continue
-        }
-
-        // remaining whitespace rules: \s*[\r\n]+ | \s+(?!\S) | \s+ (same as llama3)
-        var num_ws = 0
-        var last_rn = 0
-        while (uW(cpts, pos + num_ws)) {
-            let c2 = uC(cpts, pos + num_ws)
-            if (c2 == 13 || c2 == 10) {
-                last_rn = pos + num_ws + 1
-            }
-            num_ws++
-        }
-        if (last_rn > 0) {
-            pos = last_rn
-        } elif (num_ws > 1 && uC(cpts, pos + num_ws) != -1) {
-            pos += num_ws - 1
-        } elif (num_ws > 0) {
-            pos += num_ws
-        } else {
-            pos++  // no match — consume one codepoint
-        }
-        offs |> push(pos - prev_end); prev_end = pos
-    }
-    return <- offs
-}
-
 // ===== merge-rank BPE =====
 
-// Greedily merge the lowest-rank adjacent pair (leftmost on ties), in byte-unicode space.
-def private bpe_merge(tk : BpeTokenizer; var symbols : array<string>) {
-    while (length(symbols) > 1) {
+// past this many symbols the heap merge wins; below it the rescan's constant is smaller
+let private BPE_HEAP_MIN_SYMS = 32
+
+struct private BpeBigram {
+    rank : int64
+    li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
+    ri : int
+    l_id : int64
+    r_id : int64
+    mid : int64
+}
+
+// min-heap priority: lowest rank, then leftmost — exactly the rescan's selection order.
+// The sg_* heap in dasllama_spm is a deliberate twin: different key struct and comparator,
+// and the two backends share no module to host a generic heap.
+def private bg_before(a, b : BpeBigram) : bool => a.rank < b.rank || (a.rank == b.rank && a.li < b.li)
+
+def private bg_push(var h : array<BpeBigram>; bg : BpeBigram) {
+    h |> push(bg)
+    var i = length(h) - 1
+    while (i > 0) {
+        let p = (i - 1) / 2
+        break if (!bg_before(h[i], h[p]))
+        let t = h[i]
+        h[i] = h[p]
+        h[p] = t
+        i = p
+    }
+}
+
+def private bg_pop(var h : array<BpeBigram>) : BpeBigram {
+    let top = h[0]
+    let last = length(h) - 1
+    h[0] = h[last]
+    h |> resize(last)
+    var i = 0
+    while (true) {
+        var c = i * 2 + 1
+        break if (c >= length(h))
+        let r = c + 1
+        if (r < length(h) && bg_before(h[r], h[c])) {
+            c = r
+        }
+        break if (!bg_before(h[c], h[i]))
+        let t = h[i]
+        h[i] = h[c]
+        h[c] = t
+        i = c
+    }
+    return top
+}
+
+def private bg_try_push(tk : BpeTokenizer; var h : array<BpeBigram>; syms : array<int64>; li, ri : int) {
+    let pm = tk.pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
+    return if (pm < 0l)
+    h |> bg_push(BpeBigram(rank = pm >> 32l, li = li, ri = ri,
+        l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
+}
+
+// Heap merge for long runs: O(n log n) where the rescan is O(n^2). Stale heap entries (an
+// endpoint merged since push) are skipped by the adjacency+id guard; ids match the rescan exactly.
+def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
+    let n = length(syms)
+    var nxt : array<int>
+    var prv : array<int>
+    nxt |> resize(n)
+    prv |> resize(n)
+    for (i in range(n)) {
+        nxt[i] = i + 1 < n ? i + 1 : -1
+        prv[i] = i - 1
+    }
+    var h : array<BpeBigram>
+    h |> reserve(n)
+    for (i in range(n - 1)) {
+        bg_try_push(tk, h, syms, i, i + 1)
+    }
+    while (!empty(h)) {
+        let bg = bg_pop(h)
+        continue if (nxt[bg.li] != bg.ri || syms[bg.li] != bg.l_id || syms[bg.ri] != bg.r_id)
+        syms[bg.li] = bg.mid
+        syms[bg.ri] = -2l   // dead slot — compacted out below
+        nxt[bg.li] = nxt[bg.ri]
+        if (nxt[bg.ri] >= 0) {
+            prv[nxt[bg.ri]] = bg.li
+        }
+        if (prv[bg.li] >= 0) {
+            bg_try_push(tk, h, syms, prv[bg.li], bg.li)
+        }
+        if (nxt[bg.li] >= 0) {
+            bg_try_push(tk, h, syms, bg.li, nxt[bg.li])
+        }
+    }
+    var w = 0
+    for (i in range(n)) {
+        if (syms[i] != -2l) {
+            syms[w] = syms[i]
+            w++
+        }
+    }
+    syms |> resize(w)
+    delete nxt
+    delete prv
+    delete h
+}
+
+// Greedily merge the lowest-rank adjacent pair (leftmost on ties), over symbol IDS — one packed
+// pair_merge probe per candidate, no allocation (the concat-per-probe was the dominant cost).
+def private bpe_merge_ids(tk : BpeTokenizer; var syms : array<int64>) {
+    if (length(syms) > BPE_HEAP_MIN_SYMS) {
+        bpe_merge_ids_heap(tk, syms)
+        return
+    }
+    while (length(syms) > 1) {
         var best_rank = -1l
         var best_i = -1
-        for (i in range(length(symbols) - 1)) {
-            let r = tk.merge_rank?[symbols[i] + " " + symbols[i + 1]] ?? -1l
-            if (r >= 0l && (best_i == -1 || r < best_rank)) {
-                best_rank = r
-                best_i = i
+        var best_id = -1l
+        for (i in range(length(syms) - 1)) {
+            let pm = tk.pair_merge?[(syms[i] << 32l) | syms[i + 1]] ?? -1l
+            if (pm >= 0l) {
+                let r = pm >> 32l
+                if (best_i == -1 || r < best_rank) {
+                    best_rank = r
+                    best_i = i
+                    best_id = pm & ((1l << 32l) - 1l)
+                }
             }
         }
         if (best_i == -1) {
             break
         }
-        symbols[best_i] = symbols[best_i] + symbols[best_i + 1]
-        symbols |> erase(best_i + 1)
-    }
-}
-
-// Defensive fallback: a symbol that didn't resolve as a token is split back into its
-// base byte-unicode chars (each is always in the vocab). Rarely fires for valid merges.
-def private emit_chars(tk : BpeTokenizer; s : string; var ids : array<int64>) {
-    let scpts <- utf8_to_cpts(s)
-    for (c in scpts) {
-        let id = tk.lookup?[cpt_to_utf8(c)] ?? -1l
-        if (id >= 0l) {
-            ids |> push(id)
-        }
+        syms[best_i] = best_id
+        syms |> erase(best_i + 1)
     }
 }
 
@@ -497,8 +307,14 @@ def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<in
 // short-circuits the merge loop (llama.cpp gemma-4 newline fix).
 def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
-    let cpts <- utf8_to_cpts(replace(text, " ", "▁"))   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
+    // '▁' space escape at cpt level — ' ' and U+2581 are one cpt each (exact map); a whole-text string replace() is superlinear
+    var cpts <- utf8_to_cpts(text)
     let n = length(cpts)
+    for (i in range(n)) {
+        if (cpts[i] == ' ') {
+            cpts[i] = int(0x2581)   // U+2581, the SentencePiece '▁' space marker
+        }
+    }
     var pos = 0
     while (pos < n) {
         let is_nl = cpts[pos] == '\n'
@@ -506,13 +322,11 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
         while (e < n && (cpts[e] == '\n') == is_nl) {
             e++
         }
-        var symbols <- [for (i in range(pos, e)); cpt_to_utf8(cpts[i])]
-        pos = e
         var done = false
         if (is_nl) {
             let run = build_string() $(var wr) {
-                for (s in symbols) {
-                    write(wr, s)
+                for (i in range(pos, e)) {
+                    write(wr, cpt_to_utf8(cpts[i]))
                 }
             }
             let rid = tk.lookup?[run] ?? -1l
@@ -522,17 +336,22 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
             }
         }
         if (!done) {
-            bpe_merge(tk, symbols)
-            for (s in symbols) {
-                let id = tk.lookup?[s] ?? -1l
-                if (id >= 0l) {
-                    ids |> push(id)
+            var syms : array<int64>
+            syms |> reserve(e - pos)
+            for (i in range(pos, e)) {
+                let cid = tk.cpt_id?[cpts[i]] ?? -1l
+                if (cid >= 0l) {
+                    syms |> push(cid)
                 } else {
-                    emit_byte_fallback(tk, s, ids)
+                    // unknown cpt: eager <0xXX> fallback — byte tokens never merge, so pre-merge expansion is byte-identical
+                    emit_byte_fallback(tk, cpt_to_utf8(cpts[i]), syms)
                 }
             }
+            bpe_merge_ids(tk, syms)
+            ids |> push_from(syms)
+            delete syms
         }
-        delete symbols
+        pos = e
     }
     return <- ids
 }
@@ -550,6 +369,8 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     var offs : array<int>
     if (tk.pre == "gpt-4o") {
         offs <- pretok_split_gpt4o(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
+    } elif (tk.pre == "gpt-2") {
+        offs <- pretok_split_gpt2(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "tekken") {
         offs <- pretok_split_tekken(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "qwen35") {
@@ -559,36 +380,40 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     }
     var pos = 0
     for (off in offs) {
-        var symbols : array<string>
+        var syms : array<int64>
+        var has_unk = false
         for (i in range(pos, pos + off)) {
             peek_data(cpt_to_utf8(cpts[i])) $(d : array<uint8> const#) {
                 for (k in range(length(d))) {
-                    symbols |> push(BYTE2UNI[int(d[k])])
+                    let bid = tk.byte_id[int(d[k])]
+                    syms |> push(bid)
+                    if (bid < 0l) {
+                        has_unk = true
+                    }
                 }
             }
         }
         pos += off
-        // ignore_merges: a word that is already a single token is emitted as-is
-        let word = build_string() $(var wr) {
-            for (s in symbols) {
-                write(wr, s)
+        // ignore_merges: a word that is already a single token is emitted as-is (the one
+        // remaining per-word string build; a word with an unknown byte piece can't be one)
+        var wid = -1l
+        if (!has_unk) {
+            let word = build_string() $(var wr) {
+                for (s in syms) {
+                    write(wr, tk.vocab[s])
+                }
             }
+            wid = tk.lookup?[word] ?? -1l
         }
-        let wid = tk.lookup?[word] ?? -1l
         if (wid >= 0l) {
             ids |> push(wid)
         } else {
-            bpe_merge(tk, symbols)
-            for (s in symbols) {
-                let id = tk.lookup?[s] ?? -1l
-                if (id >= 0l) {
-                    ids |> push(id)
-                } else {
-                    emit_chars(tk, s, ids)
-                }
+            bpe_merge_ids(tk, syms)
+            for (s in syms) {
+                ids |> push(s) if (s >= 0l)   // a negative survivor is an absent byte piece — dropped, as before
             }
         }
-        delete symbols
+        delete syms
     }
     return <- ids
 }

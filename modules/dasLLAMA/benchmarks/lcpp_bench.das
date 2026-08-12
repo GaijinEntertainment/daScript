@@ -76,7 +76,7 @@ struct Args {
     @clarg_doc = "Output format: txt, md (llama-bench-style table), json (public bench records) (default: txt)"
     output : OutFmt = OutFmt.txt
 
-    @clarg_doc = "Path to a llama-bench binary — also bench llama.cpp on the same GGUF, same shapes"
+    @clarg_doc = "Path to a llama-bench binary — also bench llama.cpp on the same GGUF, same shapes (with --tok: a llama-tokenize binary instead)"
     ref : string
 
     @clarg_name = "ref-flavor"
@@ -129,6 +129,17 @@ struct Args {
 
     @clarg_doc = "ASR cell mode: -m becomes a CATALOG substring (display name or das_model), not a path. Times transcribe best-of--r over the model's corpus buckets and emits the same BenchModel cell the LLM rows use"
     asr : bool
+
+    @clarg_doc = "Tokenizer cell mode: encode/decode throughput of -m's tokenizer over corpus x size ladders (no weights loaded; txt output only; --ref here is a llama-tokenize binary)"
+    tok : bool
+
+    @clarg_name = "tok-corpus"
+    @clarg_doc = "Tokenizer cell: comma list of corpus-name substrings to run (default: all of prose,code,cjk,digits,longword)"
+    tok_corpus : string = ""
+
+    @clarg_name = "tok-max-kb"
+    @clarg_doc = "Tokenizer cell: size-ladder cap in KB (default: 1024)"
+    tok_max_kb : int = 1024
 
     @clarg_doc = "Prompt corpus for the tg-real row (segments split on lines of two percent signs; default: data/wikitext2_prompts.txt beside this bench)"
     prompts : string = ""
@@ -324,6 +335,358 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
     }
     print("{text}\n")
     return true
+}
+
+// ===== Tokenizer cell mode (--tok) =====
+// The tokenizer sibling of the LLM protocol, in the one sanctioned rig: encode/decode throughput
+// of -m's tokenizer over corpus x size ladders. The headline is the SCALING SHAPE across the 4x
+// ladder, not any single number — a superlinear direction hides at one size and is unmistakable
+// across steps. Single-threaded pure das by nature: no jobque, no tune_gate (no tuned kernel runs).
+
+let private TOK_SIZE_STEP = 4              // 4x ladder: linear cost steps 4x per size, quadratic 16x
+let private TOK_WINDOW_US = 300000l        // calibrate inner iterations to ~this per timed rep
+let private TOK_SINGLE_ONLY_US = 2000000l  // past this single-run wall, report that run alone (1 rep)
+let private TOK_LADDER_BUDGET_US = 20000000l   // skip the next size when its quadratic-worst estimate passes
+                                               // this — kept tight: a quadratic backend's allocation cost also
+                                               // DEGRADES with string-heap growth, so the estimate is a floor
+
+struct private TokCorpus {
+    name : string
+    seed : string
+}
+
+struct private TokRow {
+    mean_mbs : double
+    single_us : int64
+    ntok : int64
+}
+
+// UTF-8-safe byte-length cut: back the cut off any continuation byte so a sized input is valid text.
+def private tok_utf8_prefix(s : string; nbytes : int) : string {
+    if (length(s) <= nbytes) {
+        return s
+    }
+    var cut = nbytes
+    peek_data(s) $(d : array<uint8> const#) {
+        while (cut > 0 && (int(d[cut]) & int(0xC0)) == int(0x80)) {
+            cut--
+        }
+    }
+    return slice(s, 0, cut)
+}
+
+// A sized input is the seed tiled to >= target, cut back at a codepoint boundary. Tiling is sound
+// for cost: BPE cost is pretok-chunk-local, and the SPM merge loop scales on LENGTH, not novelty.
+def private tok_sized(seed : string; target : int) : string {
+    let sl = length(seed)
+    if (sl >= target) {
+        return tok_utf8_prefix(seed, target)
+    }
+    let reps = (target + sl - 1) / sl
+    let full = build_string() $(var wr) {
+        for (_i in range(reps)) {
+            write(wr, seed)
+        }
+    }
+    return tok_utf8_prefix(full, target)
+}
+
+def private tok_synth_digits() : string {
+    return build_string() $(var wr) {
+        for (i in range(160)) {
+            let a = i * 7919 % 100000
+            let b = i * 104729 % 1000000
+            write(wr, "{a} {b} {a}.{b % 997} 2026-0{(i % 9) + 1}-{10 + (i % 18)} {a * b} -{b} {a}e{i % 30}\n")
+        }
+    }
+}
+
+def private tok_synth_longword() : string {
+    // letters only: digits or punctuation would pretok-split the run, and the point IS one long word
+    let chunk = "abcdefghijklmnopqrstuvwxyzqwertyuiopasdfghjklzxcvbnmlkjhgfdsapo"
+    return build_string() $(var wr) {
+        for (i in range(64)) {
+            for (_j in range(4)) {
+                write(wr, chunk)
+            }
+            write(wr, i % 8 == 7 ? "\n" : " ")
+        }
+    }
+}
+
+// Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
+def private tok_read_seed(path : string) : string {
+    var text = ""
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            text = fread(f)
+        }
+    }
+    while (starts_with(text, "#")) {
+        let nl = find(text, "\n")
+        break if (nl < 0)
+        text = slice(text, nl + 1)
+    }
+    if (empty(text)) {
+        panic("lcpp_bench --tok: corpus file missing or empty: {path}")
+    }
+    return text
+}
+
+// prose = the wikitext corpus beside this bench (--prompts overrides); code = the frozen das source
+// slice in data/tok_code.txt; cjk = data/tok_cjk.txt (spaceless letter runs — the unbounded-word
+// path); digits and longword are synthesized deterministic.
+def private tok_corpora(cfg : Args) : array<TokCorpus> {
+    let dir = get_this_module_dir()
+    var all : array<TokCorpus>
+    var prose <- load_corpus(empty(cfg.prompts) ? path_join(dir, "data/wikitext2_prompts.txt") : cfg.prompts)
+    all |> emplace(TokCorpus(name = "prose", seed = join(prose, "\n")))
+    delete prose
+    all |> emplace(TokCorpus(name = "code", seed = tok_read_seed(path_join(dir, "data/tok_code.txt"))))
+    all |> emplace(TokCorpus(name = "cjk", seed = tok_read_seed(path_join(dir, "data/tok_cjk.txt"))))
+    all |> emplace(TokCorpus(name = "digits", seed = tok_synth_digits()))
+    all |> emplace(TokCorpus(name = "longword", seed = tok_synth_longword()))
+    if (empty(cfg.tok_corpus)) {
+        return <- all
+    }
+    var wanted <- [for (w in split(cfg.tok_corpus, ",")); strip(w)]
+    var out : array<TokCorpus>
+    out |> reserve(length(all))
+    for (c in all) {
+        for (w in wanted) {
+            if (!empty(w) && find(c.name, w) >= 0) {
+                out |> push(c)
+                break
+            }
+        }
+    }
+    delete wanted
+    delete all
+    return <- out
+}
+
+// decode(encode(x)) must reproduce x byte-for-byte before any throughput row is trusted — a
+// number over a broken pair measures garbage. Mirrors the test_tokenizer corpus gate.
+def private tok_roundtrip_ok(tk : Tokenizer; corpus, text : string; fmt : OutFmt) : bool {
+    var ids <- encode(tk, text, false)
+    let dec = decode(tk, ids)
+    delete ids
+    if (dec == text) {
+        return true
+    }
+    var at = 0
+    let n = min(length(dec), length(text))
+    peek_data(text) $(a : array<uint8> const#) {
+        peek_data(dec) $(b : array<uint8> const#) {
+            while (at < n && a[at] == b[at]) {
+                at++
+            }
+        }
+    }
+    say(fmt, "tok RT-FAIL {corpus}: decode(encode(x)) != x - in {length(text)} B, out {length(dec)} B, first divergence at byte {at}\n")
+    say(fmt, "  in:  ...{tok_utf8_prefix(slice(text, max(at - 20, 0)), 60)}...\n")
+    say(fmt, "  out: ...{tok_utf8_prefix(slice(dec, max(at - 20, 0)), 60)}...\n")
+    return false
+}
+
+// One encode timing cell: a calibration run sizes the inner loop to ~TOK_WINDOW_US, then `reps`
+// timed windows. A run past TOK_SINGLE_ONLY_US reports its calibration run alone — repeating a
+// multi-second quadratic encode buys noise reduction at minutes of wall.
+def private tok_enc_row(tk : Tokenizer; corpus, text : string; reps : int; fmt : OutFmt) : TokRow {
+    let bytes = double(length(text))
+    let t0 = ref_time_ticks()
+    var ids0 <- encode(tk, text, false)
+    let single_us = int64(get_time_usec(t0))
+    let ntok = long_length(ids0)
+    delete ids0
+    var mbs : array<double>
+    mbs |> reserve(reps)
+    var iters = 1
+    if (single_us > TOK_SINGLE_ONLY_US) {
+        mbs |> push(bytes / double(max(single_us, 1l)))
+    } else {
+        iters = max(1, int(TOK_WINDOW_US / max(single_us, 1l)))
+        for (_rep in range(reps)) {
+            let tr = ref_time_ticks()
+            for (_it in range(iters)) {
+                var ids <- encode(tk, text, false)
+                delete ids   // freeing the result is part of the caller-visible cost
+            }
+            let us = max(int64(get_time_usec(tr)), 1l)
+            mbs |> push(bytes * double(iters) / double(us))
+        }
+    }
+    let st = row_stat("enc", mbs)
+    let tok_s = st.mean * 1.0e6lf * double(ntok) / max(bytes, 1.0lf)
+    say(fmt, "tok enc {corpus} {length(text)} B: {st.mean:.3f} ± {st.sd:.3f} MB/s ({tok_s / 1000.0lf:.0f} Ktok/s, {ntok} tok, {length(mbs)} reps x {iters})\n")
+    delete mbs
+    return TokRow(mean_mbs = st.mean, single_us = single_us, ntok = ntok)
+}
+
+// Decode cell: full-sequence decode MB/s (of produced text), then the streaming shape — one
+// piece() per token, the per-generated-token path.
+def private tok_dec_row(tk : Tokenizer; corpus, text : string; reps : int; fmt : OutFmt) {
+    var ids <- encode(tk, text, false)
+    let np = long_length(ids)
+    let t0 = ref_time_ticks()
+    let dec0 = decode(tk, ids)
+    let single_us = int64(get_time_usec(t0))
+    let out_bytes = length(dec0)
+    var mbs : array<double>
+    mbs |> reserve(reps)
+    var iters = 1
+    if (single_us > TOK_SINGLE_ONLY_US) {
+        mbs |> push(double(out_bytes) / double(max(single_us, 1l)))
+    } else {
+        iters = max(1, int(TOK_WINDOW_US / max(single_us, 1l)))
+        for (_rep in range(reps)) {
+            var sink = 0
+            let tr = ref_time_ticks()
+            for (_it in range(iters)) {
+                sink += length(decode(tk, ids))
+            }
+            let us = max(int64(get_time_usec(tr)), 1l)
+            // consumes the sink (no dead-call elision) AND pins decode determinism per window
+            if (sink != iters * out_bytes) {
+                panic("lcpp_bench --tok: decode length varied across identical inputs")
+            }
+            mbs |> push(double(out_bytes) * double(iters) / double(us))
+        }
+    }
+    let st = row_stat("dec", mbs)
+    say(fmt, "tok dec {corpus} {out_bytes} B: {st.mean:.3f} ± {st.sd:.3f} MB/s ({np} tok, {length(mbs)} reps x {iters})\n")
+    delete mbs
+    var psink = 0
+    let tp = ref_time_ticks()
+    for (id in ids) {
+        psink += length(piece(tk, id))
+    }
+    let pus = max(int64(get_time_usec(tp)), 1l)
+    say(fmt, "tok piece {corpus}: {double(np) * 1000.0lf / double(pus):.0f} Ktok/s ({np} tok, {psink} B out)\n")
+    delete ids
+}
+
+// llama.cpp reference (encode only): llama-tokenize wall-clock minus a 1-byte-input baseline,
+// interleaved, best of `reps` each. A process-subtraction ESTIMATE — both raw walls print beside
+// it, and no estimate is claimed when tokenize does not dominate the process wall.
+def private tok_ref_row(ref_bin, gguf, corpus, text : string; reps : int; fmt : OutFmt) {
+    // unique OS-temp inputs (a fixed name beside the bench assumes a writable tree and collides
+    // across concurrent runs), and the run is gated on BOTH writes — a silently missing baseline
+    // file would skew the subtraction while printing as a valid estimate
+    var terr = ""
+    let big_path = create_temp_file("tok_ref_input", "txt", terr)
+    let base_path = create_temp_file("tok_ref_base", "txt", terr)
+    var wrote_big = false
+    var wrote_base = false
+    if (!empty(big_path) && !empty(base_path)) {
+        fopen(big_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, text)
+                wrote_big = true
+            }
+        }
+        fopen(base_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, "a")
+                wrote_base = true
+            }
+        }
+    }
+    if (!wrote_big || !wrote_base) {
+        say(fmt, "tok ref {corpus}: cannot write temp inputs ({terr}) - reference leg skipped\n")
+        remove(big_path) if (!empty(big_path))
+        remove(base_path) if (!empty(base_path))
+        return
+    }
+    let devnull = get_platform_name() == "windows" ? "NUL" : "/dev/null"
+    var big_us = -1l
+    var base_us = -1l
+    for (_r in range(reps)) {
+        let t0 = ref_time_ticks()
+        run_capture("\"{ref_bin}\" -m \"{gguf}\" -f \"{big_path}\" --ids > {devnull} 2>&1", false)
+        let us = int64(get_time_usec(t0))
+        big_us = big_us < 0l ? us : min(big_us, us)
+        let t1 = ref_time_ticks()
+        run_capture("\"{ref_bin}\" -m \"{gguf}\" -f \"{base_path}\" --ids > {devnull} 2>&1", false)
+        let bus = int64(get_time_usec(t1))
+        base_us = base_us < 0l ? bus : min(base_us, bus)
+    }
+    remove(big_path)
+    remove(base_path)
+    let net = big_us - base_us
+    if (net <= base_us / 5l) {
+        say(fmt, "tok ref-enc {corpus} {length(text)} B: no estimate - tokenize wall {double(big_us) / 1000.0lf:.1f} ms vs baseline {double(base_us) / 1000.0lf:.1f} ms (subtraction would be noise)\n")
+        return
+    }
+    let mbs = double(length(text)) / double(net)
+    say(fmt, "tok ref-enc {corpus} {length(text)} B: ~{mbs:.2f} MB/s (llama-tokenize best {double(big_us) / 1000.0lf:.1f} ms - baseline {double(base_us) / 1000.0lf:.1f} ms, best of {reps})\n")
+}
+
+// The --tok entry: per model, per corpus — round-trip gate, encode ladder with the fail-fast
+// budget, decode + piece at the largest measured size, optional llama-tokenize reference.
+def private tok_cell_main(cfg : Args; reps : int; fmt : OutFmt) : bool {
+    var corpora <- tok_corpora(cfg)
+    if (empty(corpora)) {
+        print("lcpp_bench --tok: no corpus matches '{cfg.tok_corpus}' (have: prose,code,cjk,digits,longword)\n")
+        return false
+    }
+    var any = false
+    var ok = true
+    var model_list <- [for (m in split(cfg.model, ",")); strip(m)]
+    for (mpath in model_list) {
+        continue if (empty(mpath))
+        if (!stat(mpath).is_valid) {
+            print("lcpp_bench --tok: model absent: {mpath}\n")
+            ok = false
+            continue
+        }
+        var tk <- load_tokenizer_auto(mpath)
+        let vocab_n = tk.kind == TokKind.bpe ? long_length(tk.bpe.vocab) : long_length(tk.spm.vocab)
+        let pre = tk.kind == TokKind.bpe ? (empty(tk.bpe.pre) ? "default" : tk.bpe.pre) : "spm"
+        say(fmt, "tok: {base_name(mpath)} kind {tk.kind} pre {pre} vocab {vocab_n}\n")
+        any = true
+        let max_bytes = max(cfg.tok_max_kb, 1) * 1024
+        for (c in corpora) {
+            // gate small: 4 KB catches round-trip breakage at 1/16th the 16 KB cost on a
+            // quadratic backend, and the announce line makes a slow gate attributable
+            let gate_bytes = min(4096, max_bytes)
+            say(fmt, "tok {c.name}: round-trip gate ({gate_bytes} B)\n")
+            if (!tok_roundtrip_ok(tk, c.name, tok_sized(c.seed, gate_bytes), fmt)) {
+                ok = false
+                continue
+            }
+            var kb = 1
+            var last_text = ""
+            var prev_bytes = 0.0lf
+            var prev_mbs = 0.0lf
+            while (kb * 1024 <= max_bytes) {
+                let text = tok_sized(c.seed, kb * 1024)
+                let row = tok_enc_row(tk, c.name, text, reps, fmt)
+                last_text = text
+                if (prev_mbs > 0.0lf && row.mean_mbs > 0.0lf) {
+                    let ratio = (double(length(text)) / row.mean_mbs) / (prev_bytes / prev_mbs)
+                    let bgrow = double(length(text)) / prev_bytes
+                    say(fmt, "tok enc {c.name} scaling: {ratio:.1f}x time for {bgrow:.1f}x bytes (linear {bgrow:.0f}x, quadratic {bgrow * bgrow:.0f}x)\n")
+                }
+                prev_bytes = double(length(text))
+                prev_mbs = row.mean_mbs
+                let next_est = row.single_us * int64(TOK_SIZE_STEP * TOK_SIZE_STEP)
+                if (kb * TOK_SIZE_STEP * 1024 <= max_bytes && next_est > TOK_LADDER_BUDGET_US) {
+                    say(fmt, "tok enc {c.name}: ladder stopped - {kb * TOK_SIZE_STEP} KB estimated up to {next_est / 1000000l} s at quadratic-worst\n")
+                    break
+                }
+                kb *= TOK_SIZE_STEP
+            }
+            tok_dec_row(tk, c.name, last_text, reps, fmt)
+            if (!empty(cfg.ref)) {
+                tok_ref_row(cfg.ref, mpath, c.name, tok_sized(c.seed, max_bytes), reps, fmt)
+            }
+        }
+        delete tk
+    }
+    delete corpora
+    delete model_list
+    return ok && any
 }
 
 // deterministic synthetic ids (vocab-safe low range, the decode_prof convention); llama-bench
@@ -576,6 +939,19 @@ def main() : int {
     let ab = !empty(levers)
     let real_row = ab && levers[0].real
     var fmt = cfg.output
+    if (cfg.tok) {
+        if (cfg.asr || ab) {
+            print("--tok is its own cell - drop --asr and the A/B levers\n")
+            return 1
+        }
+        if (fmt != OutFmt.txt || cfg.submit) {
+            print("--tok supports -o txt only (the tokenizer cell has no records rail)\n")
+            return 1
+        }
+        // single-threaded pure-das cell: no jobque, and no tune_gate - it dispatches no tuned
+        // kernel (the CODEREVIEW tune-gate carve-out)
+        return tok_cell_main(cfg, reps, fmt) ? 0 : 1
+    }
     if (ab && fmt != OutFmt.txt) {
         print("warning: -o {cfg.output} with an A/B lever - records cover the plain protocol only, falling back to txt\n")
         fmt = OutFmt.txt

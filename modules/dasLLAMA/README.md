@@ -142,8 +142,10 @@ modules/dasLLAMA/
     dasllama_plane.das        #   the borrowed-plane vocabulary — Plane* structs: a pointer into a prepared image + element count; a carrier owns only its backing
     dasllama_image.das        #   the .dlim prepared-model image — post-load planes dumped once, mapped back with zero O(model) copying
     dasllama_unicode.das      #   Unicode classification + UTF-8 codec
-    dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family, Phi-3, Gemma)
-    dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3 + Qwen2 pre-tokenizers)
+    dasllama_tokenizer.das    #   the tokenizer facade — backend pick + the encode/decode/piece surface
+    dasllama_spm.das          #   SentencePiece backend (Llama-2 family, Phi-3, Gemma)
+    dasllama_bpe.das          #   byte-level BPE backend (Llama-3 / tiktoken family — vocab, ranked merges)
+    dasllama_pretok.das       #   the pre-tokenizer — one hand-compiled split per family, picked by `pre`
     dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample (incl. MTP/NextN self-spec decode)
     dasllama_blocks.das       #   the shared dense/grouped transformer block helpers (FFN, embed rows, eval bridges)
     dasllama_moe.das          #   MoE routing — select, expert dispatch, the GPU expert-tier hooks
@@ -198,8 +200,8 @@ Engine internals remain reachable for tools and kernel work:
 
 ```das
 require dasllama/dasllama_transformer    // engine spellings (load_model_, eval_, ...) + raw load_gguf / forward
-require dasllama/dasllama_tokenizer      // SentencePiece
-require dasllama/dasllama_bpe            // byte-level BPE (Llama-3 / Qwen2)
+require dasllama/dasllama_tokenizer      // tokenizer facade (re-exports the SPM + BPE backends)
+require dasllama/dasllama_bpe            // byte-level BPE backend (Llama-3 / Qwen2; pretok arms in dasllama_pretok)
 require dasllama/dasllama_math           // matmul / rmsnorm / softmax / silu / rope / dot
 ```
 

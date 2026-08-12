@@ -23,8 +23,10 @@ Rule enablement is not per-rule bespoke logic — it goes through the shared pol
 - `load_lint_config(...)` — layers the repo `.lint_config` TOML `[rules]` table on top, so a
   `PERF007 = false` / `STYLE005 = true` directive can override either direction.
 - `build_lint_macro_disabled(prog)` — what the three `[lint_macro]` `apply()` methods call. It
-  honors the module-local `options _enable_default_off_rules = true` opt-in (skips the seed step
-  so default-off rules fire for that module), then layers `.lint_config`.
+  honors the module-local `options _enable_default_off_rules = true` opt-in — fixture mode: skips
+  BOTH the default-off seed and the repo config's `= false` directives, so a lint fixture always
+  exercises its rule regardless of repo policy — then layers `.lint_config` `= true` re-enables
+  and `$DAS_LINT_DISABLE` last.
 - `$DAS_LINT_DISABLE` — a whole-run denylist, no source edit.
 - CLI: `--disable CODE,...` / `--enable CODE,...` on `utils/lint/main.das`. `--enable` is a
   whitelist (only listed rules run); on overlap `--disable` wins.

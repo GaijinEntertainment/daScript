@@ -101,10 +101,18 @@ live-leg file follows the server tests' conventions, not this file's suite rules
 through the serving rail, mirrors the large-model tier gate on `DASLLAMA_PARITY_FULL`, and
 reports model-gated skips explicitly.
 
+**A tokenizer change — pre-tokenizer arm, merge loop, vocab load, decode — records a
+`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped (fixtures are machine-local,
+so an all-skip run is green and proves nothing), and a new pre-tokenizer family or backend ships
+its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture in the same change.** A corpus case
+asserts exact reference ids AND lossless round-trip; an ids-only case is a defect — a vocab can
+mask a pre-tokenizer divergence, so round-trip alone or "the model still runs" proves nothing.
+
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
-run under one tune state by construction, so the comparison holds untuned.
+run under one tune state by construction, so the comparison holds untuned. The `--tok` tokenizer
+cell in `lcpp_bench.das` is exempt as well: it dispatches no tuned kernel.
 
 **No new record-grade timing harness is written.** Model-level time is measured by the rigs
 `PROFILE.md` documents — `performance/gen_profile.das` (the routine check) and
@@ -124,10 +132,12 @@ arms it rots, in the same change. Two arms that compile identical kernel text me
 when adoption closes a lab's question, its arm pair is deleted, not kept. Lab numbers never
 enter the record stores or `PERF_LEDGER.md`.
 
-**An out-of-process observer measures only what no in-process rig can observe about itself,
-and its numbers are ledger-grade.** The one instance is `benchmarks/asr/mem_census.sh`: peak
-memory via `/usr/bin/time -l` around a whole process. It stays macOS-only and its numbers live
-in `PERF_LEDGER.md`, never in the record stores.
+**An out-of-process observer of a dasLLAMA process measures only what no in-process rig can
+observe about itself, and its numbers are ledger-grade.** The one instance is
+`benchmarks/asr/mem_census.sh`: peak memory via `/usr/bin/time -l` around a whole process. It
+stays macOS-only and its numbers live in `PERF_LEDGER.md`, never in the record stores.
+Wall-clock timing of a FOREIGN reference binary (llama-bench, llama-tokenize) is not an
+observer of dasLLAMA; a subtraction-based estimate prints both raw walls beside it.
 
 ---
 
@@ -246,8 +256,16 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_image.das` — the prepared-model image rail.
 - `dasllama_plane.das` — the borrowed-plane types and their accessors, and nothing else. A
   weight carrier holds planes; only this file knows how one is bound, read, or dropped.
-- `dasllama_tokenizer.das` — the SentencePiece tokenizer.
-- `dasllama_bpe.das` — the byte-level BPE tokenizer.
+- `dasllama_tokenizer.das` — the tokenizer facade: backend selection and the encode/decode/piece
+  surface. A backend algorithm here is a defect.
+- `dasllama_spm.das` — the SentencePiece backend.
+- `dasllama_bpe.das` — the byte-level BPE backend: vocab, byte alphabet, ranked merges, and the
+  `pre`-name selector inside `bpe_encode`. A pre-tokenizer split function here is a defect, with
+  one carve-out: the gemma-4 newline-run split stays inside `bpe_encode_spm_space`, inseparable
+  from the SPM-style encode it feeds.
+- `dasllama_pretok.das` — the pre-tokenizer: one split function per family. A family-name test
+  anywhere else in `dasllama/` is a defect, except the `bpe_encode` selector and the load-time
+  metadata defaults in `load_bpe_tokenizer_gguf`.
 - `dasllama_unicode.das` — the transcoded unicode RANGES/WS tables and their lookups.
 
 ### CPU kernel tiers
@@ -529,11 +547,18 @@ value feeds logic is marked `// clock: control`. The rails, the carve-outs (`ben
 `performance/`, `harness/`, cold one-shot load/mint progress logs), and the marker's why are
 `ARCHITECTURE.md` §2.10.
 
-**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** A region entry is an
-`*_encode` / `*_decode` / step driver; a new function is a defect only when no annotated
-region entry reaches it — a new entry point (including a backend entry: kernel-backend
-override, batch donor) carries the annotation itself. The transitive-arming model and the
-`@scratch` / `[cold_path]` companions are `ARCHITECTURE.md` §2.11.
+**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** A region entry is a
+KERNEL `*_encode` / `*_decode` / step driver — the tokenizer encode/decode path is out of
+scope (it allocates its result by design; its instrument is the `--tok` cell). A new function
+is a defect only when no annotated region entry reaches it — a new entry point (including a
+backend entry: kernel-backend override, batch donor) carries the annotation itself. The
+transitive-arming model and the `@scratch` / `[cold_path]` companions are `ARCHITECTURE.md` §2.11.
+
+**A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
+`dasllama_bpe.das` / `dasllama_pretok.das` ships its before/after `--tok` rows for the affected
+backend, and a change that turns an encode direction superlinear on the size ladder is a
+defect.** Decode rows ride along; the scaling ratio, not any single throughput number, is the
+instrument.
 
 **No raw environment access outside `dasllama_env.das`.** A knob is an `[EnvConfig]` field
 there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /
