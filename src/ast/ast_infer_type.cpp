@@ -1451,7 +1451,7 @@ namespace das {
                         message = iscf ? "concept assert failed" : "static assert failed";
                     }
                 } else {
-                    message = iscf ? "static assert failed" : "concept failed";
+                    message = iscf ? "concept assert failed" : "static assert failed";
                 }
                 if (iscf) {
                     LineInfo atC = expr->at;
