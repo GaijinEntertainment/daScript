@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Local preview rig for dasllama.io — serves site-dasllama/ with the shared css
-staged the same way the deploy does: forge.css / nav-dropdown.css / dasllama-table.css
-come from ../site/files (single source of truth in the repo), everything else from here.
+"""Local preview rig for dasllama.io — serves site-dasllama/ with the shared files
+staged the same way the deploy does: forge.css / nav-dropdown.css / dasllama-table.css /
+github-star.js come from ../site/files (single source of truth in the repo), everything
+else from here.
 
 /api/* is proxied to a locally running ladder service (utils/dasllama-ladder on :8201),
 mirroring the Caddy vhost — start one with real data to preview the live pages:
@@ -18,7 +19,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
-SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css"}
+SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
 PORT = 8932
 LADDER = "http://127.0.0.1:8201"
 

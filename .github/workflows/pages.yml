@@ -562,7 +562,7 @@ jobs:
 
         # Shared visual language, staged from the daslang.io tree — single source
         # in the repo, mirrored by site-dasllama/serve.py for local preview.
-        for f in forge.css nav-dropdown.css dasllama-table.css; do
+        for f in forge.css nav-dropdown.css dasllama-table.css github-star.js; do
             cp "site/files/$f" "_site_dasllama/files/$f"
         done
 
