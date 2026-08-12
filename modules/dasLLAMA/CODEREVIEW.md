@@ -101,6 +101,12 @@ live-leg file follows the server tests' conventions, not this file's suite rules
 through the serving rail, mirrors the large-model tier gate on `DASLLAMA_PARITY_FULL`, and
 reports model-gated skips explicitly.
 
+**A tokenizer change — pre-tokenizer arm, merge loop, vocab load, decode — lands with
+`tests/test_tokenizer.das` green, and a new pre-tokenizer family or backend ships its llama.cpp
+corpus case (`ggml-vocab-*.gguf` + `.inp/.out`) in the same change.** A corpus case asserts exact
+reference ids AND lossless round-trip; an ids-only case is a defect — a vocab can mask a
+pre-tokenizer divergence, so round-trip alone or "the model still runs" proves nothing.
+
 **A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
 first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
 three worlds the gate covers are `ARCHITECTURE.md` §2.5. Kernel A/B labs are exempt: both arms
@@ -540,6 +546,10 @@ value feeds logic is marked `// clock: control`. The rails, the carve-outs (`ben
 region entry reaches it — a new entry point (including a backend entry: kernel-backend
 override, batch donor) carries the annotation itself. The transitive-arming model and the
 `@scratch` / `[cold_path]` companions are `ARCHITECTURE.md` §2.11.
+
+**An encode-path change ships its before/after `--tok` rows for the affected backend, and a
+change that turns an encode direction superlinear on the size ladder is a defect.** Decode rows
+ride along; the scaling ratio, not any single throughput number, is the instrument.
 
 **No raw environment access outside `dasllama_env.das`.** A knob is an `[EnvConfig]` field
 there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /
