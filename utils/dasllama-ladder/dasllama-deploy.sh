@@ -72,6 +72,9 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallArchitectures=native
+# TasksMax fits because the service does no parallel work (the daslang jobque is never
+# created). If it adopts parallel_for/channels/create_job_que the pool spawns cores-1
+# threads on spawn - raise this or set DAS_JOBQUE_THREADS then.
 TasksMax=64
 
 [Install]
