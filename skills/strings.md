@@ -29,6 +29,7 @@ The single most common antipattern in this codebase is opening `peek_data` and w
 | Split on a separator | `split(s, ",")` (boost) → `array<string>` | manual `find` + `slice` loop |
 | Split on any of several chars | `split_by_chars(s, " \t\n")` (boost) | byte loop with branching |
 | Trim whitespace | `trim(s)` / `strip(s)`, or `ltrim`/`rtrim`/`strip_left`/`strip_right` | manual leading/trailing scan |
+| Skip a whitespace run from offset `i` | `skip_white_space(s, i)` — the offset where content resumes | `while (is_white_space(int(d[i]))) { i++ }` |
 | Strip a known prefix/suffix | `trim_prefix(s, "foo/")` / `trim_suffix(s, ".das")` (boost) | `starts_with` + `slice` |
 | Uppercase / lowercase | `to_upper(s)` / `to_lower(s)` | manual case-fold loop |
 | Pad to width | `pad_left(s, w, ' ')` / `pad_right(s, w, ' ')` (boost) | manual `repeat` + concat |
@@ -155,6 +156,7 @@ peek_data(line) $(d) {
 | rfind | `rfind(d, sub)`, `(d, sub, start)` | |
 | strip | `strip(d)`, `strip_left(d)`, `strip_right(d)` | |
 | trim | `trim(d)`, `ltrim(d)`, `rtrim(d)`, `rtrim(d, chars)` | |
+| whitespace cursor | `skip_white_space(d, from)` | offset of the first non-whitespace byte at or after `from` — `strip_left` as a cursor, no allocation; `skip_white_space(s, from)` is the string form |
 | parse | `int(d, res, cursor, hex)` — same shape for `int8`/`uint8`/`int16`/`uint16`/`uint`/`int64`/`uint64`; `float(d, res, cursor)` / `double(d, res, cursor)` | `cursor` is IN and OUT |
 | writer | `write_string(w, d)`, `write_string(w, d, a, b)` | writes view bytes straight into a `build_string` writer |
 
@@ -164,6 +166,10 @@ peek_data(line) $(d) {
 - **Materializing costs an allocation, not a scan.** `slice` / `chop` / `strip` / `trim` on a view still allocate a fresh temp string; what disappears is the per-call `strlen`. Comparisons and searches answer from the view with no allocation at all — reach for the materializing forms only when a `string` is what you need next.
 - **Views are binary-safe, strings are not.** Every view op is bounded by the view's length, so a `\0` inside the bytes is data like any other byte. Materialize a window that contains one and the result is an ordinary `string`, which every downstream `strlen`-based op reads as truncated at that NUL — same as `string(d)` has always been.
 - **A view longer than `INT_MAX` bytes panics.** Offsets are `int`, so such a view has no representable answer; the op stops the way `length` does instead of returning a wrapped offset.
+- **Passing a view to your own helper**: declare the parameter `bytes : array<uint8> const implicit` — that spelling binds both a plain `array<uint8>` and the `#` view `peek_data` yields. Needed the moment a scan is factored out of the `peek_data` block.
+- **`rfind(d, sub, start)` clamps a negative `start` to 0** (same as the string form) — `rfind(d, ".", -1)` on `".abc"` returns `0`, not `-1`. A backwards walk that re-feeds `hit - 1` as the next `start` needs an explicit `hit > 0` guard or it spins on a match at offset 0.
+- **`peek_data("")` never invokes its block.** Before wrapping a loop, check what the body does when the source is empty — pushes, counters, or fallback pieces that used to run once on an empty string silently vanish inside the wrap. Guard with `if (empty(s))` first when the empty case carries behavior.
+- **Code that calls a verifying macro (e.g. `macro_verify`) cannot move inside the wrap** — such macros expand to `return null`, and a `return` with a value inside a block argument is `error[31402]`. Leave those loops on the string forms (nolint with the reason) or restructure so the verify stays outside the block.
 
 ## Joining
 
@@ -185,8 +191,8 @@ The block form composes with `build_string` internally, so it's the right tool w
 - **`==` and `!=`** between `string` and `string`, between `string` and `das_string`, work directly. Don't write `string(das_str) == "foo"` — drop the cast.
 - **`compare_ignore_case(a, b)`** — `< 0` / `0` / `> 0`, like `strcmp`.
 - **`is_null_or_whitespace(s)`** (boost) — `s == ""` or every char is whitespace.
-- **`is_alpha`/`is_alnum`/`is_hex`/`is_number`/`is_white_space`/`is_tab_or_space`/`is_new_line`** — all take an `int` (the int-as-char form). When using with `peek_data`, write `is_white_space(int(c))`.
-- **Whitespace is one six-character set everywhere** — space, tab, CR, LF, FF and VT (the C `isspace` set). `is_white_space`, `strip`/`strip_left`/`strip_right`, `trim`/`ltrim`/`rtrim`, the leading-whitespace skip every parse function does, and `is_null_or_whitespace` all agree on it. JSON is the one deliberate exception: RFC 8259 whitespace is exactly space/tab/CR/LF, so `daslib/json`'s lexer keeps a spec-exact test of its own and rejects FF and VT.
+- **`is_alpha`/`is_alnum`/`is_hex`/`is_number`/`is_white_space`/`is_tab_or_space`/`is_new_line`** — all take an `int` (the int-as-char form). When using with `peek_data`, write `is_white_space(int(c))`. To advance over a whole whitespace *run* don't loop on the classifier — `skip_white_space(s, i)` / `skip_white_space(d, i)` returns the offset where content resumes.
+- **Whitespace is one six-character set everywhere** — space, tab, CR, LF, FF and VT (the C `isspace` set). `is_white_space`, `skip_white_space`, `strip`/`strip_left`/`strip_right`, `trim`/`ltrim`/`rtrim`, the leading-whitespace skip every parse function does, and `is_null_or_whitespace` all agree on it. JSON is the one deliberate exception: RFC 8259 whitespace is exactly space/tab/CR/LF, so `daslib/json`'s lexer keeps a spec-exact test of its own and rejects FF and VT.
 - **Char sets** are a `uint[8]` bitset over the 256-byte alphabet. **Build** one with bit math — `cset[ch / 32] |= 1u << uint(ch & 31)` — then query with `is_char_in_set(ch, cset)` (faster than `find(charset, c) >= 0` in hot loops). `set_total(cset)` is the population count; `set_element(i, cset)` is the i-th member character (or `-1`). Both are readers — there is no builtin that *adds* a char to a set.
 
 ## Escape and unescape

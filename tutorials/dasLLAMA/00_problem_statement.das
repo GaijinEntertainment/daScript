@@ -228,7 +228,7 @@ def normalize(
 // One token through the entire transformer
 // -----------------------------------------------------------------------------
 
-def forward(
+def forward( // nolint:STYLE038 — tutorial: one token through the whole transformer in one place is the lesson
             c : Config;
             w : Weights;
             model : array<float>#;
@@ -360,6 +360,8 @@ def encode(tk : Tokenizer; text : string) : array<int> {
     if (!empty(text) && dummy_prefix >= 0) {
         tokens |> push(dummy_prefix)
     }
+    // one byte view for the whole prompt: the UTF-8 walk and every piece lookup below read the
+    // length it carries, so no call re-measures `text`
     peek_data(text) $(bytes : array<uint8> const#) {
         var begin = 0
         while (begin < length(bytes)) {
@@ -367,7 +369,7 @@ def encode(tk : Tokenizer; text : string) : array<int> {
             while (end < length(bytes) && (int(bytes[end]) & int(0xC0)) == int(0x80)) {
                 end++
             }
-            let id = tk.lookup?[slice(text, begin, end)] ?? -1
+            let id = tk.lookup?[slice(bytes, begin, end)] ?? -1
             if (id >= 0) {
                 tokens |> push(id)
             } else {

@@ -48,11 +48,16 @@ temp-string results marked, view param `array<uint8> const implicit`:
 | ends_with | `(d,cmp)` | 1 |
 | find / rfind | `find(d,sub)` `(d,sub,start)` `(d,ch)` `(d,ch,start)`; `rfind(d,sub)` `(d,sub,start)` | 6 |
 | strip family | `strip(d)` `strip_left(d)` `strip_right(d)` → string | 3 |
+| whitespace cursor | `skip_white_space(d, from)` → int, plus the `string` twin | 2 |
 | trim family | `trim(d)` `ltrim(d)` `rtrim(d)` `rtrim(d,chars)` → string | 4 |
 | parse-at-offset | `int8/uint8/int16/uint16/int/uint/int64/uint64(d, result : ConversionResult&, offset : int&, hex)`, `float/double(d, result, offset)` | 10 |
 | writer | `write_string(w,d)` `write_string(w,d,a,b)` | 2 |
 
-Total ~33. Needles stay `string` (short constants; no v1 site wanted view needles).
+Total ~35. `skip_white_space` is the one op the re-sweep added to this list rather than
+finding here: the offset form of `strip_left` has no string counterpart to twin, and without
+it five sites independently hand-rolled the same private cursor helper. It is the only
+member of the surface whose *string* form is also new. Needles stay `string` (short
+constants; no v1 site wanted view needles).
 NOT twinned, with reason: `length`/`empty` (array builtins already), `string(d)` (exists),
 `character_at`/`first_character` (`int(d[i])` is O(1)+checked; `is_character_at` already in
 strings_boost), `is_*` classifiers (take `int`), whole-string transforms (`to_upper`, `reverse`,
@@ -172,6 +177,13 @@ The ~33 externs above, one commit. Each is entry-glue over a phase-1 core — no
   upstream patch gets filed against `borisbat/dasAnthropic`.
 - End state: tree lint sweep-clean under PERF031 with the rule ON repo-wide (`.lint_config`
   carries no override), only external-checkout hits remaining locally.
+- **A gap the re-sweep surfaces is closed as stdlib surface, not as a private helper in the
+  consuming file** — a private cursor helper is the same defect v1 was vetoed for, one file
+  down. `skip_white_space` is the worked example: five sites (dasllama_chat, `cpp_skip_space`
+  in the MCP cpp tool, `skip_ws` in doc-verify, two inline loops in the MCP outline tool,
+  one in `linq_das`) each grew their own copy before the op existed; all five now call it.
+  Still missing, and still hand-rolled once (`trimmed_end` in `utils/doc-verify/main.das`):
+  the offset form of `strip_right`. Add it if a second site wants it.
 
 ## Phase 6 — PR mechanics
 

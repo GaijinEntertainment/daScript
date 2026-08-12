@@ -423,10 +423,16 @@ def tok_read_seed(path : string) : string {
             text = fread(f)
         }
     }
-    while (starts_with(text, "#")) {
-        let nl = find(text, "\n")
-        break if (nl < 0)
-        text = slice(text, nl + 1)
+    var body = 0   // first byte past the header block; one view walk, one slice
+    peek_data(text) $(d) {
+        while (starts_with(d, body, "#")) {
+            let nl = find(d, '\n', body)
+            break if (nl < 0)
+            body = nl + 1
+        }
+    }
+    if (body > 0) {
+        text = slice(text, body)
     }
     if (empty(text)) {
         panic("lcpp_bench --tok: corpus file missing or empty: {path}")

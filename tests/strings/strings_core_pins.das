@@ -235,6 +235,58 @@ def test_pin_strip_degenerate(t : T?) {
     t |> equal(strip_right(plain), "ab", "strip_right with nothing to remove")
 }
 
+def private pin_skip_removes(t : T?; ch, what : string) {
+    let s = heap_str("{ch}ab")
+    t |> equal(skip_white_space(s, 0), 1, "skip_white_space skips {what}")
+    peek_data(s) $(d) {
+        t |> equal(skip_white_space(d, 0), 1, "view skip_white_space skips {what}")
+    }
+}
+
+[test]
+def test_pin_skip_white_space_set(t : T?) {
+    // skip_white_space is strip_left as a cursor, so it rides the same C isspace 6-set
+    pin_skip_removes(t, " ", "space")
+    pin_skip_removes(t, "\t", "tab")
+    pin_skip_removes(t, "\n", "newline")
+    pin_skip_removes(t, "\r", "carriage return")
+    pin_skip_removes(t, "\f", "form feed")
+    pin_skip_removes(t, "\v", "vertical tab")
+}
+
+[test]
+def test_pin_skip_white_space_bounds(t : T?) {
+    let s = heap_str("  ab  cd")
+    let ws = heap_str("   ")
+    let none = heap_str("")
+    var inscope empty_view : array<uint8>
+    t |> equal(skip_white_space(s, 0), 2, "skip from 0 lands on the first content byte")
+    t |> equal(skip_white_space(s, 2), 2, "non-whitespace at from returns from")
+    t |> equal(skip_white_space(s, 4), 6, "skip from mid-string crosses the interior run")
+    t |> equal(skip_white_space(s, -100), 2, "a negative from clamps to 0")
+    t |> equal(skip_white_space(s, 8), 8, "from == length returns length")
+    t |> equal(skip_white_space(s, 100), 8, "from past length clamps to length")
+    t |> equal(skip_white_space(ws, 0), 3, "an all-whitespace tail returns length")
+    t |> equal(skip_white_space(ws, 1), 3, "an all-whitespace tail from mid returns length")
+    t |> equal(skip_white_space(none, 0), 0, "the empty string returns 0")
+    t |> equal(skip_white_space(none, 5), 0, "the empty string clamps any from to 0")
+    t |> equal(skip_white_space(empty_view, 0), 0, "the empty view returns 0")
+    t |> equal(skip_white_space(empty_view, -5), 0, "the empty view clamps a negative from to 0")
+    t |> equal(skip_white_space(empty_view, 5), 0, "the empty view clamps a from past length to 0")
+    peek_data(s) $(d) {
+        t |> equal(skip_white_space(d, 0), 2, "view skip from 0 lands on the first content byte")
+        t |> equal(skip_white_space(d, 2), 2, "view non-whitespace at from returns from")
+        t |> equal(skip_white_space(d, 4), 6, "view skip from mid-string crosses the interior run")
+        t |> equal(skip_white_space(d, -100), 2, "view negative from clamps to 0")
+        t |> equal(skip_white_space(d, 8), 8, "view from == length returns length")
+        t |> equal(skip_white_space(d, 100), 8, "view from past length clamps to length")
+    }
+    peek_data(ws) $(d) {
+        t |> equal(skip_white_space(d, 0), 3, "view all-whitespace tail returns length")
+        t |> equal(skip_white_space(d, 1), 3, "view all-whitespace tail from mid returns length")
+    }
+}
+
 def private pin_trim_removes(t : T?; ch, what : string) {
     let s = heap_str("{ch}ab{ch}")
     t |> equal(trim(s), "ab", "trim removes {what}")

@@ -1386,7 +1386,8 @@ costs O(length × iterations) — quadratic.
 
 The fix is mechanical. Wrap the loop in ``peek_data``, then pass the view
 everywhere the string used to go: ``slice``, ``chop``, ``find``, ``rfind``,
-``starts_with``, ``ends_with``, ``strip``, ``trim`` and the parse family each
+``starts_with``, ``ends_with``, ``strip``, ``trim``, ``skip_white_space`` and
+the parse family each
 have a byte-view form that takes an ``array<uint8>`` — the view ``peek_data``
 hands to its block. A view carries its own length, so the ``strlen`` happens
 once, at ``peek_data``, and the loop is linear. When the window never changes,

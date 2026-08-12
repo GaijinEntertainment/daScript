@@ -73,14 +73,25 @@ def private level_name(level : int) : string {
 // "mcp.live.foo" first looks up the full path, then "mcp.live", then "mcp",
 // before falling back to the global min level.
 def private resolve_level(category : string) : int {
-    var probe = category
-    while (true) {
-        if (key_exists(log_category_overrides, probe)) return log_category_overrides[probe]
-        let dot = probe |> rfind(".")
-        break if (dot < 0)
-        probe = probe |> slice(0, dot)
+    if (key_exists(log_category_overrides, category)) return log_category_overrides[category]
+    var found = false
+    var level = 0
+    peek_data(category) $(d) {
+        var end = length(d)
+        // `end == 0` stops the walk: rfind clamps a negative start to 0, so a leading '.' would repeat forever
+        while (end > 0) {
+            let dot = rfind(d, ".", end - 1)
+            break if (dot < 0)
+            let probe = slice(d, 0, dot)
+            if (key_exists(log_category_overrides, probe)) {
+                level = log_category_overrides[probe]
+                found = true
+                return
+            }
+            end = dot
+        }
     }
-    return log_min_level
+    return found ? level : log_min_level
 }
 
 def private should_log(level : int; category : string) : bool {

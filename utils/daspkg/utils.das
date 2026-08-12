@@ -253,20 +253,21 @@ def satisfies_constraint(version_str, constraint : string) : bool {
     let ver = parse_version(version_str)
     if (!ver.valid) return false
     // split on comma
-    var rest = constraint
-    while (!empty(rest)) {
-        let comma = find(rest, ",")
-        var part : string
-        if (comma >= 0) {
-            part = strip(slice(rest, 0, comma))
-            rest = strip(slice(rest, comma + 1))
-        } else {
-            part = strip(rest)
-            rest = ""
+    var ok = true
+    peek_data(constraint) $(d) {
+        let n = length(d)
+        var pos = 0
+        while (pos < n) {
+            let comma = find(d, ",", pos)
+            let part = strip(comma >= 0 ? slice(d, pos, comma) : slice(d, pos))
+            pos = comma >= 0 ? comma + 1 : n
+            if (!empty(part) && !check_single_constraint(ver, part)) {
+                ok = false
+                break
+            }
         }
-        if (!empty(part) && !check_single_constraint(ver, part)) return false
     }
-    return true
+    return ok
 }
 
 // ── .gitignore management ───────────────────────────────────────────
@@ -284,24 +285,23 @@ def gitignore_add(root, pattern : string) {
     }
     // check if pattern already present (exact line match)
     var found = false
-    var rest = content
-    while (!empty(rest)) {
-        let nl = find(rest, "\n")
-        var line : string
-        if (nl >= 0) {
-            line = slice(rest, 0, nl)
-            rest = slice(rest, nl + 1)
-        } else {
-            line = rest
-            rest = ""
-        }
-        // strip trailing \r
-        if (!empty(line) && ends_with(line, "\r")) {
-            line = slice(line, 0, length(line) - 1)
-        }
-        if (line == pattern) {
-            found = true
-            break
+    let plen = length(pattern)
+    peek_data(content) $(d) {
+        let n = length(d)
+        var pos = 0
+        while (pos < n) {
+            let nl = find(d, "\n", pos)
+            var stop = nl >= 0 ? nl : n
+            // strip trailing \r
+            if (stop > pos && int(d[stop - 1]) == '\r') {
+                stop--
+            }
+            // same length + same prefix is an exact line match, with no window to allocate
+            if (stop - pos == plen && starts_with(d, pos, pattern)) {
+                found = true
+                break
+            }
+            pos = nl >= 0 ? nl + 1 : n
         }
     }
     if (found) return
@@ -329,28 +329,31 @@ def gitignore_remove(root, pattern : string) {
     }
     if (empty(content)) return
     // rebuild without the matching line
-    var result = ""
     var removed = false
-    var rest = content
-    while (!empty(rest)) {
-        let nl = find(rest, "\n")
-        var line : string
-        if (nl >= 0) {
-            line = slice(rest, 0, nl)
-            rest = slice(rest, nl + 1)
-        } else {
-            line = rest
-            rest = ""
+    let plen = length(pattern)
+    let result = build_string() $(var writer) {
+        peek_data(content) $(d) {
+            let n = length(d)
+            var pos = 0
+            while (pos < n) {
+                let nl = find(d, "\n", pos)
+                let eol = nl >= 0 ? nl : n
+                var stop = eol
+                if (stop > pos && int(d[stop - 1]) == '\r') {
+                    stop--
+                }
+                if (stop - pos == plen && starts_with(d, pos, pattern)) {
+                    removed = true
+                } else {
+                    // kept lines keep their own \r; the \n only when the source had one
+                    writer |> write_string(d, pos, eol)
+                    if (nl >= 0) {
+                        writer |> write_char('\n')
+                    }
+                }
+                pos = nl >= 0 ? nl + 1 : n
+            }
         }
-        var trimmed = line
-        if (!empty(trimmed) && ends_with(trimmed, "\r")) {
-            trimmed = slice(trimmed, 0, length(trimmed) - 1)
-        }
-        if (trimmed == pattern) {
-            removed = true
-            continue
-        }
-        result = nl >= 0 ? "{result}{line}\n" : "{result}{line}"
     }
     if (removed) {
         fopen(gitignore_path, "wb") $(f) {

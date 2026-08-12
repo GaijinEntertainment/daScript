@@ -113,6 +113,8 @@ class PrintfMacro : AstCallMacro {
         let format = string((expr.arguments[0] as ExprConstString).value)
         var pos = 0
         let format_len = length(format)
+        // A peek_data view would drop the per-chop strlen, but macro_verify expands to a
+        // `return`, which a block cannot carry - the format string stays the receiver here.
         while (pos < format_len) {
             // Find the next (N) placeholder
             let open = find(format, '(', pos)
@@ -124,7 +126,7 @@ class PrintfMacro : AstCallMacro {
             }
             // Add literal text before the placeholder
             if (open > pos) {
-                let text = format.chop(pos, open - pos)
+                let text = format.chop(pos, open - pos)  // nolint:PERF031 - see the macro_verify note above
                 sbuilder.elements |> emplace_new <| new ExprConstString(value := text, at = expr.at)
             }
             // Find matching closing paren
@@ -132,7 +134,7 @@ class PrintfMacro : AstCallMacro {
             macro_verify(close != -1, prog, expr.at,
                 "unmatched '(' in format string")
             // Parse the argument number
-            let argNumStr = format.chop(open + 1, close - open - 1)
+            let argNumStr = format.chop(open + 1, close - open - 1)  // nolint:PERF031 - see the macro_verify note above
             let argNum = to_int(argNumStr)
             macro_verify(argNum >= 1, prog, expr.at,
                 "argument number must be >= 1, got '({argNumStr})'")

@@ -542,6 +542,8 @@ def public repository_build_worktree_create_argv(source_worktree_path,
     if (!empty(base_ref) && !valid_path(base_ref)) return "base ref cannot contain CR/LF"
     let normalized_base = strip(base_ref)
     let resolved_base = !empty(normalized_base) ? normalized_base : "HEAD"
+    // the caller may reuse one argv across calls, so release the previous command first
+    delete argv
     argv <- ["git", "-C", source_worktree_path, "worktree", "add", "-b",
         normalized_branch, "--", new_worktree_path, resolved_base]
     return ""
@@ -633,23 +635,23 @@ def public repository_build_files_action_argv(worktree_path : string;
     }
     var inscope command : array<string>
     if (action == "stage") {
-        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path, // nolint:PERF030 - target is the fresh empty inscope decl above; the five fills are mutually exclusive branches
             "add", "--"]
     } elif (action == "unstage") {
-        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path, // nolint:PERF030 - target is the fresh empty inscope decl above; the five fills are mutually exclusive branches
             "reset", "--quiet", "HEAD", "--"]
     } elif (action == "discard_worktree") {
         // Unstaged tracked edits: restore from the INDEX, so a staged part of
         // the same file survives. Never spell this `checkout HEAD` — that is
         // discard_all, and confusing the two silently destroys staged work.
-        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path, // nolint:PERF030 - target is the fresh empty inscope decl above; the five fills are mutually exclusive branches
             "checkout", "--"]
     } elif (action == "discard_all") {
         // Throw the change away entirely: index AND worktree reset to HEAD.
-        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path, // nolint:PERF030 - target is the fresh empty inscope decl above; the five fills are mutually exclusive branches
             "checkout", "HEAD", "--"]
     } elif (action == "discard_untracked") {
-        command <- ["git", "--literal-pathspecs", "-C", worktree_path,
+        command <- ["git", "--literal-pathspecs", "-C", worktree_path, // nolint:PERF030 - target is the fresh empty inscope decl above; the five fills are mutually exclusive branches
             "clean", "-f"]
         // Porcelain reports a wholly-untracked directory as one "dir/" row;
         // clean refuses directories without -d.
@@ -1171,7 +1173,7 @@ def private operation_start(kind, repository_id, worktree_path : string;
     }
     if (empty(steps)) return "operation has no steps"
     delete g_operation.log
-    g_operation = WorktreeOperation(kind = kind, repository_id = repository_id,
+    g_operation = WorktreeOperation(kind = kind, repository_id = repository_id,   // nolint:PERF030 - the delete above releases g_operation.log, the only heap-carrying field
         worktree_path = worktree_path, state = "running", step = "starting",
         step_count = length(steps), revision = g_operation.revision + 1l)
     operation_clear_steps()
@@ -1902,10 +1904,8 @@ def public repository_parse_inventory(text : string; var worktrees : array<Workt
         } elif (starts_with(line, "HEAD ")) {
             current.head = slice(line, 5)
         } elif (starts_with(line, "branch ")) {
-            current.branch = slice(line, 7)
-            if (starts_with(current.branch, "refs/heads/")) {
-                current.branch = slice(current.branch, 11)
-            }
+            let branch = slice(line, 7)
+            current.branch = starts_with(branch, "refs/heads/") ? slice(branch, 11) : branch
         } elif (line == "detached") {
             current.detached = true
         } elif (line == "bare") {
@@ -2646,8 +2646,8 @@ def private numstat_count_token(token : string) : bool {
 
 def private expanded_numstat_path(path : string) : string {
     let arrow = find(path, " => ")
-    var tail_text : string // nolint:LINT003 daScript loses let lifetime after the early-return guard
-    var end_pos : int // nolint:LINT003 daScript loses let lifetime after the early-return guard
+    var tail_text : string // daScript loses let lifetime after the early-return guard
+    var end_pos : int // daScript loses let lifetime after the early-return guard
     if (arrow < 0) {
         return path
     }
@@ -2662,8 +2662,8 @@ def private expanded_numstat_path(path : string) : string {
 
 def private original_numstat_path(path : string) : string {
     let arrow = find(path, " => ")
-    var tail_text : string // nolint:LINT003 daScript loses let lifetime after the early-return guard
-    var end_pos : int // nolint:LINT003 daScript loses let lifetime after the early-return guard
+    var tail_text : string // daScript loses let lifetime after the early-return guard
+    var end_pos : int // daScript loses let lifetime after the early-return guard
     if (arrow < 0) return ""
     let brace_start = find(path, "\{")
     tail_text = slice(path, arrow + 4)

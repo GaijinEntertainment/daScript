@@ -177,11 +177,12 @@ def private clip_recipient(s : string) : string {
     return strip(slice(s, 0, e))
 }
 
-// One Harmony header at `pos` -> kind (reasoning|content|preamble|call|drop, name set for calls); advances pos to the body.
-def private harmony_header(s : string; var pos : int&; var name : string&) : string {
+// One Harmony header at `pos` in the reply's byte view -> kind (reasoning|content|preamble|call|drop,
+// name set for calls); advances pos to the body.
+def private harmony_header(s : array<uint8> const#; var pos : int&; var name : string&) : string {
     name = ""
     // role-header recipient form: the reply opens with ` to=functions.NAME<|channel|>...`
-    if (starts_with(slice(s, pos, length(s)), " to=")) {
+    if (starts_with(s, pos, " to=")) {
         let ch = find(s, "<|channel|>", pos)
         let msg = find(s, "<|message|>", pos)
         if (msg < 0) {
@@ -195,7 +196,7 @@ def private harmony_header(s : string; var pos : int&; var name : string&) : str
         }
         return "drop"
     }
-    if (!starts_with(slice(s, pos, length(s)), "<|channel|>")) {
+    if (!starts_with(s, pos, "<|channel|>")) {
         return ""   // no header: raw text (defensive — classify as content)
     }
     let hstart = pos + length("<|channel|>")
@@ -243,38 +244,40 @@ def harmony_parse(reply : string) : ToolReply {
     var out = ToolReply()
     var rparts : array<string>
     var cparts : array<string>
-    var pos = 0
-    let n = length(reply)
-    while (pos < n) {
-        var name = ""
-        let kind = harmony_header(reply, pos, name)
-        // segment boundary: <|end|>, or a bare <|start|> re-header — the stream can suppress the
-        // <|end|> control token entirely (observed live on gpt-oss-20b). The needle is the SAME
-        // "<|start|>" the streaming splitter cuts on, so finish and stream never diverge.
-        var bend = find(reply, "<|end|>", pos)
-        var blen = length("<|end|>")
-        let bstart = find(reply, "<|start|>", pos)
-        if (bstart >= 0 && (bend < 0 || bstart < bend)) {
-            bend = bstart
-            blen = length("<|start|>")
-        }
-        let body = slice(reply, pos, bend < 0 ? n : bend)
-        if (kind == "reasoning") {
-            rparts |> push(body)
-        } elif (kind == "content" || kind == "" || kind == "preamble") {
-            cparts |> push(body)
-        } elif (kind == "call") {
-            out.calls |> push(ToolCall(name = name, args = strip(body)))
-        }
-        if (bend < 0) {
-            break
-        }
-        pos = bend + blen
-        if (starts_with(slice(reply, pos, n), "<|start|>")) {
-            pos += length("<|start|>")
-        }
-        if (starts_with(slice(reply, pos, n), "assistant")) {
-            pos += length("assistant")   // the re-header's role token; the recipient/channel follow
+    peek_data(reply) $(d) {
+        var pos = 0
+        let n = length(d)
+        while (pos < n) {
+            var name = ""
+            let kind = harmony_header(d, pos, name)
+            // segment boundary: <|end|>, or a bare <|start|> re-header — the stream can suppress the
+            // <|end|> control token entirely (observed live on gpt-oss-20b). The needle is the SAME
+            // "<|start|>" the streaming splitter cuts on, so finish and stream never diverge.
+            var bend = find(d, "<|end|>", pos)
+            var blen = length("<|end|>")
+            let bstart = find(d, "<|start|>", pos)
+            if (bstart >= 0 && (bend < 0 || bstart < bend)) {
+                bend = bstart
+                blen = length("<|start|>")
+            }
+            let body = slice(d, pos, bend < 0 ? n : bend)
+            if (kind == "reasoning") {
+                rparts |> push(body)
+            } elif (kind == "content" || kind == "" || kind == "preamble") {
+                cparts |> push(body)
+            } elif (kind == "call") {
+                out.calls |> push(ToolCall(name = name, args = strip(body)))
+            }
+            if (bend < 0) {
+                break
+            }
+            pos = bend + blen
+            if (starts_with(d, pos, "<|start|>")) {
+                pos += length("<|start|>")
+            }
+            if (starts_with(d, pos, "assistant")) {
+                pos += length("assistant")   // the re-header's role token; the recipient/channel follow
+            }
         }
     }
     out.reasoning = strip(join(rparts, ""))
@@ -503,25 +506,27 @@ def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
         return <- out
     }
     var content_end = -1
-    var pos = 0
-    while (true) {
-        let o = find(reply, open_mark, pos)
-        if (o < 0) {
-            break
+    peek_data(reply) $(d) {
+        var pos = 0
+        while (true) {
+            let o = find(d, open_mark, pos)
+            if (o < 0) {
+                break
+            }
+            if (content_end < 0) {
+                content_end = o
+            }
+            let bstart = o + length(open_mark)
+            let cl = find(d, close_mark, bstart)
+            if (cl < 0) {
+                break   // unterminated span (token budget cut mid-call) — scan stops
+            }
+            let c = tool_call_of_json(strip(slice(d, bstart, cl)))
+            if (!empty(c.name)) {
+                out.calls |> push(c)
+            }
+            pos = cl + length(close_mark)
         }
-        if (content_end < 0) {
-            content_end = o
-        }
-        let bstart = o + length(open_mark)
-        let cl = find(reply, close_mark, bstart)
-        if (cl < 0) {
-            break   // unterminated span (token budget cut mid-call) — scan stops
-        }
-        let c = tool_call_of_json(strip(slice(reply, bstart, cl)))
-        if (!empty(c.name)) {
-            out.calls |> push(c)
-        }
-        pos = cl + length(close_mark)
     }
     out.content = (content_end < 0 || empty(out.calls)) ? reply : strip(slice(reply, 0, content_end))
     return <- out
@@ -531,10 +536,11 @@ def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
 
 let private G4Q = "<|\"|>"   // the family's string-quote TOKEN — DSL strings need no escaping
 
-// One DSL value at `pos` -> JSON text (recursive: string | dict | array | raw number/bool/null).
-def private gemma4_dsl_value(s : string; var pos : int&) : string {
+// One DSL value at `pos` in the block body's byte view -> JSON text (recursive: string | dict |
+// array | raw number/bool/null). The view's length is the bound gemma4_parse cut at the closer.
+def private gemma4_dsl_value(s : array<uint8> const#; var pos : int&) : string {
     let n = length(s)
-    if (starts_with(slice(s, pos, n), G4Q)) {
+    if (starts_with(s, pos, G4Q)) {
         let e = find(s, G4Q, pos + length(G4Q))
         let body = slice(s, pos + length(G4Q), e < 0 ? n : e)
         pos = e < 0 ? n : e + length(G4Q)
@@ -545,10 +551,10 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
         }
         return out
     }
-    if (starts_with(slice(s, pos, n), "\{")) {
+    if (starts_with(s, pos, "\{")) {
         pos ++
         var parts : array<string>
-        while (pos < n && !starts_with(slice(s, pos, n), "}")) {
+        while (pos < n && !starts_with(s, pos, "}")) {
             let c = find(s, ":", pos)
             let eb = find(s, "}", pos)
             if (c < 0 || (eb >= 0 && eb < c)) {
@@ -564,7 +570,7 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
                 delete kv
             }
             parts |> push("{kq}:{v}")
-            if (pos < n && starts_with(slice(s, pos, n), ",")) {
+            if (pos < n && starts_with(s, pos, ",")) {
                 pos ++
             }
         }
@@ -575,12 +581,12 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
         delete parts
         return "\{{joined}}"
     }
-    if (starts_with(slice(s, pos, n), "[")) {
+    if (starts_with(s, pos, "[")) {
         pos ++
         var parts : array<string>
-        while (pos < n && !starts_with(slice(s, pos, n), "]")) {
+        while (pos < n && !starts_with(s, pos, "]")) {
             parts |> push(gemma4_dsl_value(s, pos))
-            if (pos < n && starts_with(slice(s, pos, n), ",")) {
+            if (pos < n && starts_with(s, pos, ",")) {
                 pos ++
             }
         }
@@ -594,8 +600,8 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
     // raw token: number / true / false / null — up to the enclosing delimiter
     var e = pos
     while (e < n) {
-        let ch = slice(s, e, e + 1)
-        if (ch == "," || ch == "}" || ch == "]") {
+        let ch = int(s[e])
+        if (ch == ',' || ch == '}' || ch == ']') {
             break
         }
         e ++
@@ -611,31 +617,36 @@ def private gemma4_dsl_value(s : string; var pos : int&) : string {
 def gemma4_parse(reply : string) : ToolReply {
     var out = ToolReply()
     var cparts : array<string>
-    var pos = 0
-    let n = length(reply)
-    while (pos < n) {
-        let b = find(reply, "<|tool_call>call:", pos)
-        if (b < 0) {
-            cparts |> push(slice(reply, pos, n))
-            break
+    peek_data(reply) $(d) {
+        var pos = 0
+        let n = length(d)
+        while (pos < n) {
+            let b = find(d, "<|tool_call>call:", pos)
+            if (b < 0) {
+                cparts |> push(slice(d, pos, n))
+                break
+            }
+            cparts |> push(slice(d, pos, b))
+            let p = b + length("<|tool_call>call:")
+            // every scan inside the block is bounded by ITS closer — a malformed body can never grab
+            // a later block's brace or run the walk past the closer
+            let close = find(d, "<tool_call|>", p)
+            let bend = close < 0 ? n : close
+            let brace = find(d, "\{", p)
+            if (brace < 0 || brace >= bend) {
+                pos = close < 0 ? n : close + length("<tool_call|>")   // no args dict in this block — drop it
+                continue
+            }
+            let name = strip(slice(d, p, brace))
+            let body = slice(d, brace, bend)
+            var bp = 0
+            var args = ""
+            peek_data(body) $(bd) {
+                args = gemma4_dsl_value(bd, bp)
+            }
+            out.calls |> push(ToolCall(name = name, args = args))
+            pos = close < 0 ? n : close + length("<tool_call|>")
         }
-        cparts |> push(slice(reply, pos, b))
-        let p = b + length("<|tool_call>call:")
-        // every scan inside the block is bounded by ITS closer — a malformed body can never grab
-        // a later block's brace or run the walk past the closer
-        let close = find(reply, "<tool_call|>", p)
-        let bend = close < 0 ? n : close
-        let brace = find(reply, "\{", p)
-        if (brace < 0 || brace >= bend) {
-            pos = close < 0 ? n : close + length("<tool_call|>")   // no args dict in this block — drop it
-            continue
-        }
-        let name = strip(slice(reply, p, brace))
-        let body = slice(reply, brace, bend)
-        var bp = 0
-        let args = gemma4_dsl_value(body, bp)
-        out.calls |> push(ToolCall(name = name, args = args))
-        pos = close < 0 ? n : close + length("<tool_call|>")
     }
     out.content = strip(join(cparts, ""))
     delete cparts

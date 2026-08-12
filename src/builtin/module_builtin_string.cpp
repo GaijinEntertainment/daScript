@@ -163,6 +163,15 @@ namespace das
         return t + 1;
     }
 
+    // the offset form of strip_l: a cursor walk answers "where does the content resume"
+    // without materializing the remainder. from clamps into [0,len], so the answer is
+    // always a valid offset, and len means "the tail from here is all whitespace"
+    static int skip_white_space_core ( const char * str, uint32_t len, int from ) {
+        uint32_t i = uint32_t(clamp_int(from, 0, int(len)));
+        while ( i!=len && is_white_space(str[i]) ) i++;
+        return int(i);
+    }
+
     static char * strip_core ( const char * str, uint32_t strLen, Context * context, LineInfoArg * at ) {
         if (!strLen)
             return nullptr;
@@ -207,6 +216,14 @@ namespace das
 
     char* builtin_view_strip_right ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
         return strip_right_core(view_data(bytes), view_size(bytes, context, at), context, at);
+    }
+
+    int builtin_string_skip_white_space ( const char * str, int from, Context * context ) {
+        return skip_white_space_core(str, stringLengthSafe(*context, str), from);
+    }
+
+    int builtin_view_skip_white_space ( const TArray<uint8_t> & bytes, int from, Context * context, LineInfoArg * at ) {
+        return skip_white_space_core(view_data(bytes), view_size(bytes, context, at), from);
     }
 
     // memchr narrows to the candidate first byte, then one memcmp confirms the rest
@@ -1226,6 +1243,11 @@ namespace das
                 SideEffects::none, "builtin_view_strip_right")->args({"bytes","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_view_strip_left)>(*this, lib, "strip_left",
                 SideEffects::none, "builtin_view_strip_left")->args({"bytes","context","at"})->setTempStringResult();
+            // strip_left as a cursor: the offset where content resumes, nothing allocated
+            addExtern<DAS_BIND_FUN(builtin_string_skip_white_space)>(*this, lib, "skip_white_space",
+                SideEffects::none, "builtin_string_skip_white_space")->args({"str","from","context"});
+            addExtern<DAS_BIND_FUN(builtin_view_skip_white_space)>(*this, lib, "skip_white_space",
+                SideEffects::none, "builtin_view_skip_white_space")->args({"bytes","from","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_string_chop")->args({"str","start","length","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_view_chop)>(*this, lib, "chop",

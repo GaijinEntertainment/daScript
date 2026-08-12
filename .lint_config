@@ -2,7 +2,7 @@
 # (rules stay ON for SDK users; directives here bind this repo only).
 
 [rules]
-# PERF031 (slice/chop on a loop-invariant string in a loop) ships ON, but the tree carries
-# ~127 pre-existing hits (daslib 21, utils 43, dasLLAMA 49, tutorials 5, examples 9).
-# OFF here until the follow-up sweep rewrites them - flip to true when the sweep lands.
-PERF031 = false
+# PERF031 (slice/chop on a loop-invariant string in a loop) is ON here as everywhere -
+# the byte-view sweep rewrote the tree onto peek_data views; only external checkouts
+# living inside the tree (dasVulkan, sfx_lab's dasImgui copies, das-claude) still hit.
+PERF031 = true

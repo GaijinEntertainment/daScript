@@ -190,31 +190,33 @@ def private render_parts(m : Model; parts : array<ChatPart>; content : string; v
 // splitting: vocab markers tokenize as their ids, the prose around them as text (encode() does
 // not match added tokens inline). Markers absent from the vocab stay in the text run.
 def private split_on_markers(m : Model; s : string; markers; var parts : array<ChatPart>) {
-    var pos = 0
-    let n = length(s)
-    while (pos < n) {
-        var best = -1
-        var best_mark = ""
-        for (mk in markers) {
-            if (!empty(mk) && special_id(m, mk) >= 0l) {
-                let f = find(s, mk, pos)
-                if (f >= 0 && (best < 0 || f < best)) {
-                    best = f
-                    best_mark = mk
+    peek_data(s) $(d) {
+        var pos = 0
+        let n = length(d)
+        while (pos < n) {
+            var best = -1
+            var best_mark = ""
+            for (mk in markers) {
+                if (!empty(mk) && special_id(m, mk) >= 0l) {
+                    let f = find(d, mk, pos)
+                    if (f >= 0 && (best < 0 || f < best)) {
+                        best = f
+                        best_mark = mk
+                    }
                 }
             }
+            if (best < 0) {
+                break
+            }
+            if (best > pos) {
+                parts |> push(chat_text(slice(d, pos, best)))
+            }
+            parts |> push(chat_special(best_mark))
+            pos = best + length(best_mark)
         }
-        if (best < 0) {
-            break
+        if (pos < n) {
+            parts |> push(chat_text(slice(d, pos, n)))
         }
-        if (best > pos) {
-            parts |> push(chat_text(slice(s, pos, best)))
-        }
-        parts |> push(chat_special(best_mark))
-        pos = best + length(best_mark)
-    }
-    if (pos < n) {
-        parts |> push(chat_text(slice(s, pos, n)))
     }
 }
 
@@ -923,13 +925,13 @@ def make_think_stream_(c : ChatSession) : ThinkStream {
     return make_think_stream_(c.tmpl, think_turn_active_(c))
 }
 
-// Longest k < length(mark) where s ends with mark's first k characters — the hold-back length
-// that keeps a marker split across feed boundaries matchable.
-def private tail_prefix_len(s : string; mark : string) : int {
-    let n = length(s)
-    var k = min(n, length(mark) - 1)
+// Longest k < length(mark) where the view's tail from `from` ends with mark's first k characters —
+// the hold-back length that keeps a marker split across feed boundaries matchable.
+def private tail_prefix_len(d : array<uint8> const#; from : int; mark : string) : int {
+    let n = length(d)
+    var k = min(n - from, length(mark) - 1)
     while (k > 0) {
-        if (slice(s, n - k, n) == slice(mark, 0, k)) {
+        if (starts_with(d, n - k, mark, uint(k))) {
             return k
         }
         k --
@@ -937,23 +939,33 @@ def private tail_prefix_len(s : string; mark : string) : int {
     return 0
 }
 
-// One whitespace-or-marker probe at TS_START: -1 = need more input, 0 = no opener (content),
-// 1 = opener matched at `cut` (first index past it, leading whitespace included).
-def private probe_opener(work : string; mark : string; var cut : int&) : int {
-    let stripped = strip_left(work)
-    if (empty(stripped)) {
+// One whitespace-or-marker probe at TS_START, scanning the view from `from`: -1 = need more input,
+// 0 = no opener (content), 1 = opener matched at `cut` (first index past it, leading whitespace included).
+def private probe_opener(d : array<uint8> const#; from : int; mark : string; var cut : int&) : int {
+    let n = length(d)
+    let start = skip_white_space(d, from)
+    if (start >= n) {
         return -1
     }
     let m = length(mark)
-    let avail = min(length(stripped), m)
-    if (slice(stripped, 0, avail) != slice(mark, 0, avail)) {
+    let avail = min(n - start, m)
+    if (!starts_with(d, start, mark, uint(avail))) {
         return 0
     }
     if (avail < m) {
         return -1
     }
-    cut = length(work) - length(stripped) + m
+    cut = start + m
     return 1
+}
+
+// The whole-string probe: think_finish_ probes a held tail once, outside any loop.
+def private probe_opener(work : string; mark : string; var cut : int&) : int {
+    var res = -1
+    peek_data(work) $(d) {
+        res = probe_opener(d, 0, mark, cut)
+    }
+    return res
 }
 
 // Route one channel header by its NAME token — the text up to the first space, since Harmony
@@ -965,128 +977,132 @@ def private harmony_header_is_content(hdr : string) : bool {
     return (sp < 0 ? name : slice(name, 0, sp)) == "final"
 }
 
-def private think_feed_symmetric(var ts : ThinkStream; var work : string; var rp, cp : array<string>) {
-    while (!empty(work)) {
-        if (ts.state == TS_START) {
-            var cut = 0
-            let r = probe_opener(work, ts.open_mark, cut)
-            if (r < 0) {
-                ts.hold = work
-                return
-            }
-            if (r == 0) {
+def private think_feed_symmetric(var ts : ThinkStream; work : string; var rp, cp : array<string>) {
+    peek_data(work) $(d) {
+        let n = length(d)
+        var pos = 0   // the undecided remainder is d[pos, n) — consuming advances the cursor, never re-slices
+        while (pos < n) {
+            if (ts.state == TS_START) {
+                var cut = 0
+                let r = probe_opener(d, pos, ts.open_mark, cut)
+                if (r < 0) {
+                    ts.hold = slice(d, pos, n)
+                    return
+                }
+                if (r == 0) {
+                    ts.state = TS_CONTENT
+                    continue
+                }
+                // asymmetric openers spell an optional trailing newline (gemma-4's `thought\n`)
+                if (ts.mode == ThinkMode.asymmetric && cut < n && d[cut] == uint8('\n')) {
+                    cut ++
+                } elif (ts.mode == ThinkMode.asymmetric && cut >= n) {
+                    ts.hold = slice(d, pos, n)   // the optional newline may still arrive with the next piece
+                    return
+                }
+                pos = cut
+                ts.state = TS_REASON
+                ts.consumed = true
+            } elif (ts.state == TS_REASON) {
+                let f = find(d, ts.close_mark, pos)
+                if (f >= 0) {
+                    rp |> push(slice(d, pos, f))
+                    pos = f + length(ts.close_mark)
+                    ts.state = TS_WS
+                } else {
+                    let h = tail_prefix_len(d, pos, ts.close_mark)
+                    rp |> push(slice(d, pos, n - h))
+                    ts.hold = slice(d, n - h, n)
+                    return
+                }
+            } elif (ts.state == TS_WS) {
+                let start = skip_white_space(d, pos)
+                if (start >= n) {
+                    return   // still whitespace: drop it (content leading-trim)
+                }
+                pos = start
                 ts.state = TS_CONTENT
-                continue
-            }
-            // asymmetric openers spell an optional trailing newline (gemma-4's `thought\n`)
-            if (ts.mode == ThinkMode.asymmetric && cut < length(work) && slice(work, cut, cut + 1) == "\n") {
-                cut ++
-            } elif (ts.mode == ThinkMode.asymmetric && cut >= length(work)) {
-                ts.hold = work   // the optional newline may still arrive with the next piece
-                return
-            }
-            work = slice(work, cut, length(work))
-            ts.state = TS_REASON
-            ts.consumed = true
-        } elif (ts.state == TS_REASON) {
-            let f = find(work, ts.close_mark)
-            if (f >= 0) {
-                rp |> push(slice(work, 0, f))
-                work = slice(work, f + length(ts.close_mark), length(work))
-                ts.state = TS_WS
             } else {
-                let h = tail_prefix_len(work, ts.close_mark)
-                let n = length(work)
-                rp |> push(slice(work, 0, n - h))
-                ts.hold = slice(work, n - h, n)
+                cp |> push(slice(d, pos, n))
                 return
             }
-        } elif (ts.state == TS_WS) {
-            let stripped = strip_left(work)
-            if (empty(stripped)) {
-                return   // still whitespace: drop it (content leading-trim)
-            }
-            work = stripped
-            ts.state = TS_CONTENT
-        } else {
-            cp |> push(work)
-            return
         }
     }
 }
 
-def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, cp : array<string>) {
-    while (!empty(work)) {
-        if (ts.state == TS_START) {
-            var cut = 0
-            let r = probe_opener(work, HARMONY_CH, cut)
-            if (r < 0) {
-                ts.hold = work
-                return
-            }
-            if (r == 0) {
-                ts.state = TS_CONTENT
-                continue
-            }
-            work = slice(work, cut, length(work))
-            ts.state = TS_HEADER
-            ts.hdr = ""
-            ts.consumed = true
-        } elif (ts.state == TS_HEADER) {
-            let f = find(work, HARMONY_MSG)
-            if (f < 0) {
-                let h = tail_prefix_len(work, HARMONY_MSG)
-                let n = length(work)
-                ts.hdr = "{ts.hdr}{slice(work, 0, n - h)}"   // headers are a few chars; no O(n^2) risk
-                ts.hold = slice(work, n - h, n)
-                return
-            }
-            ts.hdr = "{ts.hdr}{slice(work, 0, f)}"
-            work = slice(work, f + length(HARMONY_MSG), length(work))
-            ts.state = harmony_header_is_content(ts.hdr) ? TS_CONTENT : TS_REASON
-            ts.hdr = ""
-        } elif (ts.state == TS_REASON) {
-            var fe = find(work, HARMONY_END)
-            var flen = length(HARMONY_END)
-            // a bare <|start|> re-header also ends the segment — the stream can suppress <|end|>
-            let fs = find(work, "<|start|>")
-            if (fs >= 0 && (fe < 0 || fs < fe)) {
-                fe = fs
-                flen = length("<|start|>")
-            }
-            let fc = find(work, HARMONY_CH)
-            if (fe >= 0 && (fc < 0 || fe <= fc)) {
-                rp |> push(slice(work, 0, fe))
-                work = slice(work, fe + flen, length(work))
-                ts.state = TS_BETWEEN
-            } elif (fc >= 0) {
-                rp |> push(slice(work, 0, fc))
-                work = slice(work, fc + length(HARMONY_CH), length(work))
+def private think_feed_channel(var ts : ThinkStream; work : string; var rp, cp : array<string>) {
+    peek_data(work) $(d) {
+        let n = length(d)
+        var pos = 0   // the undecided remainder is d[pos, n) — consuming advances the cursor, never re-slices
+        while (pos < n) {
+            if (ts.state == TS_START) {
+                var cut = 0
+                let r = probe_opener(d, pos, HARMONY_CH, cut)
+                if (r < 0) {
+                    ts.hold = slice(d, pos, n)
+                    return
+                }
+                if (r == 0) {
+                    ts.state = TS_CONTENT
+                    continue
+                }
+                pos = cut
+                ts.state = TS_HEADER
+                ts.hdr = ""
+                ts.consumed = true
+            } elif (ts.state == TS_HEADER) {
+                let f = find(d, HARMONY_MSG, pos)
+                if (f < 0) {
+                    let h = tail_prefix_len(d, pos, HARMONY_MSG)
+                    ts.hdr = "{ts.hdr}{slice(d, pos, n - h)}"   // headers are a few chars; no O(n^2) risk
+                    ts.hold = slice(d, n - h, n)
+                    return
+                }
+                ts.hdr = "{ts.hdr}{slice(d, pos, f)}"
+                pos = f + length(HARMONY_MSG)
+                ts.state = harmony_header_is_content(ts.hdr) ? TS_CONTENT : TS_REASON
+                ts.hdr = ""
+            } elif (ts.state == TS_REASON) {
+                var fe = find(d, HARMONY_END, pos)
+                var flen = length(HARMONY_END)
+                // a bare <|start|> re-header also ends the segment — the stream can suppress <|end|>
+                let fs = find(d, "<|start|>", pos)
+                if (fs >= 0 && (fe < 0 || fs < fe)) {
+                    fe = fs
+                    flen = length("<|start|>")
+                }
+                let fc = find(d, HARMONY_CH, pos)
+                if (fe >= 0 && (fc < 0 || fe <= fc)) {
+                    rp |> push(slice(d, pos, fe))
+                    pos = fe + flen
+                    ts.state = TS_BETWEEN
+                } elif (fc >= 0) {
+                    rp |> push(slice(d, pos, fc))
+                    pos = fc + length(HARMONY_CH)
+                    ts.state = TS_HEADER
+                    ts.hdr = ""
+                } else {
+                    var h = max(tail_prefix_len(d, pos, HARMONY_END), tail_prefix_len(d, pos, HARMONY_CH))
+                    h = max(h, tail_prefix_len(d, pos, "<|start|>"))
+                    rp |> push(slice(d, pos, n - h))
+                    ts.hold = slice(d, n - h, n)
+                    return
+                }
+            } elif (ts.state == TS_BETWEEN) {
+                // framing glue (<|start|>assistant etc.) up to the next channel header is dropped
+                let f = find(d, HARMONY_CH, pos)
+                if (f < 0) {
+                    let h = tail_prefix_len(d, pos, HARMONY_CH)
+                    ts.hold = slice(d, n - h, n)   // the glue before it is framing, not content
+                    return
+                }
+                pos = f + length(HARMONY_CH)
                 ts.state = TS_HEADER
                 ts.hdr = ""
             } else {
-                var h = max(tail_prefix_len(work, HARMONY_END), tail_prefix_len(work, HARMONY_CH))
-                h = max(h, tail_prefix_len(work, "<|start|>"))
-                let n = length(work)
-                rp |> push(slice(work, 0, n - h))
-                ts.hold = slice(work, n - h, n)
-                return
-            }
-        } elif (ts.state == TS_BETWEEN) {
-            // framing glue (<|start|>assistant etc.) up to the next channel header is dropped
-            let f = find(work, HARMONY_CH)
-            if (f < 0) {
-                let h = tail_prefix_len(work, HARMONY_CH)
-                let n = length(work)
-                ts.hold = slice(work, n - h, n)   // the glue before it is framing, not content
-                return
-            }
-            work = slice(work, f + length(HARMONY_CH), length(work))
-            ts.state = TS_HEADER
-            ts.hdr = ""
-        } else {
-            if (!channel_content_arm(ts, work, cp)) {
-                return
+                if (!channel_content_arm(ts, d, pos, cp)) {
+                    return
+                }
             }
         }
     }
@@ -1095,27 +1111,27 @@ def private think_feed_channel(var ts : ThinkStream; var work : string; var rp, 
 // TS_CONTENT (channel mode): content runs to the NEXT header, so post-final framing re-enters the
 // grammar instead of streaming raw — the finish parser segments on the same "<|start|>" needle.
 // False = the tail is held back, stop feeding.
-def private channel_content_arm(var ts : ThinkStream; var work : string&; var cp : array<string>) : bool {
-    let fs = find(work, "<|start|>")
-    let fc = find(work, HARMONY_CH)
+def private channel_content_arm(var ts : ThinkStream; d : array<uint8> const#; var pos : int&; var cp : array<string>) : bool {
+    let n = length(d)
+    let fs = find(d, "<|start|>", pos)
+    let fc = find(d, HARMONY_CH, pos)
     var f = fs
     if (fc >= 0 && (f < 0 || fc < f)) {
         f = fc
     }
     if (f < 0) {
-        let h = max(tail_prefix_len(work, "<|start|>"), tail_prefix_len(work, HARMONY_CH))
-        let n = length(work)
-        cp |> push(slice(work, 0, n - h))
-        ts.hold = slice(work, n - h, n)
+        let h = max(tail_prefix_len(d, pos, "<|start|>"), tail_prefix_len(d, pos, HARMONY_CH))
+        cp |> push(slice(d, pos, n - h))
+        ts.hold = slice(d, n - h, n)
         return false
     }
-    cp |> push(slice(work, 0, f))
+    cp |> push(slice(d, pos, f))
     if (f == fc) {
-        work = slice(work, f + length(HARMONY_CH), length(work))
+        pos = f + length(HARMONY_CH)
         ts.state = TS_HEADER
         ts.hdr = ""
     } else {
-        work = slice(work, f + length("<|start|>"), length(work))
+        pos = f + length("<|start|>")
         ts.state = TS_BETWEEN   // the role token is framing glue up to the next <|channel|>
     }
     return true

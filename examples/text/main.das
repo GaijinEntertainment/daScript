@@ -1097,8 +1097,7 @@ def private dispatch_commands() {
             g_bindings_editor.open = true
         } elif (starts_with(invocation.command_id, "create.") && active >= 0
                 && g_documents[active].editing) {
-            let creatable = slice(invocation.command_id, 7,
-                length(invocation.command_id))
+            let creatable = slice(invocation.command_id, 7)  // nolint:PERF031 - command_take refills invocation each pass, so this slices one fresh id
             var inscope ctx <- creation_context(g_documents[active].edit)
             // (rich-mode hosts add RichDocument-derived ctx.tags here)
             if (!creation_execute(g_documents[active].edit, creatable, ctx)) {

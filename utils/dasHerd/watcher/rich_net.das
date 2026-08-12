@@ -138,7 +138,7 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def override onMessage(message : string#) { // nolint:STYLE037,STYLE038
+    def override onMessage(message : string#) { // nolint:STYLE037,STYLE038 — message pump: a flat arm per envelope kind, all writing the same client state
         message_count++
         var envelope : WatcherEnvelope
         let body = string(message)
@@ -363,8 +363,7 @@ class WatcherRichClient : HvWebSocketClient {
                                         line_end--
                                     }
                                     if (line_end > start) {
-                                        g_worktree_files |> push(slice(
-                                            incoming.listing, start, line_end))
+                                        g_worktree_files |> push(slice(bytes, start, line_end))
                                     }
                                     start = index + 1
                                 }

@@ -6,8 +6,8 @@ require run   // the suite runner's own helper — bare same-dir require; run.da
 require daslib/fio
 
 // The runner's log scraper, model-free: log_summary walks a dastest log line by line and keeps the
-// LAST NEWLINE-TERMINATED line carrying " tests, ". An unterminated final line (a run killed
-// mid-print) is therefore invisible to it — the rows below pin that, carrying RESWEEP markers.
+// LAST line carrying " tests, ". End-of-file closes a line just like a newline does, so a run
+// killed mid-print still reports the summary it managed to write.
 
 // Per-process temp directory, created on first use and removed by [finalize] — writing fixtures
 // into the worktree would leave untracked state, and a shared path races parallel dastest runs.
@@ -59,14 +59,14 @@ def test_log_summary_terminated(t : T?) {
 
 [test]
 def test_log_summary_unterminated(t : T?) {
-    t |> run("an UNTERMINATED final line does NOT match - the per-line walk needs its newline") @(t : T?) {
-        // a run killed mid-print leaves no trailing newline, so that line never closes
+    t |> run("an UNTERMINATED final line matches - end of file closes it") @(t : T?) {
+        // a run killed mid-print leaves no trailing newline, and that line is the one worth having
         let p = write_log("unterminated.log", "=== RUN 'arm12'\n9 tests, 8 passed, 1 failed")
-        t |> equal(log_summary(p), "")   // RESWEEP: v1 widened this — re-sweep decides consciously
+        t |> equal(log_summary(p), "9 tests, 8 passed, 1 failed")
     }
-    t |> run("an unterminated single-line log does not match either") @(t : T?) {
+    t |> run("an unterminated single-line log matches too") @(t : T?) {
         let p = write_log("unterminated_only.log", "4 tests, 4 passed")
-        t |> equal(log_summary(p), "")   // RESWEEP: v1 widened this — re-sweep decides consciously
+        t |> equal(log_summary(p), "4 tests, 4 passed")
     }
 }
 
@@ -77,9 +77,9 @@ def test_log_summary_last_wins(t : T?) {
                           "1 tests, 1 passed, 0 failed\nnoise between\n2 tests, 0 passed, 2 failed\nSUCCESS!\n")
         t |> equal(log_summary(p), "2 tests, 0 passed, 2 failed")
     }
-    t |> run("of three, the last TERMINATED one wins - the unterminated third is skipped") @(t : T?) {
+    t |> run("of three, the last one wins even though no newline terminates it") @(t : T?) {
         let p = write_log("three.log", "1 tests, a\n2 tests, b\n3 tests, c")
-        t |> equal(log_summary(p), "2 tests, b")   // RESWEEP: v1 widened this — re-sweep decides consciously
+        t |> equal(log_summary(p), "3 tests, c")
     }
 }
 
@@ -90,9 +90,9 @@ def test_log_summary_marker_twice(t : T?) {
         let p = write_log("twice.log", "before\n5 tests, ran 5 tests, all passed\nafter\n")
         t |> equal(log_summary(p), "5 tests, ran 5 tests, all passed")
     }
-    t |> run("a doubled marker on an unterminated LAST line is invisible, doubled or not") @(t : T?) {
+    t |> run("a doubled marker on an unterminated LAST line still yields that one line") @(t : T?) {
         let p = write_log("twice_unterminated.log", "before\n5 tests, ran 5 tests, all passed")
-        t |> equal(log_summary(p), "")   // RESWEEP: v1 widened this — re-sweep decides consciously
+        t |> equal(log_summary(p), "5 tests, ran 5 tests, all passed")
     }
 }
 

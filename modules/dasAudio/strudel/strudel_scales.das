@@ -10,7 +10,6 @@ require strudel/strudel_event
 require strudel/strudel_time
 require strudel/strudel_pattern
 require strudel/strudel_mini
-require math
 require strings
 
 // ─── Scale Interval Tables ───
@@ -93,13 +92,7 @@ def private parse_scale_root(root_str : string) : int {
 // Normalize scale type: replace ":" with "_" so "minor:pentatonic" matches "minor_pentatonic".
 // This lets users write "C4:minor:pentatonic" matching mini-notation syntax.
 def private normalize_scale_type(raw : string) : string {
-    var result = raw
-    while (true) {
-        let pos = find(result, ":")
-        if (pos < 0) break
-        result = slice(result, 0, pos) + "_" + slice(result, pos + 1)
-    }
-    return result
+    return replace(raw, ":", "_")
 }
 
 // Parse a scale definition string "Root:Type" or "Root:Mod:Type" → (root_midi, scale_type).

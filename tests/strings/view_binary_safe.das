@@ -132,6 +132,19 @@ def test_nul_strip_and_trim(t : T?) {
 }
 
 [test]
+def test_nul_skip_white_space(t : T?) {
+    // a NUL is content, so the cursor stops on it from either surface
+    var inscope lead <- with_nul(" ", " a")
+    t |> equal(skip_white_space(lead, 0), 1, "the view cursor stops at the NUL")
+    t |> equal(skip_white_space(string(lead), 0), 1, "and so does the string twin, at its truncated length")
+    // past the NUL the surfaces MUST diverge: the view still carries the tail, the string does not
+    t |> equal(skip_white_space(lead, 2), 3, "the view crosses the whitespace after the NUL")
+    t |> equal(skip_white_space(string(lead), 2), 1, "the string twin clamps to the length the NUL leaves it")
+    t |> equal(length(lead), 4, "the view length counts every byte")
+    t |> equal(length(string(lead)), 1, "while the materialized string reads truncated")
+}
+
+[test]
 def test_nul_parse_cursor(t : T?) {
     var inscope d <- with_nul("1", " 42")
     var cr = ConversionResult.ok

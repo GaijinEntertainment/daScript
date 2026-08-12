@@ -42,6 +42,7 @@ namespace das {
     DAS_API char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at );
     DAS_API char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at );
     DAS_API char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at );
+    DAS_API int builtin_string_skip_white_space ( const char * str, int from, Context * context );
     DAS_API int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context );
     DAS_API int builtin_string_find2 (const char *str, const char *substr);
     DAS_API int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context );
@@ -109,6 +110,7 @@ namespace das {
     DAS_API char* builtin_view_strip ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
     DAS_API char* builtin_view_strip_left ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
     DAS_API char* builtin_view_strip_right ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
+    DAS_API int builtin_view_skip_white_space ( const TArray<uint8_t> & bytes, int from, Context * context, LineInfoArg * at );
     DAS_API int builtin_view_find ( const TArray<uint8_t> & bytes, const char * substr, Context * context, LineInfoArg * at );
     DAS_API int builtin_view_find_from ( const TArray<uint8_t> & bytes, const char * substr, int start, Context * context, LineInfoArg * at );
     DAS_API int builtin_view_find_char_of ( const TArray<uint8_t> & bytes, int Ch, Context * context, LineInfoArg * at );

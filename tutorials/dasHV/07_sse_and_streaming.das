@@ -250,11 +250,12 @@ def parse_sse_events(body : string) : array<SseEvent> {
                     current_data = ""
                 }
             } else {
-                let line = slice(body, pos, eol)
-                if (starts_with(line, "event: ")) {
-                    current_event = slice(line, 7)
-                } elif (starts_with(line, "data: ")) {
-                    current_data = slice(line, 6)
+                // the view carries its length, so the line is read in place -
+                // only the field value is materialized
+                if (starts_with(bytes, pos, "event: ")) {
+                    current_event = slice(bytes, pos + 7, eol)
+                } elif (starts_with(bytes, pos, "data: ")) {
+                    current_data = slice(bytes, pos + 6, eol)
                 }
             }
             pos = eol + 1

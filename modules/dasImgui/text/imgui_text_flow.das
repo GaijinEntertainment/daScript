@@ -150,10 +150,10 @@ def private starts_ascii_ci(bytes : array<uint8> const#; at : int; value : strin
         for (i in range(length(expected))) {
             var a = int(bytes[at + i])
             var b = int(expected[i])
-            if (a >= 'A' && a <= 'Z') { // nolint:PERF014
+            if (a >= 'A' && a <= 'Z') {
                 a += 32
             }
-            if (b >= 'A' && b <= 'Z') { // nolint:PERF014
+            if (b >= 'A' && b <= 'Z') {
                 b += 32
             }
             if (a != b) {
@@ -230,7 +230,7 @@ def public text_uris(text : string) : array<TextUri> {
                     let slash_form = (colon + 2 < length(bytes)
                         && int(bytes[colon + 1]) == '/'
                         && int(bytes[colon + 2]) == '/')
-                    if (slash_form || known_uri_scheme(slice(text, at, colon))) {
+                    if (slash_form || known_uri_scheme(slice(bytes, at, colon))) {
                         body = slash_form ? colon + 3 : colon + 1
                     }
                 }
@@ -533,12 +533,12 @@ def private uri_break_after(cp : int) : bool {
         || cp == '%')
 }
 
-def private make_units(source : string; spans : array<TextFlowSpan> const;
-                       line_height : float;
-                       measure : block<(text : string; start_byte : int;
-                         end_byte : int; style_id : int) : float>) : array<TextFlowUnit> {
-    var units : array<TextFlowUnit>
-    let source_len = length(source)
+def private push_span_units(var units : array<TextFlowUnit>; source : string;
+                            bytes : array<uint8> const implicit;
+                            spans : array<TextFlowSpan> const; line_height : float;
+                            measure : block<(text : string; start_byte : int;
+                              end_byte : int; style_id : int) : float>) {
+    let source_len = length(bytes)
     units |> reserve(source_len + length(spans) * 2)
     for (span in spans) {
         let a = clamp(span.source.start_byte, 0, source_len)
@@ -558,7 +558,7 @@ def private make_units(source : string; spans : array<TextFlowSpan> const;
                 control_kind = span.leading_control_kind,
                 is_control = true))
         }
-        let span_text = slice(source, a, b)
+        let span_text = slice(bytes, a, b)
         var graphemes <- text_graphemes(span_text)
         for (g in graphemes) {
             let ga = a + g.source.start_byte
@@ -591,6 +591,22 @@ def private make_units(source : string; spans : array<TextFlowSpan> const;
                 control_id = span.trailing_control_id,
                 control_kind = span.trailing_control_kind,
                 is_control = true))
+        }
+    }
+}
+
+def private make_units(source : string; spans : array<TextFlowSpan> const;
+                       line_height : float;
+                       measure : block<(text : string; start_byte : int;
+                         end_byte : int; style_id : int) : float>) : array<TextFlowUnit> {
+    var units : array<TextFlowUnit>
+    if (empty(source)) {
+        // peek_data never invokes its block on an empty view, and control-only spans still emit units
+        let no_bytes : array<uint8>
+        push_span_units(units, source, no_bytes, spans, line_height, measure)
+    } else {
+        peek_data(source) $(bytes) {
+            push_span_units(units, source, bytes, spans, line_height, measure)
         }
     }
     return <- units

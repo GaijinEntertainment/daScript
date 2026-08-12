@@ -17,16 +17,18 @@ def private stream_split(tmpl : ChatTemplate; reply : string; chunk : int) : Thi
     var ts = make_think_stream_(tmpl, true)
     var rp : array<string>
     var cp : array<string>
-    var pos = 0
-    let n = length(reply)
-    while (pos < n) {
-        let e = min(pos + chunk, n)
-        var r = ""
-        var c = ""
-        think_feed_(ts, slice(reply, pos, e), r, c)
-        rp |> push(r)
-        cp |> push(c)
-        pos = e
+    peek_data(reply) $(d) {
+        var pos = 0
+        let n = length(d)
+        while (pos < n) {
+            let e = min(pos + chunk, n)
+            var r = ""
+            var c = ""
+            think_feed_(ts, slice(d, pos, e), r, c)
+            rp |> push(r)
+            cp |> push(c)
+            pos = e
+        }
     }
     var rt = ""
     var ct = ""

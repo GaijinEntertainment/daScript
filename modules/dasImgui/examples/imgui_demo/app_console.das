@@ -153,23 +153,25 @@ def private text_edit_callback(var data : ImGuiInputTextCallbackData) : int {
             // Multiple matches — extend by the longest common prefix (case-insensitive), then list all.
             var match_len = plen
             var growing = true
-            while (growing) {
-                if (match_len >= length(candidates[0])) {
-                    growing = false
-                } else {
-                    let target = to_upper(slice(candidates[0], match_len, match_len + 1))
-                    for (cand in candidates) {
-                        if (match_len >= length(cand)) {
-                            growing = false
-                            break
+            peek_data(candidates[0]) $(first_bytes) {
+                while (growing) {
+                    if (match_len >= length(first_bytes)) {
+                        growing = false
+                    } else {
+                        let target = to_upper(slice(first_bytes, match_len, match_len + 1))
+                        for (cand in candidates) {
+                            if (match_len >= length(cand)) {
+                                growing = false
+                                break
+                            }
+                            if (to_upper(slice(cand, match_len, match_len + 1)) != target) {
+                                growing = false
+                                break
+                            }
                         }
-                        if (to_upper(slice(cand, match_len, match_len + 1)) != target) {
-                            growing = false
-                            break
+                        if (growing) {
+                            match_len++
                         }
-                    }
-                    if (growing) {
-                        match_len++
                     }
                 }
             }

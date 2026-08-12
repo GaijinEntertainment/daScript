@@ -149,11 +149,7 @@ def normalize_origin(origin : string) : string {
     //! the host half would carry the `/` and then never equal a Host header, so
     //! every page artifact 404s with nothing explaining why. Normalize once,
     //! here, rather than teaching each consumer to tolerate both spellings.
-    var s = origin
-    while (!empty(s) && (s |> ends_with("/"))) {
-        s = slice(s, 0, length(s) - 1)
-    }
-    return s
+    return rtrim(origin, "/")
 }
 
 def load_config(var cfg : ServerArgs; var sources : table<string; string>; var error : string&) : bool {

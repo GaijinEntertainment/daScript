@@ -108,7 +108,7 @@ def public find_flag_raw_value(args : array<string>; flag_name : string) : Optio
                 result = some(args[i + 1])
             }
         } elif (starts_with(args[i], prefix)) {
-            result = some(slice(args[i], length(prefix)))
+            result = some(slice(args[i], length(prefix)))   // nolint:PERF031 - a distinct argv element per iteration, sliced at most once
         }
     }
     return result

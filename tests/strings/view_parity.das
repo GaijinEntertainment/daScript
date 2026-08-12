@@ -119,9 +119,9 @@ def private check_slice(t : T?; name : string; d : array<uint8>) {
     let s = string(d)
     var inscope idx <- idx_lattice(length(d))
     for (a in idx) {
-        t |> equal(slice(d, a), slice(s, a), "slice({name},{a})")
+        t |> equal(slice(d, a), slice(s, a), "slice({name},{a})")  // nolint:PERF031 - the parity oracle calls the string counterpart per iteration by design
         for (b in idx) {
-            t |> equal(slice(d, a, b), slice(s, a, b), "slice({name},{a},{b})")
+            t |> equal(slice(d, a, b), slice(s, a, b), "slice({name},{a},{b})")  // nolint:PERF031 - the parity oracle calls the string counterpart per iteration by design
         }
     }
 }
@@ -133,7 +133,7 @@ def private check_chop(t : T?; name : string; d : array<uint8>) {
     var inscope lens <- [-1, 0, 1, 3, n, n + 1, 100]
     for (a in idx) {
         for (l in lens) {
-            t |> equal(chop(d, a, l), chop(s, a, l), "chop({name},{a},{l})")
+            t |> equal(chop(d, a, l), chop(s, a, l), "chop({name},{a},{l})")  // nolint:PERF031 - the parity oracle calls the string counterpart per iteration by design
         }
     }
 }
@@ -209,6 +209,14 @@ def private check_strip_trim(t : T?; name : string; d : array<uint8>) {
     }
 }
 
+def private check_skip_white_space(t : T?; name : string; d : array<uint8>) {
+    let s = string(d)
+    var inscope offs <- idx_lattice(length(d))
+    for (off in offs) {
+        t |> equal(skip_white_space(d, off), skip_white_space(s, off), "skip_white_space({name},{off})")
+    }
+}
+
 // write_string has no string counterpart to compare against; its oracle is slice, which the
 // checks above have already tied to the string surface
 def private check_write(t : T?; name : string; d : array<uint8>) {
@@ -266,6 +274,14 @@ def test_parity_strip_and_trim(t : T?) {
     var inscope cases <- text_cases()
     for (c in cases) {
         check_strip_trim(t, c.name, c.bytes)
+    }
+}
+
+[test]
+def test_parity_skip_white_space(t : T?) {
+    var inscope cases <- text_cases()
+    for (c in cases) {
+        check_skip_white_space(t, c.name, c.bytes)
     }
 }
 

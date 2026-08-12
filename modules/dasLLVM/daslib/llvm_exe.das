@@ -711,7 +711,7 @@ def private find_enclosing_das_package(start_dir : string) : string {
         if (fexist("{dir}/.das_package")) return dir
         let last_slash = rfind(dir, "/")
         if (last_slash <= 0) return ""
-        dir = slice(dir, 0, last_slash)
+        dir = slice(dir, 0, last_slash)  // nolint:PERF031 - dir shrinks one level per pass, and the walk is bounded + stats per level
     }
     return ""
 }

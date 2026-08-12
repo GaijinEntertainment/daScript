@@ -483,7 +483,7 @@ def document_module_strings(_root : string) {
         group_by_regex("Character set", mod, %regex~(set_total|set_element|is_char_in_set)$%%),
         group_by_regex("Character groups", mod, %regex~is.+%%),
         group_by_regex("Character by index", mod, %regex~(character_at|character_uat|first_character)$%%),
-        group_by_regex("String properties", mod, %regex~(empty|ends_with|length|starts_with)$%%),
+        group_by_regex("String properties", mod, %regex~(empty|ends_with|length|starts_with|skip_white_space)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string|write_string|build_hash)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(append|resize|with_das_string)$%%),
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|

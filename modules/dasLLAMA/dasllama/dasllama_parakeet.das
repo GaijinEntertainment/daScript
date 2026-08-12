@@ -1714,8 +1714,14 @@ def parakeet_detokenize(m : ParakeetModel; toks : array<ParakeetToken> | #) : st
         }
         var s = replace(piece, "▁", " ")   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
         if (idx == 0) {   // first piece: strip the leading spaces the ▁ prefix produced
-            while (starts_with(s, " ")) {
-                s = slice(s, 1, length(s))
+            var lead = 0
+            peek_data(s) $(d) {
+                while (starts_with(d, lead, " ")) {
+                    lead++
+                }
+            }
+            if (lead > 0) {
+                s = slice(s, lead)
             }
         }
         segs |> push(s)

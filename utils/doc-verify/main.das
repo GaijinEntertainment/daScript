@@ -270,15 +270,31 @@ def is_ident_char(c : int) : bool {
     return is_alpha(c) || is_number(c) || c == '_'
 }
 
-def take_ident(s : string) : string {
-    var n = 0
-    peek_data(s) $(arr) {
-        for (c in arr) {
-            break if (!is_ident_char(int(c)))
-            n++
-        }
+// the end the modifier walkers below compare against: a prefix like "private " only counts
+// when its trailing space is real source, not the line's own trailing whitespace
+def trimmed_end(d : array<uint8> const#) : int {
+    var e = length(d)
+    while (e > 0 && is_white_space(int(d[e - 1]))) {
+        e--
     }
-    return slice(s, 0, n)
+    return e
+}
+
+def take_ident(d : array<uint8> const#; from : int) : string {
+    let n = length(d)
+    var e = from
+    while (e < n && is_ident_char(int(d[e]))) {
+        e++
+    }
+    return slice(d, from, e)
+}
+
+def take_ident(s : string) : string {
+    var out = ""
+    peek_data(s) $(arr) {
+        out = take_ident(arr, 0)
+    }
+    return out
 }
 
 let TYPE_KEYWORDS = ["class ", "struct ", "enum ", "variant ", "bitfield ", "tuple ", "typedef "]
@@ -291,25 +307,30 @@ def type_decl_name(line : string) : string {
 
 def type_decl_name_mods(line : string; var mods : string&) : string {
     mods = ""
-    for (kw in TYPE_KEYWORDS) {
-        continue if (!(line |> starts_with(kw)))
-        var rest = trim(slice(line, length(kw)))
-        var again = true
-        var mod_list : array<string>
-        while (again) {
-            again = false
-            for (m in TYPE_MODIFIERS) {
-                if (rest |> starts_with(m)) {
-                    mod_list |> push(m)
-                    rest = trim(slice(rest, length(m)))
-                    again = true
+    var name = ""
+    peek_data(line) $(d) {
+        let stop = trimmed_end(d)
+        for (kw in TYPE_KEYWORDS) {
+            continue if (!starts_with(d, kw))
+            var pos = skip_white_space(d, length(kw))
+            var again = true
+            var mod_list : array<string>
+            while (again) {
+                again = false
+                for (m in TYPE_MODIFIERS) {
+                    if (pos + length(m) <= stop && starts_with(d, pos, m)) {
+                        mod_list |> push(m)
+                        pos = skip_white_space(d, pos + length(m))
+                        again = true
+                    }
                 }
             }
+            mods = join(mod_list, "")
+            name = take_ident(d, pos)
+            break
         }
-        mods = join(mod_list, "")
-        return take_ident(rest)
     }
-    return ""
+    return name
 }
 
 // a def with an untyped parameter segment is a GENERIC — contract annotations then
@@ -328,13 +349,17 @@ def def_is_generic(line : string) : bool {
 // the def name for duplicate-header renaming; "" for operators and non-def lines
 def def_decl_name(line : string) : string {
     return "" if (!(line |> starts_with("def ")))
-    var rest = trim(slice(line, length("def ")))
-    for (m in ["private ", "public ", "static ", "abstract ", "const "]) {
-        if (rest |> starts_with(m)) {
-            rest = trim(slice(rest, length(m)))
+    var name = ""
+    peek_data(line) $(d) {
+        let stop = trimmed_end(d)
+        var pos = skip_white_space(d, length("def "))
+        for (m in ["private ", "public ", "static ", "abstract ", "const "]) {
+            if (pos + length(m) <= stop && starts_with(d, pos, m)) {
+                pos = skip_white_space(d, pos + length(m))
+            }
         }
+        name = take_ident(d, pos)
     }
-    let name = take_ident(rest)
     return name == "operator" ? "" : name
 }
 
@@ -360,17 +385,22 @@ def var_decl_names(line : string) : array<string> {
     var t = trim(line)
     var names : array<string>
     if ((t |> starts_with("var ")) || (t |> starts_with("let "))) {
-        t = trim(slice(t, 4))
-        var again = true
-        while (again) {
-            again = false
-            for (m in ["inscope ", "private ", "shared ", "public "]) {
-                if (t |> starts_with(m)) {
-                    t = trim(slice(t, length(m)))
-                    again = true
+        var pos = 0
+        peek_data(t) $(d) {
+            pos = skip_white_space(d, 4)
+            var again = true
+            while (again) {
+                again = false
+                for (m in ["inscope ", "private ", "shared ", "public "]) {
+                    if (starts_with(d, pos, m)) {
+                        pos = skip_white_space(d, pos + length(m))
+                        again = true
+                    }
                 }
             }
         }
+        // `t` came in trimmed, so the cursor above already consumed every leading space
+        t = slice(t, pos)
     } elif ((t |> starts_with("for (")) || (t |> starts_with("for("))) {
         let open = find(t, '(')
         let in_pos = find(t, " in ")
@@ -457,15 +487,15 @@ def replace_ident(line : string; base : string; alias_name : string) : string {
         out = build_string() $(var writer) {
             var start = 0
             while (true) {
-                let pos = find(line, base, start)
+                let pos = find(arr, base, start)
                 if (pos < 0) {
-                    writer |> write(slice(line, start))
+                    writer |> write_string(arr, start, length(arr))
                     break
                 }
                 let before_ok = pos == 0 || (!is_ident_char(int(arr[pos - 1])) && int(arr[pos - 1]) != '.')
                 let after_pos = pos + blen
                 let after_ok = after_pos >= length(arr) || !is_ident_char(int(arr[after_pos]))
-                writer |> write(slice(line, start, pos))
+                writer |> write_string(arr, start, pos)
                 writer |> write((before_ok && after_ok && !in_str[pos]) ? alias_name : base)
                 start = after_pos
             }

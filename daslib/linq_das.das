@@ -117,7 +117,7 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
             // A clause keyword is a depth-0 whole word NOT preceded (ignoring whitespace) by `.` (member access) or by a `>` that is the tail of a pipe `|>` / lambda arrow `=>` / `->` — so an aggregate like `g |> select(...) |> sum` inside an orderby/where body is not mistaken for a `select` clause. A `>` from a type/generic bracket (`default<int>`, `type<Foo>`) or comparison is NOT excluded, so a clause keyword that legitimately follows one (e.g. `let d = default<int> select …`) still matches.
             let afterPipeTail = prevSig == '>' && (prevSig2 == '|' || prevSig2 == '=' || prevSig2 == '-')
             let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.' && !afterPipeTail
-            if (depth == 0 && atWordStart && i + m <= n && slice(q, i, i + m) == kw) {
+            if (depth == 0 && atWordStart && i + m <= n && starts_with(arr, i, kw)) {
                 if (i + m == n || !is_ident_byte(int(arr[i + m]))) {
                     found = i
                 }
@@ -152,12 +152,12 @@ def private split_depth0(text : string) : array<string> {
             if (c == '(' || c == '[' || c == '{') { depth++; i++; continue }
             if (c == ')' || c == ']' || c == '}') { depth--; i++; continue }
             if (depth == 0 && c == ',') {
-                segs |> push(strip(slice(text, segStart, i)))
+                segs |> push(strip(slice(arr, segStart, i)))
                 segStart = i + 1
             }
             i++
         }
-        segs |> push(strip(slice(text, segStart, n)))
+        segs |> push(strip(slice(arr, segStart, n)))
     }
     return <- segs
 }
@@ -353,7 +353,7 @@ def private mentions_ident(text : string; name : string) : bool {
                 continue
             }
             let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.'
-            if (atWordStart && i + m <= n && slice(text, i, i + m) == name
+            if (atWordStart && i + m <= n && starts_with(arr, i, name)
                     && (i + m == n || !is_ident_byte(int(arr[i + m])))) {
                 found = true
             }
@@ -449,27 +449,32 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     var postWheres : array<string>
     var firstPostWhere = -1
     var wp = firstWhere
-    while (wp >= 0 && wp < termPos) {
-        let wEnd = next_clause_kw(q, wp + 5)
-        let predText = strip(slice(q, wp + 5, wEnd))
-        if (predText == "") {
-            macro_error(prog, at, "linq: empty 'where' predicate")
-            return "(0)"
-        }
-        if (wp < secondIntroPos) {
-            preWheres |> push(predText)
-        } elif (wp < tailStart) {
-            if (isJoin) {
-                macro_error(prog, at, "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')")
-            } else {
-                macro_error(prog, at, "linq: 'where' cannot appear between the second range variable and 'in'")
+    var whereErr = ""
+    peek_data(q) $(qd) {
+        while (wp >= 0 && wp < termPos) {
+            let wEnd = next_clause_kw(q, wp + 5)
+            let predText = strip(slice(qd, wp + 5, wEnd))
+            if (predText == "") {
+                whereErr = "linq: empty 'where' predicate"
+                return
             }
-            return "(0)"
-        } else {
-            if (firstPostWhere < 0) { firstPostWhere = wp }
-            postWheres |> push(predText)
+            if (wp < secondIntroPos) {
+                preWheres |> push(predText)
+            } elif (wp < tailStart) {
+                whereErr = (isJoin
+                    ? "linq: 'where' cannot appear inside the join clause (between 'join' and 'equals')"
+                    : "linq: 'where' cannot appear between the second range variable and 'in'")
+                return
+            } else {
+                if (firstPostWhere < 0) { firstPostWhere = wp }
+                postWheres |> push(predText)
+            }
+            wp = find_kw_depth0(q, "where", wEnd)
         }
-        wp = find_kw_depth0(q, "where", wEnd)
+    }
+    if (whereErr != "") {
+        macro_error(prog, at, whereErr)
+        return "(0)"
     }
     let hasPostWhere = !empty(postWheres)
     if (groupInto && hasPostWhere) {
@@ -744,64 +749,71 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
     let var2j = joinPos >= 0 ? read_ident(q, joinPos + 4)._0 : ""
     let var2f = secondFromPos >= 0 ? read_ident(q, secondFromPos + 4)._0 : ""
     var searchFrom = bodyStart
-    while (true) {
-        let lp = find_kw_depth0(q, "let", searchFrom)
-        if (lp < 0) break
-        let np = read_ident(q, lp + 3)
-        let name = np._0
-        if (name == "") {
-            macro_error(prog, at, "linq: 'let' requires a binding name (e.g. `let n = <expr>`)")
-            return (false, "")
+    // one view for the whole clause walk; the macro_error is raised after it closes
+    var letErr = ""
+    peek_data(q) $(qd) {
+        let nq = length(qd)
+        while (true) {
+            let lp = find_kw_depth0(q, "let", searchFrom)
+            if (lp < 0) return
+            let np = read_ident(q, lp + 3)
+            let name = np._0
+            if (name == "") {
+                letErr = "linq: 'let' requires a binding name (e.g. `let n = <expr>`)"
+                return
+            }
+            if (name == rangeVar || name == var2j || name == var2f) {
+                letErr = "linq: 'let {name}' shadows the range variable '{name}'"
+                return
+            }
+            if (key_exists(subs, name)) {
+                letErr = "linq: 'let {name}' is already bound earlier in the query"
+                return
+            }
+            // Expect a single '=' (not '==') after the binding name.
+            var eq = -1
+            let i = skip_white_space(qd, np._1)
+            if (i < nq && int(qd[i]) == '=' && (i + 1 >= nq || int(qd[i + 1]) != '=')) { eq = i }
+            if (eq < 0) {
+                letErr = "linq: expected '=' after 'let {name}'"
+                return
+            }
+            let rhsStart = eq + 1
+            let rhsEnd = next_clause_kw(q, rhsStart)   // RHS runs to the next clause keyword (or end)
+            var rhs = strip(slice(qd, rhsStart, rhsEnd))
+            if (rhs == "") {
+                letErr = "linq: empty 'let {name}' expression"
+                return
+            }
+            // A `let` with no following clause has nothing to inline into — it would be silently dropped, turning an invalid query (e.g. `… select … let n = …`) into a valid one. Reject it: a `let` must precede the `select`/`group` terminal.
+            if (rhsEnd >= nq) {
+                letErr = "linq: 'let {name}' has no following clause - a 'let' must precede the 'select'/'group' terminal"
+                return
+            }
+            if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }   // chain earlier lets in
+            subs[name] = "({rhs})"
+            cuts |> push((lp, rhsEnd, name))
+            searchFrom = rhsEnd
         }
-        if (name == rangeVar || name == var2j || name == var2f) {
-            macro_error(prog, at, "linq: 'let {name}' shadows the range variable '{name}'")
-            return (false, "")
-        }
-        if (key_exists(subs, name)) {
-            macro_error(prog, at, "linq: 'let {name}' is already bound earlier in the query")
-            return (false, "")
-        }
-        // Expect a single '=' (not '==') after the binding name.
-        var eq = -1
-        peek_data(q) $(arr) {
-            let n2 = length(arr)
-            var i = np._1
-            while (i < n2 && is_white_space(int(arr[i]))) { i++ }
-            if (i < n2 && int(arr[i]) == '=' && (i + 1 >= n2 || int(arr[i + 1]) != '=')) { eq = i }
-        }
-        if (eq < 0) {
-            macro_error(prog, at, "linq: expected '=' after 'let {name}'")
-            return (false, "")
-        }
-        let rhsStart = eq + 1
-        let rhsEnd = next_clause_kw(q, rhsStart)   // RHS runs to the next clause keyword (or end)
-        var rhs = strip(slice(q, rhsStart, rhsEnd))
-        if (rhs == "") {
-            macro_error(prog, at, "linq: empty 'let {name}' expression")
-            return (false, "")
-        }
-        // A `let` with no following clause has nothing to inline into — it would be silently dropped, turning an invalid query (e.g. `… select … let n = …`) into a valid one. Reject it: a `let` must precede the `select`/`group` terminal.
-        if (rhsEnd >= length(q)) {
-            macro_error(prog, at, "linq: 'let {name}' has no following clause - a 'let' must precede the 'select'/'group' terminal")
-            return (false, "")
-        }
-        if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }   // chain earlier lets in
-        subs[name] = "({rhs})"
-        cuts |> push((lp, rhsEnd, name))
-        searchFrom = rhsEnd
+    }
+    if (letErr != "") {
+        macro_error(prog, at, letErr)
+        return (false, "")
     }
     if (empty(subs)) return (true, q)
     // Rebuild: source region (< srcEnd) verbatim; each `let` span dropped (replaced by a space); each clause segment inlined with only the bindings introduced BEFORE it, so a reference preceding a binding stays.
     let body = build_string() $(var w) {
-        var active : table<string; string>
-        var pos = srcEnd
-        for (c in cuts) {
-            w |> write(substitute_idents(slice(q, pos, c._0), active))
-            w |> write(" ")
-            active[c._2] = subs[c._2]
-            pos = c._1
+        peek_data(q) $(qd) {
+            var active : table<string; string>
+            var pos = srcEnd
+            for (c in cuts) {
+                w |> write(substitute_idents(slice(qd, pos, c._0), active))
+                w |> write(" ")
+                active[c._2] = subs[c._2]
+                pos = c._1
+            }
+            w |> write(substitute_idents(slice(qd, pos, length(qd)), active))
         }
-        w |> write(substitute_idents(slice(q, pos, length(q)), active))
     }
     return (true, "{slice(q, 0, srcEnd)}{body}")
 }
@@ -934,15 +946,22 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
     stage.isGroup = isGroup
     // where / orderby belong to THIS stage only when they precede its terminal (in C# clause order).
     var wherePos = find_kw_depth0(q, "where", start)
-    while (wherePos >= 0 && wherePos < termPos) {
-        let predEnd = next_clause_kw(q, wherePos + 5)
-        let predText = strip(slice(q, wherePos + 5, predEnd))
-        if (predText == "") {
-            macro_error(prog, at, "linq: empty 'where' predicate")
-            return false
+    var emptyWhere = false
+    peek_data(q) $(qd) {
+        while (wherePos >= 0 && wherePos < termPos) {
+            let predEnd = next_clause_kw(q, wherePos + 5)
+            let predText = strip(slice(qd, wherePos + 5, predEnd))
+            if (predText == "") {
+                emptyWhere = true
+                return
+            }
+            stage.predicates |> push(isGroupVar ? rewrite_group_var(predText, rangeVar) : predText)
+            wherePos = find_kw_depth0(q, "where", predEnd)
         }
-        stage.predicates |> push(isGroupVar ? rewrite_group_var(predText, rangeVar) : predText)
-        wherePos = find_kw_depth0(q, "where", predEnd)
+    }
+    if (emptyWhere) {
+        macro_error(prog, at, "linq: empty 'where' predicate")
+        return false
     }
     let orderByPos = find_kw_depth0(q, "orderby", start)
     stage.hasOrderBy = orderByPos >= 0 && orderByPos < termPos

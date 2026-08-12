@@ -31,11 +31,9 @@ def private require_token(line : string) : string {
     // Strip `require ` and any trailing ` public`/`private`, return the module path.
     var tok = slice(line, 8, length(line))
     // Drop trailing modifiers.
-    for (suffix in ["public", "private"]) {
-        if (length(tok) > length(suffix) + 1
-                && slice(tok, length(tok) - length(suffix), length(tok)) == suffix
-                && slice(tok, length(tok) - length(suffix) - 1, length(tok) - length(suffix)) == " ") {
-            tok = chop(tok, 0, length(tok) - length(suffix) - 1)
+    for (suffix in [" public", " private"]) {
+        if (length(tok) > length(suffix) && ends_with(tok, suffix)) {
+            tok = chop(tok, 0, length(tok) - length(suffix)) // nolint:PERF031 - one require line, at most two bounded strips
         }
     }
     return tok
