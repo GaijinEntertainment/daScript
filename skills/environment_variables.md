@@ -39,9 +39,9 @@ dasLLVM's knobs — the four `DAS_JIT_*` (force-features pair, `DAS_JIT_PROBE_LT
 `DAS_JIT_DUMP_HASHES`) and the `DAS_TUNE_*` family — are declared as `[EnvConfig]` structs in
 `modules/dasLLVM/daslib/llvm_env.das` and documented in the GENERATED
 `modules/dasLLVM/ENVIRONMENT.md`; that file is the reference, this one just points at it. The
-`[tune]` framework itself is `skills/tune.md`. Loading discipline note worth repeating: the JIT
-knobs load once at context init (`g_env_jit`); the tune knobs are deliberately live-read — the
-tuner's set-then-latch contract — so a harness may `set_env_variable` one before the first read.
+`[tune]` framework itself is `skills/tune.md`. Loading discipline note worth repeating: both
+families load once at context init (`g_env_jit`, `g_env_tune`); `set_env_variable` arms tuner
+CHILDREN, and in-process overrides go through the tune setters (`tune_set_noise_cv` and kin).
 
 `--tune-quiet` / `--tune-verbose` on the application set `DAS_TUNE_VERBOSITY`, and it inherits
 down the whole tuner process chain — the measuring code is two `popen`s below the process the

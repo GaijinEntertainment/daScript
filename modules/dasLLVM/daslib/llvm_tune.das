@@ -1825,22 +1825,16 @@ def private scope_resolved_externally(scopeName : string; manifestPath : string;
         && tune_sidecar_entries_complete(manifestPath, fnames))
 }
 
-var private g_tune_control_read = false
-var private g_tune_control_path = ""
-
     //! True when the file named by `DAS_TUNE_CONTROL` exists — a supervisor's stop request.
     //! Tuners poll at kernel-family boundaries and abort without minting, so the measurement
     //! in flight always completes.
 def tune_interrupt_requested() : bool {
-    if (!g_tune_control_read) {
-        g_tune_control_read = true
-        g_tune_control_path = get_env_variable("DAS_TUNE_CONTROL")
-    }
-    if (empty(g_tune_control_path)) {
+    let p = g_env_tune.tune_control
+    if (empty(p)) {
         return false
     }
     var fs : FStat
-    return stat(g_tune_control_path, fs)
+    return stat(p, fs)
 }
 
     //! Runtime half of `[tune_policy(missing = "restart")]`, injected as a guard at the top of

@@ -69,6 +69,10 @@ struct public TuneEnv {
     @clarg_default_doc = "declared by [tune_policy]"
     @clarg_doc = "Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy."
     tune_policy : string = ""
+
+    @clarg_path
+    @clarg_doc = "A supervisor's stop channel: while the named file exists, tune_interrupt_requested() is true and tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes."
+    tune_control : string = ""
 }
 
 let public g_env_tune = env_config(type<TuneEnv>)

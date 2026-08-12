@@ -36,6 +36,7 @@ Loaded once at context init into `g_env_tune`; tuner children inherit the enviro
 | `DAS_TUNE_NOISE_OVERRIDE` | flag | off | Mint through a refusal at either gate - a failing noise probe or a failing validation verdict. The sidecar is stamped overridden, so the escape always leaves a mark. |
 | `DAS_TUNE_VERBOSITY` | text | normal | What a tune shows: silent, normal, or verbose. Anything unrecognized reads as normal, so a typo never silences a tune. |
 | `DAS_TUNE_POLICY` | text | declared by [tune_policy] | Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy. |
+| `DAS_TUNE_CONTROL` | path | unset | A supervisor's stop channel: while the named file exists, tune_interrupt_requested() is true and tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes. |
 
 ## Ambient variables dasLLVM reads but does not own
 
