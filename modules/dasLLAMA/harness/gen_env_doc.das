@@ -7,21 +7,10 @@ options gen2
 //   daslang modules/dasLLAMA/harness/gen_env_doc.das
 
 require dasllama/dasllama_env
-require daslib/fio
 
 let OUT_PATH = "modules/dasLLAMA/ENVIRONMENT.md"
 
 [export]
 def main : int {
-    let body = env_markdown()
-    let path = "{get_das_root()}/{OUT_PATH}"
-    var f = fopen(path, "wb")
-    if (f == null) {
-        to_log(LOG_ERROR, "gen_env_doc: cannot write {path}\n")
-        return 1
-    }
-    fwrite(f, body)
-    fclose(f)
-    to_log(LOG_INFO, "gen_env_doc: wrote {OUT_PATH} ({long_length(body)} bytes)\n")
-    return 0
+    return save_generated_doc("{get_das_root()}/{OUT_PATH}", env_markdown()) ? 0 : 1
 }

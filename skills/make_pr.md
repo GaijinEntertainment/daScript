@@ -45,6 +45,11 @@ under the self-review rule) and merge the reports. Registry caveat: agent defini
 snapshot at session start, so a just-pulled or just-edited definition only exists in the
 next session.
 
+When the change warrants a full review round (non-trivial arcs), the round itself —
+grounding, change-derived risk dimensions, parallel surfacers, the falsification-gate
+prover — is `skills/review_round.md`; the auditor instances above run as part of its
+surfacing phase, and this step's discovered set feeds its grounding.
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:

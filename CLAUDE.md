@@ -101,6 +101,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
+| `skills/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") — grounding → change-derived risk dimensions → parallel surfacers + CODEREVIEW auditors → falsification-gate prover → report-then-fix |
 | `skills/codereview_md.md` | Creating or editing any module `CODEREVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection |
 | `skills/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
 | `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |

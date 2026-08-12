@@ -8,6 +8,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include <cstdarg>
+#include <cstdio>
 #include <stdexcept>
 #include <type_traits>
 
@@ -149,6 +150,10 @@ namespace das {
         }
     }
 
+    void AstSerializer::onReadFailure () {
+        throw dasException{"ast serializer read overflow", LineInfo()};
+    }
+
     void AstSerializer::serialize ( void * data, size_t size ) {
         if ( writing ) {
             write(data,size);
@@ -213,6 +218,18 @@ namespace das {
                 size = sz;
             }
         }
+    }
+
+    // a stream-backed length can never exceed the bytes left (every element costs at
+    // least one byte) - a corrupted length must fail HERE, as a recoverable throw,
+    // not as a layout-dependent wild allocation later (SIGSEGV under one allocator,
+    // clean bad_alloc under another - the module-cache corruption CI red). Called at
+    // the sites that ALLOCATE from a deserialized count - not inside the varint codec,
+    // which also carries plain values (line diffs, sourceLength of a file that is not
+    // in the stream) where the invariant does not hold
+    void AstSerializer::verifyLength ( uint64_t size ) {
+        SERIALIZER_VERIFYF(size <= buffer->readRemaining(),
+            "corrupt stream: size %llu exceeds remaining bytes", (unsigned long long)size);
     }
 
     void AstSerializer::serializeAdaptiveSize64 ( uint64_t & size ) {
@@ -291,6 +308,7 @@ namespace das {
         } else {
             uint64_t size = 0;
             serializeAdaptiveSize64(size);
+            verifyLength(size);
             str.resize(size);
             read(&str[0], size);
         }
@@ -312,6 +330,7 @@ namespace das {
         } else {
             uint64_t len = 0;
             serializeAdaptiveSize64(len);
+            verifyLength(len);
             auto data = new char [len + 1]();
             read(static_cast<void*>(data), len);
             data[len] = '\0';
@@ -352,6 +371,7 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
+        verifyLength(size);
         das_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -381,6 +401,7 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
+        verifyLength(size);
         das_insert_only_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -848,6 +869,12 @@ namespace das {
         } else {
             uint64_t curOffset = 0; *this << curOffset;
             if ( readingFileInfoMap[curOffset] == nullptr ) {
+                // a genuine first occurrence reads its payload INLINE, so the recorded
+                // offset must equal the current position; a mismatch is a back-reference
+                // into a SKIPPED record - fail this record (recoverable: resume reparses
+                // it) instead of misparsing a FileInfo from the wrong bytes
+                SERIALIZER_VERIFYF(curOffset == uint64_t(buffer->bufferPos),
+                    "file info back-reference into a skipped record");
                 uint64_t savedOffset = readOffset;
                 readOffset = curOffset;
                 uint8_t tag = 0; *this << tag;
@@ -2491,6 +2518,7 @@ namespace das {
         } else {
             uint64_t size = 0;
             ser.serializeAdaptiveSize64(size);
+            ser.verifyLength(size);
             functions.resize(size);
             for ( auto & f : functions ) ser.serializePointer(f);
         }
@@ -2511,6 +2539,9 @@ namespace das {
         } else {
             uint32_t capacity = 0; ser << capacity;
             uint32_t size = 0; ser << size;
+            // capacity is deliberately NOT length-checked: an over-reserved table's bucket
+            // count can legitimately exceed the bytes left; size is a true element count
+            ser.verifyLength(size);
             functionsByName.reserve(capacity);
             for ( uint32_t i = 0; i < size; i++ ) {
                 uint64_t nameHash = 0; ser << nameHash;
@@ -2817,6 +2848,25 @@ namespace das {
             seenNewModule = true;
             if ( program ) program->failToCompile = true;
         }
+        // per-record scratch must never survive into the next record: a failed or
+        // early-returned record leaves refs whose targets die with it (throwaway root,
+        // `delete deser`), and its same-epoch map entries would make the next record's
+        // patch() resolve those refs INTO FREED MEMORY. The success path cleared the
+        // maps already and patch() cleared the refs - re-clearing is free.
+        blockRefs.clear();
+        functionRefs.clear();
+        variableRefs.clear();
+        structureRefs.clear();
+        enumerationRefs.clear();
+        fieldRefs.clear();
+        smartMakeFieldDeclMap.clear();
+        smartEnumerationMap.clear();
+        smartStructureMap.clear();
+        smartVariableMap.clear();
+        smartFunctionMap.clear();
+        smartMakeStructMap.clear();
+        smartTypeDeclMap.clear();
+        exprBlockMap.clear();
     }
 
     void AstSerializer::serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup ) {
@@ -2836,6 +2886,7 @@ namespace das {
         // Bump epoch so reused pointer addresses across program boundaries
         // get distinct SerializeNodeIds on this persistent serializer.
         ser.epoch++;
+        ser.builtinHashDrift = false;   // per-record flavor bit, read by the resume path
 
         ser << program->thisNamespace << program->thisModuleName;
 
@@ -2847,10 +2898,40 @@ namespace das {
 
         if ( writing ) {
             moduleLibrary = &program->library;  // Module::serialize binds *moduleLibrary (finalizeModule)
-            TopSort ts(program->library.getModules());
-            auto modules = ts.getDependecyOrdered(program->thisModule.get());
+            vector<Module *> modules;
+            uint64_t thisAt = 0;    // program module's position in the LIVE library
+            if ( !program->isDependency ) {
+                // MAIN record: this list becomes the deserialized program's library
+                // insertion order, which drives foreach_in_order - module [init] order at
+                // runtime and the jit's partition/chain order. Write the LIVE library order
+                // (thisModule moved last: forward refs from its body resolve only after its
+                // dependencies' records are read), NOT a re-derived TopSort - any other
+                // valid topological order still reorders [init]s and re-keys every jit obj
+                // partition. The live order also already carries the ambient extra modules
+                // (-jit's just_in_time chain, the profiler) that a reachability walk drops -
+                // their simulate macros (the jit hook) ride the library walk at simulate.
+                // thisAt records where the program module REALLY sits, so the reader can
+                // put it back: raw library order feeds func->index and with it the
+                // cross-module [init] sequence, which must not differ cached vs fresh.
+                auto & lib = program->library.getModules();
+                for ( size_t i = 0; i != lib.size(); ++i ) {
+                    if ( lib[i] == program->thisModule.get() ) thisAt = uint64_t(i);
+                    else modules.push_back(lib[i]);
+                }
+                modules.push_back(program->thisModule.get());
+            } else {
+                // dependency record: the reachable closure only. The full library here would
+                // make the FIRST record mentioning a later module embed its whole payload
+                // early, dragging not-yet-valid state (lazy builtin hashes) into the record.
+                // Dependency programs never run a context, so their record position (last)
+                // doubles as the restore position - no reorder on read.
+                TopSort ts(program->library.getModules());
+                modules = ts.getDependecyOrdered(program->thisModule.get());
+                thisAt = modules.empty() ? 0 : uint64_t(modules.size() - 1);
+            }
 
             uint64_t size = modules.size(); *this << size;
+            *this << thisAt;
 
             for ( auto & m : modules ) {
                 bool builtin = m->builtIn, promoted = m->promoted;
@@ -2871,6 +2952,7 @@ namespace das {
             }
         } else {
             uint64_t size = 0; ser << size;
+            uint64_t thisAt = 0; ser << thisAt;
 
             // parseDaScript runs with the placeholder thisModule's gc root as the
             // thread-active root; library.reset() below deletes that module (and its
@@ -2895,12 +2977,17 @@ namespace das {
 
                 if ( builtin && !promoted ) {
                     auto m = Module::require(name);
+                    // a corrupted record can hand this arm a garbage name - require()
+                    // answers null, and the deref was a SIGSEGV (recoverable throw now;
+                    // the resume reparses the record in place)
+                    SERIALIZER_VERIFYF(m != nullptr, "builtin module '%s' not found", name.c_str());
                     uint64_t savedHash = 0, moduleHash = m->cumulativeHash;
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
                         LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
                                                << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
                     }
@@ -2962,6 +3049,19 @@ namespace das {
             // the deserialized module is the program's module now — new nodes and the
             // ModuleGcFinalize collect belong on its root
             if ( activeWasThisModule ) activeRoot = program->thisModule->module_gc_root.get();
+            // the record serialized the program module LAST (its refs resolve only after
+            // its dependencies), but the LIVE library had it at thisAt - put it back, or
+            // func->index and with it the cross-module [init] order differ cached vs fresh
+            auto & libModules = program->library.getModules();
+            if ( thisAt + 1 < uint64_t(libModules.size()) ) {
+                libModules.pop_back();
+                libModules.insert(libModules.begin() + size_t(thisAt), program->thisModule.get());
+            } else if ( thisAt + 1 > uint64_t(libModules.size()) ) {
+                LOG(LogLevel::warning) << "das: serialize: program module index " << thisAt
+                    << " out of range (" << libModules.size() << " modules)\n";
+                program->failToCompile = true;
+                return;
+            }
         }
 
         // drop ref_counts
@@ -3156,6 +3256,100 @@ namespace das {
         removeUnusedSymbols();
         TextWriter logs;
         allocateStack(logs,true,false);
+    }
+
+    void ModuleFileCache::install ( const string & readFrom, const string & writeTo ) {
+        requested = !readFrom.empty() || !writeTo.empty();
+#if !DAS_NO_FILEIO
+        writePath = writeTo;
+        auto & env = *daScriptEnvironment::getBound();
+        if ( !readFrom.empty() ) {
+            if ( FILE * f = fopen(readFrom.c_str(), "rb") ) {
+                // 64-bit tell: plain ftell returns long (32-bit on Windows), where an
+                // oversized cache would read back negative and silently count as absent
+#ifdef _MSC_VER
+                int64_t size = (fseek(f, 0, SEEK_END) == 0) ? _ftelli64(f) : -1;
+#else
+                int64_t size = (fseek(f, 0, SEEK_END) == 0) ? int64_t(ftello(f)) : -1;
+#endif
+                if ( size > 0 && fseek(f, 0, SEEK_SET) == 0 ) {
+                    readStorage.buffer.resize(size_t(size));
+                    if ( fread(readStorage.buffer.data(), 1, size_t(size), f) != size_t(size) ) {
+                        readStorage.buffer.clear();     // short read - treat as no cache
+                    }
+                }
+                fclose(f);
+            }
+            if ( !readStorage.buffer.empty() ) {
+                reader = make_unique<AstSerializer>(&readStorage, false);
+                env.serializer_read = reader.get();
+            }
+        }
+        if ( !writePath.empty() ) {
+            writer = make_unique<AstSerializer>(&writeStorage, true);
+            env.serializer_write = writer.get();
+        }
+#endif
+    }
+
+    ModuleFileCache::Result ModuleFileCache::finish () {
+        Result res;
+#if DAS_NO_FILEIO
+        // no filesystem on this target: install() bound nothing and the compile parsed
+        // from source - answer 'unavailable' rather than a silent 'none'
+        if ( requested ) res.verdict = ReadVerdict::unavailable;
+#else
+        auto & env = *daScriptEnvironment::getBound();
+        // the debugger path (disableSerializationOnDebugger) may have cleared these
+        // mid-compile; clearing again is harmless, leaving them dangling is not
+        env.serializer_read = nullptr;
+        env.serializer_write = nullptr;
+        if ( reader ) {
+            if ( !reader->checkedStreamHeader ) {
+                res.verdict = ReadVerdict::none;    // nothing was ever read (rail disabled mid-compile)
+            } else if ( reader->failed || reader->seenNewModule ) {
+                res.verdict = ReadVerdict::fallback;
+            } else if ( reader->resumedModules != 0 ) {
+                res.verdict = ReadVerdict::partial;
+            } else {
+                res.verdict = ReadVerdict::clean;
+            }
+            res.resumed = reader->resumedModules;
+            reader->moduleLibrary = nullptr;    // not ours to free
+            // claim the FileInfos the reader created that no module took ownership of -
+            // ~AstSerializer would DELETE them, and the deserialized AST's LineInfos still
+            // point at them (the crash is deferred to the first LineInfo::describe)
+            reader->collectFileInfo(orphanedFileInfos);
+            reader.reset();
+        }
+        if ( writer ) {
+            writer->moduleLibrary = nullptr;
+            writer.reset();     // releases the parsedModules program refs before the program runs
+            if ( !writeStorage.buffer.empty() ) {
+                // write-to-temp + rename: a concurrent reader on the same path sees a
+                // complete old or a complete new stream, never a torn one. The CRT rename
+                // cannot replace on Windows, so there is a missing-file blink there - a
+                // reader in that window just takes the cold path
+                string tmpPath = writePath + ".tmp";
+                if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
+                    res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
+                    fclose(f);
+                    res.wrote = res.wroteBytes == uint64_t(writeStorage.buffer.size());
+                    if ( res.wrote ) {
+#ifdef _WIN32
+                        remove(writePath.c_str());
+#endif
+                        res.wrote = rename(tmpPath.c_str(), writePath.c_str()) == 0;
+                    }
+                    if ( !res.wrote ) remove(tmpPath.c_str());   // never leave a corpse
+                    res.saveFailed = !res.wrote;
+                } else {
+                    res.saveFailed = true;
+                }
+            }
+        }
+#endif
+        return res;
     }
 
     AstSerializerState * rtti_create_ast_serializer () {

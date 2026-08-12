@@ -44,6 +44,15 @@ namespace das {
         virtual bool readOverflow ( void * data, size_t size ) = 0;
         virtual void write ( const void * data, size_t size ) = 0;
         virtual size_t writingSize() const = 0;
+        // bytes left to read, when the storage knows: lets the reader reject a corrupted
+        // length BEFORE allocating (a serialized length can never exceed the bytes left).
+        // Streaming storages that cannot know keep the default "unbounded" - they simply
+        // do not get the early rejection.
+        virtual uint64_t readRemaining() const { return ~0ull; }
+        // overwrite already-written bytes (record-length backpatch). A storage that cannot
+        // seek keeps the default false — record lengths then stay 0 and the reader falls
+        // back to the legacy stop-at-first-failure cutoff instead of skip-and-resume.
+        virtual bool patch ( size_t /*at*/, const void * /*data*/, size_t /*size*/ ) { return false; }
         virtual ~SerializationStorage() {}
     };
 
@@ -61,6 +70,14 @@ namespace das {
             auto at = buffer.size();
             buffer.resize(at + size);
             memcpy(buffer.data() + at, data, size);
+        }
+        virtual bool patch ( size_t at, const void * data, size_t size ) override {
+            if ( at + size > buffer.size() ) return false;
+            memcpy(buffer.data() + at, data, size);
+            return true;
+        }
+        virtual uint64_t readRemaining() const override {
+            return uint64_t(buffer.size() - bufferPos);
         }
     };
 
@@ -107,6 +124,11 @@ namespace das {
         size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
         bool                seenNewModule = false;
+    // module-cache resume state (trySerializeProgramModule)
+        bool                checkedStreamHeader = false;
+        uint64_t            resumedModules = 0;     // records skipped + reparsed in place
+        uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
+        bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -142,8 +164,8 @@ namespace das {
         vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parseModule tuple contains: moduleName, mtime, thisModule, thisModule
-        vector<tuple<string, uint64_t, ProgramPtr, Module*>> parsedModules;
+        // parsedModules record: fileName, mtime, size, program, thisModule
+        vector<tuple<string, int64_t, int64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
@@ -154,8 +176,14 @@ namespace das {
         __forceinline void dtag ( const char *, uint32_t ) {}
 #endif
         template<typename T>
-        void read  ( T & data ) { buffer->read(data); }
+        void read  ( T & data ) {
+            // zero-filled "success" on a truncated stream would silently corrupt every
+            // field after it - fail like the sized read does (recoverable: the module
+            // cache resumes past the record)
+            if ( !buffer->read(data) ) onReadFailure();
+        }
         void read  ( void * data, size_t size );
+        [[noreturn]] void onReadFailure ();     // throws dasException ("read overflow")
         void write ( const void * data, size_t size );
         template<typename T>
         void serialize ( T & data ) {
@@ -168,6 +196,9 @@ namespace das {
         void serialize ( void * data, size_t size );
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
+        // reject a deserialized element count that exceeds the bytes left in the stream
+        // BEFORE it gates an allocation (throws; reading only)
+        void verifyLength ( uint64_t size );
         void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
         void getCompiledModules ( );
         void patch ();
@@ -221,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 109;   // 109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags (108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
+            return 111;   // 111: record header carries file size beside mtime + program-module index in the record (init-order fidelity) (110: module-cache stream header + per-record payload length (resume-on-unchanged), 109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags, 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -244,6 +275,7 @@ namespace das {
             } else {
                 uint64_t size = 0;
                 serializeAdaptiveSize64(size);
+                verifyLength(size);
                 value.resize(size);
             }
             for ( TT & v : value ) {
@@ -329,6 +361,44 @@ namespace das {
                 baseType = (EnumType) bt;
             }
         }
+    };
+
+    // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
+    // / serializer_write): install() binds a reader (when the file exists and is non-empty)
+    // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
+    // and saves the refreshed stream (write-to-temp + rename) when the writeback fired.
+    // The writeback fires when there was no usable reader, the stream went stale, or a
+    // resumed record failed the THROWING way (damaged bytes - the rewrite repairs it); a
+    // drift-flavored 'partial' (a lazily populated builtin like dasbind, deterministic per
+    // process) deliberately does NOT rewrite - that reparse cost recurs per run by design.
+    // Pass the same path as both readFrom and writeTo for a self-maintaining cache. Under
+    // DAS_NO_FILEIO the cache degrades to a stub: install() binds nothing and finish()
+    // answers 'unavailable'.
+    struct DAS_API ModuleFileCache {
+        enum class ReadVerdict {
+            none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
+            clean,      // every module came from the cache
+            partial,    // resumed: N unchanged-file records reparsed in place, the rest served
+            fallback,   // stale/truncated/foreign stream - modules reparsed from source
+            unavailable // DAS_NO_FILEIO build - a file-backed cache cannot exist on this target
+        };
+        struct Result {
+            ReadVerdict verdict = ReadVerdict::none;
+            uint64_t    resumed = 0;
+            bool        wrote = false;          // refreshed stream saved to writeTo
+            bool        saveFailed = false;     // had bytes to save but could not write the file
+            uint64_t    wroteBytes = 0;
+        };
+        void install ( const string & readFrom, const string & writeTo );
+        Result finish ();
+        SerializationStorageVector  readStorage, writeStorage;
+        unique_ptr<AstSerializer>   reader, writer;
+        string                      writePath;
+        bool                        requested = false;  // install() was asked to read or write
+        // deserialized FileInfos not claimed by any module (collectFileInfo): LineInfos in
+        // the deserialized AST point at them, so this cache object MUST outlive the program
+        // it fed - declare it before the program/context in the embedding scope
+        vector<FileInfoPtr>         orphanedFileInfos;
     };
 
     // Opaque handle to expose serializer to daslang.

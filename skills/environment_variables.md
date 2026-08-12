@@ -33,43 +33,21 @@ number it produced is a 4-thread number.
 `set_jobque_affinity()` and `set_jobque_threads_cap()` are the programmatic equivalents; the
 environment wins over both, which is what makes them usable for an A/B without touching source.
 
-## JIT
+## JIT and kernel tuning (dasLLVM)
 
-| Variable | Type | Effect |
-|---|---|---|
-| `DAS_JIT_X64_FORCE_FEATURES` | text | Comma-separated x64 CPU features to force on (e.g. `avx2,f16c`), bypassing detection. |
-| `DAS_JIT_ARM64_FORCE_FEATURES` | text | The arm64 twin (e.g. `dotprod,i8mm`). |
-| `DAS_JIT_PROBE_LTO` | flag | Split-JIT LTO probe: partitions emit bitcode instead of objects and the link runs lld LTO (pass `/opt:lldlto=2` + CRT `/LIBPATH`s via `--jit-linker-string`). Dev instrument for measuring cross-module-inlining recovery; needs `--jit-split-modules` + `--jit-obj-cache=0`, announces itself, and folds into the cache keys so the probe artifact never serves a normal run. |
+dasLLVM's knobs — the four `DAS_JIT_*` (force-features pair, `DAS_JIT_PROBE_LTO`,
+`DAS_JIT_DUMP_HASHES`) and the `DAS_TUNE_*` family — are declared as `[EnvConfig]` structs in
+`modules/dasLLVM/daslib/llvm_env.das` and documented in the GENERATED
+`modules/dasLLVM/ENVIRONMENT.md`; that file is the reference, this one just points at it. The
+`[tune]` framework itself is `skills/tune.md`. Loading discipline note worth repeating: both
+families load once at context init (`g_env_jit`, `g_env_tune`); `set_env_variable` arms tuner
+CHILDREN, and in-process overrides go through the tune setters (`tune_set_noise_cv` and kin).
 
-Both exist to reproduce another box's codegen locally, or to check that a feature-gated kernel is
-actually the one being measured. Forcing a feature the CPU lacks produces an illegal instruction at
-run time, not a diagnostic.
-
-They also override `cpu_supports`, which is what `requires=` on a `[tune_perm]` and the
-`suffix:requires` entries of a `[tuned]` fallback chain are matched against — so forcing a feature
-is how you check that a per-ISA default resolves the way you expect without owning that silicon.
-Names are the LLVM target-feature spellings on both architectures (`avx2`, `amx-int8`; `dotprod`,
-`i8mm`, `fullfp16`).
-
-## Kernel tuning
-
-`DAS_TUNE_MODE`, `DAS_TUNE_MANIFEST` and `DAS_TUNE_POLICY` drive the `[tune]` framework. They are
-documented where the framework is — see `skills/tune.md`. The one worth repeating here:
-`DAS_TUNE_MANIFEST` points at the sidecar to read and write, which is how you tune when the
-application directory is read-only.
-
-| Variable | Type | Effect |
-|---|---|---|
-| `DAS_TUNE_VERBOSITY` | text | What a tune shows: `silent`, `normal` (default), `verbose`. Anything unrecognized reads as `normal`, so a typo never silences a tune. |
-| `DAS_TUNE_NOISE_CV` | number | The noise gate's cv ceiling in percent, overriding the built-in 2% normal / 1% paranoid. A calibration lever; garbage reads as unset. |
-| `DAS_TUNE_NOISE_OVERRIDE` | flag | Mint through a refusal at either gate — a failing noise probe (stamped `noise: overridden`) or a failing validation verdict (stamped `validation: overridden`) — so the escape always leaves a mark. One flag by design: "mint no matter what". |
-| `DAS_TUNE_HISTORY` | path | Where mint archives land, overriding `<home>/.tune-history/<box>/`. Every mint archives (failures kept, marked `.FAILED.json`); the history is never deleted. |
-| `DAS_TUNE_CONTROL` | path | A supervisor's stop channel: while the named file exists, `tune_interrupt_requested()` is true and the dasLLAMA tuners abort at the next kernel-family boundary without minting. The watchdog sets it and owns the file's lifetime; the measurement in flight always completes. |
-
-`--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
-process chain — the measuring code is two `popen`s below the process the user typed the flag at.
-It gates only what a human sees: progress *events* are forwarded to a capturing parent regardless,
-so `silent` under a supervisor still yields a full event stream in the log.
+`--tune-quiet` / `--tune-verbose` on the application set `DAS_TUNE_VERBOSITY`, and it inherits
+down the whole tuner process chain — the measuring code is two `popen`s below the process the
+user typed the flag at. It gates only what a human sees: progress *events* are forwarded to a
+capturing parent regardless, so `silent` under a supervisor still yields a full event stream in
+the log.
 
 ## Lint
 
@@ -116,9 +94,13 @@ If a variable is genuinely warranted:
 
 In `.das` code, `[EnvConfig]` (daslib/clargs, see `skills/clargs_usage.md`) gives all three for
 the price of one struct field: the initializer is the typed default, garbage warns and keeps it,
-the loader runs once, and the declaration carries the doc line. dasLLAMA runs entirely on this
-rail (`dasllama/dasllama_env.das`) and its CODEREVIEW bans raw reads outside it — prefer the same
-shape for any new module that grows more than a knob or two.
+the loader runs once, and the declaration carries the doc line. A module that grows more than a
+knob or two graduates to a **registry module**: one file holding every `[EnvConfig]` declaration,
+a GENERATED `ENVIRONMENT.md`, and a registry test that fails on any raw read outside it or on doc
+drift. The scaffolding for all three is shared — `daslib/env_registry` carries the doc renderers,
+the enforcement scanners, and the sanctioned dynamic-name readers (`env_is_set`/`env_value_of`);
+worked examples: `dasllama/dasllama_env.das` and `llvm/daslib/llvm_env.das`, each with the
+matching CODEREVIEW rule banning raw reads outside the registry.
 
 On the C++ side every core read goes through an accessor declared in
 `include/daScript/misc/env_cfg.h` rather than a `getenv` at the use site. The accessor is
