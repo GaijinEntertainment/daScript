@@ -247,8 +247,13 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_image.das` — the prepared-model image rail.
 - `dasllama_plane.das` — the borrowed-plane types and their accessors, and nothing else. A
   weight carrier holds planes; only this file knows how one is bound, read, or dropped.
-- `dasllama_tokenizer.das` — the SentencePiece tokenizer.
-- `dasllama_bpe.das` — the byte-level BPE tokenizer.
+- `dasllama_tokenizer.das` — the tokenizer facade: backend selection and the encode/decode/piece
+  surface. A backend algorithm here is a defect.
+- `dasllama_spm.das` — the SentencePiece backend.
+- `dasllama_bpe.das` — the byte-level BPE backend: vocab, byte alphabet, ranked merges. A
+  pre-tokenizer arm here is a defect.
+- `dasllama_pretok.das` — the pre-tokenizer: one split function per family, selected by the BPE
+  `pre` name. A family-name test on any other tokenizer path is a defect.
 - `dasllama_unicode.das` — the transcoded unicode RANGES/WS tables and their lookups.
 
 ### CPU kernel tiers
