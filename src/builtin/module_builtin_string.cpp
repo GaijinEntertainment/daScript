@@ -806,7 +806,7 @@ namespace das
 
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
         if ( !bytes.size ) return nullptr;
-        return context->allocateString(bytes.data, bytes.size, at);
+        return context->allocateString(bytes.data, view_size(bytes, context, at), at);
     }
 
     bool delete_string ( char * & str, Context * context, LineInfoArg * at ) {
