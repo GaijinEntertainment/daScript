@@ -20,6 +20,9 @@ struct SpmTokenizer {
     // DERIVED (build_spm_derived), never serialized: packed (left<<32)|right -> merged id for
     // every vocab piece that splits into two vocab pieces — the no-allocation merge probe
     pair_merge : table<int64; int64>
+    // DERIVED: codepoint -> id of its single-codepoint vocab piece — the encode init loop's
+    // no-allocation probe (a per-cpt slice + string-keyed lookup degrades superlinearly)
+    cpt_id : table<int; int64>
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
     bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
@@ -31,6 +34,7 @@ struct SpmTokenizer {
 //! maps to exactly the id the concat-string lookup would find (last duplicate wins in both).
 def build_spm_derived(var tk : SpmTokenizer) {
     tk.pair_merge |> clear()
+    tk.cpt_id |> clear()
     for (m, piece in count(), tk.vocab) {
         for (k in range(1, length(piece))) {
             let l = tk.lookup?[slice(piece, 0, k)] ?? -1l
@@ -40,7 +44,58 @@ def build_spm_derived(var tk : SpmTokenizer) {
                 tk.pair_merge[(l << 32l) | r] = int64(m)
             }
         }
+        let c = single_cpt_of(piece)
+        if (c >= 0) {
+            tk.cpt_id[c] = int64(m)   // last duplicate wins, same as lookup
+        }
     }
+}
+
+// the codepoint of a piece that is EXACTLY one UTF-8 codepoint, else -1
+def private single_cpt_of(piece : string) : int {
+    var cpt = -1
+    peek_data(piece) $(d : array<uint8> const#) {
+        let n = length(d)
+        if (n >= 1 && n <= 4) {
+            let c0 = int(d[0])
+            if (n == 1 && c0 < int(0x80)) {
+                cpt = c0
+            } elif (n == 2 && (c0 & int(0xE0)) == int(0xC0)) {
+                let v = ((c0 & 31) << 6) | (int(d[1]) & 63)
+                cpt = v >= int(0x80) ? v : -1   // reject overlong — the string lookup would miss it too
+            } elif (n == 3 && (c0 & int(0xF0)) == int(0xE0)) {
+                let v = ((c0 & 15) << 12) | ((int(d[1]) & 63) << 6) | (int(d[2]) & 63)
+                cpt = v >= int(0x800) ? v : -1
+            } elif (n == 4 && (c0 & int(0xF8)) == int(0xF0)) {
+                let v = ((c0 & 7) << 18) | ((int(d[1]) & 63) << 12) | ((int(d[2]) & 63) << 6) | (int(d[3]) & 63)
+                cpt = v >= int(0x10000) ? v : -1
+            }
+        }
+    }
+    return cpt
+}
+
+// single_cpt_of's byte-window twin, for the encode init loop: decode d[i..j) as exactly one
+// codepoint, -1 on malformed/overlong (where the old string lookup would miss).
+def private cpt_in_window(d : array<uint8> const#; i, j : int) : int {
+    let n = j - i
+    let c0 = int(d[i])
+    if (n == 1) {
+        return c0 < int(0x80) ? c0 : -1
+    }
+    if (n == 2 && (c0 & int(0xE0)) == int(0xC0)) {
+        let v = ((c0 & 31) << 6) | (int(d[i + 1]) & 63)
+        return v >= int(0x80) ? v : -1
+    }
+    if (n == 3 && (c0 & int(0xF0)) == int(0xE0)) {
+        let v = ((c0 & 15) << 12) | ((int(d[i + 1]) & 63) << 6) | (int(d[i + 2]) & 63)
+        return v >= int(0x800) ? v : -1
+    }
+    if (n == 4 && (c0 & int(0xF8)) == int(0xF0)) {
+        let v = ((c0 & 7) << 18) | ((int(d[i + 1]) & 63) << 12) | ((int(d[i + 2]) & 63) << 6) | (int(d[i + 3]) & 63)
+        return v >= int(0x10000) ? v : -1
+    }
+    return -1
 }
 
 //! Load tokenizer.bin. vocab_size comes from the model Config (it isn't stored in the file).
@@ -110,6 +165,108 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
     return <- tk
 }
 
+struct private SpmBigram {
+    score : float
+    li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
+    ri : int
+    l_id : int64
+    r_id : int64
+    mid : int64
+}
+
+// heap priority: highest score, then leftmost — exactly the llama2.c scan's selection order
+def private sg_before(a, b : SpmBigram) : bool => a.score > b.score || (a.score == b.score && a.li < b.li)
+
+def private sg_push(var h : array<SpmBigram>; bg : SpmBigram) {
+    h |> push(bg)
+    var i = length(h) - 1
+    while (i > 0) {
+        let p = (i - 1) / 2
+        break if (!sg_before(h[i], h[p]))
+        let t = h[i]
+        h[i] = h[p]
+        h[p] = t
+        i = p
+    }
+}
+
+def private sg_pop(var h : array<SpmBigram>) : SpmBigram {
+    let top = h[0]
+    let last = length(h) - 1
+    h[0] = h[last]
+    h |> resize(last)
+    var i = 0
+    while (true) {
+        var c = i * 2 + 1
+        break if (c >= length(h))
+        let r = c + 1
+        if (r < length(h) && sg_before(h[r], h[c])) {
+            c = r
+        }
+        break if (!sg_before(h[c], h[i]))
+        let t = h[i]
+        h[i] = h[c]
+        h[c] = t
+        i = c
+    }
+    return top
+}
+
+def private sg_try_push(tk : SpmTokenizer; var h : array<SpmBigram>; toks : array<int64>; li, ri : int) {
+    let mid = tk.pair_merge?[(toks[li] << 32l) | toks[ri]] ?? -1l
+    return if (mid < 0l)
+    h |> sg_push(SpmBigram(score = tk.scores[mid], li = li, ri = ri,
+        l_id = toks[li], r_id = toks[ri], mid = mid))
+}
+
+// Heap merge over the WHOLE token sequence: O(n log n) where the llama2.c rescan was O(n^2) in
+// text length. Stale entries (an endpoint merged since push) are skipped by the adjacency+id
+// guard; selection order matches the scan exactly, so ids are identical.
+def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
+    let n = length(toks)
+    return if (n < 2)
+    var nxt : array<int>
+    var prv : array<int>
+    nxt |> resize(n)
+    prv |> resize(n)
+    for (i in range(n)) {
+        nxt[i] = i + 1 < n ? i + 1 : -1
+        prv[i] = i - 1
+    }
+    var h : array<SpmBigram>
+    h |> reserve(n)
+    for (i in range(n - 1)) {
+        sg_try_push(tk, h, toks, i, i + 1)
+    }
+    while (!empty(h)) {
+        let bg = sg_pop(h)
+        continue if (nxt[bg.li] != bg.ri || toks[bg.li] != bg.l_id || toks[bg.ri] != bg.r_id)
+        toks[bg.li] = bg.mid
+        toks[bg.ri] = -2l   // dead slot — compacted out below (-1, the missing-piece marker, survives as before)
+        nxt[bg.li] = nxt[bg.ri]
+        if (nxt[bg.ri] >= 0) {
+            prv[nxt[bg.ri]] = bg.li
+        }
+        if (prv[bg.li] >= 0) {
+            sg_try_push(tk, h, toks, prv[bg.li], bg.li)
+        }
+        if (nxt[bg.li] >= 0) {
+            sg_try_push(tk, h, toks, bg.li, nxt[bg.li])
+        }
+    }
+    var w = 0
+    for (i in range(n)) {
+        if (toks[i] != -2l) {
+            toks[w] = toks[i]
+            w++
+        }
+    }
+    toks |> resize(w)
+    delete nxt
+    delete prv
+    delete h
+}
+
 //! Decode one token to its display text (llama2.c decode): strip a single leading space
 //! right after BOS, and turn raw-byte tokens "<0xXX>" into the actual byte (byte_token_val
 //! is shared with the BPE backend — same SentencePiece byte-fallback vocabulary).
@@ -138,7 +295,8 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
     if (tk.add_space_prefix && !empty(text)) {
         tokens |> push(tk.lookup?[" "] ?? -1l)
     }
-    // split into UTF-8 codepoints; each -> its vocab token, or byte fallback (byte + 3)
+    // split into UTF-8 codepoints; each -> its vocab token via the int-keyed cpt_id table (a
+    // per-cpt slice + string-keyed lookup here degraded superlinearly), or byte fallback (byte + 3)
     peek_data(text) $(d : array<uint8> const#) {
         var i = 0
         while (i < length(d)) {
@@ -146,7 +304,8 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
             while (j < length(d) && (int(d[j]) & int(0xC0)) == int(0x80) && j - i < 4) {
                 j++
             }
-            let id = tk.lookup?[slice(text, i, j)] ?? -1l
+            let cpt = cpt_in_window(d, i, j)
+            let id = cpt >= 0 ? tk.cpt_id?[cpt] ?? -1l : -1l
             if (id >= 0l) {
                 tokens |> push(id)
             } else {
@@ -157,26 +316,9 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
             i = j
         }
     }
-    // greedy BPE merge: repeatedly fuse the best-scoring adjacent pair present in vocab — one
-    // packed pair_merge probe per candidate (the old concat-per-probe allocated quadratically)
-    while (true) {
-        var best_score = -1.0e10
-        var best_id = -1l
-        var best_idx = -1
-        for (i in range(length(tokens) - 1)) {
-            let id = tk.pair_merge?[(tokens[i] << 32l) | tokens[i + 1]] ?? -1l
-            if (id >= 0l && tk.scores[id] > best_score) {
-                best_score = tk.scores[id]
-                best_id = id
-                best_idx = i
-            }
-        }
-        if (best_idx == -1) {
-            break
-        }
-        tokens[best_idx] = best_id
-        tokens |> erase(best_idx + 1)
-    }
+    // greedy BPE merge: repeatedly fuse the best-scoring adjacent pair present in vocab —
+    // heap-driven, one packed pair_merge probe per candidate
+    spm_merge_heap(tk, tokens)
     if (eos) {
         tokens |> push(tk.eos_id)
     }

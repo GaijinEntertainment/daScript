@@ -18,9 +18,11 @@ struct BpeTokenizer {
     lookup : table<string; int64>     // piece -> id
     merge_rank : table<string; int64> // "left right" -> rank (lower merges first; the image serialization source)
     // DERIVED (build_bpe_derived), never serialized: the no-allocation merge engine — packed
-    // (left<<32)|right -> (rank<<32)|merged — and the per-byte alphabet-piece ids
+    // (left<<32)|right -> (rank<<32)|merged — the per-byte alphabet-piece ids, and (spm_space)
+    // codepoint -> single-codepoint-piece id for the gemma4 init loop
     pair_merge : table<int64; int64>
     byte_id : array<int64>
+    cpt_id : table<int; int64>
     token_type : array<int64>         // id -> GGUF token type (3 = control/special)
     pre : string                      // pre-tokenizer name, e.g. "llama-bpe"
     bos_id : int64
@@ -90,6 +92,16 @@ def build_bpe_derived(var tk : BpeTokenizer) {
     for (b in range(256)) {
         tk.byte_id[b] = tk.lookup?[BYTE2UNI[b]] ?? -1l
     }
+    tk.cpt_id |> clear()
+    if (tk.spm_space) {
+        // gemma4 init probes per codepoint — int-keyed, so the hot loop allocates nothing
+        for (m, piece in count(), tk.vocab) {
+            var inscope pc <- utf8_to_cpts(piece)
+            if (length(pc) == 1) {
+                tk.cpt_id[pc[0]] = int64(m)
+            }
+        }
+    }
     tk.pair_merge |> clear()
     for (k, v in keys(tk.merge_rank), values(tk.merge_rank)) {
         let sp = find(k, " ")
@@ -130,9 +142,116 @@ def init_byte2uni() {
 
 // ===== merge-rank BPE =====
 
+// past this many symbols the heap merge wins; below it the rescan's constant is smaller
+let private BPE_HEAP_MIN_SYMS = 32
+
+struct private BpeBigram {
+    rank : int64
+    li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
+    ri : int
+    l_id : int64
+    r_id : int64
+    mid : int64
+}
+
+// min-heap priority: lowest rank, then leftmost — exactly the rescan's selection order
+def private bg_before(a, b : BpeBigram) : bool => a.rank < b.rank || (a.rank == b.rank && a.li < b.li)
+
+def private bg_push(var h : array<BpeBigram>; bg : BpeBigram) {
+    h |> push(bg)
+    var i = length(h) - 1
+    while (i > 0) {
+        let p = (i - 1) / 2
+        break if (!bg_before(h[i], h[p]))
+        let t = h[i]
+        h[i] = h[p]
+        h[p] = t
+        i = p
+    }
+}
+
+def private bg_pop(var h : array<BpeBigram>) : BpeBigram {
+    let top = h[0]
+    let last = length(h) - 1
+    h[0] = h[last]
+    h |> resize(last)
+    var i = 0
+    while (true) {
+        var c = i * 2 + 1
+        break if (c >= length(h))
+        let r = c + 1
+        if (r < length(h) && bg_before(h[r], h[c])) {
+            c = r
+        }
+        break if (!bg_before(h[c], h[i]))
+        let t = h[i]
+        h[i] = h[c]
+        h[c] = t
+        i = c
+    }
+    return top
+}
+
+def private bg_try_push(tk : BpeTokenizer; var h : array<BpeBigram>; syms : array<int64>; li, ri : int) {
+    let pm = tk.pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
+    return if (pm < 0l)
+    h |> bg_push(BpeBigram(rank = pm >> 32l, li = li, ri = ri,
+        l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
+}
+
+// Heap merge for long runs: O(n log n) where the rescan is O(n^2). Stale heap entries (an
+// endpoint merged since push) are skipped by the adjacency+id guard; ids match the rescan exactly.
+def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
+    let n = length(syms)
+    var nxt : array<int>
+    var prv : array<int>
+    nxt |> resize(n)
+    prv |> resize(n)
+    for (i in range(n)) {
+        nxt[i] = i + 1 < n ? i + 1 : -1
+        prv[i] = i - 1
+    }
+    var h : array<BpeBigram>
+    h |> reserve(n)
+    for (i in range(n - 1)) {
+        bg_try_push(tk, h, syms, i, i + 1)
+    }
+    while (!empty(h)) {
+        let bg = bg_pop(h)
+        continue if (nxt[bg.li] != bg.ri || syms[bg.li] != bg.l_id || syms[bg.ri] != bg.r_id)
+        syms[bg.li] = bg.mid
+        syms[bg.ri] = -2l   // dead slot — compacted out below
+        nxt[bg.li] = nxt[bg.ri]
+        if (nxt[bg.ri] >= 0) {
+            prv[nxt[bg.ri]] = bg.li
+        }
+        if (prv[bg.li] >= 0) {
+            bg_try_push(tk, h, syms, prv[bg.li], bg.li)
+        }
+        if (nxt[bg.li] >= 0) {
+            bg_try_push(tk, h, syms, bg.li, nxt[bg.li])
+        }
+    }
+    var w = 0
+    for (i in range(n)) {
+        if (syms[i] != -2l) {
+            syms[w] = syms[i]
+            w++
+        }
+    }
+    syms |> resize(w)
+    delete nxt
+    delete prv
+    delete h
+}
+
 // Greedily merge the lowest-rank adjacent pair (leftmost on ties), over symbol IDS — one packed
 // pair_merge probe per candidate, no allocation (the concat-per-probe was the dominant cost).
 def private bpe_merge_ids(tk : BpeTokenizer; var syms : array<int64>) {
+    if (length(syms) > BPE_HEAP_MIN_SYMS) {
+        bpe_merge_ids_heap(tk, syms)
+        return
+    }
     while (length(syms) > 1) {
         var best_rank = -1l
         var best_i = -1
@@ -186,8 +305,14 @@ def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<in
 // short-circuits the merge loop (llama.cpp gemma-4 newline fix).
 def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
-    let cpts <- utf8_to_cpts(replace(text, " ", "▁"))   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
+    // '▁' space escape at cpt level — ' ' and U+2581 are one cpt each (exact map); a whole-text string replace() is superlinear
+    var cpts <- utf8_to_cpts(text)
     let n = length(cpts)
+    for (i in range(n)) {
+        if (cpts[i] == ' ') {
+            cpts[i] = int(0x2581)   // U+2581, the SentencePiece '▁' space marker
+        }
+    }
     var pos = 0
     while (pos < n) {
         let is_nl = cpts[pos] == '\n'
@@ -212,13 +337,12 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
             var syms : array<int64>
             syms |> reserve(e - pos)
             for (i in range(pos, e)) {
-                let cu = cpt_to_utf8(cpts[i])
-                let cid = tk.lookup?[cu] ?? -1l
+                let cid = tk.cpt_id?[cpts[i]] ?? -1l
                 if (cid >= 0l) {
                     syms |> push(cid)
                 } else {
                     // unknown cpt: eager <0xXX> fallback — byte tokens never merge, so pre-merge expansion is byte-identical
-                    emit_byte_fallback(tk, cu, syms)
+                    emit_byte_fallback(tk, cpt_to_utf8(cpts[i]), syms)
                 }
             }
             bpe_merge_ids(tk, syms)
