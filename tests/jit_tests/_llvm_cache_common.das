@@ -7,6 +7,7 @@ module _llvm_cache_common
 
 require dastest/testing_boost
 require daslib/strings_boost
+require daslib/linq
 require daslib/fio
 require strings
 
@@ -22,6 +23,8 @@ def public copy_fixture(src_dir, dst_dir, fname : string; from_s : string = ""; 
         return false
     }
     if (!empty(from_s)) {
+        // a stale edit string must fail HERE, not two asserts later as a missing marker
+        return false if (find(content, from_s) < 0)
         content = content |> replace(from_s, to_s)
     }
     var wrote = false
@@ -74,9 +77,24 @@ def public run_child(cmd : string; markers : array<string>) : tuple<rc : int; sa
 
 // one child run: rc must be 0 and every marker must appear on stdout
 def public expect_round(t : T?; round, cmd : string; markers : array<string>) {
-    let r <- run_child(cmd, markers)
+    let no_alternatives : array<string>
+    expect_round(t, round, cmd, markers, no_alternatives)
+}
+
+// alternatives form: every `markers` entry must appear AND at least one of `any_of` must -
+// for asserts like "the verdict is partial OR clean" that must survive a strict improvement
+def public expect_round(t : T?; round, cmd : string; markers, any_of : array<string>) {
+    let all <- concat(markers, any_of)
+    let r <- run_child(cmd, all)
     t |> equal(r.rc, 0, "{round}: child rc")
-    for (m, ok in markers, r.saw) {
-        t |> success(ok, "{round}: {m}")
+    for (i in range(length(markers))) {
+        t |> success(r.saw[i], "{round}: {markers[i]}")
+    }
+    if (!empty(any_of)) {
+        var any = false
+        for (i in range(length(any_of))) {
+            any ||= r.saw[length(markers) + i]
+        }
+        t |> success(any, "{round}: one of {join(any_of, " | ")}")
     }
 }

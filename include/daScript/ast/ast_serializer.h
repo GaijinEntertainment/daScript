@@ -154,8 +154,8 @@ namespace das {
         vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parseModule tuple contains: moduleName, mtime, thisModule, thisModule
-        vector<tuple<string, uint64_t, ProgramPtr, Module*>> parsedModules;
+        // parsedModules record: fileName, mtime, size, program, thisModule
+        vector<tuple<string, int64_t, int64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
@@ -233,7 +233,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 110;   // 110: module-cache stream header + per-record payload length (resume-on-unchanged) (109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags, 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
+            return 111;   // 111: record header carries file size beside mtime + program-module index in the record (init-order fidelity) (110: module-cache stream header + per-record payload length (resume-on-unchanged), 109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags, 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -347,10 +347,12 @@ namespace das {
     // / serializer_write): install() binds a reader (when the file exists and is non-empty)
     // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
     // and saves the refreshed stream when the writeback fired (ast_parse only writes back
-    // when there was no usable reader or the stream went stale, so an empty write buffer
-    // means the cache on disk is already current). Pass the same path as both readFrom and
-    // writeTo for a self-maintaining cache. Under DAS_NO_FILEIO the cache degrades to a
-    // stub: install() binds nothing and finish() answers 'unavailable'.
+    // when there was no usable reader or the stream went stale). A 'partial' read
+    // deliberately does NOT rewrite: the resumed record's bytes are served again next run
+    // and reparsed in place, so the reparse cost recurs per run - delete the file to
+    // rebuild. Pass the same path as both readFrom and writeTo for a self-maintaining
+    // cache. Under DAS_NO_FILEIO the cache degrades to a stub: install() binds nothing and
+    // finish() answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)

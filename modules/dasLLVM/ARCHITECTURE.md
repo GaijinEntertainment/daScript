@@ -96,7 +96,9 @@ beyond its defaults — are: `DAS_TUNE_POLICY` (replaces the declared/injected t
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
 through a failing gate), `--tune` (forced re-mint), `--jit-obj-cache=0` (forces every split
 partition to re-emit, bypassing the obj cache), `DAS_JIT_PROBE_LTO` (split partitions emit
-bitcode and the link runs lld LTO — a dev probe artifact), and the runtime escape API
+bitcode and the link runs lld LTO — a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
+`DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection — emission, the cache keys,
+and `cpu_supports`-based tune eligibility all follow), and the runtime escape API
 `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
 passes the knob name it acts for). The announce contract: an override announces at the point
 it CHANGES THE OUTCOME — at least one line naming the knob (its env spelling, or the

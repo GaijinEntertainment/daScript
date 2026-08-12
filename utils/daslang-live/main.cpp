@@ -236,6 +236,9 @@ static CompileResult compile_script(const string & fn) {
         case ModuleFileCache::ReadVerdict::clean:
             tout << "daslang-live: module cache clean\n";
             break;
+        case ModuleFileCache::ReadVerdict::unavailable:
+            tout << "daslang-live: module cache unavailable (built without file IO)\n";
+            break;
         default: break;
         }
         if (cres.wrote) tout << "daslang-live: module cache refreshed (" << cres.wroteBytes << " bytes)\n";

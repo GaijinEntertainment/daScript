@@ -5,12 +5,12 @@ options gen2
 //! (`harness/gen_env_doc.das`) and `tests/llvm_env_registry.das` fails when a variable is read
 //! anywhere in the module without a declaration here.
 //!
-//! Two loading disciplines, split by struct: `JitEnv` loads ONCE at context init into
-//! `g_env_jit` (the knobs are process-stable and the DLL/obj cache keys fold them). `TuneEnv`
-//! deliberately has NO loaded global: the tuner's contract is set-then-latch — a harness (and
-//! the tune tests) may `set_env_variable` a `DAS_TUNE_*` knob in-process before the first read
-//! latches it — so its reads stay live through `env_value_of`, and the struct exists for the
-//! doc rows and the coverage scan.
+//! Both structs load ONCE at context init (`g_env_jit`, `g_env_tune`); `set_env_variable`
+//! after startup is invisible to this process and arms CHILDREN only (the tuner's re-exec
+//! model). In-process overrides go through the tune setters instead
+//! (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`,
+//! `tune_set_noise_override`, `tune_set_history_dir`), which also arm the child environment.
+//! Ambient variables the module lists but does not own stay live-read via `env_value_of`.
 
 module llvm_env shared public
 
@@ -22,7 +22,7 @@ require daslib/rtti
 
 [EnvConfig(env_prefix = "DAS")]
 struct public JitEnv {
-    @clarg_doc = "Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO. Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run."
+    @clarg_doc = "Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO (pass /opt:lldlto=2 plus the CRT /LIBPATHs via --jit-linker-string). Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run."
     jit_probe_lto : bool = false
 
     @clarg_doc = "Split-JIT key forensics: log every (partition, mangled name, aot hash) the obj-cache chain folds. Diff two runs to locate WHERE a key diverged - distinguishes a changed hash from a changed fold order."
@@ -38,8 +38,6 @@ struct public JitEnv {
 let public g_env_jit = env_config(type<JitEnv>)
 
 // ===== Kernel tuning =====
-// NO g_env_tune on purpose - see the module docstring. Read these via env_value_of/env_is_set
-// so a harness's in-process set_env_variable is still seen by the first latching read.
 
 [EnvConfig(env_prefix = "DAS")]
 struct public TuneEnv {
@@ -73,6 +71,8 @@ struct public TuneEnv {
     tune_policy : string = ""
 }
 
+let public g_env_tune = env_config(type<TuneEnv>)
+
 // ===== the generated documentation (ENVIRONMENT.md) =====
 
 // Variables dasLLVM reads but does not own - documented so the coverage scan knows them.
@@ -96,16 +96,18 @@ def public env_markdown() : string {
     return build_string() $(var w) {
         w |> write("# dasLLVM environment variables\n\n")
         w |> write("GENERATED from the `[EnvConfig]` declarations in `daslib/llvm_env.das` - do not edit by\n")
-        w |> write("hand. Regenerate with `daslang modules/dasLLVM/harness/gen_env_doc.das`; a variable read\n")
-        w |> write("anywhere in the module without a declaration fails `tests/llvm_env_registry.das`.\n\n")
+        w |> write("hand. It is regenerated in the daslang source tree (`modules/dasLLVM/harness/\n")
+        w |> write("gen_env_doc.das`; `modules/dasLLVM/tests/llvm_env_registry.das` fails on drift and on any\n")
+        w |> write("variable read in the module without a declaration).\n\n")
         write_env_doc_semantics(w)
         write_env_section(w, "JIT",
             "Loaded once at context init into `g_env_jit`. The force-features pair exists to reproduce another box's codegen locally or check that a feature-gated kernel is the one being measured; both override `cpu_supports`, which `requires=` on a `[tune_perm]` and `suffix:requires` fallback entries match against.")
         write_env_info_rows(w, get_env_config_info(type<JitEnv>))
         write_env_section(w, "Kernel tuning",
-            "LIVE-READ, not context-init loaded: the tuner's set-then-latch contract lets a harness `set_env_variable` a knob in-process before the first read latches it. The framework itself is documented in `skills/llvm_tune.md`.")
+            "Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/llvm_tune.md`.")
         write_env_info_rows(w, get_env_config_info(type<TuneEnv>))
-        write_env_section(w, "Ambient variables dasLLVM reads but does not own", "")
+        write_env_section(w, "Ambient variables dasLLVM reads but does not own",
+            "Read live at the point of use (`env_value_of`), not loaded at context init.")
         var extras <- ambient_rows()
         for (e in extras) {
             write_env_row(w, e)

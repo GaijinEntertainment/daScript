@@ -12,10 +12,12 @@ require _llvm_cache_common
 // reproduces the per-function AOT hashes links every cached object (N/N), one that doesn't
 // re-emits. The verdict line guards the vacuous pass: a stale or unreadable cache silently
 // falls back to reparse, which would score N/N without testing serialization at all.
-// Under -jit the verdict is 'deser: partial', by design: llvm_func.das registers its
+// Under -jit the verdict is 'deser: partial' TODAY: llvm_func.das registers its
 // [dasbind] externs into the dasbind BUILTIN module at compile time, so its record can
 // never deserialize in a cold process - the reader skips it (per-record length), reparses
-// it in place (replaying the registrations), and keeps serving every later record.
+// it in place (replaying the registrations), and keeps serving every later record. The
+// warm rounds accept 'partial' OR 'clean' so fixing dasbind (a strict improvement, an
+// agreed future arc) does not red this test.
 
 [test]
 def test_jit_ast_roundtrip(t : T?) {
@@ -56,7 +58,8 @@ def test_jit_ast_roundtrip(t : T?) {
     let dlls = delete_dlls_under("{tmp}/.jitted_scripts")
     t |> success(dlls > 0, "round 2 precondition: found a DLL to delete")
     expect_round(t, "round 2 deser", "{base} -deser \"{tmp}/ast.bin\" -jit {script}",
-        ["deser: partial", "obj cache - 3/3 partitions cached", "SPLIT_RESULT 340 19 36 33 -1"])
+        ["obj cache - 3/3 partitions cached", "SPLIT_RESULT 340 19 36 33 -1"],
+        ["deser: partial", "deser: clean"])
     // round 3: edit mod_a so the cache is stale - the rail must FALL BACK (mtime mismatch),
     // and the mixed program (mod_b deserialized, mod_a + main parsed) still keys mod_b's .o
     t |> success(copy_fixture(fixtures, tmp, "_llvm_split_modules_mod_a.das",
@@ -68,7 +71,8 @@ def test_jit_ast_roundtrip(t : T?) {
     expect_round(t, "round 4 mc cold", "{base} -module-cache \"{tmp}/mc.bin\" -jit {script}",
         ["ser: wrote", "SPLIT_RESULT 350 19 36 33 -1"])
     expect_round(t, "round 4 mc warm", "{base} -module-cache \"{tmp}/mc.bin\" -jit {script}",
-        ["deser: partial", "SPLIT_RESULT 350 19 36 33 -1"])
+        ["SPLIT_RESULT 350 19 36 33 -1"],
+        ["deser: partial", "deser: clean"])
     var err : string
     rmdir_rec(tmp, err)
 }

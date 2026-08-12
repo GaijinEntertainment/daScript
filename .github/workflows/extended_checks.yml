@@ -418,6 +418,17 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_exchange_client.das
 
+    - name: "Test env-knob registries"
+      # The [EnvConfig] enforcement tests (daslib/env_registry scanners): raw-read
+      # ban, declaration coverage, generated-ENVIRONMENT.md drift. Model-free,
+      # sub-second — this lane is what makes each CODEREVIEW's "the registry test
+      # enforces it" sentence true.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_env_registry.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLVM/tests/llvm_env_registry.das
+
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a
       # hyphenated directory requires siblings by bare name), so `--test

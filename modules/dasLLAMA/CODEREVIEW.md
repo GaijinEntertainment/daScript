@@ -368,9 +368,11 @@ at the call site** (`dasllama_asr.das`). Accepting it and silently ignoring it i
 
 ### Generated
 
-- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s `[EnvConfig]` declarations by
-  `harness/gen_env_doc.das` (`tests/test_env_registry.das` fails on drift). Hand-editing the .md
-  is a defect; edit the declarations and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
+- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s `[EnvConfig]` declarations AND
+  `daslib/env_registry`'s shared renderers by `harness/gen_env_doc.das`
+  (`tests/test_env_registry.das` fails on drift) — a renderer change in daslib regenerates
+  this file in the same change. Hand-editing the .md is a defect; edit the inputs and
+  regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
   llama.cpp's unicode-data.cpp — hand-editing the tables is a defect; retranscode.
 
 ---
@@ -539,7 +541,9 @@ override, batch donor) carries the annotation itself. The transitive-arming mode
 there, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` / `set_env_variable` /
 literal-name `env_config_*` anywhere else in the module is a defect. The sanctioned forms —
 tri-state knobs, dynamic names, pre-init foreign-library writes — are `ARCHITECTURE.md` §2.9,
-and `tests/test_env_registry.das` enforces the lot.
+and `tests/test_env_registry.das` enforces the lot; what counts as a read (the marker lists)
+and the scanners themselves are `daslib/env_registry`'s, so a change THERE is a change to this
+module's env contract and re-runs this suite in the same change.
 
 **An override announces itself where it changes the outcome.** An override is a gate escape,
 a policy override, or a threshold recalibration — the inventory and the announce contract are

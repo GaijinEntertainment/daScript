@@ -286,6 +286,7 @@ namespace das
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
         virtual int64_t getFileMtime ( const string & fileName ) const;
+        virtual int64_t getFileSize ( const string & fileName ) const;   // -1 when unknown (no filesystem, stat failure)
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
         virtual string getDynModulesFolder () const { return ""; }

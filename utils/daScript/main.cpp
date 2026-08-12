@@ -388,6 +388,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         access->setFileInfo("____intro____", das::move(fileInfo));
     }
     int exitCode = 1;
+    // the cache owns deserialized-AST FileInfos (LineInfos point at them) - it must outlive
+    // dummyGroup, which owns the deserialized Modules, so it is declared first
+    ModuleFileCache moduleCache;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     if ( debuggerRequired ) {
@@ -441,7 +444,6 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     // is the self-maintaining composition: read the file when present, keep a writer armed,
     // and save only when the writeback fired (first run, or a changed module cut the
     // stream). serialize_main_module defaults true, so the whole program rides the cache.
-    ModuleFileCache moduleCache;
     const string & cacheWritePath = !serFile.empty() ? serFile : moduleCacheFile;
     moduleCache.install(!deserFile.empty() ? deserFile : moduleCacheFile, cacheWritePath);
     auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
@@ -458,6 +460,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             break;
         case ModuleFileCache::ReadVerdict::clean:
             tout << "deser: clean - all modules from cache\n";
+            break;
+        case ModuleFileCache::ReadVerdict::unavailable:
+            tout << "deser: module cache unavailable (built without file IO)\n";
             break;
         default: break;
         }

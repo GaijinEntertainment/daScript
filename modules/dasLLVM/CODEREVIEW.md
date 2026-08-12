@@ -74,10 +74,16 @@ change. A diff that adds a knob to that surface, or gives one a new effect, with
 announce is a defect.
 
 **No raw environment access outside `llvm_env.das`.** An environment knob is an `[EnvConfig]`
-field there: JIT knobs read as `g_env_jit` fields; tune knobs (live-read by the set-then-latch
-contract) and ambient names go through `env_value_of` / `env_is_set`, with a declaration or an
-`ambient_rows` entry backing every literal name. `get_env_variable` / `has_env_variable` /
-literal-name `env_config_*` anywhere else in the module is a defect. `ENVIRONMENT.md` is
-generated from the declarations (`harness/gen_env_doc.das`) — hand-editing it is a defect, and
-a declaration change regenerates it in the same change; `tests/llvm_env_registry.das` enforces
-the lot.
+field there, read as a `g_env_jit` / `g_env_tune` field (both load once at context init;
+in-process overrides go through the tune setters, which also arm children); ambient names go
+through `env_value_of` / `env_is_set` with an `ambient_rows` entry backing every literal name,
+and a `set_env_variable` names only a declared knob. `get_env_variable` / `has_env_variable` /
+literal-name `env_config_*` anywhere else in the module is a defect — the ban covers the
+non-literal spelling `get_env_variable(expr)` too, which only review catches;
+`tests/llvm_env_registry.das` (run per-PR by the extended checks) enforces the literal-name
+forms.
+
+**`ENVIRONMENT.md` is generated.** `harness/gen_env_doc.das` renders it from the `[EnvConfig]`
+declarations and `daslib/env_registry`'s shared renderers — hand-editing it is a defect, a
+change to either input regenerates it in the same change, and
+`tests/llvm_env_registry.das` fails on drift.

@@ -1,8 +1,9 @@
 # dasLLVM environment variables
 
 GENERATED from the `[EnvConfig]` declarations in `daslib/llvm_env.das` - do not edit by
-hand. Regenerate with `daslang modules/dasLLVM/harness/gen_env_doc.das`; a variable read
-anywhere in the module without a declaration fails `tests/llvm_env_registry.das`.
+hand. It is regenerated in the daslang source tree (`modules/dasLLVM/harness/
+gen_env_doc.das`; `modules/dasLLVM/tests/llvm_env_registry.das` fails on drift and on any
+variable read in the module without a declaration).
 
 Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is false and
 anything else true; **number** falls back to the default when unset or unparseable, with
@@ -17,14 +18,14 @@ Loaded once at context init into `g_env_jit`. The force-features pair exists to 
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DAS_JIT_PROBE_LTO` | flag | off | Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO. Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run. |
+| `DAS_JIT_PROBE_LTO` | flag | off | Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO (pass /opt:lldlto=2 plus the CRT /LIBPATHs via --jit-linker-string). Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run. |
 | `DAS_JIT_DUMP_HASHES` | flag | off | Split-JIT key forensics: log every (partition, mangled name, aot hash) the obj-cache chain folds. Diff two runs to locate WHERE a key diverged - distinguishes a changed hash from a changed fold order. |
 | `DAS_JIT_X64_FORCE_FEATURES` | text | unset | Comma-separated x64 CPU features to force on (e.g. avx2,f16c), bypassing detection; LLVM target-feature spellings. Also satisfies cpu_supports-based tune eligibility. Executing a forced instruction the host lacks is an illegal instruction, not a diagnostic. |
 | `DAS_JIT_ARM64_FORCE_FEATURES` | text | unset | The arm64 twin (e.g. dotprod,i8mm). |
 
 ## Kernel tuning
 
-LIVE-READ, not context-init loaded: the tuner's set-then-latch contract lets a harness `set_env_variable` a knob in-process before the first read latches it. The framework itself is documented in `skills/llvm_tune.md`.
+Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/llvm_tune.md`.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
@@ -37,6 +38,8 @@ LIVE-READ, not context-init loaded: the tuner's set-then-latch contract lets a h
 | `DAS_TUNE_POLICY` | text | declared by [tune_policy] | Override the missing-scope policy: fallback, warn, error, auto, or restart. The announce line says when the environment shaped the policy. |
 
 ## Ambient variables dasLLVM reads but does not own
+
+Read live at the point of use (`env_value_of`), not loaded at context init.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|

@@ -252,19 +252,12 @@ def public scan_env_banned_helpers(roots, skip : array<string>) : array<string> 
     return <- offenders
 }
 
+//! Names in `used` with no declaration. Ambient variables the registry lists but does not
+//! own (HOME, PROCESSOR_IDENTIFIER, ...) belong in `declared` too — fold them into the
+//! registry's `registered_env_names()`.
 def public env_undeclared_names(used : table<string>; declared : array<string>) : array<string> {
-    var none : array<string>
-    return <- env_undeclared_names(used, declared, none)
-}
-
-//! Names in `used` with no declaration and no ambient listing (variables the registry lists
-//! but does not own — HOME, PROCESSOR_IDENTIFIER, ...).
-def public env_undeclared_names(used : table<string>; declared, ambient : array<string>) : array<string> {
     var known : table<string>
     for (n in declared) {
-        known |> insert(n)
-    }
-    for (n in ambient) {
         known |> insert(n)
     }
     var missing <- [for (n in keys(used)); n; where !key_exists(known, n)]

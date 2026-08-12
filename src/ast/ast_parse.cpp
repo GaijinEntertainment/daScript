@@ -622,11 +622,14 @@ namespace das {
         }
 
         int64_t file_mtime = access->getFileMtime(fileName.c_str());
+        int64_t file_size = access->getFileSize(fileName.c_str());
         int64_t saved_mtime = 0;
+        int64_t saved_size = -1;
         string saved_filename{};
         uint64_t payload_size = 0;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_mtime;
+            serializer << saved_size;
             serializer << saved_filename;
             serializer << payload_size;
         }) ) {
@@ -635,7 +638,9 @@ namespace das {
             return false;
         }
 
-        if ( saved_filename != fileName || file_mtime != saved_mtime ) {
+        // mtime alone is 1-second granular - a same-second rewrite would serve the stale
+        // AST with no diagnostic, so the size rides beside it in the header
+        if ( saved_filename != fileName || file_mtime != saved_mtime || file_size != saved_size ) {
             // a CHANGED (or added/removed) module invalidates everything after it - das
             // modules depend on earlier ones (macros), so this stays the prefix cutoff
             serializer_read->seenNewModule = true;
@@ -646,12 +651,17 @@ namespace das {
             if (file_mtime != saved_mtime) {
                 logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
             }
+            if (file_size != saved_size) {
+                logs << "ser: file size mismatch. Expected " << saved_size << ", got " << file_size << "\n";
+            }
             return false;
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
+        // no per-module logging on the happy path - the standalone sink has no level
+        // threshold, so a line here prints once per warm module; the verdict line and the
+        // failure branches below carry everything a human needs
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
-            LOG(LogLevel::debug) << "das: serialize: read program '" << fileName << "' epoch " << (unsigned long long)(serializer.epoch + 1) << "\n";
             serializer.thisModuleGroup = &libGroup;
             serializer.serializeProgram(program, libGroup);
         });
@@ -659,7 +669,7 @@ namespace das {
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
             program->thisModuleGroup = &libGroup;
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
             }
             return true;
         }
@@ -679,10 +689,13 @@ namespace das {
         // file reproduces the write-run state, registrations included, so later records
         // stay valid: skip to the record end and keep serving them. A zero length (writer's
         // storage could not backpatch) or an out-of-range one keeps the legacy cutoff.
-        size_t record_end = payload_start + size_t(payload_size);
-        if ( payload_size != 0 && record_end <= serializer_read->buffer->buffer.size() ) {
-            serializer_read->buffer->bufferPos = record_end;
+        // overflow-safe bound: payload_size is stream data - a wrapped sum must not pass
+        if ( payload_size != 0 && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
+            serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
             serializer_read->failed = false;            // per-record failure; the stream is still aligned
+            // the throwing failure flavor sets seenNewModule too - clear it, or every later
+            // record (still valid: the file is UNCHANGED) reparses instead of serving
+            serializer_read->seenNewModule = false;
             serializer_read->resumedModules ++;
             logs << "ser: reparsing in place '" << fileName << "'\n";
             return false;
@@ -957,6 +970,7 @@ namespace das {
         parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
         yyscan_t scanner = nullptr;
         int64_t file_mtime = access->getFileMtime(fileName.c_str());
+        int64_t file_size = access->getFileSize(fileName.c_str());
         if ( auto fi = access->getFileInfo(fileName) ) {
             callCompilationCallback(moduleName, fileName, "parse");
             parserState.g_FileAccessStack.push_back(fi);
@@ -1217,7 +1231,7 @@ namespace das {
             }
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_mtime, file_size, program, program->thisModule.get()});
             }
             return program;
         }
@@ -1340,8 +1354,9 @@ namespace das {
             *serializer_write << version;
         }
         for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileMtime, program, thisModule] = parsedModule; // parsedModule is tuple<string, int64_t, ProgramPtr, Module *>
+            auto & [fileName, fileMtime, fileSize, program, thisModule] = parsedModule; // tuple<string, int64_t, int64_t, ProgramPtr, Module *>
             *serializer_write << fileMtime;
+            *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.
@@ -1351,6 +1366,11 @@ namespace das {
             *serializer_write << payload_size;
             size_t payload_start = serializer_write->buffer->writingSize();
             if ( program->thisModule && program->thisModule->name.empty() )  {
+                serializer_write->serializeProgram(program, libGroup);
+            } else if ( program->thisModule.get() == thisModule ) {
+                // the ENTRY program still owns its module (dependency programs released
+                // theirs in addNewModules) - re-attaching via reset(get()) would delete
+                // the module and leave a dangling pointer
                 serializer_write->serializeProgram(program, libGroup);
             } else {
                 // set thisModule to program
@@ -1674,8 +1694,9 @@ namespace das {
             if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, modName, access, logs, libGroup, exportAll, false, policies);
             compile_gc_collect.prog = res.get();
-            // wirteback all parsed modules from serializer_write
-            if ( daScriptEnvironment::getBound()->serializer_write != nullptr
+            // writeback all parsed modules from serializer_write - but never from a FAILED
+            // compile: a syntax error must not overwrite a good cache with a broken graph
+            if ( daScriptEnvironment::getBound()->serializer_write != nullptr && !res->failed()
                 && (!daScriptEnvironment::getBound()->serializer_read || daScriptEnvironment::getBound()->serializer_read->failed) ) {
                 writebackModules(libGroup);
             }
