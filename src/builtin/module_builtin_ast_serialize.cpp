@@ -2862,6 +2862,7 @@ namespace das {
         // Bump epoch so reused pointer addresses across program boundaries
         // get distinct SerializeNodeIds on this persistent serializer.
         ser.epoch++;
+        ser.builtinHashDrift = false;   // per-record flavor bit, read by the resume path
 
         ser << program->thisNamespace << program->thisModuleName;
 
@@ -2958,6 +2959,7 @@ namespace das {
                     if ( moduleHash != savedHash ) {
                         LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
                                                << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
+                        ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
                     }
@@ -3296,10 +3298,22 @@ namespace das {
             writer->moduleLibrary = nullptr;
             writer.reset();     // releases the parsedModules program refs before the program runs
             if ( !writeStorage.buffer.empty() ) {
-                if ( FILE * f = fopen(writePath.c_str(), "wb") ) {
+                // write-to-temp + rename: a concurrent reader on the same path sees a
+                // complete old or a complete new stream, never a torn one. The CRT rename
+                // cannot replace on Windows, so there is a missing-file blink there - a
+                // reader in that window just takes the cold path
+                string tmpPath = writePath + ".tmp";
+                if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
                     fclose(f);
                     res.wrote = res.wroteBytes == uint64_t(writeStorage.buffer.size());
+                    if ( res.wrote ) {
+#ifdef _WIN32
+                        remove(writePath.c_str());
+#endif
+                        res.wrote = rename(tmpPath.c_str(), writePath.c_str()) == 0;
+                    }
+                    if ( !res.wrote ) remove(tmpPath.c_str());   // never leave a corpse
                     res.saveFailed = !res.wrote;
                 } else {
                     res.saveFailed = true;

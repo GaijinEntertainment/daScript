@@ -691,6 +691,12 @@ namespace das {
         // storage could not backpatch) or an out-of-range one keeps the legacy cutoff.
         // overflow-safe bound: payload_size is stream data - a wrapped sum must not pass
         if ( payload_size != 0 && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
+            // two resume flavors: a builtin cumulative-hash mismatch is environment drift
+            // (a lazily populated builtin like dasbind), deterministic per process - a
+            // rewrite would change nothing and just churn. EVERYTHING else (a throwing
+            // failure, a mangled module name, a missing module) is repaired by the
+            // writeback, so the next run reads clean
+            if ( !serializer_read->builtinHashDrift ) serializer_read->resumedCorrupt ++;
             serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
             serializer_read->failed = false;            // per-record failure; the stream is still aligned
             // the throwing failure flavor sets seenNewModule too - clear it, or every later
@@ -1695,9 +1701,14 @@ namespace das {
             auto res = parseDaScript(fileName, modName, access, logs, libGroup, exportAll, false, policies);
             compile_gc_collect.prog = res.get();
             // writeback all parsed modules from serializer_write - but never from a FAILED
-            // compile: a syntax error must not overwrite a good cache with a broken graph
+            // compile: a syntax error must not overwrite a good cache with a broken graph.
+            // Fires when the stream went stale (failed), or when a resumed record failed
+            // the THROWING way (resumedCorrupt) - that stream is damaged and self-heals
+            // here; drift-flavored resumes (dasbind) deliberately do not rewrite
             if ( daScriptEnvironment::getBound()->serializer_write != nullptr && !res->failed()
-                && (!daScriptEnvironment::getBound()->serializer_read || daScriptEnvironment::getBound()->serializer_read->failed) ) {
+                && (!daScriptEnvironment::getBound()->serializer_read
+                    || daScriptEnvironment::getBound()->serializer_read->failed
+                    || daScriptEnvironment::getBound()->serializer_read->resumedCorrupt != 0) ) {
                 writebackModules(libGroup);
             }
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);

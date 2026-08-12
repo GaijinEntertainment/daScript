@@ -119,6 +119,8 @@ namespace das {
     // module-cache resume state (trySerializeProgramModule)
         bool                checkedStreamHeader = false;
         uint64_t            resumedModules = 0;     // records skipped + reparsed in place
+        uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
+        bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -346,13 +348,14 @@ namespace das {
     // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
     // / serializer_write): install() binds a reader (when the file exists and is non-empty)
     // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
-    // and saves the refreshed stream when the writeback fired (ast_parse only writes back
-    // when there was no usable reader or the stream went stale). A 'partial' read
-    // deliberately does NOT rewrite: the resumed record's bytes are served again next run
-    // and reparsed in place, so the reparse cost recurs per run - delete the file to
-    // rebuild. Pass the same path as both readFrom and writeTo for a self-maintaining
-    // cache. Under DAS_NO_FILEIO the cache degrades to a stub: install() binds nothing and
-    // finish() answers 'unavailable'.
+    // and saves the refreshed stream (write-to-temp + rename) when the writeback fired.
+    // The writeback fires when there was no usable reader, the stream went stale, or a
+    // resumed record failed the THROWING way (damaged bytes - the rewrite repairs it); a
+    // drift-flavored 'partial' (a lazily populated builtin like dasbind, deterministic per
+    // process) deliberately does NOT rewrite - that reparse cost recurs per run by design.
+    // Pass the same path as both readFrom and writeTo for a self-maintaining cache. Under
+    // DAS_NO_FILEIO the cache degrades to a stub: install() binds nothing and finish()
+    // answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
