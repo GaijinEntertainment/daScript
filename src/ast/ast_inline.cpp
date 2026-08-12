@@ -2446,7 +2446,11 @@ namespace das {
                             // a global's unqualified name would re-resolve inside the wrap
                             if ( needScope && av->isGlobalVariable() ) hazard = true;
                         }
-                        if ( hazard ) {
+                        // substituting a MUTABLE variable for a const parameter re-flavors every
+                        // read in the body, and an ==const-locked instance it calls stops matching
+                        // its own locked name on re-infer (30341) - bind a const temp instead
+                        bool constWidened = P->type->constant && !(leafA->type && leafA->type->constant);
+                        if ( hazard || constWidened ) {
                             makeArgTemp(A->clone(), true, false, false);
                         } else {
                             sub.substitute = leafA;

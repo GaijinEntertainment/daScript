@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 111;   // 111: record header carries file size beside mtime + program-module index in the record (init-order fidelity) (110: module-cache stream header + per-record payload length (resume-on-unchanged), 109: no_promotion on ExprNullCoalescing/ExprIs + ExprSwizzle no_promotion in swizzleFlags, 108: Function::moreFlags2 (tempStringResult; localFunction moved off the moreFlags overflow) + CodeOfPolicies::disable_temp_string_reclaim, 107: CodeOfPolicies::default_init_containers, 106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName)
+            return 112;   // 112: added const-widened by-value argument binds a temp, not a substitution
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
