@@ -17,6 +17,8 @@ require daslib/strings_boost
 // forwarded (non-literal) blocks and recursion stay regular calls.
 
 var g_log : string = ""
+var g_probe_pool : array<int>
+var g_creatures : array<int>
 
 def side(tag : string; v : int) : int {
     g_log += tag
@@ -68,7 +70,7 @@ def recursive_taker(n : int; blk : block<(v : int) : int>) : int {
     if (n <= 0) {
         return invoke(blk, 0)
     }
-    return recursive_taker(n - 1, blk) + 1  // nolint:LINT010
+    return recursive_taker(n - 1, blk) + 1
 }
 
 def iter_sum(var src : iterator<int>; blk : block<(v : int) : int>) : int {
@@ -263,6 +265,69 @@ def target_nested_same(k : int) : int {
     return o._has ? o._v : -1
 }
 
+// a MUTABLE for-iterator reaching a const param through two splice levels: substituting
+// it verbatim re-flavors every read in the body, and the ==const-locked locked_note it
+// calls stops matching its own instance - 30341 at a call the author never wrote
+[export]
+def target_const_widened_arg() : float {
+    var counted : array<int>
+    clear(g_probe_pool)
+    clear(g_creatures)
+    push(g_creatures, 1)
+    push(g_creatures, 2)
+    var total = 0.0
+    for (creatureNode in g_creatures) {
+        total += locked_forward(creatureNode, counted)
+    }
+    return total + float(length(counted))
+}
+
+// a sink locked to the CONST flavor: only one instance can ever exist, so a
+// substitution that widens the argument's constness has no overload to fall back to
+def private locked_note(var counted : array<int>; value : int const ==const) {
+    push(counted, value)
+}
+
+def private counted_has(var counted : array<int>; v : int) : bool {
+    var found = false
+    for (c in counted) {
+        if (c == v) {
+            found = true
+        }
+    }
+    return found
+}
+
+def probe_comp(v : int; blk : block<(var comp : auto(TT)? ==const) : void>) : bool {
+    push(g_probe_pool, v)
+    var c : int? = unsafe(addr(g_probe_pool[length(g_probe_pool) - 1]))
+    if (c == null) {
+        return false
+    }
+    invoke(blk, unsafe(reinterpret<TT?>(c)))
+    return true
+}
+
+// const by-value param: the body's locked_note call is TYPED against the const view
+def private locked_once(node : int; var counted : array<int>) : float {
+    var m = 0.0
+    if (node > 0 && !counted_has(counted, node)) {
+        probe_comp(node) $(var comp : int?) {
+            m = float(*comp)
+            locked_note(counted, node)
+        }
+    }
+    return m
+}
+
+def private locked_forward(node : int; var counted : array<int>) : float {
+    var m = 0.0
+    if (!counted_has(counted, node) && node > 0) {
+        m = locked_once(node, counted)
+    }
+    return m
+}
+
 def has(s, sub : string) : bool {
     return find(s, sub, 0) >= 0
 }
@@ -332,6 +397,15 @@ def test_auto_inline_fired(t : T?) {
             let b = body_of(t, "target_clone_from_param")
             t |> success(!has(b, "clone_taker("), "call is gone: {b}")
         }
+        t |> run("const-widened by-value argument binds a temp, not a substitution") @(t : T?) {
+            let b = body_of(t, "target_const_widened_arg")
+            t |> success(!has(b, "locked_forward("), "outer call is gone: {b}")
+            t |> success(!has(b, "locked_once("), "interior call is gone: {b}")
+            // the mutable iterator must NOT reach the spliced body verbatim - it binds
+            // a const temp, which is what keeps the locked instance matching
+            t |> success(!has(b, "locked_note(counted,creatureNode)"),
+                "mutable iterator did not substitute verbatim: {b}")
+        }
         t |> run("callee with interior splice splices again without capture") @(t : T?) {
             let b = body_of(t, "target_nested_res")
             t |> success(!has(b, "outer_probe("), "outer call is gone: {b}")
@@ -379,6 +453,7 @@ def test_auto_inline_behavior(t : T?) {
         t |> equal(target_nested_res(5), 15)
         t |> equal(target_nested_same(4), 18)
         t |> equal(target_clone_from_param(4), 4)
+        t |> equal(target_const_widened_arg(), 5.0)
     }
     t |> run("impure arguments evaluate once in call order") @(t : T?) {
         g_log = ""
