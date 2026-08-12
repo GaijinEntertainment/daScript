@@ -49,11 +49,40 @@ ExecStart=/usr/bin/python3 watchdog.py
 Restart=on-failure
 RestartSec=5
 
+# Sandbox: contain a hypothetical parser/runtime RCE to a capability-less process
+# that can only write its own db + release logs; host FS and other /srv services stay
+# read-only. Does NOT replace input-validation review. ReadWritePaths covers BOTH the
+# data dir and the release tree (the service writes libhv + watchdog logs under current/).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=$DATA $APP/releases
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+# TasksMax fits because the service does no parallel work (the daslang jobque is never
+# created). If it adopts parallel_for/channels/create_job_que the pool spawns cores-1
+# threads on spawn - raise this or set DAS_JOBQUE_THREADS then.
+TasksMax=64
+
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
     systemctl enable dasllama-ladder >/dev/null 2>&1 || true
+    systemctl try-restart dasllama-ladder >/dev/null 2>&1 || true   # re-provision applies the unit to a running service; no-op on first provision
     # /srv is already in restic BACKUP_PATHS; add the db to SQLITE_DBS so it is snapshotted
     # with sqlite3 .backup (a plain copy of a live DB can capture a torn write).
     if [ -f "$RESTIC_ENV" ] && ! grep -q "$DATA/ladder.db" "$RESTIC_ENV"; then
