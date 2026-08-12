@@ -44,6 +44,11 @@ namespace das {
         virtual bool readOverflow ( void * data, size_t size ) = 0;
         virtual void write ( const void * data, size_t size ) = 0;
         virtual size_t writingSize() const = 0;
+        // bytes left to read, when the storage knows: lets the reader reject a corrupted
+        // length BEFORE allocating (a serialized length can never exceed the bytes left).
+        // Streaming storages that cannot know keep the default "unbounded" - they simply
+        // do not get the early rejection.
+        virtual uint64_t readRemaining() const { return ~0ull; }
         // overwrite already-written bytes (record-length backpatch). A storage that cannot
         // seek keeps the default false — record lengths then stay 0 and the reader falls
         // back to the legacy stop-at-first-failure cutoff instead of skip-and-resume.
@@ -70,6 +75,9 @@ namespace das {
             if ( at + size > buffer.size() ) return false;
             memcpy(buffer.data() + at, data, size);
             return true;
+        }
+        virtual uint64_t readRemaining() const override {
+            return uint64_t(buffer.size() - bufferPos);
         }
     };
 
@@ -168,8 +176,14 @@ namespace das {
         __forceinline void dtag ( const char *, uint32_t ) {}
 #endif
         template<typename T>
-        void read  ( T & data ) { buffer->read(data); }
+        void read  ( T & data ) {
+            // zero-filled "success" on a truncated stream would silently corrupt every
+            // field after it - fail like the sized read does (recoverable: the module
+            // cache resumes past the record)
+            if ( !buffer->read(data) ) onReadFailure();
+        }
         void read  ( void * data, size_t size );
+        [[noreturn]] void onReadFailure ();     // throws dasException ("read overflow")
         void write ( const void * data, size_t size );
         template<typename T>
         void serialize ( T & data ) {

@@ -150,6 +150,10 @@ namespace das {
         }
     }
 
+    void AstSerializer::onReadFailure () {
+        throw dasException{"ast serializer read overflow", LineInfo()};
+    }
+
     void AstSerializer::serialize ( void * data, size_t size ) {
         if ( writing ) {
             write(data,size);
@@ -213,6 +217,12 @@ namespace das {
                 uint32_t sz = 0; *this << sz;
                 size = sz;
             }
+            // a serialized length can never exceed the bytes left (every element costs at
+            // least one byte) - a corrupted length must fail HERE, as a recoverable throw,
+            // not as a layout-dependent wild allocation later (SIGSEGV under one allocator,
+            // clean bad_alloc under another - the module-cache corruption CI red)
+            SERIALIZER_VERIFYF(uint64_t(size) <= buffer->readRemaining(),
+                "corrupt stream: size %u exceeds remaining bytes", size);
         }
     }
 
@@ -2953,6 +2963,10 @@ namespace das {
 
                 if ( builtin && !promoted ) {
                     auto m = Module::require(name);
+                    // a corrupted record can hand this arm a garbage name - require()
+                    // answers null, and the deref was a SIGSEGV (recoverable throw now;
+                    // the resume reparses the record in place)
+                    SERIALIZER_VERIFYF(m != nullptr, "builtin module '%s' not found", name.c_str());
                     uint64_t savedHash = 0, moduleHash = m->cumulativeHash;
                     *this << savedHash;
 
