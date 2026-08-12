@@ -271,7 +271,7 @@ class AudioChannel {
     def report_eos {
         publish_status(AudioChannelState.stopped)
     }
-    def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037 - one DSP stage per branch, linear pipeline
+    def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037,STYLE038 - one DSP stage per branch, linear pipeline
         if (!source->ready() || g_pitch == 0.) return true
         if (paused) {
             publish_status(AudioChannelState.paused)
@@ -297,7 +297,7 @@ class AudioChannel {
                 unsafe(addr(temp[0])),
                 unsafe(addr(outputFrames)))
             delete samples
-            samples <- temp  // nolint:PERF030 - target deleted on the previous line
+            samples <- temp
         }
         // hrtf — only when this channel is routed through HRTF (top-N by distance per update_hrtf budget)
         var nSoundChannels = source.channels
@@ -312,7 +312,7 @@ class AudioChannel {
                 uint(outputFrames))
             nSoundChannels = 2      // HRTF always produces stereo
             delete samples
-            samples <- temp  // nolint:PERF030 - target deleted on the previous line
+            samples <- temp
         }
         // reverb
         if (reverb != null) {
@@ -326,7 +326,7 @@ class AudioChannel {
                 panic("unsupported channel count {channels}")
             }
             delete samples
-            samples <- temp  // nolint:PERF030 - target deleted on the previous line
+            samples <- temp
         }
         // chorus
         if (chorus != null && nSoundChannels == 2) {
@@ -334,7 +334,7 @@ class AudioChannel {
             temp |> resize(int(outputFrames) * 2)
             chorus_process(chorus, unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
             delete samples
-            samples <- temp  // nolint:PERF030 - target deleted on the previous line
+            samples <- temp
         }
         // convert channels — for is3D channels, pick the converter sized to the upstream stage:
         //   HRTF mode    -> samples are 2ch, use `channel_converter` (2 -> MA_CHANNELS)

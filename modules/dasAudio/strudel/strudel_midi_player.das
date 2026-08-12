@@ -81,7 +81,7 @@ def gm_preset(program : int) : GmPreset {
 
 // ─── Channel 10 Drum Map ───
 
-def render_drum_hit(note : int; velocity : float) : array<float> {
+def render_drum_hit(note : int; velocity : float) : array<float> {  // nolint:STYLE037 - GM drum-note dispatch, one arm per note
     //! Render a GM channel-10 drum hit for `note` at the given velocity as a mono PCM buffer.
     //! Dispatches to the appropriate `render_*` drum voice from `strudel_synth`; falls back to a short hi-hat burst for unmapped notes.
     let gain = velocity
@@ -396,7 +396,7 @@ def private sf2_note_off(var state : MidiPlaybackState; ch, note : int) {
 
 // ─── Event Processing ───
 
-def process_events(var state : MidiPlaybackState) {
+def process_events(var state : MidiPlaybackState) {  // nolint:STYLE037,STYLE038 - MIDI event dispatch, one arm per event kind
     //! Dispatch all MIDI events up to the current playback tick: note-on/off, program changes, CCs, pitch bend, tempo.
     //! Routes note events either to the SF2 voice allocator or to the legacy oscillator/sample path depending on `state.sf2`.
     while (state.event_index < length(state.events)) {
@@ -423,12 +423,12 @@ def process_events(var state : MidiPlaybackState) {
                     if (state.bank != null) {
                         let drum_name = gm_drum_name(ev.data1)
                         if (!empty(drum_name) && key_exists(state.bank.sounds, drum_name)) {
-                            drum_stereo <- render_sample(*state.bank, drum_name, ev.data1 % 3, 1.0)
+                            drum_stereo <- render_sample(*state.bank, drum_name, ev.data1 % 3, 1.0)  // nolint:PERF030 - first write to the fresh declaration above
                         }
                     }
                     if (empty(drum_stereo)) {
                         var drum_mono <- render_drum_hit(ev.data1, vel)
-                        drum_stereo <- mono_to_stereo(drum_mono)
+                        drum_stereo <- mono_to_stereo(drum_mono)  // nolint:PERF030 - the enclosing `empty(drum_stereo)` guard proves the target holds nothing
                     }
                     state.voices |> push(new MidiVoice(
                         channel = ch,
@@ -541,7 +541,7 @@ def process_events(var state : MidiPlaybackState) {
 
 // ─── Render One Tick ───
 
-def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<float> {
+def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<float> {  // nolint:STYLE037,STYLE038 - render pipeline, phases share the output buffer and send buses
     //! Advance playback by `chunk_seconds`, process pending events, render all active voices and return an interleaved stereo PCM chunk.
     //! Handles oscillator voices, drum/sample playback, SF2 voices, and the shared reverb/chorus send buses.
     process_events(state)
@@ -819,7 +819,7 @@ var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids 
 
 // ─── Audio Thread Main Loop ───
 
-def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_status : JobStatus?; audio_channel : void?; vis_ptr : void?) {
+def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_status : JobStatus?; audio_channel : void?; vis_ptr : void?) {  // nolint:STYLE037,STYLE038 - thread lifecycle + watermark loop, state is loop-carried
     unsafe {
         set_audio_thread_command_stream(audio_channel)
     }

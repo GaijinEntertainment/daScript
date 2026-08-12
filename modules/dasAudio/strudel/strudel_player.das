@@ -498,7 +498,7 @@ def public strudel_create_channel() {
     }
 }
 
-def public strudel_tick() {
+def public strudel_tick() {  // nolint:STYLE038 - one tick: query, render, mix, append in sequence
     //! Single main-thread tick: query all tracks, render audio, mix, append to the PCM stream.
     //! Call from your render loop; self-regulating — skips when the audio buffer has enough data queued.
     // wait for previous pcm box to be consumed before overwriting the buffer
@@ -594,7 +594,7 @@ def public strudel_tick() {
     }
 }
 
-def public strudel_tick_offline() {
+def public strudel_tick_offline() {  // nolint:STYLE038 - same tick pipeline as strudel_tick, without a driver
     //! Offline tick: same as strudel_tick but without an audio driver.
     //! Renders into g_master_pcm and advances g_wall_time; call in a tight loop for offline WAV rendering.
     let t0 = ref_time_ticks()
@@ -678,7 +678,7 @@ def public strudel_tick_offline() {
 
 // --- Threaded mode ---
 
-def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noop_cmd) {
+def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noop_cmd) {  // nolint:STYLE037,STYLE038 - blocking tick loop + command dispatch, state is loop-carried
     //! Blocking multi-track tick loop for threaded playback.
     //! Runs on the strudel thread (spawned by strudel_init); dispatches incoming user commands via cmd_fn until shutdown.
     let CHUNK_SEC = g_chunk_seconds
@@ -929,7 +929,7 @@ def public strudel_shutdown() {
             delete g_sf2
         }
         g_sf2 = null
-        g_sf2_path := ""
+        g_sf2_path = ""
     }
     // release sample bank (each Sample owns a large array<float>; table finalizer drops all variations)
     delete g_bank.sounds
@@ -1024,7 +1024,7 @@ def private serialize_zone(var arch : Archive; var zone : SF2Zone?&) {
     }
 }
 
-def private serialize_sf2(var arch : Archive; var sf2 : SF2File?&) {
+def private serialize_sf2(var arch : Archive; var sf2 : SF2File?&) {  // nolint:STYLE038 - one serialize call per field, a flat list
     var has = sf2 != null
     arch |> serialize(has)
     if (!has) return

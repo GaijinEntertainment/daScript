@@ -155,11 +155,13 @@ def load_sound_data() {
     var f = fopen(fname, "rb")
     if (f == null) {
         // Fallback: generate a 440Hz sine tone
+        delete sound_data
         sound_data <- [for (x in range(MA_SAMPLE_RATE * 2)); sin(2.0 * PI * 440.0 * float(x) / float(MA_SAMPLE_RATE))]
         sound_channels = 1
         sound_rate = MA_SAMPLE_RATE
         return
     }
+    delete sound_data
     fmap(f) $(data) {
         sound_data <- decode_audio(data, sound_channels, sound_rate)
     }
