@@ -35,15 +35,11 @@ def lint_single(file : string; project : string;
         var count = paranoid_collect(program, all_issues, disabled_codes, enabled_codes)
         var perf_issues : array<string>
         count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
-        for (w in perf_issues) {
-            all_issues |> push(w)
-        }
+        all_issues |> push_from(perf_issues)
         var style_issues : array<string>
         let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
         count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
-        for (w in style_issues) {
-            all_issues |> push(w)
-        }
+        all_issues |> push_from(style_issues)
         return "{compile_warnings}No lint issues." if (count == 0)
         return build_string() $(var w) {
             if (!empty(compile_warnings)) {
@@ -85,15 +81,11 @@ def lint_file(file : string; project : string;
                     result.count = paranoid_collect(program, result.errors, disabled_codes, enabled_codes)
                     var perf_issues : array<string>
                     result.count += perf_lint_collect(program, perf_issues, disabled_codes, enabled_codes)
-                    for (w in perf_issues) {
-                        result.errors |> push(w)
-                    }
+                    result.errors |> push_from(perf_issues)
                     var style_issues : array<string>
                     let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
                     result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
-                    for (w in style_issues) {
-                        result.errors |> push(w)
-                    }
+                    result.errors |> push_from(style_issues)
                 }
             }
         }
