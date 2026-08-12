@@ -99,6 +99,13 @@ sudo dasllama-deploy.sh install $SHA /tmp/dasllama-ladder-$SHA.tar.gz
 sudo dasllama-deploy.sh caddy                                      # splice /api into the dasllama.io vhost, validate, reload
 ```
 
+The unit `provision` writes is **sandboxed** (`ProtectSystem=strict`, all capabilities dropped,
+loopback-only, `ReadWritePaths` limited to the data dir + release tree) — it contains a
+hypothetical parser/runtime RCE to a process that can only write its own db and logs, while the
+host filesystem and the other `/srv` services stay read-only. It is defence-in-depth, not a
+substitute for validating what the public submit endpoints accept. `provision` is idempotent, so
+re-running it after a unit change re-applies the sandbox and restarts a running service.
+
 The board launches **read-only**: `submit_open` defaults false, so `/api/submit/*` returns 403
 until an operator opens it. Toggle for a test window over the loopback tunnel with
 `sudo dasllama-deploy.sh open-submit` / `close-submit`; the permanent open (after the security

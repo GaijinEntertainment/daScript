@@ -86,6 +86,12 @@ too.**
   exactly `/usr/local/sbin/dasllama-deploy.sh` and nothing else; a second command, a wildcard
   target, a bare `ALL`, or a shell is a defect.
 
+**The unit `provision` writes runs the service sandboxed** (`ProtectSystem=strict`, emptied
+`CapabilityBoundingSet`, `ReadWritePaths` limited to the data dir and the release tree). A diff
+that changes where the service or watchdog writes at runtime — log path, working directory,
+database location — without a matching `ReadWritePaths` entry is a defect; so is relaxing
+`ProtectSystem` or restoring a capability with no stated reason.
+
 ---
 
 ## Transport
