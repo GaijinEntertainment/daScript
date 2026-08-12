@@ -27,10 +27,7 @@ def private herd_base_url : string {
     if (empty(url)) {
         url = "http://127.0.0.1:9191"
     }
-    while (ends_with(url, "/")) {
-        url = slice(url, 0, length(url) - 1)
-    }
-    return url
+    return rtrim(url, "/")
 }
 
 def private herd_url(path : string) : string {
@@ -167,7 +164,7 @@ def private do_repository_add(path, display_name : string) : string {
     return herd_http(true, "/api/v1/repositories", body)
 }
 
-def private build_dasherd_tools(var reg : array<ToolDef>) {
+def private build_dasherd_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat registration table: one emplace per MCP tool
     reg |> emplace(ToolDef(
         tool <- make_tool("dasherd_whoami",
             "Identify this dasHerd session: sender, session id, watcher URL, and whether the environment is configured.",

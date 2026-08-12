@@ -105,17 +105,19 @@ def public markdown_uri_paragraph(id : string; prefix, display_text, suffix, tar
     var dl = GetWindowDrawList()
     let body_col = GetColorU32(style.body_color)
     let link_col = GetColorU32(result.hovered ? style.link_hover_color : style.link_color)
-    for (fragment in layout.fragments) {
-        if (fragment.is_control) continue
-        let fragment_text = slice(source, fragment.source.start_byte,
-                                  fragment.source.end_byte)
-        let p0 = fragment_min(origin, fragment)
-        *dl |> AddText(p0, fragment.semantic_id == 1 ? link_col : body_col, fragment_text)
-        if (result.hovered && fragment.semantic_id == 1) {
-            let underline_y = p0.y + GetTextLineHeight() - 1.0f
-            *dl |> AddLine(float2(p0.x, underline_y),
-                           float2(fragment_max(origin, fragment).x, underline_y),
-                           link_col, style.underline_thickness)
+    peek_data(source) $(source_bytes) {
+        for (fragment in layout.fragments) {
+            if (fragment.is_control) continue
+            let fragment_text = slice(source_bytes, fragment.source.start_byte,
+                                      fragment.source.end_byte)
+            let p0 = fragment_min(origin, fragment)
+            *dl |> AddText(p0, fragment.semantic_id == 1 ? link_col : body_col, fragment_text)
+            if (result.hovered && fragment.semantic_id == 1) {
+                let underline_y = p0.y + GetTextLineHeight() - 1.0f
+                *dl |> AddLine(float2(p0.x, underline_y),
+                               float2(fragment_max(origin, fragment).x, underline_y),
+                               link_col, style.underline_thickness)
+            }
         }
     }
 

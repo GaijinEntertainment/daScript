@@ -229,10 +229,13 @@ def demo_property_testing() {
 
 def reverse_string(s : string) : string {
     return build_string() $(var w) {
-        var i = length(s) - 1
-        while (i >= 0) {
-            w |> write(slice(s, i, i + 1))
-            i --
+        // walk the byte view: slicing `s` per character would re-strlen it every step
+        peek_data(s) $(d) {
+            var i = length(d) - 1
+            while (i >= 0) {
+                w |> write_char(int(d[i]))
+                i --
+            }
         }
     }
 }

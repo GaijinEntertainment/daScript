@@ -108,22 +108,33 @@ def quote_cadmus_history(text : string) : string {
 }
 
 def sanitize_cadmus_reply(text : string; var clean, error : string&) : bool {
-    clean = strip(text)
+    clean = ""
     error = ""
-    while (starts_with(clean, "<think>")) {
-        let close_at = find(clean, "</think>")
-        if (close_at < 0) {
-            clean = ""
-            error = "model response contained an unterminated thinking block"
-            return false
+    var ok = true
+    peek_data(text) $(d) {
+        let n = length(d)
+        // consuming a leading block advances the cursor - the reply is materialized once, at the end
+        var pos = skip_white_space(d, 0)
+        while (starts_with(d, pos, "<think>")) {
+            let close_at = find(d, "</think>", pos)
+            if (close_at < 0) {
+                error = "model response contained an unterminated thinking block"
+                ok = false
+                return
+            }
+            pos = skip_white_space(d, close_at + length("</think>"))
         }
-        clean = strip(slice(clean, close_at + length("</think>")))
+        if (find(d, "<think>", pos) >= 0 || find(d, "</think>", pos) >= 0) {
+            error = "model response contained a thinking block outside the response preamble"
+            ok = false
+            return
+        }
+        clean = strip(slice(d, pos, n))
     }
-    if (find(clean, "<think>") >= 0 || find(clean, "</think>") >= 0) {
-        clean = ""
-        error = "model response contained a thinking block outside the response preamble"
+    if (!ok) {
         return false
     }
+    // peek_data never calls the block on an empty text, so clean is still "" there
     if (empty(clean)) {
         error = "model response contained thinking but no final answer"
         return false

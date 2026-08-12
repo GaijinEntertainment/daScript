@@ -1,0 +1,1 @@
+Returns a new uint8 byte array holding a copy of the bytes of string `str`, with no terminator appended. This is the materializing inverse of `string(bytes)`: unlike the temporary view a `peek_data` block receives, the array is owned by the caller and outlives the call, so `string(to_bytes(str))` round-trips any string that carries no interior NUL.

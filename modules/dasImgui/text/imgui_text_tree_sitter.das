@@ -53,11 +53,11 @@ def private push_source_syntax_span(var document : TextSourceDocument;
 }
 
 def private ascii_upper(value : int) : bool {
-    return value >= 'A' && value <= 'Z' // nolint:PERF014
+    return value >= 'A' && value <= 'Z'
 }
 
 def private ascii_lower(value : int) : bool {
-    return value >= 'a' && value <= 'z' // nolint:PERF014
+    return value >= 'a' && value <= 'z'
 }
 
 def private das_identifier_start(value : int) : bool {
@@ -193,7 +193,7 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
                 // Expect flags below still style a long name after `def`.
                 var word = ""
                 if (at - start <= g_das_keyword_max_bytes) {
-                    word = slice(source, start, at)
+                    word = slice(bytes, start, at)
                 }
                 var style = das_keyword_style(word)
                 if (style == TextSourceSyntaxStyle.none && expect_function) {
@@ -341,7 +341,7 @@ def private json_lexical_source_document(source : string;
                 while (at < length(bytes) && ascii_lower(int(bytes[at]))) {
                     at++
                 }
-                let word = slice(source, start, at)
+                let word = slice(bytes, start, at)
                 if (word == "true" || word == "false") {
                     push_json_span(document, covered_until, start, at,
                         TextSourceSyntaxStyle.number)

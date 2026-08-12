@@ -33,13 +33,12 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
     while (!feof(f)) {
         var ln = fgets(f)
         // strip trailing newline/cr
-        while (!empty(ln)) {
-            let last_ch = character_at(ln, length(ln) - 1) // nolint:PERF003
-            if (last_ch == '\n' || last_ch == '\r') {
-                ln = slice(ln, 0, length(ln) - 1)
-            } else {
-                break
+        peek_data(ln) $(d) {
+            var keep = length(d)
+            while (keep > 0 && (int(d[keep - 1]) == '\n' || int(d[keep - 1]) == '\r')) {
+                keep--
             }
+            ln = slice(d, 0, keep)
         }
         lines |> push(ln)
     }
@@ -61,7 +60,7 @@ def lineinfo_file(at : LineInfo) : string {
 }
 
 // Resolve definition from a CursorHit
-def resolve_definition(hit : CursorHit) : DefinitionResult {
+def resolve_definition(hit : CursorHit) : DefinitionResult { // nolint:STYLE037,STYLE038 — exact-type `is` ladder over the AST node classes; each arm builds one DefinitionResult
     let expr = hit.expr
     // ExprVar → variable declaration
     if (expr is ExprVar) {

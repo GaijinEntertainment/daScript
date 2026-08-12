@@ -9,7 +9,6 @@ module strudel_mini shared public
 require strudel/strudel_event
 require strudel/strudel_time
 require strudel/strudel_pattern
-require math
 require strings  // to_int, to_float, to_double, slice
 
 // ─── Tokenizer ───
@@ -64,11 +63,11 @@ struct Token {
         //! Byte offset of the token in the original input string.
 }
 
-def tokenize(input : string) : array<Token> {
+def tokenize(input : string) : array<Token> { // nolint:STYLE038 — flat one-arm-per-token dispatch over the mini-notation alphabet
     //! Tokenize a mini-notation string into an array of `Token`. Uses `peek_data` for
     //! O(1) per-character access. An `EOF_TOKEN` is always appended at the end.
     var tokens : array<Token>
-    peek_data(input) $(data) {
+    peek_data(input) $(data) { // nolint:STYLE037 — the flat token dispatch is the whole block body
         var i = 0
         let n = length(data)
         while (i < n) {
@@ -130,7 +129,7 @@ def tokenize(input : string) : array<Token> {
                         break
                     }
                 }
-                tokens |> push(Token(kind = TokenKind.NUMBER, text = slice(input, start, i), pos = start))
+                tokens |> push(Token(kind = TokenKind.NUMBER, text = slice(data, start, i), pos = start))
             } elif (is_alpha(ch) || ch == '_') {
                 let start = i
                 while (i < n) {
@@ -143,7 +142,7 @@ def tokenize(input : string) : array<Token> {
                         break
                     }
                 }
-                tokens |> push(Token(kind = TokenKind.WORD, text = slice(input, start, i), pos = start))
+                tokens |> push(Token(kind = TokenKind.WORD, text = slice(data, start, i), pos = start))
             } else {
                 i ++  // skip unknown
             }
@@ -251,32 +250,33 @@ def private parse_seq(var p : Parser) : Pattern {
 // parse_element → atom_expr modifier*
 def private parse_element(var p : Parser) : Pattern {
     var pat <- parse_atom(p)
-    // apply modifiers
+    // Every combinator below @capture(<- pat)s the pattern it wraps, so `pat <- pat |> f()`
+    // hands the old value to the new one - there is nothing left to release (PERF030).
     while (!at_end(p)) {
         let k = peek(p).kind
         if (k == TokenKind.STAR) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_double(num.text)
-            pat <- pat |> fast(n)
+            pat <- pat |> fast(n) // nolint:PERF030
         } elif (k == TokenKind.SLASH) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_double(num.text)
-            pat <- pat |> slow(n)
+            pat <- pat |> slow(n) // nolint:PERF030
         } elif (k == TokenKind.BANG) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_int(num.text)
             // replicate: "bd!3" ≈ fast(3, bd) — approximation since patterns aren't copyable
-            pat <- pat |> fast(double(n))
+            pat <- pat |> fast(double(n)) // nolint:PERF030
         } elif (k == TokenKind.QUESTION) {
             advance(p)
             var prob = 0.5
             if (peek(p).kind == TokenKind.NUMBER) {
                 prob = to_float(expect_token(p, TokenKind.NUMBER).text)
             }
-            pat <- pat |> degrade(prob)
+            pat <- pat |> degrade(prob) // nolint:PERF030
         } elif (k == TokenKind.COLON) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
@@ -284,7 +284,7 @@ def private parse_element(var p : Parser) : Pattern {
             let fn <- @capture(= idx) (e : Event) : Event {
                 var r = e; r.n = idx; return r
             }
-            pat <- pat |> fmap(fn)
+            pat <- pat |> fmap(fn) // nolint:PERF030
         } elif (k == TokenKind.LPAREN) {
             // Euclidean rhythm: "bd(3,8)" → euclid(3,8); "bd(3,8,1)" → euclidRot(3,8,1)
             advance(p)
@@ -294,9 +294,9 @@ def private parse_element(var p : Parser) : Pattern {
             if (peek(p).kind == TokenKind.COMMA) {
                 advance(p)
                 let rot = to_int(expect_token(p, TokenKind.NUMBER).text)
-                pat <- pat |> euclidRot(kk, nn, rot)
+                pat <- pat |> euclidRot(kk, nn, rot) // nolint:PERF030
             } else {
-                pat <- pat |> euclid(kk, nn)
+                pat <- pat |> euclid(kk, nn) // nolint:PERF030
             }
             expect_token(p, TokenKind.RPAREN)
         } else {

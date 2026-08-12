@@ -65,13 +65,19 @@ def find_earliest(text : string; chars : array<int>) : int {
 }
 
 def strip_modifiers(rest0 : string; modifiers : array<string>) : string {
-    var rest = rest0
-    for (m in modifiers) {
-        if (starts_with(rest, m)) {
-            rest = strip(slice(rest, length(m)))
+    var out = rest0
+    peek_data(rest0) $(d) {
+        var pos = 0
+        for (m in modifiers) {
+            if (starts_with(d, pos, m)) {
+                pos = skip_white_space(d, pos + length(m))
+            }
+        }
+        if (pos > 0) {
+            out = strip(slice(d, pos))
         }
     }
-    return rest
+    return out
 }
 
 def extract_name_from_text(text, kind : string) : string {
@@ -154,16 +160,22 @@ def extract_name_from_text(text, kind : string) : string {
 
 def skip_annotations(text : string) : string {
     // Skip annotation lines like "[generic]\n[macro_function]\n" to get to the declaration
-    var line = text
-    while (starts_with(strip(line), "[")) {
-        let nl = find(line, "\n")
-        if (nl >= 0) {
-            line = slice(line, nl + 1)
-        } else {
-            break
+    var out = text
+    peek_data(text) $(d) {
+        let n = length(d)
+        var pos = 0
+        while (true) {
+            let head = skip_white_space(d, pos)
+            break if (head >= n || int(d[head]) != '[')
+            let nl = find(d, "\n", pos)
+            break if (nl < 0)
+            pos = nl + 1
+        }
+        if (pos > 0) {
+            out = slice(d, pos)
         }
     }
-    return line
+    return out
 }
 
 def get_first_line(text : string) : string {

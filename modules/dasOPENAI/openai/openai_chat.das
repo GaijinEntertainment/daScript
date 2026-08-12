@@ -174,7 +174,7 @@ def chat_text(client : OpenAIClient; model : string; prompt : string) : string {
 // carry a handful of tool calls; this is far above any legitimate count.
 let private MAX_STREAM_TOOL_CALLS = 256
 
-def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
+def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest; // nolint:STYLE038 — one SSE stream lifecycle: request setup, per-chunk line framing, completion
                 on_delta : block<(delta : string) : void>) : ChatStreamResult {
     //! Streams a ``/chat/completions`` response, invoking ``on_delta`` with each text
     //! increment as it arrives. Returns the full accumulated content plus status.
@@ -201,44 +201,52 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest;
         request_cb(hreq,
             $(chunk : string) {
                 buffer += chunk
-                var nl = find(buffer, "\n")
-                while (nl >= 0) {
-                    var line = slice(buffer, 0, nl)
-                    buffer = slice(buffer, nl + 1, length(buffer))
-                    // tolerate CRLF line endings: drop a trailing '\r' so payload + [DONE] parse cleanly
-                    if (ends_with(line, "\r")) {
-                        line = slice(line, 0, length(line) - 1)
-                    }
-                    if (starts_with(line, "data: ")) {
-                        let payload = slice(line, 6, length(line))
-                        if (payload != "[DONE]") {
-                            var frame : ChatCompletionChunk
-                            if (sscan_json(payload, frame) && !empty(frame.choices)) {
-                                let d = frame.choices[0].delta.content
-                                if (!empty(d)) {
-                                    parts |> push(d)
-                                    invoke(on_delta, d)
-                                }
-                                for (tcd in frame.choices[0].delta.tool_calls) {
-                                    let idx = tcd.index
-                                    // ignore out-of-range indices: negative would underflow the array,
-                                    // an absurdly large one would force unbounded allocation
-                                    continue if (idx < 0 || idx >= MAX_STREAM_TOOL_CALLS)
-                                    while (length(tools) <= idx) {
-                                        tools |> emplace(ToolCall())
+                // one peek_data per chunk: every line is framed inside the view, so no
+                // per-line string is materialized and the buffer is compacted once
+                var consumed = 0
+                peek_data(buffer) $(bytes) {
+                    var nl = find(bytes, '\n', consumed)
+                    while (nl >= 0) {
+                        // tolerate CRLF line endings: drop a trailing '\r' so payload + [DONE] parse cleanly
+                        var line_end = nl
+                        if (line_end > consumed && int(bytes[line_end - 1]) == '\r') {
+                            line_end --
+                        }
+                        if (starts_with(bytes, consumed, "data: ")) {
+                            let payload = slice(bytes, consumed + 6, line_end)
+                            if (payload != "[DONE]") {
+                                var frame : ChatCompletionChunk
+                                if (sscan_json(payload, frame) && !empty(frame.choices)) {
+                                    let delta = frame.choices[0].delta.content
+                                    if (!empty(delta)) {
+                                        parts |> push(delta)
+                                        invoke(on_delta, delta)
                                     }
-                                    if (!empty(tcd.id)) { tools[idx].id = tcd.id }
-                                    if (!empty(tcd._type)) { tools[idx]._type = tcd._type }
-                                    if (!empty(tcd._function.name)) { tools[idx]._function.name = tcd._function.name }
-                                    tools[idx]._function.arguments += tcd._function.arguments
-                                }
-                                if (!empty(frame.choices[0].finish_reason)) {
-                                    finish = frame.choices[0].finish_reason
+                                    for (tcd in frame.choices[0].delta.tool_calls) {
+                                        let idx = tcd.index
+                                        // ignore out-of-range indices: negative would underflow the array,
+                                        // an absurdly large one would force unbounded allocation
+                                        continue if (idx < 0 || idx >= MAX_STREAM_TOOL_CALLS)
+                                        while (length(tools) <= idx) {
+                                            tools |> emplace(ToolCall())
+                                        }
+                                        if (!empty(tcd.id)) { tools[idx].id = tcd.id }
+                                        if (!empty(tcd._type)) { tools[idx]._type = tcd._type }
+                                        if (!empty(tcd._function.name)) { tools[idx]._function.name = tcd._function.name }
+                                        tools[idx]._function.arguments += tcd._function.arguments
+                                    }
+                                    if (!empty(frame.choices[0].finish_reason)) {
+                                        finish = frame.choices[0].finish_reason
+                                    }
                                 }
                             }
                         }
+                        consumed = nl + 1
+                        nl = find(bytes, '\n', consumed)
                     }
-                    nl = find(buffer, "\n")
+                }
+                if (consumed > 0) {
+                    buffer = slice(buffer, consumed)
                 }
             },
             $(var resp : HttpResponse?) {

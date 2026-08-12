@@ -596,7 +596,7 @@ def private bake_worker(daslang_bin, gguf_path, flavor, cfg_path : string; var e
         var line_start = 0
         while (at < length(bytes)) {
             if (bytes[at] == uint8('\n')) {
-                let line = slice(out, line_start, at)
+                let line = slice(bytes, line_start, at)
                 if (find(line, "dasllama-convert:") >= 0) {
                     bake_emit(events, 0, clone_string(line))
                 }

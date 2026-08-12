@@ -420,7 +420,7 @@ def private lex_line(profile : TextLanguageProfile const; line : string;
                 while (at < n && byte_word_class(int(bytes[at])) == 1) {
                     at++
                 }
-                if (find_index(profile.keywords, slice(line, start, at)) >= 0) {
+                if (find_index(profile.keywords, slice(bytes, start, at)) >= 0) {
                     lex_push(runs, start, at, TextSourceSyntaxStyle.keyword)
                 }
             } elif (is_number(b)) {
@@ -2062,30 +2062,32 @@ def private snippet_parse(pattern, selection, indent : string;
     var rl = 0
     var rc = 0
     parsed.body = build_string() $(var writer) {
-        var at = 0
-        let total = length(pattern)
-        while (at < total) {
-            let open_ = find(pattern, "$\{", at)
-            let close_ = open_ < 0 ? -1 : find(pattern, "}", open_)
-            if (open_ < 0 || close_ < 0) {
-                let chunk = snippet_chunk(slice(pattern, at, total), indent)
-                writer |> write(chunk)
-                snippet_advance(chunk, rl, rc)
-                break
+        peek_data(pattern) $(pattern_bytes) {
+            var at = 0
+            let total = length(pattern_bytes)
+            while (at < total) {
+                let open_ = find(pattern_bytes, "$\{", at)
+                let close_ = open_ < 0 ? -1 : find(pattern_bytes, "}", open_)
+                if (open_ < 0 || close_ < 0) {
+                    let chunk = snippet_chunk(slice(pattern_bytes, at, total), indent)
+                    writer |> write(chunk)
+                    snippet_advance(chunk, rl, rc)
+                    break
+                }
+                if (open_ > at) {
+                    let chunk = snippet_chunk(slice(pattern_bytes, at, open_), indent)
+                    writer |> write(chunk)
+                    snippet_advance(chunk, rl, rc)
+                }
+                let token = slice(pattern_bytes, open_ + 2, close_)
+                if (!snippet_token(token, selection, writer, parsed, rl, rc)) {
+                    // not a placeholder: emit verbatim
+                    let literal = slice(pattern_bytes, open_, close_ + 1)
+                    writer |> write(literal)
+                    snippet_advance(literal, rl, rc)
+                }
+                at = close_ + 1
             }
-            if (open_ > at) {
-                let chunk = snippet_chunk(slice(pattern, at, open_), indent)
-                writer |> write(chunk)
-                snippet_advance(chunk, rl, rc)
-            }
-            let token = slice(pattern, open_ + 2, close_)
-            if (!snippet_token(token, selection, writer, parsed, rl, rc)) {
-                // not a placeholder: emit verbatim
-                let literal = slice(pattern, open_, close_ + 1)
-                writer |> write(literal)
-                snippet_advance(literal, rl, rc)
-            }
-            at = close_ + 1
         }
     }
 }
@@ -3706,11 +3708,13 @@ def public text_edit_color_text(value : float4; digits : int) : string {
     let hex_chars = "0123456789ABCDEF"
     return build_string() $(var writer) {
         writer |> write("0x")
-        var shift = (digits - 1) * 4
-        while (shift >= 0) {
-            let nibble = int((packed >> uint(shift)) & 0xF)
-            writer |> write(slice(hex_chars, nibble, nibble + 1))
-            shift -= 4
+        peek_data(hex_chars) $(hex) {
+            var shift = (digits - 1) * 4
+            while (shift >= 0) {
+                let nibble = int((packed >> uint(shift)) & 0xF)
+                writer |> write_char(int(hex[nibble]))
+                shift -= 4
+            }
         }
     }
 }
@@ -3845,19 +3849,21 @@ def private draw_issue_row(style : TextSourceViewStyle const;
     var x = top.x + 4.0f
     issue_segment(dl, x, top.y, style.syntax_function_color, prefix)
     issue_segment(dl, x, top.y, style.line_number_color, span + "  ")
-    var at = 0
-    while (at < length(message)) {
-        let q1 = find(message, "'", at)
-        let q2 = q1 < 0 ? -1 : find(message, "'", q1 + 1)
-        if (q2 < 0) {
-            issue_segment(dl, x, top.y, style.text_color,
-                slice(message, at, length(message)))
-            break
+    peek_data(message) $(message_bytes) {
+        var at = 0
+        while (at < length(message_bytes)) {
+            let q1 = find(message_bytes, "'", at)
+            let q2 = q1 < 0 ? -1 : find(message_bytes, "'", q1 + 1)
+            if (q2 < 0) {
+                issue_segment(dl, x, top.y, style.text_color,
+                    slice(message_bytes, at))
+                break
+            }
+            issue_segment(dl, x, top.y, style.text_color, slice(message_bytes, at, q1))
+            issue_segment(dl, x, top.y, style.syntax_string_color,
+                slice(message_bytes, q1, q2 + 1))
+            at = q2 + 1
         }
-        issue_segment(dl, x, top.y, style.text_color, slice(message, at, q1))
-        issue_segment(dl, x, top.y, style.syntax_string_color,
-            slice(message, q1, q2 + 1))
-        at = q2 + 1
     }
 }
 

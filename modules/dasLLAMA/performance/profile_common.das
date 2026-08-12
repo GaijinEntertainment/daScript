@@ -336,8 +336,10 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
             }
             print(line)
             acc = "{acc}{line}"
+            // rolling tail: acc is a fresh string on every line and never exceeds 2 * keep_tail,
+            // so the trim below runs once per keep_tail bytes of child output
             if (length(acc) > keep_tail * 2) {
-                acc = slice(acc, length(acc) - keep_tail)
+                acc = slice(acc, length(acc) - keep_tail)   // nolint:PERF031 - bounded source, one slice per trim
             }
         }
     }))

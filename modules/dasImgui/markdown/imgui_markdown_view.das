@@ -2349,10 +2349,12 @@ def public markdown_selection_text(state : MarkdownViewState const) : string {
         if (!state.nodes[i].content_valid) continue
         let content & = unsafe(state.nodes[i].content)
         var block_text = ""
-        for (run in content.runs) {
-            let display = md_selected_display_range(run, source)
-            if (display.start_byte >= 0 && display.end_byte > display.start_byte) {
-                block_text = block_text + slice(content.text, display.start_byte, display.end_byte)
+        peek_data(content.text) $(text_bytes) {
+            for (run in content.runs) {
+                let display = md_selected_display_range(run, source)
+                if (display.start_byte >= 0 && display.end_byte > display.start_byte) {
+                    block_text = block_text + slice(text_bytes, display.start_byte, display.end_byte)
+                }
             }
         }
         if (!empty(block_text)) {

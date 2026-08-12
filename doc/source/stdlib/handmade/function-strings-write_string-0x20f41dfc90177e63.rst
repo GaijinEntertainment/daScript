@@ -1,0 +1,1 @@
+Writes the bytes of a byte view (`array<uint8>`, as handed to a `peek_data` block) into the StringBuilderWriter and returns a reference to the writer. An overload takes `start` and `end` offsets and writes only that window, with negative indices counting from the end of the view.

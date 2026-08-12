@@ -237,9 +237,10 @@ def private percent_decode(value : string) : string {
     decoded |> reserve(length(value))
     peek_data(value) $(data) {
         var index = 0
-        while (index < length(value)) {
+        let n = length(data)
+        while (index < n) {
             let byte = int(data[index])
-            if (byte == '%' && index + 2 < length(value)) {
+            if (byte == '%' && index + 2 < n) {
                 let high = hex_nibble(int(data[index + 1]))
                 let low = hex_nibble(int(data[index + 2]))
                 if (high >= 0 && low >= 0) {
@@ -255,40 +256,32 @@ def private percent_decode(value : string) : string {
     return string(decoded)
 }
 
-def private query_value(url, key : string) : string {
-    let query = find(url, "?")
-    if (query < 0) return ""
-    let wanted = key + "="
-    let url_length = length(url)
-    var position = query + 1
-    while (position < url_length) {
-        let amp = find(url, "&", position)
-        let end = amp < 0 ? url_length : amp
-        if (starts_with(slice(url, position, end), wanted)) {
-            return percent_decode(slice(url, position + length(wanted), end))
-        }
-        if (amp < 0) break
-        position = amp + 1
-    }
-    return ""
-}
+// percent_decode of a miss is the miss itself - decoding "" yields "" - so the decoded form is
+// exactly the raw one run through the decoder
+def private query_value(url, key : string) : string => percent_decode(query_value_raw(url, key))
 
 def private query_value_raw(url, key : string) : string {
     let query = find(url, "?")
     if (query < 0) return ""
     let wanted = key + "="
-    let url_length = length(url)
-    var position = query + 1
-    while (position < url_length) {
-        let amp = find(url, "&", position)
-        let end = amp < 0 ? url_length : amp
-        if (starts_with(slice(url, position, end), wanted)) {
-            return slice(url, position + length(wanted), end)
+    let wanted_length = length(wanted)
+    var value = ""
+    peek_data(url) $(d) {
+        let url_length = length(d)
+        var position = query + 1
+        while (position < url_length) {
+            let amp = find(d, "&", position)
+            let end = amp < 0 ? url_length : amp
+            let value_start = position + wanted_length
+            if (value_start <= end && starts_with(d, position, wanted)) {
+                value = slice(d, value_start, end)
+                break
+            }
+            if (amp < 0) break
+            position = amp + 1
         }
-        if (amp < 0) break
-        position = amp + 1
     }
-    return ""
+    return value
 }
 
 class DasHerdWatcherServer : HvWebServer {
@@ -1460,7 +1453,7 @@ class DasHerdWatcherServer : HvWebServer {
             ws_opcode.WS_OPCODE_TEXT, true)
     }
 
-    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037,STYLE038
+    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037,STYLE038 — message pump: a flat arm per request kind, all writing the same server state
         let index = find_client(channel)
         if (index < 0) return
         var inscope incoming = WatcherWsMessage()

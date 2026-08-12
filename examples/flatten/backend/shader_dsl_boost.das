@@ -40,7 +40,7 @@ def clean_mangled_names(s : string) : string {
                         s2++
                     }
                     if (s1 < n && s2 < n) {
-                        write(sb, slice(s, s1 + 1, s2))   // bare name only
+                        write_string(sb, data, s1 + 1, s2)   // bare name only
                         i = s2 + 1
                         while (i < n && int(data[i]) >= 48 && int(data[i]) <= 57) {
                             i++                            // skip the hash digits
@@ -1284,10 +1284,12 @@ class ValidateShaderVisitor : AstVisitor {
     //   bits[2i+1:2i] = source channel index for output component i  (0=x 1=y 2=z 3=w)
     def swizzle_pack_mask(mask : string) : int {
         var packed = 0
-        for (i in range(length(mask))) {
-            let ch = slice(mask, i, i + 1)
-            let idx = (ch == "y" || ch == "g") ? 1 : ((ch == "z" || ch == "b") ? 2 : ((ch == "w" || ch == "a") ? 3 : 0))
-            packed = packed | (idx << (i * 2))
+        peek_data(mask) $(data) {
+            for (i in range(length(data))) {
+                let ch = int(data[i])
+                let idx = (ch == 'y' || ch == 'g') ? 1 : ((ch == 'z' || ch == 'b') ? 2 : ((ch == 'w' || ch == 'a') ? 3 : 0))
+                packed = packed | (idx << (i * 2))
+            }
         }
         return packed
     }

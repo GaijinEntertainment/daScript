@@ -295,25 +295,25 @@ def elide_to_avail(value : string) : string {
     let avail = GetContentRegionAvail().x
     if (avail <= 0.0f || CalcTextSize(value).x <= avail) return value
     var low = 0
-    var high = length(value)
-    while (low < high) {
-        let mid = (low + high + 1) / 2
-        if (CalcTextSize(slice(value, 0, mid) + "...").x <= avail) {
-            low = mid
-        } else {
-            high = mid - 1
-        }
-    }
-    // Never end the cut inside a UTF-8 sequence.
     peek_data(value) $(bytes) {
-        while (low > 0 && low < length(value) && (int(bytes[low]) & 0xc0) == 0x80) {
+        var high = length(bytes)
+        while (low < high) {
+            let mid = (low + high + 1) / 2
+            if (CalcTextSize(slice(bytes, 0, mid) + "...").x <= avail) {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+        // Never end the cut inside a UTF-8 sequence.
+        while (low > 0 && low < length(bytes) && (int(bytes[low]) & 0xc0) == 0x80) {
             low--
         }
     }
     return low <= 0 ? "..." : slice(value, 0, low) + "..."
 }
 
-def draw_herd_cards() { // nolint:STYLE037
+def draw_herd_cards() { // nolint:STYLE037,STYLE038 — flat draw list; the widgets share the frame cursor and per-card layout state
     if (g_client == null) return
     let line = GetTextLineHeight()
     // A PTY selection made outside the cards (task rows, auto-attach)

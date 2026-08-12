@@ -1,0 +1,1 @@
+Returns a substring of `str` from index `start` to optional `end` (exclusive), where negative indices count from the end of the string. The `bytes` overloads slice a byte view (`array<uint8>`, as handed to a `peek_data` block) and copy that window out as a new string.

@@ -183,6 +183,10 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
     return false
 }
 
+// RFC 8259 whitespace is exactly these four; the shared is_white_space also accepts
+// FF and VT, which a conforming JSON document may not carry between tokens
+def private is_json_white_space(ch : int) : bool => ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'
+
 def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one linear lexer state machine
     //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt> {
@@ -195,7 +199,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
         var line : int = 1
         var row : int = 0
         while (!empty(tin)) {
-            while (is_white_space(ahead) && next(tin, ahead, line, row)) {
+            while (is_json_white_space(ahead) && next(tin, ahead, line, row)) {
                 pass
             }
             if (empty(tin)) return false

@@ -238,8 +238,6 @@ def test_char_classification(t : T?) {
 
 [test]
 def test_trim_and_ltrim(t : T?) {
-    // trim and ltrim are distinct from strip variants in whitespace handling
-
     t |> run("trim basic") @@(t : T?) {
         t |> equal(trim("  hello  "), "hello")
         t |> equal(trim("hello"), "hello")

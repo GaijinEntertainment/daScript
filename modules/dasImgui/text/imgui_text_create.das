@@ -123,10 +123,12 @@ def private fence_open_at(ed : TextEditState const; upto_line : int) : bool {
     // markdown fence parity scan: are we inside ``` / ~~~ at upto_line?
     var open_ = false
     for (row in range(min(upto_line, length(ed.lines)))) {
-        let rest = slice(ed.lines[row], length(leading_whitespace(ed.lines[row])),
-            length(ed.lines[row]))
-        if (starts_with(rest, "```") || starts_with(rest, "~~~")) {
-            open_ = !open_
+        let rest_start = length(leading_whitespace(ed.lines[row]))
+        peek_data(ed.lines[row]) $(line_bytes) {
+            if (starts_with(line_bytes, rest_start, "```")
+                    || starts_with(line_bytes, rest_start, "~~~")) {
+                open_ = !open_
+            }
         }
     }
     return open_
@@ -351,7 +353,7 @@ def private apply_transform(var ed : TextEditState;
     var ordinal = 1
     for (row in range(block_.x, block_.y + 1)) {
         let indent = leading_whitespace(ed.lines[row])
-        let rest = slice(ed.lines[row], length(indent), length(ed.lines[row]))
+        let rest = slice(ed.lines[row], length(indent)) // nolint:PERF031 - one slice per row string, not a loop-invariant source
         let out_ = indent + transform_line(kind, rest, target, ordinal)
         if (row == caret_line) {
             caret_delta = length(out_) - length(ed.lines[row])

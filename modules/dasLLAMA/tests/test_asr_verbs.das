@@ -9,8 +9,24 @@ require dasllama/dasllama_qwen3a
 require ../performance/fetch_models.das
 
 // The family-owned halves of the ASR facade verbs (asr_exec_fmt / asr_encode_bucket), fed
-// constructed structs — the moved-bit test the extraction owes. Plus the model-provenance
-// manifest's shape invariants (fetch_models.das has no other model-free gate).
+// constructed structs — the moved-bit test the extraction owes. Plus parakeet's SPM detokenizer
+// over a hand-built vocab, and the model-provenance manifest's shape invariants (fetch_models.das
+// has no other model-free gate).
+
+// A parakeet model carrying nothing but a toy SPM vocab — parakeet_detokenize reads m.vocab only.
+// ▁ is U+2581, the SentencePiece space marker.
+def private toy_parakeet() : ParakeetModel {
+    var m = ParakeetModel()
+    m.vocab <- ["▁hello", "▁▁▁world", "▁▁", "there", "▁tail", "<pad>"]   // nolint:STYLE039 (vocabulary data, not prose)
+    return <- m
+}
+
+def private detok(m : ParakeetModel; ids : array<int>) : string {
+    var toks <- [for (i in ids); ParakeetToken(id = i)]
+    let s = parakeet_detokenize(m, toks)
+    delete toks
+    return s
+}
 
 [test]
 def test_family_exec_fmt_verbs(t : T?) {
@@ -42,6 +58,35 @@ def test_family_encode_buckets(t : T?) {
         t |> equal(gemma4a_encode_bucket(), "g4a.encode")
         t |> equal(qwen3a_encode_bucket(false), "q3a.encode")
         t |> equal(qwen3a_encode_bucket(true), "q3o.encode")
+    }
+}
+
+[test]
+def test_parakeet_detokenize(t : T?) {
+    t |> run("the FIRST piece drops the spaces its ▁ prefix produced") @(t : T?) {   // nolint:STYLE039
+        var inscope m <- toy_parakeet()
+        t |> equal(detok(m, [0]), "hello", "one leading mark")
+        t |> equal(detok(m, [1]), "world", "three leading marks")
+        t |> equal(detok(m, [2]), "", "an all-marks first piece detokenizes to nothing")
+    }
+    t |> run("a LATER piece keeps the space its ▁ prefix produced") @(t : T?) {   // nolint:STYLE039
+        var inscope m <- toy_parakeet()
+        t |> equal(detok(m, [0, 4]), "hello tail", "second piece keeps its single space")
+        t |> equal(detok(m, [0, 1]), "hello   world", "and keeps all three of them")
+        // the all-marks piece emptied out at position 0; at position 1 it is two real spaces
+        t |> equal(detok(m, [2, 4]), " tail", "an emptied first piece does not re-arm the strip")
+        t |> equal(detok(m, [3, 2]), "there  ", "a later all-marks piece stays two spaces")
+    }
+    t |> run("pieces with no ▁ prefix pass through; control pieces render as nothing") @(t : T?) {   // nolint:STYLE039
+        var inscope m <- toy_parakeet()
+        t |> equal(detok(m, [3]), "there", "a bare first piece is untouched")
+        t |> equal(detok(m, [0, 5]), "hello", "a <...> control piece drops out")
+    }
+    t |> run("an empty token list detokenizes to the empty transcript") @(t : T?) {
+        var inscope m <- toy_parakeet()
+        var none : array<int>
+        t |> equal(detok(m, none), "", "no tokens, no transcript")
+        delete none
     }
 }
 

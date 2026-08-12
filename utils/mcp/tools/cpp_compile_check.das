@@ -96,18 +96,18 @@ def private entry_command(m : JsonValue?) : string {
 def private cpp_load_compile_db(db_path : string; var entries : array<CompileEntry>; var err : string&) : bool {
     let txt = fread(db_path)
     if (empty(txt)) {
-        err := "compile DB is empty or unreadable: {db_path}"
+        err = "compile DB is empty or unreadable: {db_path}"
         return false
     }
     var perr : string
     var parsed = read_json(txt, perr)
     if (parsed == null) {
-        err := "failed to parse {db_path}: {perr}"
+        err = "failed to parse {db_path}: {perr}"
         return false
     }
     if (!(parsed.value is _array)) {
         unsafe { delete parsed; }
-        err := "unexpected compile DB format (not a JSON array): {db_path}"
+        err = "unexpected compile DB format (not a JSON array): {db_path}"
         return false
     }
     entries |> reserve(length(parsed.value as _array))
@@ -150,15 +150,15 @@ def private split_ws(s : string) : array<string> {
             let start = i
             var in_quote = false
             while (i < n) {
-                let ch = bytes[i]
-                if (ch == uint8('"')) {
+                let ch = int(bytes[i])
+                if (ch == '"') {
                     in_quote = !in_quote
-                } elif (!in_quote && (ch == uint8(' ') || ch == uint8('\t'))) {
+                } elif (!in_quote && (ch == ' ' || ch == '\t')) {
                     break
                 }
                 i++
             }
-            out |> push(slice(s, start, i))
+            out |> push(slice(bytes, start, i))
         }
     }
     return <- out
@@ -250,7 +250,7 @@ def private run_syntax_check(work_dir, cmd : string; var output : string&) : int
             }
         }
     }))
-    output := captured
+    output = captured
     return rc
 }
 

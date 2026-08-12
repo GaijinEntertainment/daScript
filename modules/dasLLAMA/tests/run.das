@@ -82,19 +82,22 @@ def private suite_files(name : string) : array<string> {
     return <- none
 }
 
-// the trailing "N tests, ..." summary line of a completed dastest log ("" when the run died
-// before printing one — crash, kill, or compile error)
-def private log_summary(log_path : string) : string {
+// the trailing "N tests, ..." summary line of a dastest log ("" when the run died before
+// printing one — crash, kill, or compile error). A final line with no trailing newline counts:
+// a killed run's last bytes are exactly the ones worth reporting.
+// Non-private: test_run_summary.das gates it.
+def log_summary(log_path : string) : string {
     var summary = ""
     fopen(log_path, "rb") $(f) {
         if (f != null) {
             let text = fread(f)
             peek_data(text) $(bytes) {
+                let n = length(bytes)
                 var at = 0
                 var line_start = 0
-                while (at < length(bytes)) {
-                    if (bytes[at] == uint8('\n')) {
-                        let line = slice(text, line_start, at)
+                while (at <= n) {   // at == n closes the final line even when no newline does
+                    if (at == n || bytes[at] == uint8('\n')) {
+                        let line = slice(bytes, line_start, at)
                         if (find(line, " tests, ") >= 0) {
                             summary = clone_string(line)
                         }

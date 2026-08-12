@@ -1,0 +1,1 @@
+Returns a new string with all leading and trailing whitespace characters removed from `str`. The `bytes` overload strips a byte view (`array<uint8>`, as handed to a `peek_data` block) and copies what is left out as a new string.

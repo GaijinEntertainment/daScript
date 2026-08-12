@@ -1222,12 +1222,12 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
         continue if (cpos < 0)
         stale_codes |> clear()
         var self_suppressed = false
-        var at = find(line, "nolint:", cpos)
-        while (at >= 0) {
-            // comma-list parse, mirroring the C-side scanner in rtti_is_nolint_suppressed
-            var p = at + length("nolint:")
-            peek_data(line) $(bytes) {
-                let n = length(bytes)
+        peek_data(line) $(bytes) {
+            let n = length(bytes)
+            var at = find(bytes, "nolint:", cpos)
+            while (at >= 0) {
+                // comma-list parse, mirroring the C-side scanner in rtti_is_nolint_suppressed
+                var p = at + length("nolint:")
                 while (p < n) {
                     while (p < n && (int(bytes[p]) == ' ' || int(bytes[p]) == '\t')) {
                         p++
@@ -1237,7 +1237,7 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
                         p++
                     }
                     break if (p == tok_start)
-                    let code = slice(line, tok_start, p)
+                    let code = slice(bytes, tok_start, p)
                     if (code == "LINT019") {
                         self_suppressed = true
                     } elif (is_rule_code(code)
@@ -1252,8 +1252,8 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
                     break if (p >= n || int(bytes[p]) != ',')
                     p++
                 }
+                at = find(bytes, "nolint:", p)
             }
-            at = find(line, "nolint:", p)
         }
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))

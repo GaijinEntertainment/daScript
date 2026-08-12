@@ -187,19 +187,21 @@ def private walk_das(dirpath : string; skip : array<string>; blk : block<(path :
 }
 
 def private collect_names(text : string; markers : array<string>; var out : table<string>) {
-    for (marker in markers) {
-        var from = 0
-        while (true) {
-            let hit = find(text, marker, from)
-            break if (hit < 0)
-            let start = hit + length(marker)
-            let close = find(text, "\"", start)
-            break if (close < 0)
-            let name = slice(text, start, close)
-            if (!empty(name) && !key_exists(out, name)) {
-                out |> insert(name)
+    peek_data(text) $(d) {
+        for (marker in markers) {
+            var from = 0
+            while (true) {
+                let hit = find(d, marker, from)
+                break if (hit < 0)
+                let start = hit + length(marker)
+                let close = find(d, "\"", start)
+                break if (close < 0)
+                let name = slice(d, start, close)
+                if (!empty(name) && !key_exists(out, name)) {
+                    out |> insert(name)
+                }
+                from = close + 1
             }
-            from = close + 1
         }
     }
 }

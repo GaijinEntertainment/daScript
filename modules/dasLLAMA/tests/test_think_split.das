@@ -17,16 +17,18 @@ def private stream_split(tmpl : ChatTemplate; reply : string; chunk : int) : Thi
     var ts = make_think_stream_(tmpl, true)
     var rp : array<string>
     var cp : array<string>
-    var pos = 0
-    let n = length(reply)
-    while (pos < n) {
-        let e = min(pos + chunk, n)
-        var r = ""
-        var c = ""
-        think_feed_(ts, slice(reply, pos, e), r, c)
-        rp |> push(r)
-        cp |> push(c)
-        pos = e
+    peek_data(reply) $(d) {
+        var pos = 0
+        let n = length(d)
+        while (pos < n) {
+            let e = min(pos + chunk, n)
+            var r = ""
+            var c = ""
+            think_feed_(ts, slice(d, pos, e), r, c)
+            rp |> push(r)
+            cp |> push(c)
+            pos = e
+        }
     }
     var rt = ""
     var ct = ""
@@ -111,9 +113,118 @@ def test_split_symmetric(t : T?) {
         var ct <- arch_chat("qwen3")
         for (reply in ["<think>\nr\n</think>\n\nThe answer is 42.", "  \n<think>r</think>answer",
                        "<think>never closed", "The answer is 42.", "", "use the <think> tag like this",
-                       "<think></think>The answer.\n"]) {
+                       "<think></think>The answer.\n", "\f\v<think>r</think>answer"]) {
             t |> equal(split_reasoning_(ct, reply).content, strip_think(reply), "parity on '{reply}'")
         }
+        delete ct
+    }
+}
+
+// ===== the whitespace byte set: FF (0x0C) and VT (0x0B) at the marker boundaries =====
+
+// The matcher's boundary tests run through `strip_left` / `is_null_or_whitespace`, whose set is the
+// C `isspace` six, so FF/VT must count as whitespace exactly like space/tab/CR/LF. A matcher wired
+// to a narrower four-byte set would read these replies as plain content instead.
+
+[test]
+def test_split_ff_vt_whitespace(t : T?) {
+    t |> run("FF/VT lead-in before a symmetric opener is whitespace") @(t : T?) {
+        var ct <- arch_chat("qwen3")
+        check_all_chunkings(t, ct, "\f\v<think>r</think>answer", "r", "answer")
+        // the whole set, in one lead-in: VT FF space tab CR LF
+        check_all_chunkings(t, ct, "\v\f \t\r\n<think>Let me count.</think>The answer is 42.",
+                            "Let me count.", "The answer is 42.")
+        // a reply truncated right at the opener still consumed the span (both halves empty)
+        check_all_chunkings(t, ct, "\f\v<think>", "", "")
+        delete ct
+    }
+    t |> run("FF/VT between the closer and the content drops (TS_WS)") @(t : T?) {
+        var ct <- arch_chat("qwen3")
+        check_all_chunkings(t, ct, "<think>\f\vr\f\v</think>\f\v\n  the answer", "r", "the answer")
+        // the drain strips both halves, so the DELTAS are what pin the TS_WS drop: a content
+        // delta that opened on the FF/VT run would still strip clean at the end
+        var ts = make_think_stream_(ct, true)
+        var r = ""
+        var c = ""
+        think_feed_(ts, "<think>r</think>", r, c)
+        t |> equal(r, "r", "the reasoning delta closed out")
+        think_feed_(ts, "\f\v\n  the answer", r, c)
+        t |> equal(c, "the answer", "the content delta opens PAST the FF/VT run, unstripped")
+        delete ct
+    }
+    t |> run("FF/VT lead-in before the gemma-4 asymmetric opener") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        check_all_chunkings(t, ct, "\f\v<|channel>thought\nLet me ponder.\n<channel|>\nAnswer here.",
+                            "Let me ponder.", "Answer here.")
+        delete ct
+    }
+    t |> run("FF/VT lead-in before the harmony channel header") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        check_all_chunkings(t, ct,
+            "\f\v<|channel|>analysis<|message|>Deep thought.<|end|><|start|>assistant<|channel|>final<|message|>The answer.",
+            "Deep thought.", "The answer.")
+        delete ct
+    }
+}
+
+// ===== the hold-back path: a marker split across a feed boundary =====
+
+// check_all_chunkings sweeps chunk sizes, but a per-feed assert is what pins WHERE the bytes go:
+// the decided prefix is emitted, the partial marker is parked in ts.hold, and the next feed
+// completes it without duplicating or dropping a byte.
+
+[test]
+def test_split_partial_marker_holdback(t : T?) {
+    t |> run("a symmetric closer split across the feed boundary holds back, then completes") @(t : T?) {
+        var ct <- arch_chat("qwen3")
+        var ts = make_think_stream_(ct, true)
+        var r = ""
+        var c = ""
+        think_feed_(ts, "<think>abc</th", r, c)
+        t |> equal(r, "abc", "the decided reasoning prefix is emitted")
+        t |> equal(c, "", "nothing reaches content yet")
+        t |> equal(ts.hold, "</th", "the partial closer is parked")
+        think_feed_(ts, "ink>tail more", r, c)
+        t |> equal(r, "", "the held bytes completed the closer, not the reasoning")
+        t |> equal(c, "tail more", "content resumes past the completed closer")
+        t |> equal(ts.hold, "", "nothing left held")
+        think_finish_(ts, r, c)
+        t |> equal(r, "", "no reasoning tail")
+        t |> equal(c, "", "no content tail")
+        delete ct
+    }
+    t |> run("an opener split across the feed boundary holds its FF/VT lead-in too") @(t : T?) {
+        var ct <- arch_chat("qwen3")
+        var ts = make_think_stream_(ct, true)
+        var r = ""
+        var c = ""
+        think_feed_(ts, "\f\v<thi", r, c)
+        t |> equal(r, "", "an undecided opener emits nothing")
+        t |> equal(c, "", "and nothing reaches content either")
+        t |> equal(ts.hold, "\f\v<thi", "the lead-in rides along with the partial opener")
+        think_feed_(ts, "nk>r</think>ans", r, c)
+        t |> equal(r, "r", "the completed opener resolves the held bytes as reasoning")
+        t |> equal(c, "ans", "and the content half follows")
+        think_finish_(ts, r, c)
+        t |> equal(r, "")
+        t |> equal(c, "")
+        delete ct
+    }
+    t |> run("a harmony re-header split across the feed boundary holds back") @(t : T?) {
+        var ct <- arch_chat("gpt-oss")
+        var ts = make_think_stream_(ct, true)
+        var r = ""
+        var c = ""
+        think_feed_(ts, "<|channel|>analysis<|message|>deep<|st", r, c)
+        t |> equal(r, "deep", "the decided analysis prefix is emitted")
+        t |> equal(c, "", "nothing reaches content yet")
+        t |> equal(ts.hold, "<|st", "the partial <|start|> is parked")
+        think_feed_(ts, "art|>assistant<|channel|>final<|message|>done", r, c)
+        t |> equal(r, "", "the held bytes were framing, not reasoning")
+        t |> equal(c, "done", "the final channel routes to content")
+        think_finish_(ts, r, c)
+        t |> equal(r, "")
+        t |> equal(c, "")
         delete ct
     }
 }

@@ -59,6 +59,24 @@ def test_non_markdown_producer_uses_shared_rich_document(t : T?) {
 }
 
 [test]
+def test_empty_source_inline_content_keeps_its_run(t : T?) {
+    var document <- rich_plain_document("")
+    t |> success(document.ok, "empty plain source is a valid rich document")
+    let paragraph = document.nodes[document.root].first_child
+    let content <- md_inline_content(document, paragraph)
+    t |> equal(content.text, "", "empty source carries no display text")
+    t |> equal(length(content.runs), 1,
+               "URI splitting on empty display text drops no run")
+    if (length(content.runs) == 1) {
+        t |> equal(content.runs[0].display.start_byte, 0,
+                   "the surviving run starts at the source head")
+        t |> equal(content.runs[0].display.end_byte, 0,
+                   "the surviving run spans no display bytes")
+    }
+    rich_document_dispose(document)
+}
+
+[test]
 def test_tight_list_direct_inline_content(t : T?) {
     let source = "- **Parent** item\n  - nested item\n- second item\n"
     let doc <- md_parse(source)
@@ -157,18 +175,20 @@ print("hi")
 
     var checked = 0
     var unchecked = 0
-    for (node in doc.nodes) {
-        if (node.kind == RichNodeKind.list_item && node.is_task) {
-            if (node.is_checked) checked++
-            else unchecked++
-            t |> success(node.source.start_byte >= 0,
-                         "task item retains its checkbox marker offset")
-            t |> equal(node.control_source.end_byte - node.control_source.start_byte, 1,
-                       "task control retains an exact one-byte marker range")
-            let marker = slice(doc.source, node.control_source.start_byte,
-                               node.control_source.end_byte)
-            t |> success(marker == " " || marker == "x",
-                         "task control range is not expanded to list contents")
+    peek_data(doc.source) $(source_bytes) {
+        for (node in doc.nodes) {
+            if (node.kind == RichNodeKind.list_item && node.is_task) {
+                if (node.is_checked) checked++
+                else unchecked++
+                t |> success(node.source.start_byte >= 0,
+                             "task item retains its checkbox marker offset")
+                t |> equal(node.control_source.end_byte - node.control_source.start_byte, 1,
+                           "task control retains an exact one-byte marker range")
+                let marker = slice(source_bytes, node.control_source.start_byte,
+                                   node.control_source.end_byte)
+                t |> success(marker == " " || marker == "x",
+                             "task control range is not expanded to list contents")
+            }
         }
     }
     t |> equal(checked, 1, "checked task metadata")
@@ -271,13 +291,15 @@ def test_markdown_plain_unicode_uris(t : T?) {
     let paragraph = first_kind(doc, RichNodeKind.paragraph)
     let inline <- md_inline_content(doc, paragraph)
     var automatic = 0
-    for (run in inline.runs) {
-        if (run.is_automatic_uri) {
-            automatic++
-            t |> success(run.semantic_node < 0,
-                         "plain URI is semantic without fabricating Markdown node")
-            t |> equal(slice(doc.source, run.source.start_byte, run.source.end_byte),
-                       run.destination, "plain URI target maps to exact source")
+    peek_data(doc.source) $(source_bytes) {
+        for (run in inline.runs) {
+            if (run.is_automatic_uri) {
+                automatic++
+                t |> success(run.semantic_node < 0,
+                             "plain URI is semantic without fabricating Markdown node")
+                t |> equal(slice(source_bytes, run.source.start_byte, run.source.end_byte),
+                           run.destination, "plain URI target maps to exact source")
+            }
         }
     }
     t |> equal(automatic, 2,

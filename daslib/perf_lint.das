@@ -31,7 +31,7 @@ module perf_lint shared private
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'; also urange/range64/urange64 + long_length
 //!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y); same range/length variants as PERF018
 //!   PERF030 — move-assign onto a live heap-carrying variable drops old contents — delete first or force_inscope_pod
-//!   PERF031 — slice/chop on a loop-invariant string inside a loop — each call strlens the whole source (O(n²))
+//!   PERF031 — slice/chop on a loop-invariant string inside a loop — each call strlens the whole source (O(n²)); slice the peek_data view instead
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast (non-generic bodies only)
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
@@ -59,9 +59,20 @@ require daslib/lint_config
 // Visitor
 // ---------------------------------------------------------------------------
 
+struct Perf031Return {
+    // what an active `return` can prove: loops deeper than `loop31` sit inside the returned
+    // expression and still repeat, and loops at or below `barrier` - the p31 depth of the innermost
+    // inline block-argument body it unwinds to - re-invoke the block, so only barrier 0 bounds all
+    loop31 : int
+    barrier : int
+}
+
 struct VarStackEntry {
     @do_not_delete v : Variable?
     depth : int
+    // PERF031's loop space: like depth, but inline block-argument bodies count as part of the
+    // enclosing function (they run in place), so loops inside them are real loop levels
+    depth31 : int
     is_iter : bool
 }
 
@@ -388,6 +399,19 @@ class PerfLintVisitor : AstVisitor {
     in_closure : int = 0
     var_stack : array<VarStackEntry>
     scope_stack : array<int>
+    // PERF031's parallel loop space: unlike `in_closure`/`loop_depth` (every isClosure block is
+    // deferred - the other loop rules' contract), `in_deferred`/`p31_loop_depth` treat inline
+    // block-argument bodies as running in place, deferring only lambda/local-fn/generator/generated
+    @do_not_delete inline_blocks : array<ExprBlock?>
+    // p31 loop depth at each inline-block push, in lockstep with inline_blocks: a return inside the
+    // body unwinds to that depth, so loops at or below it keep re-invoking the block
+    inline_block_loop31 : array<int>
+    in_deferred : int = 0
+    p31_loop_depth : int = 0
+    // innermost enclosing block's tail statement: 0 none, 1 return, 2 break
+    block_tail_exit : array<int>
+    // active returns, innermost last - what each one proves is decided in check_perf031_slice_in_loop
+    return_frames : array<Perf031Return>
     // while tracking
     in_while_cond : bool = false
     // counter-based detection state
@@ -520,14 +544,20 @@ class PerfLintVisitor : AstVisitor {
         return false
     }
 
-    def is_defined_outside_loop(v : Variable?) : bool {
-        if (v == null || loop_depth == 0 || is_loop_variable(v)) return false
+    // one walk, two loop spaces: `use31` picks the entry depth recorded in PERF031's space
+    def outside_loop(v : Variable?; depth : int; use31 : bool) : bool {
+        if (v == null || depth == 0 || is_loop_variable(v)) return false
         for (entry in var_stack) {
-            if (entry.v == v) return entry.depth < loop_depth
+            if (entry.v == v) return (use31 ? entry.depth31 : entry.depth) < depth
         }
         // not on stack — function argument or global — outside any loop
         return true
     }
+
+    def is_defined_outside_loop(v : Variable?) : bool => outside_loop(v, loop_depth, false)
+
+    // PERF031's loop space (see p31_loop_depth): inline block-argument interiors count
+    def is_defined_outside_loop31(v : Variable?) : bool => outside_loop(v, p31_loop_depth, true)
 
     // --- expression helpers ---
 
@@ -890,18 +920,63 @@ class PerfLintVisitor : AstVisitor {
 
     // --- scope tracking ---
 
+    def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
+        // generated blocks (comprehension lowering et al.) stay closure-counted - loop rules assert USER source shapes
+        if (expr._block != null && expr._block is ExprBlock && expr._type != null && expr._type.baseType == Type.tBlock
+                && !expr.mmFlags.isLambda && !expr.mmFlags.isLocalFunction && !expr.genFlags.generated
+                && !(expr._block as ExprBlock).genFlags.generated) {
+            inline_blocks |> push(expr._block as ExprBlock)
+            inline_block_loop31 |> push(p31_loop_depth)
+        }
+    }
+
+    def override visitExprMakeBlock(var expr : ExprMakeBlock?) : ExpressionPtr {
+        if (!empty(inline_blocks) && expr._block != null && expr._block is ExprBlock
+                && inline_blocks |> back() == expr._block as ExprBlock) {
+            inline_blocks |> pop()
+            inline_block_loop31 |> pop()
+        }
+        return <- expr
+    }
+
+    // p31 loop depth of the innermost inline block-argument body we are inside; 0 when there is none
+    def p31_inline_barrier() : int => empty(inline_block_loop31) ? 0 : inline_block_loop31 |> back()
+
+    def tail_exit_kind(blk : ExprBlock?) : int {
+        if (blk == null || empty(blk.list)) return 0
+        let lastE = blk.list[length(blk.list) - 1]
+        if (lastE is ExprReturn) return 1
+        if (lastE is ExprBreak) return 2
+        return 0
+    }
+
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             in_closure++
             string_builder_save_stack |> push(string_builder_target_var)
             string_builder_target_var = null
+            if (!(inline_blocks |> has_value(blk))) {
+                in_deferred++
+            }
         }
         scope_stack |> push(length(var_stack))
+        block_tail_exit |> push(tail_exit_kind(blk))
+    }
+
+    // inline-block arguments are per-invocation values - without this they read as "not on the
+    // stack = defined outside any loop" and PERF031 flags every slice of a peek/peek_data arg
+    def override preVisitExprBlockArgument(blk : ExprBlock?; var arg : VariablePtr; lastArg : bool) : void {
+        if (in_deferred == 0) {
+            var_stack |> push(VarStackEntry(v = arg, depth = loop_depth, depth31 = p31_loop_depth, is_iter = false))
+        }
     }
 
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         if (blk.blockFlags.isClosure) {
             in_closure--
+            if (!(inline_blocks |> has_value(blk))) {
+                in_deferred--
+            }
             if (!empty(string_builder_save_stack)) {
                 string_builder_target_var = string_builder_save_stack |> back()
                 string_builder_save_stack |> pop()
@@ -911,14 +986,28 @@ class PerfLintVisitor : AstVisitor {
             var_stack |> resize(scope_stack |> back())
             scope_stack |> pop()
         }
+        if (!empty(block_tail_exit)) {
+            block_tail_exit |> pop()
+        }
         return <- blk
+    }
+
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        return_frames |> push(Perf031Return(loop31 = p31_loop_depth, barrier = p31_inline_barrier()))
+    }
+
+    def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
+        if (!empty(return_frames)) {
+            return_frames |> pop()
+        }
+        return <- expr
     }
 
     // --- variable declaration tracking ---
 
     def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
-        if (in_closure == 0) {
-            var_stack |> push(VarStackEntry(v = v, depth = loop_depth, is_iter = false))
+        if (in_deferred == 0) {
+            var_stack |> push(VarStackEntry(v = v, depth = loop_depth, depth31 = p31_loop_depth, is_iter = false))
         }
         // PERF023: seed candidate when init is `clone_expression(...)`.
         if (in_closure == 0 && v != null && v.init != null && v.init is ExprCall) {
@@ -978,7 +1067,7 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprFor(expr : ExprFor?) : void {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
-            loop_depth++
+            // loop_depth increments in preVisitExprForBody - sources evaluate ONCE, at enclosing depth
             if_depth_stack |> push(0)
             current_for_known_length = true
             loop_has_early_exit |> push(false)
@@ -1012,20 +1101,29 @@ class PerfLintVisitor : AstVisitor {
             known_length_loop_depth++
         }
         if (in_closure == 0) {
+            loop_depth++
             perf018_finalize_on_body()
             perf022_inspect_body(expr.body)
+        }
+        if (in_deferred == 0) {
+            p31_loop_depth++
         }
     }
 
     def override preVisitExprForVariable(expr : ExprFor?; var v : VariablePtr; last : bool) : void {
+        if (in_deferred == 0) {
+            var_stack |> push(VarStackEntry(v = v, depth = loop_depth, depth31 = p31_loop_depth, is_iter = true))
+        }
         if (in_closure == 0) {
-            var_stack |> push(VarStackEntry(v = v, depth = loop_depth - 1, is_iter = true))
             perf018_record_var(v)
             perf022_record_var(v)
         }
     }
 
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (in_deferred == 0) {
+            p31_loop_depth--
+        }
         if (in_closure == 0) {
             perf018_pop_and_check()
             perf022_pop_and_check()
@@ -1370,6 +1468,9 @@ class PerfLintVisitor : AstVisitor {
             loop_has_early_exit |> push(false)
             in_while_cond = true
         }
+        if (in_deferred == 0) {
+            p31_loop_depth++
+        }
     }
 
     def override preVisitExprWhileBody(expr : ExprWhile?; body : ExpressionPtr) : void {
@@ -1391,6 +1492,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
+        if (in_deferred == 0) {
+            p31_loop_depth--
+        }
         if (in_closure == 0) {
             loop_depth--
             pop_loop_scope()
@@ -1967,16 +2071,28 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
-    // PERF031: slice/chop on a loop-invariant string in a loop strlens the whole source per call (O(n^2)); deliberately not closure-gated — block args (peek_data et al.) run inline in the loop
+    // PERF031: slice/chop on a loop-invariant string in a loop strlens the whole source per call (O(n^2)).
+    // Inline block args (peek_data et al.) run in place, so their interiors are analyzed as part of the
+    // enclosing function; lambda/local-function bodies run deferred and are skipped like every loop rule.
     def check_perf031_slice_in_loop(var expr : ExprCall?) {
-        if (loop_depth <= 0 || !(expr.func.name == "slice" || expr.func.name == "chop") || expr.func._module.name != "strings"
+        if (in_deferred > 0 || p31_loop_depth <= 0 || !(expr.func.name == "slice" || expr.func.name == "chop") || expr.func._module.name != "strings"
                 || empty(expr.arguments) || expr.arguments[0]._type == null || expr.arguments[0]._type.baseType != Type.tString) {
             return
         }
+        // `return slice(...)` runs once per entry only if no counted loop outlives the return (Perf031Return)
+        if (!empty(return_frames)) {
+            let rf = return_frames |> back()
+            if (rf.barrier == 0 && rf.loop31 == p31_loop_depth) return
+        }
+        if (!empty(block_tail_exit) && p31_inline_barrier() == 0) {
+            // a block that ends by leaving the function (or the only loop) runs its slice at most once
+            let tail = block_tail_exit |> back()
+            if (tail == 1 || (tail == 2 && p31_loop_depth == 1)) return
+        }
         var spath = ""
         let srv = find_expr_path(expr.arguments[0], spath)
-        if (srv != null && !srv.flags.generated && is_defined_outside_loop(srv)) {
-            perf_warning("PERF031: {expr.func.name} re-strlens its source string on every call; in a loop over the same string this is O(n^2) - hoist it, or walk bytes via peek_data", expr.at)
+        if (srv != null && !srv.flags.generated && is_defined_outside_loop31(srv)) {
+            perf_warning("PERF031: {expr.func.name} re-strlens its source string on every call; in a loop over the same string this is O(n^2) - wrap the loop in peek_data(s) $(d) and {expr.func.name}(d, ...) the view, or hoist it", expr.at)
         }
     }
 

@@ -113,22 +113,20 @@ def configure_request(var req : HttpRequest?#; client : OpenAIClient) {
 def percent_encode(s : string) : string {
     //! Percent-encodes a string for safe use as a single URL path segment (e.g. a model id like
     //! "google/gemma-..." whose '/' would otherwise be parsed as extra path segments).
-    let HEX = "0123456789ABCDEF"
-    var out = ""
-    peek_data(s) $(bytes) {
-        for (i in range(length(bytes))) {
-            let c = int(bytes[i])
-            // unreserved per RFC 3986: ALPHA / DIGIT / '-' / '_' / '.' / '~'
-            if (is_alpha(c) || is_number(c) || c == 45 || c == 95 || c == 46 || c == 126) {
-                out += slice(s, i, i + 1)
-            } else {
-                out += "%"
-                out += slice(HEX, c / 16, c / 16 + 1)
-                out += slice(HEX, c % 16, c % 16 + 1)
+    return build_string() $(var writer) {
+        peek_data(s) $(bytes) {
+            for (b in bytes) {
+                let c = int(b)
+                // unreserved per RFC 3986: ALPHA / DIGIT / '-' / '_' / '.' / '~'
+                if (is_alpha(c) || is_number(c) || c == 45 || c == 95 || c == 46 || c == 126) {
+                    writer |> write_char(c)
+                } else {
+                    writer |> write_char('%')
+                    writer |> fmt(":02X", c)
+                }
             }
         }
     }
-    return out
 }
 
 def post_json(client : OpenAIClient; path : string; body_json : string) : HttpOutcome {

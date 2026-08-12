@@ -265,23 +265,17 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
                 if (run_paranoid) {
                     var paranoid_issues : array<LintIssue>
                     result.count += paranoid_collect_issues(program, paranoid_issues, disabled_codes, enabled_codes)
-                    for (w in paranoid_issues) {
-                        result.issues |> push(w)
-                    }
+                    result.issues |> push_from(paranoid_issues)
                 }
                 if (run_perf) {
                     var perf_issues : array<LintIssue>
                     result.count += perf_lint_collect_issues(program, perf_issues, disabled_codes, enabled_codes)
-                    for (w in perf_issues) {
-                        result.issues |> push(w)
-                    }
+                    result.issues |> push_from(perf_issues)
                 }
                 if (run_style) {
                     var style_issues : array<LintIssue>
                     result.count += style_lint_collect_issues(program, style_issues, disabled_codes, enabled_codes, comment_hygiene)
-                    for (w in style_issues) {
-                        result.issues |> push(w)
-                    }
+                    result.issues |> push_from(style_issues)
                 }
             }
         }

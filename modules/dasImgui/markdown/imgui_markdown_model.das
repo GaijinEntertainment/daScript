@@ -334,60 +334,66 @@ def private collect_inline(doc : RichDocument const; node_index : int; // nolint
 }
 
 def private split_plain_uris(doc : RichDocument const; var content : RichInlineContent) {
+    // without display text every run spans nothing, so no run can carry a URI
+    return if (empty(content.text))
     var split_runs : array<RichInlineRun>
     split_runs |> reserve(length(content.runs))
-    for (i in range(length(content.runs))) {
-        var base <- content.runs[i]
-        let can_detect = (!base.is_link && base.source_exact
-            && base.node_index >= 0
-            && doc.nodes[base.node_index].kind == RichNodeKind.text)
-        if (!can_detect) {
-            split_runs |> push(<- base)
-            continue
-        }
-        let value = slice(content.text, base.display.start_byte, base.display.end_byte)
-        let uris <- text_uris(value)
-        if (empty(uris)) {
-            split_runs |> push(<- base)
-            continue
-        }
-        var cursor = 0
-        for (uri in uris) {
-            if (uri.source.start_byte > cursor) {
-                var before := base
-                before.display = TextSourceRange(
-                    start_byte = base.display.start_byte + cursor,
-                    end_byte = base.display.start_byte + uri.source.start_byte)
-                before.source = TextSourceRange(
-                    start_byte = base.source.start_byte + cursor,
-                    end_byte = base.source.start_byte + uri.source.start_byte)
-                split_runs |> push(<- before)
+    peek_data(content.text) $(text_bytes) {
+        for (i in range(length(content.runs))) {
+            var base <- content.runs[i]
+            let can_detect = (!base.is_link && base.source_exact
+                && base.node_index >= 0
+                && doc.nodes[base.node_index].kind == RichNodeKind.text)
+            if (!can_detect) {
+                split_runs |> push(<- base)
+                continue
             }
-            var linked := base
-            linked.display = TextSourceRange(
-                start_byte = base.display.start_byte + uri.source.start_byte,
-                end_byte = base.display.start_byte + uri.source.end_byte)
-            linked.source = TextSourceRange(
-                start_byte = base.source.start_byte + uri.source.start_byte,
-                end_byte = base.source.start_byte + uri.source.end_byte)
-            linked.is_link = true
-            linked.is_automatic_uri = true
-            linked.semantic_node = -1
-            let display_uri = slice(value, uri.source.start_byte, uri.source.end_byte)
-            linked.destination = (uri.kind == TextUriKind.www
-                ? "https://" + display_uri : display_uri)
-            split_runs |> push(<- linked)
-            cursor = uri.source.end_byte
-        }
-        if (cursor < length(value)) {
-            var after := base
-            after.display = TextSourceRange(
-                start_byte = base.display.start_byte + cursor,
-                end_byte = base.display.end_byte)
-            after.source = TextSourceRange(
-                start_byte = base.source.start_byte + cursor,
-                end_byte = base.source.end_byte)
-            split_runs |> push(<- after)
+            let value = slice(text_bytes, base.display.start_byte, base.display.end_byte)
+            let uris <- text_uris(value)
+            if (empty(uris)) {
+                split_runs |> push(<- base)
+                continue
+            }
+            var cursor = 0
+            for (uri in uris) {
+                if (uri.source.start_byte > cursor) {
+                    var before := base
+                    before.display = TextSourceRange(
+                        start_byte = base.display.start_byte + cursor,
+                        end_byte = base.display.start_byte + uri.source.start_byte)
+                    before.source = TextSourceRange(
+                        start_byte = base.source.start_byte + cursor,
+                        end_byte = base.source.start_byte + uri.source.start_byte)
+                    split_runs |> push(<- before)
+                }
+                var linked := base
+                linked.display = TextSourceRange(
+                    start_byte = base.display.start_byte + uri.source.start_byte,
+                    end_byte = base.display.start_byte + uri.source.end_byte)
+                linked.source = TextSourceRange(
+                    start_byte = base.source.start_byte + uri.source.start_byte,
+                    end_byte = base.source.start_byte + uri.source.end_byte)
+                linked.is_link = true
+                linked.is_automatic_uri = true
+                linked.semantic_node = -1
+                let display_uri = slice(text_bytes,
+                    base.display.start_byte + uri.source.start_byte,
+                    base.display.start_byte + uri.source.end_byte)
+                linked.destination = (uri.kind == TextUriKind.www
+                    ? "https://" + display_uri : display_uri)
+                split_runs |> push(<- linked)
+                cursor = uri.source.end_byte
+            }
+            if (cursor < length(value)) {
+                var after := base
+                after.display = TextSourceRange(
+                    start_byte = base.display.start_byte + cursor,
+                    end_byte = base.display.end_byte)
+                after.source = TextSourceRange(
+                    start_byte = base.source.start_byte + cursor,
+                    end_byte = base.source.end_byte)
+                split_runs |> push(<- after)
+            }
         }
     }
     content.runs <- split_runs
@@ -615,56 +621,58 @@ def public md_selection_export_include(var result : MdSelectionExport;
     var block_plain = ""
     var block_markdown = ""
     var block_html = ""
-    for (run in content.runs) {
-        let display = md_selected_display_range(run, source)
-        if (display.start_byte < 0 || display.end_byte <= display.start_byte) continue
-        let shown = slice(content.text, display.start_byte, display.end_byte)
-        block_plain = block_plain + shown
-        if (run.is_link || run.is_image) {
-            md_export_uri(result.uri_list, run.destination)
-        }
-        if (run.is_image) {
-            var image_html = "<img src=\"{run.destination |> md_html_attribute()}\" alt=\"{shown |> md_html_attribute()}\""
-            if (!empty(run.title)) {
-                image_html = image_html + " title=\"{run.title |> md_html_attribute()}\""
+    peek_data(content.text) $(text_bytes) {
+        for (run in content.runs) {
+            let display = md_selected_display_range(run, source)
+            if (display.start_byte < 0 || display.end_byte <= display.start_byte) continue
+            let shown = slice(text_bytes, display.start_byte, display.end_byte)
+            block_plain = block_plain + shown
+            if (run.is_link || run.is_image) {
+                md_export_uri(result.uri_list, run.destination)
             }
-            block_html = block_html + image_html + ">"
-            var image_markdown = "![{shown |> md_markdown_text()}]({run.destination |> md_markdown_destination()}"
-            if (!empty(run.title)) {
-                let escaped_title = run.title |> replace("\"", "\\\"")
-                image_markdown = image_markdown + " \"" + escaped_title + "\""
+            if (run.is_image) {
+                var image_html = "<img src=\"{run.destination |> md_html_attribute()}\" alt=\"{shown |> md_html_attribute()}\""
+                if (!empty(run.title)) {
+                    image_html = image_html + " title=\"{run.title |> md_html_attribute()}\""
+                }
+                block_html = block_html + image_html + ">"
+                var image_markdown = "![{shown |> md_markdown_text()}]({run.destination |> md_markdown_destination()}"
+                if (!empty(run.title)) {
+                    let escaped_title = run.title |> replace("\"", "\\\"")
+                    image_markdown = image_markdown + " \"" + escaped_title + "\""
+                }
+                block_markdown = block_markdown + image_markdown + ")"
+                continue
             }
-            block_markdown = block_markdown + image_markdown + ")"
-            continue
+            var markdown_text = run.is_code ? shown : (shown |> md_markdown_text())
+            if (run.is_code) {
+                markdown_text = "`" + markdown_text + "`"
+            }
+            if (run.is_strikethrough) {
+                markdown_text = "~~" + markdown_text + "~~"
+            }
+            if (run.is_emphasis) {
+                markdown_text = "*" + markdown_text + "*"
+            }
+            if (run.is_strong) {
+                markdown_text = "**" + markdown_text + "**"
+            }
+            if (run.is_link) {
+                markdown_text = "[" + markdown_text + "](" + (run.destination |> md_markdown_destination()) + ")"
+            }
+            block_markdown = block_markdown + markdown_text
+            var prefix = ""
+            var suffix = ""
+            if (run.is_link) {
+                prefix = prefix + "<a href=\"{run.destination |> md_html_attribute()}\">"
+                suffix = "</a>" + suffix
+            }
+            if (run.is_strong) { prefix = prefix + "<strong>"; suffix = "</strong>" + suffix }
+            if (run.is_emphasis) { prefix = prefix + "<em>"; suffix = "</em>" + suffix }
+            if (run.is_strikethrough) { prefix = prefix + "<del>"; suffix = "</del>" + suffix }
+            if (run.is_code) { prefix = prefix + "<code>"; suffix = "</code>" + suffix }
+            block_html = block_html + prefix + (shown |> md_html_text()) + suffix
         }
-        var markdown_text = run.is_code ? shown : (shown |> md_markdown_text())
-        if (run.is_code) {
-            markdown_text = "`" + markdown_text + "`"
-        }
-        if (run.is_strikethrough) {
-            markdown_text = "~~" + markdown_text + "~~"
-        }
-        if (run.is_emphasis) {
-            markdown_text = "*" + markdown_text + "*"
-        }
-        if (run.is_strong) {
-            markdown_text = "**" + markdown_text + "**"
-        }
-        if (run.is_link) {
-            markdown_text = "[" + markdown_text + "](" + (run.destination |> md_markdown_destination()) + ")"
-        }
-        block_markdown = block_markdown + markdown_text
-        var prefix = ""
-        var suffix = ""
-        if (run.is_link) {
-            prefix = prefix + "<a href=\"{run.destination |> md_html_attribute()}\">"
-            suffix = "</a>" + suffix
-        }
-        if (run.is_strong) { prefix = prefix + "<strong>"; suffix = "</strong>" + suffix }
-        if (run.is_emphasis) { prefix = prefix + "<em>"; suffix = "</em>" + suffix }
-        if (run.is_strikethrough) { prefix = prefix + "<del>"; suffix = "</del>" + suffix }
-        if (run.is_code) { prefix = prefix + "<code>"; suffix = "</code>" + suffix }
-        block_html = block_html + prefix + (shown |> md_html_text()) + suffix
     }
     if (empty(block_plain) && empty(block_html)) return
     if (result.block_count > 0) {

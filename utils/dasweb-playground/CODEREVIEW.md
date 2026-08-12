@@ -17,8 +17,8 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
 
 - **One rule is one short paragraph.** An entry that needs more than that is describing how to
   write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
-  needs a stable reference lives in `README.md`.
+- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
+  citation. Anything that needs a stable reference lives in `README.md`.
 - **Cite files by name; cite `README.md` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.**
 - **No history, no rationale, no direction of travel.** The reason lives in `README.md` or the
@@ -59,8 +59,8 @@ defect, and this section is the whole test.
   `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
   no SQL, no hashing, no merge logic.
 - `playground_config.das` — the config schema (`ServerArgs`), the defaults/toml/CLI merge with
-  per-key provenance, and the startup banner payload. No HTTP, no SQL, no filesystem beyond
-  reading the config file.
+  per-key provenance, normalization of merged config values, and the startup banner payload. No
+  HTTP, no SQL, no filesystem beyond reading the config file.
 - `playground_server.das` — the `HvWebServer` class: the route table and handlers. A handler
   validates transport-level shape, translates HTTP to one store call, and formats the response.
   A SQL statement, a hash computation, or a policy decision (size, rate, listing) in this file
@@ -148,8 +148,9 @@ under its configured directory before it is read.** `path_join` discards the bas
 side is absolute, so an unchecked manifest path reads any file the service user can — and the
 importer publishes what it reads.
 
-**No `unsafe` in any route handler.** An `unsafe` elsewhere takes a same-line reason comment;
-one without the comment is a defect.
+**No `unsafe` in any route handler.** An `unsafe` elsewhere carries a reason comment on the line
+of the unsafe operation itself — the `unsafe(...)` expression, or the operation line inside an
+`unsafe { }` block; one without the comment is a defect.
 
 **`POST /shutdown` and every admin operation stay unrouted in `caddy.snippet`.** Forwarding one
 there, or adding an admin endpoint to the public route set, is a defect.

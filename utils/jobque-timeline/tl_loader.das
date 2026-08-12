@@ -149,7 +149,7 @@ def private marker_kind_index(var doc : TraceDoc; name : string) : int {
 //! Load a traceSave JSON file into a TraceDoc. Synchronous (phases run back to back);
 //! returns false on read/parse failure. Old-format files (no jobqueProfile) get the
 //! legacy palette and an empty marker table.
-def public load_trace(path : string; var doc : TraceDoc) : bool {
+def public load_trace(path : string; var doc : TraceDoc) : bool { // nolint:STYLE038 — two-pass trace parser; the passes share one byte cursor and the per-tid tallies
     var text = ""
     fopen(path, "rb") $(f) {
         if (f != null) {
@@ -163,7 +163,7 @@ def public load_trace(path : string; var doc : TraceDoc) : bool {
     var tag2cat : table<int; int>
     var chains : table<uint; uint>   // chain -> packed nstages|tag<<8 (from its publish)
     var ok = true
-    peek_data(text) $(data) {
+    peek_data(text) $(data) { // nolint:STYLE037 — both parser passes live in this block, sharing the byte cursor
         let n = length(data)
         // pass A: count events per tid, find max tid, register header categories
         var counts : array<int>
@@ -191,7 +191,7 @@ def public load_trace(path : string; var doc : TraceDoc) : bool {
                 // trailer: parse the jobqueProfile object with the generic JSON parser
                 let at = seek_past(data, pos, line_end, "\"jobqueProfile\":")
                 if (at >= 0) {
-                    var jtxt = slice(text, at, line_end)
+                    var jtxt = slice(data, at, line_end)
                     if (ends_with(jtxt, "}}")) {
                         jtxt = slice(jtxt, 0, length(jtxt) - 1)
                     }

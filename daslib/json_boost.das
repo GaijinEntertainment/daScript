@@ -59,7 +59,7 @@ def private null_coalescing(a : json::JsonValue const?; val : auto(TT)) : TT {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
     if (a != null) {
         if (a.value is _number) {
-            return TT(a.value as _number)   // nolint:PERF020 generic -- cast redundant for TT=double, needed for other TT
+            return TT(a.value as _number)   // nolint:PERF020,LINT019 generic -- cast redundant for TT=double, needed for other TT; fires only in downstream instantiations
         } elif (a.value is _longint) return TT(a.value as _longint)
     }
     return val
@@ -71,7 +71,7 @@ def private null_coalescing_with_string(a : json::JsonValue const?; val : auto(T
         if (a.value is _number) {
             return TT(a.value as _number)
         } elif (a.value is _longint) {
-            return TT(a.value as _longint)   // nolint:PERF020 generic -- cast redundant for TT=int64, needed for other TT
+            return TT(a.value as _longint)   // nolint:PERF020,LINT019 generic -- cast redundant for TT=int64, needed for other TT; fires only in downstream instantiations
         } elif (a.value is _string) return TT(a.value as _string)
     }
     return val
@@ -402,7 +402,7 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
         for (k, vv in keys(tab), values(tab)) {
             // VT can be scalar or struct/table — keep from_JV uniform; ?? has
             // no overload for non-scalar VT.
-            move_to_ref(ret[k], _::from_JV(vv, type<VT -&>))  // nolint:STYLE020
+            move_to_ref(ret[k], _::from_JV(vv, type<VT -&>))  // nolint:STYLE020,LINT019 - fires only in downstream instantiations
         }
     }
     return <- ret
@@ -426,7 +426,7 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
             if (ann.data is tString) {
                 fieldState.argName = ann.data as tString
             } elif (ann.data is tBool && !empty(name) && first_character(name) == '_') {
-                fieldState.argName = slice(name, 1)
+                fieldState.argName = slice(name, 1)   // nolint:PERF031 - one slice per `rename` of a short field name; the call is memoized per (type, field)
             }
         } elif (ann.name == "enum_as_int" && ann.data is tBool) {
             fieldState.enumAsInt = ann.data as tBool
@@ -515,7 +515,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
     }
 }
 
-def JV(value : auto(TT)) : JsonValue? {
+def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if dispatch, one arm per supported source type
     //! Creates `JsonValue` out of value.
     //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(value)) {
@@ -568,7 +568,7 @@ def JV(value : auto(TT)) : JsonValue? {
                     fieldStateParsed = true
                 }
                 // No `return` to skip/replace a field: a `return` in the apply block routes the whole walk to the slow per-field invoke fallback (PR #3008). Pivot enum/string handling on a static type guard with an explicit default `else`, and gate @optional with `if (!skip)`, so the block stays return-free and inlines.
-                var skip = false   // nolint:LINT003 — written only in static_if branches; some instantiations write, some don't
+                var skip = false   // nolint:LINT003,LINT019 — written only in static_if branches; some instantiations write, some don't
                 if (fieldState.optional) {
                     // skip @optional fields at default (zero) value, matching sprint_json behavior
                     static_if (typeinfo is_string(field)) {
@@ -739,10 +739,10 @@ def from_json_row(jv : JsonValue const explicit?; t : auto(TT)) : TT {
     } static_elif (typeinfo is_numeric(type<TT>)) {
         // jv is non-null here (read_json_field / the from_json generator both guarantee it), so read the number straight off the variant with no null guard — inlines null_coalescing[_with_string].
         static_if (typeinfo is_float(type<TT>) || typeinfo is_double(type<TT>)) {
-            if (jv.value is _number) return TT(jv.value as _number)    // nolint:PERF020 redundant for TT=double
+            if (jv.value is _number) return TT(jv.value as _number)    // nolint:PERF020,LINT019 redundant for TT=double; fires only in downstream instantiations
             if (jv.value is _longint) return TT(jv.value as _longint)
         } else {
-            if (jv.value is _longint) return TT(jv.value as _longint)  // nolint:PERF020 redundant for TT=int64/uint64
+            if (jv.value is _longint) return TT(jv.value as _longint)  // nolint:PERF020,LINT019 redundant for TT=int64/uint64; fires only in downstream instantiations
             if (jv.value is _number) return TT(jv.value as _number)
             static_if (typeinfo stripped_typename(type<TT>) == "int64" || typeinfo stripped_typename(type<TT>) == "uint64") {
                 if (jv.value is _string) return TT(jv.value as _string)  // 64-bit ints also accept a numeric string

@@ -371,7 +371,7 @@ def public text_source_view_fold_handle_pos(
 
 def public text_source_view_dispose(var state : TextSourceViewState) {
     text_source_view_invalidate(state)
-    state = TextSourceViewState()
+    state = TextSourceViewState()   // nolint:PERF030 - text_source_view_invalidate above already deleted every heap-carrying field
 }
 
 def private style_id(span : TextSourceSpan const) : int {
@@ -434,40 +434,43 @@ def private rebuild_cells(document : TextSourceDocument const;
         state.line_cell_count[line_index] = 0
     }
     if (first_line >= 0 && last_line >= first_line) {
-        for (line_index in range(first_line, min(last_line + 1,
-                                                length(state.layout.lines)))) {
-            let line = state.layout.lines[line_index]
-            for (fragment_index in range(line.first_fragment,
-                                         line.first_fragment + line.fragment_count)) {
-                let fragment = state.layout.fragments[fragment_index]
-                if (fragment.is_control) continue
-                let value = slice(document.source,
-                    fragment.source.start_byte, fragment.source.end_byte)
-                var graphemes <- text_graphemes(value)
-                var x = fragment.rect.x
-                for (grapheme in graphemes) {
-                    let start_byte = fragment.source.start_byte + grapheme.source.start_byte
-                    let end_byte = fragment.source.start_byte + grapheme.source.end_byte
-                    let columns = (grapheme.first_codepoint == 0x0009u
-                        ? max(state.key.tab_cells, 1) : text_grapheme_cell_width(grapheme))
-                    let width = float(columns) * state.key.cell_width
-                    let natural_width = CalcTextSizeForFontRange(font, state.key.font_size,
-                        document.source, length(document.source), start_byte, end_byte).x
-                    let cell_index = length(state.cells)
-                    state.cells |> push(TextSourceCell(
-                        source = TextSourceRange(start_byte = start_byte, end_byte = end_byte),
-                        style_id = fragment.style_id,
-                        line_index = fragment.line_index,
-                        rect = float4(x, fragment.rect.y, x + width, fragment.rect.w),
-                        columns = columns,
-                        natural_width = natural_width))
-                    if (state.line_first_cell[line_index] < 0) {
-                        state.line_first_cell[line_index] = cell_index
+        peek_data(document.source) $(source_bytes) {
+            let source_len = length(source_bytes)
+            for (line_index in range(first_line, min(last_line + 1,
+                                                    length(state.layout.lines)))) {
+                let line = state.layout.lines[line_index]
+                for (fragment_index in range(line.first_fragment,
+                                             line.first_fragment + line.fragment_count)) {
+                    let fragment = state.layout.fragments[fragment_index]
+                    if (fragment.is_control) continue
+                    let value = slice(source_bytes,
+                        fragment.source.start_byte, fragment.source.end_byte)
+                    var graphemes <- text_graphemes(value)
+                    var x = fragment.rect.x
+                    for (grapheme in graphemes) {
+                        let start_byte = fragment.source.start_byte + grapheme.source.start_byte
+                        let end_byte = fragment.source.start_byte + grapheme.source.end_byte
+                        let columns = (grapheme.first_codepoint == 0x0009u
+                            ? max(state.key.tab_cells, 1) : text_grapheme_cell_width(grapheme))
+                        let width = float(columns) * state.key.cell_width
+                        let natural_width = CalcTextSizeForFontRange(font, state.key.font_size,
+                            document.source, source_len, start_byte, end_byte).x
+                        let cell_index = length(state.cells)
+                        state.cells |> push(TextSourceCell(
+                            source = TextSourceRange(start_byte = start_byte, end_byte = end_byte),
+                            style_id = fragment.style_id,
+                            line_index = fragment.line_index,
+                            rect = float4(x, fragment.rect.y, x + width, fragment.rect.w),
+                            columns = columns,
+                            natural_width = natural_width))
+                        if (state.line_first_cell[line_index] < 0) {
+                            state.line_first_cell[line_index] = cell_index
+                        }
+                        state.line_cell_count[line_index]++
+                        x += width
                     }
-                    state.line_cell_count[line_index]++
-                    x += width
+                    delete graphemes
                 }
-                delete graphemes
             }
         }
     }
@@ -1002,7 +1005,7 @@ def private virtual_hit_byte(document : TextSourceDocument const;
     return result
 }
 
-def private text_source_virtual_view(id : string; // nolint:STYLE037
+def private text_source_virtual_view(id : string; // nolint:STYLE037,STYLE038 — one ImGui draw pass; the phases share the frame cursor and clip state
                                      document : TextSourceDocument const;
                                      var state : TextSourceViewState;
                                      var style : TextSourceViewStyle) : TextSourceViewResult {
@@ -1177,7 +1180,7 @@ def private text_source_virtual_view(id : string; // nolint:STYLE037
     return <- result
 }
 
-def public text_source_view(id : string; document : TextSourceDocument const; // nolint:STYLE037
+def public text_source_view(id : string; document : TextSourceDocument const; // nolint:STYLE037,STYLE038 — one ImGui draw pass; the phases share the frame cursor and clip state
                             var state : TextSourceViewState;
                             var style : TextSourceViewStyle) : TextSourceViewResult {
     if (!style.wrap && length(document.source) >= 128 * 1024) {

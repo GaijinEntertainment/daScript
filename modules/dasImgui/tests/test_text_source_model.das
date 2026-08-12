@@ -8,13 +8,15 @@ require strings
 
 def private marker_text(document : TextSourceDocument const) : string {
     var result = ""
-    for (span in document.spans) {
-        if (!span.styles.marker) continue
-        if (!empty(result)) {
-            result = result + "|"
+    peek_data(document.source) $(source_bytes) {
+        for (span in document.spans) {
+            if (!span.styles.marker) continue
+            if (!empty(result)) {
+                result = result + "|"
+            }
+            result = result + slice(source_bytes,
+                span.source.start_byte, span.source.end_byte)
         }
-        result = result + slice(document.source,
-            span.source.start_byte, span.source.end_byte)
     }
     return result
 }

@@ -255,7 +255,7 @@ def func_is_provided_by(mod : Module?; name : string) : bool {
     return found
 }
 
-def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; var cop : CodeOfPolicies) : array<ModuleUsageResult> {
+def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; cop : CodeOfPolicies) : array<ModuleUsageResult> { // nolint:STYLE038 - linear compile-then-classify pipeline over one file's require list
     var result : array<ModuleUsageResult>
     var inscope access <- make_file_access(ctx.project_file)
     if (access == null) {
@@ -391,23 +391,25 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; var cop : C
 // Build source text from lines, commenting out the specified line (lines are 1-based).
 def comment_out_src_line(source : string; skip_line : int) : string {
     return build_string() $(str) {
-        var line_num = 1
-        var i = 0
-        let src_len = length(source)
-        while (i < src_len) {
-            var eol = i
-            while (eol < src_len && character_at(source, eol) != '\n') {  // nolint:PERF003 — cold path: source-insertion runs once per fix
-                eol++
+        peek_data(source) $(d) {
+            var line_num = 1
+            var i = 0
+            let src_len = length(d)
+            while (i < src_len) {
+                var eol = i
+                while (eol < src_len && int(d[eol]) != '\n') {
+                    eol++
+                }
+                if (eol < src_len) {
+                    eol++ // Include the newline
+                }
+                if (line_num == skip_line) {
+                    str |> write("// REMOVED: ")
+                }
+                str |> write_string(d, i, eol)
+                line_num++
+                i = eol
             }
-            if (eol < src_len) {
-                eol++ // Include the newline
-            }
-            if (line_num == skip_line) {
-                str |> write("// REMOVED: ")
-            }
-            str |> write(slice(source, i, eol))
-            line_num++
-            i = eol
         }
     }
 }
@@ -415,7 +417,7 @@ def comment_out_src_line(source : string; skip_line : int) : string {
 // For each module in usage_tab with 0 refs, try recompiling the file
 // without that require line. If compilation fails, the require is
 // actually needed.
-def verify_unused_by_recompilation(var ctx : RequirefixContext?; var usage_tab : table<string, ModuleUsageResult>; var cop : CodeOfPolicies) {
+def verify_unused_by_recompilation(var ctx : RequirefixContext?; var usage_tab : table<string, ModuleUsageResult>; cop : CodeOfPolicies) {
     let source = ctx.read_file_fn(ctx.filename)
     if (empty(source)) {
         ctx.last_error = "read_file_fn: can't read {ctx.filename}"
