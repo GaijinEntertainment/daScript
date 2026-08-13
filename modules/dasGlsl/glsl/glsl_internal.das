@@ -561,7 +561,7 @@ class GlslExport : AstVisitor {
         while (stnames |> key_exists(funname)) {
             // never prepend `_` onto a `_`-spelled name: GLSL ES reserves any
             // identifier containing `__` and WebGL enforces it
-            funname = (funname |> starts_with("_")) ? "u{funname}" : "_{funname}" // nolint:PERF004 rarely iterates more than once
+            funname = (funname |> starts_with("_")) ? "u{funname}" : "_{funname}"
         }
         return funname
     }
