@@ -337,6 +337,11 @@ Optimization and AOT
     Keeps the function out of best-effort (automatic) inlining - block-literal call-site
     splicing and the heuristic ``auto_inline_functions`` tier both skip it. Combining it
     with ``[inline]`` is a compile-time error: the two contracts are contradictory.
+    On a block literal (``$ [never_inline] (args) { ... }``) it keeps that block from
+    invoke-block inlining. Module-wide, ``options never_inline`` takes the whole module
+    out of the game: the pass skips its bodies (instances of its generics included,
+    wherever they land), and its functions refuse as callees everywhere - an
+    ``[inline]`` call to one degrades to a plain call.
 
 ``[hybrid]``
     Marks a function as an AOT hybrid — it can call interpreted code from AOT context.

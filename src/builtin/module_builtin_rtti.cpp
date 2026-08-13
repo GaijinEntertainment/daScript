@@ -395,7 +395,8 @@ namespace das {
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext",
             "fromExtraDependency", "doNotAllowUnsafe",
-            "wasParsedNameless", "visibleEverywhere", "allowPodInscope"
+            "wasParsedNameless", "visibleEverywhere", "allowPodInscope",
+            "neverInline"
         };
         return ft;
     }

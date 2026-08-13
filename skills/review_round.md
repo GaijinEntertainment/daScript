@@ -58,6 +58,10 @@ Spawn in ONE message, all read-only, model `opus`:
   dimension surfacers might miss."
 - **One `codereview-md-auditor` instance per discovered CODEREVIEW.md** (the agent fans in,
   the orchestrator fans out — each instance owns exactly one checklist).
+- **The `style-hygiene-auditor`** over the diff's new code (rulebook:
+  `skills/comment_style_hygiene.md`; one instance, or one per file cluster on a large
+  diff). Its findings are never blocking — they enter the report as `suggestion` at
+  most, and skip the falsification prover (style is judgment, not a claim to falsify).
 
 Findings come back as: `file:line`, the concern, the evidence (quoted code), severity
 (`bug` / `concern` / `suggestion` / `nitpick`) and whether it should block.

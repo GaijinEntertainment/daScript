@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 112;   // 112: added const-widened by-value argument binds a temp, not a substitution
+            return 113;   // 113: Module::inlineTempIndex rides the module record
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

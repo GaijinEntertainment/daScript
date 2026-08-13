@@ -1278,6 +1278,7 @@ namespace das
         string                                      name;
         string                                      cppClassName;       // C++ class name (e.g. "Module_Math"), set by REGISTER_MODULE
         uint64_t                                    nameHash = 0;
+        int                                         inlineTempIndex = 0; // next free _inl<N> id (ast_inline.cpp)
         string                                      fileName;           // where the module was found, if not built-in
         string                                      promotedRequire;    // canonical require string a shared module was promoted with (e.g. "daslib/fio"); identity-matched in requireEx so a cross-directory `require` resolves it, while a mis-qualified one (bare `require fio`) does not
         union {
@@ -1292,6 +1293,7 @@ namespace das
                 bool    wasParsedNameless : 1;
                 bool    visibleEverywhere : 1;
                 bool    allowPodInscope : 1;
+                bool    neverInline : 1;    // `options never_inline` (ast_inline.cpp)
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1921,8 +1923,8 @@ namespace das
 
     // [inline] shape contract (ast_inline.cpp); shared between the patch pass (skips
     // non-conforming callees) and the annotation lint hook (reports them as errors)
-    bool checkInlineShape ( Function * fn, string & err );
-    bool checkInlineRecursion ( Function * fn, string & err );
+    bool canFunctionInline ( Function * fn, string & err );
+    bool isInlineRecursionFree ( Function * fn, string & err );
 
     // compile an embedded builtin module's source into `module` (compiler lib)
     DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );

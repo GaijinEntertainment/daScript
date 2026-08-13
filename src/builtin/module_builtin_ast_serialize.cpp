@@ -2567,7 +2567,7 @@ namespace das {
 
     void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag(HASH_TAG("Module"));
-        ser << name << nameHash << moduleFlags;
+        ser << name << nameHash << moduleFlags << inlineTempIndex;
         ser << annotationData << requireModule;
         // das-declared distinct types round-trip with the module (C++-module annotations
         // re-register on load, parser-created ones don't). they stream BEFORE aliasTypes and
