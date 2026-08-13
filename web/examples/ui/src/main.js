@@ -529,9 +529,16 @@ function updateButtonStates() {
     // instantiates the artifact itself, and its radio is only selectable once
     // the build service has answered. Gating both on the local runtime left Run
     // dead for an engine that never uses it.
-    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !ready;
-    // Test always runs interpreted, through the local runtime.
-    if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
+    // A DEAD runner (gave up after repeated aborts) keeps Run clickable too:
+    // the click is what triggers the revive (see reportNotReady) — a disabled
+    // button on a dead page would make that state permanent.
+    const runnerDead = typeof PlaygroundRunner !== 'undefined'
+        && PlaygroundRunner.isDead && PlaygroundRunner.isDead();
+    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !(ready || runnerDead);
+    // Test always runs interpreted, through the local runtime — and on a dead
+    // page it stays clickable for the same reason Run does: the click is the
+    // revive trigger (runTests routes through the same reportNotReady).
+    if (testBtn) testBtn.disabled = !(ready || runnerDead) || !hasTestAnnotation();
 }
 // Kept under the old name so playground-tabs.js's existing autosave hook
 // still works without churn — it triggers a full refresh.
@@ -540,6 +547,19 @@ window.updateTestButtonState = updateButtonStates;
 function selectedEngine() {
     const el = document.querySelector('input[name=engine]:checked');
     return el ? el.value : 'interpreter';
+}
+
+// Run/Test clicked with no frame standing by. Two different truths: the frame
+// is still loading (wait), or the runtime kept aborting and the runner gave up
+// (rebuild it — PlaygroundRunner.revive — and say so). Before revive existed,
+// that second state showed the first state's message forever, on a page no
+// amount of waiting or reloading would fix.
+function reportNotReady() {
+    if (typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.revive && PlaygroundRunner.revive()) {
+        printOutput('the daslang runtime failed to start — retrying now, run again in a moment…', '#ff9393');
+    } else {
+        printOutput('daslang is still loading, please wait…', '#ff9393');
+    }
 }
 
 // (stdout flushing moved into run-frame.html, where FS now lives)
@@ -551,7 +571,7 @@ runCode = async function() {
         return;
     }
     if (!isWasmReady()) {
-        printOutput('daslang is still loading, please wait…', '#ff9393');
+        reportNotReady();
         return;
     }
     // Each run gets a fresh frame, so the previous program's canvas, GL context,
@@ -568,7 +588,7 @@ runCode = async function() {
 // keeping the run single-threaded in the WASM build.
 runTests = async function() {
     if (!isWasmReady()) {
-        printOutput('daslang is still loading, please wait…', '#ff9393');
+        reportNotReady();
         return;
     }
     syncUrlToState();

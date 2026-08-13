@@ -180,6 +180,58 @@
         // mainScriptUrlOrBlob. Name it explicitly — document.currentScript is null
         // under some load paths, and the pool would otherwise spawn Worker(undefined).
         mainScriptUrlOrBlob: "daslang_static.js",
+        // One compile per page: the parent compiles the runtime wasm once and
+        // every frame instantiates that module — instances share the machine
+        // code, so a frame costs an instantiation, not a 40MB compile. (The
+        // pthread pool was already sharing it inside a frame: workers do
+        // `new WebAssembly.Instance(wasmModule, …)` from the module this hook
+        // hands to `done`.) A parent that predates the protocol never acks, so
+        // after a short wait the frame compiles for itself — streaming first,
+        // then the ArrayBuffer ladder the emscripten glue carries, so a server
+        // without the wasm MIME type degrades to a warning, not a dead frame.
+        instantiateWasm: function (imports, done) {
+            var settled = false, acked = false;
+            function fail(message) { post({ type: "aborted", message: message }); }
+            function onModuleMsg(ev) {
+                if (ev.origin !== window.location.origin) return;
+                var m = ev.data;
+                if (!m || typeof m !== "object") return;
+                if (m.type === "wasm-module-pending") { acked = true; return; }
+                if (m.type !== "wasm-module" || settled) return;
+                settled = true;
+                window.removeEventListener("message", onModuleMsg);
+                if (m.module) {
+                    WebAssembly.instantiate(m.module, imports).then(
+                        function (instance) { done(instance, m.module); },
+                        function (e) { fail("wasm instantiate failed: " + e); }
+                    );
+                } else {
+                    fail("wasm compile failed: " + (m.error || "unknown error"));
+                }
+            }
+            window.addEventListener("message", onModuleMsg);
+            post({ type: "need-wasm-module" });
+            setTimeout(function () {
+                if (settled || acked) return;
+                settled = true;
+                window.removeEventListener("message", onModuleMsg);
+                WebAssembly.instantiateStreaming(fetch("daslang_static.wasm"), imports)
+                    .catch(function (e) {
+                        post({ type: "stderr", text: "wasm streaming compile failed, retrying as ArrayBuffer: " + e + "\n" });
+                        return fetch("daslang_static.wasm")
+                            .then(function (r) {
+                                if (!r.ok) throw new Error("HTTP " + r.status + " fetching daslang_static.wasm");
+                                return r.arrayBuffer();
+                            })
+                            .then(function (bytes) { return WebAssembly.instantiate(bytes, imports); });
+                    })
+                    .then(
+                        function (r) { done(r.instance, r.module); },
+                        function (e) { fail("wasm compile failed: " + e); }
+                    );
+            }, 2000);
+            return {};
+        },
         preRun: [],
         postRun: [],
         print: function (text) {

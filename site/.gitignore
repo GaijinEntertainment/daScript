@@ -10,9 +10,9 @@ files/news.json
 files/news-meta.json
 files/blog.json
 
-# Playground: vendored from web/ui/src/ for local-dev preview only.
+# Playground: vendored from web/examples/ui/src/ for local-dev preview only.
 # CI rebuilds these from source on every publish. To preview locally:
-#   cp web/ui/src/* site/playground/
+#   cp web/examples/ui/src/* site/playground/
 #   cp web/output/daslang_static.{js,wasm} site/playground/
 playground/jquery-3.6.0.min.js
 playground/main.css
