@@ -414,17 +414,28 @@ def flat_frag {
     flat_color = float4(m, fi_flat_val, fi_smooth_val, 1.0f)
 }
 
-// A vertex @in is a vertex ATTRIBUTE: the vertex buffer feeds it whole and nothing interpolates it,
-// so SPIR-V forbids an interpolation decoration on one — including the Flat an integer varying takes
-// on every other interface (VUID-StandaloneSpirv-Flat-06202).
+// Neither END of the pipe is interpolated, so SPIR-V forbids an interpolation decoration on either —
+// including the Flat an integer varying takes on every interface between them.  A vertex @in is an
+// attribute the vertex buffer feeds whole (VUID-StandaloneSpirv-Flat-06202); a fragment @out is
+// written straight to its attachment (VUID-StandaloneSpirv-Flat-06201).
 var @in @location = 3 va_mat_id : int                  // int vertex attribute -> NO Flat
 [vertex_shader(name="attr_vert_spv"), marker(no_coverage)]
 def attr_vert {
     gl_Position = float4(float(va_mat_id), 0.0f, 0.0f, 1.0f)
 }
 
+var @out @location = 0 fo_mat_id : int                 // int fragment output -> NO Flat
+[fragment_shader(name="attr_frag_spv"), marker(no_coverage)]
+def attr_frag {
+    fo_mat_id = 7
+}
+
 def public attr_vert_words : array<uint> {
     return clone_to_move(attr_vert_spv)
+}
+
+def public attr_frag_words : array<uint> {
+    return clone_to_move(attr_frag_spv)
 }
 
 def public tri_vert_words : array<uint> {
