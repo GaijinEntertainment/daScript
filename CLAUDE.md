@@ -102,7 +102,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
 | `skills/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") — grounding → change-derived risk dimensions → parallel surfacers + CODEREVIEW auditors → falsification-gate prover → report-then-fix |
-| `skills/codereview_md.md` | Creating or editing any module `CODEREVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection |
+| `skills/codereview_md.md` | Creating or editing any module `CODEREVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection, the followability finding classes |
+| `skills/tdd_audit.md` | Auditing any diff for test coverage — the constitutional branch-test rule (a new/changed reachable branch needs a test that fails without it), the negative-control procedure, pin and expectation discipline |
 | `skills/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
 | `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
 | `skills/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
@@ -148,8 +149,15 @@ step-0a walk): each discovered checklist is itself audited under the self-review
 just applied. The implementer is the shared **`codereview-md-auditor` agent**
 (`.claude/agents/codereview-md-auditor.md`): one instance owns exactly one checklist, so with
 several in scope the ORCHESTRATOR launches one instance per checklist in parallel and merges
-the findings into one report. (The agent registry snapshots at session start — a freshly
-pulled or edited definition is live in the NEXT session, not the current one.)
+the findings into one report. Self-review includes **followability** — the finding classes
+(dense multi-clause rules, enumerations standing in for criteria, mechanism prose,
+structurally homeless rules, overlap) are in `skills/codereview_md.md`; checklists stay slim
+because every round applies them, not because someone notices. Beside the checklist auditors
+runs the **`tdd-auditor` agent** (`.claude/agents/tdd-auditor.md`): ONE instance for the
+whole diff, auditing the constitutional branch-test clause (`skills/tdd_audit.md`) —
+including in folders no CODEREVIEW.md covers. (The agent registry snapshots at session
+start — a freshly pulled or edited definition is live in the NEXT session, not the current
+one.)
 
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
 

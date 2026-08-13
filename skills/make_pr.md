@@ -45,6 +45,16 @@ under the self-review rule) and merge the reports. Registry caveat: agent defini
 snapshot at session start, so a just-pulled or just-edited definition only exists in the
 next session.
 
+Alongside the checklist auditors, launch the **`tdd-auditor` agent**
+(`.claude/agents/tdd-auditor.md`) — ONE instance for the whole diff, CODEREVIEW.md folders
+or not. It audits the constitutional test rule (a new or changed reachable branch has a
+test that fails without it — procedure in `skills/tdd_audit.md`), runs negative
+controls where reading can't settle a branch, and runs the cheat check over the diff's own
+test edits. Fix policy: an UNTESTED branch gets its test written in the same change, never
+a follow-up promise; an UNPROVEN one gets its named settling run executed, or the claim
+stated explicitly in the PR description; a RETUNED test edit (re-tuned to pass, no stated
+reason) gets the old expectation restored or the reason stated — never shipped silent.
+
 When the change warrants a full review round (non-trivial arcs), the round itself —
 grounding, change-derived risk dimensions, parallel surfacers, the falsification-gate
 prover — is `skills/review_round.md`; the auditor instances above run as part of its
@@ -425,6 +435,8 @@ created it.
 | Step | Tool/Command | Fix policy |
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
+| CODEREVIEW audit | step-0a walk → one `codereview-md-auditor` per discovered checklist | Binding rules; checklist defects fixed in the same batch |
+| TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED test edit → restore the expectation or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |

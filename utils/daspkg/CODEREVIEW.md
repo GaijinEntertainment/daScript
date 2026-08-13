@@ -6,6 +6,11 @@ Run this list on every daspkg change before it ships. Every entry is checkable a
 file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
 rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
 
+**New functionality ships with tests — same PR, no follow-up promises.** A new or changed
+reachable branch ships a test that fails without it; a diff that adds a branch no test
+distinguishes is a defect. The audit procedure — including the negative control that settles
+"would it fail?" — is `skills/tdd_audit.md`.
+
 ## Tests
 
 **Run the unit suite on every change:**
