@@ -19,6 +19,23 @@ namespace das {
     static const char * INLINE_TEMP_PREFIX = "_inl";
     static const size_t INLINE_TEMP_PREFIX_LEN = 4;
 
+    // Joining a manufactured prefix (always '_'-terminated) straight onto a name
+    // that itself starts with '_' would spell `__` at the seam — the same GLSL ES
+    // reservation the prefix above avoids. Such names are routine here: nested
+    // inlining renames the inner site's own _inl<M>_* temps, and a callee local
+    // or parameter may be '_'-spelled by the user. Leading underscores re-encode
+    // as a 'u' run between the namespace and the stripped name
+    // (`_inl1_l_` + `_inl0_arg_a` -> `_inl1_lu_inl0_arg_a`), which stays
+    // injective: the plain arm's tail never starts with '_', so no 'u' run
+    // followed by '_' can collide across arms, and equal runs imply equal tails.
+    static string joinInlineName ( const string & prefix, const string & name ) {
+        DAS_ASSERT(!prefix.empty() && prefix.back()=='_');
+        if ( name.empty() || name[0]!='_' ) return prefix + name;
+        size_t k = 0;
+        while ( k<name.size() && name[k]=='_' ) ++k;
+        return prefix.substr(0,prefix.size()-1) + string(k,'u') + "_" + name.substr(k);
+    }
+
     // ===== [inline] splicing, automatic block inlining, invoke devirtualization =====
     // Runs in the patch slot (Program::patchAnnotations -> patchInline), after infer and
     // buildAccessFlags, before lint and optimize. Splices are syntax-level: cloned callee
@@ -412,8 +429,8 @@ namespace das {
         protected:
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             void renameVar ( const string & name, const string & aka ) {
-                if ( rename->find(name)==rename->end() ) (*rename)[name] = prefix + name;
-                if ( !aka.empty() && rename->find(aka)==rename->end() ) (*rename)[aka] = prefix + name;
+                if ( rename->find(name)==rename->end() ) (*rename)[name] = joinInlineName(prefix, name);
+                if ( !aka.empty() && rename->find(aka)==rename->end() ) (*rename)[aka] = joinInlineName(prefix, name);
             }
             virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
                 Visitor::preVisitLet(let, var, last);
@@ -2281,7 +2298,7 @@ namespace das {
                             argFlavorFail = true;
                             return;
                         }
-                        string tname = INLINE_TEMP_PREFIX + to_string(inlineId) + "_arg_" + P->name;
+                        string tname = joinInlineName(INLINE_TEMP_PREFIX + to_string(inlineId) + "_arg_", P->name);
                         bool viaClone = viaMove && init->type && init->type->constant;
                         temps.push_back(makeTemp(callLike->at, tname, init, cnst, ref, viaMove && !viaClone, viaClone));
                         sub.tempName = tname;

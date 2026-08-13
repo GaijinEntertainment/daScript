@@ -68,6 +68,45 @@ def mrt_fragment {
     mrt_g2 = float4(1.0, 0.0, 0.0, 1.0)
 }
 
+// Nested inlining must never mint a `__` identifier: GLSL ES reserves any
+// identifier containing two consecutive underscores and WebGL enforces it,
+// while desktop drivers do not — so a bad name compiles on the desktop and dies
+// only in the browser. The shape below is the mandelbrot tutorial's: a mutable
+// local passed twice into const parameters makes the inliner manufacture
+// _inl<N>_arg_* temps, and when that host function is itself inlined, those
+// temps are renamed into the outer _inl<N>_l_ namespace — a join that used to
+// spell `_inl1_l__inl0_arg_a`.
+def private cmul_nested(a, b : float2) : float2 {
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
+}
+
+def private iterate_nested(c : float2) : float2 {
+    var z = float2(0.0, 0.0)
+    var n = 0
+    while (n < 8) {
+        z = cmul_nested(z, z) + c
+        n++
+    }
+    return float2(float(n), z.x)
+}
+
+def private sample_nested(c : float2) : float3 {
+    let nd = iterate_nested(c)
+    if (nd.y > 4.0) {
+        return float3(nd.x * 0.1, 0.0, 0.0)
+    }
+    return float3(0.0, 0.0, 0.0)
+}
+
+[fragment_program(name="nested_inline_fs_glsl")]
+def nested_inline_fragment {
+    var col = float3(0.0, 0.0, 0.0)
+    for (s in range(16)) {
+        col += sample_nested(float2(b_vcolor.x + float(s), b_vcolor.y))
+    }
+    b_frag_color = float4(col, 1.0)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
@@ -108,5 +147,12 @@ def test_glsl_emission_basics(t : T?) {
         t |> success(has(mrt_fs_glsl, "layout(location=2) out vec4 mrt_g2"), "MRT output 2 carries its location")
         // negative control: a single bare @out (no @location) stays unqualified
         t |> success(!has(basics_fs_glsl, "layout(location"), "single fragment output has no location qualifier")
+    }
+    t |> run("inline-manufactured temp names never contain the GLSL-reserved __") <| @(t : T?) {
+        // positive control first: the shape really did nest — the outer rename
+        // namespace and an escaped inner temp are both present in the emission.
+        t |> success(has(nested_inline_fs_glsl, "_arg_"), "the inliner manufactured argument temps")
+        t |> success(has(nested_inline_fs_glsl, "_lu_"), "a leading-underscore local re-encoded at the join")
+        t |> success(!has(nested_inline_fs_glsl, "__"), "no reserved __ anywhere in the emitted GLSL")
     }
 }
