@@ -33,11 +33,15 @@ module logger shared public
 //! stays at the global :func:`logger_set_min_level`.
 //!
 //! :func:`logger_install_hook` plugs a GLOBAL debug agent into the runtime
-//! so accidental ``print()`` / ``to_log()`` calls are diverted into the
-//! log file instead of stdout/stderr — important for stdio-transport
-//! processes (MCP server, language servers) where any stdout write
-//! corrupts the wire format. One install covers every Context including
-//! future ``new_thread`` workers.
+//! so accidental ``print()`` / ``to_log()`` calls are diverted off
+//! stdout/stderr — important for stdio-transport processes (MCP server,
+//! language servers) where any stdout write corrupts the wire format.
+//! What reaches the file is still the level filter's to decide, and
+//! ``print`` is a debug-level line: under the ``LOG_INFO`` default it is
+//! dropped rather than recorded. One install covers every Context including
+//! future ``new_thread`` workers. The runtime's own crash text is not
+//! ``print`` and no hook sees it: :func:`logger_capture_diagnostics` is
+//! what puts that beside the log.
 
 require daslib/json public
 require daslib/fio public
@@ -306,6 +310,16 @@ def logger_install_hook() {
     //! Install a global debug agent that diverts ``print`` and ``to_log`` (from any Context, current or future) into the configured log file. Idempotent — safe to call from every module's [init], from MCP main, etc. Worker threads spawned via ``new_thread`` inherit the hook automatically; no per-context re-install needed.
     return if (has_debug_agent_context(LOGGER_AGENT_CATEGORY))
     install_new_debug_agent(new LogHookAgent(), LOGGER_AGENT_CATEGORY)
+}
+
+def logger_capture_diagnostics() {
+    //! Send the runtime's own diagnostics — a panic report, a leak dump, a fatal — to
+    //! ``<log>.diag.log`` beside the log file, or to stderr when it cannot be opened.
+    //! Raw text, not ndjson, and no hook sees it: the runtime prints it, not ``print``.
+    if (empty(log_path) ||
+        !diagnostics_to_file(replace_extension(log_path, ".diag.log"))) {
+        diagnostics_to_stderr()
+    }
 }
 
 def logger_init(name : string) {

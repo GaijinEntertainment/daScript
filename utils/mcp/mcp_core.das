@@ -545,6 +545,12 @@ def dispatch_jsonrpc(server : McpServer; reg : array<ToolDef>; body : string) : 
 // owns logger_init + ast-grep detection + registry assembly, then calls this.
 
 def serve_stdio(server : McpServer; reg : array<ToolDef>) {
+    // From here stdout carries frames and nothing else: a panic report, a leak
+    // dump or a fatal landing between them is read as a frame, and the client
+    // drops the connection mid-call rather than showing the text.  It goes to
+    // the log's own directory rather than to stderr because a client keeps no
+    // record of that stream, which leaves a death rattle nowhere.
+    logger_capture_diagnostics()
     let sin = fstdin()
     let sout = fstdout()
     while (!feof(sin)) {

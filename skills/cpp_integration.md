@@ -376,8 +376,14 @@ tp << "leaked " << count << " handles\n";
 
 `fprintf(stderr, ...)` has three concrete problems:
 
-- **No sink override** — `TextPrinter` can be subclassed/redirected;
-  `fprintf` writes wherever the OS `stderr` happens to point.
+- **No sink override** — every `TextPrinter` writes through one
+  process-wide sink (`setTextPrinterSink`, stdout by default), and so
+  does a fatal report (`DAS_FATAL_LOG`); `fprintf` writes wherever the
+  OS `stderr` happens to point.  A program whose stdout carries a
+  protocol calls `textPrinterToStderr()` (das: `diagnostics_to_stderr()`)
+  once, and every diagnostic follows — or `textPrinterToFile(path)` (das:
+  `diagnostics_to_file`; `logger_capture_diagnostics()` names the file
+  beside its own log) where the launcher keeps no stderr either.
 - **`stderr` is not available on consoles** (Switch, PlayStation, Xbox)
   — `TextPrinter` abstracts the output path so platform ports can route
   the text.
