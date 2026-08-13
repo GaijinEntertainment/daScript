@@ -60,11 +60,18 @@ every test the diff touches in one of these shapes:
 - a skip, exclude, or platform gate added to a test that ran before
 - a test rewritten wholesale in the same change that rewrites the code it tests
 
-For each, run the **reverse control**: the OLD test against the NEW code. Old test passes →
-the edit was expansion or cosmetics; move on. Old test FAILS → the diff changed behavior
-AND re-tuned the test to match. That is legitimate only as a conscious flip — the change
-states why the new behavior is the right one. No stated reason means the test now pins
-whatever the code happens to do, including the bug; report it.
+For each, run the **reverse control**: the OLD test against the NEW code.
+
+- Old test FAILS → the diff changed behavior AND re-tuned the test to match. Legitimate
+  only as a conscious flip — the change states why the new behavior is the right one. No
+  stated reason means the test now pins whatever the code happens to do, including the
+  bug: verdict RETUNED.
+- Old test passes and the edit only ADDS to the instrument (new cases, tighter asserts) —
+  expansion; move on.
+- Old test passes but the edit REDUCES the instrument — a weakened assertion, a deleted
+  case, an added skip — then the reduction hid nothing, but it is coverage loss all the
+  same, and nothing in the diff required it. It needs a stated reason too: verdict
+  WEAKENED.
 
 ## Rules for the tests themselves
 
@@ -93,13 +100,14 @@ Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` —
 - `UNTESTED` — the mutations tried and the tests that stayed green.
 
 Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and `VERDICT` —
-`JUSTIFIED` (the stated reason, or the reverse control passed) or `RETUNED` (the old test
-fails against the new code and the change states no reason — the test was re-tuned to
-pass).
+`JUSTIFIED` (the stated reason, or the reverse control passed and the edit only adds),
+`RETUNED` (the old test fails against the new code and the change states no reason — the
+test was re-tuned to pass), or `WEAKENED` (the old test still passes but the edit reduced
+the instrument with no stated reason).
 
 Then the summary lines: `N branches: X distinguished, Y controlled, Z untested, W unproven`
-and `M test edits: J justified, K retuned`. An all-green audit that names its branches and
-tests is a real result; "tests pass" is not an audit.
+and `M test edits: J justified, K retuned, L weakened`. An all-green audit that names its
+branches and tests is a real result; "tests pass" is not an audit.
 
 ## Where this runs in the daslang repo (repo-only)
 
