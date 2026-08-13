@@ -21,6 +21,8 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
+**If the rebase changed any `skills/*.md` or `CODEREVIEW.md`, re-read the changed ones before continuing** — the checklist you are executing may have just changed under you.
+
 ### 0a. Folder-scoped review rules — CODEREVIEW.md discovery
 
 Right after the rebase, discover folder-scoped review rules for the changed set:
