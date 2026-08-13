@@ -69,8 +69,11 @@ static bool heapReportAtExit = false;
 static bool logModuleCompileTime = false;
 static bool buildingDocumentation = false;
 
+static vector<string> dllSearchPaths;
+
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
+    policies.dll_search_paths = dllSearchPaths;
     policies.aot = false;
     policies.aot_module = true;
     policies.tune_frozen = true;    // -aot output is a cross-box artifact — no per-box [tune] stamps
@@ -192,6 +195,13 @@ int das_aot_main ( int argc, char * argv[] ) {
                     return -1;
                 }
                 projectFile = argv[ai+1];
+                ai += 1;
+            } else if ( strcmp(argv[ai],"-dll-path")==0 ) {
+                if ( ai+1 >= argc ) {
+                    tout << "dll-path requires argument";
+                    return -1;
+                }
+                dllSearchPaths.push_back(argv[ai+1]);
                 ai += 1;
             } else if ( strcmp(argv[ai],"-dasroot")==0 ) {
                 if ( ai+1 >= argc ) {
@@ -393,6 +403,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     ModuleFileCache moduleCache;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
+    policies.dll_search_paths = dllSearchPaths;
     if ( debuggerRequired ) {
         policies.debugger = true;
         access->addExtraModule("debug", getDasRoot() + "/daslib/debug.das");
@@ -640,6 +651,7 @@ void print_help() {
         << "    -compile-only compile script without simulation and execution\n"
         << "    -documentation compile in documentation/reflection mode (disables per-box transforms)\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
+        << "    -dll-path <path> additional search path for dasbind libraries (repeatable; also DAS_DLL_PATH)\n"
         << "    --track-smart-ptr <id> track smart pointer with id\n"
         << "    --track-job-status <id> track JobStatus/Channel/LockBox with id\n"
         << "    --no-dump-leaks  silence the JobStatus + HandleRegistry + smart_ptr leak dumps at exit (default: dump)\n"
@@ -664,6 +676,7 @@ void print_help() {
         << "    -q          suppress all output\n"
         << "    -dry-run    no changes will be written\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
+        << "    -dll-path <path> additional search path for dasbind libraries (repeatable; also DAS_DLL_PATH)\n"
         << "    -log-compile-time  log per-module compile-time breakdown during AOT generation\n"
     ;
 }
@@ -741,6 +754,14 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     return -1;
                 }
                 mainName = argv[i+1];
+                i += 1;
+            } else if ( cmd=="dll-path" ) {
+                if ( i+1 >= argc ) {
+                    printf("dll-path requires argument\n");
+                    print_help();
+                    return -1;
+                }
+                dllSearchPaths.push_back(argv[i+1]);
                 i += 1;
             } else if ( cmd=="dasroot" ) {
                 if ( i+1 >= argc ) {
