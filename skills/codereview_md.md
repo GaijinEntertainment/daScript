@@ -8,7 +8,8 @@ master rebase — placing the file IS the registration).
 ## The contract
 
 The opening of every CODEREVIEW.md is this block, verbatim except for the module name and
-the module's architecture document. It is not boilerplate — it is the mechanism that keeps
+the module's architecture document — an opening that deviates from it is a self-review
+finding, fixed like any other. It is not boilerplate — it is the mechanism that keeps
 the file short, and each file's own rules bind changes to that file too. Two of its
 paragraphs are constitutional rules duplicated by design into every checklist: the
 self-review rule, and the branch-test rule (whose audit procedure is `skills/tdd_audit.md`).

@@ -54,9 +54,9 @@ the run with a checked-out base file in place.
   nothing else
 
 One evidence rule: a claim of absence ("no caller", "no test") carries its evidence in the
-report — the exact tree-wide search command (`modules/`, `utils/`, `tutorials/` included)
-and what it returned. An absence you cannot show a sweep for is an absence you do not
-claim.
+report — the exact search command, run from the repo root over the whole tree (generated
+directories like `_aot_generated` excluded), and what it returned. An absence you cannot
+show a sweep for is an absence you do not claim.
 
 ## Output
 

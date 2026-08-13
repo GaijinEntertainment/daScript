@@ -66,8 +66,8 @@ For each, run the **reverse control**: the OLD test against the NEW code.
   only as a conscious flip — the change states why the new behavior is the right one. No
   stated reason means the test now pins whatever the code happens to do, including the
   bug: verdict RETUNED.
-- Old test passes and the edit only ADDS to the instrument (new cases, tighter asserts) —
-  expansion; move on.
+- Old test passes and the edit only adds to or rewords the instrument (new cases, tighter
+  asserts, refactors that keep every assertion's strength) — justified; move on.
 - Old test passes but the edit REDUCES the instrument — a weakened assertion, a deleted
   case, an added skip — then the reduction hid nothing, but it is coverage loss all the
   same, and nothing in the diff required it. It needs a stated reason too: verdict
@@ -100,7 +100,8 @@ Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` —
 - `UNTESTED` — the mutations tried and the tests that stayed green.
 
 Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and `VERDICT` —
-`JUSTIFIED` (the stated reason, or the reverse control passed and the edit only adds),
+`JUSTIFIED` (the stated reason, or the reverse control passed and the edit did not reduce
+the instrument),
 `RETUNED` (the old test fails against the new code and the change states no reason — the
 test was re-tuned to pass), or `WEAKENED` (the old test still passes but the edit reduced
 the instrument with no stated reason).
