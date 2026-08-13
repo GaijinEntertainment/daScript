@@ -758,6 +758,14 @@ namespace das {
             error("function argument type can't be declared void", "", "",
                   var->at, CompilationError::invalid_function_argument_type);
         }
+        // operators dispatching through fixed-operand nodes (ExprOp1/2/3) - no call site can
+        // supply or omit a default there. the `?` and `[` families lower to plain ExprCall
+        // where defaults pad legally, so they stay out of the set; mangled template products
+        // start with a backtick, properties with a dot
+        if (var->init && !fn->name.empty() && strchr("+-*/%&|^<>=!~", fn->name[0])) {
+            error("operator '" + fn->name + "' can't have default arguments", "", "",
+                  var->at, CompilationError::invalid_function_argument_type);
+        }
         if (var->type->ref && var->type->isRefType()) { // silently fix a : Foo& into a : Foo
             var->type->ref = false;
             auto mname = fn->getMangledName();

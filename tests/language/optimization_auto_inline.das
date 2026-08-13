@@ -461,3 +461,24 @@ def test_auto_inline_behavior(t : T?) {
         t |> equal(g_log, "ab")
     }
 }
+
+[never_inline]  // keep the probe anchor itself out of the heuristic tier
+def target_never_inline_block() : int {
+    return transform_sum([1, 2, 3]) $ [never_inline] (v : int) : int {
+        return v * 10
+    }
+}
+
+[test]
+def test_never_inline_block(t : T?) {
+    ast_gc_guard() {
+        t |> run("[never_inline] block declines invoke-block inlining") @(t : T?) {
+            let b = body_of(t, "target_never_inline_block")
+            t |> success(!has(b, "transform_sum("), "the function still inlines: {b}")
+            t |> success(has(b, "invoke("), "the block stays an invoke: {b}")
+        }
+    }
+    t |> run("values preserved") @(t : T?) {
+        t |> equal(target_never_inline_block(), 60)
+    }
+}

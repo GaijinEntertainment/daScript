@@ -62,6 +62,16 @@ grounding, change-derived risk dimensions, parallel surfacers, the falsification
 prover — is `skills/review_round.md`; the auditor instances above run as part of its
 surfacing phase, and this step's discovered set feeds its grounding.
 
+### 0a2. Style hygiene audit — mandatory run, non-blocking findings
+
+Every PR's new code gets the `style-hygiene-auditor` agent
+(`.claude/agents/style-hygiene-auditor.md`), whose rulebook is
+`skills/comment_style_hygiene.md` — comments, naming, and code shape, any language.
+Small diff: one instance over the whole changed set. Large diff: one instance per file
+cluster (by directory or language), reports merged. The run is mandatory; the findings
+are not a gate — fix each or consciously decline it (unlike lint, which blocks). Same
+registry caveat as above.
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:

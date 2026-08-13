@@ -38,6 +38,26 @@ struct Template {
     tag2expr : table<string; Expression?>                                        //! tag expression replacement rules
 }
 
+// a type substituted into a template stands at the splice site (same rule as $e/$v
+// expression splices); an input cloned from an inferred expression type carries no location
+def private stamp_type_missing_at(var typ : TypeDeclPtr; at : LineInfo) {
+    if (typ == null) {
+        return
+    }
+    if (typ.at.fileInfo == null) {
+        typ.at = at
+    }
+    if (typ.firstType != null) {
+        stamp_type_missing_at(typ.firstType, at)
+    }
+    if (typ.secondType != null) {
+        stamp_type_missing_at(typ.secondType, at)
+    }
+    for (arg in typ.argTypes) {
+        stamp_type_missing_at(arg, at)
+    }
+}
+
 def kaboomVarField(var self : Template; name, prefix, suffix : string) {
     //! Adds a rule to to the template to replace a variable field access with a prefix and suffix.
     //! I.e. foo.bar into prefix + bar + suffix
@@ -271,7 +291,10 @@ class private TemplateVisitor : AstVisitor {
         if (typ.baseType == Type.alias) {
             let ta = string(typ.alias)
             if (key_exists(rules.type2etype, ta)) {
+                // fill the donor's MISSING locations from the splice site; real ones stay (unlike $e(), which forces the root)
+                let oldAt = typ.at
                 typ = clone_type(unsafe(rules.type2etype[ta]))
+                stamp_type_missing_at(typ, oldAt)
             } elif (key_exists(rules.type2type, ta)) {
                 typ.alias := rules.type2type |> get_value(ta)
             }
@@ -279,8 +302,10 @@ class private TemplateVisitor : AstVisitor {
             let st = typ.structType
             if (key_exists(rules.struct2etype, st)) {
                 let oldFlags = typ.flags
+                let oldAt = typ.at
                 typ = clone_type(unsafe(rules.struct2etype[st]))
                 typ.flags = oldFlags
+                stamp_type_missing_at(typ, oldAt)
             }
         }
         if (typ.firstType != null) {

@@ -72,6 +72,27 @@ Two hard-won rules for tests that drive a deep JIT engine chain (`forward`/`forw
    only asserts. (`modules/dasLLAMA/tests/test_mtp.das` hit both failure modes before landing
    on this.)
 
+## Structural-proof anchors vs the heuristic inliner
+
+`auto_inline_functions` defaults ON, so a small target function whose only call sits in a
+test lambda gets auto-inlined and reaped — and a structural test that inspects its
+post-patch body (`compiling_module() |> for_each_function`) finds nothing. Mark such probe
+anchors `[never_inline]` (or keep them over the `auto_inline_cost` budget). Calls placed
+directly in the `[test]` function body are safe — an annotated caller disables the
+heuristic tier — but lambda arms (`t |> run(...) @(...)`) are not.
+
+Two more ways a structural anchor vanishes or hides, neither stopped by `[never_inline]`:
+
+- **Const-fold reaping**: a pure anchor called with constant arguments gets evaluated at
+  compile time and reaped as unused — behavior checks then pass on the folded constant
+  while the body probe finds nothing. Taint the anchor's input through a mutable global
+  (`var g_seed = 1`, written somewhere) so it must survive to runtime.
+- **Mangled instance names**: a generic instance lands in the compiling module under
+  `` origin`name`hash ``, which the exact-name `for_each_function(mod, name)` lookup
+  misses (only the empty name iterates everything). Match by substring over
+  `for_each_function("")`, and drop the `(` from body-text checks on calls to it — the
+  call site spells the mangled name too.
+
 ## Shared fixtures and the hyphen trap
 
 Shared test helpers go in `_common.das` module files (e.g. `tests/linq/_common.das`). A
