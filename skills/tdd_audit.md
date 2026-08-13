@@ -105,6 +105,9 @@ Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and 
 test was re-tuned to pass), or `WEAKENED` (the old test still passes but the edit reduced
 the instrument with no stated reason).
 
+A claim of absence — "no caller", "no test" — carries the search command and its result in
+the report; an unshown sweep is not evidence.
+
 Then the summary lines: `N branches: X distinguished, Y controlled, Z untested, W unproven`
 and `M test edits: J justified, K retuned, L weakened`. An all-green audit that names its
 branches and tests is a real result; "tests pass" is not an audit.
