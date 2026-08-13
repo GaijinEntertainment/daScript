@@ -53,7 +53,9 @@ controls where reading can't settle a branch, and runs the cheat check over the 
 test edits. Fix policy: an UNTESTED branch gets its test written in the same change, never
 a follow-up promise; an UNPROVEN one gets its named settling run executed, or the claim
 stated explicitly in the PR description; a RETUNED test edit (re-tuned to pass, no stated
-reason) gets the old expectation restored or the reason stated — never shipped silent.
+reason) gets the old expectation restored or the reason stated; a WEAKENED one (assertion
+weakened, case deleted, skip added — coverage loss the diff didn't require) gets the
+instrument restored or the reason stated — never shipped silent.
 
 When the change warrants a full review round (non-trivial arcs), the round itself —
 grounding, change-derived risk dimensions, parallel surfacers, the falsification-gate
@@ -436,7 +438,7 @@ created it.
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | CODEREVIEW audit | step-0a walk → one `codereview-md-auditor` per discovered checklist | Binding rules; checklist defects fixed in the same batch |
-| TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED test edit → restore the expectation or state the reason |
+| TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |

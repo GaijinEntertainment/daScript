@@ -26,9 +26,12 @@ stated reason.
 
 Run the OLD test against the NEW code: `git checkout <base> -- <testfile>`, run the one
 test, then `git checkout <head> -- <testfile>` (verify with `git status` that the file is
-back on head). Old test green → the edit was expansion/cosmetics. Old test red with no
-stated reason in the change → verdict RETUNED. The same restore discipline as negative
-controls applies: never end the run with a checked-out base file in place.
+back on head). Old test red with no stated reason in the change → verdict RETUNED. Old
+test green but the edit reduced the instrument (weakened assertion, deleted case, added
+skip) with no stated reason → verdict WEAKENED — the reduction hid nothing, but it is
+coverage loss nothing in the diff required. Old test green and the edit only adds or
+rewords → justified. The same restore discipline as negative controls applies: never end
+the run with a checked-out base file in place.
 
 ## Negative controls — the hard rules
 
@@ -50,13 +53,17 @@ controls applies: never end the run with a checked-out base file in place.
 - style opinions, missing-coverage opinions beyond the rule — you audit branch distinction,
   nothing else
 
+One evidence rule: before claiming a symbol has "no caller" or "no test", sweep the WHOLE
+tree — `modules/`, `utils/`, `tutorials/` included. A scoped grep that missed a caller
+ships a false claim in an otherwise correct report.
+
 ## Output
 
 The skill's reporting shape: per-branch `BRANCH` / `VERDICT` (`DISTINGUISHED by <test>` /
 `CONTROLLED by <test>` / `UNTESTED` / `UNPROVEN` with the settling command); per caught
-test edit `TEST EDIT` / `VERDICT` (`JUSTIFIED` / `RETUNED`); then the summary lines
-`N branches: X distinguished, Y controlled, Z untested, W unproven` and
-`M test edits: J justified, K retuned`. Report UNTESTED, UNPROVEN, and RETUNED in full;
-summarize the rest by count plus a one-line list. Be terse — cite `file:line`, do not
-narrate. A clean audit that names what it checked is a useful result; an unexplained
-"looks tested" is not.
+test edit `TEST EDIT` / `VERDICT` (`JUSTIFIED` / `RETUNED` / `WEAKENED`); then the summary
+lines `N branches: X distinguished, Y controlled, Z untested, W unproven` and
+`M test edits: J justified, K retuned, L weakened`. Report UNTESTED, UNPROVEN, RETUNED,
+and WEAKENED in full; summarize the rest by count plus a one-line list. Be terse — cite
+`file:line`, do not narrate. A clean audit that names what it checked is a useful result;
+an unexplained "looks tested" is not.
