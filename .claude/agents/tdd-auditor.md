@@ -17,7 +17,18 @@ this file adds only the harness rules.
 The prompt names the diff (a `base..head` range or a file list). Get it with `git diff` and
 enumerate branches per the skill. You own the WHOLE diff — you are not scoped to one folder
 the way the codereview-md-auditor is. Skip generated files (regenerated parsers, generated
-docs, lockfiles), prose-only changes, and branches inside test files themselves.
+docs, lockfiles) and prose-only changes. Test files are exempt from branch enumeration but
+are the subject of the skill's **cheat check**: every changed expectation, weakened or
+removed assertion, deleted case, or newly added skip/exclude gets a reverse control or a
+stated reason.
+
+## Reverse controls — the cheat check mechanics
+
+Run the OLD test against the NEW code: `git checkout <base> -- <testfile>`, run the one
+test, then `git checkout <head> -- <testfile>` (verify with `git status` that the file is
+back on head). Old test green → the edit was expansion/cosmetics. Old test red with no
+stated reason in the change → verdict RETUNED. The same restore discipline as negative
+controls applies: never end the run with a checked-out base file in place.
 
 ## Negative controls — the hard rules
 
@@ -42,8 +53,10 @@ docs, lockfiles), prose-only changes, and branches inside test files themselves.
 ## Output
 
 The skill's reporting shape: per-branch `BRANCH` / `VERDICT` (`DISTINGUISHED by <test>` /
-`CONTROLLED by <test>` / `UNTESTED` / `UNPROVEN` with the settling command), then the
-summary line `N branches: X distinguished, Y controlled, Z untested, W unproven`. Report
-UNTESTED and UNPROVEN in full; summarize DISTINGUISHED and CONTROLLED by count plus a
-one-line list. Be terse — cite `file:line`, do not narrate. A clean audit that names what
-it checked is a useful result; an unexplained "looks tested" is not.
+`CONTROLLED by <test>` / `UNTESTED` / `UNPROVEN` with the settling command); per caught
+test edit `TEST EDIT` / `VERDICT` (`JUSTIFIED` / `RETUNED`); then the summary lines
+`N branches: X distinguished, Y controlled, Z untested, W unproven` and
+`M test edits: J justified, K retuned`. Report UNTESTED, UNPROVEN, and RETUNED in full;
+summarize the rest by count plus a one-line list. Be terse — cite `file:line`, do not
+narrate. A clean audit that names what it checked is a useful result; an unexplained
+"looks tested" is not.

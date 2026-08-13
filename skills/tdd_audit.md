@@ -48,6 +48,24 @@ The negative control is cheap — one mutation, one targeted test run — and it
 evidence that settles the question. "The test obviously covers it" is a prediction; the
 control is a measurement.
 
+## The cheat check — audit the diff's own test edits
+
+A diff can pass the branch audit and still cheat by adjusting the instrument. Enumerate
+every test the diff touches in one of these shapes:
+
+- an expected value changed
+- an assertion weakened — `==` to a range, exact to tolerance, a tolerance widened, an
+  assert removed
+- a test or case deleted
+- a skip, exclude, or platform gate added to a test that ran before
+- a test rewritten wholesale in the same change that rewrites the code it tests
+
+For each, run the **reverse control**: the OLD test against the NEW code. Old test passes →
+the edit was expansion or cosmetics; move on. Old test FAILS → the diff changed behavior
+AND re-tuned the test to match. That is legitimate only as a conscious flip — the change
+states why the new behavior is the right one. No stated reason means the test now pins
+whatever the code happens to do, including the bug; report it.
+
 ## Rules for the tests themselves
 
 - **A new test is shown to fail first.** Run it against the pre-change code (stash the
@@ -55,7 +73,8 @@ control is a measurement.
   green may be testing nothing.
 - **An expectation change is a conscious flip.** When a diff edits an expected value, the
   change states why the new value is the right one. Weakening an expectation until the
-  implementation passes is a defect — the test now pins the bug.
+  implementation passes is a defect — the test now pins the bug. The cheat check above is
+  how an auditor settles it.
 - **Pins assert probed behavior.** A pin test (one that freezes current behavior) records
   what the code DOES: probe first, then write the assert from the probe's output. A pin
   written from what the author hopes is documentation, not a test.
@@ -73,9 +92,14 @@ Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` —
   would settle it;
 - `UNTESTED` — the mutations tried and the tests that stayed green.
 
-Then the summary line: `N branches: X distinguished, Y controlled, Z untested, W unproven`.
-An all-green audit that names its branches and tests is a real result; "tests pass" is not
-an audit.
+Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and `VERDICT` —
+`JUSTIFIED` (the stated reason, or the reverse control passed) or `RETUNED` (the old test
+fails against the new code and the change states no reason — the test was re-tuned to
+pass).
+
+Then the summary lines: `N branches: X distinguished, Y controlled, Z untested, W unproven`
+and `M test edits: J justified, K retuned`. An all-green audit that names its branches and
+tests is a real result; "tests pass" is not an audit.
 
 ## Where this runs in the daslang repo (repo-only)
 
