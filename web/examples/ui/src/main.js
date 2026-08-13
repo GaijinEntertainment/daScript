@@ -542,6 +542,19 @@ function selectedEngine() {
     return el ? el.value : 'interpreter';
 }
 
+// Run/Test clicked with no frame standing by. Two different truths: the frame
+// is still loading (wait), or the runtime kept aborting and the runner gave up
+// (rebuild it — PlaygroundRunner.revive — and say so). Before revive existed,
+// that second state showed the first state's message forever, on a page no
+// amount of waiting or reloading would fix.
+function reportNotReady() {
+    if (typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.revive && PlaygroundRunner.revive()) {
+        printOutput('the daslang runtime failed to start — retrying now, run again in a moment…', '#ff9393');
+    } else {
+        printOutput('daslang is still loading, please wait…', '#ff9393');
+    }
+}
+
 // (stdout flushing moved into run-frame.html, where FS now lives)
 
 runCode = async function() {
@@ -551,7 +564,7 @@ runCode = async function() {
         return;
     }
     if (!isWasmReady()) {
-        printOutput('daslang is still loading, please wait…', '#ff9393');
+        reportNotReady();
         return;
     }
     // Each run gets a fresh frame, so the previous program's canvas, GL context,
@@ -568,7 +581,7 @@ runCode = async function() {
 // keeping the run single-threaded in the WASM build.
 runTests = async function() {
     if (!isWasmReady()) {
-        printOutput('daslang is still loading, please wait…', '#ff9393');
+        reportNotReady();
         return;
     }
     syncUrlToState();

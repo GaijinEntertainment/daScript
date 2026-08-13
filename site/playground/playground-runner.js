@@ -13,7 +13,7 @@
 (function () {
     "use strict";
 
-    var FRAME_SRC = "run-frame.html";
+    var FRAME_SRC = "run-frame.html?v=2";
 
     var host = null;        // element the frames live in
     var current = null;     // frame serving the run in flight (or the idle one)
@@ -27,6 +27,32 @@
     // unreachable, retrying forever just spawns frames.
     var spareAborts = 0;
     var MAX_SPARE_ABORTS = 3;
+
+    // ── the one compiled runtime ─────────────────────────────────────────────
+    // The runtime wasm (~40MB) is compiled HERE, once per page. Every frame asks
+    // for this module over postMessage and instantiates it — instances share the
+    // compiled machine code, so a Run click costs an instantiation, not a
+    // compile. Without this, every frame (one per run, plus the pre-warmed
+    // spare) compiled the whole runtime again; browsers budget compiled wasm
+    // per PROCESS and reclaim it lazily, so a session of runs walked the
+    // process to "wasm streaming compile failed: out of memory" — a wedge that
+    // survives reloads (same process) until the tab is closed.
+    var WASM_URL = "daslang_static.wasm";
+    var wasmModulePromise = null;
+
+    function compileRuntime() {
+        if (!wasmModulePromise) {
+            wasmModulePromise = WebAssembly.compileStreaming(fetch(WASM_URL))
+                .catch(function (e) {
+                    // Drop the failed promise so a revive() retries the compile —
+                    // an OOM here is often transient (the old page's module not
+                    // yet collected), and a pinned rejection would make it final.
+                    wasmModulePromise = null;
+                    throw e;
+                });
+        }
+        return wasmModulePromise;
+    }
 
     function makeFrame() {
         var rec = { el: document.createElement("iframe"), ready: false, used: false };
@@ -139,6 +165,21 @@
         if (!rec) return;
 
         switch (msg.type) {
+            case "need-wasm-module":
+                // Ack immediately: the compile can take seconds, and without an
+                // ack the frame cannot tell "parent is compiling" from "parent
+                // predates this protocol" (where it falls back to self-compile).
+                (function (target) {
+                    function deliver(payload) {
+                        try { target.postMessage(payload, window.location.origin); } catch (e) { /* frame gone */ }
+                    }
+                    deliver({ type: "wasm-module-pending" });
+                    compileRuntime().then(
+                        function (mod) { deliver({ type: "wasm-module", module: mod }); },
+                        function (e) { deliver({ type: "wasm-module", module: null, error: String((e && e.message) || e) }); }
+                    );
+                })(ev.source);
+                break;
             case "ready":
                 rec.ready = true;
                 if (rec === spare) spareAborts = 0;
@@ -188,12 +229,31 @@
             host = hostEl;
             onOutput = outputFn;
             onExit = exitFn || null;
+            // Start the one compile now — the spare is about to ask for it.
+            // Errors surface through the frame protocol, not here.
+            compileRuntime().catch(function () {});
             ensureSpare();
         },
 
         // Ready means "a frame is standing by", which is what gates the buttons.
         isReady: function () {
             return !!(spare && spare.ready) || !!(current && current.ready && !current.used);
+        },
+
+        // A page whose spare kept aborting (MAX_SPARE_ABORTS) has no frame and,
+        // without this, no way back short of a reload — which does not help when
+        // the abort was the process's wasm memory, since that outlives reloads.
+        // A Run click is the user's explicit "try again": rebuild the spare and
+        // reset the abort budget. Cheap — a new frame reuses the compiled
+        // module, and a failed parent compile retries because compileRuntime()
+        // drops its promise on rejection. Returns whether it revived anything;
+        // false means a spare is already standing (loading or ready).
+        revive: function () {
+            if (spare) return false;
+            spareAborts = 0;
+            ensureSpare();
+            if (typeof window.updateButtonStates === "function") window.updateButtonStates();
+            return true;
         },
 
         // Size an element the way a run frame is sized. The wasm engine's page
