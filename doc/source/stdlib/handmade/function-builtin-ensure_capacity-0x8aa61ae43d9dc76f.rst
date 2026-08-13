@@ -1,0 +1,1 @@
+Grows the capacity of `Arr` to at least `newSize` elements, at least doubling it on each growth so an append-by-resize loop stays amortized O(1). A `resize` that follows never has to grow, so it cannot trip the `max_unreserved_size` guard — this is the deliberate spelling for buffers that grow without a known final size.
