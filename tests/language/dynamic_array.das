@@ -5,7 +5,7 @@ require dastest/testing_boost public
 // erase, insert, move (<-), and element initialization.
 
 [test]
-def test_dynamic_array(t : T?) {
+def test_dynamic_array(t : T?) { // nolint:STYLE038 — flat list of independent container-op arms
     t |> run("push and length") @(t : T?) {
         var arr : array<int>
         let val2 = 2

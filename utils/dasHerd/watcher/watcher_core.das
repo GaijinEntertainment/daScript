@@ -1083,7 +1083,7 @@ def public watcher_adopt_hosts : int {
     return adopted
 }
 
-def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult { // nolint:STYLE037
+def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult { // nolint:STYLE037,STYLE038
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }
