@@ -1596,15 +1596,6 @@ class public LlvmJitVisitor : AstVisitor {
         return load_local_const(global_addr, nonnull_type)
     }
 
-    // emit-object mode: record a cross-module call/ctor target glob (just created
-    // null by save_address_global) so emit_aot_object_globinit fills it with the
-    // host Context's SimFunction* (das_aot_get_func_by_mnh) at load.
-    def aot_record_func_glob(name : DllName; func : Function?) {
-        if (g_emit_aot_object_globals) {
-            g_aot_func_globs |> push((glob = LLVMGetNamedGlobal(g_mod, name.glob()), mnh = func.getMangledNameHash))
-        }
-    }
-
     def set_meta_cconv(instr : LLVMOpaqueValue?; conv : string) {
         var values : LLVMOpaqueValue? [1]
         values[0] = LLVMMDStringInContext(g_ctx, conv, uint(length(conv)))
@@ -1774,11 +1765,15 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             } else {
                 var args = build_array_of_arguments(expr.arguments)
-                var glob_fn_ptr = get_address_global(uid.get_dll_fn_name_ptr(expr.func))
-                if (glob_fn_ptr == null) {
-                    var MNH_ADDR = get_function_addr(jit_context, expr.func)
-                    glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
-                    aot_record_func_glob(uid.get_dll_fn_name_ptr(expr.func), expr.func)
+                var glob_fn_ptr : LLVMOpaqueValue?
+                if (g_emit_aot_object_globals) {
+                    glob_fn_ptr = build_aot_get_func_by_mnh(g_builder, types, expr.func.getMangledNameHash, get_context_param())
+                } else {
+                    glob_fn_ptr = get_address_global(uid.get_dll_fn_name_ptr(expr.func))
+                    if (glob_fn_ptr == null) {
+                        var MNH_ADDR = get_function_addr(jit_context, expr.func)
+                        glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
+                    }
                 }
                 var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
                 params |> push(glob_fn_ptr)  // mnh
@@ -4330,11 +4325,15 @@ class public LlvmJitVisitor : AstVisitor {
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
         } else {
             let name = uid.get_ctor(expr)
-            var ctor = get_address_global(name)
-            if (ctor == null) {
-                var MNH_ADDR = get_function_addr(jit_context, expr_func)
-                ctor = save_address_global(name, MNH_ADDR)
-                aot_record_func_glob(name, expr_func)
+            var ctor : LLVMOpaqueValue?
+            if (g_emit_aot_object_globals) {
+                ctor = build_aot_get_func_by_mnh(g_builder, types, expr_func.getMangledNameHash, get_context_param())
+            } else {
+                ctor = get_address_global(name)
+                if (ctor == null) {
+                    var MNH_ADDR = get_function_addr(jit_context, expr_func)
+                    ctor = save_address_global(name, MNH_ADDR)
+                }
             }
             var params <- [
                 ctor,  // mnh
@@ -4782,9 +4781,19 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprAddr
     def override preVisitExprAddr(expr : ExprAddr?) : void {
-        var MNH_ADDR = get_function_addr(jit_context, expr.func)
+        let simfn_t = LLVMPointerType(g_t_simFunction, 0u)
+        var fn_ptr : LLVMOpaqueValue?
+        if (g_emit_aot_object_globals) {
+            // A Func is a SimFunction*, which belongs to one context, so an object global shared by
+            // every context that links the object can only ever hold one of them - and it dangles
+            // once that context dies. Look it up per use, the way a call target does.
+            let raw = build_aot_get_func_by_mnh(g_builder, types, expr.func.getMangledNameHash, get_context_param())
+            fn_ptr = LLVMBuildPointerCast(g_builder, raw, simfn_t, "")
+        } else {
+            var MNH_ADDR = get_function_addr(jit_context, expr.func)
+            fn_ptr = save_address_global(uid.get_addr(expr), MNH_ADDR, simfn_t)
+        }
         var rfun = LLVMGetUndef(g_t_function)
-        let fn_ptr = save_address_global(uid.get_addr(expr), MNH_ADDR, LLVMPointerType(g_t_simFunction, 0u))
         rfun = LLVMBuildInsertValue(g_builder, rfun, fn_ptr, 0u, "")
         setE(expr, rfun)
     }

@@ -34,8 +34,6 @@ namespace das {
 
     // makeAotJitNode builds a SimNode_Jit (defined in module_jit.cpp, where it is visible);
     SimNode * makeAotJitNode ( Context & ctx, void * publ );
-    // runLlvmAotGlobInits runs each linked LLVM-AOT object's glob re-resolution callback.
-    void runLlvmAotGlobInits ( Context & ctx );
 
     // Test standalone context
 

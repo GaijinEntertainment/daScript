@@ -36,7 +36,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4dul   // --jit-split-modules: per-das-module partition emission (impl linkage, shared-glob linkonce, split bool in the cache key) (0x4c: write_dll's target machine follows --jit-opt-level)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4eul   // scalar ABI coercion at calls, returns and branches; call/ctor/addr targets resolved per use (0x4d: --jit-split-modules: per-das-module partition emission)
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -719,7 +719,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // the emit_aot_object_globinit ctor); reset after this run.
     g_emit_aot_object_globals = emit_aot_object
     if (emit_aot_object) {
-        g_aot_func_globs |> clear()
     }
     defer() { g_emit_aot_object_globals = false; }
     let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only && !emit_aot_object
