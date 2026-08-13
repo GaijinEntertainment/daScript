@@ -53,9 +53,10 @@ the run with a checked-out base file in place.
 - style opinions, missing-coverage opinions beyond the rule — you audit branch distinction,
   nothing else
 
-One evidence rule: before claiming a symbol has "no caller" or "no test", sweep the WHOLE
-tree — `modules/`, `utils/`, `tutorials/` included. A scoped grep that missed a caller
-ships a false claim in an otherwise correct report.
+One evidence rule: a claim of absence ("no caller", "no test") carries its evidence in the
+report — the exact search command, run from the repo root over the whole tree (generated
+directories like `_aot_generated` excluded), and what it returned. An absence you cannot
+show a sweep for is an absence you do not claim.
 
 ## Output
 
