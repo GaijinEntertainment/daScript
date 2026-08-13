@@ -1338,6 +1338,7 @@ def public batch(cb : block) {
 
 def push_cmd(var cmd : AudioCommand) {
     var bytes <- mem_archive_save(cmd)
+    delete cmd
     if (global_batch != null) {
         *global_batch |> emplace(bytes)
     } else {
