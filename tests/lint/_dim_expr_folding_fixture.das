@@ -42,12 +42,23 @@ struct Lanes {
     across : int[LANES + 1]
 }
 
+// A CALL in a dimension, at either end of a nested one.  An operator chain the
+// old dim-site fold already reached; a call it did not, so this is the shape
+// that says the fold reaches a constructor at all -- and the one that says the
+// force is restored, since the inner dimension is folded under the same flag.
+struct Called {
+    outer : int[int(4.9) + 1][2]
+    inner : int[2][int(4.9) + 1]
+}
+
 [export]
 def main {
     let g : Grid
     let s : Stack
     let l : Lanes
+    let c : Called
     print("{length(g.cells)} {length(g.cells[0])}\n")
     print("{length(s.slots)} {length(s.slots[0])}\n")
     print("{length(l.own)} {length(l.across)} {UNDEMANDED} {SPAN}\n")
+    print("{length(c.outer)} {length(c.outer[0])} {length(c.inner)} {length(c.inner[0])}\n")
 }

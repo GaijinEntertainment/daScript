@@ -496,7 +496,7 @@ namespace das {
         }
     }
 
-    static bool isConstExprFunc ( Function * fun ) {
+    bool isConstExprFunc ( Function * fun ) {
         return fun->sideEffectFlags==0 && fun->builtIn && fun->result && fun->result->isFoldable();
     }
 
@@ -573,6 +573,18 @@ namespace das {
                         stampMissingAt(folded, expr->at);
                         return folded;
                     } else if ( constExprFolding.count(variable)==0 ) {
+                        // a const read N times costs its whole init N times over without this,
+                        // and a chain whose every level reads the one above it is exponential
+                        // in the chain's length.  The value cannot change under the memo: it is
+                        // what this global's init evaluates to, and the answer handed back is
+                        // always a fresh clone, since a node has exactly one parent
+                        auto memo = constExprFolded.find(variable);
+                        if ( memo != constExprFolded.end() ) {
+                            if ( recordConstAccess ) variable->access_fold = true;
+                            auto folded = memo->second->clone();
+                            stampMissingAt(folded, expr->at);
+                            return folded;
+                        }
                         // the in-flight set breaks an init cycle (A = B + 1; B = A + 1): a
                         // revisited global reads as non-constant, and the standard init-loop
                         // diagnostic is what reports it
@@ -581,6 +593,7 @@ namespace das {
                         constExprFolding.erase(variable);
                         if ( folded ) {
                             if ( recordConstAccess ) variable->access_fold = true;
+                            constExprFolded[variable] = folded->clone();
                             return folded;
                         }
                     }

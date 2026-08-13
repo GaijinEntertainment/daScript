@@ -1157,7 +1157,7 @@ namespace das {
         }
     }
     bool InferTypes::isConstExprFunc(Function *fun) const {
-        return (fun->sideEffectFlags == 0) && (fun->builtIn) && (fun->result->isFoldable());
+        return das::isConstExprFunc(fun);
     }
     bool InferTypes::isPodDelete(TypeDecl *typ) {
         if (typ->temporary)
