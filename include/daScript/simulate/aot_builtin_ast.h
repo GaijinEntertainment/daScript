@@ -484,6 +484,7 @@ namespace das {
     DAS_CC_API void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API void ast_style_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
+    DAS_CC_API ExpressionPtr ast_get_const_expr ( ProgramPtr prog, ExpressionPtr expr, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     DAS_CC_API CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context );

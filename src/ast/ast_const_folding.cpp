@@ -496,6 +496,165 @@ namespace das {
         }
     }
 
+    static bool isConstExprFunc ( Function * fun ) {
+        return fun->sideEffectFlags==0 && fun->builtIn && fun->result && fun->result->isFoldable();
+    }
+
+    // The value of a const is wanted HERE, and its own initializer never folded (lint
+    // policies via no_infer_time_folding, or `options infer_time_folding = false`).  Its
+    // module may be long compiled, so this evaluates a COPY and leaves that AST alone.
+    // Every leaf comes back through getConstExpr, so nothing reaching eval reads a global.
+    // Gated: infer demands the constructor arm only where folding is off for the whole
+    // program, because evaluating mid-infer under a compile that never asked for it
+    // restarts the folding context.
+    ExpressionPtr FoldingVisitor::foldConstInit ( Expression * expr ) {
+        if ( auto cexpr = getConstExpr(expr) ) {
+            return cexpr;
+        }
+        if ( !demandFoldConstInit ) {
+            return nullptr;
+        }
+        if ( !expr->type || expr->type->isAuto() || !expr->__rtti ) {
+            return nullptr;
+        }
+        if ( strcmp(expr->__rtti, "ExprCall") != 0 ) {
+            return nullptr;
+        }
+        // a vector or matrix constructor is a call, so a const spelled float4(...)/2 needs this
+        // arm as much as the operators.  Only a builtin can be evaluated in place, which is the
+        // same gate the folding pass itself applies; a user function needs its own run.
+        auto call = static_cast<ExprCall *>(expr);
+        if ( !call->func || !isConstExprFunc(call->func) ) {
+            return nullptr;
+        }
+        auto copy = static_cast<ExprCall *>(call->clone());
+        for ( size_t ai=0, ais=call->arguments.size(); ai!=ais; ++ai ) {
+            const auto & arg = call->arguments[ai];
+            if ( arg->type->baseType==Type::fakeContext || arg->type->baseType==Type::fakeLineInfo ) continue;
+            auto ac = foldConstInit(arg);
+            if ( !ac ) return nullptr;
+            copy->arguments[ai] = ac;
+        }
+        auto folded = evalAndFold(copy);
+        return ( folded && folded->rtti_isConstant() ) ? folded : nullptr;
+    }
+    ExpressionPtr FoldingVisitor::getConstExpr ( Expression * expr ) {
+        if ( expr->rtti_isConstant() && expr->type && expr->type->isFoldable() ) {
+            if ( expr->type->isEnum() ) {
+                auto enumc = static_cast<ExprConstEnumeration *>(expr);
+                auto enumv = enumc->enumType->find(enumc->text);
+                if ( !enumv.second )
+                    return nullptr; // not found???
+                if ( !enumv.first || !enumv.first->type )
+                    return nullptr; // not resolved
+                if ( !enumv.first->rtti_isConstant() )
+                    return nullptr; // not a constant
+                // TODO: do we need to check if const is of the same size?
+                // if ( enumc->baseType != enumv.first->type->baseType ) return nullptr;   // not a constant of the same type
+            }
+            return expr;
+        }
+        if ( expr->rtti_isR2V() ) {
+            auto r2v = static_cast<ExprRef2Value *>(expr);
+            return getConstExpr(r2v->subexpr);
+        }
+        if ( expr->rtti_isVar() ) { // global variable which happens to be constant
+            auto var = static_cast<ExprVar *>(expr);
+            auto variable = var->variable;
+            if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
+                if ( /*!var->local &&*/ // this is an interesting question. should we allow local const to be folded?
+                    !var->argument &&
+                    !var->block ) {
+                    if ( variable->init->rtti_isConstant() ) {
+                        if ( recordConstAccess ) variable->access_fold = true;
+                        auto folded = variable->init->clone();
+                        // a C++-registered constant has no location of its own, so the folded
+                        // value reports where it was used
+                        stampMissingAt(folded, expr->at);
+                        return folded;
+                    } else if ( constExprFolding.count(variable)==0 ) {
+                        // the in-flight set breaks an init cycle (A = B + 1; B = A + 1): a
+                        // revisited global reads as non-constant, and the standard init-loop
+                        // diagnostic is what reports it
+                        constExprFolding.insert(variable);
+                        auto folded = foldConstInit(variable->init);
+                        constExprFolding.erase(variable);
+                        if ( folded ) {
+                            if ( recordConstAccess ) variable->access_fold = true;
+                            return folded;
+                        }
+                    }
+                }
+            }
+        }
+        if ( expr->rtti_isOp1() ) {
+            // the operand folds on a DETACHED clone, never in place, so a profile that keeps
+            // source shapes for its lint rules still sees the expression it was given
+            auto op1 = static_cast<ExprOp1 *>(expr);
+            if ( op1->func && op1->subexpr->type && isConstExprFunc(op1->func) ) {
+                if ( auto scc = foldConstInit(op1->subexpr) ) {
+                    auto copy = static_cast<ExprOp1 *>(op1->clone());
+                    copy->subexpr = scc;
+                    auto folded = evalAndFold(copy);
+                    if ( folded && folded->rtti_isConstant() ) {
+                        return folded;
+                    }
+                }
+            }
+        }
+        if ( expr->rtti_isOp2() ) {
+            auto op2 = static_cast<ExprOp2 *>(expr);
+            if ( op2->func && op2->left->type && op2->right->type && isConstExprFunc(op2->func) ) {
+                auto lcc = foldConstInit(op2->left);
+                auto rcc = lcc ? foldConstInit(op2->right) : nullptr;
+                if ( lcc && rcc ) {
+                    auto copy = static_cast<ExprOp2 *>(op2->clone());
+                    copy->left = lcc;
+                    copy->right = rcc;
+                    auto folded = evalAndFold(copy);
+                    if ( folded && folded->rtti_isConstant() ) {
+                        return folded;
+                    }
+                }
+            }
+        }
+        if ( expr->rtti_isSwizzle() ) {
+            auto swz = static_cast<ExprSwizzle *>(expr);
+            if ( swz->value->type ) {
+                if ( auto cswz = getConstExpr(swz->value) ) {
+                    int dim = swz->value->type->getVectorDim();
+                    vector<uint8_t> fields;
+                    if ( TypeDecl::buildSwizzleMask(swz->mask, dim, fields) ) {
+                        auto baseType = swz->value->type->getVectorBaseType();
+                        vec4f data = static_cast<ExprConst *>(cswz)->value;
+                        vec4f resData = v_zero();
+                        if ( baseType != Type::tInt64 && baseType != Type::tUInt64 ) {
+                            int32_t *res = (int32_t *)&resData;
+                            int32_t *src = (int32_t *)&data;
+                            int outI = 0;
+                            for ( auto f : fields ) {
+                                res[outI++] = src[f];
+                            }
+                        } else {
+                            int64_t *res = (int64_t *)&resData;
+                            int64_t *src = (int64_t *)&data;
+                            int outI = 0;
+                            for ( auto f : fields ) {
+                                res[outI++] = src[f];
+                            }
+                        }
+                        auto vecType = swz->type->getVectorType(baseType, int(fields.size()));
+                        auto constValue = program->makeConst(expr->at, new TypeDecl(vecType), resData);
+                        constValue->type = new TypeDecl(vecType);
+                        constValue->type->at = expr->at;
+                        return constValue;
+                    }
+                }
+            }
+        }
+        return nullptr;
+    }
+
     // ===== algebraic identity folding helpers =====
 
     static bool isFloat32Family ( Type bt ) {

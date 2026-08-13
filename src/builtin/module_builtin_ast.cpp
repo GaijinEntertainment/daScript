@@ -5,6 +5,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/misc/das_common.h"
@@ -341,6 +342,28 @@ namespace das {
     void ast_style_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
         prog->error(message ? message : "style warning","","",at,CompilationError::runtime_macro_style);
+    }
+
+    // FoldingVisitor takes its program from preVisitProgram, which never runs on a visitor
+    // built to answer one question.
+    class DemandConstExpr : public FoldingVisitor {
+    public:
+        DemandConstExpr ( const ProgramPtr & prog ) : FoldingVisitor(prog) {
+            program = prog.get();
+            demandFoldConstInit = true;
+            recordConstAccess = false;
+        }
+        using FoldingVisitor::foldConstInit;
+    };
+
+    // The answer is the caller's own node: the fold can answer with one out of the tree
+    // it was handed.
+    ExpressionPtr ast_get_const_expr ( ProgramPtr prog, ExpressionPtr expr, Context * context, LineInfoArg * lineInfo ) {
+        if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
+        if ( !expr ) context->throw_error_at(lineInfo,"expression can't be null");
+        DemandConstExpr folder(prog);
+        auto cexpr = folder.foldConstInit(expr);
+        return cexpr ? cexpr->clone() : nullptr;
     }
 
     int32_t get_variant_field_offset ( TypeDecl * td, int32_t index, Context * context, LineInfoArg * at ) {
@@ -1643,6 +1666,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(evalSingleExpressionInContext)>(*this, lib, "eval_single_expression",
             SideEffects::modifyArgumentAndExternal, "evalSingleExpressionInContext")
                 ->args({"expr","ctx","ok"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(ast_get_const_expr)>(*this, lib, "get_const_expr",
+            SideEffects::modifyArgumentAndExternal, "ast_get_const_expr")
+                ->args({"program","expression","context","line"});
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
             SideEffects::modifyArgumentAndExternal, "ast_error")

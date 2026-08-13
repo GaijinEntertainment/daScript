@@ -355,12 +355,17 @@ namespace das {
     protected:
         Context         ctx;
         DebugInfoHelper helper;
+        das_set<Variable *> constExprFolding;            // globals whose init is mid-fold, which is what breaks a cycle of consts defined off each other
+        bool            demandFoldConstInit = false;    // evaluate an initializer the policy left unfolded, where a constant is demanded of it
+        bool            recordConstAccess = true;       // a recorded fold silences the unused-variable and dead-store lints on that global, so asking what a const is worth must not record one
     protected:
         DAS_EVAL_ABI vec4f eval ( Expression * expr, bool & failed );
         ExpressionPtr evalAndFold ( Expression * expr );
         ExpressionPtr evalAndFoldString ( Expression * expr );
         ExpressionPtr evalAndFoldStringBuilder ( ExprStringBuilder * expr );
         ExpressionPtr cloneWithType ( ExpressionPtr expr );
+        ExpressionPtr getConstExpr ( Expression * expr );
+        ExpressionPtr foldConstInit ( Expression * expr );
         bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }
