@@ -1816,8 +1816,8 @@ namespace das
 
     void diagnosticsToStderr() {
         // For a program whose stdout is a protocol rather than its own output:
-        // a panic report, a leak dump or a fatal landing there is read as a
-        // frame, and the reader is gone before anyone sees the text.
+        // a leak dump or a fatal landing there is read as a frame, and the
+        // reader is gone before anyone sees the text.
         textPrinterToStderr();
     }
 

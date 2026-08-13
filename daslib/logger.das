@@ -39,9 +39,9 @@ module logger shared public
 //! What reaches the file is still the level filter's to decide, and
 //! ``print`` is a debug-level line: under the ``LOG_INFO`` default it is
 //! dropped rather than recorded. One install covers every Context including
-//! future ``new_thread`` workers. The runtime's own crash text is not
-//! ``print`` and no hook sees it: :func:`logger_capture_diagnostics` is
-//! what puts that beside the log.
+//! future ``new_thread`` workers. A leak dump or a fatal is not ``print``
+//! and no hook sees it: :func:`logger_capture_diagnostics` is what puts
+//! those beside the log.
 
 require daslib/json public
 require daslib/fio public
@@ -313,9 +313,9 @@ def logger_install_hook() {
 }
 
 def logger_capture_diagnostics() {
-    //! Send the runtime's own diagnostics — a panic report, a leak dump, a fatal — to
-    //! ``<log>.diag.log`` beside the log file, or to stderr when it cannot be opened.
-    //! Raw text, not ndjson, and no hook sees it: the runtime prints it, not ``print``.
+    //! Send the runtime's own diagnostics — a leak dump, a fatal, what it reports
+    //! about itself — as raw text to ``<log>.diag.log``, or to stderr when that
+    //! cannot open. Not a panic report: that is level-tagged, so the hook logs it.
     if (empty(log_path) ||
         !diagnostics_to_file(replace_extension(log_path, ".diag.log"))) {
         diagnostics_to_stderr()
