@@ -72,7 +72,10 @@ namespace das {
         void * saved_aot_function = nullptr;
     };
 
+    static void runLlvmAotGlobInitOf ( Context & ctx, void * publ );
+
     SimNode * makeAotJitNode ( Context & ctx, void * publ ) {
+        runLlvmAotGlobInitOf(ctx, publ);
         return ctx.code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)publ);
     }
 
@@ -89,6 +92,30 @@ namespace das {
         static vector<void(*)(Context*)> inits;
         return inits;
     }
+
+    // publ -> index into llvmAotGlobInits, so linking one function can init the object it came from.
+    static das_hash_map<void *,uint32_t> & llvmAotGlobInitOfPubl() {
+        static das_hash_map<void *,uint32_t> ofPubl;
+        return ofPubl;
+    }
+
+    // An object registers its functions first, then its glob-init; the functions wait here until
+    // the glob-init arrives and claims them.
+    static vector<void *> & llvmAotPendingPubl() {
+        static vector<void *> pending;
+        return pending;
+    }
+
+    // Runs an object's glob-init once: the slot is cleared as it is consumed.
+    static void runLlvmAotGlobInitOf ( Context & ctx, void * publ ) {
+        auto it = llvmAotGlobInitOfPubl().find(publ);
+        if ( it==llvmAotGlobInitOfPubl().end() ) return;
+        auto & fn = llvmAotGlobInits()[it->second];
+        if ( !fn ) return;
+        auto todo = fn;
+        fn = nullptr;
+        todo(&ctx);
+    }
     static void registerLlvmAotFunctions ( AotLibrary & lib ) {
         for ( auto & e : llvmAotEntries() ) {
             lib.emplace(e.first, AotFactory(e.second));
@@ -98,14 +125,16 @@ namespace das {
 
     extern "C" void das_aot_register ( uint64_t aotHash, void * publ ) {
         llvmAotEntries().emplace_back(aotHash, publ);
+        llvmAotPendingPubl().push_back(publ);
     }
 
     extern "C" void das_aot_register_globinit ( void (*fn)(Context*) ) {
+        uint32_t index = uint32_t(llvmAotGlobInits().size());
         llvmAotGlobInits().push_back(fn);
-    }
-
-    void runLlvmAotGlobInits ( Context & ctx ) {
-        for ( auto fn : llvmAotGlobInits() ) fn(&ctx);
+        for ( auto publ : llvmAotPendingPubl() ) {
+            llvmAotGlobInitOfPubl()[publ] = index;
+        }
+        llvmAotPendingPubl().clear();
     }
 
     struct SimNode_JitBlock;

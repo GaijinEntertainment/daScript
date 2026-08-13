@@ -719,7 +719,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // the emit_aot_object_globinit ctor); reset after this run.
     g_emit_aot_object_globals = emit_aot_object
     if (emit_aot_object) {
-        g_aot_func_globs |> clear()
     }
     defer() { g_emit_aot_object_globals = false; }
     let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe && !compile_only && !emit_aot_object
