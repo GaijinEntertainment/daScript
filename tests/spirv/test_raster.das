@@ -190,6 +190,20 @@ def test_vertex_flat(t : T?) {
     }
 }
 
+// The one interface Flat may not reach: a vertex @in is an attribute the vertex buffer feeds whole,
+// so an interpolation decoration on it is a spec violation rather than a mandate.
+[test]
+def test_vertex_attribute_is_never_flat(t : T?) {
+    t |> run("vertex: an int @in attribute takes no Flat") <| @(t : T?) {
+        var words <- attr_vert_words()
+        let nflat = count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Flat))
+        t |> success(nflat == 0, "attr_vert: no Flat decoration (got {nflat})")
+        t |> success(has_location(words, 3u), "attr_vert: Location 3 still present")
+        validate(t, words, "attr_vert")
+        delete words
+    }
+}
+
 [test]
 def test_fragment_flat(t : T?) {
     t |> run("fragment: int @in is auto-Flat; @flat float @in is Flat; plain float @in is not") <| @(t : T?) {
