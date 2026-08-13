@@ -920,7 +920,7 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
                 var wrapped <- ["xvfb-run", "-a"]
                 wrapped |> push_from(args)
                 delete args
-                args <- wrapped   // nolint:PERF030 — old args deleted above
+                args <- wrapped
             } else {
                 return GateResult(name = "sequence", status = GateStatus.Skip, seconds = seconds_since(t0),
                     detail = "headless linux without xvfb-run — apt-get install xvfb")
@@ -972,7 +972,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
-        GateInfo(name = "docs", full_only = true, doc = "the six doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, untracked, sphinx html)"),
+        GateInfo(name = "docs", full_only = true, doc = "the six doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, docs/untracked, sphinx html)"),
         GateInfo(name = "tests-cpp", full_only = true, doc = "ctest -L small"),
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),

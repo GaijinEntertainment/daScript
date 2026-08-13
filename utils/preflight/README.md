@@ -11,7 +11,7 @@ daslang utils/preflight/main.das
 
 # full tier: adds the untracked-files gate (working tree carries none — commit,
 # delete, or ignore each), dasgen freshness, CI-only-das compile sweep, the
-# seven doc gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
+# six doc gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
 daslang utils/preflight/main.das -- --full
 
 # subset / introspection
