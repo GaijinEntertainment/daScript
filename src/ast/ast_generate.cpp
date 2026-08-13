@@ -685,6 +685,7 @@ namespace das {
         fb->list.push_back(with);
         pFunc->body = fb;
         pFunc->result = new TypeDecl(*block->type);
+        if ( !pFunc->result->at.fileInfo ) pFunc->result->at = block->at;
         auto cTHIS = new Variable();
         cTHIS->generated = true;
         cTHIS->at = block->at;
@@ -2116,6 +2117,12 @@ namespace das {
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             if ( !expr->at.fileInfo ) expr->at = at;   // no file means no location, whatever line it carries
+        }
+        // declaration types are nodes too - a macro-built `let x : <type>` splices a type
+        // cloned from an inferred expression type, which never carried a location
+        virtual void preVisit ( TypeDecl * td ) override {
+            Visitor::preVisit(td);
+            if ( !td->at.fileInfo ) td->at = at;
         }
         // a MakeFieldDecl is not an Expression, so preVisitExpression never reaches it - a
         // $v() conversion builds its make-struct fields with no location at all
