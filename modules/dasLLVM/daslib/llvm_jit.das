@@ -1514,11 +1514,29 @@ class public LlvmJitVisitor : AstVisitor {
                         src,
                     "wrap_str")
                 params |> push(res)
+            } elif (funcArg._type.flags.ref && !a._type.flags.ref) {
+                var tmp : LLVMOpaqueValue?
+                at_function_entry() {
+                    tmp = LLVMBuildAlloca(g_builder, type_to_llvm_type(a._type), "arg_{funcArg.name}_byval2ref")
+                }
+                LLVMBuildStore(g_builder, src, tmp)
+                params |> push(LLVMBuildPointerCast(g_builder, tmp, type_to_llvm_abi_type(funcArg._type), "arg_{funcArg.name}_ref"))
             } else {
-                params |> push(src)
+                params |> push(coerce_scalar_to_abi(src, type_to_llvm_abi_type(funcArg._type)))
             }
         }
         return <- params
+    }
+
+    // daScript `bool` is a 4-byte int in memory but i1 in a signature, so a loaded bool reaches a
+    // call or a return as iN. LLVM rejects the width mismatch; cast to the ABI type.
+    def coerce_scalar_to_abi(value : LLVMOpaqueValue?; targetT : LLVMOpaqueType?) : LLVMOpaqueValue? {
+        if (value == null || targetT == null || LLVMTypeOf(value) == targetT ||
+            LLVMGetTypeKind(LLVMTypeOf(value)) != LLVMTypeKind.LLVMIntegerTypeKind ||
+            LLVMGetTypeKind(targetT) != LLVMTypeKind.LLVMIntegerTypeKind) {
+            return value
+        }
+        return LLVMBuildIntCast2(g_builder, value, targetT, 0, "abi_cast")
     }
 
     // All later loads will be replaced to the first one, assuming `val` is const.
@@ -6350,7 +6368,7 @@ class public LlvmJitVisitor : AstVisitor {
             if (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
                 LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
             } else {
-                LLVMBuildRet(g_builder, expr_res)
+                LLVMBuildRet(g_builder, coerce_scalar_to_abi(expr_res, type_to_llvm_abi_type(returnType)))
             }
         }
     }
