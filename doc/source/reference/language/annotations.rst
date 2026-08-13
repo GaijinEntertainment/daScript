@@ -341,7 +341,8 @@ Optimization and AOT
     invoke-block inlining. Module-wide, ``options never_inline`` takes the whole module
     out of the game: the pass skips its bodies (instances of its generics included,
     wherever they land), and its functions refuse as callees everywhere - an
-    ``[inline]`` call to one degrades to a plain call.
+    ``[inline]`` call to one degrades to a plain call. As with ``disable_inline``,
+    the declaration-level contract checks (body shape, recursion, ``@@``) still run.
 
 ``[hybrid]``
     Marks a function as an AOT hybrid — it can call interpreted code from AOT context.

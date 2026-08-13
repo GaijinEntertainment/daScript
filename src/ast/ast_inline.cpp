@@ -173,7 +173,7 @@ namespace das {
 
         class ParamReadScan : public Visitor {
         public:
-            ParamReadScan ( const vector<VariablePtr> & paramVars, ParamReadStats & stats ) : stats(stats) {
+            ParamReadScan ( const vector<VariablePtr> & paramVars, ParamReadStats & into ) : stats(into) {
                 for ( auto & arg : paramVars ) params.insert(arg);
             }
         protected:
@@ -662,10 +662,11 @@ namespace das {
         // collects splice sites, each tagged with its (block, index) statement anchor
         class InlineCollect : public Visitor {
         public:
-            InlineCollect ( const AutoInlineCfg & cfg ) : cfg(cfg) {}
+            InlineCollect ( const AutoInlineCfg & cfg, TextWriter * log = nullptr ) : cfg(cfg), logs(log) {}
             vector<PlannedSite> sites;      // in visit order: within a block, increasing index
         protected:
             const AutoInlineCfg & cfg;
+            TextWriter * logs = nullptr;    // log_optimization sink; a degraded [inline] contract must be visible
             vector<StmtAnchor> blockStack;
             vector<string> withModules;     // enclosing module-flavored with scopes
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
@@ -691,7 +692,12 @@ namespace das {
             }
             void plan ( Expression * expr, SiteKind kind ) {
                 if ( auto callee = callLikeFunc(expr) ) {
-                    if ( moduleNeverInlines(callee) ) return;   // stays a plain call
+                    if ( moduleNeverInlines(callee) ) {         // stays a plain call
+                        if ( logs && kind==SiteKind::MustCall ) {
+                            *logs << "INLINE  declined " << callee->name << " - `options never_inline` module " << callee->module->name << "\n";
+                        }
+                        return;
+                    }
                 }
                 // the anchoring statement is the innermost open block's CURRENT
                 // statement - not the last statement any nested block visited
@@ -1395,11 +1401,11 @@ namespace das {
                     tailBlk->at = list[i+1]->at;
                     tailBlk->list.assign(list.begin()+i+1, list.end());
                     list.resize(i+1);
-                    RetExit tailSt = transformBlock(tailBlk, false);
+                    RetExit tailExit = transformBlock(tailBlk, false);
                     list.push_back(new ExprIfThenElse(tailBlk->at,
                         new ExprOp1(tailBlk->at, "!", flagRead(tailBlk->at)), tailBlk, nullptr));
                     // flagged paths returned, and an always-returning tail covers the rest
-                    return tailSt==RetExit::Always ? RetExit::Always : RetExit::Maybe;
+                    return tailExit==RetExit::Always ? RetExit::Always : RetExit::Maybe;
                 }
                 return overall;
             }
@@ -1852,7 +1858,7 @@ namespace das {
                 vector<ExpressionPtr> temps;                // `let _inl<N>_arg_*`, in call-argument order
             };
 
-            bool tryBindArgTemp ( const PlannedSite & site, const string & subjName, const VariablePtr & P,
+            bool tryBindArgTemp ( const PlannedSite & site, const string & subjName, const VariablePtr & param,
                 bool callerIsGenerator, Expression * init, bool cnst, bool ref, bool viaMove,
                 vector<ExpressionPtr> & temps, ArgSub & sub );
             void graftExpressionBody ( Function * caller, const PlannedSite & site, const SpliceSubject & subj,
@@ -1886,7 +1892,7 @@ namespace das {
         void InlinePatch::processFunction ( Function * caller ) {
             if ( moduleNeverInlines(caller) ) return;   // the instance body is that module's code: leave it alone
             AutoInlineCfg callerCfg = callerAutoCfg(caller);
-            InlineCollect collect(callerCfg);
+            InlineCollect collect(callerCfg, logOpt ? logs : nullptr);
             caller->body->visit(collect);
             if ( collect.sites.empty() ) return;
             CallerSpliceState state;
@@ -2039,16 +2045,16 @@ namespace das {
         }
 
         // manufactures the `let _inl<N>_arg_<param>` temp and plans its read
-        bool InlinePatch::tryBindArgTemp ( const PlannedSite & site, const string & subjName, const VariablePtr & P,
+        bool InlinePatch::tryBindArgTemp ( const PlannedSite & site, const string & subjName, const VariablePtr & param,
                 bool callerIsGenerator, Expression * init, bool cnst, bool ref, bool viaMove,
                 vector<ExpressionPtr> & temps, ArgSub & sub ) {
             if ( !tempTypeIsLocal(init, ref, callerIsGenerator) ) {
-                siteFail(site, "can't inline " + subjName + ": argument '" + P->name
+                siteFail(site, "can't inline " + subjName + ": argument '" + param->name
                     + "' needs a temporary, and " + init->type->describe()
                     + " can't be a local variable", site.callLike->at);
                 return false;
             }
-            string tname = joinInlineName(INLINE_TEMP_PREFIX + to_string(program->thisModule->inlineTempIndex) + "_arg_", P->name);
+            string tname = joinInlineName(INLINE_TEMP_PREFIX + to_string(program->thisModule->inlineTempIndex) + "_arg_", param->name);
             temps.push_back(makeTemp(site.callLike->at, tname, init, cnst, ref, viaMove));
             sub.tempName = tname;
             return true;

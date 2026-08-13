@@ -291,7 +291,7 @@ class private TemplateVisitor : AstVisitor {
         if (typ.baseType == Type.alias) {
             let ta = string(typ.alias)
             if (key_exists(rules.type2etype, ta)) {
-                // the substituted type stands at the splice site - $e()'s rule; an inferred-type input has no location
+                // fill the donor's MISSING locations from the splice site; real ones stay (unlike $e(), which forces the root)
                 let oldAt = typ.at
                 typ = clone_type(unsafe(rules.type2etype[ta]))
                 stamp_type_missing_at(typ, oldAt)

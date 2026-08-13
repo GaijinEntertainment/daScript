@@ -36,3 +36,26 @@ def test_operator_declaration_errors(t : T?) {
             "operator '+' can't have default arguments")
     }
 }
+
+// the `?` and `[` operator families lower to plain ExprCall, where a defaulted
+// trailing parameter pads like any call - the reject above must not catch them
+struct Boxed {
+    v : int
+}
+
+def operator ??(a : Boxed?; b : Boxed; scale : int = 2) {
+    return a != null ? *a : Boxed(v = b.v * scale)
+}
+
+def operator [] (b : Boxed; i : int; scale : int = 3) {
+    return b.v * i * scale
+}
+
+[test]
+def test_operator_defaults_that_pad(t : T?) {
+    t |> run("defaulted `??` and `[]` overloads compile and pad") @(t : T?) {
+        var p : Boxed?
+        t |> equal((p ?? Boxed(v = 5)).v, 10)
+        t |> equal(Boxed(v = 2)[3], 18)
+    }
+}

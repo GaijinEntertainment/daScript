@@ -357,10 +357,9 @@ jobs:
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         BASE_REF="${BASE_REF:-master}"
         mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
-        if [ ${#CHANGED[@]} -eq 0 ]; then
-          echo "no .das files changed; skipping ast-verify"
-          exit 0
-        fi
+        # canary: macro-PRODUCED AST is only verified where a macro expands, and the tree-wide
+        # sweep is nightly-only - so the heaviest qmacro consumer verifies on every PR
+        CHANGED+=("tests/linq/test_linq_fold.das")
         rc=0
         for f in "${CHANGED[@]}"; do
           case "$(basename "$f")" in

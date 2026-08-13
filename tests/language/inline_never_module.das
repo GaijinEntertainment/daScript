@@ -40,6 +40,13 @@ def target_baseline() : int {
     return nvm_step(3 + g_seed)
 }
 
+[never_inline]
+def target_canon() : int {
+    return nvm_guarded(6 + g_seed) $(v : int) : int {
+        return v * 2
+    }
+}
+
 def has(s, sub : string) : bool {
     return !empty(sub) && find(s, sub) >= 0
 }
@@ -51,7 +58,7 @@ def body_of(t : T?; nm : string) : string {
             body = "{describe(func.body)}"
         }
     }
-    t |> success(!empty(body), "target function found")
+    t |> success(!empty(body), "target function not found")
     let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
     return join(clean, "\n")
 }
@@ -65,7 +72,7 @@ def instance_body_of(t : T?; nm : string) : string {
             body = "{describe(func.body)}"
         }
     }
-    t |> success(!empty(body), "instance found")
+    t |> success(!empty(body), "instance not found")
     let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
     return join(clean, "\n")
 }
@@ -92,11 +99,28 @@ def test_never_inline_module(t : T?) {
             let b = body_of(t, "target_baseline")
             t |> success(!has(b, "nvm_step("), "[inline] splice fired: {b}")
         }
+        t |> run("the pass skips the module's own bodies") @(t : T?) {
+            var body = ""
+            find_module(this_program(), "_never_inline_module") |> for_each_function("nvm_chain") $(func) {
+                if (empty(body)) {
+                    body = "{describe(func.body)}"
+                }
+            }
+            t |> success(has(body, "nvm_add("), "internal [inline] call survives: {body}")
+        }
+        t |> run("flagged-origin instance skips return canonicalization") @(t : T?) {
+            let gb = instance_body_of(t, "nvm_guarded")
+            t |> success(!has(gb, "else"), "early-exit shape kept, no synthesized else: {gb}")
+        }
+        t |> run("the module bit is set and rtti-visible") @(t : T?) {
+            t |> success(find_module(this_program(), "_never_inline_module").moduleFlags.neverInline, "neverInline flag")
+        }
     }
     t |> run("targets still compute their values") @(t : T?) {
         t |> equal(target_must(), 3)
         t |> equal(target_literal(), 10)
         t |> equal(target_instance(), 8)
         t |> equal(target_baseline(), 5)
+        t |> equal(target_canon(), 14)
     }
 }
