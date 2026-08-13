@@ -998,6 +998,12 @@ def public jit_sec(us : int) : double => double(us) / 1000000.0lf
 def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host_cpu : bool = false) {
     // Codegen level 3 deliberate: shipped artifacts, no cache guard (ARCHITECTURE.md 1.2)
     with_default_target_machine(3u, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
+        // A module with no triple and no layout leaves the object to whatever the backend
+        // assumes, which need not be what this target machine emits.
+        let dl = LLVMCreateTargetDataLayout(targetMachine)
+        LLVMSetModuleDataLayout(mod, dl)
+        LLVMSetTarget(mod, LLVMGetDefaultTargetTriple())
+        LLVMDisposeTargetData(dl)
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
