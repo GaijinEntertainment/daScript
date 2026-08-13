@@ -198,6 +198,24 @@ def reserve(var Arr : array<auto(numT)>; newSize : int64) {
     __builtin_array_reserve_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
+//! Grows capacity to at least `newSize`, at least doubling on each growth so an
+//! append-by-resize loop stays amortized O(1). This is the deliberate-unbounded-append
+//! spelling: a following `resize` never grows, so it cannot trip `max_unreserved_size`.
+def ensure_capacity(var Arr : array<auto(numT)>; newSize : int) {
+    ensure_capacity(Arr, int64(newSize))
+}
+
+//! Grows capacity to at least `newSize` (int64 form), at least doubling on each growth.
+def ensure_capacity(var Arr : array<auto(numT)>; newSize : int64) {
+    if (newSize > long_capacity(Arr)) {
+        var want = long_capacity(Arr) * 2l
+        if (newSize > want) {
+            want = newSize
+        }
+        Arr |> reserve(want)
+    }
+}
+
 def pop(var Arr : array<auto(numT)>) {
     unsafe(resize(Arr, length(Arr) - 1))// resize will throw if negative
 }

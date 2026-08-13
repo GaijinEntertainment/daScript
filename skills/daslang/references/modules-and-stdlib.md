@@ -195,7 +195,8 @@ let sub <- a[1..3]                 // subarray via a range index
 |---|---|
 | `push` / `push_clone` / `emplace` | Copy in / deep-clone in / move in (zeroes the source). |
 | `push_from` / `push_clone_from` | Bulk forms taking a whole `array<T>` or `T[]`. |
-| `resize` / `resize_and_init` / `resize_no_init` / `reserve` | Grow or shrink; `reserve` only changes capacity. |
+| `resize` / `resize_and_init` / `resize_no_init` / `reserve` | Grow or shrink; `reserve` only changes capacity, exactly (no pow2 round-up). A resize that must GROW past `max_unreserved_size` bytes (64 MB default) without a prior reserve panics. |
+| `ensure_capacity` | Geometric (at-least-doubling) reserve for open-ended appends — a following `resize` never grows, so it never trips `max_unreserved_size`. |
 | `erase` / `erase_if` / `remove_value` / `pop` / `clear` | Remove; `clear` keeps the capacity. |
 | `length` / `long_length` / `capacity` / `empty` / `back` | Query; `back` panics (`back empty array`) when empty. |
 | `find_index` / `find_index_if` / `has_value` | Search; the `find_*` pair returns `-1` when absent. |

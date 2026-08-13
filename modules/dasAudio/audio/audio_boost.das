@@ -412,6 +412,7 @@ class AudioSourcePCM : AudioSource {
     def override append_temporary(data : array<float>) : bool {
         let ofs = length(samples)
         let nsmp = length(data)
+        samples |> ensure_capacity(ofs + nsmp)
         samples |> resize(ofs + nsmp)
         unsafe {
             memcpy(addr(samples[ofs]), addr(data[0]), nsmp * 4)

@@ -313,22 +313,22 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         && (kq_sb(f3) ? sb_fusable : f3 == KqFmt.q51))
     let fused = fused_gpu || fused_kq
     let grows = fused ? nk : npos
-    s.moe_rlog |> resize(npos * ne)
-    s.moe_idx_b |> resize(nk)
-    s.moe_w_b |> resize(nk)
-    s.moe_cnt |> resize(ne)
-    s.moe_bkt |> resize(nk)
-    s.moe_gxq |> resize(grows * dim)
-    s.moe_gxs |> resize(grows * nb)
-    s.moe_ghb |> resize(grows * nfe)
-    s.moe_ghb2 |> resize(grows * nfe)
-    s.moe_hq |> resize(grows * nfe)
-    s.moe_hs |> resize(grows * nfe / 32l)
-    s.moe_gout |> resize(grows * dim)
-    s.moe_eout |> resize(nk * dim)
+    s.moe_rlog |> grow_resize(npos * ne)
+    s.moe_idx_b |> grow_resize(nk)
+    s.moe_w_b |> grow_resize(nk)
+    s.moe_cnt |> grow_resize(ne)
+    s.moe_bkt |> grow_resize(nk)
+    s.moe_gxq |> grow_resize(grows * dim)
+    s.moe_gxs |> grow_resize(grows * nb)
+    s.moe_ghb |> grow_resize(grows * nfe)
+    s.moe_ghb2 |> grow_resize(grows * nfe)
+    s.moe_hq |> grow_resize(grows * nfe)
+    s.moe_hs |> grow_resize(grows * nfe / 32l)
+    s.moe_gout |> grow_resize(grows * dim)
+    s.moe_eout |> grow_resize(nk * dim)
     if (kq_layer) {
-        s.moe_gxbs |> resize(grows * dim / 16l)
-        s.moe_hbs |> resize(grows * nfe / 16l)
+        s.moe_gxbs |> grow_resize(grows * dim / 16l)
+        s.moe_hbs |> grow_resize(grows * nfe / 16l)
     }
 
     // 1. route every position: double-RMS router input, one batched GEMM, per-row select + down-scale fold
@@ -367,9 +367,9 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     // kq v2: kq gate/up stacks gather off a Q8_K-form image; q8 stacks off the Q8_0 image
     let moe_kform = kq_layer && moe_pair_kform(f1, f3)
     if (moe_kform) {
-        s.kxqb |> resize(npos * dim)
-        s.kxsb |> resize(npos * dim / 256l)
-        s.kxbsb |> resize(npos * dim / 16l)
+        s.kxqb |> grow_resize(npos * dim)
+        s.kxsb |> grow_resize(npos * dim / 256l)
+        s.kxbsb |> grow_resize(npos * dim / 16l)
         requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
     } else {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)

@@ -293,11 +293,11 @@ def whisper_dec_quantize(var st : WhisperStaging) {
     }
     let qlayer = 16l * d * d
     let qtotal = st.e.n_text_layer * qlayer + st.e.n_vocab * d
-    st.dqblob |> resize(qtotal)
-    st.dqscales |> resize(qtotal / 32l)
+    st.dqblob |> reserve_resize(qtotal)
+    st.dqscales |> reserve_resize(qtotal / 32l)
     // the fp32 remainder keeps pe + the full te (row lookups) + vectors + final ln
     var nf : array<float>
-    nf |> resize(long_length(st.dblob) - st.e.n_text_layer * qlayer)
+    nf |> reserve_resize(long_length(st.dblob) - st.e.n_text_layer * qlayer)
     var og = 0l
     var of = 0l
     st.e.d_pe_off = tq_keep(nf, st.dblob, of, st.e.d_pe_off, st.e.n_text_ctx * d)
@@ -531,14 +531,14 @@ def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
         var encJobs : array<WFillJob>
         var decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
-        st.enc.fblob |> resize(sz.enc_len)
+        st.enc.fblob |> reserve_resize(sz.enc_len)
         for (j in encJobs) {
             wjob_read(recs, bytes, j, st.enc.fblob, 0l)
         }
         if (q8) {
             tower_quantize(st.e.enc, st.enc)
         }
-        st.dblob |> resize(sz.dec_len)
+        st.dblob |> reserve_resize(sz.dec_len)
         for (j in decJobs) {
             wjob_read(recs, bytes, j, st.dblob, 0l)
         }
@@ -965,10 +965,10 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
     let ta = w.enc.n_ctx
     let ncap = tmax
     var ds = DecoderState()
-    ds.kcache |> resize(w.n_text_layer * d * tmax)
-    ds.vcache |> resize(w.n_text_layer * d * tmax)
-    ds.kx |> resize(w.n_text_layer * d * ta)
-    ds.vx |> resize(w.n_text_layer * d * ta)
+    ds.kcache |> reserve_resize(w.n_text_layer * d * tmax)
+    ds.vcache |> reserve_resize(w.n_text_layer * d * tmax)
+    ds.kx |> reserve_resize(w.n_text_layer * d * ta)
+    ds.vx |> reserve_resize(w.n_text_layer * d * ta)
     ds.ckv_tmp |> resize(ta * d)
     ds.x |> resize(ncap * d)
     ds.xb |> resize(ncap * d)

@@ -200,6 +200,11 @@ Resize & Reserve
     field initializers, ``resize`` forwards to ``resize_and_init`` so that new elements
     get ``default<T>`` rather than zeroes.  ``new_size`` may also be ``int64``.
 
+    A growing resize rounds capacity up to the next power of two, so append-by-resize
+    stays amortized O(1).  A resize that has to grow the array past ``max_unreserved_size``
+    bytes (64 MB by default) panics — ``reserve`` the exact size first (a reserved resize
+    never grows), use ``ensure_capacity`` for open-ended appending, or raise the option.
+
 .. das:function:: resize_and_init(var arr : array<T>; new_size : int [; init_value : T])
 
     Resizes the array and initializes all new elements — with ``default<T>``, or with
@@ -213,7 +218,15 @@ Resize & Reserve
 .. das:function:: reserve(var arr : array<T>; capacity : int)
 
     Pre-allocates memory for at least ``capacity`` elements without changing the array length.
-    Also defined for ``table<K;V>``.
+    ``reserve`` is exact: the capacity you ask for is the capacity you get, with no
+    power-of-two round-up.  Also defined for ``table<K;V>``.
+
+.. das:function:: ensure_capacity(var arr : array<T>; new_size : int)
+
+    Grows capacity to at least ``new_size`` elements, at least doubling on each growth.
+    The deliberate-unbounded-append spelling: an append loop that calls ``ensure_capacity``
+    before ``resize`` stays amortized O(1) and never trips ``max_unreserved_size``, because
+    the resize that follows never has to grow.  ``new_size`` may also be ``int64``.
 
 ^^^^^^^^^^^^^^^^
 Push & Emplace

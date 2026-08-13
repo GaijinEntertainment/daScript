@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 113;   // 113: Module::inlineTempIndex rides the module record
+            return 114;   // 114: CodeOfPolicies::max_unreserved_size rides the policy record
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

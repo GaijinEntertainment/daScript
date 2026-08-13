@@ -55,6 +55,7 @@ class public MemSerializer : Serializer {
     def override write(bytes : void? implicit; size : int) : bool {
         //! Appends bytes at the end of the data.
         let pos = length(data)
+        data |> ensure_capacity(pos + size)
         data |> resize_no_init(pos + size)
         unsafe {
             memcpy(addr(data[pos]), bytes, size)

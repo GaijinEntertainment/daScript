@@ -553,6 +553,7 @@ def private decode_ogg_block(data : array<uint8>; byte_offset, byte_len : int; v
     if (total > 0) {
         // decode straight into out_pcm's tail — no temp buffer
         let base = length(out_pcm)
+        out_pcm |> ensure_capacity(base + total)
         out_pcm |> resize(base + total)
         ma_decoder_read_pcm_frames(decoder, unsafe(addr(out_pcm[base])), uint64(total))
     }

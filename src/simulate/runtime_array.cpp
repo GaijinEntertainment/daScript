@@ -114,19 +114,20 @@ namespace das
             context.throw_error_at(at, "array_resize: newSize exceeds INT64_MAX [newSize=%llu]", (unsigned long long)newSize);
         }
         if ( newSize > arr.capacity ) {
-            uint64_t newCapacity;
-            // Small arrays round the capacity up to the next power of two, leaving slack for
-            // cheap incremental growth. Past 256 bytes that pow2 slack wastes up to ~2x memory,
-            // so a large resize() sizes to the request exactly (this is resize-only; push keeps
-            // geometric growth via array_grow). The newSize<=256 guard keeps newSize*stride from
-            // overflowing uint64 in the byte-size test.
-            if ( newSize <= uint64_t(256) && newSize * uint64_t(stride) <= uint64_t(256) ) {
-                newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
-                newCapacity = das::max(newCapacity, uint64_t(16));
-            } else {
-                newCapacity = newSize;
+            // A growing resize this large must be preceded by an explicit reserve (which is
+            // exact-capacity, so a reserved resize never grows). The guard keeps the pow2 slack
+            // below from silently doubling huge one-shot allocations. Divide form: newSize*stride
+            // can overflow uint64 (same trick as the array_reserve guard).
+            if ( stride && newSize > context.maxUnreservedSize / uint64_t(stride) ) {
+                context.throw_error_at(at, "array resize to %llu elements of stride %u grows past max_unreserved_size (%llu bytes) without a prior reserve; reserve the size first, or raise the max_unreserved_size option",
+                    (unsigned long long)newSize, stride, (unsigned long long)context.maxUnreservedSize);
             }
-            // Keep the resulting capacity representable in the int64 long_capacity() surface.
+            // Round the capacity up to the next power of two, leaving slack so append-style
+            // repeated resize stays amortized O(1) (push grows geometrically via array_grow).
+            uint64_t newCapacity = uint64_t(1) << (64 - das_clz64(das::max(newSize, uint64_t(2)) - 1));
+            newCapacity = das::max(newCapacity, uint64_t(16));
+            // The pow2 round-up overflows past INT64_MAX when newSize > 2^62; clamp so the
+            // resulting capacity stays representable in the int64 long_capacity() surface.
             if ( newCapacity > uint64_t(INT64_MAX) ) newCapacity = uint64_t(INT64_MAX);
             array_reserve(context, arr, newCapacity, stride, at);
         }

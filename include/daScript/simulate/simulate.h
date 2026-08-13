@@ -841,6 +841,7 @@ namespace das
         bool                            gcLogTime = false;          // log per-phase heap GC timing
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
+        uint64_t                        maxUnreservedSize = 64ull<<20;  // a growing array resize past this byte size without a prior reserve panics
         bool                            sharedPtrContext = false;   // there is a shared ptr to this context
         bool                            skipInitShutdownScript = false; // this (cloned) context skipped global init, so skip shutdown too
         // atomic (relaxed): a job's post-notify cleanup reads these on a worker while the main

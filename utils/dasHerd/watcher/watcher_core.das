@@ -379,6 +379,7 @@ class private WatcherHostLink : HvWebSocketClient {
         }
         if (byte_count <= 0) return
         let offset = length(received)
+        received |> ensure_capacity(offset + byte_count)
         received |> resize_no_init(offset + byte_count)
         unsafe {
             memcpy(addr(received[offset]), reinterpret<void?>(msg), byte_count)

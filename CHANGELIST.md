@@ -132,7 +132,7 @@ Z3 SMT solver bindings as a dynamic module, dasLLVM-style.
 - **`addr<T?>(x)` sugar** (#3464) — `reinterpret<T?>(addr(x))` with a single unsafe gate, plus STYLE034 and a tree-wide sweep
 - **Fixed arrays accept int64/uint64 indexes** (#3345) — across interpreter, fusion, AOT, and JIT
 - **`template_structure` classes** (#3538); **auto-required module handling** (#3336)
-- **`array` `resize()` sizes exactly past 256 bytes** (#3400) — no more capacity doubling on explicit resize
+- **`array` `resize()` grows pow2 again + `max_unreserved_size` guard** — the #3400 exact-fit sizing made append-by-resize O(N²) (and O(N²) garbage under `very_safe_context`), so it is reverted; instead, a resize that must grow past `max_unreserved_size` bytes (64 MB default; option / `CodeOfPolicies` / `set_max_unreserved_size()`) without a prior exact `reserve` panics, and the new `ensure_capacity` builtin is the amortized spelling for open-ended appends
 - **Instance-registry re-resolution** (#3399) — flavor tie-break + origin-generic fallback for generic instances
 - **Promoted shared modules match by canonical require identity** (#3360)
 - **LineInfo audit** (#3431) — a validation suite + three systematic range fixes

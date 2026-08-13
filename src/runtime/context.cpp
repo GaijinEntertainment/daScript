@@ -89,6 +89,7 @@ namespace das
             exit(1);
         }
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
+        maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
         breakOnException |= policies.debugger;
         gcEnabled = options.getBoolOption("gc", false);
         gcLogTime = options.getBoolOption("log_gc_time", policies.log_gc_time);
@@ -296,6 +297,7 @@ namespace das
         : stack(opts.stackSize ? opts.stackSize : ctx.stack.size()) {
         ref_count_magic = TRACK_PTR_CONTEXT;
         verySafeContext = ctx.verySafeContext;
+        maxUnreservedSize = ctx.maxUnreservedSize;
         persistent = ctx.persistent;
         gcEnabled = ctx.gcEnabled;
         code = ctx.code;

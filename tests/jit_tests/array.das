@@ -27,6 +27,10 @@ def outOfRange(var a : array<int>) {
     return a[13]
 }
 
+def resizeUnreserved(var a : array<int>) {
+    a |> resize(17000000)   // 68 MB: past the default 64 MB max_unreserved_size, no reserve
+}
+
 def check_array_float3(t : T?; a : array<float3>) {
     for (v, i in a, count()) {
         t |> equal(float3(i + 1, i + 2, i + 3), v)
@@ -94,5 +98,16 @@ def test_array(t : T?) {
             failed = true
         }
         t |> success(failed, "resize caused panic")
+    }
+    t |> run("unreserved huge resize") @(t : T?) {
+        t |> success(!jit_enabled() || is_jit_function(@@resizeUnreserved))
+        var x : array<int>
+        var failed = false
+        try {
+            resizeUnreserved(x)
+        } recover {
+            failed = true
+        }
+        t |> success(failed, "unreserved resize past max_unreserved_size caused panic")
     }
 }

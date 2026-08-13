@@ -60,6 +60,8 @@ namespace das {
     DAS_API uint64_t string_heap_allocation_count ( Context * context );
     DAS_API uint64_t heap_bytes_allocated ( Context * context );
     DAS_API uint64_t heap_total_allocated ( Context * context );
+    DAS_API uint64_t max_unreserved_size ( Context * context );
+    DAS_API void set_max_unreserved_size ( uint64_t bytes, Context * context );
     DAS_API int32_t heap_depth ( Context * context );
     DAS_API uint64_t string_heap_bytes_allocated ( Context * context );
     DAS_API uint64_t string_heap_total_allocated ( Context * context );

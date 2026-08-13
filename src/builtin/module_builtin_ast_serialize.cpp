@@ -2756,6 +2756,7 @@ namespace das {
               << value.max_static_variables_size
               << value.max_heap_allocated
               << value.max_string_heap_allocated
+              << value.max_unreserved_size
               << value.track_allocations
               << value.rtti
               << value.unsafe_table_lookup

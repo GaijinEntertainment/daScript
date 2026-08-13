@@ -208,6 +208,13 @@ Memory
      - int
      - 0
      - Maximum string heap allocation in bytes. ``0`` means unlimited.
+   * - ``max_unreserved_size``
+     - int
+     - 67108864
+     - A ``resize`` that has to grow an array past this many bytes without a prior
+       ``reserve`` panics; ``reserve`` the exact size first, or raise the limit.
+       Entry-program option (like ``stack``); also settable at runtime via
+       ``set_max_unreserved_size()``.
    * - ``persistent_heap``
      - bool
      - false

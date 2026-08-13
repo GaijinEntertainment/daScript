@@ -1283,6 +1283,7 @@ namespace das {
     // memory
         "heap_size_limit",              Type::tInt,
         "string_heap_size_limit",       Type::tInt,
+        "max_unreserved_size",          Type::tInt,
         "gc",                           Type::tBool,
         // documented in options.rst and /*option*/-tagged in ast.h, but were never registered —
         // 'options gc_infer_collect = false' died with error 50100

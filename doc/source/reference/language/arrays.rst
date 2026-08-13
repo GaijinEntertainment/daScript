@@ -167,6 +167,12 @@ that have them.
 
 ``reserve`` is there for performance reasons. Generally, array capacity doubles, if exceeded.
 ``reserve`` allows you to specify the exact known capacity and significantly reduce the overhead of multiple ``push`` operations.
+``reserve`` is exact — the capacity you ask for is the capacity you get — which makes it the
+right tool for large one-shot allocations: a ``resize`` that has to grow the array past
+``max_unreserved_size`` bytes (64 MB by default) without a prior ``reserve`` panics, so huge
+arrays are always sized deliberately instead of inheriting the doubling slack. For a buffer
+that grows without a known final size, ``ensure_capacity`` grows the capacity geometrically
+and keeps a following ``resize`` from ever tripping the limit.
 
 ``empty`` tells you if the dynamic array is empty.
 

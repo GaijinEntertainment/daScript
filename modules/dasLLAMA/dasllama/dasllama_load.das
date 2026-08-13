@@ -818,7 +818,9 @@ def private blob_pack_job(q : array<int8>; s : array<float>; nblk : int64;
         return
     }
     let mbb = Q8_QPB + Q8_SPB
+    dst |> ensure_capacity(nblk * mbb)
     dst |> resize_no_init(nblk * mbb)
+    s16 |> ensure_capacity(nblk)
     s16 |> resize_no_init(nblk)
     unsafe {
         cvt_f32_to_f16(addr(s16[0]), addr < float const? >(s[0]), nblk)
@@ -961,9 +963,9 @@ def private load_dn_grouped(m : GGUFMeta; bytes : array<uint8> | #; var t : Mode
     }
     let n = t.config.ssm_d_inner * dim
     var raw : array<float>
-    raw |> resize(n)
+    raw |> reserve_resize(n)
     gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_out.weight", raw, 0l, n)
-    scratch |> resize(n)
+    scratch |> grow_resize(n)
     let din = t.config.ssm_d_inner
     unsafe {   // column-permute threaded over output rows (disjoint writes per row)
         let rawp = addr < float const? >(raw[0])
