@@ -13,7 +13,7 @@
 (function () {
     "use strict";
 
-    var FRAME_SRC = "run-frame.html?v=2";
+    var FRAME_SRC = "run-frame.html?v=3";
 
     var host = null;        // element the frames live in
     var current = null;     // frame serving the run in flight (or the idle one)
@@ -27,6 +27,8 @@
     // unreachable, retrying forever just spawns frames.
     var spareAborts = 0;
     var MAX_SPARE_ABORTS = 3;
+    var lastReviveAt = 0;
+    var REVIVE_COOLDOWN_MS = 8000;
 
     // ── the one compiled runtime ─────────────────────────────────────────────
     // The runtime wasm (~40MB) is compiled HERE, once per page. Every frame asks
@@ -40,9 +42,48 @@
     var WASM_URL = "daslang_static.wasm";
     var wasmModulePromise = null;
 
+    // A download that stops flowing must reject rather than hang: once a frame
+    // has been acked, this promise is the only thing it is waiting on — nothing
+    // else times out, so a silent stall would wedge the page in the exact shape
+    // this file exists to remove. Idle-based, not total-time-based, so a slow
+    // link that is still moving bytes is never cut off.
+    var STALL_MS = 30000;
+
+    function fetchRuntimeWithStallGuard() {
+        return fetch(WASM_URL).then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status + " fetching " + WASM_URL);
+            if (!r.body || typeof TransformStream === "undefined") return r;
+            var timer = null;
+            function arm(controller) {
+                clearTimeout(timer);
+                timer = setTimeout(function () {
+                    controller.error(new Error("runtime download stalled"));
+                }, STALL_MS);
+            }
+            var guard = new TransformStream({
+                start: function (c) { arm(c); },
+                transform: function (chunk, c) { arm(c); c.enqueue(chunk); },
+                flush: function () { clearTimeout(timer); },
+            });
+            // Headers ride along so compileStreaming still sees the wasm MIME type.
+            return new Response(r.body.pipeThrough(guard), { headers: r.headers });
+        });
+    }
+
     function compileRuntime() {
         if (!wasmModulePromise) {
-            wasmModulePromise = WebAssembly.compileStreaming(fetch(WASM_URL))
+            wasmModulePromise = fetchRuntimeWithStallGuard()
+                .then(function (r) { return WebAssembly.compileStreaming(r); })
+                .catch(function (e) {
+                    // The ladder the emscripten glue always had: streaming compile
+                    // hard-requires the application/wasm MIME type, and losing the
+                    // ArrayBuffer arm turned a warn-and-work server into a dead
+                    // page. One retry also covers a mid-stream stall.
+                    console.warn("wasm streaming compile failed, retrying as ArrayBuffer:", e);
+                    return fetchRuntimeWithStallGuard()
+                        .then(function (r) { return r.arrayBuffer(); })
+                        .then(function (bytes) { return WebAssembly.compile(bytes); });
+                })
                 .catch(function (e) {
                     // Drop the failed promise so a revive() retries the compile —
                     // an OOM here is often transient (the old page's module not
@@ -240,12 +281,14 @@
             return !!(spare && spare.ready) || !!(current && current.ready && !current.used);
         },
 
-        // Dead means the runner gave up: no frame standing by and none loading.
-        // Distinct from "loading" (a spare exists, not ready yet) — the Run
-        // button stays clickable in THIS state only, so the user has a way to
-        // trigger revive(); reporting it as "still loading" hid exactly that.
+        // Dead means the runner gave up: initialized, yet no frame standing by
+        // and none loading. Distinct from "loading" (a spare exists, not ready
+        // yet) — the Run button stays clickable in THIS state only, so the user
+        // has a way to trigger revive(); reporting it as "still loading" hid
+        // exactly that. (No `current` term: a current frame is always mid-run
+        // or finished, never standing by.)
         isDead: function () {
-            return !spare && !(current && current.ready && !current.used);
+            return !!host && !spare;
         },
 
         // A page whose spare kept aborting (MAX_SPARE_ABORTS) has no frame and,
@@ -255,9 +298,14 @@
         // reset the abort budget. Cheap — a new frame reuses the compiled
         // module, and a failed parent compile retries because compileRuntime()
         // drops its promise on rejection. Returns whether it revived anything;
-        // false means a spare is already standing (loading or ready).
+        // false means a spare is already standing (loading or ready), or a
+        // revive just ran — the cooldown keeps a click storm on a structurally
+        // dead page (no runtime to fetch at all) from stacking abort budgets.
         revive: function () {
-            if (spare) return false;
+            if (!host || spare) return false;
+            var now = Date.now();
+            if (now - lastReviveAt < REVIVE_COOLDOWN_MS) return false;
+            lastReviveAt = now;
             spareAborts = 0;
             ensureSpare();
             if (typeof window.updateButtonStates === "function") window.updateButtonStates();
@@ -279,13 +327,18 @@
         },
 
         // Throw away the frame that ran (if any) and promote the pre-warmed one.
-        // Called before every run, and by Clear.
+        // Called before every run, and by Clear. Clear on a dead page is a "try
+        // again" gesture like Run, so it grants the same fresh abort budget its
+        // new spare needs — and the buttons re-gate, since aliveness may have
+        // just flipped.
         reset: function () {
             if (current) { destroy(current); current = null; }
             var out = document.getElementById("output");
             if (out) out.classList.remove("with-canvas");
             renderBadge(null);   // the run it described is gone
+            spareAborts = 0;
             ensureSpare();
+            if (typeof window.updateButtonStates === "function") window.updateButtonStates();
         },
 
         // files: { "main.das": "...", ... }  args: argv for callMain

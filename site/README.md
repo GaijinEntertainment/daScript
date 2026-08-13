@@ -63,7 +63,7 @@ generated and gitignored — see [`site/.gitignore`](.gitignore).
 | Surface | Desktop | Mobile (<768 px) |
 |---|---|---|
 | **Landing hero** | CodeMirror editor with sample picker, ▶ run, ↗ playground handoff | Static `<pre><code class="language-daslang">` block, no CM init. Hero buttons + sample tabs hidden via CSS. |
-| **/playground/** | Full multi-file IDE — tabs, splitter, share via `#z=` hash, ▶ run via WASM | "Open this on a laptop" notice. `pageInit` is overridden before WASM fetch — `daslang_static.{js,wasm}` is never requested. |
+| **/playground/** | Full multi-file IDE — tabs, splitter, share via `#z=` hash, ▶ run via WASM | "Open this on a laptop" notice (CSS overlay); the IDE and the runtime still initialize underneath it. |
 | **/blog/<slug>** | Full post + Disqus comments at the bottom (shortname `https-borisbat-github-io-dascf-blog`, identifier = slug, Auto theme picks dark via `:root { color-scheme: dark }`) | Same. Disqus is responsive. |
 | **Nav** | Inline links: docs · benchmarks · downloads · blog · community + `v0.6.4`, github ↗, install | ≡ hamburger toggles a dropdown panel with the same links. `v0.6.4` chip is hidden at <480 px. |
 
@@ -292,10 +292,11 @@ The benchmarks chart on the landing reads it directly — no rebuild needed.
 
 ## Playwright e2e suite (`site/tests/playground/`)
 
-28 specs covering: dropdowns, tab strip CRUD, multi-file persistence,
-share-URL round-trip, splitter drag, hero ↗ playground handoff, mobile gate
-(asserts WASM is *not* fetched at narrow viewports). 5 are tagged `@wasm`
-and only run when the WASM artifact is present.
+Specs cover: dropdowns, tab strip CRUD, multi-file persistence, share-URL
+round-trip, splitter drag, hero ↗ playground handoff, engine toggle, the
+shared runtime module, and dead-page revival. Tests that need the daslang
+runtime carry `@wasm` in their title and only run when the WASM artifacts
+are staged; the per-PR lane runs the rest with `--grep-invert '@wasm'`.
 
 ```bash
 # Start the dev server from site/ (so paths resolve like prod).
@@ -345,7 +346,8 @@ mirrors the steps above. Differences worth knowing:
 - CI fetches `profile_results.json` on each publish.
 - CI builds Sphinx with `-W` (treats warnings as errors). Local builds should
   do the same before pushing.
-- CI uploads to GitHub Pages via `actions/deploy-pages@v4`.
+- CI deploys to the VPS over rsync (`pages.yml` — a release dir + atomic
+  symlink flip; Caddy serves it directly).
 
 If something works locally but fails on CI, walk through the workflow file
 side-by-side with this README — the commands should match.

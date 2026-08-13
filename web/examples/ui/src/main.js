@@ -535,8 +535,10 @@ function updateButtonStates() {
     const runnerDead = typeof PlaygroundRunner !== 'undefined'
         && PlaygroundRunner.isDead && PlaygroundRunner.isDead();
     if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !(ready || runnerDead);
-    // Test always runs interpreted, through the local runtime.
-    if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
+    // Test always runs interpreted, through the local runtime — and on a dead
+    // page it stays clickable for the same reason Run does: the click is the
+    // revive trigger (runTests routes through the same reportNotReady).
+    if (testBtn) testBtn.disabled = !(ready || runnerDead) || !hasTestAnnotation();
 }
 // Kept under the old name so playground-tabs.js's existing autosave hook
 // still works without churn — it triggers a full refresh.

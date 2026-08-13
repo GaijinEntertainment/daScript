@@ -6,17 +6,21 @@
 // ("wasm streaming compile failed: InternalError: out of memory" — a state
 // reloads don't clear, because the quota is per-process, not per-page).
 //
-// The observable is network fetches of the runtime after the page is ready:
-// a run must not trigger another daslang_static.wasm fetch — a frame that
-// fetches it went back to compiling for itself.
+// The observable is fetches of the runtime after the page is ready: a run must
+// not trigger another daslang_static.wasm fetch. Counted twice — page-level
+// request events, and each run frame's own Resource Timing — because a frame
+// that fetches it went back to compiling for itself, and belt-and-braces here
+// is what keeps the spec honest if either channel's visibility changes.
 
 const { test, expect } = require('@playwright/test');
 
+// Gate on the runner's own readiness, not the Run button: the button is
+// re-gated on state *changes*, so mid-run it can briefly hold a stale enabled
+// state while isReady() is false.
 async function waitForRunReady(page) {
-    await page.waitForFunction(() => {
-        const b = document.getElementById('run');
-        return b && !b.disabled;
-    }, null, { timeout: 60_000 });
+    await page.waitForFunction(
+        () => window.PlaygroundRunner && window.PlaygroundRunner.isReady(),
+        null, { timeout: 60_000 });
 }
 
 async function runAndWaitForOutput(page) {
@@ -46,25 +50,27 @@ test('a session of runs compiles the runtime once, not once per run @wasm', asyn
     await runAndWaitForOutput(page);
     await waitForRunReady(page);
 
-    // Both runs actually executed (the count above must not pass vacuously).
+    // Both runs actually executed: the default sample prints "Hello World"
+    // once per run. (A weaker any-output check would accept a status line.)
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
-    expect(lines.length).toBeGreaterThan(0);
+    expect((lines.match(/Hello World/g) || []).length).toBe(2);
     expect(lines).not.toContain('runtime aborted');
 
     expect(lateWasmFetches).toBe(0);
 
-    // The page-level counter cannot see a frame's own fallback fetch — the COI
-    // service worker fetches on the frames' behalf and those requests don't
-    // reach page.on('request'). Ask each live run frame directly: a frame that
-    // fetched the runtime went back to compiling for itself.
+    // Ask each live run frame directly too, and prove the loop saw frames —
+    // zero inspected frames would make this arm vacuously green.
+    let inspected = 0;
     for (const f of page.frames()) {
         if (!f.url().includes('run-frame')) continue;
+        inspected++;
         const frameWasmFetches = await f.evaluate(() =>
             performance.getEntriesByType('resource')
                 .filter((e) => e.name.includes('daslang_static.wasm')).length);
         expect(frameWasmFetches).toBe(0);
     }
+    expect(inspected).toBeGreaterThan(0);
 });
 
 // Version skew: an old cached parent never answers need-wasm-module, and the
@@ -74,6 +80,7 @@ test('a session of runs compiles the runtime once, not once per run @wasm', asyn
 // The /playground/ visit first is what registers the COI service worker, so
 // the direct navigation is served cross-origin-isolated like production.
 test('a frame whose parent never answers compiles for itself @wasm', async ({ page }) => {
+    test.slow();   // a full self-compile after the ack timeout; CI load stretches it
     await page.goto('/playground/');
     await page.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 30_000 });
 

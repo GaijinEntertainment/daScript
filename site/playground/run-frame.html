@@ -186,7 +186,9 @@
         // pthread pool was already sharing it inside a frame: workers do
         // `new WebAssembly.Instance(wasmModule, …)` from the module this hook
         // hands to `done`.) A parent that predates the protocol never acks, so
-        // after a short wait the frame compiles for itself, exactly as before.
+        // after a short wait the frame compiles for itself — streaming first,
+        // then the ArrayBuffer ladder the emscripten glue carries, so a server
+        // without the wasm MIME type degrades to a warning, not a dead frame.
         instantiateWasm: function (imports, done) {
             var settled = false, acked = false;
             function fail(message) { post({ type: "aborted", message: message }); }
@@ -213,10 +215,20 @@
                 if (settled || acked) return;
                 settled = true;
                 window.removeEventListener("message", onModuleMsg);
-                WebAssembly.instantiateStreaming(fetch("daslang_static.wasm"), imports).then(
-                    function (r) { done(r.instance, r.module); },
-                    function (e) { fail("wasm compile failed: " + e); }
-                );
+                WebAssembly.instantiateStreaming(fetch("daslang_static.wasm"), imports)
+                    .catch(function (e) {
+                        post({ type: "stderr", text: "wasm streaming compile failed, retrying as ArrayBuffer: " + e + "\n" });
+                        return fetch("daslang_static.wasm")
+                            .then(function (r) {
+                                if (!r.ok) throw new Error("HTTP " + r.status + " fetching daslang_static.wasm");
+                                return r.arrayBuffer();
+                            })
+                            .then(function (bytes) { return WebAssembly.instantiate(bytes, imports); });
+                    })
+                    .then(
+                        function (r) { done(r.instance, r.module); },
+                        function (e) { fail("wasm compile failed: " + e); }
+                    );
             }, 2000);
             return {};
         },
