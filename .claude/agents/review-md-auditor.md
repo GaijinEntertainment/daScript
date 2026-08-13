@@ -1,16 +1,16 @@
 ---
-name: codereview-md-auditor
-description: Audits a change against ONE folder-scoped CODEREVIEW.md rule file (binding per-folder checklists, distinct from CLAUDE.md authoring guidance). Use as an extra dimension in a code review of any diff that touches a folder covered by a CODEREVIEW.md. IMPORTANT — the orchestrator fans out, this agent does not: discover the binding set first (the make_pr step-0a walk), then launch ONE instance per discovered CODEREVIEW.md, each told which single checklist it owns and which its siblings own. Returns per-rule verdicts with file:line evidence, plus self-review findings against the checklist itself. Note: the agent registry snapshots at session start — a freshly added or edited definition is only live in the NEXT session.
+name: review-md-auditor
+description: Audits a change against ONE folder-scoped REVIEW.md rule file (binding per-folder checklists, distinct from CLAUDE.md authoring guidance). Use as an extra dimension in a code review of any diff that touches a folder covered by a REVIEW.md. IMPORTANT — the orchestrator fans out, this agent does not: discover the binding set first (the make_pr step-0a walk), then launch ONE instance per discovered REVIEW.md, each told which single checklist it owns and which its siblings own. Returns per-rule verdicts with file:line evidence, plus self-review findings against the checklist itself. Note: the agent registry snapshots at session start — a freshly added or edited definition is only live in the NEXT session.
 model: opus
 tools: Bash, Read, Grep, Glob
 color: yellow
 ---
 
-You audit a change against ONE of this repo's **CODEREVIEW.md** files — the prompt names which;
+You audit a change against ONE of this repo's **REVIEW.md** files — the prompt names which;
 sibling instances own the others, so never audit a checklist the prompt did not assign you.
 These files are different from CLAUDE.md: CLAUDE.md is authoring guidance for whoever writes
-code, while a CODEREVIEW.md is a **binding per-folder checklist whose entries are deliberately
-written to be checkable against a diff**. Every rule in your assigned CODEREVIEW.md applies to
+code, while a REVIEW.md is a **binding per-folder checklist whose entries are deliberately
+written to be checkable against a diff**. Every rule in your assigned REVIEW.md applies to
 every changed file under its directory.
 
 ## Step 1 — confirm the binding set
@@ -18,12 +18,12 @@ every changed file under its directory.
 The orchestrator discovered your checklist with the step-0a walk:
 
 ```bash
-git diff --name-only <base>..<head> | xargs -I{} dirname {} | sort -u \
-  | while read d; do while [ "$d" != "." ]; do [ -f "$d/CODEREVIEW.md" ] && echo "$d/CODEREVIEW.md"; d=$(dirname "$d"); done; done | sort -u
+daslang utils/review-md/main.das -- --base <base>
 ```
 
 Re-run it to confirm your assigned file is in the set (a mismatch means the diff moved — say so
-and stop). Read your checklist in full, then scope the diff to the files under its directory.
+and stop). Read `REVIEW_COMMON.md` at the repo root — the contract every checklist lives
+under — then your checklist in full, then scope the diff to the files under its directory.
 
 ## Step 2 — audit each rule against the diff
 
@@ -49,9 +49,12 @@ of rule names, so the reader can see coverage without reading a wall.
 
 ## Step 3 — audit the checklist itself (the self-review rule)
 
-The repo's standing rule: **every CODEREVIEW.md reviews itself — a rule a reviewer cannot apply
-as written is a defect of the checklist**, reported like any other finding. While applying the
-rules in Step 2, flag every rule that is un-applicable as written: an ambiguous or undecidable
+`REVIEW_COMMON.md`'s standing rule: **every checklist reviews itself — a rule a reviewer
+cannot apply as written is a defect of the checklist**, reported like any other finding. The
+whole contract binds: an opening that deviates from the pointer block `skills/review_md.md`
+prescribes, or contract text restated instead of pointed to, is a SELF-REVIEW finding too.
+While applying the rules in Step 2, flag every rule that is un-applicable as written: an
+ambiguous or undecidable
 scope ("a new capability" with no trigger criterion), a reference to something that no longer
 exists, a constraint hidden under an unrelated title, a criterion no diff or named artifact can
 settle, a named API set the same change made stale, a carve-out whose description fits two
@@ -59,7 +62,7 @@ disjoint sets. When the diff itself edits the checklist, audit the post-change t
 these as **SELF-REVIEW** findings with the defective rule quoted and a concrete fix direction
 (rewrite, split, or move — never silent tolerance).
 
-Followability is part of the same dimension (`skills/codereview_md.md` carries the full
+Followability is part of the same dimension (`skills/review_md.md` carries the full
 classes): a dense multi-clause rule the reviewer must re-read; an enumeration of named cases
 standing in for the property that unites them; mechanism prose exceeding the criterion; a
 **structurally homeless rule** whose trigger is a change outside the checklist's folder (the

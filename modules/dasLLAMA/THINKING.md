@@ -95,7 +95,7 @@ undeclared (an honest 400) pending the zen2 leg.
   Llama-3.2-3B (llama_json), Mistral-7B-v0.3 (mistral), gpt-oss-20b (Harmony split + harmony
   tools; `DASLLAMA_PARITY_FULL=1`).
 
-CODEREVIEW.md binds new families to this map: declaring `think_mode` or `tool_mode` ships
+REVIEW.md binds new families to this map: declaring `think_mode` or `tool_mode` ships
 the wire-shape case and the live leg in the same change.
 
 ## GLM-4 — the pending zen2 leg

@@ -85,7 +85,7 @@ Rules that fall out of the review round and must hold here:
 
 Same service anatomy as `dasweb-playground` — clargs + toml, `logger_init_tee`, watchdog
 contract (`/healthz`, `POST /shutdown`, exit 0/4), systemd wrapping the watchdog, module-global
-lifecycle state. Its own `CODEREVIEW.md` from the get-go, same as the playground service got.
+lifecycle state. Its own `REVIEW.md` from the get-go, same as the playground service got.
 
 It polls the queue, and for each claimed job runs one build in a sandbox. **Sandbox choice is
 open**: `bwrap` (bubblewrap) is the lightest and is a single apt package; rootless `podman` is

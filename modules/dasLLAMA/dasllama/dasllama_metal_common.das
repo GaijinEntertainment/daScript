@@ -1255,7 +1255,7 @@ var @scratch g_gr_bytes : array<uint8>      // inline-kargs pool; KBind.off inde
 var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
-// ===== the kernel coverage census (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite") =====
+// ===== the kernel coverage census (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite") =====
 // Dispatches count under the PSO pointer; compile_pso registers pointer -> MSL entry name, and
 // releases FOLD live counts into names first (PSO pointers recycle across shutdown/reinit).
 var @scratch g_kcov : table<uint64; int64>          // pso pointer -> dispatches since last fold

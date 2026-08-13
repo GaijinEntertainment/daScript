@@ -5,7 +5,7 @@ The wasm build worker of the daslang.io playground pipeline
 build queue from `dasweb-playground` over HTTPS with a bearer token, runs each job through a
 sandboxed build command, and uploads the artifact file set (or the compiler error — that text
 is what the playground shows the user). Nothing on the web box ever connects here: builder
-death degrades to a backed-up queue, never a site outage. Review rules: `CODEREVIEW.md`
+death degrades to a backed-up queue, never a site outage. Review rules: `REVIEW.md`
 (binding).
 
 ## Run

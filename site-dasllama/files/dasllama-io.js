@@ -46,7 +46,8 @@
 
   function ratioCell(r) {
     // an empty ratio is a das-only row: it MUST read "not raced", never a dash that a sorted
-    // table lets sit next to real ratios and imply parity (site CODEREVIEW: the honesty rule)
+    // table lets sit next to real ratios and imply parity (site-dasllama/REVIEW.md: "an
+    // empty ratio cell always reads 'not raced'")
     if (r === null) return '<td class="dl-num dl-dim" title="no llama.cpp reference was raced">not raced</td>';
     var cls = r > 1.005 ? 'dl-win' : (r < 0.995 ? 'dl-loss' : '');
     return '<td class="' + ('dl-num ' + cls).trim() + '">' + fmt(r, 2) + '×</td>';

@@ -1,34 +1,7 @@
 # dasweb-buildd Code Review Checklist
 
-Run this list on every dasweb-buildd change before it ships — including changes to this file.
-
-**What stays in this document:** criteria that can be checked against a diff. Nothing else.
-A reader must be able to apply every entry below **without reading the code, without prior
-knowledge of the service, and without opening another document.** If an entry needs any of
-those, it is not a review criterion — move it to `README.md` and leave a one-line criterion
-here.
-
-**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
-file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
-rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
-
-**New functionality ships with tests — same PR, no follow-up promises.** A new or changed
-reachable branch ships a test that fails without it; a diff that adds a branch no test
-distinguishes is a defect. The audit procedure — including the negative control that settles
-"would it fail?" — is `skills/tdd_audit.md`.
-
-**Form, and it is a hard limit:**
-
-- **One rule is one short paragraph.** An entry that needs more than that is describing how to
-  write code, not how to review it. Split it or move it.
-- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
-  needs a stable reference lives in `README.md`.
-- **Cite files by name; cite `README.md` by section.** Never cite an entry in this file.
-- **Name the API a rule is about; never name an example of it.**
-- **No history, no rationale, no direction of travel.** The reason lives in `README.md` or the
-  plan; planned work lives in `plans/dasweb_wasm_pipeline.md`.
-
----
+**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md`.
 
 ## Tests
 
@@ -78,7 +51,9 @@ defect, and this section is the whole test.
   cross-compile host and the wasm archives, warming the emcc cache in both modes, restarting the
   service. The only place a roll step lives. A step added or removed here without a note in
   `README.md` (The toolchain-bump protocol section) is a defect, and a roll path that moves the
-  worktree without rebuilding both the host and the runtime archive is a defect.
+  worktree without rebuilding both the host and the runtime archive is a defect. The wasm-archive
+  step's build command and archive list mirror `modules/dasImgui/.das_package`, minus
+  `liblibDasModuleClipboard.a`; changing one side without the other is a defect.
 - `Containerfile` — the sandbox image. It holds only what a system must provide the toolchain;
   anything a read-only mount can supply instead belongs in `run_build.sh`. A change here
   without bumping the image tag in both files, in the same commit, is a defect.

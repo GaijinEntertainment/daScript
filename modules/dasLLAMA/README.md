@@ -80,7 +80,7 @@ modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace (dynamic binary)
   CMakeLists.txt              # ADD_MODULE_DAS registration (static binary + install)
   ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
-  CODEREVIEW.md               # the per-change review checklist
+  REVIEW.md                   # the per-change review checklist
   METHODOLOGY.md              # how every published number is measured (the site's method page)
   PROFILE.md                  # the three profiling rigs — the routine in-process check, the oracle cell, the rig that publishes
   PERF_LEDGER.md              # the living perf backlog — parked ideas, not chased mid-wave

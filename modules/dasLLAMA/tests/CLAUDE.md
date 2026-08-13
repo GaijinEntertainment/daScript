@@ -87,7 +87,7 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census — needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
 under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census
-(CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite"): the small-model zoo swept across format/graph/batch/KV axes, then a
+(REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite"): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels — never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
 never "unreachable": the deletion gate is a reachability AUDIT of the kernel's dispatch
@@ -102,7 +102,7 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Model-free / no-arm tests
 
 Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
-New suite-less files register on this note (CODEREVIEW: "A new file under `tests/` registers
+New suite-less files register on this note (REVIEW: "A new file under `tests/` registers
 in `tests/CLAUDE.md`"); suite members register in their suite's arm list via `run.das` instead.
 Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
@@ -122,7 +122,7 @@ synthetic log files from a per-process temp dir. Requires `run` by bare same-dir
 `test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 
-## Model loads — never the image rail (CODEREVIEW: "A test suite loads models with load_model_")
+## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box
@@ -176,7 +176,7 @@ Always capture COMPLETE logs (the runner does this); grep afterwards, never at c
 a capture-time filter once hid the exact proof line a verification run existed to produce.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
-THE EYEBALL RAIL (CODEREVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
+THE EYEBALL RAIL (REVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
 streams (`log_gen_texts` in `_model_tier.das`), and every logits-tolerance cell logs a decoded
 text form (forced stream + the GPU's greedy would-be picks, or both next-token pieces) — read
 the text before trusting a red or a suspicious green; a near-tie synonym flip and real garbage

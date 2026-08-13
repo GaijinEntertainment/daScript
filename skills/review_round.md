@@ -1,7 +1,7 @@
 # The multi-agent review round (repo-only)
 
 Read this before running a deep review of a branch or diff — the pre-PR review round of
-`skills/make_pr.md`, or a standalone "review this" request. This is NOT `skills/codereview_md.md`
+`skills/make_pr.md`, or a standalone "review this" request. This is NOT `skills/review_md.md`
 (authoring the per-folder checklists) and NOT the post-open Copilot loop (`skills/babysit.md`);
 this is the round where agents read the change and findings are proven before anyone reads them.
 
@@ -27,7 +27,7 @@ Spawn ONE read-only agent over the full diff range. It produces a map, not findi
   ordering dependency, a semantics change) and file:line.
 - **Blind spots** — what the diff does NOT show: consumers in other directories, generated
   files, configs, platform arms the change can break without touching.
-- **The CODEREVIEW.md binding set** — the `skills/make_pr.md` step-0a walk over the changed set.
+- **The REVIEW.md binding set** — the `skills/make_pr.md` step-0a walk over the changed set.
 
 Grounding is context, not authority: a later agent that finds the code disagreeing with the
 grounding believes the code.
@@ -56,7 +56,7 @@ Spawn in ONE message, all read-only, model `opus`:
 - **One general surfacer**, no prescribed dimension: "follow any thread; focus on behavioral
   regressions — semantic contracts, lifecycle guarantees, concurrency — and anything the
   dimension surfacers might miss."
-- **One `codereview-md-auditor` instance per discovered CODEREVIEW.md** (the agent fans in,
+- **One `review-md-auditor` instance per discovered REVIEW.md** (the agent fans in,
   the orchestrator fans out — each instance owns exactly one checklist).
 - **The `style-hygiene-auditor`** over the diff's new code (rulebook:
   `skills/comment_style_hygiene.md`; one instance, or one per file cluster on a large

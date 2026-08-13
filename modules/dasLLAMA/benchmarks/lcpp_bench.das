@@ -956,7 +956,7 @@ def main() : int {
             return 1
         }
         // single-threaded pure-das cell: no jobque, and no tune_gate - it dispatches no tuned
-        // kernel (the CODEREVIEW tune-gate carve-out)
+        // kernel (the REVIEW tune-gate carve-out)
         return tok_cell_main(cfg, reps, fmt) ? 0 : 1
     }
     if (ab && fmt != OutFmt.txt) {

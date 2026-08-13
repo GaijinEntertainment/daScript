@@ -8,9 +8,10 @@ options persistent_heap
 // Fast tier (default): format --verify, lint on changed .das, clang
 // frontend (syntax-only) pass on changed C++ — escalates to a full
 // src+tests-cpp sweep when a header changed, since a header edit can break
-// template instantiation in TUs the diff never touched. --full adds dasgen
-// freshness, the CI-only-das compile sweep, the six doc gates, tests-cpp
-// (ctest -L small), interpreter/JIT/AOT suites, and the sequence smoke.
+// template instantiation in TUs the diff never touched. --full adds the
+// untracked-files gate, dasgen freshness, the CI-only-das compile sweep, the
+// six doc gates, tests-cpp (ctest -L small), interpreter/JIT/AOT suites, and
+// the sequence smoke.
 //
 // Cross-platform: Windows / macOS / Linux+WSL. Subprocesses go through
 // popen_argv (no shell, no quoting trap), with one exception: the sequence
@@ -30,7 +31,7 @@ require config
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Run the full tier (adds dasgen, ci-das, docs, tests-cpp, interp/JIT/AOT suites, sequence smoke)"
+    @clarg_doc = "Run the full tier (adds untracked, dasgen, ci-das, docs, tests-cpp, interp/JIT/AOT suites, sequence smoke)"
     full : bool
 
     @clarg_doc = "Diff base for changed-file detection (default: origin/master)"
@@ -360,10 +361,27 @@ def collect_changed_files(base : string; var das_files, cpp_files : array<string
 
 // ===== gate runners =====
 
+// PR-time hygiene: leftover session goo must not ride into or linger past a PR.
+def gate_untracked() : GateResult {
+    let t0 = ref_time_ticks()
+    let ls = run_argv(["git", "ls-files", "--others", "--exclude-standard"])
+    if (ls.rc != 0) {
+        return GateResult(name = "untracked", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "git ls-files failed", output = ls.out)
+    }
+    var inscope files <- untracked_from_ls(ls.out)
+    if (empty(files)) {
+        return GateResult(name = "untracked", status = GateStatus.Pass, seconds = seconds_since(t0))
+    }
+    return GateResult(name = "untracked", status = GateStatus.Fail, seconds = seconds_since(t0),
+        detail = "{length(files)} untracked file(s) — commit, delete, or ignore each (.gitignore pattern, or .git/info/exclude for box-local)",
+        output = ls.out)
+}
+
 def gate_format(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    // mirror .githooks/pre-push: verify TRACKED files only, so gitignored
-    // scratch that never reaches CI can't fail the gate
+    // verify TRACKED files only (CI's own scope), so gitignored scratch that
+    // never reaches CI can't fail the gate
     let ls = run_argv(["git", "ls-files", "--cached", "--", "*.das"])
     if (ls.rc != 0) {
         return GateResult(name = "format", status = GateStatus.Fail, seconds = seconds_since(t0),
@@ -935,7 +953,7 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
         [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
          "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
          "--exclude", "glfw_synth", "--exclude", "key_hud", "--exclude", "embedded_terminal"],
-        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the pre-push mirror)")
+        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)")
 }
 
 // ===== orchestration =====
@@ -948,7 +966,8 @@ struct GateInfo {
 
 def gate_table() : array<GateInfo> {
     return <- [
-        GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors pre-push + CI)"),
+        GateInfo(name = "untracked", full_only = true, doc = "no untracked files at PR time — commit, delete, or ignore each"),
+        GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
@@ -959,7 +978,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
         GateInfo(name = "tests-aot", full_only = true, doc = "build test_aot + full AOT suite"),
         GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)"),
-        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-push gate for it)")
+        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-merge gate for it)")
     ]
 }
 
@@ -999,58 +1018,6 @@ def report_gate(r : GateResult; verbose : bool) {
     to_log(level, "[{tag}] {r.name}{timing}{detail}\n")
     if ((r.status == GateStatus.Fail || verbose) && !empty(r.output)) {
         to_log(level, "{r.output}\n")
-    }
-}
-
-// ===== preflight token (pre-push gate) =====
-
-// On a complete full run with no failing gate (env-SKIPs are fine) and a clean
-// tree, mint a token the pre-push hook checks. Bound to the HEAD sha so any
-// later commit/amend goes stale; written via `git rev-parse --git-path` so each
-// worktree keeps its own. Threat model is "forgot to preflight", not a hostile
-// actor — it's a forcing function, not a security boundary (`git push
-// --no-verify` is the documented WIP escape, CI is the real wall).
-
-def git_line(args : array<string>) : string {
-    let r = run_argv(args)
-    return r.rc == 0 ? strip(replace(r.out, "\r", "")) : ""
-}
-
-def token_path() : string {
-    return git_line(["git", "rev-parse", "--git-path", "preflight-token"])
-}
-
-def emit_preflight_token() {
-    let head = git_line(["git", "rev-parse", "HEAD"])
-    if (empty(head)) {
-        to_log(LOG_WARNING, "preflight: could not resolve HEAD — no token written\n")
-        return
-    }
-    // The tree we validated must equal HEAD: git push ships the commit, not the
-    // working tree, so a dirty tree would certify code that isn't being pushed.
-    // (untracked files are ignored — they never reach CI.)
-    if (run_argv(["git", "diff", "--quiet", "HEAD"]).rc != 0) {
-        to_log(LOG_WARNING, "preflight: working tree differs from HEAD — no token written (commit, then re-run --full)\n")
-        return
-    }
-    let path = token_path()
-    if (empty(path)) {
-        to_log(LOG_WARNING, "preflight: could not resolve token path — no token written\n")
-        return
-    }
-    if (!fwrite(path, "head={head}\nmode=full\nresult=pass\n")) {
-        to_log(LOG_WARNING, "preflight: could not write token at {path}\n")
-        return
-    }
-    to_log(LOG_INFO, "preflight: full-pass token written for {head} — git push allowed\n")
-}
-
-// A failed (or now-stale) complete full run must not leave a prior pass token
-// behind for a bare `git push` to ride on.
-def clear_preflight_token() {
-    let path = token_path()
-    if (!empty(path) && fexist(path)) {
-        remove(path)
     }
 }
 
@@ -1113,7 +1080,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         return 1
     }
     ctx.config = detect_build_config(ctx.daslang)
-    // A complete pre-push run executes every interpreter/JIT/AOT file. Debug
+    // A complete full run executes every interpreter/JIT/AOT file. Debug
     // is useful for focused diagnosis, but turns that matrix into a tens-of-
     // minutes trap and does not represent CI performance. Subset runs remain
     // available with --only/--skip when Debug coverage is intentional.
@@ -1121,7 +1088,6 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         to_log(LOG_ERROR,
             "full preflight requires a Release daslang; got {ctx.config} at {ctx.daslang}\n" +
             "rebuild Release first (on Windows, stop a locking utils/mcp/main.das host; its watcher restarts it)\n")
-        clear_preflight_token()
         return 1
     }
     if (fexist(path_join(cfg.build_dir, "CMakeCache.txt"))) {
@@ -1154,7 +1120,9 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
             results |> push_from(doc_results)
         } else {
             var r = GateResult(name = info.name)
-            if (info.name == "format") {
+            if (info.name == "untracked") {
+                r <- gate_untracked()
+            } elif (info.name == "format") {
                 r <- gate_format(ctx)
             } elif (info.name == "lint") {
                 r <- gate_lint(ctx)
@@ -1216,16 +1184,5 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         }
     }
 
-    // Mint the pre-push token only after a complete full run (no --only/--skip
-    // subsetting) with no failing gate (env-SKIPs are fine). A failed complete
-    // run clears any stale token. Fast tier and subset runs leave a prior token
-    // untouched.
-    if (cfg.full && empty(cfg.only) && empty(cfg.skip)) {
-        if (n_fail == 0) {
-            emit_preflight_token()
-        } else {
-            clear_preflight_token()
-        }
-    }
     return n_fail > 0 ? 1 : 0
 }

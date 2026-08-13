@@ -163,7 +163,7 @@ Each phase gets decided in detail when reached.
   bit-identical (swiglu single via enc_ew2 + Pf via prefill + sinks through comb @default).
   CombB window>0 model-level note: covered at the kernel-unit tier (the attn gate's window
   arms); no batch-suite cell runs a sliding model — pre-existing shape, unchanged here.
-  In-batch: the CODEREVIEW.md sweep — env/profiling/hot_path rules shrunk to criteria
+  In-batch: the REVIEW.md sweep — env/profiling/hot_path rules shrunk to criteria
   (mechanics → ARCHITECTURE.md §2.9-2.11), PSO rule reframed to class-file ownership with the
   Vulkan sentence moved to the Vulkan section, the kn_moe_mm_family_tail race carve-out, and
   three new-fashion rules (twins share a template; explicit @role = "weight" on weight fields;

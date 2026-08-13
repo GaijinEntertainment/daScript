@@ -2,7 +2,7 @@
 
 **Endgoal (one PR):** when it merges, every supported family except GLM-4 serves `tools`
 through the OpenAI endpoint — gpt-oss, gemma-4, mistral3, llama — with tests demonstrating
-each per the CODEREVIEW.md recognition-test rule. GLM keeps its THINKING.md remote-leg record
+each per the REVIEW.md recognition-test rule. GLM keeps its THINKING.md remote-leg record
 (zen2). The Hermes/Qwen family is the already-working reference.
 
 ## The design: ToolMode as template data (the ThinkMode pattern)
@@ -36,7 +36,7 @@ The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normali
 | **mistral** | `[AVAILABLE_TOOLS]`…`[/AVAILABLE_TOOLS]` (before the last user turn, not the system block) | `[TOOL_CALLS]` + JSON ARRAY, no closing marker (ends at EOS) | `[TOOL_RESULTS]`…`[/TOOL_RESULTS]` | real control tokens in the v0.3/tekken vocabs; closest fit to the marker model |
 | **llama_json** (llama-3.x) | JSON defs in the system prompt | the WHOLE reply is a bare JSON object (`{"name":…,"parameters":…}`) — no markers; `<|python_tag|>` only for builtins (out of scope) | `ipython` role turn | parse = strict whole-content JSON sniff (a call iff the full content parses as an object with name+parameters); weakest small-model reliability — see the grammar section |
 
-## Tests (the CODEREVIEW rule, applied four times)
+## Tests (the REVIEW rule, applied four times)
 
 - **Model-free**: per-mode parse pins (call extraction, replay round-trip, reasoning+tools
   compose for harmony/gemma4) — `tests/test_chat.das` render pins + parse cases wherever a
@@ -133,7 +133,7 @@ split-then-parse); gemma4 = think-split then `gemma4_parse`; mistral/llama_json 
 
 ## Review round for PR #3691 — ALL items greenlit (no trims), fix before merge
 
-Sources: opus /code-review (10 confirmed), CODEREVIEW.md audit (4V/2U/4S), Copilot (2).
+Sources: opus /code-review (10 confirmed), REVIEW.md audit (4V/2U/4S), Copilot (2).
 
 **A. Severe:**
 1. role:"tool" + no tools on a none-mode family → render_tool_results' llama else-arm panics
@@ -142,7 +142,7 @@ Sources: opus /code-review (10 confirmed), CODEREVIEW.md audit (4V/2U/4S), Copil
 2. [INST]-sniffed templates without v0.3 tokens: ungated [TOOL_RESULTS] special panics; tools
    no longer 400. FIX: resolve `tool_vocab_ok` per mode at create (mirror think_vocab);
    effective mode falls to none when the mode's control specials are absent — the server 400s
-   honestly again (this also makes CODEREVIEW's inert-declaration exemption TRUE).
+   honestly again (this also makes REVIEW's inert-declaration exemption TRUE).
 3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results —
    dropped on ALL families (partly pre-existing for hermes). FIX: flush the queued results
    turn (render, no assistant_open) before add_user when both queue in render_chat_suffix's
@@ -172,12 +172,12 @@ Sources: opus /code-review (10 confirmed), CODEREVIEW.md audit (4V/2U/4S), Copil
   turn). V2: pins for tool_call_of_json / json_value_or_quoted / json_quoted in
   test_tool_formats.das. V3+S1: move the pure wire-text builders into dasllama_tools
   (mistral_defs_text, llama_json_defs_text, llama_json_call_text, harmony result-header) and
-  sharpen the CODEREVIEW placement rule to "every byte that goes on the wire is produced by a
+  sharpen the REVIEW placement rule to "every byte that goes on the wire is produced by a
   function in dasllama_tools.das; dasllama_chat.das assembles ChatParts and places them in
   turns" + reconcile the section preamble with entries naming neighbours.
 - V4: THINKING.md test map — add test_tool_formats.das, the four tool live legs, and fix the
   trigger spelling. S2: the recognition rule's trigger becomes "think_mode or tool_mode" in
-  CODEREVIEW.md AND THINKING.md. S3: reword the exemption per fix A2. S4: bind "smallest
+  REVIEW.md AND THINKING.md. S3: reword the exemption per fix A2. S4: bind "smallest
   local GGUF" to the fetch_models manifest.
 - U1: PR body gains the model-free -jit command line. U2: catalogue
   Llama-3.2-3B-Instruct-Q4_K_M, Mistral-7B-Instruct-v0.3-Q4_K_M, gemma-4-E2B-it-Q4_K_M in

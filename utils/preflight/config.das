@@ -3,13 +3,21 @@ options no_aot
 
 module config shared
 
+require strings
 require daslib/fio
 require daslib/json
+require daslib/strings_boost
 require daslib/toml
 
 struct public PreflightSettings {
     jit_threads : int = 0
     jit_max_file_time : float = 60.0
+}
+
+//! The pure half of the untracked-files gate: repo-relative paths from
+//! `git ls-files --others --exclude-standard` output, CR and blank lines dropped.
+def public untracked_from_ls(out : string) : array<string> {
+    return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 }
 
 def public valid_jit_max_file_time_override(value : float) : bool {

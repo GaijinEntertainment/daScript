@@ -149,9 +149,9 @@ A rejected comment still gets a reply (one-line reason, evidence if the reviewer
 After greenlight:
 1. Edit the code per the agreed verdicts.
 2. **Watch for contradictory comments.** When fixing a bug, scan inline comments that describe the affected surface — they often need updating in the same pass. (If you forget, the next review round will flag it.)
-3. Run focused local gates that exercise the changed surface, plus `git diff --check` and any directly applicable formatter/generator check. The full preflight belongs to `skills/make_pr.md` and runs **once per PR** — before the initial push, and even when that single run fails (fix + targeted re-check + `git push --no-verify`, announced); never repeat it for Copilot or CI fix rounds. Let the automatically restarted CI matrix provide the complete validation of each later tip.
+3. Run focused local gates that exercise the changed surface, plus `git diff --check` and any directly applicable formatter/generator check. The full preflight belongs to `skills/make_pr.md` and runs **once per PR** — before the initial push, and even when that single run fails (fix + targeted re-check, announced); never repeat it for Copilot or CI fix rounds. Let the automatically restarted CI matrix provide the complete validation of each later tip.
 4. **`//!` doc-comment changes:** re-run `bin/Release/daslang.exe -documentation doc/reflections/das2rst.das`, delete `doc/sphinx-build`, then run both Sphinx builders. Preflight's docs gate deletes that cache unconditionally so stale doctrees cannot hide warnings. Generated `doc/source/stdlib/generated/*.rst` are gitignored; Sphinx picks them up at build time.
-5. Commit the fix. Because the pre-push token is SHA-bound to the one pre-PR full run, post-open review fixes may use `git push --no-verify` after their focused gates; CI remains mandatory before merge. If amending, use **`git push --force-with-lease`** (never `--force`).
+5. Commit the fix and push once its focused gates pass; CI remains mandatory before merge. If amending, use **`git push --force-with-lease`** (never `--force`).
 
 ## 5. Reply to each comment + resolve all threads
 

@@ -102,8 +102,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
-| `skills/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") — grounding → change-derived risk dimensions → parallel surfacers + CODEREVIEW auditors → falsification-gate prover → report-then-fix |
-| `skills/codereview_md.md` | Creating or editing any module `CODEREVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection, the followability finding classes |
+| `skills/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") — grounding → change-derived risk dimensions → parallel surfacers + REVIEW auditors → falsification-gate prover → report-then-fix |
+| `skills/review_md.md` | Creating or editing any module `REVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection, the followability finding classes |
 | `skills/tdd_audit.md` | Auditing any diff for test coverage — the constitutional branch-test rule (a new/changed reachable branch needs a test that fails without it), the negative-control procedure, pin and expectation discipline |
 | `skills/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
 | `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
@@ -135,28 +135,31 @@ When you discover something new about daslang syntax, semantics, or conventions 
 **Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
 
 **Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule
-docs (CODEREVIEW.md-style checklists) state the CURRENT contract only — no incident anecdotes,
+docs (REVIEW.md-style checklists) state the CURRENT contract only — no incident anecdotes,
 no PR/issue numbers, no dated rulings, no "as of" changelog entries. History lives in git,
 `/history`, and memory. When a rule changes, replace the old text outright instead of
 appending a dated entry; state the timeless WHY, and if the motivating incident is worth
 keeping, archive it in `/history`. (Carve-out: `probe-verified <date>` tags on syntax/behavior
 claims are verification provenance, not history — they stay.)
 
-**Every CODEREVIEW.md reviews itself.** Each carries the self-review rule — a rule a reviewer
-cannot apply as written is a defect of the checklist, marked like any other finding — and a
-NEW CODEREVIEW.md includes that rule from its first commit. When a checklist audit runs for a
-PR, its scope is every CODEREVIEW.md discovered from the changed set (the `skills/make_pr.md`
-step-0a walk): each discovered checklist is itself audited under the self-review rule, not
-just applied. The implementer is the shared **`codereview-md-auditor` agent**
-(`.claude/agents/codereview-md-auditor.md`): one instance owns exactly one checklist, so with
+**Every REVIEW.md reviews itself.** The contract all checklists share — diff-checkable
+criteria only, the self-review rule (a rule a reviewer cannot apply as written is a defect
+of the checklist, marked like any other finding), the Form hard limits — lives ONCE in
+`REVIEW_COMMON.md` at the repo root; every checklist opens with a pointer to it from its
+first commit, never a restatement (`skills/review_md.md` carries the opening template). When
+a checklist audit runs for a PR, its scope is every REVIEW.md discovered from the changed set
+(the `skills/make_pr.md` step-0a walk, tool: `utils/review-md/main.das`): each discovered
+checklist is itself audited under the self-review rule, not
+just applied. The implementer is the shared **`review-md-auditor` agent**
+(`.claude/agents/review-md-auditor.md`): one instance owns exactly one checklist, so with
 several in scope the ORCHESTRATOR launches one instance per checklist in parallel and merges
 the findings into one report. Self-review includes **followability** — the finding classes
 (dense multi-clause rules, enumerations standing in for criteria, mechanism prose,
-structurally homeless rules, overlap) are in `skills/codereview_md.md`; checklists stay slim
+structurally homeless rules, overlap) are in `skills/review_md.md`; checklists stay slim
 because every round applies them, not because someone notices. Beside the checklist auditors
 runs the **`tdd-auditor` agent** (`.claude/agents/tdd-auditor.md`): ONE instance for the
 whole diff, auditing the constitutional branch-test clause (`skills/tdd_audit.md`) —
-including in folders no CODEREVIEW.md covers. (The agent registry snapshots at session
+including in folders no REVIEW.md covers. (The agent registry snapshots at session
 start — a freshly pulled or edited definition is live in the NEXT session, not the current
 one.)
 

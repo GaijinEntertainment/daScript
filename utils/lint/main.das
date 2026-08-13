@@ -521,8 +521,7 @@ def collect_input_files(var files : array<string>&) : int {
     if (empty(files)) {
         // All inputs were intentionally skipped (e.g. builtin.das) -- success.
         // Distinguishes a clean "nothing to lint" from a genuine "no .das at the
-        // given path", which still errors. This matters for the pre-push hook:
-        // a commit that only touches a skip-listed file would otherwise fail.
+        // given path", which still errors.
         return 0 if (skipped > 0)
         print("Error: no .das files found\n")
         return 1

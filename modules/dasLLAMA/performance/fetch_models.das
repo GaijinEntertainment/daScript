@@ -75,7 +75,7 @@ def models_provenance() : array<ProvEntry> {   // nolint:STYLE038 — flat prove
         ProvEntry(name = "Llama-3.2-1B-Instruct-Q8_0.gguf", root = "llm",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
             bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"),
-        // the tool-format live-leg carriers (CODEREVIEW recognition-test rule): each family's
+        // the tool-format live-leg carriers (REVIEW recognition-test rule): each family's
         // smallest catalogued GGUF, exercised by utils/dasllama-server/test_openai_server_think.das
         ProvEntry(name = "Llama-3.2-3B-Instruct-Q4_K_M.gguf", root = "llm",
             url = "{HF}/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",

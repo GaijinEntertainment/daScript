@@ -9,8 +9,9 @@ manual commands this tool automates live in
 # on changed C++ (full src+tests-cpp sweep when a header changed)
 daslang utils/preflight/main.das
 
-# full tier: adds dasgen freshness, CI-only-das compile sweep, the seven doc
-# gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
+# full tier: adds the untracked-files gate (working tree carries none — commit,
+# delete, or ignore each), dasgen freshness, CI-only-das compile sweep, the
+# seven doc gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
 daslang utils/preflight/main.das -- --full
 
 # subset / introspection
@@ -57,15 +58,6 @@ The parallel cold JIT sweep defaults to 60 seconds because healthy files can
 cross 30 seconds under worker contention. Any completed test file above its
 ceiling fails preflight even when its assertions pass; the suite-wide timeout
 remains the separate deadlock guard.
-
-**Pre-push token.** A clean, complete `--full` run (no `--only`/`--skip`, no gate
-failing — env-SKIPs are fine — working tree == HEAD) mints a token at
-`$(git rev-parse --git-path preflight-token)` bound to the HEAD sha. The
-`.githooks/pre-push` hook requires that token, so `git push` is blocked until
-full preflight has passed for exactly the commit being pushed — re-run after any
-new commit/amend/rebase. A failed complete run clears a stale token. Forcing
-function only; `git push --no-verify` is the WIP escape. See
-[.githooks/README.md](../../.githooks/README.md).
 
 `ci_only_das.txt` lists the in-repo das surface that no default local build
 compiles (dasOpenGL today); see the header comment there before adding
