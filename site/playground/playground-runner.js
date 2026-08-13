@@ -240,6 +240,14 @@
             return !!(spare && spare.ready) || !!(current && current.ready && !current.used);
         },
 
+        // Dead means the runner gave up: no frame standing by and none loading.
+        // Distinct from "loading" (a spare exists, not ready yet) — the Run
+        // button stays clickable in THIS state only, so the user has a way to
+        // trigger revive(); reporting it as "still loading" hid exactly that.
+        isDead: function () {
+            return !spare && !(current && current.ready && !current.used);
+        },
+
         // A page whose spare kept aborting (MAX_SPARE_ABORTS) has no frame and,
         // without this, no way back short of a reload — which does not help when
         // the abort was the process's wasm memory, since that outlives reloads.

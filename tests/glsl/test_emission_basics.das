@@ -107,6 +107,40 @@ def nested_inline_fragment {
     b_frag_color = float4(col, 1.0)
 }
 
+// The other seam: a PARAMETER spelled with a leading underscore reaches the
+// manufactured `_arg_` temp name directly (`_inl<N>_arg_` + `_a`), before any
+// nesting — and then rides the rename seam too. Both joins must re-encode.
+def private mul_underscore(_a, _b : float2) : float2 {
+    return float2(_a.x * _b.x - _a.y * _b.y, _a.x * _b.y + _a.y * _b.x)
+}
+
+def private iterate_underscore(c : float2) : float2 {
+    var z = float2(0.1, 0.1)
+    var n = 0
+    while (n < 8) {
+        z = mul_underscore(z, z) + c
+        n++
+    }
+    return float2(float(n), z.x)
+}
+
+def private sample_underscore(c : float2) : float3 {
+    let nd = iterate_underscore(c)
+    if (nd.y > 4.0) {
+        return float3(nd.x * 0.1, 0.0, 0.0)
+    }
+    return float3(0.0, 0.0, 0.0)
+}
+
+[fragment_program(name="nested_underscore_fs_glsl")]
+def nested_underscore_fragment {
+    var col = float3(0.0, 0.0, 0.0)
+    for (s in range(16)) {
+        col += sample_underscore(float2(b_vcolor.x + float(s), b_vcolor.y))
+    }
+    b_frag_color = float4(col, 1.0)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
@@ -154,5 +188,9 @@ def test_glsl_emission_basics(t : T?) {
         t |> success(has(nested_inline_fs_glsl, "_arg_"), "the inliner manufactured argument temps")
         t |> success(has(nested_inline_fs_glsl, "_lu_"), "a leading-underscore local re-encoded at the join")
         t |> success(!has(nested_inline_fs_glsl, "__"), "no reserved __ anywhere in the emitted GLSL")
+        // the _arg_ seam: a leading-underscore PARAMETER re-encodes in the
+        // manufactured temp itself (`_argu_a`), and the nested rename stays clean
+        t |> success(has(nested_underscore_fs_glsl, "_argu_"), "a leading-underscore parameter re-encoded in its arg temp")
+        t |> success(!has(nested_underscore_fs_glsl, "__"), "no reserved __ with underscore-named parameters")
     }
 }

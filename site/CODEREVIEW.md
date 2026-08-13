@@ -23,7 +23,7 @@ distinguishes is a defect. The audit procedure — including the negative contro
 - **One rule is one short paragraph.** An entry that needs more than that is describing how
   to write code, not how to review it. Split it or move it.
 - **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything
-  that needs a stable reference lives in `README.md`, which is numbered for that purpose.
+  that needs a stable reference lives in `README.md`, cited by section heading.
 - **Cite files by name; cite `README.md` by section.** Never cite an entry in this file.
 - **Name the API a rule is about; never name an example of it.** A rule governing specific
   functions or files must name them or it cannot be checked — that name is the criterion. An
@@ -42,13 +42,23 @@ does not exist yet, the page does not show the command.
 **Every code sample shown on a page compiles and runs with the current toolchain.** daslang
 samples are gen2 and compile with the current binary; no pseudo-code presented as code.
 
+**A spec under `site/tests/playground/` that needs the daslang runtime carries `@wasm` in its
+test title.** The per-PR lane stages the site without WASM artifacts and runs the suite with
+`--grep-invert '@wasm'` (`playground-e2e.yml`), so an untagged runtime-dependent spec fails
+every PR.
+
+**A change under `site/playground/` ships with a stated run of the WASM-staged Playwright
+suite** (`site/tests/playground/` with the runtime artifacts present), naming the pass count
+in the PR body or commit message. The no-WASM lane cannot see a broken runtime path, and
+every sample on the page runs through it.
+
 **Every number shown is either rendered from live data or copied from a checked-in
 measurement record; anything else is a placeholder and carries an HTML comment naming it as
 one.** A placeholder that could be mistaken for a fact is a defect.
 
 **The `dl-*` measurement-table language's source of truth is `files/dasllama-table.css`**
-(the file dasllama.io loads). This page does not link it — it carries an inline mirror — so a
-`dl-*` change updates the source AND this page's inline copy together; changing only one is a defect.
+(the file dasllama.io loads). `dasllama.html` does not link it — it carries an inline mirror — so a
+`dl-*` change updates the source AND `dasllama.html`'s inline copy together; changing only one is a defect.
 
 **News entries state real, shipped events.** An entry in `_news/*.md` for something not yet
 true at publish time is a defect.

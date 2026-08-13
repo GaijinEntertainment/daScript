@@ -529,7 +529,12 @@ function updateButtonStates() {
     // instantiates the artifact itself, and its radio is only selectable once
     // the build service has answered. Gating both on the local runtime left Run
     // dead for an engine that never uses it.
-    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !ready;
+    // A DEAD runner (gave up after repeated aborts) keeps Run clickable too:
+    // the click is what triggers the revive (see reportNotReady) — a disabled
+    // button on a dead page would make that state permanent.
+    const runnerDead = typeof PlaygroundRunner !== 'undefined'
+        && PlaygroundRunner.isDead && PlaygroundRunner.isDead();
+    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !(ready || runnerDead);
     // Test always runs interpreted, through the local runtime.
     if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
 }
