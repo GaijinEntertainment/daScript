@@ -1321,10 +1321,12 @@ add_dependencies(libDaScriptDyn parser_generated)
 # (no double-override).
 target_compile_definitions(libDaScript_runtime    PUBLIC
     $<$<CONFIG:RelWithDebInfo>:DAS_TRACK_ALLOC=1>
-    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>)
+    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>
+    $<$<CONFIG:RelWithDebInfo>:DAS_DONT_REPORT_LEXER_LEAKS=1>)
 target_compile_definitions(libDaScriptDyn_runtime PUBLIC
     $<$<CONFIG:RelWithDebInfo>:DAS_TRACK_ALLOC=1>
-    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>)
+    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>
+    $<$<CONFIG:RelWithDebInfo>:DAS_DONT_REPORT_LEXER_LEAKS=1>)
 # Global new/delete override: covers STL/raw new/smart_ptr refcount blocks.
 # On Windows each module resolves operator new per-CRT, so the override TU must
 # be compiled into every binary that wants its own code covered. Uses std::malloc
