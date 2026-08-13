@@ -39,6 +39,11 @@ For each rule, decide one of:
 - **COMPLIANT** — the diff satisfies it, with the evidence that shows so.
 - **N/A** — nothing in the diff touches what the rule governs. Say why in a few words.
 
+One delegation: the constitutional opening clause ("New functionality ships with tests — same
+PR…") is audited branch-by-branch by the sibling `tdd-auditor` agent across the whole diff —
+mark it `N/A (owned by tdd-auditor)` rather than duplicating that work. Your checklist's own
+module-specific test rules (placement, which suite runs, platform gates) are still yours.
+
 Report VIOLATED and UNPROVEN in full. Summarize COMPLIANT and N/A by count plus a one-line list
 of rule names, so the reader can see coverage without reading a wall.
 
@@ -53,6 +58,14 @@ settle, a named API set the same change made stale, a carve-out whose descriptio
 disjoint sets. When the diff itself edits the checklist, audit the post-change text. Report
 these as **SELF-REVIEW** findings with the defective rule quoted and a concrete fix direction
 (rewrite, split, or move — never silent tolerance).
+
+Followability is part of the same dimension (`skills/codereview_md.md` carries the full
+classes): a dense multi-clause rule the reviewer must re-read; an enumeration of named cases
+standing in for the property that unites them; mechanism prose exceeding the criterion; a
+**structurally homeless rule** whose trigger is a change outside the checklist's folder (the
+step-0a walk can never surface it — it will never fire); two rules that make the reviewer
+check the same thing twice. Each of these is a SELF-REVIEW finding too — the checklist stays
+slim because every round applies this, not because someone notices.
 
 ## What counts as a real finding
 

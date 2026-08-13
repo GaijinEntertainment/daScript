@@ -74,6 +74,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII, builder, XPath, struct round-trip) |
 | `skills/filesystem.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
 | `skills/writing_tests.md` | Writing tests with the bundled `dastest` framework |
+| `skills/tdd_audit.md` | Auditing any diff for test coverage — does every new/changed branch have a test that fails without it? The negative-control procedure, pin and expectation discipline, the reporting shape |
 | `skills/memory_leak_detection.md` | Diagnosing leaks (`--das-profiler-leaks`, `--track-smart-ptr`, `GC APP LEAK`, `HandleRegistry`) |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leaks |
 | `skills/detect_dupe.md` | Duplicate-function detection (corpus, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |

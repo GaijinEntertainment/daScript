@@ -4,6 +4,11 @@ Run this list on every dasweb-verify change before it ships — including change
 Entries must be checkable against a diff alone; anything needing prior knowledge or another
 document belongs in `README.md` with a one-line criterion here.
 
+**New functionality ships with tests — same PR, no follow-up promises.** A new or changed
+reachable branch ships a test that fails without it; a diff that adds a branch no test
+distinguishes is a defect. The audit procedure — including the negative control that settles
+"would it fail?" — is `skills/tdd_audit.md`.
+
 ## Tests
 
 **Every core behavior has a dastest test in this directory.** Exempt: `main.das` argv/exit

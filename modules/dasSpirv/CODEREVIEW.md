@@ -4,6 +4,11 @@
 file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
 rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
 
+**New functionality ships with tests — same PR, no follow-up promises.** A new or changed
+reachable branch ships a test that fails without it; a diff that adds a branch no test
+distinguishes is a defect. The audit procedure — including the negative control that settles
+"would it fail?" — is `skills/tdd_audit.md`.
+
 1. **Any new bit of functionality ships with test coverage for EVERY new scenario it
    introduces.** The emitter's test home is `tests/spirv/`: word-level fixtures (`_golden/`
    disassembly, equivalence gates), the opcode census, and a `_fail_closed/` fixture for
