@@ -2506,28 +2506,30 @@ namespace das
         const auto &at = expr->at;
         if ( expr->block ) {
         } else if ( expr->local ) {
+            // extraLocalOffset is part of where the variable itself sits (a fake make-local var
+            // carries its slot inside the literal there), so it belongs to the variable and is
+            // added here alone - the chain of fields and indices above it never carries it
+            uint32_t varOffset = extraOffset + expr->variable->extraLocalOffset;
             if ( expr->variable->type->ref ) {
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalRefOffR2V>(r2vType->getR2VType(), at,
-                                                    expr->variable->stackTop, extraOffset + expr->variable->extraLocalOffset);
+                                                    expr->variable->stackTop, varOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetLocalRefOff>(at,
-                                                    expr->variable->stackTop, extraOffset + expr->variable->extraLocalOffset);
+                                                    expr->variable->stackTop, varOffset);
                 }
             } else if ( expr->variable->aliasCMRES ) {
-                // extraOffset already includes the var's extraLocalOffset (passed by the caller),
-                // which for fake CMRES-alias vars carries the make-struct element slot offset.
                 if ( r2vType->baseType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetCMResOfsR2V>(r2vType->getR2VType(), at, extraOffset);
+                    return context.code->makeValueNode<SimNode_GetCMResOfsR2V>(r2vType->getR2VType(), at, varOffset);
                 } else {
-                    return context.code->makeNode<SimNode_GetCMResOfs>(at, extraOffset);
+                    return context.code->makeNode<SimNode_GetCMResOfs>(at, varOffset);
                 }
             } else {
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalR2V>(r2vType->getR2VType(), at,
-                                                                            expr->variable->stackTop + extraOffset);
+                                                                            expr->variable->stackTop + varOffset);
                 } else {
-                    return context.code->makeNode<SimNode_GetLocal>(at, expr->variable->stackTop + extraOffset);
+                    return context.code->makeNode<SimNode_GetLocal>(at, expr->variable->stackTop + varOffset);
                 }
             }
         } else if ( expr->argument ) {
@@ -2587,10 +2589,10 @@ namespace das
             }
         } else if ( expr->local ) {
             if ( expr->r2v ) {
-                setE(expr, sv_trySimulate(expr, expr->variable->extraLocalOffset, expr->type));
+                setE(expr, sv_trySimulate(expr, 0, expr->type));
             } else {
                 gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
-                setE(expr, sv_trySimulate(expr, expr->variable->extraLocalOffset, noneType));
+                setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         } else if ( expr->argument) {
             if (expr->variable->type->isRef()) {
