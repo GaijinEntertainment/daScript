@@ -414,7 +414,7 @@ def run_with_progress(argv : array<string>; timeout_sec : float; var output : st
     return code
 }
 
-def handle_tools_call(server : McpServer; reg : array<ToolDef>; id_json : string; params : JsonValue?) : string {
+def handle_tools_call(server : McpServer; reg : array<ToolDef>; id_json : string; params : JsonValue?) : string {   // nolint:STYLE037 - flat tool-call validation and argument extraction, no seam to split
     let tool_name_val = params?.name
     let args = params?.arguments
     if (tool_name_val == null || !(tool_name_val.value is _string)) return jsonrpc::error(id_json, -32602, "missing or non-string tool name")
@@ -454,10 +454,7 @@ def handle_tools_call(server : McpServer; reg : array<ToolDef>; id_json : string
     let ns = length(server.str_extra_args)
     let extra1 = ns > 0 ? get_string_arg(args, server.str_extra_args[0]) : ""
     let extra2 = ns > 1 ? get_string_arg(args, server.str_extra_args[1]) : ""
-    var extra_list : array<string>
-    if (!empty(server.arr_extra_arg)) {
-        extra_list <- get_string_array_arg(args, server.arr_extra_arg)
-    }
+    var extra_list <- get_string_array_arg(args, server.arr_extra_arg)
     // Universal progress: armed only when the tool opts in, the server names a
     // progress dir, and the client supplied a scalar _meta.progressToken. The
     // handler reads these back through mcp_progress_path / run_with_progress.
