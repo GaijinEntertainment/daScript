@@ -56,7 +56,7 @@ The image preprocessing rail: dynamic-resolution token bounds and the debug dump
 |---|---|---|---|
 | `DASLLAMA_IMAGE_MIN_TOKENS` | number | 40 (the gemma-4 model default) | Minimum soft tokens per image; dynamic-resolution geometry upscales to reach it. |
 | `DASLLAMA_IMAGE_MAX_TOKENS` | number | 280 (the gemma-4 model default) | Maximum soft tokens per image; dynamic-resolution geometry downscales to fit. |
-| `DASLLAMA_VISION_DUMP` | text | unset | Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.png — the human smoke test; empty = off. |
+| `DASLLAMA_VISION_DUMP` | text | unset | Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off. |
 
 ## Metal backend
 

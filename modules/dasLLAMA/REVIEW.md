@@ -303,6 +303,12 @@ before a human can see what the model saw.
 from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
 and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
 
+**A media turn's prompt renders as two token spans around the soft-token splice**
+(`render_prompt_media`) — never one stream with a placeholder — so BPE merges cannot cross the
+media, and a new media kind adds its marker pair to the chat template rather than a second
+renderer. A family whose template declares no marker pair has no arm for that media kind, and
+`create_chat_` panics at create.
+
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode
 loop, a caps value, or a language rule in the facade is a defect.

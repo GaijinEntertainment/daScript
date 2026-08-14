@@ -4,6 +4,11 @@ options persistent_heap   // + explicit deletes below: each test frees its model
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
+
+[init]
+def private allow_cpu_prefill_intent() {
+    allow_cpu_prefill()   // render/eval-seam test, CPU by design: on a Metal build the prefill guard panics otherwise
+}
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/jobque_boost

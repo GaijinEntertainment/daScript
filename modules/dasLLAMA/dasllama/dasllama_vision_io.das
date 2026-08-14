@@ -51,8 +51,9 @@ def public load_image_rgb(bytes : array<uint8>) : VisionImage {
     return <- img
 }
 
-//! The human smoke test: write `img` as a PNG so a red never requires new instrumentation
-//! before someone can see what the model saw. Callers gate on `DASLLAMA_VISION_DUMP`.
+//! Write `img` as a PNG. The engine's own dump knob (`DASLLAMA_VISION_DUMP`) writes PPM from
+//! `dasllama_vision` instead — it must not pull stbimage into the core; this is for apps that
+//! already require this module and want a viewer-friendly format.
 def public dump_image_png(img : VisionImage; path : string) : bool {
     if (img.width == 0 || img.height == 0) {
         return false

@@ -4,6 +4,8 @@ options _comment_hygiene = true
 module dasllama_vision shared public
 
 require math
+require daslib/fio
+require dasllama/dasllama_env
 
 //! The vision preprocessing rail: dynamic-resolution geometry, the letterbox resize
 //! (aspect-preserving bilinear + center pad on black), and u8→f32 normalize. Conventions
@@ -113,6 +115,37 @@ def public vision_letterbox(src : VisionImage; target : int2) : VisionImage {
         }
     }
     return <- dst
+}
+
+//! Write `img` as a binary PPM (P6) — pure das, no image library, so the engine-side dump knob
+//! never pulls stbimage into the core chat module. macOS Preview and every viewer open P6.
+def public write_image_ppm(img : VisionImage; path : string) : bool {
+    if (img.width <= 0 || img.height <= 0) {
+        return false
+    }
+    let f = fopen(path, "wb")
+    if (f == null) {
+        return false
+    }
+    fwrite(f, "P6\n{img.width} {img.height}\n255\n")
+    fwrite(f, img.rgb)
+    fclose(f)
+    return true
+}
+
+//! The DASLLAMA_VISION_DUMP knob: when set, write `img` as <prefix><tag>.ppm — the human smoke
+//! test; a red never requires new instrumentation before someone can see what the model saw.
+def public maybe_dump_vision(img : VisionImage; tag : string) {
+    let prefix = g_env_vision.vision_dump
+    if (empty(prefix)) {
+        return
+    }
+    let path = "{prefix}{tag}.ppm"
+    if (write_image_ppm(img, path)) {
+        to_log(LOG_INFO, "dasLLAMA vision: dumped {img.width}x{img.height} letterboxed image to {path}\n")
+    } else {
+        to_log(LOG_WARNING, "dasLLAMA vision: could not write the dump to {path}\n")
+    }
 }
 
 //! u8 → f32 planes for the embedder: exactly x/255, interleaved layout preserved — gemma-4's

@@ -133,6 +133,11 @@ mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
 agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
+`test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
+`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
+span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
+llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
+arm defaults to instruct, and freeform token-parity cells are banned (see below).
 
 ## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 

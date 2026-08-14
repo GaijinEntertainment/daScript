@@ -12,6 +12,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // the three tools), and every sibling is tuned.
 
 require dasllama/dasllama       // load_model / generate / the shared [tune_scope]
+require dasllama/dasllama_vision_io   // --image: file → RGB8 (the only stbimage-touching module)
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status
 require daslib/jobque_boost
 require daslib/clargs
@@ -64,6 +65,14 @@ struct AskArgs {
     @clarg_doc = "Weight serving mode: fp32 | q8 (default; file-format spellings serve natively under q8) | q4 = legacy requant"
     quant : string
 
+    @clarg_path
+    @clarg_doc = "Ask about an image: the prompt becomes a chat turn carrying it (needs --mmproj)"
+    image : string
+
+    @clarg_path
+    @clarg_doc = "Path to the vision mmproj GGUF; required with --image"
+    mmproj : string
+
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch"
     tune : bool
 
@@ -102,6 +111,10 @@ def main : int {
 
     let max_new = cfg.max_tokens > 0 ? int64(cfg.max_tokens) : 256l
 
+    if (!empty(cfg.image) && empty(cfg.mmproj)) {
+        to_log(LOG_ERROR, "ask: --image needs --mmproj <vision mmproj gguf>\n")
+        return 1
+    }
     var m <- load_model(cfg.model, pick_quant(cfg.quant))
     allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let toks <- encode(m, cfg.prompt, true, false)
@@ -116,6 +129,10 @@ def main : int {
 
     with_job_que() {
         setup_dasllama_jobque()
+        if (!empty(cfg.image)) {
+            ask_image(m, cfg, params, max_new)
+            return
+        }
         var s = create_session(m)
         if (cfg.seed != 0) {
             set_seed(s, cfg.seed)
@@ -131,4 +148,26 @@ def main : int {
         print("prefill {int(st.prefill_tps)} t/s | gen {int(st.gen_tps)} t/s]\n")
     }
     return 0
+}
+
+// --image: one chat turn carrying the image, the prompt as its text
+def private ask_image(m : Model; cfg : AskArgs; params : SamplingParams; max_new : int64) {
+    let img <- load_image_rgb(cfg.image)
+    if (img.width == 0) {
+        to_log(LOG_ERROR, "ask: could not decode image '{cfg.image}'\n")
+        return
+    }
+    var emb <- load_gemma4uv_embedder(cfg.mmproj)
+    var chat <- create_chat(m, emb, "", max_new)
+    add_user_image(chat, img)
+    add_user(chat, cfg.prompt)
+    respond(m, chat, params) $(piece) {
+        fprint(fstdout(), piece)
+        fflush(fstdout())
+        return true
+    }
+    let st = stats(chat.session)
+    print("\n[image {img.width}x{img.height} | prompt {st.n_prompt} tok | gen {st.n_gen} tok | ")
+    print("ttft {int(st.ttft_s * 1000.0lf)}ms | gen {int(st.gen_tps)} t/s]\n")
+    delete chat
 }

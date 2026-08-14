@@ -1055,6 +1055,8 @@ struct ChatTemplate {
     assistant_open_think : ChatTurn = ChatTurn()   // replaces assistant_open when thinking is ON (gemma-4 bare header)
     audio_pre : ChatTurn = ChatTurn()
     audio_post : ChatTurn = ChatTurn()
+    image_pre : ChatTurn = ChatTurn()    // opens the image soft-token span (gemma-4: <|image>)
+    image_post : ChatTurn = ChatTurn()   // closes it (gemma-4: <image|>); empty = family has no image arm
     stop : array<string>
     stop_nothink : array<string>   // extra stops when thinking is OFF (gemma-4: a channel marker in an instruct turn is framing noise — the turn is over)
     // tool-calling format (ToolMode.none = the family declares none; see hermes_tools)

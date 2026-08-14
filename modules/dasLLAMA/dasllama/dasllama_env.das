@@ -150,7 +150,7 @@ struct public VisionEnv {
     @clarg_doc = "Maximum soft tokens per image; dynamic-resolution geometry downscales to fit."
     image_max_tokens : int = 280
 
-    @clarg_doc = "Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.png — the human smoke test; empty = off."
+    @clarg_doc = "Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off."
     vision_dump : string = ""
 }
 

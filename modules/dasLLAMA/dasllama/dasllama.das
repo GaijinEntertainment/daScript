@@ -22,6 +22,8 @@ require dasllama/dasllama_image   // the prepared-image cache: load_model maps i
 require dasllama/dasllama_prefix public        // page-granular prefix cache over the paged pool
 require dasllama/dasllama_chat public          // layer 2: chat sessions over the same engine
 require dasllama/dasllama_audio public         // audio tower (mel frontend + whisper encoder + projectors)
+require dasllama/dasllama_vision public        // image preprocessing rail (geometry, letterbox, normalize)
+require dasllama/dasllama_gemma4uv public      // gemma4uv vision embedder (image soft tokens)
 require dasllama/dasllama_asr public           // uniform ASR surface (whisper today; parakeet/qwen3-asr land behind the same sniff)
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
 require dasllama/dasllama_math                 // setup_dasllama_jobque_ (engine-level, wrapped below, not re-exported)
@@ -145,6 +147,13 @@ def eval_embd(model : Model; var session : Session; embd : array<float>; npos : 
     eval_embd_(model, session, embd, npos)
 }
 
+def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
+    //! ``eval_embd`` for a prompt carrying one NON-CAUSAL image span: rows ``[span_lo, span_hi)``
+    //! prefill with every query attending the whole span, the text around them causally — the
+    //! gemma vision decode shape (mtmd's non-causal media chunk).
+    eval_embd_span_(model, session, embd, npos, span_lo, span_hi)
+}
+
 def create_batch_workspace(model : Model) : BatchWorkspace {
     //! Create the caller-owned scratch that ``eval_batch`` steps through — one per concurrent batch,
     //! reused across calls (buffers grow to the largest batch seen). Holds no session state: the
@@ -193,7 +202,16 @@ def generate_embd(model : Model; var session : Session; embd : array<float>; npo
     //! ``generate``'s embedding-prefill twin: prefill ``npos`` pre-built embedding rows (the
     //! multimodal splice — see ``eval_embd``), then stream-sample exactly like ``generate``. The
     //! chat layer's audio turns run on this; use it directly for custom multimodal prompts.
-    return generate_embd_(model, session, embd, npos, params, max_tokens, blk)
+    return generate_embd_(model, session, embd, npos, params, max_tokens, 0l, 0l, blk)
+}
+
+def generate_embd(model : Model; var session : Session; embd : array<float>; npos : int64;
+                  params : SamplingParams; max_tokens : int64; span_lo, span_hi : int64;
+                  blk : block<(id : int64; piece : string) : bool>) : int64 {
+    //! ``generate_embd`` with a NON-CAUSAL span: rows ``[span_lo, span_hi)`` prefill as an image
+    //! span (every query attends the whole span), the text around them causally — the gemma
+    //! vision decode shape. The chat layer's image turns run on this.
+    return generate_embd_(model, session, embd, npos, params, max_tokens, span_lo, span_hi, blk)
 }
 
 // ===== Embeddings =====
@@ -221,6 +239,13 @@ def create_chat(model : Model; var tower : AudioTower; system : string = ""; max
     return <- create_chat_(model, tower, system, max_new, kv_dtype)
 }
 
+def create_chat(model : Model; var embedder : Gemma4uvEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+    //! Start a VISION-CAPABLE conversation: takes ownership of ``embedder`` (moved in — load with
+    //! ``load_gemma4uv_embedder``) so ``add_user_image`` can splice image soft tokens into its
+    //! turns. Panics on a mismatched decoder/mmproj pair or a family with no image markers.
+    return <- create_chat_(model, embedder, system, max_new, kv_dtype)
+}
+
 def create_chat_renderer(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     //! ``create_chat``'s RENDER-ONLY twin: resolves the template/stop ids/turn close but creates NO
     //! KV session — a queued request can render its whole prompt holding tokens only, no cache
@@ -231,6 +256,13 @@ def create_chat_renderer(model : Model; system : string = ""; max_new : int64 = 
 def add_user(var chat : ChatSession; text : string) {
     //! Queue a user message for the next ``respond``.
     add_user_(chat, text)
+}
+
+def add_user_image(var chat : ChatSession; img : VisionImage) {
+    //! Queue an image for the next ``respond`` — geometry, letterbox and the embedder run NOW,
+    //! spliced at the head of the next user turn. ONE image per turn; needs a chat created with
+    //! ``create_chat(model, embedder)``; call inside ``with_job_que()`` (decode: dasllama_vision_io).
+    add_user_image_(chat, img)
 }
 
 def add_assistant(model : Model; var chat : ChatSession; text : string) {

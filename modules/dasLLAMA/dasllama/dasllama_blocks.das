@@ -1553,6 +1553,38 @@ def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; no
     s.n_past += npos
 }
 
+//! `eval_embd_` for a prompt carrying ONE non-causal image span: rows [span_lo, span_hi) prefill
+//! with the span flag, the text around them causally. Three evals, because the flag is per-call —
+//! the KV cache is identical either way, so only the masks differ (`vision_plan.md` §pipeline).
+def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
+    if (npos <= 0l) {
+        return
+    }
+    if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
+        panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    // each eval reads its own rows from the front of a slice buffer; the source stays untouched
+    var part : array<float>
+    eval_embd_slice_(t, s, embd, 0l, span_lo, false, part)
+    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, part)
+    eval_embd_slice_(t, s, embd, span_hi, npos, false, part)
+    delete part
+}
+
+def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo, hi : int64;
+                             non_causal : bool; var part : array<float>) {
+    let n = hi - lo
+    if (n <= 0l) {
+        return
+    }
+    let dim = t.config.dim
+    part |> resize(n * dim)
+    for (i in range64(n * dim)) {
+        part[i] = embd[lo * dim + i]
+    }
+    eval_embd_(t, s, part, n, non_causal)
+}
+
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
 //! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
 //! FRESH session (no KV history assumed; cache is left filled).
