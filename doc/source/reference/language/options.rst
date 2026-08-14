@@ -214,7 +214,9 @@ Memory
      - A ``resize`` that has to grow an array past this many bytes without a prior
        ``reserve`` panics; ``reserve`` the exact size first, or raise the limit.
        Entry-program option (like ``stack``); also settable at runtime via
-       ``set_max_unreserved_size()``.
+       ``set_max_unreserved_size()``. Unlike the limits above, ``0`` is not
+       "unlimited" — it makes every growing ``resize`` panic; there is no unlimited
+       setting, use a large value.
    * - ``persistent_heap``
      - bool
      - false

@@ -114,12 +114,11 @@ namespace das
             context.throw_error_at(at, "array_resize: newSize exceeds INT64_MAX [newSize=%llu]", (unsigned long long)newSize);
         }
         if ( newSize > arr.capacity ) {
-            // A growing resize this large must be preceded by an explicit reserve (which is
-            // exact-capacity, so a reserved resize never grows). The guard keeps the pow2 slack
-            // below from silently doubling huge one-shot allocations. Divide form: newSize*stride
+            // Without this, the pow2 round-up below silently doubles a huge one-shot allocation;
+            // an exact reserve (never rounded) is the deliberate spelling. Divide: newSize*stride
             // can overflow uint64 (same trick as the array_reserve guard).
             if ( stride && newSize > context.maxUnreservedSize / uint64_t(stride) ) {
-                context.throw_error_at(at, "array resize to %llu elements of stride %u grows past max_unreserved_size (%llu bytes) without a prior reserve; reserve the size first, or raise the max_unreserved_size option",
+                context.throw_error_at(at, "array resize to %llu elements of %u bytes each grows past max_unreserved_size (%llu bytes); reserve the final size first, ensure_capacity for open-ended appends, or raise the max_unreserved_size option",
                     (unsigned long long)newSize, stride, (unsigned long long)context.maxUnreservedSize);
             }
             // Round the capacity up to the next power of two, leaving slack so append-style

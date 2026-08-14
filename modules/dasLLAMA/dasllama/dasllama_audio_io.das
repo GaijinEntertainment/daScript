@@ -23,6 +23,7 @@ def load_audio_16k_mono(path : string) : array<float> {
     let chunk = 16000
     var total = 0
     while (true) {
+        samples |> ensure_capacity(total + chunk)
         samples |> resize(total + chunk)   // grow by a chunk, read straight into the tail
         let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(samples[total])), uint64(chunk)))
         total += got

@@ -219,11 +219,13 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
         }
         arch |> read_raw(len)
         static_if (typeinfo is_workhorse(type<TT>) && typeinfo is_raw(type<TT>)) {
+            value |> reserve(len)   // read side knows the final size: the resize never grows
             value |> resize_no_init(len)
             if (len > 0) {
                 arch.stream->read(unsafe(addr(value[0])), len * typeinfo sizeof(type<TT>))
             }
         } else {
+            value |> reserve(len)
             unsafe(value |> resize(len))
             for (element in value) {
                 arch |> _::serialize(element)

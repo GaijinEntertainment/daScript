@@ -929,9 +929,9 @@ def private store_entity_row(var arch : Archetype; var cmp : ComponentMap; index
     decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = index)
 }
 
-def private grow_components(var arch : Archetype; count : int) {
+def private grow_components(var arch : Archetype; entity_count : int) {
     for (c in arch.components) {
-        let newSize = long_length(c.data) + int64(c.stride) * int64(count)
+        let newSize = long_length(c.data) + int64(c.stride) * int64(entity_count)
         c.data |> ensure_capacity(newSize)
         c.data |> resize(newSize)
     }
@@ -954,7 +954,6 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)
         }
-        // Pre-resize all component arrays for count entities at once
         let base = arch.size
         arch |> grow_components(count)
         // Fill first entity

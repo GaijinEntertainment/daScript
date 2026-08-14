@@ -315,6 +315,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     let tail = int(AUDIO_SAMPLE_RATE * 30l) + head         // 30 s zeros + 200
     let n_padded = head + n_base + tail
     var padded : array<float>
+    padded |> reserve(n_padded)
     padded |> resize(n_padded)                             // resize zero-fills
     for (i in range(n_in)) {
         padded[head + i] = samples[i]
@@ -332,7 +333,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
 
     // windowed frames [n_len × n_fft]
     var xw : array<float>
-    xw |> resize(int(n_len * n_fft))
+    xw |> reserve_resize(int(n_len * n_fft))
     for (i in range64(n_len)) {
         let off = i * AUDIO_HOP
         for (j in range64(n_fft)) {
@@ -342,6 +343,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
 
     // DFT as one GEMM: [n_len × n_fft] · [n_fft × 2·n_bins] -> interleaved re/im
     var reim : array<float>
+    reim |> reserve(int(n_len * n_bins * 2l))
     reim |> resize(int(n_len * n_bins * 2l))               // gemm accumulates: starts zeroed
     gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
              n_len, n_fft, n_bins * 2l)
@@ -350,6 +352,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     let mel_floor = 5.960464477539063e-08lf                // 2^-24, mtmd filter_params default
     let log10_e = 0.43429448190325176lf
     var mel : array<float>
+    mel |> reserve(int(n_mel * n_len))
     mel |> resize(int(n_mel * n_len))                      // mel-major [n_mel][n_len]
     var power : array<float>
     power |> resize(int(n_bins))
@@ -1080,10 +1083,10 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
         qtotal += pq1 ? (t.proj_kind == AudioProjKind.qwen2a ? t.proj_dim * d : t.mm1_out * m1in) : 0l
         qtotal += pq2 ? t.proj_dim * m2in : 0l
     }
-    qblob |> resize(qtotal)
-    qscales |> resize(qtotal / 32l)
+    qblob |> reserve_resize(qtotal)
+    qscales |> reserve_resize(qtotal / 32l)
     var nf : array<float>
-    nf |> resize(long_length(fblob) - qtotal)
+    nf |> reserve_resize(long_length(fblob) - qtotal)
     var og = 0l
     var of = 0l
     if (has_conv) {   // conv1 always stays fp32 (3·n_mel contraction; served via mm_blob_b)
@@ -1200,7 +1203,7 @@ def private tw_mm_rq(t : AudioTower; var y : array<float>; woff : int64; x : arr
 def private load_conv_permuted(m : GGUFMeta; bytes : array<uint8> | #; name : string;
                                var blob : array<float>; off : int64; c_out, c_in : int64) {
     var raw : array<float>
-    raw |> resize(int(c_out * c_in * 3l))
+    raw |> reserve_resize(int(c_out * c_in * 3l))
     gguf_read_tensor_f32(m, bytes, name, raw, 0l, c_out * c_in * 3l)
     for (o in range64(c_out)) {
         for (c in range64(c_in)) {
@@ -1335,7 +1338,7 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
             st.e.proj_w_off = o; o += st.e.mm1_out * mm1_in
             st.e.mm2_w_off = o; o += st.e.proj_dim * st.e.mm1_out
         }
-        st.fblob |> resize(o)
+        st.fblob |> reserve_resize(o)
 
         load_conv_permuted(m, bytes, "a.conv1d.1.weight", st.fblob, st.e.conv1_w_off, d, nm)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.bias", st.fblob, st.e.conv1_b_off, d)
@@ -1425,22 +1428,22 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     s.hp |> resize(4l * tt * d)
     s.att |> resize(int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt)
     s.h |> resize(tt * t.n_ff)
-    s.pooled |> resize(tt / 2l * d)
+    s.pooled |> reserve_resize(tt / 2l * d)
     let rows = audio_tokens_per_chunk(t)
     if (t.proj_kind != AudioProjKind.qwen2a) {
-        s.ph |> resize(rows * t.mm1_out)
+        s.ph |> reserve_resize(rows * t.mm1_out)
         if (t.proj_kind == AudioProjKind.ultravox) {
-            s.pg |> resize(rows * t.mm1_out / 2l)
+            s.pg |> reserve_resize(rows * t.mm1_out / 2l)
         }
     }
-    s.out |> resize(rows * t.proj_dim)
+    s.out |> reserve_resize(rows * t.proj_dim)
     if (t.q8) {   // largest requant image any tower GEMM feeds (conv2 3d / fc2 ff / projector mats)
         var need = tt * max(3l * d, t.n_ff)
         if (t.proj_dim > 0l && t.proj_kind != AudioProjKind.qwen2a) {
             need = max(need, rows * max(d * t.stack_factor, t.mm1_out))
         }
-        s.xqi |> resize(need)
-        s.xsi |> resize(need / 32l)
+        s.xqi |> reserve_resize(need)
+        s.xsi |> reserve_resize(need / 32l)
     }
     return <- s
 }

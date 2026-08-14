@@ -435,7 +435,7 @@ def private wt_read(recs : table<string; WTensorRec>; b : array<uint8> | #; name
 def private wt_read_conv_permuted(recs : table<string; WTensorRec>; b : array<uint8> | #; name : string;
                                   var blob : array<float>; off : int64; c_out, c_in : int64) {
     var raw : array<float>
-    raw |> resize(int(c_out * c_in * 3l))
+    raw |> reserve_resize(int(c_out * c_in * 3l))
     wt_read(recs, b, name, raw, 0l, c_out * c_in * 3l)
     for (o in range64(c_out)) {
         for (c in range64(c_in)) {
@@ -598,7 +598,7 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             continue if (!qz)
         }
         if (long_length(scratch) < j.n) {
-            scratch |> resize(int(j.n))
+            scratch |> grow_resize(int(j.n))
         }
         wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
         if (kind == 0) {
@@ -608,8 +608,8 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             continue
         }
         if (long_length(q8s) < j.n) {
-            q8s |> resize(int(j.n))
-            qss |> resize(int(j.n / 32l))
+            q8s |> grow_resize(int(j.n))
+            qss |> grow_resize(int(j.n / 32l))
         }
         quantize_q8_0_into(scratch, j.n, q8s, qss, 0l, 0l)
         if (rep) {

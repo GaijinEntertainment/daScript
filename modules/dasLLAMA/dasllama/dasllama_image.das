@@ -384,6 +384,7 @@ def w_zeros(var w : ImgWriter; n : uint64) {
         return
     }
     var z : array<uint8>
+    z |> reserve(int64(n))
     z |> resize(int64(n))
     unsafe {
         w_append(w, addr<void?>(z[0]), n)
@@ -496,6 +497,7 @@ def private serialize_pod_array(var arch : Archive; var a : array<auto(TT)>) {
     var n = length(a)
     arch |> serialize_raw(n)
     if (arch.reading) {
+        a |> reserve(n)
         a |> resize(n)
     }
     if (n > 0) {
@@ -524,6 +526,7 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
             lens |> push(n)
             total += n
         }
+        blob |> reserve(total)
         blob |> resize(total)
         var at = 0
         for (v in a) {
@@ -1085,6 +1088,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     }
     // the meta blob is the ONE copied+parsed piece (small); planes stay lazy in the mapping
     var meta_blob : array<uint8>
+    meta_blob |> reserve(int(meta_bytes))
     meta_blob |> resize(int(meta_bytes))
     unsafe {
         memcpy(addr(meta_blob[0]), reinterpret<void?>(bp + int64(meta_off)), meta_bytes)
@@ -1331,6 +1335,7 @@ def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var section
     w_zeros(w, at - w.cur)
     let ts = ref_time_ticks()
     var band : array<uint8>
+    band |> reserve(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
     band |> resize_no_init(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
     var b0 = 0l
     while (b0 < sh.blocks && w.ok) {

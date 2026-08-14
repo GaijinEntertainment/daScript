@@ -1,14 +1,12 @@
 #include <doctest/doctest.h>
 
 #include "daScript/daScript.h"
+#include "daScript/daScriptC.h"
 
 using namespace das;
 
-// The unreserved-resize guard through the host-embedding path: CodeOfPolicies::
-// max_unreserved_size flows Program::simulate -> Context, a bare growing resize past it
-// throws, and an exact reserve first passes at any size. The das-side twin
-// (tests/language/max_unreserved_size.das) covers the `options` spelling and the
-// runtime get/set calls; this covers the policy one.
+// The policy path: CodeOfPolicies::max_unreserved_size -> Context via Program::simulate.
+// The `options` spelling and the runtime get/set live in tests/language/max_unreserved_size.das.
 
 namespace {
 
@@ -53,4 +51,28 @@ TEST_CASE("max_unreserved_size flows from CodeOfPolicies to the context") {
         ctx.evalWithCatch(fn, nullptr);
         CHECK(ctx.getException() == nullptr);
     }
+}
+
+TEST_CASE("DAS_POLICY_MAX_UNRESERVED_SIZE reaches the context through the C API") {
+    das_text_writer * tout = das_text_make_printer();
+    das_module_group * mg = das_modulegroup_make();
+    das_file_access * fa = das_fileaccess_make_default();
+    das_fileaccess_introduce_file(fa, "policy_main.das", SRC, 1);
+    das_policies * pol = das_policies_make();
+    REQUIRE(das_policies_set_int(pol, DAS_POLICY_MAX_UNRESERVED_SIZE, 65536) == 1);
+    das_program * prog = das_program_compile_policies((char*)"policy_main.das", fa, tout, mg, pol);
+    REQUIRE(prog);
+    REQUIRE(das_program_err_count(prog) == 0);
+    das_context * ctx = das_context_make(das_program_context_stack_size(prog));
+    REQUIRE(das_program_simulate(prog, ctx, tout));
+    das_function * fn = das_context_find_function(ctx, "bare_resize");
+    REQUIRE(fn);
+    das_context_eval_with_catch(ctx, fn, nullptr);
+    CHECK(das_context_get_exception(ctx) != nullptr);
+    das_context_release(ctx);
+    das_program_release(prog);
+    das_policies_release(pol);
+    das_fileaccess_release(fa);
+    das_modulegroup_release(mg);
+    das_text_release(tout);
 }

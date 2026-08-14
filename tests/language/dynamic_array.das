@@ -42,8 +42,11 @@ def test_dynamic_array(t : T?) { // nolint:STYLE038 — flat list of independent
         t |> equal(length(arr), 4)
     }
     t |> run("resize rounds capacity to the next power of two") @(t : T?) {
+        var min : array<int>
+        resize(min, 3)                  // below the floor -> min capacity 16
+        t |> equal(capacity(min), 16)
         var tiny : array<int>
-        resize(tiny, 63)                // rounds UP to the next pow2 (min capacity 16)
+        resize(tiny, 63)                // rounds UP to the next pow2
         t |> equal(capacity(tiny), 64)
         var big : array<int>
         resize(big, 65)                 // pow2 slack keeps append-by-resize amortized O(1)

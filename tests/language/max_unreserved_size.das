@@ -2,6 +2,16 @@ options gen2
 options max_unreserved_size = 65536
 
 require dastest/testing_boost
+require strings
+require daslib/archive
+
+let LIMIT = 65536
+
+struct Empty {}
+
+struct BigPayload {
+    samples : array<uint8>
+}
 
 // The unreserved-resize guard: a resize that has to GROW past max_unreserved_size bytes
 // panics; a prior exact reserve means the resize never grows, so it passes at any size.
@@ -13,7 +23,7 @@ def test_unreserved_resize_panics(t : T?) {
         var failed = false
         try {
             var a : array<uint8>
-            a |> resize(65537)
+            a |> resize(LIMIT + 1)
         } recover {
             failed = true
         }
@@ -23,7 +33,7 @@ def test_unreserved_resize_panics(t : T?) {
         var failed = false
         try {
             var a : array<uint8>
-            a |> resize_no_init(65537)
+            a |> resize_no_init(LIMIT + 1)
         } recover {
             failed = true
         }
@@ -33,7 +43,7 @@ def test_unreserved_resize_panics(t : T?) {
         var failed = false
         try {
             var a : array<uint8>
-            a |> resize(65537l)
+            a |> resize(int64(LIMIT) + 1l)
         } recover {
             failed = true
         }
@@ -43,7 +53,7 @@ def test_unreserved_resize_panics(t : T?) {
         var failed = false
         try {
             var a : array<int>
-            a |> resize(20000)          // 80000 bytes: the threshold is bytes, not elements
+            a |> resize(LIMIT / 4 + 1)  // one int past the threshold: it counts bytes, not elements
         } recover {
             failed = true
         }
@@ -76,6 +86,42 @@ def test_reserved_and_small_resizes_pass(t : T?) {
         t |> equal(length(a), 210000)
         t |> success(capacity(a) >= 210000)
     }
+    t |> run("zero-stride elements never trip the guard") @(t : T?) {
+        var a : array<Empty>
+        a |> resize(1000000)            // 0 bytes total: the stride sub-guard skips
+        t |> equal(length(a), 1000000)
+    }
+    t |> run("to_bytes reserves exactly past the threshold") @(t : T?) {
+        let s = repeat("abcdefgh", 16384)   // 128 KB, past the 64 KB limit
+        let b <- to_bytes(s)
+        t |> equal(length(b), 131072)
+        t |> equal(capacity(b), 131072)     // exact reserve, no pow2 round-up
+    }
+    t |> run("binary_load reserves exactly past the threshold") @(t : T?) {
+        var src : BigPayload
+        src.samples |> reserve(200000)
+        src.samples |> resize(200000)
+        var dst : BigPayload
+        binary_save(src) <| $(data) {
+            binary_load(dst, data)
+        }
+        t |> equal(length(dst.samples), 200000)
+        delete src
+        delete dst
+    }
+    t |> run("MemSerializer.write appends past the threshold") @(t : T?) {
+        var src : BigPayload
+        src.samples |> reserve(200000)
+        src.samples |> resize(200000)
+        var bytes <- mem_archive_save(src)
+        t |> success(length(bytes) > 200000, "the archive carries the payload")
+        var back : BigPayload
+        mem_archive_load(bytes, back)
+        t |> equal(length(back.samples), 200000)
+        delete src
+        delete back
+        delete bytes
+    }
     t |> run("shrink never panics regardless of size") @(t : T?) {
         var a : array<uint8>
         a |> reserve(200000)
@@ -90,13 +136,13 @@ def test_reserved_and_small_resizes_pass(t : T?) {
 [test]
 def test_max_unreserved_size_api(t : T?) {
     t |> run("option, getter, and runtime setter agree") @(t : T?) {
-        t |> equal(max_unreserved_size(), 65536ul)
-        set_max_unreserved_size(1048576ul)
-        t |> equal(max_unreserved_size(), 1048576ul)
+        t |> equal(max_unreserved_size(), uint64(LIMIT))
+        set_max_unreserved_size(uint64(LIMIT * 16))
+        t |> equal(max_unreserved_size(), uint64(LIMIT * 16))
         var ok : array<uint8>
         ok |> resize(100000)            // under the raised limit now
         t |> equal(length(ok), 100000)
-        set_max_unreserved_size(65536ul)
+        set_max_unreserved_size(uint64(LIMIT))
         var failed = false
         try {
             var a : array<uint8>

@@ -701,8 +701,10 @@ struct Q8Tensor {
 def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
     var qt : Q8Tensor
     qt.n = n
+    qt.q |> reserve(n)
     qt.q |> resize(n)
     let nblocks = (n + QK8 - 1l) / QK8
+    qt.scales |> reserve(nblocks)
     qt.scales |> resize(nblocks)
     for (b in range64(nblocks)) {
         let base = b * QK8
@@ -905,8 +907,10 @@ def quantize_q4_0(src : array<float> | #; n : int64) : Q4Tensor {
     let half = QK4 / 2l  // 16 packed bytes per 32-weight block
     var qt : Q4Tensor
     qt.n = n
+    qt.q |> reserve(n / 2l)
     qt.q |> resize(n / 2l)
     let nblocks = n / QK4
+    qt.scales |> reserve(nblocks)
     qt.scales |> resize(nblocks)
     for (b in range64(nblocks)) {
         let base = b * QK4

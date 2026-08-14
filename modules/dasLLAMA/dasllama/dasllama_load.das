@@ -722,16 +722,16 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         let sh = stream_job_shape(t, j)
         stream_zero_fill(stream_job_qoff(t, j) - cursor, zeros, append)
         cursor = stream_job_qoff(t, j) + sh.qb
-        temp_q |> resize(int(sh.qb))
+        temp_q |> grow_resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = ""
         if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
-            temp_s |> resize(int(sh.sb))
+            temp_s |> grow_resize(int(sh.sb))
             kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
         } else {
             // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
-            temp_q8 |> resize(int(j.n))
-            temp_sf |> resize(int(j.n / 32l))
+            temp_q8 |> grow_resize(int(j.n))
+            temp_sf |> grow_resize(int(j.n / 32l))
             kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
         }
         conv_note(kind, t0, j.n)

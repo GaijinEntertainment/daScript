@@ -186,8 +186,8 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     // int-indexed destinations: a >2GB plane would resize truncated and then memcpy past it
     assert(e.wq_bytes <= 2_147_483_647l && e.ws_bytes <= 2_147_483_647l,
         "vulkan image: a baked plane exceeds the int-indexed array cap")
-    wq |> resize(e.wq_bytes)
-    ws |> resize(e.ws_bytes)
+    wq |> grow_resize(e.wq_bytes)
+    ws |> grow_resize(e.ws_bytes)
     unsafe {
         // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
         if (e.wq_bytes > 0l) {

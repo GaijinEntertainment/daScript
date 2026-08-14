@@ -36,8 +36,8 @@ require daslib/apply  // the Model finalizer + the image save/load walk both ite
 // (the embedding table + the norm weights, which forward always reads as fp32) and the big 2D
 // weight matrices (attn q/k/v/o, ffn gate/down/up, untied classifier). Only the big weights are
 // quantized, and only ONE representation is held — so a Q8 model never materializes the fp32
-// weights ("load as stored"). All big-weight arrays are reserve()'d to exact size to avoid the
-// allocator's power-of-2 rounding.
+// weights ("load as stored"). All big-weight arrays are reserve()'d to exact size — no pow2
+// slack, and a reserved resize never trips max_unreserved_size.
 
 //! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
 //! q8 selects the fast integer rails (K-quant / mxfp4 / Q4_0 files keep their native planes);
@@ -1094,7 +1094,7 @@ def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
-// Reserve exact capacity then size — avoids the array allocator's power-of-2 rounding on big arrays.
+// Exact reserve then size — no pow2 slack, and the reserved resize never trips max_unreserved_size.
 def reserve_resize(var a : array<auto(numT)>; n : int | int64) {
     a |> reserve(n)
     a |> resize(n)
