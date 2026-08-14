@@ -483,6 +483,12 @@ picks its own number is a defect, and so is a new root that omits the declaratio
 require `dasllama/` and export `main`; `tests/test_program_roots.das` enforces exactly that, plus
 prefill intent for model-loading roots (`ARCHITECTURE.md` §2.8).
 
+**A root that cannot recover from a panic declares its engine intent in code, not by side effect.**
+The CPU-prefill guard is a profiling tripwire that PANICS, so a long-running server or service reaches
+it and takes every live stream down with it; such a root calls `allow_cpu_prefill()` explicitly on the
+arms that will hit it and logs, once, which configuration it ended up on. `set_metal_mode(x)` with a
+runtime value declares nothing — `MetalMode.off` leaves the guard armed.
+
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is a
 defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose value
 feeds logic is marked `// clock: control`. The rails and the carve-outs (`benchmarks/`,

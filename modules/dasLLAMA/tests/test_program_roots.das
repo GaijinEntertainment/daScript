@@ -35,6 +35,12 @@ def private das_files_of(dir_path : string) : array<string> {
     return <- files
 }
 
+// the scan reads CODE, so a tail comment can never stand in for a declaration
+def private strip_comment(line : string) : string {
+    let at = find(line, "//")
+    return at < 0 ? line : slice(line, 0, at)
+}
+
 [test]
 def test_program_roots(t : T?) {
     t |> run("dasllama program roots declare the stack and their prefill intent") @(t : T?) {
@@ -52,13 +58,21 @@ def test_program_roots(t : T?) {
                     has_main ||= (line |> starts_with("def main")) || (line |> starts_with("def main("))
                     has_stack ||= line |> starts_with(STACK_LINE)
                     loads_model ||= find(line, "load_model(") >= 0 || find(line, "load_asr_model(") >= 0 || find(line, "load_audio_tower(") >= 0
-                    has_intent ||= find(line, "allow_cpu_prefill(") >= 0 || find(line, "set_metal_mode(") >= 0
+                    // CODE only: every root's `allow_cpu_prefill()` carries a tail comment that
+                    // NAMES set_metal_mode, so scanning the raw line would let the comment stand in
+                    // for the declaration. And a bare `set_metal_mode(x)` declares nothing the
+                    // runtime honors — MetalMode.off leaves the CPU-prefill guard armed, which is
+                    // fatal, so only a literal GPU mode counts.
+                    let code = strip_comment(line)
+                    let gpu_pin = (find(code, "set_metal_mode(") >= 0
+                        && (find(code, "MetalMode.when_available") >= 0 || find(code, "MetalMode.required") >= 0))
+                    has_intent ||= find(code, "allow_cpu_prefill(") >= 0 || gpu_pin
                 }
                 continue if (!requires_dasllama || !has_main)
                 checked++
                 t |> success(has_stack, "{path}: a dasllama program root declares `{STACK_LINE}`")
                 if (loads_model) {
-                    t |> success(has_intent, "{path}: a model-loading root declares prefill intent (allow_cpu_prefill / set_metal_mode)")
+                    t |> success(has_intent, "{path}: a model-loading root declares prefill intent (allow_cpu_prefill(), or set_metal_mode with a literal GPU mode)")
                 }
             }
         }

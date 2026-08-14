@@ -775,6 +775,15 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         metal_mode = MetalMode.off   // gpu = off | vulkan both keep metal out
     }
     set_metal_mode(metal_mode)
+    if (metal_mode == MetalMode.off) {
+        // A server cannot answer a request by dying. The Metal-build CPU-prefill guard is a
+        // PROFILING tripwire — it exists so a batched prefill never sinks time on the CPU
+        // unnoticed — and its panic would take the process down mid-stream, killing every other
+        // live stream with it. Serving on the CPU arm is a legitimate configuration, so say so
+        // once, out loud, and name the flag that moves it to the GPU.
+        allow_cpu_prefill()
+        to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
+    }
     to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
     if (gpu == "vulkan") {
         // shexp rides the blessed shape: the resident shared expert measured +8.3% on decode

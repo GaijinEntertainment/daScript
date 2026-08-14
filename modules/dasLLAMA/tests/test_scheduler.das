@@ -572,6 +572,56 @@ def test_scheduler_mtp(t : T?) {
     }
 }
 
+// ===== paged + SAMPLED: the combination the server actually serves =====
+
+// The seeded-sampling equivalence arm above runs a FLAT scheduler, and the paged arm above runs
+// GREEDY — so paged-and-sampled, which is exactly what dasllama-server does on every request that
+// sets a temperature, had no gate. A sampled stream consults the RNG once per token, so any extra
+// or missing sample() call in the paged path shows up as a diverged stream, not as a crash.
+[test]
+def test_scheduler_paged_sampled(t : T?) {
+    t |> run("paged scheduler, seeded sampling: stream == generate() (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_capped(128l)
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the warm run re-chunks (tail-only)
+            var prompt <- encode(m, "Once upon a time in a small village near the mountains there lived a very curious little robot who loved counting stars", true, false)
+            var none : array<int64>
+            let sp = SamplingParams(temp = 0.8, top_k = 40l)
+            var ref <- ref_generate(m, prompt, sp, 12l, none, 4242)
+            t |> success(!empty(ref.toks), "the sampled reference produced tokens")
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 16l)   // paged, P=16, unbounded prefix cache
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, sp, 12l, none, 4242)), "cold sampled stream queued")
+            drain(m, sch, events)
+            var cold <- toks_of(events, 1l)
+            t |> equal(finished_of(events, 1l).n_cached, 0l)
+            t |> success(same(cold, ref.toks), "paged cold sampled stream == generate()")
+            // and again over a WARM cache: the attach must not perturb the sampler either
+            events |> clear()
+            t |> success(submit(m, sch, make_req(2l, prompt, sp, 12l, none, 4242)), "warm sampled stream queued")
+            drain(m, sch, events)
+            var warm <- toks_of(events, 2l)
+            t |> success(finished_of(events, 2l).n_cached > 0l, "the warm run attached cached pages")
+            t |> success(same(warm, ref.toks), "paged WARM sampled stream == generate()")
+            set_prefill_attn_mode(saved_mode)
+            delete cold
+            delete warm
+            delete events
+            unsafe {
+                delete sch
+            }
+            delete ref
+            delete prompt
+            delete m
+        }
+    }
+}
+
 // ===== media splice: soft-token rows prefill between two token spans =====
 
 // Build a media request whose ROWS are the prompt's own embedding rows for [lo, hi): the tokens

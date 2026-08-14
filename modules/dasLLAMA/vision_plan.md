@@ -246,7 +246,7 @@ invariant — a transposed patch grid is only visible per-token).
   the two `*_bf16` meta flags describe the layout completely.
 - **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
   PERF_LEDGER entry, this findings section, predictions scored.
-- **K. The bug-fix round — everything the arc surfaced, with a test each.** An arc that walks
+- **K. The bug-fix round — everything the arc surfaced, with a test each (DONE 2026-08-14).** An arc that walks
   a new path through a live product finds defects that were already there; this slice is where
   they get fixed instead of ledgered. Standing entries:
   (1) **`dasllama-server` with default flags panics and EXITS on the first real prompt on a
@@ -257,6 +257,21 @@ invariant — a transposed patch grid is only visible per-token).
   (2) **`test_program_roots.das` accepts a bare `set_metal_mode(` as declaring prefill intent** —
   the detector cannot see the argument, so it passes while the program dies. It is the drift
   detector for exactly this failure, so a hole in it is a defect in the detector.
+  **Both fixed.** The detector now reads CODE (a tail comment naming `set_metal_mode` can no longer
+  stand in for the declaration — every root's real call carries exactly such a comment) and accepts
+  `set_metal_mode` only with a literal GPU mode; its negative control lands on `main.das` alone.
+  `main.das` declares `allow_cpu_prefill()` on the metal-off arm and logs which arm it ended up on.
+  Proven live: the 190-token prompt that killed the server now serves, zero panics.
+  **One suspicion investigated and DISMISSED**: sampled turns through the server looked garbled
+  ("hits hits", "shorterer shorter") where the engine looked clean. It was sampling variance on a
+  Q4_K_M 12B — an identical seeded A/B (server vs `create_chat`+`respond`) is coherent on both
+  sides, and `ask.das` reproduces the "garbled" raw-prompt case exactly. What the chase DID find
+  is a coverage hole: the seeded-sampling equivalence arm ran a FLAT scheduler and the paged arm ran
+  GREEDY, so paged-and-sampled — what the server does on every request with a temperature — had no
+  gate. It has one now (cold and warm, both bit-exact vs `generate()`), and it passes.
+  Still open, unproven, reported not fixed: a `--gpu metal` run rejected a CPU-tuned sidecar and
+  re-tuned, logging "is untuned on this box" — plausibly correct (a metal arm wants different
+  winners) but the message does not say so.
 - **J. The image turn joins the profiling app — and NO separate benches, ever.** Model-level
   image timing (ttft, prefill, decode; CPU and Metal arms) becomes a cell in the documented
   rig (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
