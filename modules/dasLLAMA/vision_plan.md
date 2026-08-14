@@ -272,7 +272,9 @@ invariant — a transposed patch grid is only visible per-token).
   Still open, unproven, reported not fixed: a `--gpu metal` run rejected a CPU-tuned sidecar and
   re-tuned, logging "is untuned on this box" — plausibly correct (a metal arm wants different
   winners) but the message does not say so.
-- **J. The image turn joins the profiling app — and NO separate benches, ever.** Model-level
+- **J. The image turn joins the profiling app — and NO separate benches, ever (DONE 2026-08-14:
+  `lcpp_bench --image`, three keys `img:enc` / `img:pp` / `img:tg`, `workload = "image-chat"`,
+  documented in `PROFILE.md`; measured on the M1 Max at enc 53.8 ms, pp 63.5 tok/s, tg 14.3 tok/s).** Model-level
   image timing (ttft, prefill, decode; CPU and Metal arms) becomes a cell in the documented
   rig (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
   sidecar resolution, noise probes and box/engine provenance; embedder-only timing takes the

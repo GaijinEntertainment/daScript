@@ -13,6 +13,11 @@ require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see 
 require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe (narrower than the full facade; it requires the transformer umbrella itself)
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
+require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
+require dasllama/dasllama_gemma4uv   // --image: the vision embedder + encode_image_
+require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
+require dasllama/dasllama_vision_io   // --image: decode the picture to RGB8
+require dasllama/dasllama_sampling   // --image: generate_embd_ over the spliced prompt
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
@@ -129,6 +134,16 @@ struct Args {
 
     @clarg_doc = "ASR cell mode: -m becomes a CATALOG substring (display name or das_model), not a path. Times transcribe best-of--r over the model's corpus buckets and emits the same BenchModel cell the LLM rows use"
     asr : bool
+
+    @clarg_doc = "Image cell mode: the image TURN on -m (a vision decoder path) — embedder encode, the spliced prefill, and decode, as one image-chat cell. Needs --image-mmproj"
+    image : string
+
+    @clarg_name = "image-mmproj"
+    @clarg_doc = "Image cell: the vision mmproj (gemma4uv) paired with -m"
+    image_mmproj : string
+
+    @clarg_doc = "Image cell: the question asked about the picture (default: a short describe prompt)"
+    image_prompt : string = ""
 
     @clarg_doc = "Tokenizer cell mode: encode/decode throughput of -m's tokenizer over corpus x size ladders (no weights loaded; txt output only; --ref here is a llama-tokenize binary)"
     tok : bool
@@ -318,6 +333,144 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
     }
     if (!found) {
         print("lcpp_bench --asr: no catalog model matches '{model}'\n")
+        return false
+    }
+    let text = sprint_json(jsonModels, true)
+    if (!empty(json_path)) {
+        var wrote = false
+        fopen(json_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, text)
+                wrote = true
+            }
+        }
+        if (!wrote) {
+            print("warning: could not open {json_path} for writing - no records file\n")
+        }
+    }
+    print("{text}\n")
+    return true
+}
+
+// ===== Image cell mode (--image) =====
+// The vision sibling of the ASR cell: ONE process, one tune-key demand, one image-identity stamp.
+// An image turn is a decoder turn with a soft-token span spliced in, so the numbers a user waits
+// on are the ordinary ones (prefill, decode) plus the embedder's own encode split — which is why
+// this is a cell here and not a bench beside the rig.
+
+// Best-of-`reps` for one image turn: `enc_ms` is the embedder alone, `pp_tok_s` the spliced
+// prefill (head tokens + soft-token rows + tail tokens, all positions), `tg_tok_s` the decode.
+// `text` carries the LAST rep's reply — a duration alone cannot tell "faster" from "said less".
+def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : VisionImage;
+                               prompt : string; reps : int; var enc_ms : double&;
+                               var pp_tok_s : double&; var tg_tok_s : double&;
+                               var n_rows : int64&; var text : string&) {
+    enc_ms = 1.0e30lf
+    pp_tok_s = 0.0lf
+    tg_tok_s = 0.0lf
+    var st = Gemma4uvState()
+    var rows : array<float>
+    for (_rep in range(reps)) {
+        let t_enc = ref_time_ticks()
+        n_rows = encode_image_(emb, st, img, "bench", rows)
+        enc_ms = min(enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
+        var chat <- create_chat_(m, "", 32l)
+        set_thinking_(chat, false)   // the timed shape is the answer, not a scratchpad
+        add_user_(chat, prompt)
+        var head : array<int64>
+        var tail : array<int64>
+        render_turn_image_(m, chat, head, tail)
+        let dim = m.config.dim
+        let n_head = long_length(head)
+        let npos = n_head + n_rows + long_length(tail)
+        var embd : array<float>
+        embd |> resize(npos * dim)
+        embed_text_rows(m, head, embd, 0l)
+        for (i in range64(n_rows * dim)) {
+            embd[n_head * dim + i] = rows[i]
+        }
+        embed_text_rows(m, tail, embd, n_head + n_rows)
+        var parts : array<string>
+        // the same stop protocol respond_ runs: without it a stray channel marker rides into the
+        // timed text, and the row would price a reply the product would never have shown
+        var stops <- effective_stop_ids_(chat)
+        generate_embd_(m, chat.session, embd, npos, SamplingParams(), 32l, n_head, n_head + n_rows) $(id, piece) {
+            for (sid in stops) {
+                return false if (id == sid)
+            }
+            parts |> push(piece)
+            return true
+        }
+        delete stops
+        let sres = stats_(chat.session)
+        pp_tok_s = max(pp_tok_s, sres.prefill_tps)
+        tg_tok_s = max(tg_tok_s, sres.gen_tps)
+        text = join(parts, "")
+        delete parts
+        delete embd
+        delete head
+        delete tail
+        delete chat
+    }
+    delete rows
+    delete st
+}
+
+// The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
+def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int) : bool {
+    allow_cpu_prefill()   // the image cell is CPU by protocol — disarm the Metal-build tripwire
+    apply_box_profile_runtime()
+    if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
+        return false
+    }
+    for (p in [model, mmproj, image]) {
+        if (!stat(p).is_valid) {
+            print("lcpp_bench --image: missing input '{p}'\n")
+            return false
+        }
+    }
+    let ask = empty(prompt) ? "What is in this picture? Answer in one sentence." : prompt
+    var jsonModels : array<BenchModel>
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var m <- load_model_cached(model, QuantMode.q8)
+        var emb <- load_gemma4uv_embedder(mmproj)
+        var pic <- load_image_rgb(image)
+        if (pic.width == 0) {
+            print("lcpp_bench --image: could not decode '{image}'\n")
+        } else {
+            var enc = 0.0lf
+            var pp = 0.0lf
+            var tg = 0.0lf
+            var rows = 0l
+            var text = ""
+            measure_image_turn(m, emb, pic, ask, 1, enc, pp, tg, rows, text)   // warm: JIT + first touch
+            measure_image_turn(m, emb, pic, ask, reps, enc, pp, tg, rows, text)
+            var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
+                exec_fmt = model_exec_fmt(m),
+                workload = "image-chat", box = box_name(), threads = threads,
+                date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
+                sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
+                dasllama_version = DASLLAMA_VERSION,
+                tune = tune_summary(), tune_sha = tune_manifest_sha(), noise = tune_manifest_noise(),
+                hardware = gather_hardware(),
+                files <- [file_identity(model, "weights"), file_identity(mmproj, "mmproj"),
+                          file_identity(image, "image")])
+            run.tests |> insert("img:enc", BenchTest(ms = enc))
+            run.tests |> insert("img:pp", BenchTest(tok_s = pp))
+            run.tests |> insert("img:tg", BenchTest(tok_s = tg, text = text))
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {rows} soft tokens | enc {enc} ms | pp {pp} tok/s | tg {tg} tok/s\n")
+            print("  text: {text}\n")
+            var cell = BenchModel(gguf = base_name(model), arch = "gemma4uv",
+                                  size_bytes = int64(stat(model).size))
+            cell.runs |> emplace(run)
+            jsonModels |> emplace(cell)
+        }
+        delete pic
+        delete emb
+        delete m
+    }
+    if (empty(jsonModels)) {
         return false
     }
     let text = sprint_json(jsonModels, true)
@@ -1001,6 +1154,14 @@ def main() : int {
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
         return asr_cell_main(cfg.model, cfg.json_path, reps, threads) ? 0 : 1
+    }
+    if (!empty(cfg.image)) {   // the vision cell, same deal
+        if (empty(cfg.image_mmproj)) {
+            print("--image needs --image-mmproj (the gemma4uv embedder paired with -m)\n")
+            return 1
+        }
+        return image_cell_main(cfg.model, cfg.image_mmproj, cfg.image, cfg.image_prompt,
+                               cfg.json_path, reps, threads) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag

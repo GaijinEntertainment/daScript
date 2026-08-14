@@ -31,11 +31,19 @@ what it costs today and what the fix would change.
   allocation and no processing at load; the embedder's `blob : array<float>` is the second,
   array-owning shape `dasllama_audio.das` explicitly refuses to maintain. What it buys is RSS
   (mapped pages are shared and evictable across processes; a 190 MB owned bf16→f32 widening is
-  neither) and zero load-time work — not the 30 ms. Plane FORMAT is open and precedes the
-  serializer: f32 is a single slow path rather than a serving format, and bf16 converted
-  in-tile is the likely long-term answer. **What reopens the quantized half:** a family whose
-  vision side is a real ViT (the E-series `gemma4v` tower — 16 attention blocks, not two
-  GEMMs), or batch image serving, where per-image cost stops hiding behind one prefill.
+  neither) and zero load-time work — not the 30 ms. **Both are DONE (2026-08-14, the same arc's slices I and J).** The rail
+  landed: the embedder stages, mints and maps like the audio towers, and the prepared image maps
+  in 0–1 ms. Plane format settled as **per-GEMM, following each source tensor's on-disk type** —
+  and the premise that the mmproj is uniformly bf16 was HALF WRONG: gemma-4's shipped "BF16"
+  mmproj carries an **F32** patch embedder (26.5M params) and a **BF16** projection (14.7M), so a
+  both-or-neither rule bought nothing. Per-GEMM gives 200 MB → 170 MB with tier-1 unmoved to the
+  ulp (2.098e-05 before and after) — the bit-for-bit claim about `dot_bf16`'s widen, confirmed.
+  Rounding the F32 half down would cost ~0.2% relative, two orders over the tier-1 gate, so it
+  stays fp32. The turn is also a rig cell now (`lcpp_bench --image`: `img:enc` 53.8 ms,
+  `img:pp` 63.5 tok/s, `img:tg` 14.3 tok/s on the M1 Max), so these numbers are re-measurable
+  rather than quoted. **What reopens the quantized half:** a family whose vision side is a real
+  ViT (the E-series `gemma4v` tower — 16 attention blocks, not two GEMMs), or batch image serving,
+  where per-image cost stops hiding behind one prefill.
 
 - **CPU attention: promote it from the loop-crown tier to the EMITTED tier (named 2026-08-05,
   the E2B deep-clip fade probes; corrected same day after a double-check).** Attention is NOT
