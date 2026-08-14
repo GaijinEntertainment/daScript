@@ -160,7 +160,7 @@ def test_vision_io_roundtrip(t : T?) {
                 png |> push(b)
             }
         }
-        t |> success(length(png) > 0, "png encoded")
+        t |> success(!empty(png), "png encoded")
         let back <- load_image_rgb(png)
         t |> equal(back.width, 21)
         t |> equal(back.height, 13)

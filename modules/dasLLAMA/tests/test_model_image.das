@@ -550,10 +550,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
 def test_metal_flavor_image(tst : T?) {
     tst |> run("SmolLM2 q8: metal flavor - blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!family_on(t, "llama")) return
-            if (!arm_on(t, "metal")) {
-                return
-            }
+            if (!family_on(t, "llama") || !arm_on(t, "metal")) return
             if (!jit_enabled()) {
                 t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
                 return
@@ -583,7 +580,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(tm.metal_blob, "metal-mode load is blob-form")
             t |> success(tm.image_map != null, "cold metal load serves the image it built")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
-            t |> success(length(tm.qblob) == 0, "planar q8 planes are gone")
+            t |> success(empty(tm.qblob), "planar q8 planes are gone")
             var g_mint <- gen_ids(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
                                                     // completing at all proves the GPU served
             // teacher-forced parity vs a fresh planar CPU control (engine entry, no image
@@ -637,10 +634,7 @@ def test_metal_flavor_image(tst : T?) {
 def test_metal_flavor_derive(tst : T?) {
     tst |> run("SmolLM2 q8: the derived blob plane equals the in-RAM transform's") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!family_on(t, "llama")) return
-            if (!arm_on(t, "metal")) {
-                return
-            }
+            if (!family_on(t, "llama") || !arm_on(t, "metal")) return
             if (!jit_enabled()) {
                 t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
                 return
@@ -967,8 +961,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
 [test]
 def test_gemma4uv_embedder_image_roundtrip(t : T?) {
     t |> run("gemma4uv embedder: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
-        if (!family_on(t, "gemma")) return
-        if (!arm_on(t, "gemma4uv")) return
+        if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return

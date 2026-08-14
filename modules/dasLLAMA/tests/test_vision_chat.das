@@ -71,7 +71,7 @@ def test_vision_chat(t : T?) {
             // TIER 3 - the caption. Greedy; the full text is logged either way (the eyeball rail)
             var params = SamplingParams()
             params.temp = 0.0
-            let reply = respond_(m, chat, params) <| $(piece : string) {
+            let reply = respond_(m, chat, params) $(piece : string) {
                 return true
             }
             to_log(LOG_INFO, "vision caption: {replace(reply, "\n", "\\n")}\n")
