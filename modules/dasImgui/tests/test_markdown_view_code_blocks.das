@@ -37,7 +37,7 @@ def test_markdown_code_blocks_shorter_cache(t : T?) {
     // node count and the cache length disagree until the next render.
     let doc <- md_parse("```das\nlet x = 1\n```\n\ntext\n\n```das\nlet y = 2\n```\n")
     var state = MarkdownViewState()
-    unsafe(state.nodes |> resize(2))
+    state.nodes |> resize(2)
     let expected <- code_block_nodes(doc)
     t |> equal(length(expected), 2, "the document has two code blocks")
     t |> success(expected[1] >= length(state.nodes), "the document outgrew the cache")
@@ -53,7 +53,7 @@ def test_markdown_code_blocks_shorter_cache(t : T?) {
 def test_markdown_code_blocks_report_layout(t : T?) {
     let doc <- md_parse("```das\nlet x = 1\n```\n")
     var state = MarkdownViewState()
-    unsafe(state.nodes |> resize(length(doc.nodes)))
+    state.nodes |> resize(length(doc.nodes))
     let node = code_block_nodes(doc)[0]
     var entry & = unsafe(state.nodes[node])
     entry.icon_rects_valid = true

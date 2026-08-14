@@ -8,7 +8,6 @@ module opengl_gen public
 require opengl/opengl_boost public
 require geometry/geom_gen public
 require daslib/safe_addr
-require math
 
 [vertex_buffer]
 struct private PreviewVertex {
@@ -94,10 +93,7 @@ def public draw_geometry_fragment(frag : OpenGLGeometryFragment) {
 
 def public create_texture(var surf : ImageSurface; kill_pixels : bool = true) {
     if (empty(surf.pixels)) return 0u
-    var tex = 0u
-    unsafe {
-        tex = load_image_from_bytes(surf.width, surf.height, addr(surf.pixels[0]))
-    }
+    let tex = load_image_from_bytes(surf.width, surf.height, unsafe(addr(surf.pixels[0])))
     if (kill_pixels) {
         delete surf.pixels
     }

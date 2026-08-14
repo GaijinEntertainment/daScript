@@ -16,7 +16,7 @@ require stbimage/stbimage_boost
 require math
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     let W = 32
     let H = 32
     let path = "_tutorial_out.hdr"

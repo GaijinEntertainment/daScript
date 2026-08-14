@@ -29,7 +29,6 @@ module advanced_function_macro_mod public
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/strings_boost
 
 // ============================================================================
 // The [memoize] function macro
@@ -101,7 +100,7 @@ class MemoizeMacro : AstFunctionAnnotation {
     // The "already processed" guard prevents re-generation on the
     // second inference pass (after astChanged restarts inference).
     // ------------------------------------------------------------------
-    def override patch(var fn : FunctionPtr; var group : ModuleGroup;
+    def override patch(var fn : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - tutorial walkthrough, the numbered memoize steps ARE the lesson
                        args, progArgs : AnnotationArgumentList;
                        var errors : das_string; var astChanged : bool&) : bool {
 
@@ -110,7 +109,7 @@ class MemoizeMacro : AstFunctionAnnotation {
 
         // Validate: return type must be cloneable (needed for insert_clone)
         if (!fn.result.canClone) {
-            errors := "cannot memoize '{string(fn.name)}' — return type '{describe(fn.result)}' cannot be cloned"
+            errors := "cannot memoize '{fn.name}' — return type '{describe(fn.result)}' cannot be cloned"
             return false
         }
 
@@ -130,7 +129,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         // Check that we haven't already generated a wrapper with this name
         var existingWrapper = fn._module |> find_unique_function(wrapperName)
         if (existingWrapper != null) {
-            errors := "duplicate memoize wrapper for '{string(fn.name)}'"
+            errors := "duplicate memoize wrapper for '{fn.name}'"
             return false
         }
 
@@ -175,10 +174,7 @@ class MemoizeMacro : AstFunctionAnnotation {
 
         // Step 4: Build the hash key computation
         //         let key = hash(a) ^ hash(b) ^ ...
-        var hashExprs : array<ExpressionPtr>
-        for (arg in fn.arguments) {
-            hashExprs |> push <| qmacro(hash($i(arg.name)))
-        }
+        var hashExprs <- [for (arg in fn.arguments); qmacro(hash($i(arg.name)))]
 
         // Combine hashes with XOR
         var keyExpr = hashExprs[0]
@@ -191,10 +187,7 @@ class MemoizeMacro : AstFunctionAnnotation {
 
         // Step 5: Build the call to the original (unannotated) copy
         //         `memoize`original`fib(arg1, arg2, ...)
-        var callArgs : array<ExpressionPtr>
-        for (arg in fn.arguments) {
-            callArgs |> push <| qmacro($i(arg.name))
-        }
+        var callArgs <- [for (arg in fn.arguments); qmacro($i(arg.name))]
 
         // Step 6: Assemble the wrapper body
         var bodyExprs <- [

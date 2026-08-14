@@ -58,16 +58,16 @@ def make_signs(n : int; seed : uint) : array<float> {
 }
 
 def rotate_row(var v : array<float>; signs : array<float>) {
-    for (i in range(length(v))) {
-        v[i] *= signs[i]
+    for (x, s in v, signs) {
+        x *= s
     }
     fwht_inplace(v)
 }
 
 def unrotate_row(var v : array<float>; signs : array<float>) {
     fwht_inplace(v)
-    for (i in range(length(v))) {
-        v[i] *= signs[i]
+    for (x, s in v, signs) {
+        x *= s
     }
 }
 
@@ -190,8 +190,8 @@ def gen_row(var v : array<float>; var seed : uint&; outliers : bool) {
 
 def row_dot(a, b : array<float>) : float {
     var s = 0.0f
-    for (i in range(length(a))) {
-        s += a[i] * b[i]
+    for (x, y in a, b) {
+        s += x * y
     }
     return s
 }

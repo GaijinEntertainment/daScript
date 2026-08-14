@@ -79,9 +79,9 @@ def render_sf2_drum(sf2 : SF2File; key, velocity : int; duration : float) : arra
         if (sf2_create_c_voice(sf2, z.x, z.y, pzone, preset.global_zone, key, velocity, 0, cc_defaults, cv, atten_state)) {
             let excl = sf2_get_exclusive_class(sf2, z.x, z.y, pzone, preset.global_zone)
             if (excl > 0) {
-                for (i in range(length(voices))) {
-                    if (excl_classes[i] == excl && voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(voices[i])); }
+                for (v, ec in voices, excl_classes) {
+                    if (ec == excl && v.finished == 0) {
+                        unsafe { ma_sf2_voice_end_quick(addr(v)); }
                     }
                 }
             }

@@ -191,7 +191,7 @@ def stream_basics() {
     with_job_que() {
         with_stream() $(var s : Stream?) {
             // Push a blob of bytes; the Stream takes a copy.
-            var payload = [1u8, 2u8, 3u8, 4u8]
+            let payload = [1u8, 2u8, 3u8, 4u8]
             s |> push(payload)
             print("buffered blobs: {s.total}\n")
 

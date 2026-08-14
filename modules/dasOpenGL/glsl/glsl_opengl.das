@@ -64,8 +64,8 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
 
 // Emit the host-side bind for a combined image sampler: bind <var>.<fieldName> (the GL texture
 // handle) to texture unit `binding` via bindFn, then point the sampler uniform at that unit. Shared
-// by the samplerCube / sampler2DArray / sampler2DShadow paths (sampler2D / sampler3D predate it and
-// stay inline). bindFn must resolve in the consumer's require chain (opengl_boost), like glUniformAny.
+// by every combined-sampler path (sampler2D / sampler3D / samplerCube / sampler2DArray /
+// sampler2DShadow). bindFn must resolve in the consumer's require chain (opengl_boost), like glUniformAny.
 [macro_function]
 def private emit_combined_sampler_bind(var blk : ExprBlock?; vv : VariablePtr; fieldName, bindFn : string) {
     let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
@@ -83,6 +83,34 @@ def private emit_combined_sampler_bind(var blk : ExprBlock?; vv : VariablePtr; f
     var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
     cll_uni.arguments |> emplace(cll_gul)
     cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
+    blk.list |> emplace(cll_uni)
+}
+
+// Emit the host-side bind for a storage image (image2D / image3D): bind_image_any(binding,
+// <var>.texture?D, format, access). @format defaults to rgba8; @readonly / @writeonly narrow the
+// access qualifier, which GL needs at bind time to match the shader's image declaration.
+[macro_function]
+def private emit_image_bind(var blk : ExprBlock?; vv : VariablePtr) {
+    let is2D = is_glsl_structure(vv, "image2D")
+    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
+    var vtex = new ExprField(at = vv.at,
+        value <- new ExprVar(at = vv.at, name := vv.name),
+        name := is2D ? "texture2D" : "texture3D"
+    )
+    var format = vv.annotation |> find_arg("format") ?as tString ?? "rgba8"
+    format = "GL_{to_upper(format)}"
+    var access = "GL_READ_WRITE"
+    if (vv.annotation |> find_arg("writeonly") is tBool) {
+        access = "GL_WRITE_ONLY"
+    }
+    if (vv.annotation |> find_arg("readonly") is tBool) {
+        access = "GL_READ_ONLY"
+    }
+    var cll_uni = new ExprCall(at = vv.at, name := "bind_image_any")
+    cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
+    cll_uni.arguments |> emplace(vtex)
+    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := format)
+    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := access)
     blk.list |> emplace(cll_uni)
 }
 
@@ -194,6 +222,63 @@ def private emit_std140_ubo_bind(var blk : ExprBlock?; vv : VariablePtr; binding
     delete errs
 }
 
+// std140 UBO binding points: a linked program needs a DISTINCT point per block, and a block shared
+// across stages must get the SAME point in each stage's bind. The reachable set is per-stage, so an
+// index over it is NOT program-stable — two distinct blocks split across the vertex/fragment stages
+// could both land on 0 and stomp each other. So we assign points over ALL of the MODULE's packable
+// UBO globals (every stage walks the same set, so the result is identical in each): an explicit
+// @binding is reserved as-is (fail-closed on a negative or a duplicate), and every other block gets
+// the lowest still-free point. The per-shader bind then just looks up its reachable blocks.
+[macro_function]
+def private assign_std140_binding_points(at : LineInfo) : table<string; int> {
+    var ubo_explicit : table<string; int>   // module UBO block name -> explicit @binding (if any)
+    var ubo_names : array<string>           // all module UBO block names (sorted -> deterministic auto order)
+    for_each_global(compiling_module()) $(gv) {
+        if (is_packable_ubo(gv)) {
+            let gnm = string(gv.name)
+            ubo_names |> push(gnm)
+            let be = gv.annotation |> find_arg("binding")
+            if (be is tInt) {
+                ubo_explicit[gnm] = be as tInt
+            }
+        }
+    }
+    ubo_names |> sort()
+    var reserved : table<int>                // points claimed by an explicit @binding
+    for (gnm in ubo_names) {
+        if (key_exists(ubo_explicit, gnm)) {
+            let be = ubo_explicit[gnm]
+            if (be < 0) {
+                macro_error(compiling_program(), at,
+                    "[opengl std140]: @uniform block '{gnm}' has a negative @binding ({be}); binding points must be >= 0.")
+            } elif (key_exists(reserved, be)) {
+                macro_error(compiling_program(), at,
+                    "[opengl std140]: two std140 UBO blocks both request @binding {be}; each block needs a distinct binding point.")
+            } else {
+                reserved |> insert(be)
+            }
+        }
+    }
+    var ubo_point : table<string; int>       // final program-stable point per block
+    var next_free = 0
+    for (gnm in ubo_names) {
+        if (key_exists(ubo_explicit, gnm)) {
+            ubo_point[gnm] = ubo_explicit[gnm]
+        } else {
+            while (key_exists(reserved, next_free)) {
+                next_free++
+            }
+            ubo_point[gnm] = next_free
+            reserved |> insert(next_free)
+            next_free++
+        }
+    }
+    delete ubo_explicit
+    delete ubo_names
+    delete reserved
+    return <- ubo_point
+}
+
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pack_std140 : bool) {
     var blk = new ExprBlock(at = fn.at)
@@ -215,66 +300,11 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pa
                     continue
                 }
                 if (is_glsl_structure(vv, "sampler2D")) {
-                    // bind_sampler_2d(binding, varName.texture2D)
-                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var vtex = new ExprField(at = vv.at,
-                        value <- new ExprVar(at = vv.at, name := vv.name),
-                        name := "texture2D"
-                    )
-                    var cll_bind = new ExprCall(at = vv.at, name := "bind_sampler_2d")
-                    cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
-                    cll_bind.arguments |> emplace(vtex)
-                    blk.list |> emplace(cll_bind)
-                    // glUniformAny(gl_GetUniformLocation("varName"),binding)
-                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
-                    cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
-                    cll_uni.arguments |> emplace(cll_gul)
-                    cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
-                    blk.list |> emplace(cll_uni)
+                    emit_combined_sampler_bind(blk, vv, "texture2D", "bind_sampler_2d")
                 } elif (is_glsl_structure(vv, "sampler3D")) {
-                    // bind_sampler_2d(binding, varName.texture2D)
-                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var vtex = new ExprField(at = vv.at,
-                        value <- new ExprVar(at = vv.at, name := vv.name),
-                        name := "texture3D"
-                    )
-                    var cll_bind = new ExprCall(at = vv.at, name := "bind_sampler_3d")
-                    cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
-                    cll_bind.arguments |> emplace(vtex)
-                    blk.list |> emplace(cll_bind)
-                    // glUniformAny(gl_GetUniformLocation("varName"),binding)
-                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
-                    cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
-                    cll_uni.arguments |> emplace(cll_gul)
-                    cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
-                    blk.list |> emplace(cll_uni)
+                    emit_combined_sampler_bind(blk, vv, "texture3D", "bind_sampler_3d")
                 } elif (is_glsl_structure(vv, "image2D") || is_glsl_structure(vv, "image3D")) {
-                    // bind_sampler_any(binding, varName.texture?D, format, access)
-                    let is2D = is_glsl_structure(vv, "image2D")
-                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var vtex = new ExprField(at = vv.at,
-                        value <- new ExprVar(at = vv.at, name := vv.name),
-                        name := is2D ? "texture2D" : "texture3D"
-                    )
-                    var format = vv.annotation |> find_arg("format") ?as tString ?? "rgba8"
-                    format = "GL_{to_upper(format)}"
-                    var access = "GL_READ_WRITE"
-                    if (vv.annotation |> find_arg("writeonly") is tBool) {
-                        access = "GL_WRITE_ONLY"
-                    }
-                    if (vv.annotation |> find_arg("readonly") is tBool) {
-                        access = "GL_READ_ONLY"
-                    }
-                    var cll_uni = new ExprCall(at = vv.at, name := "bind_image_any")
-                    cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
-                    cll_uni.arguments |> emplace(vtex)
-                    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := format)
-                    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := access)
-                    blk.list |> emplace(cll_uni)
+                    emit_image_bind(blk, vv)
                 } elif (is_glsl_structure(vv, "samplerCube")) {
                     emit_combined_sampler_bind(blk, vv, "textureCube", "bind_sampler_cube")
                 } elif (is_glsl_structure(vv, "sampler2DArray")) {
@@ -315,61 +345,10 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pa
             }
         }
     }
-    // std140 UBO binding points: a linked program needs a DISTINCT point per block, and a block shared
-    // across stages must get the SAME point in each stage's bind. The reachable set is per-stage, so an
-    // index over it is NOT program-stable — two distinct blocks split across the vertex/fragment stages
-    // could both land on 0 and stomp each other. So we assign points over ALL of the MODULE's packable
-    // UBO globals (every stage walks the same set, so the result is identical in each): an explicit
-    // @binding is reserved as-is (fail-closed on a negative or a duplicate), and every other block gets
-    // the lowest still-free point. The per-shader bind then just looks up its reachable blocks.
-    var ubo_explicit : table<string; int>   // module UBO block name -> explicit @binding (if any)
-    var ubo_names : array<string>           // all module UBO block names (sorted -> deterministic auto order)
-    for_each_global(compiling_module()) $(gv) {
-        if (is_packable_ubo(gv)) {
-            let gnm = string(gv.name)
-            ubo_names |> push(gnm)
-            let be = gv.annotation |> find_arg("binding")
-            if (be is tInt) {
-                ubo_explicit[gnm] = be as tInt
-            }
-        }
-    }
-    ubo_names |> sort()
-    var reserved : table<int>                // points claimed by an explicit @binding
-    for (gnm in ubo_names) {
-        if (key_exists(ubo_explicit, gnm)) {
-            let be = ubo_explicit[gnm]
-            if (be < 0) {
-                macro_error(compiling_program(), fn.at,
-                    "[opengl std140]: @uniform block '{gnm}' has a negative @binding ({be}); binding points must be >= 0.")
-            } elif (key_exists(reserved, be)) {
-                macro_error(compiling_program(), fn.at,
-                    "[opengl std140]: two std140 UBO blocks both request @binding {be}; each block needs a distinct binding point.")
-            } else {
-                reserved |> insert(be)
-            }
-        }
-    }
-    var ubo_point : table<string; int>       // final program-stable point per block
-    var next_free = 0
-    for (gnm in ubo_names) {
-        if (key_exists(ubo_explicit, gnm)) {
-            ubo_point[gnm] = ubo_explicit[gnm]
-        } else {
-            while (key_exists(reserved, next_free)) {
-                next_free++
-            }
-            ubo_point[gnm] = next_free
-            reserved |> insert(next_free)
-            next_free++
-        }
-    }
+    var ubo_point <- assign_std140_binding_points(fn.at)
     for (vv in ubo_globals) {
         emit_std140_ubo_bind(blk, vv, ubo_point?[string(vv.name)] ?? 0)
     }
-    delete ubo_explicit
-    delete ubo_names
-    delete reserved
     delete ubo_point
     unsafe { delete ubo_globals; }
     delete ubo_seen

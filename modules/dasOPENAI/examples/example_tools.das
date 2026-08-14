@@ -1,7 +1,6 @@
 options gen2
 options rtti  // required so sprint_json/sscan_json honor @optional / @rename
 require openai/openai_chat
-require strings
 
 [export]
 def main {

@@ -20,7 +20,7 @@ class TableKVForLoop : AstForLoopMacro {
         // Find a tuple-expanded iterator whose source is a table
         var tab_index = -1
         for (index, src in count(), expr.sources) {
-            if (index < int(expr.iteratorsTupleExpansion |> length)) {
+            if (index < length(expr.iteratorsTupleExpansion)) {
                 if (int(expr.iteratorsTupleExpansion[index]) != 0 && src._type != null && src._type.isGoodTableType) {
                     tab_index = index
                     break

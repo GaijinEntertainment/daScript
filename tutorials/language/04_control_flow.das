@@ -12,7 +12,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === if / elif / else ===
     // Parentheses are required around the condition in gen2 syntax.

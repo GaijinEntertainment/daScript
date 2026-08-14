@@ -30,7 +30,7 @@ def bonus_color(t : BonusType) : float3 {
 }
 
 def spawn_pickup_burst(origin, color : float3) {
-    create_entities`Particle(14) $(eid : EntityId; i : int; var p : Particle) {
+    create_entities`Particle(14) $(_eid : EntityId; _i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
         let elev = random_range(-0.25, 0.85)
         let dir = normalize(float3(cos(angle), sin(angle), elev))
@@ -47,7 +47,7 @@ def spawn_pickup_burst(origin, color : float3) {
 }
 
 def spawn_particles(origin, color : float3; object_radius : float; count : int) {
-    create_entities`Particle(count) $(eid : EntityId; i : int; var p : Particle) {
+    create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
         let r = max(object_radius, 0.18)
         let local = float3(
@@ -231,16 +231,24 @@ def spawn_section_objects() {
     // Determine a Y range ahead of player to place objects
     let base_y = player_pos.y + 40.0
     let section_mult = float(min(current_section + 1, 5))
+    spawn_section_bridges(base_y, section_mult)
+    spawn_section_islands(base_y, section_mult)
+    spawn_section_trees(base_y)
+    spawn_section_houses(base_y)
+    spawn_section_depots(base_y)
+    spawn_section_enemies(base_y, section_mult)
+}
 
-    // Bridges
+def spawn_section_bridges(base_y, section_mult : float) {
     let bridge_count = int(1.0 + section_mult * 0.4)
     for (i in range(bridge_count)) {
         let by = base_y + SECTION_LENGTH * (float(i + 1) / float(bridge_count + 1))
         spawn_bridge(float3(0.0, by, BRIDGE_Z))
     }
     commit()
+}
 
-    // Islands
+def spawn_section_islands(base_y, section_mult : float) {
     let island_count = int(section_mult * 0.8 + random_f() * 2.0)
     for (_i in range(island_count)) {
         var placed = false
@@ -261,8 +269,10 @@ def spawn_section_objects() {
         }
     }
     commit()
+}
 
-    // River-side trees — denser and varied.
+// River-side trees — denser and varied.
+def spawn_section_trees(base_y : float) {
     let tree_attempts = int(18.0 + random_f() * 9.0)
     for (_i in range(tree_attempts)) {
         if (random_f() > 0.52) {
@@ -282,8 +292,10 @@ def spawn_section_objects() {
         spawn_river_tree(float3(tx, ty, 0.0), tsize, tiers, tint, shift, trunk)
     }
     commit()
+}
 
-    // Occasional houses on banks.
+// Occasional houses on banks.
+def spawn_section_houses(base_y : float) {
     let house_attempts = int(3.0 + random_f() * 3.0)
     for (_i in range(house_attempts)) {
         if (random_f() > 0.42) {
@@ -325,9 +337,11 @@ def spawn_section_objects() {
         }
     }
     commit()
+}
 
-    // Fuel depots — spaced evenly and never on top of islands
-    // At drain=1.8/s and min speed 4u/s, one section takes ~60s = 108 fuel total
+// Fuel depots — spaced evenly and never on top of islands
+// At drain=1.8/s and min speed 4u/s, one section takes ~60s = 108 fuel total
+def spawn_section_depots(base_y : float) {
     let depot_spacing = 70.0
     let depot_count = int(SECTION_LENGTH / depot_spacing)
     for (i in range(depot_count)) {
@@ -363,56 +377,59 @@ def spawn_section_objects() {
         }
     }
     commit()
+}
 
-    // Enemies — staggered ahead
+// A boat may not spawn on an island, on a fuel depot, or under a bridge span.
+def boat_spot_blocked(candidate : float3) : bool {
+    var blocked = false
+    find_query() $(isle : Island) {
+        let rr = isle.size + BOAT_SIZE + 0.4
+        if (dist2d_sq(isle.pos, candidate) < rr * rr) {
+            blocked = true
+            return true
+        }
+        return false
+    }
+    if (!blocked) {
+        find_query() $(d : FuelDepot) {
+            let rr = FUEL_DEPOT_SIZE + BOAT_SIZE + 0.45
+            if (dist2d_sq(d.pos, candidate) < rr * rr) {
+                blocked = true
+                return true
+            }
+            return false
+        }
+    }
+    if (!blocked) {
+        find_query() $(br : Bridge) {
+            if (
+                abs(candidate.y - br.pos.y) < 1.2 &&
+                candidate.x > br.left_x - BOAT_SIZE &&
+                candidate.x < br.right_x + BOAT_SIZE
+            ) {
+                blocked = true
+                return true
+            }
+            return false
+        }
+    }
+    return blocked
+}
+
+// Enemies — staggered ahead
+def spawn_section_enemies(base_y, section_mult : float) {
     let boat_count = int(2.0 + section_mult * 1.0)
     let plane_count = (current_section >= 1 ? int(1.0 + section_mult * 0.6) : 0)
     let heli_count = (current_section >= 2 ? int(section_mult * 0.5) : 0)
 
     for (_i in range(boat_count)) {
-        var placed = false
         for (_try in range(10)) {
             let ey = base_y + random_range(5.0, SECTION_LENGTH - 5.0)
             let bounds = river_clamp_x_for(ey, random_sign() * 20.0)
             let ex = random_range(bounds.x + 1.0, bounds.y - 1.0)
             let candidate = float3(ex, ey, BOAT_Z)
-
-            var blocked = false
-            find_query() $(isle : Island) {
-                let rr = isle.size + BOAT_SIZE + 0.4
-                if (dist2d_sq(isle.pos, candidate) < rr * rr) {
-                    blocked = true
-                    return true
-                }
-                return false
-            }
-            if (!blocked) {
-                find_query() $(d : FuelDepot) {
-                    let rr = FUEL_DEPOT_SIZE + BOAT_SIZE + 0.45
-                    if (dist2d_sq(d.pos, candidate) < rr * rr) {
-                        blocked = true
-                        return true
-                    }
-                    return false
-                }
-            }
-            if (!blocked) {
-                find_query() $(br : Bridge) {
-                    if (
-                        abs(candidate.y - br.pos.y) < 1.2 &&
-                        candidate.x > br.left_x - BOAT_SIZE &&
-                        candidate.x < br.right_x + BOAT_SIZE
-                    ) {
-                        blocked = true
-                        return true
-                    }
-                    return false
-                }
-            }
-
-            if (!blocked) {
+            if (!boat_spot_blocked(candidate)) {
                 spawn_enemy_boat(candidate)
-                placed = true
                 break
             }
         }
@@ -483,30 +500,30 @@ def reset_game() {
 def update_player_input() {
     // Keyboard
     let key_left = (
-        glfwGetKey(live_window, int(GLFW_KEY_A)) == int(GLFW_PRESS) ||
-        glfwGetKey(live_window, int(GLFW_KEY_LEFT)) == int(GLFW_PRESS)
+        glfwGetKey(live_window, GLFW_KEY_A) == GLFW_PRESS ||
+        glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS
     )
     let key_right = (
-        glfwGetKey(live_window, int(GLFW_KEY_D)) == int(GLFW_PRESS) ||
-        glfwGetKey(live_window, int(GLFW_KEY_RIGHT)) == int(GLFW_PRESS)
+        glfwGetKey(live_window, GLFW_KEY_D) == GLFW_PRESS ||
+        glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS
     )
     let key_up = (
-        glfwGetKey(live_window, int(GLFW_KEY_W)) == int(GLFW_PRESS) ||
-        glfwGetKey(live_window, int(GLFW_KEY_UP)) == int(GLFW_PRESS)
+        glfwGetKey(live_window, GLFW_KEY_W) == GLFW_PRESS ||
+        glfwGetKey(live_window, GLFW_KEY_UP) == GLFW_PRESS
     )
     let key_down = (
-        glfwGetKey(live_window, int(GLFW_KEY_S)) == int(GLFW_PRESS) ||
-        glfwGetKey(live_window, int(GLFW_KEY_DOWN)) == int(GLFW_PRESS)
+        glfwGetKey(live_window, GLFW_KEY_S) == GLFW_PRESS ||
+        glfwGetKey(live_window, GLFW_KEY_DOWN) == GLFW_PRESS
     )
 
     // Compose strafe and speed inputs
     var strafe_input = 0.0
-    if (key_left) { strafe_input -= 1.0; }
-    if (key_right) { strafe_input += 1.0; }
+    if (key_left) { strafe_input--; }
+    if (key_right) { strafe_input++; }
 
     var speed_input = 0.0
-    if (key_up) { speed_input += 1.0; }
-    if (key_down) { speed_input -= 1.0; }
+    if (key_up) { speed_input++; }
+    if (key_down) { speed_input--; }
 
     player_vel.x += strafe_input * PLAYER_STRAFE_SPEED * tick_dt * 6.0
     player_fwd_speed = clamp(
@@ -534,7 +551,7 @@ def rotate_xy(v : float2; angle : float) : float2 {
 
 def update_player_shoot() {
     player_shoot_cooldown = max(player_shoot_cooldown - tick_dt, 0.0)
-    let fire = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
+    let fire = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     if (fire && player_shoot_cooldown <= 0.0 && player_respawn_timer <= 0.0) {
         let max_lateral = BULLET_SPEED * 0.259  // sin(15°) ≈ 0.259
         let lateral = clamp(player_vel.x, -max_lateral, max_lateral)
@@ -579,7 +596,7 @@ def update_player_movement() {
 }
 
 def on_player_killed() {
-    player_lives -= 1
+    player_lives--
     spawn_particles(player_pos, float3(1.0, 0.5, 0.2), PLAYER_SIZE * 2.6, 34)
     play_sfx(snd_player_hit)
     add_screen_shake(SHAKE_MED)
@@ -598,7 +615,7 @@ def on_player_killed() {
     }
 }
 
-def update_player(var esc_just : bool) {
+def update_player(var _esc_just : bool) {
     if (game_state != GameState.playing) {
         return
     }
@@ -641,7 +658,7 @@ def update_section() {
 
     if (section_dist >= SECTION_LENGTH) {
         section_dist -= SECTION_LENGTH
-        current_section += 1
+        current_section++
         section_banner_timer = WAVE_BANNER_DURATION
         play_sfx(snd_section_clear)
         score += 500 * (current_section)
@@ -680,15 +697,22 @@ def enemy_shoot_at_player(from : float3; btype : int = 0) {
 
 def update_enemies() {
     let sm = section_speed_mult()
+    update_enemy_boats(sm)
+    update_enemy_planes(sm)
+    update_enemy_helis(sm)
+    update_bullets()
+    age_out_particles()
+}
 
-    // Boats: patrol horizontally, shoot at player
+// Boats: patrol horizontally, shoot at player
+def update_enemy_boats(sm : float) {
     query() $(eid : EntityId; var b : EnemyBoat) {
         // Scroll with world — boats stay at their world Y, player moves to them
         b.shoot_timer -= tick_dt
         // Patrol
         let bounds = river_clamp_x_for(b.pos.y, b.lane_prefer_x)
         let lane_width = max(bounds.y - bounds.x, 0.01)
-        let margin = max(0.05, min(BOAT_SIZE * 2.0, lane_width * 0.5 - 0.08))
+        let margin = clamp(lane_width * 0.5 - 0.08, 0.05, BOAT_SIZE * 2.0)
         let lane_min = bounds.x + margin
         let lane_max = bounds.y - margin
         b.vel.x = b.patrol_dir * BOAT_PATROL_SPEED * sm
@@ -731,8 +755,10 @@ def update_enemies() {
         }
     }
     commit()
+}
 
-    // Planes: fly sideways, shoot when passing player Y
+// Planes: fly sideways, shoot when passing player Y
+def update_enemy_planes(sm : float) {
     query() $(eid : EntityId; var p : EnemyPlane) {
         p.pos += p.vel * tick_dt
         p.shoot_timer -= tick_dt
@@ -748,8 +774,10 @@ def update_enemies() {
         }
     }
     commit()
+}
 
-    // Helicopters: hover and orbit player
+// Helicopters: hover and orbit player
+def update_enemy_helis(sm : float) {
     query() $(eid : EntityId; var h : EnemyHelicopter) {
         h.hover_phase += tick_dt * 1.8
         let hover_z = ENEMY_HELI_Z + sin(h.hover_phase) * 0.4
@@ -766,8 +794,10 @@ def update_enemies() {
         }
     }
     commit()
+}
 
-    // Move player bullets; delete on expiry or island collision
+// Move player bullets; delete on expiry or island collision
+def update_bullets() {
     var inscope pb_island_hits : array<tuple<EntityId; float3>>
     query() $(eid : EntityId; var b : PlayerBullet) {
         b.age += tick_dt
@@ -805,8 +835,10 @@ def update_enemies() {
         }
     }
     commit()
+}
 
-    // Age out particles
+// Age out particles
+def age_out_particles() {
     query() $(eid : EntityId; var p : Particle) {
         p.lifetime -= tick_dt
         p.pos += p.vel * tick_dt
@@ -867,10 +899,19 @@ def process_collisions() {
     if (game_state != GameState.playing || player_respawn_timer > PLAYER_RESPAWN_BLINK) {
         return
     }
+    var inscope enemy_hits <- collect_bullet_hits()
+    resolve_enemy_hits(enemy_hits)
+    enemy_bullets_vs_player()
+    player_vs_fuel_depots()
+    player_vs_bonuses()
+    player_vs_islands()
+    player_vs_bridges()
+}
 
-    // Player bullets vs enemies — collect hits first
-    var inscope enemy_hits : array<EnemyHitInfo>
-
+// Player bullets vs enemies — hits are collected first because a decs query
+// may not mutate the entity set it is walking.
+def collect_bullet_hits() : array<EnemyHitInfo> {   // nolint:STYLE037,STYLE038 - one find_query arm per enemy kind, in hit-priority order
+    var enemy_hits : array<EnemyHitInfo>
     query() $(eid aka b_eid : EntityId; pb : PlayerBullet) {
         var bullet_hit = false
         // vs boats
@@ -971,7 +1012,10 @@ def process_collisions() {
             }
         }
     }
+    return <- enemy_hits
+}
 
+def resolve_enemy_hits(enemy_hits : array<EnemyHitInfo>) {
     var inscope killed_this_tick : array<EntityId>
     for (h in enemy_hits) {
         delete_entity(h.bullet_eid)
@@ -986,109 +1030,120 @@ def process_collisions() {
             continue
         }
         spawn_particles(h.pos, float3(1.0, 0.95, 0.5), max(0.15, h.blast_radius * 0.2), 4)
-        // damage enemy
-        var killed = false
-        find_query() $(eid : EntityId; var b : EnemyBoat) {
-            if (eid == h.enemy_eid) {
-                if (b.health > 0) {
-                    b.health -= 1
-                    if (b.health <= 0) { killed = true; }
-                }
-                return true
-            }
-            return false
-        }
-        find_query() $(eid : EntityId; var p : EnemyPlane) {
-            if (eid == h.enemy_eid) {
-                if (p.health > 0) {
-                    p.health -= 1
-                    if (p.health <= 0) { killed = true; }
-                }
-                return true
-            }
-            return false
-        }
-        find_query() $(eid : EntityId; var hh : EnemyHelicopter) {
-            if (eid == h.enemy_eid) {
-                if (hh.health > 0) {
-                    hh.health -= 1
-                    if (hh.health <= 0) { killed = true; }
-                }
-                return true
-            }
-            return false
-        }
-        // Bridges now take multiple hits.
-        find_query() $(eid : EntityId; var br : Bridge) {
-            if (eid == h.enemy_eid) {
-                if (br.health > 0) {
-                    br.health -= 1
-                    if (br.health <= 0) {
-                        killed = true
-                    }
-                }
-                return true
-            }
-            return false
-        }
-        // Fuel depots — always one-shot
         var is_depot = false
-        find_query() $(eid : EntityId; d : FuelDepot) {
-            if (eid == h.enemy_eid) {
-                killed = true
-                is_depot = true
-                return true
-            }
-            return false
-        }
-        if (killed) {
+        if (damage_enemy(h, is_depot)) {
             delete_entity(h.enemy_eid)
             killed_this_tick |> push(h.enemy_eid)
-            var is_bridge = false
-            find_query() $(eid : EntityId; br : Bridge) {
-                if (eid == h.enemy_eid) { is_bridge = true; return true; }
-                return false
-            }
-            if (is_depot) {
-                let c1 = int(24.0 + h.blast_radius * 15.0)
-                let c2 = int(14.0 + h.blast_radius * 10.0)
-                spawn_particles(h.pos, float3(1.0, 0.5, 0.05), h.blast_radius * 1.2, c1)
-                spawn_particles(h.pos + float3(0.0, 0.0, 1.0), float3(0.9, 0.2, 0.0), h.blast_radius * 0.8, c2)
-            } else {
-                let c = int(10.0 + h.blast_radius * 12.0)
-                spawn_particles(h.pos, float3(1.0, 0.65, 0.1), h.blast_radius, c)
-            }
-            play_sfx(is_bridge ? snd_bridge_destroy : snd_enemy_explode)
-            if (is_bridge) {
-                add_screen_shake(SHAKE_BIG)
-            } elif (is_depot) {
-                add_screen_shake(SHAKE_MED)
-            } else {
-                add_screen_shake(SHAKE_SMALL)
-            }
-            score += h.score_value
-
-            let drop_chance = (
-                h.enemy_kind == EnemyKind.helicopter ? 0.75
-                    : (h.enemy_kind == EnemyKind.plane ? 0.55
-                        : (h.enemy_kind == EnemyKind.boat ? BONUS_DROP_CHANCE : 0.0))
-            )
-            if (drop_chance > 0.0 && random_f() < drop_chance) {
-                let r = random_f()
-                let bt = (
-                    r < 0.3
-                        ? BonusType.fuel
-                        : (r < 0.6 ? BonusType.multishot : (r < 0.9 ? BonusType.fastshot : BonusType.life))
-                )
-                let drop_bounds = river_clamp_x(h.pos.y)
-                let drop_x = clamp(h.pos.x, drop_bounds.x + BONUS_PICKUP_RADIUS, drop_bounds.y - BONUS_PICKUP_RADIUS)
-                spawn_bonus_pickup(float3(drop_x, h.pos.y, 0.42), bt)
-            }
+            on_enemy_destroyed(h, is_depot)
         }
     }
     commit()
+}
 
-    // Enemy bullets vs player
+// Applies one hit to whichever enemy kind owns h.enemy_eid; true once its health runs out.
+def damage_enemy(h : EnemyHitInfo; var is_depot : bool&) : bool {   // nolint:STYLE037 - one find_query arm per enemy kind
+    var killed = false
+    find_query() $(eid : EntityId; var b : EnemyBoat) {
+        if (eid == h.enemy_eid) {
+            if (b.health > 0) {
+                b.health--
+                if (b.health <= 0) { killed = true; }
+            }
+            return true
+        }
+        return false
+    }
+    find_query() $(eid : EntityId; var p : EnemyPlane) {
+        if (eid == h.enemy_eid) {
+            if (p.health > 0) {
+                p.health--
+                if (p.health <= 0) { killed = true; }
+            }
+            return true
+        }
+        return false
+    }
+    find_query() $(eid : EntityId; var hh : EnemyHelicopter) {
+        if (eid == h.enemy_eid) {
+            if (hh.health > 0) {
+                hh.health--
+                if (hh.health <= 0) { killed = true; }
+            }
+            return true
+        }
+        return false
+    }
+    // Bridges now take multiple hits.
+    find_query() $(eid : EntityId; var br : Bridge) {
+        if (eid == h.enemy_eid) {
+            if (br.health > 0) {
+                br.health--
+                if (br.health <= 0) {
+                    killed = true
+                }
+            }
+            return true
+        }
+        return false
+    }
+    // Fuel depots — always one-shot
+    find_query() $(eid : EntityId; d : FuelDepot) {
+        if (eid == h.enemy_eid) {
+            killed = true
+            is_depot = true
+            return true
+        }
+        return false
+    }
+    return killed
+}
+
+// Death effects and loot for an enemy whose entity has just been deleted.
+def on_enemy_destroyed(h : EnemyHitInfo; is_depot : bool) {
+    var is_bridge = false
+    find_query() $(eid : EntityId; br : Bridge) {
+        if (eid == h.enemy_eid) { is_bridge = true; return true; }
+        return false
+    }
+    if (is_depot) {
+        let c1 = int(24.0 + h.blast_radius * 15.0)
+        let c2 = int(14.0 + h.blast_radius * 10.0)
+        spawn_particles(h.pos, float3(1.0, 0.5, 0.05), h.blast_radius * 1.2, c1)
+        spawn_particles(h.pos + float3(0.0, 0.0, 1.0), float3(0.9, 0.2, 0.0), h.blast_radius * 0.8, c2)
+    } else {
+        let c = int(10.0 + h.blast_radius * 12.0)
+        spawn_particles(h.pos, float3(1.0, 0.65, 0.1), h.blast_radius, c)
+    }
+    play_sfx(is_bridge ? snd_bridge_destroy : snd_enemy_explode)
+    if (is_bridge) {
+        add_screen_shake(SHAKE_BIG)
+    } elif (is_depot) {
+        add_screen_shake(SHAKE_MED)
+    } else {
+        add_screen_shake(SHAKE_SMALL)
+    }
+    score += h.score_value
+
+    let drop_chance = (
+        h.enemy_kind == EnemyKind.helicopter ? 0.75
+            : (h.enemy_kind == EnemyKind.plane ? 0.55
+                : (h.enemy_kind == EnemyKind.boat ? BONUS_DROP_CHANCE : 0.0))
+    )
+    if (drop_chance > 0.0 && random_f() < drop_chance) {
+        let r = random_f()
+        let bt = (
+            r < 0.3
+                ? BonusType.fuel
+                : (r < 0.6 ? BonusType.multishot : (r < 0.9 ? BonusType.fastshot : BonusType.life))
+        )
+        let drop_bounds = river_clamp_x(h.pos.y)
+        let drop_x = clamp(h.pos.x, drop_bounds.x + BONUS_PICKUP_RADIUS, drop_bounds.y - BONUS_PICKUP_RADIUS)
+        spawn_bonus_pickup(float3(drop_x, h.pos.y, 0.42), bt)
+    }
+}
+
+// Enemy bullets vs player
+def enemy_bullets_vs_player() {
     if (player_invuln_timer <= 0.0) {
         var player_hit = false
         query() $(eid : EntityId; eb : EnemyBullet) {
@@ -1105,8 +1160,10 @@ def process_collisions() {
         }
         commit()
     }
+}
 
-    // Player vs fuel depots
+// Player vs fuel depots
+def player_vs_fuel_depots() {
     query() $(eid : EntityId; d : FuelDepot) {
         let r = FUEL_DEPOT_SIZE + PLAYER_SIZE + REFUEL_RADIUS
         if (dist2d_sq(d.pos, player_pos) < r * r && player_fuel < PLAYER_FUEL_MAX) {
@@ -1118,9 +1175,11 @@ def process_collisions() {
             }
         }
     }
+}
 
-    // Player vs bonuses — collect burst origins/colors and spawn AFTER the
-    // query (create_entities can't run inside a decs query).
+// Player vs bonuses — collect burst origins/colors and spawn AFTER the
+// query (create_entities can't run inside a decs query).
+def player_vs_bonuses() {
     var burst_origins : array<float3>
     var burst_colors : array<float3>
     query() $(eid : EntityId; b : BonusPickup) {
@@ -1136,7 +1195,7 @@ def process_collisions() {
                 player_fastshot_timer = max(player_fastshot_timer, BONUS_FASTSHOT_TIME)
                 play_sfx(snd_bonus_fastshot)
             } else {
-                player_lives += 1
+                player_lives++
                 play_sfx(snd_bonus_life)
             }
             burst_origins |> push(b.pos + float3(0.0, 0.0, 0.55))
@@ -1144,12 +1203,14 @@ def process_collisions() {
             delete_entity(eid)
         }
     }
-    for (i in range(length(burst_origins))) {
-        spawn_pickup_burst(burst_origins[i], burst_colors[i])
+    for (origin, color in burst_origins, burst_colors) {
+        spawn_pickup_burst(origin, color)
     }
     commit()
+}
 
-    // Player vs islands
+// Player vs islands
+def player_vs_islands() {
     if (player_invuln_timer <= 0.0) {
         var island_hit = false
         query() $(isle : Island) {
@@ -1168,8 +1229,10 @@ def process_collisions() {
             on_player_killed()
         }
     }
+}
 
-    // Player through bridge — must pass through gap
+// Player through bridge — must pass through gap
+def player_vs_bridges() {
     if (player_invuln_timer <= 0.0) {
         var bridge_hit = false
         query() $(br : Bridge) {
@@ -1350,7 +1413,7 @@ def render_player(game_time : float) {
     geo_sphere |> draw_geometry_fragment()
 }
 
-def render_enemies(game_time : float) {
+def render_enemies() {
     glUseProgram(phong_program)
     active_program = phong_program
 
@@ -1392,8 +1455,17 @@ def render_obstacles(game_time : float) {
     glDisable(GL_CULL_FACE)
     glUseProgram(phong_program)
     active_program = phong_program
+    render_bridges()
+    render_islands()
+    render_fuel_depots(game_time)
+    render_trees()
+    render_houses()
+    render_bonuses(game_time)
+    glEnable(GL_CULL_FACE)
+}
 
-    // Bridges: two pylons + two half-spans
+// Bridges: two pylons + two half-spans
+def render_bridges() {
     query() $(br : Bridge) {
         let pylon_h = BRIDGE_SPAN_Z + 0.5
         let pylon_color = float3(0.55, 0.5, 0.45)
@@ -1429,15 +1501,19 @@ def render_obstacles(game_time : float) {
             geo_cube |> draw_geometry_fragment()
         }
     }
+}
 
-    // Islands: flattened sphere
+// Islands: flattened sphere
+def render_islands() {
     query() $(isle : Island) {
         let island_color = float3(0.3, 0.45, 0.2)
         draw_with_phong(isle.pos, float3(isle.size, isle.size, isle.size * 0.3), island_color)
         geo_sphere |> draw_geometry_fragment()
     }
+}
 
-    // Fuel depots: flat barge + tall beacon
+// Fuel depots: flat barge + tall beacon
+def render_fuel_depots(game_time : float) {
     query() $(d : FuelDepot) {
         let rr = FUEL_DEPOT_SIZE + PLAYER_SIZE + REFUEL_RADIUS
         let refueling = dist2d_sq(d.pos, player_pos) < rr * rr
@@ -1454,8 +1530,10 @@ def render_obstacles(game_time : float) {
         draw_with_phong(beacon_pos, float3(0.1, 0.1, FUEL_DEPOT_SIZE * 0.8), beacon_color)
         geo_cube |> draw_geometry_fragment()
     }
+}
 
-    // Pine trees: trunk + stacked cones
+// Pine trees: trunk + stacked cones
+def render_trees() {
     query() $(t : RiverTree) {
         let trunk_h = t.size * t.trunk_ratio
         let trunk_pos = t.pos + float3(0.0, 0.0, trunk_h * 0.5)
@@ -1477,8 +1555,10 @@ def render_obstacles(game_time : float) {
             geo_cone |> draw_geometry_fragment()
         }
     }
+}
 
-    // Houses: cube body + prism roof.
+// Houses: cube body + prism roof.
+def render_houses() {
     query() $(h : RiverHouse) {
         let body_color_a = float3(0.75, 0.68, 0.58)
         let body_color_b = float3(0.6, 0.67, 0.73)
@@ -1497,8 +1577,10 @@ def render_obstacles(game_time : float) {
         draw_with_phong(roof_pos, float3(h.size * 1.05, h.size * 1.18, roof_h), roof_color)
         geo_prism |> draw_geometry_fragment()
     }
+}
 
-    // Bonuses: spinning horizontal cylinders, color-coded by type.
+// Bonuses: spinning horizontal cylinders, color-coded by type.
+def render_bonuses(game_time : float) {
     let q_tilt = quat_y_rot(PI * 0.5)
     query() $(b : BonusPickup) {
         let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
@@ -1509,7 +1591,6 @@ def render_obstacles(game_time : float) {
         draw_with_phong(p, float3(0.22, 0.22, 0.55), color, rot)
         geo_cylinder |> draw_geometry_fragment()
     }
-    glEnable(GL_CULL_FACE)
 }
 
 def render_projectiles() {
@@ -1626,7 +1707,7 @@ def render_rotors(game_time : float) {
 def render_all(game_time : float) {
     render_shadows(game_time)
     render_player(game_time)
-    render_enemies(game_time)
+    render_enemies()
     render_obstacles(game_time)
     render_projectiles()
     render_rotors(game_time)

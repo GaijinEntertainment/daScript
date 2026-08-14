@@ -1784,7 +1784,7 @@ def private click_at_coro(center : float2; scrolled : bool; button : int; ticket
     let dx = center.x - sx
     let dy = center.y - sy
     // Constant cursor SPEED: ~11 px/step so a long hop takes proportionally more frames (not a warp); the cap is a sanity ceiling.
-    let steps = max(int(max(abs(dx), abs(dy)) / 11.0f) + 1, 2) |> min(96)
+    let steps = clamp(int(max(abs(dx), abs(dy)) / 11.0f) + 1, 2, 96)
     for (i in range(1, steps + 1)) {
         let f = float(i) / float(steps)
         synth_mouse_move(sx + dx * f, sy + dy * f)

@@ -10,6 +10,7 @@
 
 options gen2
 options persistent_heap
+options force_inscope_pod   // samples is move-filled from inside fmap; let the compiler release the target
 options indenting = 4
 
 require audio/audio_boost

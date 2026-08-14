@@ -203,7 +203,7 @@ struct PostState {
 
 // Apply the enabled effects, in chain order, to a mono buffer in place (rate = sample rate, Hz).
 // Effects run on an interleaved stereo working copy; the result is folded back to mono.
-def apply_post(var mono : array<float>; p : PostChain; rate : float) {
+def apply_post(var mono : array<float>; p : PostChain; rate : float) {   // nolint:STYLE037,STYLE038 - flat effect chain; one enable-guarded stage per effect, in order, over the shared stereo working buffer
     let n0 = length(mono)
     if (n0 == 0 || !any_enabled(p)) return
     // extend the buffer with silence so the reverb / delay tail isn't cut off
@@ -476,7 +476,7 @@ def private emit_modal(v : ModalVoice; pitch_param : bool; fund : float) : strin
     return "ModalVoice({inner})"
 }
 
-def private emit_sfxr(s : SfxrSound) : string {
+def private emit_sfxr(s : SfxrSound) : string {   // nolint:STYLE037 - one non-default check per sfxr field
     let d = SfxrSound()
     var a : array<string>
     if (s.wave != d.wave) { a |> push("wave = SfxrWave.{wave_name(s.wave)}") }

@@ -234,7 +234,7 @@ def init {
     // Mouse callbacks
     unsafe {
         glfwSetMouseButtonCallback(window) <| @(w, button, action, mods) {
-            if (button == int(GLFW_MOUSE_BUTTON_1) && action == int(GLFW_PRESS)) {
+            if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
                 cursor_captured = !cursor_captured
                 if (cursor_captured) {
                     glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_DISABLED))

@@ -73,7 +73,7 @@ def test_facade_docstrings_inside_body(t : T?) {
         let lines <- read_lines(FACADE)
         for (i in range(length(lines) - 1)) {
             let inert = starts_with(strip(lines[i]), "//!") && starts_with(lines[i + 1], "def ")
-            t |> success(!inert, "line {i + 1}: //! directly above a def is invisible to the doc extractor — move it inside the body")
+            t |> success(!inert, "line {i + 1}: //! directly above a def is invisible to the doc extractor - move it inside the body")
         }
     }
 }

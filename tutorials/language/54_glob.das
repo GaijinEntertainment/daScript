@@ -19,7 +19,7 @@ require daslib/fio
 require daslib/strings_boost
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     // ============================================================
     // Section 1: match_glob — pathname-aware matching
     // ============================================================
@@ -71,7 +71,7 @@ def main() {
     var das_files : array<string>
     glob(tmpdir, "**/*.das") $(filename, is_dir) {
         if (!is_dir) {
-            das_files |> push_clone(filename)
+            das_files |> push(filename)
         }
     }
     sort(das_files)
@@ -83,7 +83,7 @@ def main() {
     var pngs : array<string>
     glob(tmpdir, "assets/**/*.png") $(filename, is_dir) {
         if (!is_dir) {
-            pngs |> push_clone(filename)
+            pngs |> push(filename)
         }
     }
     sort(pngs)
@@ -101,13 +101,11 @@ def main() {
     print("\n=== glob_filtered ===\n")
 
     var hits : array<string>
-    var includes : array<string>
-    var excludes : array<string>
-    includes |> push_clone("**/*.das")
-    excludes |> push_clone("tests/**")
+    let includes <- ["**/*.das"]
+    let excludes <- ["tests/**"]
     glob_filtered(tmpdir, includes, excludes) $(filename, is_dir) {
         if (!is_dir) {
-            hits |> push_clone(filename)
+            hits |> push(filename)
         }
     }
     sort(hits)

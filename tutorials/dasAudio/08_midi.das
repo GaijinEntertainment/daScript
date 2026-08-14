@@ -17,7 +17,6 @@ require strudel/strudel_midi
 require strudel/strudel_midi_player
 require audio/audio_boost
 require daslib/fio
-require daslib/strings_boost
 require math
 
 // ──────────────────────────────────────────────────────────────────────────

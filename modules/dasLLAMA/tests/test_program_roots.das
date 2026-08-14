@@ -62,6 +62,6 @@ def test_program_roots(t : T?) {
                 }
             }
         }
-        t |> success(checked > 10, "the scan found the program roots ({checked} checked — a broken glob would pass vacuously)")
+        t |> success(checked > 10, "the scan found the program roots ({checked} checked - a broken glob would pass vacuously)")
     }
 }

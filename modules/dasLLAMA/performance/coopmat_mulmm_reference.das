@@ -156,7 +156,7 @@ def private record_gemm(rawcmd : VkCommandBuffer; rpipe : VkPipeline; rlayout : 
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var inscope` handle must outlive the shape loop, so the setup cannot move into helpers
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "no Vulkan loader\n")
         return

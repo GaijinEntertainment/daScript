@@ -7,7 +7,7 @@ require daslib/defer
 require daslib/json_boost
 
 [test]
-def test_parse_cadmus_retrieval_plan(t : T?) {
+def test_parse_cadmus_retrieval_plan(t : T?) {   // nolint:STYLE038 - flat parse-then-assert list, one plan shape per block
     var plan = CadmusRetrievalPlan()
     defer() { delete plan.Queries }
     var error = ""

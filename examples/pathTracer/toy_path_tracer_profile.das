@@ -7,10 +7,8 @@ options solid_context
 
 require path_tracer
 
-require strings
 require stbimage
 require daslib/jobque_boost
-require daslib/random
 require daslib/math_boost
 
 [export]

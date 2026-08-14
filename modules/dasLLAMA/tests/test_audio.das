@@ -115,8 +115,8 @@ def test_swiglu_swapped(t : T?) {
         let x = [2.0, 4.0, 1.0, -1.0]
         var o = [0.0, 0.0]
         swiglu_swapped_rows(o, x, 2l, 1l)
-        t |> success(abs(o[0] - 2.0 * 0.7310586) < 1e-6, "silu(second)·first [0]")
-        t |> success(abs(o[1] + 4.0 * 0.2689414) < 1e-6, "silu(second)·first [1]")
+        t |> success(abs(o[0] - 2.0 * 0.7310586) < 1e-6, "silu(second)*first [0]")
+        t |> success(abs(o[1] + 4.0 * 0.2689414) < 1e-6, "silu(second)*first [1]")
     }
 }
 

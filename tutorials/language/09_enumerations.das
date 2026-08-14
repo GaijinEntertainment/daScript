@@ -67,7 +67,7 @@ bitfield FilePermissions {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Using enums ===
     // Access values with dot syntax: EnumName.Value

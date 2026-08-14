@@ -304,7 +304,7 @@ def test_mtp_invariance_glm(t : T?) {
             t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts)")
             // a 100%-accept run would leave the reject branch untouched and the arm would prove
             // nothing about it — so require that at least one draft was actually rejected
-            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected — reject branch covered")
+            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected - reject branch covered")
         }
         delete tr
     }

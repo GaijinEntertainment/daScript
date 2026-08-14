@@ -12,9 +12,7 @@ require strings
 [test]
 def test_moderation_request_serialization(t : T?) {
     t |> run("moderation request serializes input array") @(t : T?) {
-        var req : ModerationRequest
-        req.model = "omni-moderation-latest"
-        req.input <- ["some text"]
+        let req = ModerationRequest(model = "omni-moderation-latest", input <- ["some text"])
         let js = sprint_json(req, false)
         t |> success(find(js, "\"model\":\"omni-moderation-latest\"") >= 0, "model present")
         t |> success(find(js, "\"input\":[\"some text\"]") >= 0, "input array present")
@@ -24,9 +22,7 @@ def test_moderation_request_serialization(t : T?) {
 [test]
 def test_moderation_response_decode(t : T?) {
     t |> run("moderation response round-trips with table-keyed categories") @(t : T?) {
-        var resp : ModerationResponse
-        resp.id = "modr-1"
-        resp.model = "omni-moderation-latest"
+        var resp = ModerationResponse(id = "modr-1", model = "omni-moderation-latest")
         var r : ModerationCategoryResult
         r.flagged = true
         r.categories["violence"] = false

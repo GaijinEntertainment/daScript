@@ -8,8 +8,6 @@ options strict_smart_pointers = true
 module meta_ast shared
 
 require daslib/match public
-require daslib/fio
-require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost

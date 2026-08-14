@@ -25,7 +25,7 @@ def test_vkd_class_dispatch(t0 : T?) {
     t0 |> run("class kernel through the generated [vk_dispatch] surface == CPU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_vkd_toy()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let n = 250   // deliberately not a multiple of 64 — the in-kernel guard covers the pad
@@ -89,7 +89,7 @@ def test_vkd_ar_class(t0 : T?) {
     t0 |> run("ar_add_rms class twin == the vk_add_rms seam (bit-exact, same reduce order)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_ar()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let dim = 1024
@@ -380,7 +380,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
     t0 |> run("kq GEMV class family == the CPU oracle (all 4 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let nsb = 2      // superblocks per row reduction (n = 512)
@@ -490,7 +490,7 @@ def test_vkd_act_family(t0 : T?) {
     t0 |> run("act/requant + combine class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && ensure_combine_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let nelem = 1024
@@ -647,7 +647,7 @@ def test_vkd_rope_family(t0 : T?) {
     t0 |> run("rope_kv_store + qk_rms class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_rope_kv_cls() && ensure_qk_rms_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let hs = 64
@@ -884,7 +884,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
     t0 |> run("q8 batch tile class kernel == the CPU oracle (edge tiles + K tail)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let n = 96                 // nbb = 3: exercises the zero-filled K tail (nsteps = 1, 8-block pass)
@@ -992,7 +992,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
     t0 |> run("kq batch tile class family == the CPU oracle (all 4 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_kq_batch_k4_cls() && ensure_kq_batch_q40_cls() && ensure_kq_batch_k5_cls() && ensure_kq_batch_k6_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let n = 512               // nsb = 2 superblocks
@@ -1114,7 +1114,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
     t0 |> run("coopmat batch class kernels == the CPU oracle (per available mode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // probe via a NON-coopmat ensure — a cm pipeline build
-                feint("no Vulkan device — skipping\n")   // on a no-coopmat device panics, not feints
+                feint("no Vulkan device - skipping\n")   // on a no-coopmat device panics, not feints
                 return
             }
             var ran = 0
@@ -1273,7 +1273,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 delete y_cls
             }
             if (ran == 0) {
-                feint("no coopmat batch pipes in this mode — set DASLLAMA_COOPMAT to cover\n")
+                feint("no coopmat batch pipes in this mode - set DASLLAMA_COOPMAT to cover\n")
             }
         } else {
             feint("dasVulkan not present — skipping\n")
@@ -1286,11 +1286,11 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
     t0 |> run("q40 coopmat f16 batch class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (g_gpu.coopmat_mode != 1) {
-                feint("q40 rides the f16 coopmat twin only in mode 1 (DASLLAMA_COOPMAT=f16) — skipping\n")
+                feint("q40 rides the f16 coopmat twin only in mode 1 (DASLLAMA_COOPMAT=f16) - skipping\n")
                 return
             }
             verify(ensure_kq_batch_q40_cmf16_cls(), "class rail must engage in f16 coopmat mode")
@@ -1400,11 +1400,11 @@ def test_vkd_cm2l_batch(t0 : T?) {
     t0 |> run("cm2 l-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) — skipping\n")
+                feint("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
                 return
             }
             verify(ensure_q8_batch_cm2l_cls(), "class rail must engage in cm2 mode")
@@ -1505,11 +1505,11 @@ def test_vkd_cm2m_batch(t0 : T?) {
     t0 |> run("cm2 m-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 m-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) — skipping\n")
+                feint("the cm2 m-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
                 return
             }
             verify(ensure_q8_batch_cm2m_cls(), "class rail must engage in cm2 mode")
@@ -1609,11 +1609,11 @@ def test_vkd_cm2l_split(t0 : T?) {
     t0 |> run("cm2 l-tile split-k + reduce == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) — skipping\n")
+                feint("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
                 return
             }
             verify(ensure_q8_batch_cm2l_cls(), "class rail must engage in cm2 mode")
@@ -1718,7 +1718,7 @@ def test_vkd_da_attn(t0 : T?) {
     t0 |> run("decode attention class kernel == the CPU oracle (chunk boundary)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_da_attn_cls()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let hs = 64
@@ -1800,11 +1800,11 @@ def test_vkd_at_attn(t0 : T?) {
     t0 |> run("prefill attention class kernel == the CPU oracle (partial tiles, gated)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!ensure_at_attn_cls()) {
-                feint("at_attn class declined on this device (workgroup cap) — skipping\n")
+                feint("at_attn class declined on this device (workgroup cap) - skipping\n")
                 return
             }
             let nheads = 4
@@ -1900,11 +1900,11 @@ def test_vkd_fa_cm2(t0 : T?) {
     t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128, f16cvt-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_f16cvt_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!g_gpu.has_coopmat2_fa) {
-                feint("device lacks the cm2 flash-attention trio — skipping\n")
+                feint("device lacks the cm2 flash-attention trio - skipping\n")
                 return
             }
             verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls(), "fa class rails must engage on an fa-capable device")
@@ -2020,11 +2020,11 @@ def test_vkd_da_attn_b(t0 : T?) {
     t0 |> run("batched decode attention class kernel == the CPU oracle (mirror offsets)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!ensure_da_attn_b_cls()) {
-                feint("da_attn_b class declined on this device (workgroup cap) — skipping\n")
+                feint("da_attn_b class declined on this device (workgroup cap) - skipping\n")
                 return
             }
             let nheads = 4
@@ -2114,15 +2114,15 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
     t0 |> run("h128 coopmat attention class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!ensure_da_attn_b_cls()) {   // probe via the NON-coopmat twin — a cm pipeline build
-                feint("da_attn_b class declined on this device (workgroup cap) — skipping\n")   // on a no-coopmat device panics, not feints
+                feint("da_attn_b class declined on this device (workgroup cap) - skipping\n")   // on a no-coopmat device panics, not feints
                 return
             }
             if (!g_gpu.has_coopmat) {
-                feint("no coopmat on this device — skipping\n")
+                feint("no coopmat on this device - skipping\n")
                 return
             }
             verify(ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -2213,7 +2213,7 @@ def test_vkd_requant_family(t0 : T?) {
     t0 |> run("fused ar+requant + q8k requant class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_cls_ar_rq() && ensure_cls_q8k_rq())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let begin = VkCommandBufferBeginInfo()
@@ -2379,7 +2379,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8 GEMV class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let nb = 16      // 32-blocks per row reduction (n = 512)
@@ -2491,7 +2491,7 @@ def test_vkd_cvt_family(t0 : T?) {
     t0 |> run("dn requant + cvt/act-f16 class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_dn_rq()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             // dn_requant: src floats at an offset -> Q8_0 words + scales
@@ -2624,7 +2624,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
     t0 |> run("batch rope + fused qkn-rope class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_rope_kv_b_cls() && ensure_qkn_rope_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let nh = 4
@@ -2906,11 +2906,11 @@ def test_vkd_at_prep(t0 : T?) {
     t0 |> run("attention prep class (q+k collapse) == the CPU oracle (gated+qknorm+partial rope)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!ensure_at_prep_cls()) {
-                feint("at_prep class declined on this device (workgroup cap) — skipping\n")
+                feint("at_prep class declined on this device (workgroup cap) - skipping\n")
                 return
             }
             let nh = 4
@@ -3073,11 +3073,11 @@ def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!g_gpu.dn_shared_ok) {
-                feint("dn chain declined on this device (shared-memory cap) — skipping\n")
+                feint("dn chain declined on this device (shared-memory cap) - skipping\n")
                 return
             }
             verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls(),
@@ -3560,7 +3560,7 @@ def test_vkd_kv16_writers(t0 : T?) {
     t0 |> run("f16-mirror writer instances == the CPU oracle (rope_kv / rope_kv_b / qkn_rope)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_rope_kv_f16_cls() && ensure_rope_kv_b_f16_cls() && ensure_qkn_rope_f16_cls())) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             let nh = 4
@@ -3931,11 +3931,11 @@ def test_vkd_kv16_readers(t0 : T?) {
     t0 |> run("f16-mirror reader instances == the CPU oracle (da_attn / da_attn_b / h128)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device — skipping\n")
+                feint("no Vulkan device - skipping\n")
                 return
             }
             if (!(ensure_da_attn_f16_cls() && ensure_da_attn_b_f16_cls())) {
-                feint("f16 attention classes declined on this device — skipping\n")
+                feint("f16 attention classes declined on this device - skipping\n")
                 return
             }
             let begin = VkCommandBufferBeginInfo()
@@ -4167,7 +4167,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 delete k16
                 delete v16
             } else {
-                feint("no coopmat on this device — h128 f16 arm skipped\n")
+                feint("no coopmat on this device - h128 f16 arm skipped\n")
             }
         } else {
             feint("dasVulkan not present — skipping\n")

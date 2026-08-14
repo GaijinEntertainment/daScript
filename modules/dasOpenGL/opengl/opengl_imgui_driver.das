@@ -148,7 +148,7 @@ def public imgui_gl_update_textures(var r : ImguiGlRenderer) {
     for (i in range(length(pio.Textures))) {
         // const-strip: `pio` is const, so the element is a const-pointee pointer; SetTexID/SetStatus
         // below need a mutable ImTextureData.
-        var tex = unsafe(reinterpret<ImTextureData? -const>(pio.Textures[i]))
+        var tex = unsafe(reinterpret<ImTextureData?>(pio.Textures[i]))
         if (tex == null) {
             continue
         }
@@ -186,6 +186,58 @@ def private setup_render_state(r : ImguiGlRenderer; ds, dp : float2; fb_w, fb_h 
     glBindVertexArray(r.vao)
 }
 
+// Replay one command list's draw commands, with the list's vertex/index data already streamed into
+// the shared buffers: per command, set the (y-flipped, framebuffer-clamped) scissor, bind the
+// command's texture, and issue the indexed draw.
+def private replay_cmd_buffer(cl : ImDrawList?; dp, fb : float2; fb_w, fb_h : int) {
+    for (j in range(length(cl.CmdBuffer))) {
+        let c & = unsafe(cl.CmdBuffer[j])
+        if (c.ElemCount == 0u) {
+            continue
+        }
+        let clip = c.ClipRect
+        var minx = (clip.x - dp.x) * fb.x
+        var miny = (clip.y - dp.y) * fb.y
+        var maxx = (clip.z - dp.x) * fb.x
+        var maxy = (clip.w - dp.y) * fb.y
+        // clamp to the framebuffer: a partially off-screen window can push the clip rect past the
+        // target, and glScissor rejects a negative origin / out-of-range extent with GL_INVALID_VALUE.
+        if (minx < 0.0f) {
+            minx = 0.0f
+        }
+        if (miny < 0.0f) {
+            miny = 0.0f
+        }
+        if (maxx > float(fb_w)) {
+            maxx = float(fb_w)
+        }
+        if (maxy > float(fb_h)) {
+            maxy = float(fb_h)
+        }
+        if (maxx <= minx || maxy <= miny) {
+            continue
+        }
+        // GL scissor origin is bottom-left, so the clip rect's top (miny) maps to fb_h - maxy.
+        glScissor(int(minx), fb_h - int(maxy), int(maxx - minx), int(maxy - miny))
+        bind_sampler_2d(0, uint(c.GetTexID()))
+        // COMPILE-TIME web branch: WebGL2/GLES3 has no glDrawElementsBaseVertex, and on the wasm
+        // cross-compile that symbol isn't even declared (the native GLES3 opengl module replaces the
+        // pure-das Opengl32 late-extern) -- so the desktop branch must be dropped before symbol
+        // resolution, which `if` can't do (it resolves both branches). Both platform queries fold
+        // (SideEffects::none): get_platform_name covers the wasm interpreter (host IS the target),
+        // get_cross_platform_name covers the host->wasm cross-compile (reads --jit-target).
+        static_if (get_platform_name() == "emscripten" || get_cross_platform_name() == "emscripten") {
+            // RendererHasVtxOffset is cleared on web (see backend flags) so ImGui keeps VtxOffset == 0
+            // by splitting any >64K-vertex list; plain glDrawElements over the per-list buffers is correct.
+            glDrawElements(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
+                unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)))
+        } else {
+            glDrawElementsBaseVertex(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
+                unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)), int(c.VtxOffset))
+        }
+    }
+}
+
 //! Replay the UI into the current framebuffer. Per command list: stream its vertex/index data into the
 //! shared buffers, then replay each draw command with its own (y-flipped) scissor and texture.
 def public imgui_gl_render(r : ImguiGlRenderer) {
@@ -220,52 +272,7 @@ def public imgui_gl_render(r : ImguiGlRenderer) {
                 addr<void?>(cl.IdxBuffer[0]), GL_STREAM_DRAW)
         }
 
-        for (j in range(length(cl.CmdBuffer))) {
-            let c & = unsafe(cl.CmdBuffer[j])
-            if (c.ElemCount == 0u) {
-                continue
-            }
-            let clip = c.ClipRect
-            var minx = (clip.x - dp.x) * fb.x
-            var miny = (clip.y - dp.y) * fb.y
-            var maxx = (clip.z - dp.x) * fb.x
-            var maxy = (clip.w - dp.y) * fb.y
-            // clamp to the framebuffer: a partially off-screen window can push the clip rect past the
-            // target, and glScissor rejects a negative origin / out-of-range extent with GL_INVALID_VALUE.
-            if (minx < 0.0f) {
-                minx = 0.0f
-            }
-            if (miny < 0.0f) {
-                miny = 0.0f
-            }
-            if (maxx > float(fb_w)) {
-                maxx = float(fb_w)
-            }
-            if (maxy > float(fb_h)) {
-                maxy = float(fb_h)
-            }
-            if (maxx <= minx || maxy <= miny) {
-                continue
-            }
-            // GL scissor origin is bottom-left, so the clip rect's top (miny) maps to fb_h - maxy.
-            glScissor(int(minx), fb_h - int(maxy), int(maxx - minx), int(maxy - miny))
-            bind_sampler_2d(0, uint(c.GetTexID()))
-            // COMPILE-TIME web branch: WebGL2/GLES3 has no glDrawElementsBaseVertex, and on the wasm
-            // cross-compile that symbol isn't even declared (the native GLES3 opengl module replaces the
-            // pure-das Opengl32 late-extern) -- so the desktop branch must be dropped before symbol
-            // resolution, which `if` can't do (it resolves both branches). Both platform queries fold
-            // (SideEffects::none): get_platform_name covers the wasm interpreter (host IS the target),
-            // get_cross_platform_name covers the host->wasm cross-compile (reads --jit-target).
-            static_if (get_platform_name() == "emscripten" || get_cross_platform_name() == "emscripten") {
-                // RendererHasVtxOffset is cleared on web (see backend flags) so ImGui keeps VtxOffset == 0
-                // by splitting any >64K-vertex list; plain glDrawElements over the per-list buffers is correct.
-                glDrawElements(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
-                    unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)))
-            } else {
-                glDrawElementsBaseVertex(GL_TRIANGLES, int(c.ElemCount), GL_UNSIGNED_SHORT,
-                    unsafe(reinterpret<void?>(int(c.IdxOffset) * IDX_SIZE)), int(c.VtxOffset))
-            }
-        }
+        replay_cmd_buffer(cl, dp, fb, fb_w, fb_h)
     }
 
     // leave scissor disabled so the next frame's glClear isn't clipped to the last command's rect

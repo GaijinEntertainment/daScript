@@ -98,10 +98,7 @@ class OnceMacro : AstFunctionAnnotation {
         //         We clone the block, unwrap it, and extract its statements.
         var block_clone = clone_expression(call.arguments[0])
         var blk = move_unquote_block(block_clone)
-        var stmts : array<ExpressionPtr>
-        for (s in blk.list) {
-            stmts |> push <| clone_expression(s)
-        }
+        var stmts <- [for (s in blk.list); clone_expression(s)]
 
         // Step 4: Build the replacement AST using qmacro_block.
         //         $i(flag_name) splices the flag name as an identifier.

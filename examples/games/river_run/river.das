@@ -138,7 +138,7 @@ def advance_river() {
     var drop = 0
     for (seg in river_segments) {
         if (seg.world_y < keep_y) {
-            drop += 1
+            drop++
         } else {
             break
         }
@@ -234,16 +234,28 @@ def is_out_of_river(pos : float3) : bool {
         return false
     }
     let s = river_clamp_x_secondary(pos.y, pos.x)
-    if (s.x <= s.y && pos.x >= s.x && pos.x <= s.y) {
-        return false
-    }
-    return true
+    return !(s.x <= s.y && pos.x >= s.x && pos.x <= s.y)
 }
 
 // --- Geometry Rebuild ---
 
 // Terrain extends this far outward from each bank
 let TERRAIN_EXTEND = 90.0
+
+// One quad, corners in (near-left, near-right, far-left, far-right) order, wound as two triangles.
+def push_quad(var frag : GeometryFragment; p0, p1, p2, p3, nrm : float3; uv : float2) {
+    let base = length(frag.vertices)
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p0, normal = nrm, uv = uv))  // nolint:STYLE012 - appends to the accumulating fragment
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p1, normal = nrm, uv = uv))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p2, normal = nrm, uv = uv))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p3, normal = nrm, uv = uv))
+    frag.indices |> push(base + 0)  // nolint:STYLE012 - appends to the accumulating fragment
+    frag.indices |> push(base + 1)
+    frag.indices |> push(base + 2)
+    frag.indices |> push(base + 2)
+    frag.indices |> push(base + 1)
+    frag.indices |> push(base + 3)
+}
 
 def gen_river_banks() : GeometryFragment {
     var frag : GeometryFragment
@@ -279,17 +291,9 @@ def gen_river_banks() : GeometryFragment {
         let lext0 = lx0 - TERRAIN_EXTEND
         let lext1 = lx1 - TERRAIN_EXTEND
 
-        let base = length(frag.vertices)
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(lext0, y0, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(lx0,   y0, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(lext1, y1, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(lx1,   y1, Z), normal = zero_n, uv = zero_uv))
-        frag.indices |> push(base + 0)
-        frag.indices |> push(base + 1)
-        frag.indices |> push(base + 2)
-        frag.indices |> push(base + 2)
-        frag.indices |> push(base + 1)
-        frag.indices |> push(base + 3)
+        push_quad(frag,
+            float3(lext0, y0, Z), float3(lx0, y0, Z),
+            float3(lext1, y1, Z), float3(lx1, y1, Z), zero_n, zero_uv)
 
         // Right bank quad: extends rightward
         let rx0 = s0.right_bank_x
@@ -297,36 +301,15 @@ def gen_river_banks() : GeometryFragment {
         let rext0 = rx0 + TERRAIN_EXTEND
         let rext1 = rx1 + TERRAIN_EXTEND
 
-        let base2 = length(frag.vertices)
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(rx0,   y0, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(rext0, y0, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(rx1,   y1, Z), normal = zero_n, uv = zero_uv))
-        frag.vertices |> push(GeometryPreviewVertex(xyz = float3(rext1, y1, Z), normal = zero_n, uv = zero_uv))
-        frag.indices |> push(base2 + 0)
-        frag.indices |> push(base2 + 1)
-        frag.indices |> push(base2 + 2)
-        frag.indices |> push(base2 + 2)
-        frag.indices |> push(base2 + 1)
-        frag.indices |> push(base2 + 3)
+        push_quad(frag,
+            float3(rx0, y0, Z), float3(rext0, y0, Z),
+            float3(rx1, y1, Z), float3(rext1, y1, Z), zero_n, zero_uv)
 
         // Center island strip when river is split at this slice.
         if (s0.split || s1.split) {
-            let ml0 = s0.split_left_x
-            let mr0 = s0.split_right_x
-            let ml1 = s1.split_left_x
-            let mr1 = s1.split_right_x
-
-            let base3 = length(frag.vertices)
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(ml0, y0, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(mr0, y0, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(ml1, y1, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(mr1, y1, Z), normal = zero_n, uv = zero_uv))
-            frag.indices |> push(base3 + 0)
-            frag.indices |> push(base3 + 1)
-            frag.indices |> push(base3 + 2)
-            frag.indices |> push(base3 + 2)
-            frag.indices |> push(base3 + 1)
-            frag.indices |> push(base3 + 3)
+            push_quad(frag,
+                float3(s0.split_left_x, y0, Z), float3(s0.split_right_x, y0, Z),
+                float3(s1.split_left_x, y1, Z), float3(s1.split_right_x, y1, Z), zero_n, zero_uv)
         }
     }
 
@@ -353,42 +336,21 @@ def gen_river_surface() : GeometryFragment {
 
         if (s0.split || s1.split) {
             // Left channel surface.
-            let base = length(frag.vertices)
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.left_bank_x,  s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.split_left_x, s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.left_bank_x,  s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.split_left_x, s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.indices |> push(base + 0)
-            frag.indices |> push(base + 1)
-            frag.indices |> push(base + 2)
-            frag.indices |> push(base + 2)
-            frag.indices |> push(base + 1)
-            frag.indices |> push(base + 3)
+            push_quad(frag,
+                float3(s0.left_bank_x, s0.world_y, Z), float3(s0.split_left_x, s0.world_y, Z),
+                float3(s1.left_bank_x, s1.world_y, Z), float3(s1.split_left_x, s1.world_y, Z),
+                zero_n, zero_uv)
 
             // Right channel surface.
-            let base2 = length(frag.vertices)
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.split_right_x, s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.right_bank_x,  s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.split_right_x, s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.right_bank_x,  s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.indices |> push(base2 + 0)
-            frag.indices |> push(base2 + 1)
-            frag.indices |> push(base2 + 2)
-            frag.indices |> push(base2 + 2)
-            frag.indices |> push(base2 + 1)
-            frag.indices |> push(base2 + 3)
+            push_quad(frag,
+                float3(s0.split_right_x, s0.world_y, Z), float3(s0.right_bank_x, s0.world_y, Z),
+                float3(s1.split_right_x, s1.world_y, Z), float3(s1.right_bank_x, s1.world_y, Z),
+                zero_n, zero_uv)
         } else {
-            let base = length(frag.vertices)
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.left_bank_x,  s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s0.right_bank_x, s0.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.left_bank_x,  s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.vertices |> push(GeometryPreviewVertex(xyz = float3(s1.right_bank_x, s1.world_y, Z), normal = zero_n, uv = zero_uv))
-            frag.indices |> push(base + 0)
-            frag.indices |> push(base + 1)
-            frag.indices |> push(base + 2)
-            frag.indices |> push(base + 2)
-            frag.indices |> push(base + 1)
-            frag.indices |> push(base + 3)
+            push_quad(frag,
+                float3(s0.left_bank_x, s0.world_y, Z), float3(s0.right_bank_x, s0.world_y, Z),
+                float3(s1.left_bank_x, s1.world_y, Z), float3(s1.right_bank_x, s1.world_y, Z),
+                zero_n, zero_uv)
         }
     }
 

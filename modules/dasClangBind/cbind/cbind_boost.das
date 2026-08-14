@@ -52,7 +52,7 @@ bitfield TypeRules {
     top_level_pointers_are_implicit     // for any pointer make it implicit
 }
 
-def clang_typeToDasTypeUnqEx(var t : CXType; topLevel : bool; rules : TypeRules; var error : string&) {
+def clang_typeToDasTypeUnqEx(var t : CXType; topLevel : bool; rules : TypeRules; var error : string&) {   // nolint:STYLE037,STYLE038 - flat ladder - one arm per CXTypeKind
     if (t.kind == CXTypeKind.Void) {
         return "void"
     } elif (t.kind == CXTypeKind.Bool) {
@@ -436,8 +436,8 @@ class AnyGenBind {
     def skip_alias(var c : CXCursor) {
         return true
     }
-    def parse(var cursor : CXCursor) {
-        clang_visitChildren(cursor) $(var c, parent) {
+    def parse(var cursor : CXCursor) {   // nolint:STYLE038 - flat ladder - one arm per CXCursorKind
+        clang_visitChildren(cursor) $(var c, parent) {   // nolint:STYLE037 - flat ladder - one arm per CXCursorKind
             var file : CXFile
             var line, column, offset : uint
             clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
@@ -1369,7 +1369,7 @@ class CppGenBind : AnyGenBind {
     def get_module_temp_fn : string {
         return ""
     }
-    def parse_anyFunctionDecl(var c : CXCursor; isMethod : bool) {
+    def parse_anyFunctionDecl(var c : CXCursor; isMethod : bool) {   // nolint:STYLE038 - flat emitter - one write per makeExtern section
         step_Function()
         let isStatic = clang_Cursor_getStorageClass(c) == CX_StorageClass.Static
         let function_name = string(clang_getCursorSpelling(c))
@@ -1524,7 +1524,7 @@ class CppGenBind : AnyGenBind {
         let tn = string(clang_getTypeSpelling(t))
         return alias2type?[tn] ?? ""
     }
-    def getCursorInit(var c : CXCursor; this_alias : string) {
+    def getCursorInit(var c : CXCursor; this_alias : string) {   // nolint:STYLE038 - flat ladder - one ExprConst spelling per CXTypeKind
         var result = ""
         var t = clang_getCanonicalType(clang_getCursorType(c))
         var res = clang_Cursor_Evaluate(c)

@@ -66,7 +66,7 @@ def parse_expr(calc : string; blk : block<(val : int; err : array<ParsingError>)
 [test]
 def test_calc_1(t : T?) {
     let input = "1+2*2+1---(3*2 +1*2)-1-1-1*2 "
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(res; _err) {
         t |> equal(-6, res)
     }
 }
@@ -74,7 +74,7 @@ def test_calc_1(t : T?) {
 [test]
 def test_calc_2(t : T?) {
     let input = "5-2*3+4/2"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(res; _err) {
         t |> equal(1, res)
     }
 }
@@ -83,7 +83,7 @@ def test_calc_2(t : T?) {
 [test]
 def test_calc_3(t : T?) {
     let input = "4*(2+3)-6"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(res; _err) {
         t |> equal(14, res)
     }
 }
@@ -92,7 +92,7 @@ def test_calc_3(t : T?) {
 [test]
 def test_calc_4(t : T?) {
     let input = "(2+3)*4-6"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(res; _err) {
         t |> equal(14, res)
     }
 }
@@ -102,7 +102,7 @@ def test_calc_4(t : T?) {
 [test]
 def test_calc_error_1(t : T?) {
     let input = "4-"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -112,7 +112,7 @@ def test_calc_error_1(t : T?) {
 [test]
 def test_ctest_calc_error_2(t : T?) {
     let input = "(2"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -122,7 +122,7 @@ def test_ctest_calc_error_2(t : T?) {
 [test]
 def test_calc_error_3(t : T?) {
     let input = "2+3)"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -132,7 +132,7 @@ def test_calc_error_3(t : T?) {
 [test]
 def test_calc_error_4(t : T?) {
     let input = "2+*3"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -142,7 +142,7 @@ def test_calc_error_4(t : T?) {
 [test]
 def test_calc_error_5(t : T?) {
     let input = "4*(2+3-6"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -152,7 +152,7 @@ def test_calc_error_5(t : T?) {
 [test]
 def test_calc_error_6(t : T?) {
     let input = "2*3*"
-    parse_expr(input) $(res; err) {
+    parse_expr(input) $(_res; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }

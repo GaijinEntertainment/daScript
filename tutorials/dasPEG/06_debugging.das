@@ -114,33 +114,33 @@ def show_errors(errors : array<ParsingError>) {
 def main {
     // Section 1: Tracing
     print("=== Tracing (matching) ===\n")
-    parse_traced("hello world") $(val; err) {
+    parse_traced("hello world") $(val; _err) {
         print("  result: \"{val}\"\n")
     }
     print("\n=== Tracing (backtracking) ===\n")
-    parse_traced("bye") $(val; err) {
+    parse_traced("bye") $(val; _err) {
         print("  result: \"{val}\"\n")
     }
 
     // Section 2: Log messages
     print("\n=== Log messages ===\n")
-    parse_with_log("3 + 5") $(val; err) {
+    parse_with_log("3 + 5") $(val; _err) {
         print("  result: {val}\n")
     }
-    parse_with_log("42") $(val; err) {
+    parse_with_log("42") $(val; _err) {
         print("  result: {val}\n")
     }
 
     // Section 3: Commit vs no commit
     print("\n=== Error reporting: without commit ===\n")
     print("  Parsing \"val = ;\"\n")
-    parse_no_commit("val = ;") $(val; err) {
+    parse_no_commit("val = ;") $(_val; err) {
         show_errors(err)
     }
 
     print("\n=== Error reporting: with commit ===\n")
     print("  Parsing \"val = ;\"\n")
-    parse_with_commit("val = ;") $(val; err) {
+    parse_with_commit("val = ;") $(_val; err) {
         show_errors(err)
     }
 

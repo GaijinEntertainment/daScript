@@ -135,7 +135,7 @@ def main {
     print("=== Single row ===\n")
     let csv1 = %stringify~1,"hello",3.14%%
     print("  Input: {csv1}\n")
-    parse_csv(csv1) $(val; err) {
+    parse_csv(csv1) $(val; _err) {
         print_table(val)
     }
 
@@ -145,13 +145,13 @@ def main {
 2,"Bob",87.0
 3,"Charlie",92.3%%
     print("  Input:\n    {csv2}\n")
-    parse_csv(csv2) $(val; err) {
+    parse_csv(csv2) $(val; _err) {
         print_table(val)
     }
 
     // Empty input
     print("\n=== Empty input ===\n")
-    parse_csv("") $(val; err) {
+    parse_csv("") $(val; _err) {
         print("  Rows: {length(val)}\n")
     }
 }

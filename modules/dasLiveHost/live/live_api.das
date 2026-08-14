@@ -112,10 +112,8 @@ def compilation_error_response(resp : HttpResponse?) : http_status {
     //! Returns OK (200) if there is no error — caller should continue with normal logic.
     let err = get_last_error()
     if (!empty(err)) {
-        var tab : table<string; JsonValue?>
-        tab |> insert("error", JV(err))
-        tab |> insert("hint", JV("POST /reload to retry"))
-        return resp |> JSON(write_json(JV(tab)), http_status.SERVICE_UNAVAILABLE)
+        let tab = JV((error = err, hint = "POST /reload to retry"))
+        return resp |> JSON(write_json(tab), http_status.SERVICE_UNAVAILABLE)
     }
     return http_status.OK
 }
@@ -151,7 +149,7 @@ def live_api_help_json() : string {
 // --- Server ---
 
 class LiveApiServer : HvWebServer {
-    def override onInit() {
+    def override onInit() {  // nolint:STYLE038 - flat route-registration table; each entry is one endpoint
         allow_cors()
 
         GET("/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -231,10 +229,10 @@ class LiveApiServer : HvWebServer {
             }
             let arr & = unsafe(parsed.value as _array)
             let result = build_string() $(var w) {
-                write_char(w, int('['))
+                write_char(w, '[')
                 var first = true
                 for (entry in arr) {
-                    if (!first) write_char(w, int(','))
+                    if (!first) write_char(w, ',')
                     first = false
                     let entry_v = unsafe(reinterpret<JsonValue?>(entry))
                     if (entry_v == null || !(entry_v.value is _object)) {
@@ -249,7 +247,7 @@ class LiveApiServer : HvWebServer {
                     }
                     write(w, dispatch_command(write_json(entry_v)))
                 }
-                write_char(w, int(']'))
+                write_char(w, ']')
             }
             return resp |> JSON(result, http_status.OK)
         }

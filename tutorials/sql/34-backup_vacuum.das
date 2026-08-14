@@ -26,7 +26,7 @@ struct LogEntry {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<LogEntry>)
         for (i in range(100)) {

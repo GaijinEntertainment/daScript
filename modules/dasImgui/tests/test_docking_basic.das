@@ -90,11 +90,11 @@ def test_docking_basic(t : T?) { // nolint:STYLE038
             let ou_x1 = ou_bb?["z"] ?? 0.0f
             let pr_x0 = pr_bb?["x"] ?? 0.0f
             t |> success(ex_x1 <= so_x0 + 4.0f,
-                         "EXPLORER.right ({ex_x1}) at-or-left-of SOURCE.left ({so_x0}) — split-left landed")
+                         "EXPLORER.right ({ex_x1}) at-or-left-of SOURCE.left ({so_x0}) - split-left landed")
             t |> success(so_y1 <= ou_y0 + 4.0f,
-                         "SOURCE.bottom ({so_y1}) at-or-above OUTPUT.top ({ou_y0}) — split-top landed")
+                         "SOURCE.bottom ({so_y1}) at-or-above OUTPUT.top ({ou_y0}) - split-top landed")
             t |> success(ou_x1 <= pr_x0 + 4.0f,
-                         "OUTPUT.right ({ou_x1}) at-or-left-of PROPERTIES.left ({pr_x0}) — split-left landed inside bottom row")
+                         "OUTPUT.right ({ou_x1}) at-or-left-of PROPERTIES.left ({pr_x0}) - split-left landed inside bottom row")
         }
         reset(d)
 
@@ -186,21 +186,21 @@ def test_docking_basic(t : T?) { // nolint:STYLE038
             }
             // Output is the front tab initially (docked last); Console is backgrounded.
             t |> success(wait_for_visible(d, "DOCK_ROOT/OUTPUT/CLEAR_BTN", 5.0f) != null,
-                         "OUTPUT starts as the front tab — CLEAR_BTN paints")
+                         "OUTPUT starts as the front tab - CLEAR_BTN paints")
             t |> success(!widget_rendered(snapshot(d), "DOCK_ROOT/CONSOLE/CONSOLE_BTN"),
-                         "CONSOLE starts backgrounded — its child does not paint")
+                         "CONSOLE starts backgrounded - its child does not paint")
 
             // Raise Console -> it becomes the front tab; its child paints, Output's stops.
             post_command(d, "imgui_raise", JV((target = "DOCK_ROOT/CONSOLE")))
             t |> success(wait_for_visible(d, "DOCK_ROOT/CONSOLE/CONSOLE_BTN", 5.0f) != null,
-                         "imgui_raise CONSOLE selected its tab — CONSOLE_BTN paints")
-            t |> success(wait_cond(d, 5.0f) $() => !widget_rendered(snapshot(d), "DOCK_ROOT/OUTPUT/CLEAR_BTN"),
-                         "...and OUTPUT is backgrounded — its child stops painting")
+                         "imgui_raise CONSOLE selected its tab - CONSOLE_BTN paints")
+            t |> success(wait_cond(d, 5.0f) $ => !widget_rendered(snapshot(d), "DOCK_ROOT/OUTPUT/CLEAR_BTN"),
+                         "...and OUTPUT is backgrounded - its child stops painting")
 
             // Raise Output back -> the tab switches the other way.
             post_command(d, "imgui_raise", JV((target = "DOCK_ROOT/OUTPUT")))
             t |> success(wait_for_visible(d, "DOCK_ROOT/OUTPUT/CLEAR_BTN", 5.0f) != null,
-                         "imgui_raise OUTPUT switched the tab back — CLEAR_BTN paints again")
+                         "imgui_raise OUTPUT switched the tab back - CLEAR_BTN paints again")
         }
     }
 }

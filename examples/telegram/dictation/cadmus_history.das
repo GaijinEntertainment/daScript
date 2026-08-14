@@ -356,7 +356,7 @@ def load_cadmus_assistant_sources(
     }
     var source_ids : array<int64>
     with_cadmus_database(path) $(db) {
-        source_ids <- %linq! from item : CadmusAssistantSource in db
+        source_ids <- %linq! from item : CadmusAssistantSource in db   // nolint:PERF030 - target is the fresh empty decl above; the fill is inside a callback, so it cannot fold into the declaration
                               where item.ChatId == chat_id &&
                                     item.AssistantMessageId == assistant_message_id
                               select item.SourceMessageId %%

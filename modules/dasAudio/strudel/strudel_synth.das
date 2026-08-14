@@ -936,39 +936,29 @@ def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb
 
 // ─── Main render entry point ───
 
+// Drum sounds have fixed durations and render at unit gain; an unknown name gives silence.
+def private render_drum_mono(s : string; duration_sec : float) : array<float> {
+    if (s == "bd") return <- render_bd(duration_sec, 1.0)
+    if (s == "sd") return <- render_sd(duration_sec, 1.0)
+    if (s == "hh" || s == "hh_pedal") return <- render_hh(duration_sec, 1.0)
+    if (s == "oh" || s == "hh_open") return <- render_oh(duration_sec, 1.0)
+    if (s == "cp") return <- render_cp(duration_sec, 1.0)
+    if (s == "tom_low") return <- render_tom(duration_sec, 1.0, 80.0)
+    if (s == "tom_high") return <- render_tom(duration_sec, 1.0, 175.0)
+    if (s == "ride" || s == "ride_bell") return <- render_ride(duration_sec, 1.0)
+    if (s == "crash") return <- render_crash(duration_sec, 1.0)
+    if (s == "sidestick") return <- render_rimshot(duration_sec, 1.0)
+    if (s == "cowbell" || s == "cb") return <- render_cowbell(duration_sec, 1.0)
+    if (s == "tambourine" || s == "tamb") return <- render_tambourine(duration_sec, 1.0)
+    var mono : array<float>
+    mono |> resize(int(duration_sec * float(SAMPLE_RATE)))
+    return <- mono
+}
+
 def render_event_stereo(event : Event; duration_sec : float) : array<float> {
     //! Render an Event into an interleaved stereo PCM buffer using the built-in drum synths.
     //! Returns raw audio with no gain/pan applied — the scheduler's `ma_volume_mixer` applies those during the mix pass.
-    let s = event.s
-    var mono : array<float>
-    // drum sounds have fixed durations, rendered at unit gain
-    if (s == "bd") {
-        mono <- render_bd(duration_sec, 1.0)
-    } elif (s == "sd") {
-        mono <- render_sd(duration_sec, 1.0)
-    } elif (s == "hh" || s == "hh_pedal") {
-        mono <- render_hh(duration_sec, 1.0)
-    } elif (s == "oh" || s == "hh_open") {
-        mono <- render_oh(duration_sec, 1.0)
-    } elif (s == "cp") {
-        mono <- render_cp(duration_sec, 1.0)
-    } elif (s == "tom_low") {
-        mono <- render_tom(duration_sec, 1.0, 80.0)
-    } elif (s == "tom_high") {
-        mono <- render_tom(duration_sec, 1.0, 175.0)
-    } elif (s == "ride" || s == "ride_bell") {
-        mono <- render_ride(duration_sec, 1.0)
-    } elif (s == "crash") {
-        mono <- render_crash(duration_sec, 1.0)
-    } elif (s == "sidestick") {
-        mono <- render_rimshot(duration_sec, 1.0)
-    } elif (s == "cowbell" || s == "cb") {
-        mono <- render_cowbell(duration_sec, 1.0)
-    } elif (s == "tambourine" || s == "tamb") {
-        mono <- render_tambourine(duration_sec, 1.0)
-    } else {
-        mono |> resize(int(duration_sec * float(SAMPLE_RATE)))
-    }
+    var mono <- render_drum_mono(event.s, duration_sec)
     return <- mono_to_stereo(mono)
 }
 

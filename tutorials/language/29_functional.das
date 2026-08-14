@@ -33,7 +33,7 @@ def add(a, b : int) : int {
 // It yields only elements for which the predicate returns true.
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // --- filter ---
     print("filter:\n")

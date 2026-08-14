@@ -234,7 +234,7 @@ class ILogger {
     def abstract log_name : string
     // Default implementation — not required to override
     def format(message : string) : string {
-        return "[{self->log_name()}] {message}"
+        return "[{self.log_name()}] {message}"
     }
 }
 

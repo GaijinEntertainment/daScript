@@ -128,6 +128,13 @@ var @live snd_game_over : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
+    // release whatever a previous run left in the @live buffers before regenerating
+    delete snd_paddle_hit
+    delete snd_brick_break
+    delete snd_wall_bounce
+    delete snd_ball_miss
+    delete snd_bonus_pickup
+    delete snd_bonus_bad
     // Paddle hit: chirp 440→880Hz, 50ms
     snd_paddle_hit <- gen_sine_sweep(440.0, 880.0, 0.05, 0.3)
     // Brick break: noise + sine
@@ -622,11 +629,11 @@ def activate_bonus(btype : int) {
             positions |> push(b.pos)
             velocities |> push(b.vel)
         }
-        for (i in range(length(positions))) {
-            let p = positions[i]
-            let speed = length(velocities[i])
-            let vel1 = normalize(float3(velocities[i].x + sin(0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
-            let vel2 = normalize(float3(velocities[i].x + sin(-0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
+        for (bpos, bvel in positions, velocities) {
+            let p = bpos
+            let speed = length(bvel)
+            let vel1 = normalize(float3(bvel.x + sin(0.5) * speed * 0.3, 0.0, bvel.z)) * speed
+            let vel2 = normalize(float3(bvel.x + sin(-0.5) * speed * 0.3, 0.0, bvel.z)) * speed
             create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel1))
             }
@@ -1338,7 +1345,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulation, render, HUD
     if (!live_begin_frame()) {
         return
     }

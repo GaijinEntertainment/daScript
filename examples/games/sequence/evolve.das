@@ -103,6 +103,13 @@ def array_to_lookahead_weights(a : array<float>; depth : int; jack_lookahead : i
     )
 }
 
+def default_weights_array(is_lookahead : bool; depth, jack_lookahead : int) : array<float> {
+    if (is_lookahead) {
+        return <- lookahead_weights_to_array(LookaheadWeights(depth = depth, jack_lookahead = jack_lookahead))
+    }
+    return <- greedy_weights_to_array(GreedyWeights())
+}
+
 // --- Gaussian RNG via Box-Muller ---
 
 def random_gaussian(var seed : int4&) : float {
@@ -181,6 +188,73 @@ struct EvalResult {
     wins : int
 }
 
+// --- Evaluate one generation of children against the parent, in parallel ---
+
+def evaluate_children(children : array<array<float>>; parent : array<float>;
+                      bot_type : string; depth, jack_lookahead, gen : int) : int2 {
+    var best_child_idx = -1
+    var best_child_wins = 0
+    with_channel(ES_LAMBDA) $(ch) {
+        with_wait_group(ES_LAMBDA) $(wg) {
+            for (i in range(ES_LAMBDA)) {
+                let child_idx = i
+                let child_bot = make_bot_from_array(children[i], bot_type, depth, jack_lookahead)
+                let parent_bot = make_bot_from_array(parent, bot_type, depth, jack_lookahead)
+                let base_seed = gen * 10000 + i * 1000
+                new_job() @() {
+                    let result = play_pair_parallel(child_bot, parent_bot, ES_GAMES_PER_PAIR, base_seed)
+                    ch |> push_clone(EvalResult(child_idx = child_idx, wins = result.x))
+                    ch |> notify_and_release
+                    wg |> done
+                }
+            }
+        }
+
+        // Collect results
+        ch |> for_each_clone() $(r : EvalResult#) {
+            if (r.wins > best_child_wins) {
+                best_child_wins = r.wins
+                best_child_idx = r.child_idx
+            }
+        }
+    }
+    return int2(best_child_idx, best_child_wins)
+}
+
+// --- Final report ---
+
+def print_final_report(parent : array<float>; is_lookahead : bool; depth, jack_lookahead : int) {
+    let struct_name = is_lookahead ? "LookaheadWeights" : "GreedyWeights"
+    print("\n=== Final Optimized Weights ===\n")
+    print("{struct_name}(\n")
+    if (is_lookahead) {
+        let n = length(LOOKAHEAD_WEIGHT_NAMES)
+        for (i in range(n)) {
+            if (i >= length(parent)) {
+                break
+            }
+            let name = LOOKAHEAD_WEIGHT_NAMES[i]
+            let val = parent[i]
+            let comma = i < n - 1 ? "," : ""
+            print("    {name} = {val:.1f}{comma}\n")
+        }
+        print("    depth = {depth},\n")
+        print("    jack_lookahead = {jack_lookahead}\n")
+    } else {
+        let n = length(GREEDY_WEIGHT_NAMES)
+        for (i in range(n)) {
+            if (i >= length(parent)) {
+                break
+            }
+            let name = GREEDY_WEIGHT_NAMES[i]
+            let val = parent[i]
+            let comma = i < n - 1 ? "," : ""
+            print("    {name} = {val:.1f}{comma}\n")
+        }
+    }
+    print(")\n")
+}
+
 // --- CLI argument parsing ---
 
 def find_arg(args : array<string>; name : string; default_val : string) : string {
@@ -219,12 +293,7 @@ def main() {
 
     var seed = random_seed(12345)
     var sigma = ES_SIGMA_INIT
-    var parent : array<float>
-    if (is_lookahead) {
-        parent <- lookahead_weights_to_array(LookaheadWeights(depth = depth, jack_lookahead = jack_lookahead))
-    } else {
-        parent <- greedy_weights_to_array(GreedyWeights())
-    }
+    var parent <- default_weights_array(is_lookahead, depth, jack_lookahead)
     let t_start = ref_time_ticks()
 
     with_job_que() {
@@ -236,38 +305,15 @@ def main() {
             }
 
             // Evaluate all children vs parent in parallel
-            var best_child_idx = -1
-            var best_child_wins = 0
-            with_channel(ES_LAMBDA) $(ch) {
-                with_wait_group(ES_LAMBDA) $(wg) {
-                    for (i in range(ES_LAMBDA)) {
-                        let child_idx = i
-                        let child_bot = make_bot_from_array(children[i], bot_type, depth, jack_lookahead)
-                        let parent_bot = make_bot_from_array(parent, bot_type, depth, jack_lookahead)
-                        let base_seed = gen * 10000 + i * 1000
-                        new_job() @() {
-                            let result = play_pair_parallel(child_bot, parent_bot, ES_GAMES_PER_PAIR, base_seed)
-                            ch |> push_clone(EvalResult(child_idx = child_idx, wins = result.x))
-                            ch |> notify_and_release
-                            wg |> done
-                        }
-                    }
-                }
-
-                // Collect results
-                ch |> for_each_clone() $(r : EvalResult#) {
-                    if (r.wins > best_child_wins) {
-                        best_child_wins = r.wins
-                        best_child_idx = r.child_idx
-                    }
-                }
-            }
+            let best = evaluate_children(children, parent, bot_type, depth, jack_lookahead, gen)
+            let best_child_idx = best.x
+            let best_child_wins = best.y
 
             // Select winner: child must win majority to replace parent
             let parent_wins = ES_GAMES_PER_PAIR - best_child_wins
             if (best_child_idx >= 0 && best_child_wins > parent_wins) {
                 delete parent
-                parent <- children[best_child_idx]
+                parent <- children[best_child_idx]  // nolint:PERF030 released by the delete above; unseen across the block argument
                 let pct = float(best_child_wins) * 100.0 / float(ES_GAMES_PER_PAIR)
                 print("Gen {gen}: child_{best_child_idx} selected ({pct:.0f}%)  sigma={sigma:.4f}\n")
             } else {
@@ -275,12 +321,7 @@ def main() {
             }
 
             // Quick baseline check — parent vs default
-            var default_arr : array<float>
-            if (is_lookahead) {
-                default_arr <- lookahead_weights_to_array(LookaheadWeights(depth = depth, jack_lookahead = jack_lookahead))
-            } else {
-                default_arr <- greedy_weights_to_array(GreedyWeights())
-            }
+            var default_arr <- default_weights_array(is_lookahead, depth, jack_lookahead)
             let vs_default_wins = head_to_head(parent, default_arr, bot_type, depth, jack_lookahead, ES_GAMES_PER_PAIR, gen * 10000 + 9500)
             delete default_arr
             print("  vs_default: {vs_default_wins}/{ES_GAMES_PER_PAIR}\n")
@@ -301,35 +342,7 @@ def main() {
     // Final report
     let elapsed_ms = get_time_usec(t_start) / 1000
     print("\nCompleted in {elapsed_ms} ms ({elapsed_ms / 1000} sec)\n")
-    let struct_name = is_lookahead ? "LookaheadWeights" : "GreedyWeights"
-    print("\n=== Final Optimized Weights ===\n")
-    print("{struct_name}(\n")
-    if (is_lookahead) {
-        let n = length(LOOKAHEAD_WEIGHT_NAMES)
-        for (i in range(n)) {
-            if (i >= length(parent)) {
-                break
-            }
-            let name = LOOKAHEAD_WEIGHT_NAMES[i]
-            let val = parent[i]
-            let comma = i < n - 1 ? "," : ""
-            print("    {name} = {val:.1f}{comma}\n")
-        }
-        print("    depth = {depth},\n")
-        print("    jack_lookahead = {jack_lookahead}\n")
-    } else {
-        let n = length(GREEDY_WEIGHT_NAMES)
-        for (i in range(n)) {
-            if (i >= length(parent)) {
-                break
-            }
-            let name = GREEDY_WEIGHT_NAMES[i]
-            let val = parent[i]
-            let comma = i < n - 1 ? "," : ""
-            print("    {name} = {val:.1f}{comma}\n")
-        }
-    }
-    print(")\n")
+    print_final_report(parent, is_lookahead, depth, jack_lookahead)
 
     delete parent
 }

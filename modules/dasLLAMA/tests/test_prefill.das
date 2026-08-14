@@ -9,7 +9,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // CPU-correctness test — prefills on the CPU by design
 }
-require dasllama/dasllama_tokenizer
+require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
@@ -115,7 +115,7 @@ def test_prefill_fp32(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
-        let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
+        let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
             check_prefill(t, tr, prompt, mode)
             check_continuation(t, tr, prompt, 4l, mode)
@@ -146,7 +146,7 @@ def test_prefill_q8(t : T?) {
         quantize_weights(tr)
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
-        let long_prompt <- [for (i in range64(200l)); int64(i % 200l + 1l)]
+        let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]
         for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
             check_prefill(t, tr, prompt, mode)
             check_continuation(t, tr, prompt, 4l, mode)

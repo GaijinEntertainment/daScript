@@ -6,10 +6,8 @@ options indenting = 4
 require strudel/strudel
 require strudel/strudel_player
 require strudel/strudel_sf2
-require strudel/strudel_sf2_voice
 require audio/audio_wav
 require audio/audio_boost
-require audio
 require daslib/fio
 
 def find_sf2() : string {
@@ -78,9 +76,7 @@ def main() {
     print("Rendering {duration} seconds...\n")
     while (wall_time < duration) {
         tick(sched, pat, bank, wall_time, chunk_sec)
-        for (s in g_master_pcm) {
-            output |> push(s)
-        }
+        output |> push_from(g_master_pcm)
         wall_time += double(chunk_sec)
     }
 

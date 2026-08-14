@@ -118,7 +118,7 @@ def test_batch_backend_pin(t : T?) {
             }
         }
         if (!tested_reject) {
-            to_log(LOG_WARNING, "test_batch_backend_pin: no repack donor (arm64-gen/x64-gen) registered on this build — layout-guard path not exercised\n")
+            to_log(LOG_WARNING, "test_batch_backend_pin: no repack donor (arm64-gen/x64-gen) registered on this build - layout-guard path not exercised\n")
         }
         // a row-major donor takes the batch slots and survives re-activation
         var tested_accept = false
@@ -132,7 +132,7 @@ def test_batch_backend_pin(t : T?) {
             }
         }
         if (!tested_accept) {
-            to_log(LOG_WARNING, "test_batch_backend_pin: no row-major donor (arm64-sdot; x64 has none — its row-major default is portable) registered on this build — batch-pin override/survival not exercised\n")
+            to_log(LOG_WARNING, "test_batch_backend_pin: no row-major donor (arm64-sdot; x64 has none - its row-major default is portable) registered on this build - batch-pin override/survival not exercised\n")
         }
         // clearing the pin restores whole-backend slots on the next activation
         select_batch_backend("")

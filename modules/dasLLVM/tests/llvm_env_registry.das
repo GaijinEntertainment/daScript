@@ -27,7 +27,7 @@ def test_no_env_reads_outside_the_declarations(t : T?) {
     t |> run("dasLLVM reads knobs as g_env_jit fields or the sanctioned live-read helpers") @(t : T?) {
         var offenders <- scan_env_raw_reads(STRICT_ROOTS, SKIP_FILES)
         t |> success(empty(offenders),
-            "raw environment read(s) outside llvm_env.das: {join(offenders, "; ")} — declare the knob as an [EnvConfig] field; read g_env_jit (or env_value_of/env_is_set for the live-read tune knobs)")
+            "raw environment read(s) outside llvm_env.das: {join(offenders, "; ")} - declare the knob as an [EnvConfig] field; read g_env_jit (or env_value_of/env_is_set for the live-read tune knobs)")
         delete offenders
     }
 }
@@ -37,12 +37,12 @@ def test_every_env_read_is_declared(t : T?) {
     t |> run("every environment variable read or armed anywhere has a declaration") @(t : T?) {
         var used : table<string>
         let files_scanned = scan_env_used_names(STRICT_ROOTS, SKIP_FILES, used)
-        t |> success(files_scanned > 40, "walk visited {files_scanned} files under modules/dasLLVM — a real walk sees dozens; a broken walk must not let both enforcement tests pass vacuously")
-        t |> success(length(used) > 0, "scan found {length(used)} names — zero means even the sanctioned-spelling scan broke")
+        t |> success(files_scanned > 40, "walk visited {files_scanned} files under modules/dasLLVM - a real walk sees dozens; a broken walk must not let both enforcement tests pass vacuously")
+        t |> success(!empty(used), "scan found {length(used)} names - zero means even the sanctioned-spelling scan broke")
         var names <- registered_env_names()
         var missing <- env_undeclared_names(used, names)
         t |> success(empty(missing),
-            "undeclared environment variable(s): {join(missing, ", ")} — add the field to the area struct in llvm_env.das (ambient names get an ambient_rows entry)")
+            "undeclared environment variable(s): {join(missing, ", ")} - add the field to the area struct in llvm_env.das (ambient names get an ambient_rows entry)")
         delete names
         delete missing
     }
@@ -53,7 +53,7 @@ def test_no_ad_hoc_env_helpers(t : T?) {
     t |> run("nobody re-declares a private env reader") @(t : T?) {
         var offenders <- scan_env_banned_helpers(STRICT_ROOTS, SKIP_FILES)
         t |> success(empty(offenders),
-            "re-declared env helper(s): {join(offenders, "; ")} — knobs are [EnvConfig] fields in llvm_env.das")
+            "re-declared env helper(s): {join(offenders, "; ")} - knobs are [EnvConfig] fields in llvm_env.das")
         delete offenders
     }
 }
@@ -68,7 +68,7 @@ def test_environment_md_is_current(t : T?) {
         let want = replace(env_markdown(), "\r\n", "\n")
         let got = replace(onDisk, "\r\n", "\n")
         t |> success(want == got,
-            "ENVIRONMENT.md is stale — regenerate with `daslang modules/dasLLVM/harness/gen_env_doc.das`")
+            "ENVIRONMENT.md is stale - regenerate with `daslang modules/dasLLVM/harness/gen_env_doc.das`")
     }
 }
 
@@ -76,7 +76,7 @@ def test_environment_md_is_current(t : T?) {
 def test_registry_has_no_duplicates(t : T?) {
     t |> run("each knob is declared once across the area structs") @(t : T?) {
         var names <- registered_env_names()
-        t |> success(length(names) > 14, "only {length(names)} declared names — an area struct dropped out")
+        t |> success(length(names) > 14, "only {length(names)} declared names - an area struct dropped out")
         var dupes <- env_duplicate_names(names)
         t |> success(empty(dupes), "duplicate declarations: {join(dupes, ", ")}")
         delete names

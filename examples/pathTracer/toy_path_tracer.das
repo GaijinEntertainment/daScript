@@ -7,7 +7,6 @@ options solid_context
 
 require path_tracer
 
-require strings
 require stbimage
 require daslib/jobque_boost
 require daslib/random
@@ -23,7 +22,7 @@ enum Mode {
 let USE_MODE = Mode.JobQue
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - one arm per Mode; the four tracing strategies side by side are the demo
     let width = 1024
     let height = 1024
     let kFrameCount = 1

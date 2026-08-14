@@ -30,10 +30,7 @@ require daslib/stringify
 // ──────────────────────────────────────────────────────────────────────────
 
 def into_table(var src : array<tuple<string; JsonValue?>>) : table<string; JsonValue?> {
-    var result : table<string; JsonValue?>
-    for (elem in src) {
-        result |> insert(elem._0, elem._1)
-    }
+    var result <- {for (elem in src); elem._0 => elem._1}
     return <- result
 }
 
@@ -45,7 +42,7 @@ def into_table(var src : array<tuple<string; JsonValue?>>) : table<string; JsonV
 // This is a complete JSON parser producing daslib/json JsonValue? trees.
 // It demonstrates deep recursive grammars and all PEG features together.
 
-def parse_json(input : string; blk : block<(var val : JsonValue?# implicit; err : array<ParsingError>) : void>) {
+def parse_json(input : string; blk : block<(var val : JsonValue?# implicit; err : array<ParsingError>) : void>) { // nolint:STYLE038 - flat PEG grammar declaration; the rules are the JSON spec, one per production
     parse(input) {
         var json_value : JsonValue?
 
@@ -143,33 +140,33 @@ def parse_json(input : string; blk : block<(var val : JsonValue?# implicit; err 
 def main {
     // Simple values
     print("=== Simple values ===\n")
-    parse_json("42") $(var val; err) {
+    parse_json("42") $(var val; _err) {
         print("  42 -> {write_json(val)}\n")
     }
-    parse_json("\"hello\"") $(var val; err) {
+    parse_json("\"hello\"") $(var val; _err) {
         print("  \"hello\" -> {write_json(val)}\n")
     }
-    parse_json("true") $(var val; err) {
+    parse_json("true") $(var val; _err) {
         print("  true -> {write_json(val)}\n")
     }
 
     // Arrays
     print("\n=== Arrays ===\n")
-    parse_json("[1, 2, 3]") $(var val; err) {
+    parse_json("[1, 2, 3]") $(var val; _err) {
         print("  [1,2,3] -> {write_json(val)}\n")
     }
 
     // Objects
     print("\n=== Objects ===\n")
     let obj_input = %stringify~{"name": "Alice", "age": 30, "active": true}%%
-    parse_json(obj_input) $(var val; err) {
+    parse_json(obj_input) $(var val; _err) {
         print("  -> {write_json(val)}\n")
     }
 
     // Nested structure
     print("\n=== Nested ===\n")
     let nested = %stringify~{"users": [{"name": "Alice"}, {"name": "Bob"}], "count": 2}%%
-    parse_json(nested) $(var val; err) {
+    parse_json(nested) $(var val; _err) {
         print("  -> {write_json(val)}\n")
     }
 
@@ -178,7 +175,7 @@ def main {
     let test_input = %stringify~[1, "hello", true, null, {"key": [2, 3]}]%%
     var discard_error : string
     var stdlib_json <- read_json(test_input, discard_error)
-    parse_json(test_input) $(var peg_json; err) {
+    parse_json(test_input) $(var peg_json; _err) {
         let match_ = write_json(stdlib_json) == write_json(peg_json)
         print("  stdlib vs PEG match: {match_}\n")
     }

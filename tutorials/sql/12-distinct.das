@@ -31,7 +31,7 @@ def fixture(db : SqlRunner) {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     with_sqlite(":memory:") $(db) {
         fixture(db)
 

@@ -9,7 +9,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // CPU-correctness test — prefills on the CPU by design
 }
-require dasllama/dasllama_tokenizer
+require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require math

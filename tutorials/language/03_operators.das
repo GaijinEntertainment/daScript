@@ -15,7 +15,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Arithmetic ===
     // Both operands must be the same type — no implicit promotion.
@@ -88,7 +88,7 @@ def main {
     // = is copy assignment — works for simple types and copyable values.
     let p = 10
     var q = p       // q is a copy of p  // nolint:LINT010 — demonstrating reassignment after copy
-    q = 99
+    q += 89         // mutating the copy cannot reach p
     print("p={p}  q={q}\n")    // p is unchanged
 
     // <- is move assignment — transfers ownership, zeroes the source.

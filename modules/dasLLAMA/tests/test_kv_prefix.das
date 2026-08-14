@@ -8,6 +8,7 @@ require dasllama/dasllama_prefix
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
+require daslib/linq
 require dasllama/dasllama_env
 
 // Prefix cache (S5) — accounting, the attach cap, LRU budget, and token verification on a tiny
@@ -191,8 +192,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             // COLD: single-shot prefill + greedy decode, snapshotting every logits vector
             var cold <- make_run_state_paged(c, pool)
             eval_(tr, cold, prompt)
-            var cold_all : array<float>
-            cold_all |> push_from(cold.logits)
+            var cold_all := cold.logits
             var cold_toks : array<int64>
             var one : array<int64>
             one |> resize(1)
@@ -205,9 +205,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
                 tok = argmax_of(cold, c.vocab_size)
             }
             // donate: full evaled history = prompt + sampled tokens, floor(29/8) = 3 pages
-            var full : array<int64>
-            full |> push_from(prompt)
-            full |> push_from(cold_toks)
+            var full <- concat(prompt, cold_toks)
             prefix_insert_(cache, pool, cold, full)
             t |> equal(3l, prefix_held_groups_(cache))
             let g0 = cold.block_table[0]
@@ -237,10 +235,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             }
             t |> equal(0, bad)
             // DIVERGENT suffix: same 16-token prefix, different tail — warm attach == its own cold
-            var prompt2 : array<int64>
-            for (i in range64(24l)) {
-                prompt2 |> push(i < 16l ? prompt[i] : 3l + i % 30l)
-            }
+            var prompt2 <- [for (i in range64(24l)); i < 16l ? prompt[i] : 3l + i % 30l]
             var cold2 <- make_run_state_paged(c, pool)
             eval_(tr, cold2, prompt2)
             var warm2 <- make_run_state_paged(c, pool)

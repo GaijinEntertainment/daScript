@@ -223,9 +223,7 @@ def test_shared_codec_helpers(t : T?) {
         t |> equal(json_value_or_quoted("\"x\""), "\"\\\"x\\\"\"")
     }
     t |> run("the wire-text builders: mistral defs, llama defs + call, harmony headers") @(t : T?) {
-        var tools : array<string>
-        tools |> push("\{\"a\": 1}")
-        tools |> push("\{\"b\": 2}")
+        var tools <- ["\{\"a\": 1}", "\{\"b\": 2}"]
         t |> equal(mistral_defs_text(tools), "[AVAILABLE_TOOLS][\{\"a\": 1}, \{\"b\": 2}][/AVAILABLE_TOOLS]")
         t |> success(find(llama_json_defs_text(tools), "\{\"a\": 1}\n\n\{\"b\": 2}") >= 0, "defs joined")
         t |> success(starts_with(llama_json_defs_text(tools), "Given the following functions"), "canonical prompt text")

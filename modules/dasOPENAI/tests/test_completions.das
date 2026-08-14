@@ -10,9 +10,7 @@ require strings
 [test]
 def test_completion_request_serialization(t : T?) {
     t |> run("completion request includes fields, omits unset optionals") @(t : T?) {
-        var req : CompletionRequest
-        req.model = "m"
-        req.prompt = "hello"
+        let req = CompletionRequest(model = "m", prompt = "hello")
         let js = sprint_json(req, false)
         t |> success(find(js, "\"model\":\"m\"") >= 0, "model present")
         t |> success(find(js, "\"prompt\":\"hello\"") >= 0, "prompt present")
@@ -23,12 +21,12 @@ def test_completion_request_serialization(t : T?) {
 [test]
 def test_completion_response_decode(t : T?) {
     t |> run("completion response round-trips through sprint_json/sscan_json") @(t : T?) {
-        var resp : CompletionResponse
-        resp.id = "cmpl-1"
-        resp._object = "text_completion"
-        resp.model = "m"
-        resp.choices <- [CompletionChoice(text = "Paris", index = 0, finish_reason = "stop")]
-        resp.usage = Usage(prompt_tokens = 3, completion_tokens = 1, total_tokens = 4)
+        let resp = CompletionResponse(
+            id = "cmpl-1",
+            _object = "text_completion",
+            model = "m",
+            choices <- [CompletionChoice(text = "Paris", index = 0, finish_reason = "stop")],
+            usage = Usage(prompt_tokens = 3, completion_tokens = 1, total_tokens = 4))
         let js = sprint_json(resp, false)
         var back : CompletionResponse
         t |> success(sscan_json(js, back), "decode ok")

@@ -116,6 +116,7 @@ def test_kv_runs_paged(t : T?) {
         var s <- make_run_state_paged(c, pool)
         t |> equal(5, length(s.kv_runs))   // ceil(16/4) + 1 worst-case scratch
         // identity table: pages are physically consecutive -> every window merges to ONE run
+        s.block_table |> reserve(4)
         for (g in range(4)) {
             s.block_table |> push(g)
         }
@@ -427,10 +428,8 @@ def test_kv_paged_prefill(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            var prompt : array<int64>
-            for (i in range(21)) {   // straddles pages at P=8 (2 full + 1 partial)
-                prompt |> push(int64(i % 50 + 2))
-            }
+            // 21 tokens straddles pages at P=8 (2 full + 1 partial)
+            var prompt <- [for (i in range(21)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
             var sp <- make_run_state_paged(c, pool)

@@ -61,7 +61,7 @@ def template demo_add(a, b : $t(t_value)) : $t(t_value) {
 
 [call_macro(name="build_demo")]
 class BuildDemoMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {   // nolint:STYLE038 - tutorial walkthrough, the numbered qmacro steps ARE the lesson
 
         // ===============================================================
         // 1. quote(expr) — plain AST capture, NO reification.

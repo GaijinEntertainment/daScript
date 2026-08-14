@@ -55,9 +55,27 @@ require math
 // Stack-locals don't survive long enough — auto-fit invokes the callback
 // from inside Begin AFTER the wrapper function has returned. Module
 // scope keeps the struct alive for the lifetime of the program.
-var private SQUARE_CN : ImGuiSizeConstraints
-var private ASPECT_CN : ImGuiSizeConstraints
-var private STEP_CN : ImGuiSizeConstraints
+// Each is seeded once, right here: daslang lambdas hold their own capture
+// state, so a single per-shape struct serves every future Begin().
+let private ASPECT_RATIO = 16.0f / 9.0f
+let private FIXED_STEP = 50.0f
+
+var private SQUARE_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @(var data : ImGuiSizeCallbackData) : void {
+        let s = max(data.DesiredSize.x, data.DesiredSize.y)
+        data.DesiredSize = float2(s, s)
+    })
+var private ASPECT_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @ capture(= ASPECT_RATIO) (var data : ImGuiSizeCallbackData) : void {
+        data.DesiredSize = float2(data.DesiredSize.x,
+                                  float(int(data.DesiredSize.x / ASPECT_RATIO)))
+    })
+var private STEP_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @ capture(= FIXED_STEP) (var data : ImGuiSizeCallbackData) : void {
+        let rx = float(int(data.DesiredSize.x / FIXED_STEP + 0.5f)) * FIXED_STEP
+        let ry = float(int(data.DesiredSize.y / FIXED_STEP + 0.5f)) * FIXED_STEP
+        data.DesiredSize = float2(rx, ry)
+    })
 
 [export]
 def init() {
@@ -69,25 +87,6 @@ def init() {
     DisableIniPersistence()
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.2
-
-    // Seed the three constraints once at init — daslang lambdas hold their
-    // own capture state, so a single per-shape struct is enough for all
-    // future Begin() invocations of the matching window.
-    SQUARE_CN <- ImGuiSizeConstraints(@(var data : ImGuiSizeCallbackData) : void {
-        let s = max(data.DesiredSize.x, data.DesiredSize.y)
-        data.DesiredSize = float2(s, s)
-    })
-    let ratio = 16.0f / 9.0f
-    ASPECT_CN <- ImGuiSizeConstraints(@ capture(= ratio) (var data : ImGuiSizeCallbackData) : void {
-        data.DesiredSize = float2(data.DesiredSize.x,
-                                  float(int(data.DesiredSize.x / ratio)))
-    })
-    let step = 50.0f
-    STEP_CN <- ImGuiSizeConstraints(@ capture(= step) (var data : ImGuiSizeCallbackData) : void {
-        let rx = float(int(data.DesiredSize.x / step + 0.5f)) * step
-        let ry = float(int(data.DesiredSize.y / step + 0.5f)) * step
-        data.DesiredSize = float2(rx, ry)
-    })
 }
 
 [export]

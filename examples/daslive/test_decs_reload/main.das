@@ -1,7 +1,7 @@
 options gen2
 
 require daslib/decs_boost
-require live/decs_live
+require live/decs_live   // nolint:STYLE030 - side-effect-only module: its [before_reload]/[after_reload] hooks are what carry DECS state across the reload under test
 require live_host
 
 var reload_count : int = 0
@@ -44,7 +44,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {   // nolint:STYLE038 - one arm per reload phase; the phases read top-to-bottom as the test script
     if (reload_count == 0) {
         // First run: verify entities exist, then reload
         var count = 0

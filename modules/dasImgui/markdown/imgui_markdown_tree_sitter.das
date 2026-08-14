@@ -126,9 +126,9 @@ def public markdown_tree_sitter_effective_language(
 }
 
 def public markdown_tree_sitter_dispose(var state : MarkdownTreeSitterState) {
-    delete state.overrides
-    delete state.applied
-    state = MarkdownTreeSitterState()
+    var fresh = MarkdownTreeSitterState()
+    swap(state, fresh)
+    delete fresh
 }
 
 def private retain_markdown_syntax_revision(var state : MarkdownTreeSitterState;

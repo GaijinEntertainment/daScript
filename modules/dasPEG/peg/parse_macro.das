@@ -398,6 +398,7 @@ class ParseMacro : AstCallMacro {
         // Emit wrapper code
         let first_method_name = gram[0].name
         let parse_main_func = "parse_{first_method_name}`id_{gen.id}"
+        let main_result_type = unsafe(gen.return_types[first_method_name])
 
         return <- qmacro_block() {
             var parser : $t(gen.parser_type)
@@ -412,7 +413,7 @@ class ParseMacro : AstCallMacro {
                 parser.input := inp
             }
 
-            var result : $t(unsafe(gen.return_types[gram[0].name])) <- $c(parse_main_func)(parser)
+            var result : $t(main_result_type) <- $c(parse_main_func)(parser)
 
             if (result.success) {
                 invoke(blk, result.value, array<ParsingError>())
@@ -431,10 +432,10 @@ class ParseMacro : AstCallMacro {
             error_reporting_parser.error_reporting = true
             error_reporting_parser.longest_prefix = parser.longest_prefix
 
-            result <- $c(parse_main_func)(error_reporting_parser)
+            var error_result : $t(main_result_type) <- $c(parse_main_func)(error_reporting_parser)
             sort_unique(error_reporting_parser.errors)
 
-            invoke(blk, result.value, error_reporting_parser.errors)
+            invoke(blk, error_result.value, error_reporting_parser.errors)
         }
     }
 }

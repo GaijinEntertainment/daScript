@@ -127,7 +127,7 @@ class LiveApiStdioAgent : DapiDebugAgent {
     }
 }
 
-def debug_agent(ctx : Context) {
+def debug_agent(_ctx : Context) {
     assert(this_context().category.debug_context)
     install_new_debug_agent(new LiveApiStdioAgent(), "live_api_stdio")
 }

@@ -18,7 +18,6 @@ require stbimage/stbimage_boost
 require daslib/safe_addr
 require math
 require daslib/fio
-require strings
 
 // ============================================================================
 // Low-level safe wrappers over stbtt_* C bindings
@@ -346,7 +345,7 @@ def public measure_text(font : Font; text : string; pixel_height : float) : floa
     let scale = stbtt_scale_for_pixel_height(font.fontinfo, pixel_height)
     var width = 0.0
     for (ch in text) {
-        let hm = stbtt_codepoint_hmetrics(font.fontinfo, int(ch))
+        let hm = stbtt_codepoint_hmetrics(font.fontinfo, ch)
         width += float(hm.advance_width) * scale
     }
     return width

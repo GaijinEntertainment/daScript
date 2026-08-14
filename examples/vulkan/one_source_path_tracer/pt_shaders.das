@@ -70,7 +70,7 @@ def pt_rgen {
     var throughput = float3(1.0)
     var radiance = float3(0.0)
     var specular = true
-    for (bounce in range(PT_MAX_BOUNCES)) {
+    for (_bounce in range(PT_MAX_BOUNCES)) {
         pt_hit = float4(0.0)
         traceRayEXT(pt_tlas, 0x01u, 0xFFu, 0u, 0u, 0u, ro, PT_MIN_T, rd, PT_MAX_T, pt_hit)
         if (pt_hit.z == 0.0) {

@@ -65,9 +65,9 @@ def test_arch_chat_templates(t : T?) {
     t |> run("each arch has a well-formed chat template") @(t : T?) {
         for (name in ["llama", "qwen2", "qwen2vl", "qwen3", "qwen3vl", "phi3", "gemma2", "gemma3", "gemma4", "qwen2moe", "qwen3moe", "qwen3vlmoe", "qwen35", "qwen35moe", "qwen3next", "glm4moe", "gpt-oss"]) {
             let ct <- arch_chat(name)
-            t |> success(length(ct.user.parts) > 0, "'{name}' user turn non-empty")
+            t |> success(!empty(ct.user.parts), "'{name}' user turn non-empty")
             t |> success(has_content(ct.user), "'{name}' user turn has a content slot")
-            t |> success(length(ct.assistant_open.parts) > 0, "'{name}' assistant_open non-empty")
+            t |> success(!empty(ct.assistant_open.parts), "'{name}' assistant_open non-empty")
             t |> success(!empty(ct.stop), "'{name}' has stop tokens")
         }
         // mistral3 (v7-tekken): the reply opens bare right after [/INST] — assistant_open is

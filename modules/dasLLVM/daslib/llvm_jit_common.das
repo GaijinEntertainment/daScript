@@ -409,35 +409,23 @@ var public g_target_is_aarch64 = false
 // table in llvm_jit_intrin — same contract as g_target_is_aarch64 above.
 var public g_target_is_x64 = false
 
-// nolint:STYLE014 The x64 intrinsic table additionally requires AVX2 on the TARGET — unlike aarch64 (where every
-// daslang JIT host has dotprod, force-appended to the feature set), AVX2 is not universal on x86-64
-// (pre-Haswell, pre-Gracemont Pentium/Celeron/Atom). Emitting llvm.x86.avx2.* against a TargetMachine
-// whose cpuid-derived features lack +avx2 is a FATAL "Cannot select" at codegen — and the JIT compiles
-// the whole program up-front, so one reachable dot32 body would kill the program on such a box.
-// Host path: cpu_supports("avx2") (cpuid + OSXSAVE truth, matching what LLVMGetHostCPUFeatures feeds
-// the TargetMachine). Explicit cross-compile triples get empty features (generic cpu) — no AVX2 there
-// either, so the intrinsics compile their portable fallback bodies: correct, just not fast.
+// Feature truth for the tier gates below: host targets read cpuid, while cross triples and
+// generic-CPU exe builds read DAS_JIT_X64_FORCE_FEATURES / DAS_JIT_ARM64_FORCE_FEATURES only. A
+// forced tier is EMISSION-ONLY (executing it SIGILLs) and folds into the DLL cache key.
+
+// The x64 intrinsic table additionally requires AVX2, which is not universal on x86-64 (unlike
+// aarch64 dotprod). Emitting llvm.x86.avx2.* against a TargetMachine without +avx2 is a FATAL
+// "Cannot select", and the JIT compiles up-front, so one reachable dot32 body kills the program.
 var public g_target_x64_avx2 = false
 
-// nolint:STYLE014 F16C (half<->float convert, VCVTPH2PS/VCVTPS2PH) gate for the f16_cvt intrinsic table — same
-// contract as g_target_x64_avx2, but its OWN cpuid bit, NOT tied to avx2 (Ivy Bridge has F16C
-// without AVX2). Without it, fpext/fptrunc through half on x86-64 lowers to a compiler-rt libcall
-// (__extendhfsf2/__truncsfhf2) the JIT doesn't link — so the gate must stay false there and the
-// calls compile their exact bit-twiddle daslang bodies instead. aarch64 needs no gate: scalar
-// fp16 convert is ARMv8.0 baseline.
+// F16C (VCVTPH2PS/VCVTPS2PH) gate for the f16_cvt table — its OWN cpuid bit, NOT tied to avx2
+// (Ivy Bridge has F16C without it). False keeps fpext/fptrunc through half off the compiler-rt
+// libcalls the JIT can't link; aarch64 needs no gate, scalar fp16 convert is ARMv8.0 baseline.
 var public g_target_x64_f16c = false
 
-// nolint:STYLE014 The AVX kernel-matrix tiers (x64_avx dot32_vnni / dot64_acc16 / mx4_dequant64 families) gate on
-// finer cpuid truth, same contract as g_target_x64_avx2 — each flag guards its own lookup table in
-// llvm_jit_intrin, and a false flag means the call compiles its daslang body (which delegates to
-// the next tier down, so degradation is graceful). vnni256 = 256-bit VPDPBUSD (VEX AVX-VNNI, or
-// EVEX AVX512-VNNI+VL); avx512bw = zmm byte ops (VPABSB/VPMADDUBSW/VPSHUFB at 512 need BW, not
-// just F); avx512vnni = zmm VPDPBUSD (requires the bw gate too — the sign trick around it is BW).
-// DAS_JIT_X64_FORCE_FEATURES (comma-separated cpuid names, e.g. "avxvnni,avx512f,avx512bw") ORs
-// features in for EMISSION-ONLY verification on a box without them: the DLL codegens and can be
-// disassembled, but executing the forced sequences is an illegal instruction — compile/disasm
-// only. The force string is folded into the DLL cache key (jit_dll_basename) so a forced artifact
-// never cache-hits a normal run.
+// Kernel-matrix tiers (x64_avx dot32_vnni / dot64_acc16 / mx4_dequant64), each guarding its own
+// lookup table: vnni256 = 256-bit VPDPBUSD (VEX AVX-VNNI or EVEX AVX512-VNNI+VL), avx512bw = zmm
+// byte ops (BW, not just F), avx512vnni = zmm VPDPBUSD (needs bw — the sign trick around it is BW).
 var public g_target_x64_vnni256 = false
 var public g_target_x64_avx512bw = false
 var public g_target_x64_avx512vnni = false
@@ -445,29 +433,23 @@ var public g_target_x64_avx512vnni = false
 // yet; lights up via cpuid on future boxes and via DAS_JIT_X64_FORCE_FEATURES for emission-only
 // verification today.
 var public g_target_x64_vnniint8 = false
-// nolint:STYLE014 AMX INT8 tiles (TDPBSSD — SPR/Genoa-X server silicon; the dasLLAMA amx tile family). Both
-// amx-tile and amx-int8 cpuid bits, hyphen-spelled like the LLVM target features so the force
-// env and llc -mattr take the same names. cpuid says nothing about the per-process XTILEDATA
-// grant — that runtime enable (Linux arch_prctl) lives in the family's witness companion.
+// AMX INT8 tiles (TDPBSSD — SPR/Genoa-X server silicon; the dasLLAMA amx tile family). Both
+// amx-tile and amx-int8 cpuid bits, hyphen-spelled like the LLVM target features so the force env
+// and llc -mattr take the same names. The per-process XTILEDATA grant is the family's own witness.
 var public g_target_x64_amx = false
 
 // The JIT target OS is Linux: host platform on native runs, the triple's OS field on cross
 // targets. Gates emission that calls Linux-only externs (the amx witness's arch_prctl).
 var public g_target_os_linux = false
 
-// nolint:STYLE014 ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
-// DotProd only). Host truth comes off LLVMGetHostCPUFeatures() ("+i8mm" — populated on Linux
-// aarch64; EMPTY on macOS, where features are implied by the CPU name), OR'd with
-// DAS_JIT_ARM64_FORCE_FEATURES — so on Apple silicon the env is the rail on BOTH the emitting
-// box and the executing box (same string = same DLL cache key, the no-linker-on-target recipe).
-// Cross aarch64 triples read the force string only, same contract as the x64 tiers above.
+// ARMv8.6 i8mm (SMMLA — 2×2 s8 matrix-multiply-accumulate; Apple M2/A15+, Graviton3+; M1 has
+// DotProd only). Host truth is LLVMGetHostCPUFeatures "+i8mm" — populated on Linux aarch64, EMPTY
+// on macOS where the CPU name implies features — so there the force env is the rail on both boxes.
 var public g_target_arm64_i8mm = false
 
-// nolint:STYLE014 ARMv8.2 fullfp16 (native half arithmetic — fadd.4h/8h etc.). Same detection contract as
-// i8mm, except darwin-arm64 is unconditionally true: LLVMGetHostCPUFeatures is empty on
-// macOS and every darwin-arm64 host is Apple Silicon (M1+), which always has fullfp16.
-// The target machine needs no feature append: Linux host feature strings carry +fullfp16
-// explicitly, and on macOS the host CPU name (apple-m1, ...) implies it in the backend.
+// ARMv8.2 fullfp16 (native half arithmetic — fadd.4h/8h etc.). Detected as i8mm, except
+// darwin-arm64 is unconditionally true (every Apple Silicon host has it). No feature append needed:
+// Linux host strings carry +fullfp16, and on macOS the host CPU name implies it in the backend.
 var public g_target_arm64_fullfp16 = false
 
 def private arm64_forced_feature(name : string) : bool {
@@ -519,13 +501,9 @@ def public x64_forced_plus_features() : string {
     return join(plus, ",")
 }
 
-// nolint:STYLE014 Cross-compile a wasm object compatible with a -pthread (SharedArrayBuffer)
-// runtime: add +atomics,+bulk-memory to the target_features section so wasm-ld
-// links it into a --shared-memory build. Set from the --jit-threads CLI flag in
-// llvm_jit_run.das BEFORE codegen. MUST match the archives: a +atomics object
-// links only against -pthread archives (web/output64mt), and a non-threads
-// object only against non-pthread ones (web/output64) — same discipline as the
-// +simd128 vec4f-sret match documented in write_wasm.
+// Cross-compile a wasm object for a -pthread (SharedArrayBuffer) runtime: adds
+// +atomics,+bulk-memory so wasm-ld links it into a --shared-memory build. Set from --jit-threads
+// BEFORE codegen, and MUST match the archives — a +atomics object links only against web/output64mt.
 var public g_target_wasm_threads = false
 
 // --jit-check-abi: startup sweep comparing every used handled-type's HOST-baked size + field
@@ -540,11 +518,9 @@ def private wasm_target_features() : string {
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
     var rv = LLVMAddFunction(mod, name, typ)
     g_fn_types[name] = typ
-    // nolint:STYLE014 uwtable(async): -O3 function-attrs infers `nounwind` through the runtime-helper
-    // attributes, and Win64 codegen then omits .pdata for provably-nounwind functions —
-    // a C++-EH panic (DAS_ENABLE_EXCEPTIONS=1 host) crossing such a frame kills the
-    // process. uwtable forces the tables regardless; ignored on declarations. Skipped
-    // on longjmp hosts (tables dead weight there); folded into the DLL cache key.
+    // uwtable(async): -O3 function-attrs infers `nounwind` through the runtime-helper
+    // attributes and Win64 codegen then omits .pdata, so a C++-EH panic crossing such a frame kills
+    // the process. Forced regardless (ignored on declarations); skipped on longjmp hosts.
     if (das_is_exceptions_enabled()) {
         rv |> LLVMAddAttributeToFunction(LLVMCreateEnumAttribute(g_ctx, LLVMGetEnumAttributeKindForName("uwtable"), 2ul))
     }
@@ -623,16 +599,9 @@ def public init_jit_clopts() {
     }
 }
 
-// nolint:STYLE014 Pure target-truth computation — no LLVM state touched, so it is safe (and required) to
-// call BEFORE init_jit: the DisableJitVisitor pass consults the g_target_* gates through
-// has_intrinsic, and it runs before the LLVM module exists. init_jit re-runs it (idempotent —
-// callers must pass the SAME host_features both times or the pass and emission diverge).
-//
-// host_features=false (standalone-exe builds): the artifact targets a GENERIC CPU of the host
-// arch (write_exe use_host_cpu=false is the redistributable default), so every cpuid/host-
-// feature-derived gate must be conservative — host-F16C leaking into a generic x64 exe emits
-// fpext-through-half that lowers to compiler-rt libcalls (__extendhfsf2) msvcrt never links.
-// Env-FORCED features stay honored (explicit emission-only rail, same contract as cross triples).
+// Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor
+// consults these gates. init_jit re-runs it — pass the SAME host_features or pass and emission diverge.
+// host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
 def public init_jit_target_flags(target_triple : string = ""; host_features : bool = true) {
     g_target_host_features = host_features
     g_target_is_wasm = target_triple |> starts_with("wasm")
@@ -716,14 +685,9 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
         if (g_target_is_wasm) {
             LLVMInitializeWasmTarget()
         }
-        // nolint:STYLE014 +simd128 / +nontrapping-fptoint is the feature set the wasm runtime
-        // archive is compiled with (see web/CMakeLists.txt). Required on wasm
-        // so vec4f returns are v128-in-register on both sides; meaningless
-        // (and potentially a target-machine-creation failure) on other
-        // cross-compile triples, so keep features empty there — except x64
-        // cross, where the DAS_JIT_X64_FORCE_FEATURES emission-only override
-        // is the tier truth (see the g_target_x64_* gates above) and must
-        // reach any codegen off this machine too.
+        // +simd128 / +nontrapping-fptoint matches the wasm runtime archive (web/CMakeLists.txt),
+        // so vec4f returns are v128-in-register on both sides. Meaningless (and a possible
+        // target-machine failure) on other cross triples, except x64 cross, where the force env rules.
         let features = (g_target_is_wasm ? wasm_target_features()
             : (g_target_is_x64 ? x64_forced_plus_features() : ""))   // inside the non-empty-triple branch, is_x64 == x64-cross
         with_target_machine(target_triple, "", features, cg_opt_level) $(targetMachine : LLVMTargetMachineRef) {
@@ -949,22 +913,15 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
     let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
 
-    // nolint:STYLE014 JIT host artifact on aarch64: force +dotprod into the feature set. On macOS
-    // LLVMGetHostCPUFeatures() is empty — the features are implied by the CPU name
-    // (e.g. apple-m1) — so when LLVM maps a chip it doesn't recognize (a newer Apple
-    // part on an older LLVM) to "generic", SDOT (@llvm.aarch64.neon.sdot, emitted for
-    // the dasLLAMA Q8 kernels) has no instruction to select and codegen aborts. Every
-    // aarch64 host daslang JITs on has dotprod, so add the feature explicitly rather
-    // than trusting CPU-name recognition. (Verified: -mcpu=generic fails to select
-    // SDOT; -mcpu=generic -mattr=+dotprod emits `sdot.4s`.)
+    // JIT host artifact on aarch64: force +dotprod in. LLVMGetHostCPUFeatures is empty on macOS
+    // (the CPU name implies features), so a part an older LLVM cannot name maps to "generic",
+    // where SDOT has no instruction to select and codegen aborts. Every aarch64 host has dotprod.
     var targetMachine : LLVMTargetMachineRef
     if (use_host_cpu && g_target_is_aarch64) {
         var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
-        // nolint:STYLE014 DAS_JIT_ARM64_FORCE_FEATURES (comma-separated aarch64 feature names, e.g. "i8mm"): the
-        // x64 rail's twin — lets a pre-i8mm host EMIT AND LINK an artifact for newer silicon (the
-        // DLL-cache key folds the string, so a forced artifact never cache-hits a normal run, and
-        // the same-env run on the target box cache-hits it without needing a linker there).
-        // Executing forced instructions on this host SIGILLs — pair with a skip-execution gate.
+        // DAS_JIT_ARM64_FORCE_FEATURES (e.g. "i8mm"): the x64 rail's twin — a pre-i8mm host EMITS
+        // AND LINKS an artifact for newer silicon, which the same-env run on the target box then
+        // cache-hits without a linker. Executing forced instructions here SIGILLs; gate execution.
         let forced_arm <- [for (part in split(g_env_jit.jit_arm64_force_features, ",")); "+{part}"; where !empty(part)]
         if (!empty(forced_arm)) {
             feats = "{feats},{join(forced_arm, ",")}"
@@ -1123,13 +1080,9 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
     if (needs_runtime && is_none(runtime_lib)) {
         to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ - run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
     }
-    // nolint:STYLE014 Match the feature set web/CMakeLists.txt compiles the runtime archive with
-    // (-msimd128 -mnontrapping-fptoint). Without +simd128 the host LLVM lowers
-    // vec4f returns via sret while emcc returns them as native v128, causing
-    // function-signature mismatches at wasm-ld link time and `unreachable`
-    // traps at runtime on any helper that returns vec4f (jit_invoke_block_*,
-    // jit_call_*). +atomics,+bulk-memory added for a -pthread runtime — see
-    // g_target_wasm_threads / wasm_target_features.
+    // Match the feature set web/CMakeLists.txt compiles the runtime archive with (-msimd128
+    // -mnontrapping-fptoint): without +simd128 the host lowers vec4f returns via sret while emcc
+    // returns native v128 — wasm-ld signature mismatches and `unreachable` traps on any vec4f helper.
     let features = wasm_target_features()
     with_target_machine(real_triple, "", features, 2u) $(targetMachine : LLVMTargetMachineRef) {
         // Pin the module's data layout + triple to the TARGET's so codegen sizes

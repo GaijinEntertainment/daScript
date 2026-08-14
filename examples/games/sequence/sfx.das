@@ -3,7 +3,7 @@ options gen2
 module sfx public
 
 require audio/audio_boost
-require live/audio_live
+require live/audio_live   // nolint:STYLE030 — load-bearing: registers the audio live-reload hooks
 require live/live_vars
 require live/live_commands
 require live_host
@@ -91,6 +91,14 @@ def init_audio() {
         g_audio_channels = audio_system_create()
         audio_initialized = true
     }
+    // init_audio re-runs on every live reload; release the buffers the previous run left behind
+    delete snd_card_play
+    delete snd_chip_place
+    delete snd_chip_remove
+    delete snd_card_draw
+    delete snd_sequence
+    delete snd_game_win
+    delete snd_turn_chime
     // Card play: short click/snap
     snd_card_play <- gen_sine_sweep(1200.0, 600.0, 0.03, 0.2)
     // Chip place: soft tap
@@ -131,12 +139,12 @@ def public sfx_shutdown() {
 }
 
 def play_sfx(samples : array<float>) {
-    if (!audio_initialized || length(samples) == 0) {
+    if (!audio_initialized || empty(samples)) {
         return
     }
     var copy <- clone(samples)
-    for (i in range(length(copy))) {
-        copy[i] *= sfx_volume
+    for (s in copy) {
+        s *= sfx_volume
     }
     play_sound_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, copy)
 }

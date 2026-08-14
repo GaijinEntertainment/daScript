@@ -16,7 +16,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Declaring a table ===
     // table<KeyType; ValueType> — note the semicolon between key and value types.

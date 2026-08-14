@@ -247,7 +247,7 @@ def describe_bool(b : bool) : string {
 // === Main ===
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // Integer matching
     print("integer matching:\n")

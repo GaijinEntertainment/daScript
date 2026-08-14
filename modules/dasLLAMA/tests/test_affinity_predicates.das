@@ -12,7 +12,7 @@ def test_affinity_predicates(t : T?) {
     t |> run("mask argv matches lcpp_mask_on") @(t : T?) {
         let argv <- lcpp_affinity_argv(8)
         if (lcpp_mask_on()) {
-            t |> success(length(argv) > 0, "windows: mask argv present")
+            t |> success(!empty(argv), "windows: mask argv present")
         } else {
             t |> equal(0, length(argv))
         }

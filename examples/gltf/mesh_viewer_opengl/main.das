@@ -90,8 +90,8 @@ def load_model(path : string) {
     var model <- upload_gltf(scene)
     delete g_model
     delete g_scene
-    g_scene <- scene
-    g_model <- model
+    g_scene <- scene   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
+    g_model <- model   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
 
     let bounds = gltf_scene_bounds(g_scene)
     g_center = (bounds._0 + bounds._1) * 0.5f

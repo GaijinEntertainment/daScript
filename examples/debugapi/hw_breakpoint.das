@@ -50,7 +50,7 @@ class BreakpointAgent : DapiDebugAgent {
     }
 }
 
-[export]
+[export, unused_argument(ctx)]
 def install_bp_agent(ctx : Context) {
     assert(this_context().category.debug_context)
     install_new_debug_agent(new BreakpointAgent(), "bp_agent")

@@ -12,13 +12,11 @@ options debugger
 
 require dastest/testing_boost
 require daslib/strings_boost
-require daslib/utf8_utils
 require daslib/stringify
-require daslib/fio
 require peg/peg
 
 
-def get_parser_with(csv : string; blk : block<(email : array<string>; err : array<ParsingError>) : void>) {
+def get_parser_with(csv : string; blk : block<(email : array<string>; err : array<ParsingError>) : void>) { // nolint:STYLE038 - flat PEG grammar declaration; the rules are the CSV grammar, one per production
     parse(csv) {
         var Row : array<string>
 
@@ -232,7 +230,7 @@ def test_all_empty_fields(t : T?) {
 def test_no_eol(t : T?) {
     let input = %stringify~1,True%%;
 
-    get_parser_with(input) $(email; errors) {
+    get_parser_with(input) $(_email; errors) {
         if (errors |> empty) {
             t |> failure("Parsing did not fail");
             return ;
@@ -245,7 +243,7 @@ def test_missing_quote(t : T?) {
     let input = %stringify~1,"True
     %%;
 
-    get_parser_with(input) $(email; errors) {
+    get_parser_with(input) $(_email; errors) {
         if (errors |> empty) {
             t |> failure("Parsing did not fail");
             return;

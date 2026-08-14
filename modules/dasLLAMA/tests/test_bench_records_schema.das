@@ -92,11 +92,9 @@ def test_annotations(t : T?) {
     t |> run("model-level note + run-level comment land where selected") @(t : T?) {
         var models : array<BenchModel>
         models |> emplace(make_model())
-        var annos : array<BenchAnnotation>
-        annos |> push(BenchAnnotation(gguf = "ggml-tiny.bin", comment = "board caveat"))
-        annos |> push(BenchAnnotation(gguf = "ggml-tiny.bin", engine = "whisper-cli",
-            comment = "reference note"))
-        annos |> push(BenchAnnotation(gguf = "absent.gguf", comment = "must not land"))
+        let annos <- [BenchAnnotation(gguf = "ggml-tiny.bin", comment = "board caveat"),
+            BenchAnnotation(gguf = "ggml-tiny.bin", engine = "whisper-cli", comment = "reference note"),
+            BenchAnnotation(gguf = "absent.gguf", comment = "must not land")]
         apply_annotations(models, annos)
         t |> equal(models[0].note, "board caveat")
         t |> equal(models[0].runs[0].comment, "")            // das run: not selected

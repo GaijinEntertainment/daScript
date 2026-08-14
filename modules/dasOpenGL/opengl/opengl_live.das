@@ -205,6 +205,27 @@ def private log_gl_backend() {
     to_log(LOG_INFO, "[opengl_live] GL_VENDOR='{gl_string(GL_VENDOR)}' GL_RENDERER='{gl_string(GL_RENDERER)}' GL_VERSION='{gl_string(GL_VERSION)}'")
 }
 
+// Allocate the capture ring: `n` pixel-pack buffers of `pbo_size` bytes. Done before the apng writer
+// opens so a GL failure leaves no half-state behind. glGenBuffers can't really fail with a sane
+// driver, but we still validate the IDs; on a null id the ring is released and this returns false.
+def private alloc_pbo_ring(n : int; pbo_size : int64; var pbos : array<uint>) : bool {
+    pbos |> resize(n)
+    glGenBuffers(n, unsafe(addr(pbos[0])))
+    for (id in pbos) {
+        if (id == 0u) {
+            glDeleteBuffers(n, unsafe(addr(pbos[0])))
+            delete pbos
+            return false
+        }
+    }
+    for (id in pbos) {
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, id)
+        glBufferData(GL_PIXEL_PACK_BUFFER, pbo_size, null, GL_STREAM_READ)
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
+    return true
+}
+
 [live_command(description = "Begin APNG recording. Args: file, fps, max_seconds, pbo_count.")]
 def record_start(input : JsonValue?) : JsonValue? {
     return JV((error = "already recording")) if (recorder_active)
@@ -223,24 +244,10 @@ def record_start(input : JsonValue?) : JsonValue? {
     }
     let pbo_size = int64(w) * int64(h) * 4l
 
-    // Allocate the ring before opening the apng writer so a GL failure leaves
-    // no half-state behind. glGenBuffers can't really fail with a sane driver,
-    // but we still validate the IDs before proceeding.
     var pbos : array<uint>
-    pbos |> resize(n)
-    glGenBuffers(n, unsafe(addr(pbos[0])))
-    for (id in pbos) {
-        if (id == 0u) {
-            glDeleteBuffers(n, unsafe(addr(pbos[0])))
-            delete pbos
-            return JV((error = "glGenBuffers failed"))
-        }
+    if (!alloc_pbo_ring(n, pbo_size, pbos)) {
+        return JV((error = "glGenBuffers failed"))
     }
-    for (id in pbos) {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, id)
-        glBufferData(GL_PIXEL_PACK_BUFFER, pbo_size, null, GL_STREAM_READ)
-    }
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
 
     // Probe: stbi's default PNG compression level is 8 (high). That caps the
     // single worker thread to ~25-27 fps at 1280x720. Level 4 is the

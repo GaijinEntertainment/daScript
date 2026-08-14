@@ -74,11 +74,9 @@ struct public TextSourceDocument {
 }
 
 def public text_source_document_dispose(var document : TextSourceDocument) {
-    delete document.spans
-    delete document.line_marks
-    delete document.line_numbers
-    delete document.folds
-    document = TextSourceDocument()
+    var fresh = TextSourceDocument()
+    swap(document, fresh)
+    delete fresh
 }
 
 def public text_source_fold_at(document : TextSourceDocument const;

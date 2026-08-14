@@ -358,7 +358,7 @@ def make_game(var game : GameState; num_players : int; seed : int = 42) {
     let hs = hand_size_for_players(game.num_players)
     for (_c in range(hs)) {
         for (p in range(game.num_players)) {
-            if (length(game.draw_pile) > 0) {
+            if (!empty(game.draw_pile)) {
                 game.hands[p][game.hand_sizes[p]] = game.draw_pile[length(game.draw_pile) - 1]
                 game.hand_sizes[p]++
                 game.draw_pile |> resize(length(game.draw_pile) - 1)
@@ -368,13 +368,9 @@ def make_game(var game : GameState; num_players : int; seed : int = 42) {
 }
 
 def draw_card_from_pile(var game : GameState; player_idx : int) : bool {
-    if (player_idx < 0 || player_idx >= game.num_players) {
-        return false
-    }
-    if (game.hand_sizes[player_idx] >= MAX_HAND_SIZE) {
-        return false
-    }
-    if (length(game.draw_pile) == 0) {
+    if (player_idx < 0 || player_idx >= game.num_players
+            || game.hand_sizes[player_idx] >= MAX_HAND_SIZE
+            || empty(game.draw_pile)) {
         return false
     }
     game.hands[player_idx][game.hand_sizes[player_idx]] = game.draw_pile[length(game.draw_pile) - 1]
@@ -384,10 +380,8 @@ def draw_card_from_pile(var game : GameState; player_idx : int) : bool {
 }
 
 def remove_card_from_hand(var game : GameState; player_idx, card_idx : int) : Card {
-    if (player_idx < 0 || player_idx >= game.num_players) {
-        return Card.card_none
-    }
-    if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
+    if (player_idx < 0 || player_idx >= game.num_players
+            || card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
         return Card.card_none
     }
     let card = game.hands[player_idx][card_idx]
@@ -400,10 +394,8 @@ def remove_card_from_hand(var game : GameState; player_idx, card_idx : int) : Ca
 }
 
 def get_hand_card(game : GameState; player_idx, card_idx : int) : Card {
-    if (player_idx < 0 || player_idx >= game.num_players) {
-        return Card.card_none
-    }
-    if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
+    if (player_idx < 0 || player_idx >= game.num_players
+            || card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
         return Card.card_none
     }
     return game.hands[player_idx][card_idx]
@@ -494,10 +486,8 @@ def legal_moves(game : GameState; player_idx : int) : array<Move> {
 }
 
 def is_legal_move(game : GameState; player_idx : int; m : Move) : bool {
-    if (m.card_idx < 0 || m.card_idx >= game.hand_sizes[player_idx]) {
-        return false
-    }
-    if (m.row < 0 || m.row >= BOARD_ROWS || m.col < 0 || m.col >= BOARD_COLS) {
+    if (m.card_idx < 0 || m.card_idx >= game.hand_sizes[player_idx]
+            || m.row < 0 || m.row >= BOARD_ROWS || m.col < 0 || m.col >= BOARD_COLS) {
         return false
     }
     let card = game.hands[player_idx][m.card_idx]
@@ -546,23 +536,16 @@ def has_legal_moves(game : GameState; player_idx : int) : bool {
 // ============================================================================
 
 def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
-    if (game.phase != GamePhase.playing) {
-        return false
-    }
-    if (player_idx != game.current_player) {
-        return false
-    }
-    if (move.card_idx < 0 || move.card_idx >= game.hand_sizes[player_idx]) {
+    if (game.phase != GamePhase.playing || player_idx != game.current_player
+            || move.card_idx < 0 || move.card_idx >= game.hand_sizes[player_idx]) {
         return false
     }
     let card = game.hands[player_idx][move.card_idx]
     let color = player_chip_color(player_idx)
     if (is_black_jack(card)) {
         let chip = game.board_chips[move.row * BOARD_COLS + move.col]
-        if (chip == ChipColor.none || chip == color) {
-            return false
-        }
-        if (is_in_sequence(game, move.row, move.col)) {
+        if (chip == ChipColor.none || chip == color
+                || is_in_sequence(game, move.row, move.col)) {
             return false
         }
         game.board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none

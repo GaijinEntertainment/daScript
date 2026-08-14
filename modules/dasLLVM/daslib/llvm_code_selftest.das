@@ -47,9 +47,8 @@ def private add_plus_k_gen(var gc : LlvmCodeCtx) : bool {
 }
 
 // companion worked example (the [tune_companion] self-test vehicle): emits `return k` for a
-// `() : int` stub — the same perm arg the main generator gets, observable on the sibling.
-// Declines in lockstep with add_plus_k_gen (the same decline=true rail), which is the
-// two-function-stamp coherence contract.
+// `() : int` stub — the same perm arg the main generator gets, observable on the sibling. Declines
+// in lockstep with add_plus_k_gen (decline=true), which is the two-function-stamp coherence contract.
 def private k_value_gen(var gc : LlvmCodeCtx) : bool {
     if (!empty(gc.fn.arguments) || gc.fn.result.baseType != Type.tInt) return false
     let dv = find_arg(gc.ann.arguments, "decline")

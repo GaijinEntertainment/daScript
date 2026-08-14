@@ -139,8 +139,8 @@ def load_model(path : string) {
         g_scene_pass, scene)
     delete g_model
     delete g_scene
-    g_scene <- scene
-    g_model <- model
+    g_scene <- scene   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
+    g_model <- model   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
     g_have_model = true
     // equirect HDR environment for image-based ambient (metals reflect it); CC0, shared with GL tutorial 12
     var env <- load_texture_hdr(harness_device(), harness_phys(), harness_queue(), harness_pool(),
@@ -243,7 +243,7 @@ def build_composite {
     g_quad_vert <- create_shader_module(harness_device(), viewer_quad_vs_spv)
     g_quad_frag <- create_shader_module(harness_device(), viewer_quad_fs_spv)
     var reflections <- [decode_reflection(viewer_quad_vs_spv_reflect), decode_reflection(viewer_quad_fs_spv_reflect)]
-    g_quad_layouts <- build_descriptor_set_layouts(harness_device(), reflections)
+    g_quad_layouts <- build_descriptor_set_layouts(harness_device(), reflections)   // nolint:PERF030 - module global, first and only write (build_composite runs once from init)
     g_quad_pipe_layout <- build_pipeline_layout(harness_device(), g_quad_layouts, reflections)
     delete reflections
     let sz = harness_size()

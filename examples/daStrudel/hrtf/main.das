@@ -25,7 +25,7 @@ require daslib/fio
 def strudel_main() {
     strudel_set_bpm(140.0lf)
     // Source A — bumblebee: rapid chromatic line, animated HRTF position
-    var bumblebee <- (
+    let bumblebee <- (
         note("c5 c#5 d5 d#5 e5 f5 f#5 g5 g#5 a5 a#5 b5 b5 a#5 a5 g#5 g5 f#5 f5 e5 d#5 d5 c#5 c5", "sawtooth")
         |> hrtf_azimuth(sine() |> range(-180.0, 180.0) |> slow(4.0lf))
         |> hrtf_elevation(cosine() |> range(-30.0, 30.0) |> slow(3.0lf))
@@ -37,7 +37,7 @@ def strudel_main() {
         |> gain(0.45)
     )
     // Source B — left pad
-    var left_pad <- (
+    let left_pad <- (
         note("<c3 g2>", "triangle")
         |> hrtf(-90.0, 0.0)
         |> orbit(1)
@@ -49,7 +49,7 @@ def strudel_main() {
         |> gain(0.3)
     )
     // Source C — right-front pluck
-    var right_pluck <- (
+    let right_pluck <- (
         note("c4 e4 g4 e4", "sine")
         |> hrtf(30.0, 0.0)
         |> orbit(1)

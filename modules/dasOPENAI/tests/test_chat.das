@@ -13,9 +13,9 @@ require daslib/fio
 [test]
 def test_chat_request_serialization(t : T?) {
     t |> run("request includes set fields and omits unset optionals") @(t : T?) {
-        var req : ChatCompletionRequest
-        req.model = "m1"
-        req.messages <- [ChatMessage(role = "user", content = "hi")]
+        var req = ChatCompletionRequest(
+            model = "m1",
+            messages <- [ChatMessage(role = "user", content = "hi")])
         let js = sprint_json(req, false)
         t |> success(find(js, "\"model\":\"m1\"") >= 0, "model present")
         t |> success(find(js, "\"role\":\"user\"") >= 0, "message role present")
@@ -34,15 +34,15 @@ def test_chat_request_serialization(t : T?) {
 [test]
 def test_chat_response_decode(t : T?) {
     t |> run("chat.completion round-trips through sprint_json/sscan_json") @(t : T?) {
-        var resp : ChatCompletionResponse
-        resp.id = "chatcmpl-123"
-        resp._object = "chat.completion"
-        resp.created = 1700000000
-        resp.model = "test-model"
-        resp.choices <- [ChatChoice(index = 0,
-            message = ChatMessage(role = "assistant", content = "Hello there"),
-            finish_reason = "stop")]
-        resp.usage = Usage(prompt_tokens = 9, completion_tokens = 3, total_tokens = 12)
+        let resp = ChatCompletionResponse(
+            id = "chatcmpl-123",
+            _object = "chat.completion",
+            created = 1700000000,
+            model = "test-model",
+            choices <- [ChatChoice(index = 0,
+                message = ChatMessage(role = "assistant", content = "Hello there"),
+                finish_reason = "stop")],
+            usage = Usage(prompt_tokens = 9, completion_tokens = 3, total_tokens = 12))
 
         let js = sprint_json(resp, false)
         // @rename = "object" must surface as the JSON key "object"
@@ -67,10 +67,10 @@ def test_chat_response_decode(t : T?) {
 def test_chat_live_ollama(t : T?) {
     t |> run("live chat against Ollama") @(t : T?) {
         let client = openai_client("http://localhost:11434/v1")
-        var req : ChatCompletionRequest
-        req.model = "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M"
-        req.messages <- [ChatMessage(role = "user", content = "Reply with exactly the word: pong")]
-        req.max_tokens = 16
+        let req = ChatCompletionRequest(
+            model = "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M",
+            messages <- [ChatMessage(role = "user", content = "Reply with exactly the word: pong")],
+            max_tokens = 16)
         let res = chat(client, req)
         t |> success(res.ok, "chat ok (kind={res.error.kind} status={res.error.status} {res.error.message})")
         if (res.ok) {
@@ -88,10 +88,10 @@ def test_chat_live_openrouter(t : T?) {
             return
         }
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
-        var req : ChatCompletionRequest
-        req.model = "liquid/lfm-2.5-1.2b-instruct:free"
-        req.messages <- [ChatMessage(role = "user", content = "Reply with exactly the word: pong")]
-        req.max_tokens = 16
+        let req = ChatCompletionRequest(
+            model = "liquid/lfm-2.5-1.2b-instruct:free",
+            messages <- [ChatMessage(role = "user", content = "Reply with exactly the word: pong")],
+            max_tokens = 16)
         let res = chat(client, req)
         if (!res.ok && res.error.status == 429) {
             t |> success(true, "OpenRouter free-tier rate-limited (429) - skipped")

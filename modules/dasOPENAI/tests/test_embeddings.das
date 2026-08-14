@@ -12,9 +12,7 @@ require strings
 [test]
 def test_embeddings_request_serialization(t : T?) {
     t |> run("embeddings request includes input array, omits unset optionals") @(t : T?) {
-        var req : EmbeddingRequest
-        req.model = "m"
-        req.input <- ["a", "b"]
+        let req = EmbeddingRequest(model = "m", input <- ["a", "b"])
         let js = sprint_json(req, false)
         t |> success(find(js, "\"model\":\"m\"") >= 0, "model present")
         t |> success(find(js, "\"input\":[\"a\",\"b\"]") >= 0, "input array present")
@@ -25,11 +23,11 @@ def test_embeddings_request_serialization(t : T?) {
 [test]
 def test_embeddings_response_decode(t : T?) {
     t |> run("embeddings response round-trips through sprint_json/sscan_json") @(t : T?) {
-        var resp : EmbeddingResponse
-        resp._object = "list"
-        resp.model = "test-embed"
-        resp.data <- [EmbeddingData(_object = "embedding", index = 0, embedding <- [0.1f, 0.2f, 0.3f])]
-        resp.usage = EmbeddingUsage(prompt_tokens = 4, total_tokens = 4)
+        let resp = EmbeddingResponse(
+            _object = "list",
+            model = "test-embed",
+            data <- [EmbeddingData(_object = "embedding", index = 0, embedding <- [0.1f, 0.2f, 0.3f])],
+            usage = EmbeddingUsage(prompt_tokens = 4, total_tokens = 4))
         let js = sprint_json(resp, false)
         var back : EmbeddingResponse
         t |> success(sscan_json(js, back), "decode ok")

@@ -7,8 +7,6 @@ options strict_smart_pointers = true
 
 module helpers shared
 
-require daslib/fio
-
 var public g_failed = false
 var public g_errors : array<string>
 
@@ -26,7 +24,7 @@ def iota {
     return <- generator<int> {
         var i : int = 0
         while (true) {
-            i += 1
+            i++
             if (i == 0) return false // integer overflow guard; reachable after ~4B iterations
             yield i
         }

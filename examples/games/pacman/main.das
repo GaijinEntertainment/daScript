@@ -172,6 +172,12 @@ var @live snd_level_win   : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
+    // release whatever a previous run left in the @live buffers before regenerating
+    delete snd_eat_pellet
+    delete snd_eat_power
+    delete snd_eat_ghost
+    delete snd_pac_die
+    delete snd_level_win
     snd_eat_pellet <- gen_sine_sweep(600.0, 400.0, 0.04, 0.15)
     snd_eat_power <- gen_sine_sweep(300.0, 900.0, 0.12, 0.3)
     snd_eat_ghost <- gen_sine_sweep(800.0, 1400.0, 0.1, 0.3)
@@ -825,11 +831,7 @@ def update_pac(dt : float) {
                 fruit = Fruit(active = true, kind = next_fruit_idx, timer = 9.0, world_pos = fw)
                 ++next_fruit_idx
             }
-            if (!has_pellets() && !power_pills_any()) {
-                game_state = GameState.win_state
-                end_screen_timer = 2.0
-                play_sfx(snd_level_win)
-            }
+            check_level_cleared()
         } elif (power_pills[pi]) {
             power_pills[pi] = false
             score += POWER_SCORE
@@ -847,11 +849,7 @@ def update_pac(dt : float) {
             // Switch music to flee
             stop_all_music(0.2)
             start_flee_music()
-            if (!has_pellets() && !power_pills_any()) {
-                game_state = GameState.win_state
-                end_screen_timer = 2.0
-                play_sfx(snd_level_win)
-            }
+            check_level_cleared()
         }
     }
 }
@@ -861,6 +859,14 @@ def power_pills_any() : bool {
         if (p) { return true; }
     }
     return false
+}
+
+def check_level_cleared() {
+    if (!has_pellets() && !power_pills_any()) {
+        game_state = GameState.win_state
+        end_screen_timer = 2.0
+        play_sfx(snd_level_win)
+    }
 }
 
 // ===== Update: Bonus fruit =====
@@ -1111,7 +1117,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {   // nolint:STYLE038 - one linear frame: input, timers, simulation, render, HUD
     if (!live_begin_frame()) { return ; }
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)

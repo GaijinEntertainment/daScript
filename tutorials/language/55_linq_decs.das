@@ -36,7 +36,7 @@ struct Car {
 
 def seed(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, Car(
             id    = i + 1,
             price = (i * 37) % 100,
@@ -46,7 +46,7 @@ def seed(n : int) {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     print("=== Tutorial 55: LINQ over DECS ===\n\n")
 
     seed(20)

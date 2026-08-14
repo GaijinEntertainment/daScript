@@ -139,13 +139,13 @@ def draw_powerups_3d(game_time : float) {
         let cy = PWR_ICON_Y0 + float(row) * PWR_ROW_H
         draw_powerup_icon_3d(game_time, PWR_ICON_X, cy, BonusType.multishot,
             player_multishot_timer, BONUS_MULTISHOT_TIME)
-        row += 1
+        row++
     }
     if (player_fastshot_timer > 0.0) {
         let cy = PWR_ICON_Y0 + float(row) * PWR_ROW_H
         draw_powerup_icon_3d(game_time, PWR_ICON_X, cy, BonusType.fastshot,
             player_fastshot_timer, BONUS_FASTSHOT_TIME)
-        row += 1
+        row++
     }
 }
 

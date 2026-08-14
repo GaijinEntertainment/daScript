@@ -369,7 +369,7 @@ def test_batch_decode_b1_delegation(t : T?) {
                 }
             }
             t |> success(tokens_ok, "B==1: tokens match")
-            t |> success(maxd == 0.0, "B==1: logits BIT-exact — the same forward() path (max diff {maxd})")
+            t |> success(maxd == 0.0, "B==1: logits BIT-exact - the same forward() path (max diff {maxd})")
             cache_feq(t, s, ref, c, 0.0, "B==1")
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
             unsafe {

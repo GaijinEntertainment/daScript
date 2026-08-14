@@ -67,7 +67,8 @@ def blit_f32(src : array<float>; var dst : array<float>; at : int64) {
 
 // One variant over group range [gb, ge) — shared by the single-thread race (full range) and the
 // threaded runner (per chunk). Not `private`: called from inside the lifted parallel_for workers.
-def gemv_range(vsel, gb, ge : int; var yp : float?; wp : int8 const?; sp : float const?;
+def gemv_range(vsel, gb, ge : int;   // nolint:STYLE037,STYLE038 - one arm per raced kernel variant; the ladder IS the race table
+               var yp : float?; wp : int8 const?; sp : float const?;
                ip : int8 const?; xqp : int8 const?; xsp : float const?; n : int64) {
     let nb = n / 32l
     unsafe {
@@ -216,7 +217,7 @@ def pad(s : string; w : int) : string {
     return k > 0 ? s + repeat(" ", k) : s
 }
 
-def bench_shape(name : string; n, d : int64; reps_st, reps_thr : int) {
+def bench_shape(name : string; n, d : int64; reps_st, reps_thr : int) {   // nolint:STYLE038 - one linear bench pass; the phases share the manually-freed weight/accumulator buffers
     let nb = n / 32l
     verify(d % 4l == 0l)
 

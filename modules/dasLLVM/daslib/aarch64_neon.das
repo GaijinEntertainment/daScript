@@ -34,10 +34,8 @@ def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4 {
 }
 
 //! Signed dot-product with a VALUE weight operand: like `sdot4`, but `w` is 16 int8 packed
-//! little-endian into the 4 lanes of an `int4` (byte e of lane g = element 4g+e) instead of a
-//! pointer — the form `tbl16_lo`/`tbl16_hi` return, so a LUT-dequantized vector feeds SDOT with no
-//! memory round-trip. On an aarch64 JIT target this is one SDOT (the `int4` is bitcast in a NEON
-//! register); elsewhere it is the scalar body below.
+//! little-endian into the 4 lanes of an `int4` (byte e of lane g = element 4g+e) — the form
+//! `tbl16_lo`/`tbl16_hi` return, so a LUT-dequantized vector feeds SDOT with no memory round-trip.
 def sdot4_w(acc : int4; w : int4; x : int8 const?) : int4 {
     var s0 = 0
     var s1 = 0
@@ -57,11 +55,9 @@ def sdot4_w(acc : int4; w : int4; x : int8 const?) : int4 {
 // sign-extend byte e (0..3, little-endian) of a packed int lane
 def private sxb(lane : int; e : int) : int => (((lane >> (e * 8)) & 0xff) ^ 0x80) - 0x80
 
-//! Byte table lookup of LOW nibbles (`TBL` / `vqtbl1q_s8(table, nib & 0x0f)`): load 16 bytes from
-//! `table` and 16 bytes from `nib`, look up each byte's low nibble in the table, and return the 16
-//! resulting int8 packed little-endian into an `int4` (byte e of lane g = result byte 4g+e) — feed
-//! it to `sdot4_w`. The nibble is masked to 0..15, so the lookup never leaves the table. On an
-//! aarch64 JIT target this lowers to AND + one TBL; elsewhere it is the scalar body below.
+//! Byte table lookup of LOW nibbles (`TBL` / `vqtbl1q_s8(table, nib & 0x0f)`): each of 16 `nib`
+//! bytes has its low nibble (masked to 0..15, never out of table) looked up in `table`; the 16
+//! results pack little-endian into an `int4` (byte e of lane g = byte 4g+e) — feed it to `sdot4_w`.
 def tbl16_lo(lut : int8 const?; nib : uint8 const?) : int4 {
     var l0 = 0
     var l1 = 0
@@ -97,13 +93,9 @@ def tbl16_hi(lut : int8 const?; nib : uint8 const?) : int4 {
     return int4(l0, l1, l2, l3)
 }
 
-//! Lane-indexed signed dot-product (`SDOT (by element)` / `vdotq_laneq_s32`): like `sdot4`, but the
-//! 4-byte group selected by `lane` (0..3) of the 16 int8 at `x` is broadcast against ALL 4 groups of
-//! `w` — so lane L += sum over e in 0..3 of w[4L+e]*x[4*lane+e]. With `w` holding 4 DIFFERENT weight
-//! rows (interleaved repack) and `x` one token's 16 int8 loaded once, four calls with lane 0..3 finish
-//! 16 k-values across 4 rows into 4 SEPARATE accumulator lanes — each lane is a distinct output row, so
-//! there is never a horizontal reduce. On aarch64 JIT this lowers to one indexed SDOT (one `x` load
-//! feeds all four); elsewhere it is the scalar body below. `lane` must be a compile-time constant.
+//! Lane-indexed signed dot-product (`SDOT (by element)` / `vdotq_laneq_s32`): the 4-byte group
+//! `lane` (0..3) of `x` broadcasts against ALL 4 groups of `w` — lane L += sum over e of
+//! w[4L+e]*x[4*lane+e], so 4 interleaved rows land in 4 lanes, never a reduce. `lane` is constant.
 def sdot4_laneq(acc : int4; w : int8 const?; x : int8 const?; lane : int) : int4 {
     let b = lane * 4
     var r = acc
@@ -120,11 +112,9 @@ def sdot4_laneq(acc : int4; w : int8 const?; x : int8 const?; lane : int) : int4
     return r
 }
 
-//! Lane-indexed signed dot-product with a VALUE weight operand: like `sdot4_laneq`, but `w` is
-//! 16 int8 packed little-endian into an `int4` (the form `tbl16_lo`/`tbl16_hi` return) — so a
-//! LUT-dequantized 4-row interleaved weight vector feeds the indexed SDOT with no memory
-//! round-trip. On an aarch64 JIT target this is one indexed SDOT; elsewhere the scalar body below.
-//! `lane` must be a compile-time constant.
+//! Lane-indexed signed dot-product with a VALUE weight operand: `sdot4_laneq` with `w` as 16 int8
+//! packed into an `int4` (the form `tbl16_lo`/`tbl16_hi` return), so a LUT-dequantized 4-row
+//! interleaved weight vector feeds the indexed SDOT with no round-trip. `lane` is constant.
 def sdot4_laneq_w(acc : int4; w : int4; x : int8 const?; lane : int) : int4 {
     let b = lane * 4
     var r = acc
@@ -142,11 +132,8 @@ def sdot4_laneq_w(acc : int4; w : int4; x : int8 const?; lane : int) : int4 {
 }
 
 //! Signed 8-bit matrix-multiply-accumulate (`SMMLA` / `@llvm.aarch64.neon.smmla`, ARMv8.6 i8mm):
-//! `a` and `b` are each a 2×8 int8 matrix (bytes 0..7 = row 0, 8..15 = row 1). Computes the 2×2 int32
-//! product `a · bᵀ` and adds it into the 4 lanes of `acc`, laid out `[a0·b0, a0·b1, a1·b0, a1·b1]` —
-//! 32 int8·int8 MACs (four length-8 dots) per call, twice SDOT's 16, with NO horizontal reduce. On an
-//! aarch64 JIT target this lowers to a single SMMLA; on every other target it is the scalar loop below.
-//! Pointers are passed pre-offset by the caller (16-wide unaligned loads).
+//! `a` and `b` are each a 2×8 int8 matrix (bytes 0..7 = row 0, 8..15 = row 1); the 2×2 int32 product
+//! `a · bᵀ` adds into `acc` as `[a0·b0, a0·b1, a1·b0, a1·b1]` — 32 MACs, twice SDOT's 16, no reduce.
 def smmla(acc : int4; a : int8 const?; b : int8 const?) : int4 {
     var d00 = 0
     var d01 = 0

@@ -120,7 +120,7 @@ def load_audio_memory(data : array<uint8>) : Sample {
     // so we do our own decoding with proper error checking
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 0u, 0u)
-    let res = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)
+    let res = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(long_length(data)), unsafe(addr(config)), decoder)
     if (res != ma_result.MA_SUCCESS) {
         unsafe { delete decoder; }
         return <- result

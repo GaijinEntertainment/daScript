@@ -136,11 +136,7 @@ def ShowExampleAppLayout() : bool {
 
 // Static shared float[8] mirroring cpp's `static float placeholder_members[8]`.
 // All ShowPlaceholderObject instances write to the same array — matches cpp.
-var private SMALL_PROPED_PLACEHOLDER : array<float>
-[init]
-def proped_init() {
-    SMALL_PROPED_PLACEHOLDER <- [0.0f, 0.0f, 1.0f, 3.1416f, 100.0f, 999.0f, 0.0f, 0.0f]
-}
+var private SMALL_PROPED_PLACEHOLDER <- [0.0f, 0.0f, 1.0f, 3.1416f, 100.0f, 999.0f, 0.0f, 0.0f]
 
 var SMALL_PROPED_NODE : table<int; TreeNodeState>
 var SMALL_PROPED_FIELD : table<int; TreeNodeState>
@@ -364,36 +360,30 @@ var SMALL_CONSTR_LINES : table<int; NarrativeState>
 // Module-scope holders for the three callback-bearing constraints: ImGui invokes
 // the stored callback from the NEXT Begin() (incl. the auto-fit pass), so the
 // wrapper's address must outlive SetNextWindowSizeConstraints — no stack temps.
-var private SMALL_CONSTR_ASPECT_CN : ImGuiSizeConstraints
-var private SMALL_CONSTR_SQUARE_CN : ImGuiSizeConstraints
-var private SMALL_CONSTR_STEP_CN : ImGuiSizeConstraints
+let private SMALL_CONSTR_ASPECT_RATIO = 16.0f / 9.0f
+let private SMALL_CONSTR_FIXED_STEP = 100.0f
 
-[init]
-def small_constr_init() {
-    let aspect_ratio = 16.0f / 9.0f
-    SMALL_CONSTR_ASPECT_CN <- ImGuiSizeConstraints(
-        @ capture(= aspect_ratio) (var data : ImGuiSizeCallbackData) : void {
-            data.DesiredSize = float2(data.DesiredSize.x,
-                                      float(int(data.DesiredSize.x / aspect_ratio)))
-        })
-    SMALL_CONSTR_SQUARE_CN <- ImGuiSizeConstraints(
-        @(var data : ImGuiSizeCallbackData) : void {
-            let s = max(data.DesiredSize.x, data.DesiredSize.y)
-            data.DesiredSize = float2(s, s)
-        })
-    let fixed_step = 100.0f
-    SMALL_CONSTR_STEP_CN <- ImGuiSizeConstraints(
-        @ capture(= fixed_step) (var data : ImGuiSizeCallbackData) : void {
-            let rx = float(int(data.DesiredSize.x / fixed_step + 0.5f)) * fixed_step
-            let ry = float(int(data.DesiredSize.y / fixed_step + 0.5f)) * fixed_step
-            data.DesiredSize = float2(rx, ry)
-        })
-}
+var private SMALL_CONSTR_ASPECT_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @ capture(= SMALL_CONSTR_ASPECT_RATIO) (var data : ImGuiSizeCallbackData) : void {
+        data.DesiredSize = float2(data.DesiredSize.x,
+                                  float(int(data.DesiredSize.x / SMALL_CONSTR_ASPECT_RATIO)))
+    })
+var private SMALL_CONSTR_SQUARE_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @(var data : ImGuiSizeCallbackData) : void {
+        let s = max(data.DesiredSize.x, data.DesiredSize.y)
+        data.DesiredSize = float2(s, s)
+    })
+var private SMALL_CONSTR_STEP_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+    @ capture(= SMALL_CONSTR_FIXED_STEP) (var data : ImGuiSizeCallbackData) : void {
+        let rx = float(int(data.DesiredSize.x / SMALL_CONSTR_FIXED_STEP + 0.5f)) * SMALL_CONSTR_FIXED_STEP
+        let ry = float(int(data.DesiredSize.y / SMALL_CONSTR_FIXED_STEP + 0.5f)) * SMALL_CONSTR_FIXED_STEP
+        data.DesiredSize = float2(rx, ry)
+    })
 
 def ShowExampleAppConstrainedResize() : bool {
     // Submit constraint — 9 options. Options 0..5 use the no-callback overload;
     // 6..8 use the lambda-callback overload from imgui_window_constraints_builtin,
-    // backed by the module-scope wrappers seeded in `small_constr_init`.
+    // backed by the module-scope wrappers declared above.
     if (SMALL_CONSTR_TYPE == 0) {
         SetNextWindowSizeConstraints(float2(100.0f, 100.0f), float2(500.0f, 500.0f))
     } elif (SMALL_CONSTR_TYPE == 1) {

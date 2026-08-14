@@ -6,7 +6,6 @@ options gc
 require dastest/testing_boost public
 require _openai_stream_mock
 require openai/openai_chat
-require strings
 
 // Offline end-to-end streaming tests: stand up the local streaming mock server
 // (_openai_stream_mock.das) on a worker thread and run real chat_stream calls

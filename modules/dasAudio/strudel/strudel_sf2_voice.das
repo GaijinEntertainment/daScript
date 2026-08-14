@@ -584,7 +584,8 @@ def public sf2_recalc_atten(atten_state : SF2VoiceAttenState; cc_values : int[12
 // ─── C Voice Creation (populates ma_sf2_voice from SF2 generators) ───
 
 [unused_argument(channel)]
-def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
+def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one resolution step per SF2 generator group, all writing the same voice from the same zone chain
+                              inst_idx, izone_idx : int;
                               pzone : SF2Zone const?; global_pzone : SF2Zone const?;
                               note, velocity, channel : int;
                               cc_values : int[128];

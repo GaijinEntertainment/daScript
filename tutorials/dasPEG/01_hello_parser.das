@@ -142,36 +142,36 @@ def try_parse(input : string) {
 def main {
     // Section 1: Simple literal matching
     print("=== Literal matching ===\n")
-    parse_hello("Hello") $(val; err) {
+    parse_hello("Hello") $(val; _err) {
         print("  \"Hello\" -> {val}\n")
     }
-    parse_hello("Goodbye") $(val; err) {
+    parse_hello("Goodbye") $(val; _err) {
         print("  \"Goodbye\" -> {val} (no match)\n")
     }
 
     // Section 2: Multiple alternatives
     print("\n=== Ordered choice ===\n")
     for (word in ["Hello", "Hi", "Hey", "Bye"]) {
-        parse_greeting(word) $(val; err) {
+        parse_greeting(word) $(val; _err) {
             print("  \"{word}\" -> \"{val}\"\n")
         }
     }
 
     // Section 3: Text extraction
     print("\n=== Text extraction ===\n")
-    parse_name("Hello, World!") $(val; err) {
+    parse_name("Hello, World!") $(val; _err) {
         print("  name = \"{val}\"\n")
     }
-    parse_name("Hello, daScript!") $(val; err) {
+    parse_name("Hello, daScript!") $(val; _err) {
         print("  name = \"{val}\"\n")
     }
 
     // Section 4: Key-value parser
     print("\n=== Key-value ===\n")
-    parse_key_value("name = \"Alice\"") $(val; err) {
+    parse_key_value("name = \"Alice\"") $(val; _err) {
         print("  {val}\n")
     }
-    parse_key_value("age=\"30\"") $(val; err) {
+    parse_key_value("age=\"30\"") $(val; _err) {
         print("  {val}\n")
     }
 

@@ -112,9 +112,7 @@ def private write_store(var runs : array<BenchRun>) : string {
 [test]
 def test_writer_round_trip(t : T?) {
     t |> run("the live writer's stamped output is submission-grade") @(t : T?) {
-        var runs : array<BenchRun>
-        runs |> emplace(make_das_run())
-        runs |> emplace(make_ref_run())
+        var runs <- [ <- make_das_run(), <- make_ref_run()]
         let text = write_store(runs)
         var errors : array<string>
         report(t, "shape", validate_record_store(text, errors), errors)

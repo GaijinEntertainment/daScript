@@ -190,9 +190,11 @@ def init() { // nolint:STYLE038 — linear track-setup sequence
     live_create_window("daStrudel Visualizer", 1280, 720)
     create_gl_objects()
     create_ttf_objects()
-    font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 16.0, oversampling = 2])
+    delete font
+    font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 16.0, oversampling = 2])  // nolint:PERF030 - deleted on the line above; the check cannot see a struct delete
     if (!!empty(font.bitmap.bytes)) {
-        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])
+        delete font
+        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])  // nolint:PERF030 - deleted on the line above; the check cannot see a struct delete
     }
     if (!!empty(font.bitmap.bytes)) {
         panic("can't load font")
@@ -303,7 +305,7 @@ def init() { // nolint:STYLE038 — linear track-setup sequence
 }
 
 [export]
-def update() { // nolint:STYLE037 — per-panel-kind dispatch
+def update() { // nolint:STYLE037,STYLE038 — per-panel-kind dispatch over a GL state sequence
     if (!live_begin_frame()) {
         return
     }

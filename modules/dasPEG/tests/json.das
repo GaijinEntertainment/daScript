@@ -7,7 +7,6 @@ options strict_smart_pointers = true
 
 require dastest/testing_boost
 require daslib/stringify
-require daslib/utf8_utils
 require daslib/json
 require peg/peg
 
@@ -22,7 +21,7 @@ def into_table(var src : array<tuple<auto(K); auto(V)>>) : table<K; V> {
 }
 
 
-def get_parser_with(json : string; blk : block<(var res_json : JsonValue?# implicit; errors : array<ParsingError>) : void>) {
+def get_parser_with(json : string; blk : block<(var res_json : JsonValue?# implicit; errors : array<ParsingError>) : void>) { // nolint:STYLE038 - flat PEG grammar declaration; the rules are the JSON spec, one per production
     parse(json) {
         var JsonValue : JsonValue?
 
@@ -158,7 +157,7 @@ def test1(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json : JsonValue?# implicit; errors : array<ParsingError>) {
+    get_parser_with(input) $(var res_json : JsonValue?# implicit; _errors : array<ParsingError>) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -171,7 +170,7 @@ def test2(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json; errors) {
+    get_parser_with(input) $(var res_json; _errors) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -184,7 +183,7 @@ def test3(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json; errors) {
+    get_parser_with(input) $(var res_json; _errors) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -198,7 +197,7 @@ def test4(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json; errors) {
+    get_parser_with(input) $(var res_json; _errors) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -213,7 +212,7 @@ def test5(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json; errors) {
+    get_parser_with(input) $(var res_json; _errors) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -232,7 +231,7 @@ def test6(t : T?) {
     var discard_error : string
     var json <- read_json(input, discard_error)
 
-    get_parser_with(input) $(var res_json; errors) {
+    get_parser_with(input) $(var res_json; _errors) {
         t |> equal(json |> write_json(), res_json |> write_json)
     }
 }
@@ -245,7 +244,7 @@ def test_json_error_1(t : T?) {
 "city": "New York"
 %%
     // Error: Expected the terminal `;` ...
-    get_parser_with(input) $(res; err) {
+    get_parser_with(input) $(_res; err) {
         if (err |> empty) {
             t |> failure <| "Should not parse missing right curly bracket"
         }
@@ -261,7 +260,7 @@ def test_json_error_2(t : T?) {
   "city": "New York"
 }%%
     // Error: Expected the terminal `:` at 30, around; 30
-    get_parser_with(input) $(res; err) {
+    get_parser_with(input) $(_res; err) {
         if (err |> empty) {
             t |> failure <| "Should not parse missing semilcolon"
         }
@@ -273,7 +272,7 @@ def test_json_error_3(t : T?) {
     let input = %stringify~"city": "New York"
 }%%
     // Error: Expected EOF at 6
-    get_parser_with(input) $(res; err) {
+    get_parser_with(input) $(_res; err) {
         if (err |> empty) {
             t |> failure <| "Should not parse missing semilcolon"
         }
@@ -292,7 +291,7 @@ def test_json_error_4(t : T?) {
 
     // Error: Expected the terminal `,` at 24, around; 24
     // Error: Expected the terminal `}` at 24, around; 24
-    get_parser_with(input) $(res; err) {
+    get_parser_with(input) $(_res; err) {
         if (err |> empty) {
             t |> failure <| "Should not parse missing semilcolon"
         }
@@ -312,7 +311,7 @@ def test_json_error_5(t: T?) {
 }%%
     // Error: Expected the terminal `]` at 77, around; 77
     // Error: Expected the terminal `,` at 77, around; 77
-    get_parser_with(input) $(res; err) {
+    get_parser_with(input) $(_res; err) {
         if (err |> empty) {
             t |> failure <| "Should not parse missing semilcolon"
         }

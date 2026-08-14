@@ -56,7 +56,7 @@ def test_each_card_appears_twice(t : T?) {
         if (card != Card.card_none) {
             let k = int(card)
             if (key_exists(counts, k)) {
-                counts[k] += 1
+                counts[k]++
             } else {
                 counts[k] = 1
             }
@@ -203,7 +203,7 @@ def test_double_deck(t : T?) {
     for (card in deck) {
         let k = int(card)
         if (key_exists(counts, k)) {
-            counts[k] += 1
+            counts[k]++
         } else {
             counts[k] = 1
         }
@@ -319,7 +319,7 @@ def test_sort_hand(t : T?) {
 def test_legal_moves_normal_card(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
-    t |> success(length(moves) > 0, "player 0 should have legal moves")
+    t |> success(!empty(moves), "player 0 should have legal moves")
     for (m in moves) {
         let card = get_hand_card(game, 0, m.card_idx)
         if (!is_jack(card)) {
@@ -334,7 +334,7 @@ def test_legal_moves_normal_card(t : T?) {
 def test_apply_move(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
-    t |> success(length(moves) > 0)
+    t |> success(!empty(moves))
     let m = moves[0]
     let card = get_hand_card(game, 0, m.card_idx)
     t |> success(apply_move(game, 0, m), "move should succeed")
@@ -348,7 +348,7 @@ def test_apply_move(t : T?) {
 def test_apply_move_wrong_player(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
-    t |> success(length(moves) > 0)
+    t |> success(!empty(moves))
     t |> success(!apply_move(game, 1, moves[0]), "wrong player should fail")
 }
 
@@ -386,7 +386,7 @@ def test_full_game_simulation(t : T?) {
         let p = game.current_player
         discard_dead_cards(game, p)
         let moves <- legal_moves(game, p)
-        if (length(moves) == 0) {
+        if (empty(moves)) {
             break
         }
         let m = moves[turns % length(moves)]
@@ -400,7 +400,7 @@ def test_full_game_simulation(t : T?) {
 def test_is_legal_move(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
-    t |> success(length(moves) > 0)
+    t |> success(!empty(moves))
     for (m in moves) {
         t |> success(is_legal_move(game, 0, m), "legal_moves entry should be legal")
     }
@@ -428,7 +428,7 @@ def test_is_legal_move(t : T?) {
     t |> run("occupied cell is illegal for normal card") <| @(t : T?) {
         make_game(game, 2, 42)
         let moves <- legal_moves(game, 0)
-        if (length(moves) > 0) {
+        if (!empty(moves)) {
             let m = moves[0]
             let card = get_hand_card(game, 0, m.card_idx)
             if (!is_jack(card)) {

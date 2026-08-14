@@ -71,6 +71,7 @@ def load_ref(path : string) : bool {
         delete samples
         return false
     }
+    delete g_ref   // do_drum runs once per drum; the previous reference buffer is still live
     g_ref <- load_to_mono44k(samples, sr, ch)
     delete samples
     return true

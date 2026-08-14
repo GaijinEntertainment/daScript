@@ -79,7 +79,7 @@ def sfxr_wave_of(i : int) : SfxrWave {
 
 // ===== Synthesis =====
 
-def render_sfxr(snd : SfxrSound) : array<float> {
+def render_sfxr(snd : SfxrSound) : array<float> {   // nolint:STYLE037,STYLE038 - sfxr synth kernel; reset, retrigger, envelope, filter and phaser all mutate the same register set per sample
     //! Render a sound to a mono buffer in [-1,1] at SFXR_SAMPLE_RATE (44100, the model's native rate).
     //! Deterministic: identical params yield identical output.
     var seed = 0x9E3779B9u
@@ -459,7 +459,7 @@ def sfxr_randomize(var seed : uint&) : SfxrSound {
     return s
 }
 
-def sfxr_mutate(snd : SfxrSound; var seed : uint&; amount : float = 0.05) : SfxrSound {
+def sfxr_mutate(snd : SfxrSound; var seed : uint&; amount : float = 0.05) : SfxrSound {   // nolint:STYLE037 - one coin flip per sfxr parameter
     //! Nudge each parameter by a small random delta — sfxr's "Mutate" for exploring nearby sounds.
     var s = snd
     if (rnd_i(seed, 1) != 0) { s.base_freq += frnd(seed, amount * 2.0) - amount; }

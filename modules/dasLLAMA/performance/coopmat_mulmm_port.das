@@ -37,7 +37,7 @@ var @workgroup buf_a : uint[2560]   // 128 rows x SST uints (f16 pairs, K contig
 var @workgroup buf_b : uint[2560]   // 128 cols x SST
 
 [compute_shader(local_size_x=128, name="ourmm_spv")]
-def ourmm_kernel {
+def ourmm_kernel {   // nolint:STYLE038 - compute-shader body; the staging/barrier/MMA phases are register- and barrier-coupled
     let mm = int(vk_meta[0])
     let kk = int(vk_meta[1])
     let nbk = int(vk_meta[2])
@@ -373,7 +373,7 @@ def private make_raw_pipeline(dev : VkDevice; shader_words : array<uint>; var rl
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handle must outlive the shape loop, so the setup cannot move into helpers
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "no Vulkan loader\n")
         return
