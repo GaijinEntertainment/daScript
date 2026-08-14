@@ -205,7 +205,16 @@ namespace das {
     static TextPrinterSink g_textPrinterSink = &textPrinterToStdout;
 
     void setTextPrinterSink ( TextPrinterSink sink ) {
-        g_textPrinterSink = sink ? sink : &textPrinterToStdout;
+        auto newSink = sink ? sink : &textPrinterToStdout;
+        // the file is closed exactly when it stops BEING the sink, on the same
+        // contract the sink itself rests on: nothing prints while it is being set,
+        // which is the one moment closing it is safe.  A handle left open holds the
+        // file against deletion on Windows, where fopen does not share delete
+        if ( newSink!=&textPrinterToFileSink && g_textPrinterFile ) {
+            fclose(g_textPrinterFile);
+            g_textPrinterFile = nullptr;
+        }
+        g_textPrinterSink = newSink;
     }
 
     void textPrinterToStderr() {
@@ -217,10 +226,9 @@ namespace das {
         if ( !f ) return false;
         FILE * was = g_textPrinterFile;
         g_textPrinterFile = f;
+        // the sink does not change kind here, so setting it closes nothing: the
+        // file it replaces is closed right after, on the same being-set contract
         setTextPrinterSink(&textPrinterToFileSink);
-        // Closing the one it replaces is safe on the same contract the sink
-        // itself rests on: nothing prints while it is being set. The file is
-        // never closed after that -- a fatal fires during shutdown too.
         if ( was ) fclose(was);
         return true;
     }

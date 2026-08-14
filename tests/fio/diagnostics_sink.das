@@ -19,10 +19,10 @@ def test_diagnostics_to_file(t : T?) {
         t |> success(!empty(root), "temp dir created: {terr}")
         if (!empty(root)) {
             t |> success(diagnostics_to_file(path_join(root, "diag.log")))
-            // the sink outlives this test and never closes the file it holds, so
-            // leave it on stderr rather than inside a directory about to go
+            // moving the sink off the file closes it, and a removal that succeeds
+            // is the proof: on Windows an open handle holds a file against deletion
             diagnostics_to_stderr()
-            rmdir_rec(root)
+            t |> success(rmdir_rec(root), "the sink held its file open")
         }
     }
 }
