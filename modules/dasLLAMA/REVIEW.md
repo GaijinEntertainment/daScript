@@ -285,6 +285,13 @@ Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 
   transcribe driver, quirks. Shared tower pieces move up into `dasllama_audio.das`, never sideways.
 - `dasllama_vad.das` — voice-activity detection weights and stream state.
 
+### Vision
+
+- `dasllama_vision.das` — the preprocessing rail: dynamic-resolution geometry, the letterbox
+  resize, normalize. The only preproc home.
+- `dasllama_vision_io.das` — image decode to RGB8 and the debug PNG dump. The only file that talks
+  to stbimage.
+
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode
 loop, a caps value, or a language rule in the facade is a defect.

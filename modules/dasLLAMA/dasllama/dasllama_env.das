@@ -138,6 +138,22 @@ struct public GpuTierEnv {
     gpu_prof : bool = false
 }
 
+// ===== Vision =====
+
+[EnvConfig(env_prefix = "DASLLAMA")]
+struct public VisionEnv {
+    @clarg_default_doc = "40 (the gemma-4 model default)"
+    @clarg_doc = "Minimum soft tokens per image; dynamic-resolution geometry upscales to reach it."
+    image_min_tokens : int = 40
+
+    @clarg_default_doc = "280 (the gemma-4 model default)"
+    @clarg_doc = "Maximum soft tokens per image; dynamic-resolution geometry downscales to fit."
+    image_max_tokens : int = 280
+
+    @clarg_doc = "Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.png — the human smoke test; empty = off."
+    vision_dump : string = ""
+}
+
 // ===== Metal backend =====
 
 [EnvConfig(env_prefix = "DASLLAMA_METAL")]
@@ -659,6 +675,7 @@ struct public CoreEnv {
 // One load per context, at init. Read sites touch fields; nothing hot ever calls the OS.
 
 let public g_env_engine = env_config(type<EngineEnv>)
+let public g_env_vision = env_config(type<VisionEnv>)
 let public g_env_gpu = env_config(type<GpuTierEnv>)
 let public g_env_metal = env_config(type<MetalEnv>)
 let public g_env_vulkan = env_config(type<VulkanEnv>)
@@ -707,6 +724,9 @@ def public env_markdown() : string {
             "Read by the inference engine itself, so these affect any program that loads a model.")
         write_env_info_rows(w, get_env_config_info(type<EngineEnv>))
         write_env_info_rows(w, get_env_config_info(type<GpuTierEnv>))
+        write_env_section(w, "Vision",
+            "The image preprocessing rail: dynamic-resolution token bounds and the debug dump.")
+        write_env_info_rows(w, get_env_config_info(type<VisionEnv>))
         write_env_section(w, "Metal backend",
             "Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.")
         write_env_info_rows(w, get_env_config_info(type<MetalEnv>))

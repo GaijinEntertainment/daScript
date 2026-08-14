@@ -124,6 +124,9 @@ by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full e
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `scratch_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
+`test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
+bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
+`gemma4-vision-oracle/`), plus the stbimage decode/dump round-trips in a per-process temp dir.
 
 ## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 
