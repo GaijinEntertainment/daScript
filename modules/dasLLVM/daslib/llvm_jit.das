@@ -16,6 +16,7 @@ module llvm_jit shared private
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
+require llvm/daslib/llvm_jit_lower
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
@@ -1745,6 +1746,12 @@ class public LlvmJitVisitor : AstVisitor {
                     params |> push(cmresPtr, 0)
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
+                } elif (has_interop_lowering(expr)) {
+                    var ccall = lookup_interop_lowering(g_ctx, g_builder, types, expr,
+                        [for (x in expr.arguments); getE(x)]) {
+                        return build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
+                    }
+                    setE(expr, ccall)
                 } else {
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
                     setE(expr, ccall)
