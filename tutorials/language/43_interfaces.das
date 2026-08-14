@@ -49,7 +49,7 @@ def demo_basic_interface() {
     var g = new FriendlyGreeter()
 
     // Direct getter call (original pattern)
-    let greet_alice = g->get`IGreeter()->greet("Alice")
+    let greet_alice = g->get`IGreeter()->greet("Alice")     // nolint:STYLE036 - compiler-inserted const-adaptation cast, not source
     print("  getter:  {greet_alice}\n")
 
     // `as` — returns the interface proxy

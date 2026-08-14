@@ -260,6 +260,13 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
                         result.compile_errors = issue_str
                         return
                     }
+                    // A [extern] dlopen miss (e.g. dasSMT without libz3) is the environment, not the
+                    // code — skip with a visible reason so nightly coverage counting still sees it.
+                    if (find(issue_str, "can't load library") >= 0) {
+                        result.skip_reason = "(native library unavailable — install it to lint this file)"
+                        result.compile_errors = issue_str
+                        return
+                    }
                     result.failed = true
                     result.compile_errors = issue_str
                     return

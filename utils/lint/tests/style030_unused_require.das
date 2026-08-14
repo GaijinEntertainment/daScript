@@ -21,6 +21,7 @@ expect 31209:1
 require daslib/style_lint       // [lint_macro] module — pass-macro guard must NOT flag it
 require _style030_unused        // genuinely unused source module (FIRES)
 require _style029_direct        // used directly — must NOT fire
+require _style030_finalize_only // lifecycle-hook-only module ([finalize]) — must NOT fire
 
 [export]
 def use_them() : int {

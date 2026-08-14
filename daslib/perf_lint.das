@@ -2052,6 +2052,12 @@ class PerfLintVisitor : AstVisitor {
         if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
             perf023_splice_depth++
         }
+        // PERF030 release tracking: deletes lower to builtin`finalize`/`_::finalize` calls; deferred bodies run later so they must not credit the move site
+        if (in_deferred == 0 && !empty(expr.arguments)
+                && (expr.name == "_::finalize" || expr.func.name == "finalize"
+                    || expr.func.name |> starts_with("builtin`finalize`"))) {
+            perf030_mark_released(expr.arguments[0])
+        }
         // Loop/while-aware rules below skip closure bodies (they run later, not in the loop)
         if (in_closure > 0) return
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
@@ -2065,9 +2071,6 @@ class PerfLintVisitor : AstVisitor {
         // PERF005: length(string) in while condition — start tracking
         if (in_while_cond && expr.func.name == "length" && expr.func._module.name == "strings") {
             in_length_while_call++
-        }
-        if (!empty(expr.arguments) && expr.func.name |> starts_with("builtin`finalize`")) {
-            perf030_mark_released(expr.arguments[0])
         }
     }
 
@@ -2204,7 +2207,7 @@ class PerfLintVisitor : AstVisitor {
             perf030_released |> erase(released)
             return
         }
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration (a `cond ? a : b` init covers conditional fills); or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
     def perf030_mark_released(sub : ExpressionPtr) : void {

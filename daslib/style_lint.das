@@ -36,7 +36,7 @@ module style_lint shared private
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro, or an [init]/[finalize]/[before_reload]/[after_reload]/[live_command] function, or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
 //!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign). Cloneable elements only (a copyable-but-not-cloneable element such as a lambda stays silent — ':=' would not compile)
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
@@ -2323,14 +2323,18 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st029_module_has_init(mod : Module?) : bool {
-        // Modules with an [init] function run side effects on load even with no visible reference, so they are never "unused".
+        // A lifecycle hook ([init]/[finalize]/[before_reload]/[after_reload]/[live_command]) acts by being required alone - never "unused"
         var found = false
         for_each_function(mod, "") $(fn) {
             if (found) return
             for (a in fn.annotations) {
-                if (a != null && a.annotation != null && a.annotation.name == "init") {
-                    found = true
-                    break
+                if (a != null && a.annotation != null) {
+                    let an = "{a.annotation.name}"
+                    if (an == "init" || an == "finalize" || an == "before_reload"
+                            || an == "after_reload" || an == "live_command") {
+                        found = true
+                        break
+                    }
                 }
             }
         }

@@ -12,7 +12,7 @@ options gen2
 //   delete a
 //   a <- make_more()
 
-expect 31208:4
+expect 31208:5
 
 require daslib/perf_lint
 
@@ -82,6 +82,50 @@ def good_hoisted_inscope_init(flag : bool) : int {
     return length(a)
 }
 
+def make_holder : Holder {
+    var h : Holder
+    h.xs |> push(1)
+    return <- h
+}
+
+def good_struct_delete_first {
+    // a struct delete lowers to a `_::finalize` call, not builtin`finalize` -
+    // the release must still credit the move below
+    var h <- make_holder()
+    delete h
+    h <- make_holder()
+    delete h
+}
+
+def run_inline(blk : block<() : void>) {
+    invoke(blk)
+}
+
+def good_delete_in_block_arg {
+    // inline block args run in place - a delete inside one counts
+    var a <- make_arr()
+    var b <- make_arr()
+    run_inline() {
+        delete a
+        a <- b
+    }
+    delete a
+}
+
+def bad_delete_only_in_lambda {
+    // a lambda body runs LATER - its delete must not credit the move below
+    var a <- make_arr()
+    var l <- unsafe(@ capture(& a) () : void {
+        delete a
+    })
+    a <- make_arr()          // PERF030: the lambda has not run yet
+    invoke(l)
+    delete a
+    unsafe {
+        delete l
+    }
+}
+
 [export]
 def main {
     bad_array_reassign()
@@ -91,4 +135,7 @@ def main {
     good_pod_move()
     good_element_target()
     let _ = good_hoisted_inscope_init(false)
+    good_struct_delete_first()
+    good_delete_in_block_arg()
+    bad_delete_only_in_lambda()
 }
