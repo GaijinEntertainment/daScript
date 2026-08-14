@@ -64,7 +64,7 @@ class Reduce {
 }
 
 [test]
-def test_reduce_gpu_vs_cpu(t : T?) {
+def test_reduce_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("threadgroup tree reduction: GPU partials == directly computed sums") <| @(t : T?) {
         var usrc : array<uint>
         var fsrc : array<float>

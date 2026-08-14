@@ -11,13 +11,13 @@ require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-require live/decs_live    // nolint:STYLE030 — load-bearing for decs entity serialization across live reloads
-require live/opengl_live  // nolint:STYLE030 — load-bearing for OpenGL resource live-reload
+require live/decs_live
+require live/opengl_live
 require live/live_commands
 require ?dashv live/live_api
-require live/live_watch_boost // nolint:STYLE030 — load-bearing for live file-watch side-effects
+require live/live_watch_boost
 require live/live_vars
-require live/audio_live   // nolint:STYLE030 — load-bearing for audio buffer persistence across reloads
+require live/audio_live
 require daslib/json_boost
 require daslib/math_boost
 require daslib/archive
@@ -25,7 +25,7 @@ require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live // nolint:STYLE030 — load-bearing for strudel audio live-reload side-effects
+require strudel/strudel_live
 require daslib/strings_boost
 require live_host
 

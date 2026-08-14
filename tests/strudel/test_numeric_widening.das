@@ -90,9 +90,6 @@ def test_time_funcs_accept_int_float_double(t : T?) {
 [test]
 def test_pattern_overload_still_resolves(t : T?) {
     // widening must NOT shadow the Pattern (mod_pat) overload
-    var p <- s("bd sd")
-    p <- speed(p, s("1 2"))
-    p <- gain(p, s("0.5 1.0"))
-    p <- fast(p, s("1 2"))
+    let p <- s("bd sd") |> speed(s("1 2")) |> gain(s("0.5 1.0")) |> fast(s("1 2"))
     t |> success(hc(p) > 0)
 }

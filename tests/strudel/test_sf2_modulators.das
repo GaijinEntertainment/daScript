@@ -183,7 +183,7 @@ def test_modulators_affect_voice(t : T?) {
             return
         }
         let zones = sf2_find_zones(*sf2, idx, 60, 127)
-        if (length(zones) == 0) {
+        if (empty(zones)) {
             t->skip("no zones for piano C4")
             return
         }
@@ -225,7 +225,7 @@ def test_default_modulators(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         if (idx < 0) { t->skip("no piano"); return ; }
         let zones = sf2_find_zones(*sf2, idx, 60, 100)
-        if (length(zones) == 0) { t->skip("no zones"); return ; }
+        if (empty(zones)) { t->skip("no zones"); return ; }
         let z = zones[0]
         let preset = sf2.presets[idx]
         var pzone : SF2Zone const?

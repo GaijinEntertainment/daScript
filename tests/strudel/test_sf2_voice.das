@@ -24,7 +24,7 @@ def roughly_equal(t : T?; expected, actual, tolerance : float; msg : string = ""
 // ─── Envelope Tests ───
 
 [test]
-def test_envelope_stages(t : T?) {
+def test_envelope_stages(t : T?) {   // nolint:STYLE038 flat list of independent envelope-stage arms
     t |> run("delay then attack") <| @(t : T?) {
         var env = SF2Envelope()
         env.delay_sec = 0.001  // ~48 samples at 48kHz
@@ -156,7 +156,7 @@ def test_voice_pitch(t : T?) {
     t |> run("piano C4 on root key has phase_inc near 1.0") <| @(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         let zones = sf2_find_zones(*sf2, idx, 60, 100)
-        if (length(zones) > 0) {
+        if (!empty(zones)) {
             let preset = sf2.presets[idx]
             var pzone : SF2Zone const?
             for (pz in preset.zones) {
@@ -177,7 +177,7 @@ def test_voice_pitch(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         if (idx >= 0) {
             let zones_lo = sf2_find_zones(*sf2, idx, 55, 100)
-            if (length(zones_lo) > 0) {
+            if (!empty(zones_lo)) {
                 let preset = sf2.presets[idx]
                 let z = zones_lo[0]
                 var pzone : SF2Zone const?
@@ -266,7 +266,7 @@ def test_loop_modes(t : T?) {
 // ─── C Voice Tests ───
 
 [test]
-def test_c_voice_render(t : T?) {
+def test_c_voice_render(t : T?) {   // nolint:STYLE038 flat list of arms sharing one loaded-sf2 fixture and its teardown
     var st : FStat
     if (!stat("{SF2_DIR}/FluidR3_GM.sf2", st)) {
         t->skip("FluidR3_GM.sf2 not available")
@@ -280,7 +280,7 @@ def test_c_voice_render(t : T?) {
     t |> run("C voice produces non-zero output") <| @(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         let zones = sf2_find_zones(*sf2, idx, 60, 127)
-        if (length(zones) > 0) {
+        if (!empty(zones)) {
             let preset = sf2.presets[idx]
             var pzone : SF2Zone const?
             for (pz in preset.zones) {
@@ -308,7 +308,7 @@ def test_c_voice_render(t : T?) {
     t |> run("C voice note-off triggers release and finishes") <| @(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         let zones = sf2_find_zones(*sf2, idx, 60, 127)
-        if (length(zones) > 0) {
+        if (!empty(zones)) {
             let preset = sf2.presets[idx]
             var pzone : SF2Zone const?
             for (pz in preset.zones) {
@@ -335,7 +335,7 @@ def test_c_voice_render(t : T?) {
     t |> run("C voice end_quick kills fast") <| @(t : T?) {
         let idx = sf2_find_preset(*sf2, 128, 0)  // drums
         let zones = sf2_find_zones(*sf2, idx, 36, 127)
-        if (length(zones) > 0) {
+        if (!empty(zones)) {
             let preset = sf2.presets[idx]
             var pzone : SF2Zone const?
             for (pz in preset.zones) {

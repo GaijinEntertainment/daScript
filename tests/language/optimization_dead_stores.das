@@ -280,7 +280,7 @@ def body_of(t : T?; nm : string) : string {
 }
 
 [test]
-def test_dead_stores_fired(t : T?) {
+def test_dead_stores_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
     ast_gc_guard() {
         t |> run("overwritten store is removed") @(t : T?) {
             let b = body_of(t, "target_overwrite")

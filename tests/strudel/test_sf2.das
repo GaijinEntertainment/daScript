@@ -82,7 +82,7 @@ def test_load_sf3_compressed(t : T?) {
         t |> success(idx >= 0)
         if (idx >= 0) {
             let zones = sf2_find_zones(*sf2, idx, 60, 127)
-            t |> success(length(zones) > 0)
+            t |> success(!empty(zones))
         }
     }
     unsafe { delete sf2; }
@@ -104,10 +104,10 @@ def test_load_fluidr3(t : T?) {
         t |> success(length(sf2.presets) >= 128)
     }
     t |> run("has instruments") <| @(t : T?) {
-        t |> success(length(sf2.instruments) > 0)
+        t |> success(!empty(sf2.instruments))
     }
     t |> run("has samples") <| @(t : T?) {
-        t |> success(length(sf2.samples) > 0)
+        t |> success(!empty(sf2.samples))
     }
     t |> run("has sample data") <| @(t : T?) {
         t |> success(length(sf2.sample_data) > 1000000)
@@ -132,18 +132,18 @@ def test_load_fluidr3(t : T?) {
         let idx = sf2_find_preset(*sf2, 0, 0)
         if (idx >= 0) {
             let zones = sf2_find_zones(*sf2, idx, 60, 127)
-            t |> success(length(zones) > 0)
+            t |> success(!empty(zones))
         }
     }
     t |> run("zone lookup for drum kick") <| @(t : T?) {
         let idx = sf2_find_preset(*sf2, 128, 0)
         if (idx >= 0) {
             let zones = sf2_find_zones(*sf2, idx, 36, 127)
-            t |> success(length(zones) > 0)
+            t |> success(!empty(zones))
         }
     }
     t |> run("sample headers have valid data") <| @(t : T?) {
-        if (length(sf2.samples) > 0) {
+        if (!empty(sf2.samples)) {
             let s = sf2.samples[0]
             t |> success(s.sample_rate > 0u)
             t |> success(s.end > s.start)

@@ -11,7 +11,6 @@ options indenting = 4
 
 require dastest/testing_boost
 require strudel/strudel
-require strudel/strudel_synth
 require strudel/strudel_scheduler
 require strudel/strudel_samples
 require math

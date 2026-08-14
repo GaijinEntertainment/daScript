@@ -2799,8 +2799,9 @@ class StyleLintVisitor : AstVisitor {
                 && !expr.subexpr.genFlags.generated) {
             style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at)
         }
-        // ===== STYLE036 — type contract that cannot act on a resolved cast type =====
-        if (!expr.genFlags.generated && expr.castType != null) {
+        // ===== STYLE036 — type contract that cannot act on a resolved cast type (instances skipped: their SOURCE target was auto/alias, the contract real at substitution) =====
+        if (!expr.genFlags.generated && expr.castType != null
+                && (current_function == null || current_function.fromGeneric == null)) {
             let inert = style036_inert_contract(expr.castType)
             if (!empty(inert)) {
                 let tail = inert == "-const" ? "; drop it, along with any 'const' it was meant to cancel" : "; drop it"

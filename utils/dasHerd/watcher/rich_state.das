@@ -557,7 +557,7 @@ def settings_load() {
         var inscope loaded = HerdUiSettings()
         if (sscan_json(fread(settings_path()), loaded) && loaded.version == 1) {
             delete g_ui_settings
-            g_ui_settings <- loaded  // nolint:PERF030 - deleted on the line above; the check cannot see that release
+            g_ui_settings <- loaded
         }
     } elif (fexist(layout_choice_path())) {
         // Migrate the pre-settings layout choice file once.

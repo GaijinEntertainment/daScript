@@ -7,8 +7,8 @@ require strings
 
 def private equal_bytes(a, b : array<uint8> const) : bool {
     if (length(a) != length(b)) return false
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) return false
+    for (ea, eb in a, b) {
+        if (ea != eb) return false
     }
     return true
 }

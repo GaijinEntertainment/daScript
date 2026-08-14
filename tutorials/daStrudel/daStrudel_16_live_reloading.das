@@ -26,9 +26,9 @@ require strudel/strudel public
 require strudel/strudel_player
 // strudel_live registers [before_reload]/[after_reload] hooks automatically —
 // just require it and player state (tracks, SID, SF2 data) is preserved.
-require strudel/strudel_live // nolint:STYLE030 — required for its [before_reload]/[after_reload] handlers, not symbols
+require strudel/strudel_live
 require audio/audio_boost
-require live/audio_live // nolint:STYLE030 — required for its live-reload handlers, not symbols
+require live/audio_live
 require live/live_commands
 require live/live_api
 require live/live_gc

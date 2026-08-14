@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-require daslib/linked_list
+require daslib/linked_list   // nolint:STYLE030 - TLinkedList is reached through the spoof_instance reader macro
 
 class Bar {
     a : int

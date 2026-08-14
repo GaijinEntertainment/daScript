@@ -9,10 +9,7 @@ require math
 def private query_cycle(var pat : Pattern; cycle : int = 0) : array<Event> {
     let start = double(cycle)
     var haps <- pat(TimeSpan(start = start, stop = start + 1.0lf))
-    var events : array<Event>
-    for (h in haps) {
-        events |> push(h.value) // nolint:PERF006
-    }
+    var events <- [for (h in haps); h.value]
     delete haps
     return <- events
 }
@@ -20,10 +17,7 @@ def private query_cycle(var pat : Pattern; cycle : int = 0) : array<Event> {
 // Helper: query multiple cycles and return all events.
 def private query_cycles(var pat : Pattern; num_cycles : int) : array<Event> {
     var haps <- pat(TimeSpan(start = 0.0lf, stop = double(num_cycles)))
-    var events : array<Event>
-    for (h in haps) {
-        events |> push(h.value) // nolint:PERF006
-    }
+    var events <- [for (h in haps); h.value]
     delete haps
     return <- events
 }
@@ -155,20 +149,20 @@ def test_noise_bed(t : T?) {
 [test]
 def test_full_ambient_layer_count(t : T?) {
     // Build all 7 layers exactly as in integration_full_ambient.das
-    var layer1 <- note_pattern("<c1 g1 f1 eb1 bb0 f1>", "sine") |> slow(32.0lf) |> set_gain(0.3) |> set_attack(6.0) |> set_release(8.0) |> set_lpf(180.0) |> set_room(1.0) |> set_roomsize(10.0) |> set_orbit(1)
+    let layer1 <- note_pattern("<c1 g1 f1 eb1 bb0 f1>", "sine") |> slow(32.0lf) |> set_gain(0.3) |> set_attack(6.0) |> set_release(8.0) |> set_lpf(180.0) |> set_room(1.0) |> set_roomsize(10.0) |> set_orbit(1)
     let lpf2 <- signal_sine() |> signal_range(250.0, 800.0) |> slow(32.0lf)
     let pan2 <- signal_sine() |> signal_range(0.3, 0.7) |> slow(20.0lf)
-    var layer2 <- note_pattern("<c2 eb2 g2 bb2 f2 ab2 g2 eb2>", "supersaw") |> slow(24.0lf) |> set_gain(0.1) |> set_lpf(lpf2) |> set_hpf(80.0) |> set_room(0.9) |> set_roomsize(8.0) |> set_pan(pan2) |> set_orbit(2)
+    let layer2 <- note_pattern("<c2 eb2 g2 bb2 f2 ab2 g2 eb2>", "supersaw") |> slow(24.0lf) |> set_gain(0.1) |> set_lpf(lpf2) |> set_hpf(80.0) |> set_room(0.9) |> set_roomsize(8.0) |> set_pan(pan2) |> set_orbit(2)
     let vowel3 <- s("<a e i o u e>") |> slow(12.0lf)
-    var layer3 <- note_pattern("<g3 c4 eb4 f4 bb3 g3 ab3 c4>", "sine") |> set_fm(2.0) |> set_fmh(3.0) |> slow(28.0lf) |> set_gain(0.08) |> set_vowel(vowel3) |> set_lpf(1200.0) |> set_room(1.0) |> set_delay(0.3) |> set_orbit(3)
+    let layer3 <- note_pattern("<g3 c4 eb4 f4 bb3 g3 ab3 c4>", "sine") |> set_fm(2.0) |> set_fmh(3.0) |> slow(28.0lf) |> set_gain(0.08) |> set_vowel(vowel3) |> set_lpf(1200.0) |> set_room(1.0) |> set_delay(0.3) |> set_orbit(3)
     let gain4 <- signal_perlin() |> signal_range(0.03, 0.12) |> slow(10.0lf)
-    var layer4 <- scale_pattern("0 ~ ~ 4 ~ 2 ~ ~ 6 ~ 3 ~", "C4:pentatonic", "triangle") |> slow(6.0lf) |> set_gain(gain4) |> set_delay(0.55) |> set_orbit(4)
+    let layer4 <- scale_pattern("0 ~ ~ 4 ~ 2 ~ ~ 6 ~ 3 ~", "C4:pentatonic", "triangle") |> slow(6.0lf) |> set_gain(gain4) |> set_delay(0.55) |> set_orbit(4)
     let gain5 <- signal_perlin() |> signal_range(0.02, 0.08) |> slow(14.0lf)
-    var layer5 <- scale_pattern("~ 5 ~ ~ 1 ~ ~ ~ 3 ~ ~ 7", "C5:pentatonic", "sine") |> slow(8.0lf) |> set_gain(gain5) |> set_delay(0.4) |> set_orbit(4)
+    let layer5 <- scale_pattern("~ 5 ~ ~ 1 ~ ~ ~ 3 ~ ~ 7", "C5:pentatonic", "sine") |> slow(8.0lf) |> set_gain(gain5) |> set_delay(0.4) |> set_orbit(4)
     let lpf6 <- signal_sine() |> signal_range(120.0, 350.0) |> slow(40.0lf)
-    var layer6 <- atom("pink") |> set_gain(0.03) |> set_lpf(lpf6) |> set_hpf(40.0) |> set_orbit(5)
+    let layer6 <- atom("pink") |> set_gain(0.03) |> set_lpf(lpf6) |> set_hpf(40.0) |> set_orbit(5)
     let gain7 <- signal_sine() |> signal_range(0.0, 0.15) |> slow(16.0lf)
-    var layer7 <- note_pattern("<c1 c1 f0 f0>", "sine") |> slow(48.0lf) |> set_gain(gain7) |> set_lpf(100.0) |> set_orbit(1)
+    let layer7 <- note_pattern("<c1 c1 f0 f0>", "sine") |> slow(48.0lf) |> set_gain(gain7) |> set_lpf(100.0) |> set_orbit(1)
     let pat <- stack([layer1, layer2, layer3, layer4, layer5, layer6, layer7])
     // Query cycle 0 — should get events from all 7 layers
     var inscope events <- query_cycle(pat)
@@ -178,13 +172,13 @@ def test_full_ambient_layer_count(t : T?) {
 [test]
 def test_full_ambient_layer_sounds(t : T?) {
     // Quick build — just verify each layer produces the right sound name
-    var layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
-    var layer2 <- note_pattern("<c2>", "supersaw") |> set_orbit(2)
-    var layer3 <- note_pattern("<g3>", "sine") |> set_fm(2.0) |> set_orbit(3)
-    var layer4 <- scale_pattern("0", "C4:pentatonic", "triangle") |> set_orbit(4)
-    var layer5 <- scale_pattern("5", "C5:pentatonic", "sine") |> set_orbit(4)
-    var layer6 <- atom("pink") |> set_orbit(5)
-    var layer7 <- note_pattern("<c1>", "sine") |> set_orbit(1)
+    let layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
+    let layer2 <- note_pattern("<c2>", "supersaw") |> set_orbit(2)
+    let layer3 <- note_pattern("<g3>", "sine") |> set_fm(2.0) |> set_orbit(3)
+    let layer4 <- scale_pattern("0", "C4:pentatonic", "triangle") |> set_orbit(4)
+    let layer5 <- scale_pattern("5", "C5:pentatonic", "sine") |> set_orbit(4)
+    let layer6 <- atom("pink") |> set_orbit(5)
+    let layer7 <- note_pattern("<c1>", "sine") |> set_orbit(1)
     let pat <- stack([layer1, layer2, layer3, layer4, layer5, layer6, layer7])
     var inscope events <- query_cycle(pat)
     t |> equal(length(events), 7)
@@ -200,13 +194,13 @@ def test_full_ambient_layer_sounds(t : T?) {
 
 [test]
 def test_full_ambient_orbits(t : T?) {
-    var layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
-    var layer2 <- note_pattern("<c2>", "supersaw") |> set_orbit(2)
-    var layer3 <- note_pattern("<g3>", "sine") |> set_orbit(3)
-    var layer4 <- scale_pattern("0", "C4:pentatonic", "triangle") |> set_orbit(4)
-    var layer5 <- scale_pattern("5", "C5:pentatonic", "sine") |> set_orbit(4)
-    var layer6 <- atom("pink") |> set_orbit(5)
-    var layer7 <- note_pattern("<c1>", "sine") |> set_orbit(1)
+    let layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
+    let layer2 <- note_pattern("<c2>", "supersaw") |> set_orbit(2)
+    let layer3 <- note_pattern("<g3>", "sine") |> set_orbit(3)
+    let layer4 <- scale_pattern("0", "C4:pentatonic", "triangle") |> set_orbit(4)
+    let layer5 <- scale_pattern("5", "C5:pentatonic", "sine") |> set_orbit(4)
+    let layer6 <- atom("pink") |> set_orbit(5)
+    let layer7 <- note_pattern("<c1>", "sine") |> set_orbit(1)
     let pat <- stack([layer1, layer2, layer3, layer4, layer5, layer6, layer7])
     var inscope events <- query_cycle(pat)
     t |> equal(events[0].orbit, 1)  // layer 1

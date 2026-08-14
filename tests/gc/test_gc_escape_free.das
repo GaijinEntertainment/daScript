@@ -59,7 +59,7 @@ def leak_into_global(i : int) {
 var g_lam : lambda<() : int>
 def capture_into_global(i : int) {
     var p = new Node(x = i, y = i)
-    g_lam <- @() : int { return p.x }
+    g_lam <- @() : int { return p.x }   // nolint:PERF030 - dropping the old lambda into the GC is the escape path under test
 }
 
 def make_node(i : int) : Node? {
@@ -102,7 +102,7 @@ def escape_via_script_transitive(i : int) {
 
 // a script callee that captures its argument into a lambda stored in a global -> the parameter
 // escapes through the capture frame
-def keep_node_capture(p : Node?) { g_lam <- @() : int { return p.x } }
+def keep_node_capture(p : Node?) { g_lam <- @() : int { return p.x } }   // nolint:PERF030 - the global store is the escape path under test
 def escape_via_script_capture(i : int) {
     var p = new Node(x = i, y = i)
     keep_node_capture(p)

@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64+jit
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — registers "arm64-gen"/"x64-gen" (the repack tier) when dasLLVM is mounted
+require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack

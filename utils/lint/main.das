@@ -1,4 +1,5 @@
 options gen2
+options gc
 
 require daslib/lint
 require daslib/perf_lint
@@ -151,6 +152,23 @@ def has_expect_directive(file : string) : bool {
     return false
 }
 
+// `// lint-skip-file: <reason>` opts a file out of linting entirely — for files whose
+// SUBJECT conflicts with the lint pipeline's policies (e.g. tests/language/static_if.das
+// tests the infer-time folding the policies disable, so it cannot even compile here).
+def lint_skip_reason(file : string) : string {
+    let text = fread(file)
+    return "" if (empty(text))
+    for (line in split(text, "\n")) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("// lint-skip-file")) {
+            let colon = find(trimmed, ":")
+            let reason = colon >= 0 ? strip(slice(trimmed, colon + 1)) : ""
+            return empty(reason) ? "(lint-skip-file directive)" : "(lint-skip-file: {reason})"
+        }
+    }
+    return ""
+}
+
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
     return if (!st.is_valid)
@@ -227,12 +245,16 @@ def normalize_rule_list(raw : array<string>; var dest : table<string>) : string 
     return ""
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-              disabled_codes, enabled_codes : table<string>) : LintResult {
-    var result = LintResult(file = file)
+// expect / lint-skip-file / fixture-name skips - true when result carries the skip reason
+def resolve_skip(file : string; lint_fixtures : bool; var result : LintResult) : bool {
     if (has_expect_directive(file)) {
         result.skip_reason = "(intentional compile errors via `expect`)"
-        return <- result
+        return true
+    }
+    let skip_directive = lint_skip_reason(file)
+    if (!empty(skip_directive)) {
+        result.skip_reason = skip_directive
+        return true
     }
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
     // files carry no `expect` directive, so the content skip above misses them).
@@ -240,6 +262,15 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     if (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
             || (!lint_fixtures && is_lint_fixture_name(base_name(file)))) {
         result.skip_reason = "(lint rule fixture)"
+        return true
+    }
+    return false
+}
+
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, defer_stale : bool;
+              disabled_codes, enabled_codes : table<string>) : LintResult {
+    var result = LintResult(file = file)
+    if (resolve_skip(file, lint_fixtures, result)) {
         return <- result
     }
     var inscope access <- make_file_access("")
@@ -291,7 +322,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     }
     // LINT019 (stale nolint) needs every pass's consumption record - a partial run
     // under-consumes and would report live directives as dead
-    if (run_paranoid && run_perf && run_style && !result.failed && empty(result.skip_reason)) {
+    if (!defer_stale && run_paranoid && run_perf && run_style && !result.failed && empty(result.skip_reason)) {
         let src = fread(file)
         if (!empty(src)) {
             var stale : array<LintIssue>
@@ -364,11 +395,28 @@ def read_paths_from(path : string; var out : array<string>) : bool {
 // Worker entry: lint every file in `paths`, emit one JSON-wrapped
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
+// Each compile_file leaves AST/module residue only the GC can reclaim - on a
+// whole-tree run that grows to gigabytes. Collect every N files (needs `options gc`).
+let COLLECT_EVERY = 100
+
+def maybe_collect(var since_collect : int&) {
+    since_collect ++
+    if (since_collect >= COLLECT_EVERY) {
+        since_collect = 0
+        // a JIT'd context cannot collect - the run just keeps the old grow-only behavior there
+        if (!jit_enabled()) {
+            unsafe(heap_collect(true, false))
+        }
+    }
+}
+
 def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
                disabled_codes, enabled_codes : table<string>) {
+    var since_collect = 0
     for (f in paths) {
-        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
+        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, false, disabled_codes, enabled_codes)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
+        maybe_collect(since_collect)
     }
 }
 
@@ -566,6 +614,29 @@ def collect_input_files(var files : array<string>&) : int {
     return -1
 }
 
+// Stale scan LAST, over the whole run's consumption ledger: a directive is consumed
+// by ANY compile in the run, including files sorted after it - the per-file scan
+// under-credited whatever sorts first (daslib), calling live directives stale.
+// Worker mode still scans per-file; the driver-merged ledger is a known follow-up.
+def stale_scan_at_end(stale_eligible : array<string>; cfg : Config; disabled_codes, enabled_codes : table<string>;
+                      var total_issues : int&; var total_errors : int&; var total_skipped : int&; var total_excluded : int&) : void {
+    for (file in stale_eligible) {
+        let src = fread(file)
+        continue if (empty(src))
+        var result = LintResult(file = file)
+        var stale : array<LintIssue>
+        result.count = stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
+        result.issues <- stale
+        if (!cfg.lint_excluded_paths) {
+            apply_path_excludes(result)
+        }
+        if (result.count > 0 || result.excluded > 0) {
+            print_result(result, cfg.quiet, cfg.silent)
+            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+        }
+    }
+}
+
 def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&; var excluded : int&) : void {
     excluded += result.excluded
     if (!empty(result.skip_reason)) {
@@ -651,13 +722,23 @@ def main() : int {
         if (!cfg.quiet) {
             print("Linting {length(files)} file(s)...\n\n")
         }
+        var since_collect = 0
+        var stale_eligible : array<string>
         for (file in files) {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes)
+            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, true, disabled_codes, enabled_codes)
+            if (!result.failed && empty(result.skip_reason)) {
+                stale_eligible |> push(file)
+            }
             print_result(result, cfg.quiet, cfg.silent)
             tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+            maybe_collect(since_collect)
+        }
+        if (run_paranoid && run_perf && run_style) {
+            stale_scan_at_end(stale_eligible, cfg, disabled_codes, enabled_codes,
+                total_issues, total_errors, total_skipped, total_excluded)
         }
     }
 

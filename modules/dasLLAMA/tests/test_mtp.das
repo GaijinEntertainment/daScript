@@ -121,7 +121,7 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
         delete s1
         delete want
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]   // nolint:PERF030 — released on the line above
+        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)

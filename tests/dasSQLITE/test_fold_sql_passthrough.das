@@ -43,8 +43,8 @@ def fixture_db(db : SqlRunner) {
 
 def cars_equal(a, b : array<Car>) : bool {
     if (length(a) != length(b)) return false
-    for (i in range(length(a))) {
-        if (a[i].id != b[i].id || a[i].name != b[i].name || a[i].price != b[i].price) return false
+    for (ea, eb in a, b) {
+        if (ea.id != eb.id || ea.name != eb.name || ea.price != eb.price) return false
     }
     return true
 }

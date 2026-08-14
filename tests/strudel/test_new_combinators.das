@@ -420,9 +420,7 @@ def test_wchoose(t : T?) {
     var p1 <- atom("sd")
     pats |> emplace <| p0
     pats |> emplace <| p1
-    var weights : array<float>
-    weights |> push(100.0)
-    weights |> push(0.0)
+    var weights <- [100.0, 0.0]
     let pat <- wchoose(pats, weights)
     // With weight 100 vs 0, should always pick "bd"
     for (cyc in range(10)) {
@@ -491,8 +489,8 @@ def test_shuffle_deterministic(t : T?) {
     let haps1 <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     let haps2 <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps1), length(haps2))
-    for (i in range(length(haps1))) {
-        t |> equal(haps1[i].value.s, haps2[i].value.s)
+    for (h1, h2 in haps1, haps2) {
+        t |> equal(h1.value.s, h2.value.s)
     }
 }
 
@@ -516,8 +514,8 @@ def test_scramble_deterministic(t : T?) {
     let haps1 <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     let haps2 <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps1), length(haps2))
-    for (i in range(length(haps1))) {
-        t |> equal(haps1[i].value.s, haps2[i].value.s)
+    for (h1, h2 in haps1, haps2) {
+        t |> equal(h1.value.s, h2.value.s)
     }
 }
 

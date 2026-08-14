@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require daslib/fuzzer
 require daslib/faker
 require daslib/math
@@ -514,19 +512,19 @@ def test_mat_ctor(t : T?) {
     t |> success(!jit_enabled() || is_jit_function(@@get_m_3x4))
     t |> success(!jit_enabled() || is_jit_function(@@get_m_4x4))
 
-    var m1 = get_m_3x3()
+    let m1 = get_m_3x3()
     for (x in 0..2) {
         for (y in 0..2) {
             t |> equal(0., m1[x][y])
         }
     }
-    var m2 = get_m_3x4()
+    let m2 = get_m_3x4()
     for (x in 0..2) {
         for (y in 0..3) {
             t |> equal(0., m2[x][y])
         }
     }
-    var m3 = get_m_4x4()
+    let m3 = get_m_4x4()
     for (x in 0..3) {
         for (y in 0..3) {
             t |> equal(0., m3[x][y])

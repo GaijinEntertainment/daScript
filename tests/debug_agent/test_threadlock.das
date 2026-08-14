@@ -26,7 +26,7 @@ def tl_reset() {
     tl_counter = 0
 }
 
-def setup_threadlock_agent(ctx : Context) {
+def setup_threadlock_agent(_ctx : Context) {
     install_new_debug_agent(new DapiDebugAgent(), "threadlock_test")
 }
 
@@ -62,7 +62,7 @@ def test_threadlock_multiple(t : T?) {
         unsafe {
             invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_reset")
         }
-        for (i in range(5)) {
+        for (_i in range(5)) {
             unsafe {
                 invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_increment")
             }

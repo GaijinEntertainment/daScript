@@ -72,8 +72,8 @@ def test_t7c_parity_vs_cascade(t : T?) {
         // Handwritten cascade: just compute (a[i] + 7) element-wise.
         let cascade <- [for (x in a); x + 7]
         tt |> equal(length(spliced), length(cascade))
-        for (i in range(length(cascade))) {
-            tt |> equal(spliced[i], cascade[i])
+        for (s, c in spliced, cascade) {
+            tt |> equal(s, c)
         }
     }
 }

@@ -20,7 +20,7 @@ class LogAgent : DapiDebugAgent {
 
 var log_agent_ready : bool = false
 
-def setup_log_agent(ctx : Context) {
+def setup_log_agent(_ctx : Context) {
     install_new_debug_agent(new LogAgent(), "log_test")
     log_agent_ready = true
 }
@@ -96,7 +96,7 @@ def test_on_log_receives_level(t : T?) {
         unsafe {
             invoke_in_context(get_debug_agent_context("log_test"), "read_last_level", addr(level))
         }
-        t |> equal(level, int(LOG_WARNING))
+        t |> equal(level, LOG_WARNING)
     }
 }
 

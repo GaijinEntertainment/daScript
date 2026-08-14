@@ -33,7 +33,7 @@ def test_delete(t : T?; var f : FancyClass?) {
     unsafe {
         delete f
     }
-    assert(f == null)
+    t |> success(f == null, "delete nulls the pointer")
 }
 
 [test]
@@ -107,8 +107,7 @@ def ref_count_test(t : T?) {
     t |> equal(1, getTotalTestObjectSmart())
     t |> equal(1u, smart_ptr_use_count(sptr))
     var ptr = get_ptr(sptr)
-    var pptr : TestObjectSmart?
-    pptr = get_ptr(sptr)
+    let _pptr : TestObjectSmart? = get_ptr(sptr)   // type-compat probe: raw ptr binds to a declared pointer var
     t |> success(sptr == ptr)
     t |> success(get_ptr(sptr) == ptr)
     var qptr : smart_ptr<TestObjectSmart>

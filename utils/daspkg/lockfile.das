@@ -84,7 +84,7 @@ def read_lock_file_at(path : string; var lf : LockFile) : bool {
             return
         }
         delete lf
-        lf = from_JV(parsed, type<LockFile>)   // nolint:PERF030 - the delete above releases the old contents; the check cannot see a struct delete
+        lf = from_JV(parsed, type<LockFile>)
         ok = true
     }
     return ok

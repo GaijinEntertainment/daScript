@@ -50,8 +50,8 @@ def test_subpass_input(t : T?) {
         // Reflection: the binding is registered as input_attachment (the host needs to bind it as
         // VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, distinct from combined_image_sampler / storage_image).
         let refl = decode_reflection(subpass_spv_reflect)
-        t |> success(length(refl.bindings) >= 1, "subpass: at least one descriptor binding reflected")
-        if (length(refl.bindings) >= 1) {
+        t |> success(!empty(refl.bindings), "subpass: at least one descriptor binding reflected")
+        if (!empty(refl.bindings)) {
             let b = refl.bindings[0]
             t |> success(b.kind == SpirvDescriptorKind.input_attachment,
                 "subpass: binding kind is input_attachment (got {b.kind})")

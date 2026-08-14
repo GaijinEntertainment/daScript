@@ -139,8 +139,8 @@ def load_model(path : string) {
         g_scene_pass, scene)
     delete g_model
     delete g_scene
-    g_scene <- scene   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
-    g_model <- model   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
+    g_scene <- scene
+    g_model <- model
     g_have_model = true
     // equirect HDR environment for image-based ambient (metals reflect it); CC0, shared with GL tutorial 12
     var env <- load_texture_hdr(harness_device(), harness_phys(), harness_queue(), harness_pool(),

@@ -29,9 +29,9 @@ def read_file_bytes(path : string) : array<uint8> {
 def test_load_audio_memory(t : T?) {
     t |> run("load OGG from memory") <| @(t : T?) {
         let bytes <- read_file_bytes("{MEDIA}/drums/bd/kick_0.ogg")
-        t |> success(length(bytes) > 0, "file read ok")
+        t |> success(!empty(bytes), "file read ok")
         let sample <- load_audio_memory(bytes)
-        t |> success(length(sample.data) > 0, "decoded audio has samples")
+        t |> success(!empty(sample.data), "decoded audio has samples")
         t |> success(sample.channels > 0, "has channel info")
     }
 }
@@ -45,7 +45,7 @@ def test_round_trip(t : T?) {
         let from_mem <- load_audio_memory(bytes)
         t |> equal(length(from_file.data), length(from_mem.data), "same sample count")
         t |> equal(from_file.channels, from_mem.channels, "same channels")
-        if (length(from_file.data) > 0 && length(from_mem.data) > 0) {
+        if (!empty(from_file.data) && !empty(from_mem.data)) {
             // spot-check first and last samples
             t |> success(abs(from_file.data[0] - from_mem.data[0]) < 0.001, "first sample matches")
             let last = length(from_file.data) - 1
@@ -94,7 +94,7 @@ def test_render_sample_full(t : T?) {
         load_sound_memory(bytes, "bd", bank)
         let full <- render_sample(bank, "bd", 0, 1.0)
         let full_explicit <- render_sample(bank, "bd", 0, 1.0, 0.0, 1.0)
-        t |> success(length(full) > 0, "full render produced samples")
+        t |> success(!empty(full), "full render produced samples")
         t |> equal(length(full), length(full_explicit), "default == explicit [0,1]")
     }
 }
@@ -145,15 +145,15 @@ def test_render_sample_head_not_equal_tail(t : T?) {
         load_sound_memory(bytes, "bd", bank)
         let head <- render_sample(bank, "bd", 0, 1.0, 0.0, 0.5)
         let tail <- render_sample(bank, "bd", 0, 1.0, 0.5, 1.0)
-        t |> success(length(head) > 0 && length(tail) > 0, "both slices have samples")
+        t |> success(!empty(head) && !empty(tail), "both slices have samples")
         // kick samples decay — peak amplitude of head should exceed tail
         var headPeak = 0.0
         var tailPeak = 0.0
-        for (i in range(length(head))) {
-            headPeak = max(headPeak, abs(head[i]))
+        for (s in head) {
+            headPeak = max(headPeak, abs(s))
         }
-        for (i in range(length(tail))) {
-            tailPeak = max(tailPeak, abs(tail[i]))
+        for (s in tail) {
+            tailPeak = max(tailPeak, abs(s))
         }
         t |> success(headPeak > tailPeak, "head louder than tail (natural decay)")
     }

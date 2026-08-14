@@ -14,8 +14,8 @@ struct WithDim {
 [test]
 def test_xml_serialize_dim(t : T?) {
     t |> run("serialize fixed array to XML") <| @(t : T?) {
-        var arr = fixed_array(10, 20, 30)
-        with_doc() <| $(doc) {
+        let arr = fixed_array(10, 20, 30)
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "arr")
             XML(root, arr)
@@ -32,10 +32,8 @@ def test_xml_serialize_dim(t : T?) {
 [test]
 def test_xml_serialize_struct_with_dim(t : T?) {
     t |> run("serialize struct containing fixed array") <| @(t : T?) {
-        var wd : WithDim
-        wd.tag_name = "data"
-        wd.values = fixed_array(1, 2, 3)
-        with_doc() <| $(doc) {
+        let wd = WithDim(tag_name = "data", values = fixed_array(1, 2, 3))
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "item")
             XML(root, wd)
@@ -55,7 +53,7 @@ def test_xml_serialize_struct_with_dim(t : T?) {
 [test]
 def test_from_xml_dim(t : T?) {
     t |> run("deserialize fixed array from XML") <| @(t : T?) {
-        parse_xml("<arr><item>5</item><item>10</item><item>15</item></arr>") <| $(doc, ok) {
+        parse_xml("<arr><item>5</item><item>10</item><item>15</item></arr>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let arr = from_XML(root, type<int[3]>)
@@ -69,7 +67,7 @@ def test_from_xml_dim(t : T?) {
 [test]
 def test_from_xml_dim_strings(t : T?) {
     t |> run("deserialize fixed array of strings from XML") <| @(t : T?) {
-        parse_xml("<arr><item>a</item><item>b</item></arr>") <| $(doc, ok) {
+        parse_xml("<arr><item>a</item><item>b</item></arr>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let arr = from_XML(root, type<string[2]>)
@@ -82,9 +80,9 @@ def test_from_xml_dim_strings(t : T?) {
 [test]
 def test_roundtrip_dim(t : T?) {
     t |> run("roundtrip fixed array") <| @(t : T?) {
-        var original = fixed_array(100, 200, 300)
+        let original = fixed_array(100, 200, 300)
         let xml_str = to_XML(original, "arr")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<int[3]>)
             t |> equal(restored[0], 100)
@@ -97,11 +95,9 @@ def test_roundtrip_dim(t : T?) {
 [test]
 def test_roundtrip_struct_with_dim(t : T?) {
     t |> run("roundtrip struct with fixed array field") <| @(t : T?) {
-        var original : WithDim
-        original.tag_name = "xyz"
-        original.values = fixed_array(7, 8, 9)
+        let original = WithDim(tag_name = "xyz", values = fixed_array(7, 8, 9))
         let xml_str = to_XML(original, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<WithDim>)
             t |> equal(restored.tag_name, "xyz")

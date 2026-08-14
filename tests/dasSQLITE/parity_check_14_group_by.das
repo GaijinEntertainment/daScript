@@ -42,11 +42,10 @@ def fixture_array() : array<User> {
     ]
 }
 
-def sort_by_city_age(var rows : array<auto(R)>) : array<R> {
+def sort_by_city_age(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         return a.City == b.City ? a.Age < b.Age : a.City < b.City
     }
-    return <- rows
 }
 
 [test]
@@ -215,9 +214,9 @@ def parity_multi_key_group(t : T?) {
                        |> _having(_._1 |> length > 1)
                        |> _select((City = _._0._0, Age = _._0._1, N = _._1 |> length)))
 
-        m1 <- sort_by_city_age(m1)
-        m2 <- sort_by_city_age(m2)
-        m3 <- sort_by_city_age(m3)
+        sort_by_city_age(m1)
+        sort_by_city_age(m2)
+        sort_by_city_age(m3)
 
         t |> equal(length(m1), length(m2), "multi-key length: M1 ≡ M2")
         t |> equal(length(m2), length(m3), "multi-key length: M2 ≡ M3")

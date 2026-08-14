@@ -96,7 +96,7 @@ class AsyncMacro : AstFunctionAnnotation {
         var blk = qmacro_expr() {
             return <- generator<$t(retT)> {
                 $e(func.body)
-                return false
+                return false        // nolint:LINT001,LINT019 - safety net; unreachable only when the body already ends in return
             }
         }
 

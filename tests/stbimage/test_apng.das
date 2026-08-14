@@ -4,7 +4,6 @@ options no_unused_function_arguments = false
 options indenting = 4
 
 require stbimage
-require strings
 require daslib/safe_addr
 require daslib/fio
 require dastest/testing_boost public
@@ -102,7 +101,7 @@ def test_apng_basic(t : T?) {
     t |> run("APNG: encode 4 frames, parse chunks, decode frame 0") <| @(tt : T?) {
         let fname = "{get_das_root()}/tests/stbimage/_test_output.apng"
         let W = 32; let H = 32
-        var writer = unsafe(stbi_apng_begin(fname, W, H, 4))
+        var writer = stbi_apng_begin(fname, W, H, 4)
         tt |> success(writer != null, "stbi_apng_begin succeeded")
         return if (writer == null)
         for (frame in range(4)) {
@@ -114,7 +113,7 @@ def test_apng_basic(t : T?) {
             }
             tt |> equal(ok, 1)
         }
-        let end_ok = unsafe(stbi_apng_end(writer))
+        let end_ok = stbi_apng_end(writer)
         tt |> equal(end_ok, 1)
 
         // Frame 0 decodes as a normal PNG (default-image fallback)
@@ -151,7 +150,7 @@ def test_apng_rgb_channels(t : T?) {
     t |> run("APNG: 3-channel RGB encode works") <| @(tt : T?) {
         let fname = "{get_das_root()}/tests/stbimage/_test_output_rgb.apng"
         let W = 8; let H = 8
-        var writer = unsafe(stbi_apng_begin(fname, W, H, 3))
+        var writer = stbi_apng_begin(fname, W, H, 3)
         tt |> success(writer != null, "begin RGB succeeded")
         return if (writer == null)
         var pixels : array<uint8>
@@ -163,7 +162,7 @@ def test_apng_rgb_channels(t : T?) {
             stbi_apng_frame(writer, addr(pixels[0]), W * 3, 50)
             stbi_apng_frame(writer, addr(pixels[0]), W * 3, 50)
         }
-        let end_ok = unsafe(stbi_apng_end(writer))
+        let end_ok = stbi_apng_end(writer)
         tt |> equal(end_ok, 1)
         let chunks = parse_png_chunks(fname)
         tt |> equal(chunks.n_ihdr, 1)
@@ -177,7 +176,7 @@ def test_apng_rgb_channels(t : T?) {
 def test_apng_begin_bad_filename(t : T?) {
     t |> run("APNG: begin with unwritable path returns null") <| @(tt : T?) {
         // A path that fopen("wb") refuses: the path IS a directory.
-        let writer = unsafe(stbi_apng_begin(get_das_root(), 16, 16, 4))
+        let writer = stbi_apng_begin(get_das_root(), 16, 16, 4)
         tt |> success(writer == null, "begin on bad path returns null, no crash")
     }
 }
@@ -188,7 +187,7 @@ def test_apng_drop_accounting(t : T?) {
         let fname = "{get_das_root()}/tests/stbimage/_test_output_overflow.apng"
         // Big-ish frame so deflate takes noticeable time vs. enqueue speed.
         let W = 512; let H = 512
-        var writer = unsafe(stbi_apng_begin(fname, W, H, 4))
+        var writer = stbi_apng_begin(fname, W, H, 4)
         if (writer == null) {
             tt |> success(false, "begin failed")
             return
@@ -205,8 +204,8 @@ def test_apng_drop_accounting(t : T?) {
                 stbi_apng_frame(writer, addr(pixels[0]), W * 4, 33)
             }
         }
-        let dropped_before_end = unsafe(stbi_apng_dropped(writer))
-        let end_ok = unsafe(stbi_apng_end(writer))
+        let dropped_before_end = stbi_apng_dropped(writer)
+        let end_ok = stbi_apng_end(writer)
         tt |> equal(end_ok, 1)
         // File is valid even when many frames dropped — verify chunk parse succeeds.
         let chunks = parse_png_chunks(fname)
@@ -233,8 +232,8 @@ def test_apng_double_writers(t : T?) {
     t |> run("APNG: two parallel writers — no shared state") <| @(tt : T?) {
         let path1 = "{get_das_root()}/tests/stbimage/_test_output_p1.apng"
         let path2 = "{get_das_root()}/tests/stbimage/_test_output_p2.apng"
-        var w1 = unsafe(stbi_apng_begin(path1, 32, 32, 4))
-        var w2 = unsafe(stbi_apng_begin(path2, 64, 64, 4))
+        var w1 = stbi_apng_begin(path1, 32, 32, 4)
+        var w2 = stbi_apng_begin(path2, 64, 64, 4)
         tt |> success(w1 != null && w2 != null, "both writers opened")
         if (w1 == null || w2 == null) {
             return
@@ -247,8 +246,8 @@ def test_apng_double_writers(t : T?) {
                 stbi_apng_frame(w2, addr(px64[0]), 64 * 4, 100)
             }
         }
-        let ok1 = unsafe(stbi_apng_end(w1))
-        let ok2 = unsafe(stbi_apng_end(w2))
+        let ok1 = stbi_apng_end(w1)
+        let ok2 = stbi_apng_end(w2)
         tt |> equal(ok1, 1)
         tt |> equal(ok2, 1)
         // Both files should be valid APNGs of their respective sizes
@@ -278,7 +277,7 @@ def test_apng_dropped_zero_when_keeping_up(t : T?) {
     t |> run("APNG: drop counter stays at 0 for small, slow stream") <| @(tt : T?) {
         let fname = "{get_das_root()}/tests/stbimage/_test_output_slow.apng"
         let W = 16; let H = 16
-        var writer = unsafe(stbi_apng_begin(fname, W, H, 4))
+        var writer = stbi_apng_begin(fname, W, H, 4)
         if (writer == null) {
             tt |> success(false, "begin failed")
             return
@@ -291,7 +290,7 @@ def test_apng_dropped_zero_when_keeping_up(t : T?) {
             }
             sleep(50u)   // ms — give worker time to drain
         }
-        let dropped = unsafe(stbi_apng_dropped(writer))
+        let dropped = stbi_apng_dropped(writer)
         tt |> equal(dropped, 0)
         unsafe {
             stbi_apng_end(writer)

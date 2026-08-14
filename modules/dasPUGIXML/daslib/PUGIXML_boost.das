@@ -19,7 +19,7 @@ require daslib/templates
 require daslib/enum_trait
 require daslib/json_boost
 require daslib/static_let
-require strings   // nolint:STYLE030 — unescape() is used inside the XML(struct) apply block, invisible to the require-usage scan
+require strings
 
 // ============ Iteration helpers ============
 
@@ -854,7 +854,7 @@ def from_XML(node : xml_node; anything : table<auto(KT)>) {
     var ret : table<KT>
     var ch = node.first_child
     while (ch.ok) {
-        var next_ch = ch.next_sibling
+        let next_ch = ch.next_sibling
         ret |> insert(_::from_XML(ch, type<KT -&>))
         ch = next_ch
     }

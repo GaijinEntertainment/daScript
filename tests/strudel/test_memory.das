@@ -6,7 +6,6 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost
 require strudel/strudel
-require math
 
 // Measure per-query heap growth rate.
 // Runs warmup queries, then two measurement batches.

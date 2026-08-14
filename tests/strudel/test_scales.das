@@ -16,10 +16,7 @@ def private query_first(var pat : Pattern) : Event {
 // Helper: query all events in cycle 0.
 def private query_all(var pat : Pattern) : array<Event> {
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
-    var events : array<Event>
-    for (h in haps) {
-        events |> push(h.value) // nolint:PERF006
-    }
+    var events <- [for (h in haps); h.value]
     delete haps
     return <- events
 }

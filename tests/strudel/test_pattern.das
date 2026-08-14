@@ -163,7 +163,7 @@ def test_bjorklund(t : T?) {
     var count = 0
     for (b in rhythm) {
         if (b) {
-            count += 1
+            count++
         }
     }
     t |> equal(count, 3)

@@ -242,8 +242,8 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 
     print("\n--- 8. Set operations ---\n")
 
-    var a = [1, 2, 2, 3, 3, 3] // nolint:LINT003
-    var b = [2, 3, 4, 5] // nolint:LINT003
+    var a = [1, 2, 2, 3, 3, 3]
+    var b = [2, 3, 4, 5]
 
     let dist = distinct(a)
     print("distinct: {dist}\n")

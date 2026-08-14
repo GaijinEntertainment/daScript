@@ -265,7 +265,7 @@ def body_of(t : T?; nm : string) : string {
 }
 
 [test]
-def test_cse_fired(t : T?) {
+def test_cse_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
     ast_gc_guard() {
         t |> run("let-seeded reuse") @(t : T?) {
             let b = body_of(t, "target_let_reuse")

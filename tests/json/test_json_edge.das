@@ -536,25 +536,25 @@ def operator ==(a, b : TestStruct) {
 def test_from_jv(t : T?) {
     t |> run("from_JV int") @(t : T?) {
         var js = JV(42)
-        t |> equal(from_JV(js, type<int>), 42)
+        t |> equal(from_JV(js, type<int>), 42) // nolint:STYLE020 from_JV is the subject; ?? would assert its own default
     }
     t |> run("from_JV float") @(t : T?) {
         var js = JV(3.14)
-        t |> equal(from_JV(js, type<float>) > 3.0, true)
+        t |> equal(from_JV(js, type<float>) > 3.0, true) // nolint:STYLE020 from_JV is the subject
     }
     t |> run("from_JV string") @(t : T?) {
         var js = JV("hello")
-        t |> equal(from_JV(js, type<string>), "hello")
+        t |> equal(from_JV(js, type<string>), "hello") // nolint:STYLE020 from_JV is the subject
     }
     t |> run("from_JV bool") @(t : T?) {
         var js = JV(true)
-        t |> equal(from_JV(js, type<bool>), true)
+        t |> equal(from_JV(js, type<bool>), true) // nolint:STYLE020 from_JV is the subject
     }
     t |> run("from_JV null returns default") @(t : T?) {
         var js : JsonValue?
-        t |> equal(from_JV(js, type<int>), 0)
-        t |> equal(from_JV(js, type<string>), "")
-        t |> equal(from_JV(js, type<bool>), false)
+        t |> equal(from_JV(js, type<int>), 0) // nolint:STYLE020 from_JV's own default is the subject
+        t |> equal(from_JV(js, type<string>), "") // nolint:STYLE020 from_JV's own default is the subject
+        t |> equal(from_JV(js, type<bool>), false) // nolint:STYLE020 from_JV's own default is the subject
     }
     t |> run("from_JV struct") @(t : T?) {
         let input = "\{ \"name\": \"test\", \"value\": 42, \"score\": 3.14 \}"

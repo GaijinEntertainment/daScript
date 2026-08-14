@@ -1,7 +1,7 @@
 options gen2
 
 require daslib/decs_boost
-require live/decs_live   // nolint:STYLE030 - side-effect-only module: its [before_reload]/[after_reload] hooks are what carry DECS state across the reload under test
+require live/decs_live
 require live_host
 
 var reload_count : int = 0

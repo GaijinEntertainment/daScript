@@ -97,7 +97,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
         var blk = qmacro_block() {
             return <- generator<$t(retT)> {
                 $e(func.body)
-                return false
+                return false        // nolint:LINT001,LINT019 - safety net; unreachable only when the body already ends in return
             }
         }
         func.body = blk

@@ -91,19 +91,19 @@ def test_midi_adsr_fn(tt : T?) {
 def test_drums(tt : T?) {
     tt |> run("kick non-empty") <| @(tt : T?) {
         let s <- render_drum_hit(36, 1.0)
-        tt |> success(length(s) > 0)
+        tt |> success(!empty(s))
     }
     tt |> run("snare non-empty") <| @(tt : T?) {
         let s <- render_drum_hit(38, 1.0)
-        tt |> success(length(s) > 0)
+        tt |> success(!empty(s))
     }
     tt |> run("hihat non-empty") <| @(tt : T?) {
         let s <- render_drum_hit(42, 1.0)
-        tt |> success(length(s) > 0)
+        tt |> success(!empty(s))
     }
     tt |> run("unknown drum fallback") <| @(tt : T?) {
         let s <- render_drum_hit(99, 1.0)
-        tt |> success(length(s) > 0)
+        tt |> success(!empty(s))
     }
 }
 
@@ -158,7 +158,7 @@ def test_events(tt : T?) {
         var state = MidiPlaybackState()
         init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
         midi_tick(state, 0.05)
-        tt |> success(length(state.voices) > 0, "voice created")
+        tt |> success(!empty(state.voices), "voice created")
     }
     tt |> run("program change updates channel") <| @(tt : T?) {
         var d : array<uint8>

@@ -278,8 +278,8 @@ class GExt : GKernT {
 def test_tsi_gated_fields(t : T?) {
     t |> run("a gated field exists only where its axis says so, both polarities") @(t : T?) {
         // each stamp dropped exactly one of the two gated ints — both remaining would be 12
-        t |> equal(int(typeinfo sizeof(type<GateOff>)), 8)
-        t |> equal(int(typeinfo sizeof(type<GateOn>)), 8)
+        t |> equal(typeinfo sizeof(type<GateOff>), 8)
+        t |> equal(typeinfo sizeof(type<GateOn>), 8)
         let off = GateOff(a = 1, solo = 3) // named-arg construction pins WHICH field survived
         let on = GateOn(a = 1, rt = 2)
         t |> equal(off.a + off.solo, 4)

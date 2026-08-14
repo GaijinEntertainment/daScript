@@ -1,7 +1,6 @@
 options gen2
 require daslib/linq
 require dastest/testing_boost public
-require math
 
 require daslib/linq_boost
 
@@ -98,12 +97,12 @@ def test_unique_by_inplace_empty(t : T?) {
 def test_unique_empty_via_unique(t : T?) {
     t |> run("unique on empty array") @(t : T?) {
         var arr : array<int>
-        var result = unique(arr)
+        let result = unique(arr)
         t |> equal(length(result), 0)
     }
     t |> run("unique_by on empty array") @(t : T?) {
         var arr : array<int>
-        var result = _unique_by(arr, _)
+        let result = _unique_by(arr, _)
         t |> equal(length(result), 0)
     }
 }
@@ -128,7 +127,7 @@ def test_select_indexed(t : T?) {
     }
     t |> run("select indexed from array") @(t : T?) {
         var arr = [10, 20, 30, 40, 50]
-        var query = select(arr)
+        let query = select(arr)
         t |> equal(length(query), 5)
         for (i in 0..5) {
             t |> equal(query[i]._0, i)
@@ -136,7 +135,7 @@ def test_select_indexed(t : T?) {
         }
     }
     t |> run("select indexed to array") @(t : T?) {
-        var query = select_to_array(
+        let query = select_to_array(
             [iterator for(x in 0..3); x * 100]
         )
         t |> equal(length(query), 3)
@@ -180,62 +179,62 @@ def test_select_indexed(t : T?) {
 [test]
 def test_sequence_equal_length(t : T?) {
     t |> run("sequence_equal different lengths - first longer") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..3); x]
         )
         t |> success(!result)
     }
     t |> run("sequence_equal different lengths - second longer") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..3); x],
             [iterator for(x in 0..5); x]
         )
         t |> success(!result)
     }
     t |> run("sequence_equal empty vs non-empty") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..0); x],
             [iterator for(x in 0..3); x]
         )
         t |> success(!result)
     }
     t |> run("sequence_equal non-empty vs empty") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..3); x],
             [iterator for(x in 0..0); x]
         )
         t |> success(!result)
     }
     t |> run("sequence_equal both empty") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..0); x],
             [iterator for(x in 0..0); x]
         )
         t |> success(result)
     }
     t |> run("sequence_equal same content same length") @(t : T?) {
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..5); x * 2],
             [iterator for(x in 0..5); x * 2]
         )
         t |> success(result)
     }
     t |> run("sequence_equal array different lengths") @(t : T?) {
-        var a = [1, 2, 3]
-        var b = [1, 2, 3, 4, 5]
-        var result = sequence_equal(a, b)
+        let a = [1, 2, 3]
+        let b = [1, 2, 3, 4, 5]
+        let result = sequence_equal(a, b)
         t |> success(!result)
     }
     t |> run("sequence_equal array same") @(t : T?) {
-        var a = [1, 2, 3]
-        var b = [1, 2, 3]
-        var result = sequence_equal(a, b)
+        let a = [1, 2, 3]
+        let b = [1, 2, 3]
+        let result = sequence_equal(a, b)
         t |> success(result)
     }
     t |> run("sequence_equal prefix match should fail") @(t : T?) {
         // This was the main bug: [1,2] is a prefix of [1,2,3] but they are NOT equal
-        var result = sequence_equal(
+        let result = sequence_equal(
             [iterator for(x in 0..3); x],
             [iterator for(x in 0..5); x]
         )
@@ -246,7 +245,7 @@ def test_sequence_equal_length(t : T?) {
 [test]
 def test_sequence_equal_by_length(t : T?) {
     t |> run("sequence_equal_by different lengths") @(t : T?) {
-        var result = _sequence_equal_by(
+        let result = _sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..3); x],
             _
@@ -254,7 +253,7 @@ def test_sequence_equal_by_length(t : T?) {
         t |> success(!result)
     }
     t |> run("sequence_equal_by both empty") @(t : T?) {
-        var result = _sequence_equal_by(
+        let result = _sequence_equal_by(
             [iterator for(x in 0..0); x],
             [iterator for(x in 0..0); x],
             _
@@ -262,7 +261,7 @@ def test_sequence_equal_by_length(t : T?) {
         t |> success(result)
     }
     t |> run("sequence_equal_by same content") @(t : T?) {
-        var result = _sequence_equal_by(
+        let result = _sequence_equal_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             _.a[0]
@@ -270,9 +269,9 @@ def test_sequence_equal_by_length(t : T?) {
         t |> success(result)
     }
     t |> run("sequence_equal_by array different lengths") @(t : T?) {
-        var a = [1, 2, 3]
-        var b = [1, 2]
-        var result = _sequence_equal_by(a, b, _)
+        let a = [1, 2, 3]
+        let b = [1, 2]
+        let result = _sequence_equal_by(a, b, _)
         t |> success(!result)
     }
 }
@@ -288,7 +287,7 @@ def test_intersect_duplicates(t : T?) {
         // should yield [2,3] not [2,2,3,3,3]
         var arr1 = [1, 2, 3]
         var arr2 = [2, 2, 3, 3, 3]
-        var result = intersect(arr1, arr2)
+        let result = intersect(arr1, arr2)
         t |> equal(length(result), 2)
         t |> equal(result[0], 2)
         t |> equal(result[1], 3)
@@ -299,7 +298,7 @@ def test_intersect_duplicates(t : T?) {
         // result: [2,3]
         var arr1 = [1, 1, 2, 2, 3]
         var arr2 = [2, 3]
-        var result = intersect(arr1, arr2)
+        let result = intersect(arr1, arr2)
         t |> equal(length(result), 2)
         t |> equal(result[0], 2)
         t |> equal(result[1], 3)
@@ -307,7 +306,7 @@ def test_intersect_duplicates(t : T?) {
     t |> run("intersect with duplicates in both sources") @(t : T?) {
         var arr1 = [1, 1, 2, 2, 3]
         var arr2 = [2, 2, 3, 3, 4]
-        var result = intersect(arr1, arr2)
+        let result = intersect(arr1, arr2)
         t |> equal(length(result), 2)
         t |> equal(result[0], 2)
         t |> equal(result[1], 3)
@@ -315,7 +314,7 @@ def test_intersect_duplicates(t : T?) {
     t |> run("intersect no overlap") @(t : T?) {
         var arr1 = [1, 2, 3]
         var arr2 = [4, 5, 6]
-        var result = intersect(arr1, arr2)
+        let result = intersect(arr1, arr2)
         t |> equal(length(result), 0)
     }
     t |> run("intersect_by with duplicates") @(t : T?) {
@@ -323,7 +322,7 @@ def test_intersect_duplicates(t : T?) {
         var arr2 = [12, 12, 13, 13]
         // key: _ % 10, so arr1 keys={1,2,3}, arr2 keys: 12%10=2, 12%10=2, 13%10=3, 13%10=3
         // should yield [12, 13] not [12, 12, 13, 13]
-        var result = _intersect_by(arr1, arr2, _ % 10)
+        let result = _intersect_by(arr1, arr2, _ % 10)
         t |> equal(length(result), 2)
         t |> equal(result[0], 12)
         t |> equal(result[1], 13)
@@ -341,7 +340,7 @@ def test_except_duplicates(t : T?) {
         // should yield [1,2] not [1,1,2,2]
         var arr1 = [1, 1, 2, 2, 3]
         var arr2 = [3]
-        var result = except(arr1, arr2)
+        let result = except(arr1, arr2)
         t |> equal(length(result), 2)
         t |> equal(result[0], 1)
         t |> equal(result[1], 2)
@@ -349,13 +348,13 @@ def test_except_duplicates(t : T?) {
     t |> run("except with all duplicates excluded") @(t : T?) {
         var arr1 = [1, 1, 2, 2]
         var arr2 = [1, 2]
-        var result = except(arr1, arr2)
+        let result = except(arr1, arr2)
         t |> equal(length(result), 0)
     }
     t |> run("except with no overlap and duplicates") @(t : T?) {
         var arr1 = [1, 1, 2, 2]
         var arr2 = [3, 4]
-        var result = except(arr1, arr2)
+        let result = except(arr1, arr2)
         t |> equal(length(result), 2)
         t |> equal(result[0], 1)
         t |> equal(result[1], 2)
@@ -367,7 +366,7 @@ def test_except_duplicates(t : T?) {
         // items with key NOT in exclude and deduped: 1 (key=1, first), 2 (key=2, first)
         var arr1 = [1, 11, 2, 12, 3]
         var arr2 = [3]
-        var result = _except_by(arr1, arr2, _ % 10)
+        let result = _except_by(arr1, arr2, _ % 10)
         t |> equal(length(result), 2)
         t |> equal(result[0], 1)
         t |> equal(result[1], 2)
@@ -430,19 +429,19 @@ def test_range_sequence_count(t : T?) {
 [test]
 def test_aggregation_empty(t : T?) {
     t |> run("count empty") @(t : T?) {
-        var c = count(empty(type<int>))
+        let c = count(empty(type<int>))
         t |> equal(c, 0)
     }
     t |> run("long_count empty") @(t : T?) {
-        var c = long_count(empty(type<int>))
+        let c = long_count(empty(type<int>))
         t |> equal(c, 0l)
     }
     t |> run("sum empty") @(t : T?) {
-        var s = sum(empty(type<int>))
+        let s = sum(empty(type<int>))
         t |> equal(s, 0)
     }
     t |> run("average from single element") @(t : T?) {
-        var avg = average(
+        let avg = average(
             [iterator for(x in 0..1); 42]
         )
         t |> equal(avg, 42.0lf)
@@ -456,7 +455,7 @@ def test_aggregation_empty(t : T?) {
 [test]
 def test_aggregate_edge_cases(t : T?) {
     t |> run("aggregate empty sequence") @(t : T?) {
-        var result = aggregate(
+        let result = aggregate(
             empty(type<int>),
             100,
             $(acc, x) => acc + x
@@ -464,7 +463,7 @@ def test_aggregate_edge_cases(t : T?) {
         t |> equal(result, 100)
     }
     t |> run("aggregate single element") @(t : T?) {
-        var result = aggregate(
+        let result = aggregate(
             [iterator for(x in 0..1); 42],
             0,
             $(acc, x) => acc + x
@@ -584,28 +583,28 @@ def test_take_skip_edge_cases(t : T?) {
 [test]
 def test_element_at_edge_cases(t : T?) {
     t |> run("element_at first") @(t : T?) {
-        var result = element_at(
+        let result = element_at(
             [iterator for(x in 0..5); x * 10],
             0
         )
         t |> equal(result, 0)
     }
     t |> run("element_at last") @(t : T?) {
-        var result = element_at(
+        let result = element_at(
             [iterator for(x in 0..5); x * 10],
             4
         )
         t |> equal(result, 40)
     }
     t |> run("element_at_or_default out of range") @(t : T?) {
-        var result = element_at_or_default(
+        let result = element_at_or_default(
             [iterator for(x in 0..5); x],
             100
         )
         t |> equal(result, 0) // default int value
     }
     t |> run("element_at_or_default negative index") @(t : T?) {
-        var result = element_at_or_default(
+        let result = element_at_or_default(
             [iterator for(x in 0..5); x],
             -1
         )
@@ -664,20 +663,20 @@ def test_concat_edge_cases(t : T?) {
 def test_distinct_edge_cases(t : T?) {
     t |> run("distinct all same") @(t : T?) {
         var arr = [5, 5, 5, 5, 5]
-        var result = distinct(arr)
+        let result = distinct(arr)
         t |> equal(length(result), 1)
         t |> equal(result[0], 5)
     }
     t |> run("distinct single element") @(t : T?) {
         var arr = [42]
-        var result = distinct(arr)
+        let result = distinct(arr)
         t |> equal(length(result), 1)
         t |> equal(result[0], 42)
     }
     t |> run("distinct_by all same key") @(t : T?) {
         var arr = [1, 11, 21, 31]
         // key: _ % 10 → all have key 1
-        var result = distinct_by(arr, $(_ : int) => _ % 10)
+        let result = distinct_by(arr, $(_ : int) => _ % 10)
         t |> equal(length(result), 1)
         t |> equal(result[0], 1) // first element kept
     }
@@ -911,28 +910,28 @@ def test_chunk_edge_cases(t : T?) {
 [test]
 def test_first_last_defaults(t : T?) {
     t |> run("first_or_default from empty") @(t : T?) {
-        var result = first_or_default(
+        let result = first_or_default(
             empty(type<int>),
             -999
         )
         t |> equal(result, -999)
     }
     t |> run("last_or_default from empty") @(t : T?) {
-        var result = last_or_default(
+        let result = last_or_default(
             empty(type<int>),
             -999
         )
         t |> equal(result, -999)
     }
     t |> run("single_or_default from empty") @(t : T?) {
-        var result = single_or_default(
+        let result = single_or_default(
             empty(type<int>),
             -999
         )
         t |> equal(result, -999)
     }
     t |> run("single_or_default from multiple") @(t : T?) {
-        var result = single_or_default(
+        let result = single_or_default(
             [iterator for(x in 0..5); x],
             -999
         )
@@ -947,7 +946,7 @@ def test_first_last_defaults(t : T?) {
 [test]
 def test_to_table_edge_cases(t : T?) {
     t |> run("to_table empty") @(t : T?) {
-        var result = to_table(
+        let result = to_table(
             empty(type<int>),
             $(x : int) => x,
             $(x : int) => x * 10
@@ -995,25 +994,25 @@ def test_select_many_edge_cases(t : T?) {
 [test]
 def test_contains_edge_cases(t : T?) {
     t |> run("contains in empty") @(t : T?) {
-        var result = contains(empty(type<int>), 42)
+        let result = contains(empty(type<int>), 42)
         t |> success(!result)
     }
     t |> run("contains first element") @(t : T?) {
-        var result = contains(
+        let result = contains(
             [iterator for(x in 0..5); x],
             0
         )
         t |> success(result)
     }
     t |> run("contains last element") @(t : T?) {
-        var result = contains(
+        let result = contains(
             [iterator for(x in 0..5); x],
             4
         )
         t |> success(result)
     }
     t |> run("contains missing element") @(t : T?) {
-        var result = contains(
+        let result = contains(
             [iterator for(x in 0..5); x],
             99
         )
@@ -1028,22 +1027,22 @@ def test_contains_edge_cases(t : T?) {
 [test]
 def test_any_all_edge_cases(t : T?) {
     t |> run("any with predicate on empty") @(t : T?) {
-        var result = _any(empty(type<int>), _ > 0)
+        let result = _any(empty(type<int>), _ > 0)
         t |> success(!result)
     }
     t |> run("all on empty is true") @(t : T?) {
-        var result = _all(empty(type<int>), _ > 0)
+        let result = _all(empty(type<int>), _ > 0)
         t |> success(result) // vacuous truth
     }
     t |> run("all with failing predicate") @(t : T?) {
-        var result = _all(
+        let result = _all(
             [iterator for(x in 0..5); x],
             _ < 3
         )
         t |> success(!result)
     }
     t |> run("any with all matching") @(t : T?) {
-        var result = _any(
+        let result = _any(
             [iterator for(x in 0..5); x],
             _ >= 0
         )

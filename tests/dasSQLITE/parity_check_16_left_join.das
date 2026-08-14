@@ -62,23 +62,21 @@ def fixture_orders() : array<Order> {
     ]
 }
 
-def sort_left(var rows : array<auto(R)>) : array<R> {
+def sort_left(var rows : array<auto(R)>) {
     // Both Alice rows are content-identical ((Name=Alice, HasOrder=true)),
     // so ordering between them doesn't matter — sort by Name alone.
     rows |> sort() $(a, b) {
         return a.Name < b.Name
     }
-    return <- rows
 }
 
-def sort_right(var rows : array<auto(R)>) : array<R> {
+def sort_right(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         return a.OrderId < b.OrderId
     }
-    return <- rows
 }
 
-def sort_full(var rows : array<auto(R)>) : array<R> {
+def sort_full(var rows : array<auto(R)>) {
     // Multi-key — both probes drive deterministic order across (T,T)/(T,F)/(F,T) groups.
     rows |> sort() $(a, b) {
         if (a.HasUser != b.HasUser) {
@@ -86,17 +84,15 @@ def sort_full(var rows : array<auto(R)>) : array<R> {
         }
         return !a.HasOrder && b.HasOrder
     }
-    return <- rows
 }
 
-def sort_cross(var rows : array<auto(R)>) : array<R> {
+def sort_cross(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.UserName != b.UserName) {
             return a.UserName < b.UserName
         }
         return a.OrderId < b.OrderId
     }
-    return <- rows
 }
 
 [test]
@@ -119,9 +115,9 @@ def parity_left_join_basic(t : T?) {
                                        $(u : User, o : Order)         => u.Id == o.UserId,
                                        $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
 
-        m1 <- sort_left(m1)
-        m2 <- sort_left(m2)
-        m3 <- sort_left(m3)
+        sort_left(m1)
+        sort_left(m2)
+        sort_left(m3)
 
         t |> equal(length(m1), 4, "left join row count: 4 (Alice ×2, Bob, Carol)")
         t |> equal(length(m1), length(m2), "left join: M1 length ≡ M2")
@@ -155,9 +151,9 @@ def parity_right_join_basic(t : T?) {
                                         $(u : User, o : Order)         => u.Id == o.UserId,
                                         $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
 
-        m1 <- sort_right(m1)
-        m2 <- sort_right(m2)
-        m3 <- sort_right(m3)
+        sort_right(m1)
+        sort_right(m2)
+        sort_right(m3)
 
         t |> equal(length(m1), 4, "right join row count: 4 (orders 10/11/12 with HasUser=true, orphan 13 with HasUser=false)")
         t |> equal(length(m1), length(m2), "right join: M1 length ≡ M2")
@@ -191,9 +187,9 @@ def parity_full_outer_join_basic(t : T?) {
                                              $(u : User, o : Order)                 => u.Id == o.UserId,
                                              $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
 
-        m1 <- sort_full(m1)
-        m2 <- sort_full(m2)
-        m3 <- sort_full(m3)
+        sort_full(m1)
+        sort_full(m2)
+        sort_full(m3)
 
         t |> equal(length(m1), 5, "full outer row count: 5 (3 matched + 1 LEFT-only + 1 RIGHT-only)")
         t |> equal(length(m1), length(m2), "full outer: M1 length ≡ M2")
@@ -224,9 +220,9 @@ def parity_cross_join_basic(t : T?) {
         var m3 <- (users |> _cross_join(orders,
                                         $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
 
-        m1 <- sort_cross(m1)
-        m2 <- sort_cross(m2)
-        m3 <- sort_cross(m3)
+        sort_cross(m1)
+        sort_cross(m2)
+        sort_cross(m3)
 
         t |> equal(length(m1), 12, "cross row count: 12 (3 users × 4 orders)")
         t |> equal(length(m1), length(m2), "cross: M1 length ≡ M2")
@@ -271,9 +267,9 @@ def parity_right_join_with_lhs_where(t : T?) {
                                         $(u : User, o : Order)         => u.Id == o.UserId,
                                         $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
 
-        m1 <- sort_right(m1)
-        m2 <- sort_right(m2)
-        m3 <- sort_right(m3)
+        sort_right(m1)
+        sort_right(m2)
+        sort_right(m3)
 
         t |> equal(length(m3), 4, "M3 row count: 4 (10/Alice, 11/Alice, 12/Bob, 13/orphan)")
         t |> equal(length(m1), length(m3), "right + lhs where: M1 length ≡ M3 (linq truth)")
@@ -309,9 +305,9 @@ def parity_right_join_with_rhs_where(t : T?) {
                                         $(u : User, o : Order)         => u.Id == o.UserId,
                                         $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
 
-        m1 <- sort_right(m1)
-        m2 <- sort_right(m2)
-        m3 <- sort_right(m3)
+        sort_right(m1)
+        sort_right(m2)
+        sort_right(m3)
 
         t |> equal(length(m3), 3, "M3 row count: 3 (orders 10/11/12; orphan 13 filtered)")
         t |> equal(length(m1), length(m3), "right + rhs where: M1 length ≡ M3")
@@ -347,9 +343,9 @@ def parity_full_outer_with_lhs_where(t : T?) {
                                              $(u : User, o : Order)                 => u.Id == o.UserId,
                                              $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
 
-        m1 <- sort_full(m1)
-        m2 <- sort_full(m2)
-        m3 <- sort_full(m3)
+        sort_full(m1)
+        sort_full(m2)
+        sort_full(m3)
 
         t |> equal(length(m3), 4, "M3 row count: 4 (3 matched + 1 RIGHT-only orphan)")
         t |> equal(length(m1), length(m3), "full outer + lhs where: M1 length ≡ M3")
@@ -384,9 +380,9 @@ def parity_full_outer_with_rhs_where(t : T?) {
                                              $(u : User, o : Order)                 => u.Id == o.UserId,
                                              $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
 
-        m1 <- sort_full(m1)
-        m2 <- sort_full(m2)
-        m3 <- sort_full(m3)
+        sort_full(m1)
+        sort_full(m2)
+        sort_full(m3)
 
         t |> equal(length(m3), 4, "M3 row count: 4 (3 matched + Carol LEFT-only)")
         t |> equal(length(m1), length(m3), "full outer + rhs where: M1 length ≡ M3")
@@ -422,9 +418,9 @@ def parity_cross_with_or_lhs_where(t : T?) {
                          |> _cross_join(orders |> _where(_.Total < 500),
                                         $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
 
-        m1 <- sort_cross(m1)
-        m2 <- sort_cross(m2)
-        m3 <- sort_cross(m3)
+        sort_cross(m1)
+        sort_cross(m2)
+        sort_cross(m3)
 
         t |> equal(length(m3), 6, "M3 row count: 6 (Alice + Carol × orders 10/11/12)")
         t |> equal(length(m1), length(m3), "cross + or-lhs where: M1 length ≡ M3 (parens precedence)")

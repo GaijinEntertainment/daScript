@@ -64,19 +64,18 @@ def enemies_eq(a : array<Enemy>; b : array<Enemy>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!enemy_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!enemy_eq(ea, eb)) {
             return false
         }
     }
     return true
 }
 
-def sort_by_id(var rows : array<Enemy>) : array<Enemy> {
+def sort_by_id(var rows : array<Enemy>) {
     rows |> sort() $(a, b) {
         return a.Id < b.Id
     }
-    return <- rows
 }
 
 [test]
@@ -91,9 +90,9 @@ def parity_sql_function_in_where(t : T?) {
         var m2 <- (db |> select_from(type<Enemy>) |> _where(score(_.Hp, _.Armor) >= 100.0lf))
         var m3 <- (arr |> _where(score(_.Hp, _.Armor) >= 100.0lf))
 
-        m1 <- sort_by_id(m1)
-        m2 <- sort_by_id(m2)
-        m3 <- sort_by_id(m3)
+        sort_by_id(m1)
+        sort_by_id(m2)
+        sort_by_id(m3)
 
         t |> equal(length(m1), 2, "sql_function where: 2 strong enemies")
         t |> success(enemies_eq(m1, m2), "sql_function where: M1 ≡ M2")

@@ -313,7 +313,7 @@ def main() {
             let parent_wins = ES_GAMES_PER_PAIR - best_child_wins
             if (best_child_idx >= 0 && best_child_wins > parent_wins) {
                 delete parent
-                parent <- children[best_child_idx]  // nolint:PERF030 released by the delete above; unseen across the block argument
+                parent <- children[best_child_idx]
                 let pct = float(best_child_wins) * 100.0 / float(ES_GAMES_PER_PAIR)
                 print("Gen {gen}: child_{best_child_idx} selected ({pct:.0f}%)  sigma={sigma:.4f}\n")
             } else {

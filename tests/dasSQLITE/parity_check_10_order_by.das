@@ -51,8 +51,8 @@ def cars_equal(a : array<Car>; b : array<Car>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i].Id != b[i].Id || a[i].Name != b[i].Name || a[i].Price != b[i].Price) {
+    for (ea, eb in a, b) {
+        if (ea.Id != eb.Id || ea.Name != eb.Name || ea.Price != eb.Price) {
             return false
         }
     }
@@ -67,8 +67,8 @@ def int_array_eq(a : array<int>; b : array<int>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (ea, eb in a, b) {
+        if (ea != eb) {
             return false
         }
     }

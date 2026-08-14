@@ -7,16 +7,16 @@ require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
-require live/opengl_live // nolint:STYLE030 — side-effect registration for live-reload
+require live/opengl_live
 require live/live_commands
 require live/live_api
-require live/live_watch_boost // nolint:STYLE030 — side-effect registration for live-reload
+require live/live_watch_boost
 require live/live_vars
-require live/audio_live // nolint:STYLE030 — side-effect registration for live-reload
+require live/audio_live
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live // nolint:STYLE030 — side-effect registration for live-reload
+require strudel/strudel_live
 require daslib/math_boost
 require daslib/json_boost
 require daslib/strings_boost

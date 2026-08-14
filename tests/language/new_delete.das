@@ -24,7 +24,7 @@ def test_delete_array(t : T?) {
     let w2 = heap_bytes_allocated()
     t |> success(w1 > w0 && w0 == w2)
     for (ii in range(5)) {
-        t |> success(length(a[ii]) == 0 && capacity(a[ii]) == 0)
+        t |> success(empty(a[ii]) && capacity(a[ii]) == 0)
     }
 }
 
@@ -37,7 +37,7 @@ def test_delete_table(t : T?) {
     delete a
     let w2 = heap_bytes_allocated()
     t |> success(w1 > w0 && w0 == w2)
-    t |> success(length(a) == 0 && capacity(a) == 0)
+    t |> success(empty(a) && capacity(a) == 0)
 }
 
 def test_delete_struct(t : T?) {
@@ -68,8 +68,7 @@ def test_delete_struct_array(t : T?) {
 }
 
 def test_delete_handle(t : T?) {
-    var a : TestObjectFoo?
-    a = new TestObjectFoo
+    var a = new TestObjectFoo
     unsafe {
         delete a
     }

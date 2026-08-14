@@ -153,10 +153,7 @@ def test_conf_distinct_by(t : T?) {
                 |> _group_by(_.Tag)
                 |> _select((Tag = _._0, First = _._1 |> first())))
             t |> equal(length(groups), 3)
-            var byTag : table<string; int>
-            for (g in groups) {
-                byTag[g.Tag] = g.First.Val
-            }
+            let byTag <- {for (g in groups); g.Tag => g.First.Val}
             t |> equal(byTag?["a"] ?? -1, 10)
             t |> equal(byTag?["b"] ?? -1, 20)
             t |> equal(byTag?["c"] ?? -1, 40)

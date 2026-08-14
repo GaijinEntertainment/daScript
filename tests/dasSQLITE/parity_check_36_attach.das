@@ -60,19 +60,18 @@ def users_eq(a : array<User>; b : array<User>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!user_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!user_eq(ea, eb)) {
             return false
         }
     }
     return true
 }
 
-def sort_by_id(var rows : array<User>) : array<User> {
+def sort_by_id(var rows : array<User>) {
     rows |> sort() $(a, b) {
         return a.Id < b.Id
     }
-    return <- rows
 }
 
 [test]
@@ -89,9 +88,9 @@ def parity_attach_with_attached(t : T?) {
             var m2 <- (scoped |> select_from(type<User>) |> _where(_.Active))
             var m3 <- (arr |> _where(_.Active))
 
-            m1 <- sort_by_id(m1)
-            m2 <- sort_by_id(m2)
-            m3 <- sort_by_id(m3)
+            sort_by_id(m1)
+            sort_by_id(m2)
+            sort_by_id(m3)
 
             t |> equal(length(m1), 2, "attached _where: 2 active users")
             t |> success(users_eq(m1, m2), "attached _where: M1 ≡ M2")
@@ -115,9 +114,9 @@ def parity_attach_manual(t : T?) {
             var m2 <- (scoped |> select_from(type<User>) |> _where(!_.Active))
             var m3 <- (arr |> _where(!_.Active))
 
-            m1 <- sort_by_id(m1)
-            m2 <- sort_by_id(m2)
-            m3 <- sort_by_id(m3)
+            sort_by_id(m1)
+            sort_by_id(m2)
+            sort_by_id(m3)
 
             t |> equal(length(m1), 2, "manual attach _where !Active: 2 inactive users")
             t |> success(users_eq(m1, m2), "manual attach: M1 ≡ M2")

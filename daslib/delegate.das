@@ -86,8 +86,8 @@ struct template public DelegateReturn {
             static_if (typeinfo can_copy(type<$t(retType) -const>)) {
                 return default<$t(retType) -const>
             } else {
-                var _delegate_default : $t(retType) -const
-                return <- _delegate_default
+                var delegate_default : $t(retType) -const
+                return <- delegate_default
             }
         }
         let delegate_n = length(invocation_list)

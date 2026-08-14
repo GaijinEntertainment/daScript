@@ -422,14 +422,14 @@ def private splice_packed_body(var func : FunctionPtr; var blk : ExprBlock?; gro
     }
     var finalStmt = qmacro_expr(${ var $i(finalAcc) = $e(acc); })
     var newBody = new ExprBlock(at = blk.at)
-    for (i in range(initIdx)) {   // nolint:PERF018 — preamble is a [0,initIdx) sub-range
+    for (i in range(initIdx)) {
         newBody.list |> emplace(blk.list[i])
     }
     for (s in newLets) {
         newBody.list |> emplace(s)
     }
     newBody.list |> emplace(finalStmt)
-    for (i in range(lastLinkIdx + 1, n)) {   // nolint:PERF018 — tail is a (lastLinkIdx,n) sub-range
+    for (i in range(lastLinkIdx + 1, n)) {
         newBody.list |> emplace(blk.list[i])
     }
     func.body = newBody

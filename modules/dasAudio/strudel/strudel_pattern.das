@@ -31,10 +31,10 @@ typedef PatternTransform = lambda<(var pat : Pattern) : Pattern>
 // is centralized here: `double(n)`/`float(n)` is a no-op for the same-type union
 // member, but is required to cover the other two.
 def private numd(n : int | float | double) : double {
-    return double(n) // nolint:PERF020
+    return double(n)
 }
 def private numf(n : int | float | double) : float {
-    return float(n) // nolint:PERF020
+    return float(n)
 }
 
 // ─── Constructors ───

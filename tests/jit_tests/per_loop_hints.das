@@ -42,8 +42,8 @@ def countdown_while_annotated(start : int) {
     var x = start
     var iters = 0
     while [unroll_disable] (x > 0) {
-        x -= 1
-        iters += 1
+        x--
+        iters++
     }
     return iters
 }
@@ -52,8 +52,8 @@ def countdown_while_bare(start : int) {
     var x = start
     var iters = 0
     while (x > 0) {
-        x -= 1
-        iters += 1
+        x--
+        iters++
     }
     return iters
 }

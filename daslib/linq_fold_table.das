@@ -72,7 +72,7 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
         }
         inner |> push(body)
         return <- qmacro_block() {
-            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
+            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) {
                 $b(inner)
             }
         }
@@ -97,14 +97,14 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
     }
     if (useKey && useValue) {
         return <- qmacro_block() {
-            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) { // nolint:LINT002 parallel-for must bind both vars
+            for ($i(kIter), $i(vIter) in keys($i(srcName)), values($i(srcName))) {
                 $b(inner)
             }
         }
     }
     // key-only AND no-field-touched (e.g. bare count walk) both ride the cheaper keys iterator
     return <- qmacro_block() {
-        for ($i(kIter) in keys($i(srcName))) { // nolint:LINT002 body may not read the key (bare-count walk)
+        for ($i(kIter) in keys($i(srcName))) {
             $b(inner)
         }
     }

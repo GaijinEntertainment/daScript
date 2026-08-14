@@ -67,7 +67,7 @@ def test_pad_one_default(t : T?) {
         t |> equal(r, 3.25)
     }
     t |> run("explicit <| pipe pads the same way") @(t : T?) {
-        let r = pad_b(1) <| $(y : float) : float {
+        let r = pad_b(1) <| $(y : float) : float {     // nolint:STYLE001 - the explicit pipe form is what this test covers
             return y;
         }
         t |> equal(r, 3.25)

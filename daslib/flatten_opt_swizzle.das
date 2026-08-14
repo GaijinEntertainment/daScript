@@ -174,7 +174,7 @@ def private resolve_selection(var that : ExprSwizzle?; var sel : array<LaneSrc>;
     }
     if (ok) {
         for (f in that.fields) {
-            sel |> push(lanes[int(f)])   // nolint:PERF006 -- ≤4 lanes
+            sel |> push(lanes[int(f)])
         }
     }
     unsafe {

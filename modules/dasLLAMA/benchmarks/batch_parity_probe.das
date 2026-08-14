@@ -271,7 +271,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
                 select_decode_override("")
                 var sink : array<int64>
                 delete truth   // a rejected cache can leave rows behind (feeds empty, logits parsed)
-                truth <- teacher_logits(t, nb, nsteps, sink, feeds)   // nolint:PERF030 — released by the delete above
+                truth <- teacher_logits(t, nb, nsteps, sink, feeds)
                 delete sink
                 if (!empty(cpath)) {
                     save_truth(cpath, feeds, truth)

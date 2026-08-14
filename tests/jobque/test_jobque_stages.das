@@ -103,7 +103,7 @@ def stages_ragged_round(t : T?) {
                 unsafe(pa[i]) = i * 7
             }
         } elif (stage == 2) {
-            unsafe(pa[0]) += 1   // single chunk: [0,1)
+            unsafe(pa[0]) ++   // single chunk: [0,1)
         } elif (stage == 3) {
             for (i in range(jb, je)) {
                 unsafe(pb[i]) = unsafe(pa[total - 1 - i])
@@ -144,7 +144,7 @@ def stages_mixed_storm(t : T?; rounds : int) {
         }
         team_parallel_for(0, lanes, lanes) <| @(jb : int; je : int) {
             for (i in range(jb, je)) {
-                unsafe(ph[i]) += 1
+                unsafe(ph[i]) ++
             }
         }
         team_parallel_stages(stages) <| @(stage : int; jb : int; je : int) {
@@ -160,7 +160,7 @@ def stages_mixed_storm(t : T?; rounds : int) {
         }
         team_parallel_for(0, total, 64) <| @(jb : int; je : int) {
             for (i in range(jb, je)) {
-                unsafe(ph[i]) += 1
+                unsafe(ph[i]) ++
             }
         }
         var bad = 0

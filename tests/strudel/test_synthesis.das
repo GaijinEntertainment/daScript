@@ -172,8 +172,8 @@ def test_fm_zero_depth_matches_plain(t : T?) {
     let fm_out <- render_voice_stereo(fm_voice, frames)
 
     var maxDiff = 0.0
-    for (i in range(length(plain_out))) {
-        maxDiff = max(maxDiff, abs(plain_out[i] - fm_out[i]))
+    for (ps, fs in plain_out, fm_out) {
+        maxDiff = max(maxDiff, abs(ps - fs))
     }
     t |> success(maxDiff < 0.0001)
 }

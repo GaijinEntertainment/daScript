@@ -16,10 +16,7 @@ def private query_first(var pat : Pattern) : Event {
 // Helper: query all events in cycle 0.
 def private query_all(var pat : Pattern) : array<Event> {
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
-    var events : array<Event>
-    for (h in haps) {
-        events |> push(h.value) // nolint:PERF006
-    }
+    var events <- [for (h in haps); h.value]
     delete haps
     return <- events
 }
@@ -126,8 +123,8 @@ def test_bpf_passes_center_frequency(t : T?) {
     var maxAbs = 0.0
     for (_i in range(480)) {
         let inp = sin(phase * 3.14159265358979323846 * 2.0)
-        let out = formant_biquad_tick(bq, float(inp))
-        maxAbs = max(maxAbs, float(abs(out)))
+        let out = formant_biquad_tick(bq, inp)
+        maxAbs = max(maxAbs, abs(out))
         phase += phaseInc
     }
     t |> success(maxAbs > 0.1)
@@ -142,9 +139,9 @@ def test_bpf_rejects_distant_frequency(t : T?) {
     var maxAbs = 0.0
     for (i in range(4800)) {
         let inp = sin(phase * 3.14159265358979323846 * 2.0)
-        let out = formant_biquad_tick(bq, float(inp))
+        let out = formant_biquad_tick(bq, inp)
         if (i > 2400) {
-            maxAbs = max(maxAbs, float(abs(out)))
+            maxAbs = max(maxAbs, abs(out))
         }
         phase += phaseInc
     }
@@ -162,7 +159,7 @@ def test_vowel_filter_tick_produces_output(t : T?) {
     for (_i in range(4800)) {
         let inp = noise(seed)
         let out = vowel_filter_tick(vf, inp)
-        maxAbs = max(maxAbs, float(abs(out)))
+        maxAbs = max(maxAbs, abs(out))
     }
     t |> success(maxAbs > 0.1)
 }
@@ -182,8 +179,8 @@ def test_different_vowels_different_output(t : T?) {
         let inp_i = noise(seed_i)
         let out_a = vowel_filter_tick(vf_a, inp_a)
         let out_i = vowel_filter_tick(vf_i, inp_i)
-        energy_a += float(out_a * out_a)
-        energy_i += float(out_i * out_i)
+        energy_a += out_a * out_a
+        energy_i += out_i * out_i
     }
     t |> success(energy_a > 0.0)
     t |> success(energy_i > 0.0)

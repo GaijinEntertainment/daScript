@@ -31,10 +31,10 @@ def test_play_for_gate(t : T?) {
         t |> success(length(c0) == 4, "the whole phrase plays once ({length(c0)} onsets)")
         delete c0
         var c1 <- pat(TimeSpan(start = 1.0lf, stop = 2.0lf))
-        t |> success(length(c1) == 0, "no onsets after the window (stop)")
+        t |> success(empty(c1), "no onsets after the window (stop)")
         delete c1
         var cneg <- pat(TimeSpan(start = -1.0lf, stop = 0.0lf))
-        t |> success(length(cneg) == 0, "nothing before it starts")
+        t |> success(empty(cneg), "nothing before it starts")
         delete cneg
     }
     t |> run("playFor(n) spans n cycles, then stops") @(t : T?) {
@@ -43,7 +43,7 @@ def test_play_for_gate(t : T?) {
         var c1 <- pat(TimeSpan(start = 1.0lf, stop = 2.0lf))
         var c2 <- pat(TimeSpan(start = 2.0lf, stop = 3.0lf))
         t |> success(length(c0) == 1 && length(c1) == 1, "plays across both cycles")
-        t |> success(length(c2) == 0, "silent on the third cycle")
+        t |> success(empty(c2), "silent on the third cycle")
         delete c0
         delete c1
         delete c2

@@ -1008,7 +1008,7 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
 [macro_function]
 def private cm_helper(val : auto; cast_var, actual_var : string; var body : array<Expression?>&; at : LineInfo) {
     //! Generate: if (cast_var.value != val) { return fail }
-    var cond = qmacro($i(cast_var).value != $v(val))
+    var cond = qmacro($i(cast_var).value != $v(val))     // nolint:STYLE018,LINT019 - template compares any const; bool instantiations spell != true
     qm_const_value_guard(at, cast_var, actual_var, cond, body)
 }
 

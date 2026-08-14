@@ -3,7 +3,7 @@ options gen2
 module sfx public
 
 require audio/audio_boost
-require live/audio_live   // nolint:STYLE030 — load-bearing: registers the audio live-reload hooks
+require live/audio_live
 require live/live_vars
 require live/live_commands
 require live_host

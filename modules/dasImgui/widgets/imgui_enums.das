@@ -27,7 +27,7 @@ def public operator |(a, b : ImGuiItemFlags) : ImGuiItemFlags {
 
 def public operator &(a, b : ImGuiItemFlags) : ImGuiItemFlags {
     //! Bitwise AND — mask / membership test (pair with ``bool``/``!`` from enum_trait).
-    return unsafe(reinterpret<ImGuiItemFlags>(int(a) & int(b))) // nolint:PERF019
+    return unsafe(reinterpret<ImGuiItemFlags>(int(a) & int(b)))
 }
 
 def public operator ~(a : ImGuiItemFlags) : ImGuiItemFlags {

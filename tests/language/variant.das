@@ -44,7 +44,7 @@ def test_short_notation(t : T?) {
 }
 
 [test]
-def test_variant(t : T?) {
+def test_variant(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
 
     t |> equal(typeinfo sizeof(type<U_F>), 8)
 

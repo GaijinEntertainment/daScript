@@ -30,7 +30,7 @@ def init() {
     font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [oversampling = 2])   // nolint:PERF030 - module global, first write (init runs once)
     if (!!empty(font.bitmap.bytes)) {
         delete font
-        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])   // nolint:PERF030 - released by the delete above; the rule only tracks array/table finalize, not struct
+        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])
     }
     if (!!empty(font.bitmap.bytes)) {
         panic("can't load droidsansmono.ttf")

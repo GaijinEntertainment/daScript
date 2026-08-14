@@ -424,7 +424,7 @@ def test_auto_inline_behavior(t : T?) {
         // shrink the borrowed temporary's lifetime to the temp's own statement and
         // the spliced body would iterate freed memory (latent in v1's devirt too)
         let r <- invoke($(var it : iterator<int&>) : array<int> {
-            var buf : array<int>
+            var buf : array<int>  // nolint:STYLE027 - the loop body shape is what auto-inline is tested on
             for (x in it) {
                 buf |> push(x * 2)
             }

@@ -318,7 +318,7 @@ def test_inline_fired(t : T?) {
 }
 
 [test]
-def test_inline_behavior(t : T?) {
+def test_inline_behavior(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
     t |> run("values preserved") @(t : T?) {
         t |> equal(target_basic(5, 6), 12);
         t |> equal(target_fold(), 1.0);
@@ -383,12 +383,12 @@ def test_inline_behavior(t : T?) {
     t |> run("statement-needing callee in if and elif conditions") @(t : T?) {
         var hits = 0;
         if (madd(1, 2, 3) == 5) {
-            hits += 1;
+            hits ++;
         }
         if (false) {
             hits += 100;
         } elif (madd(1, 1, 1) == 2) {
-            hits += 1;
+            hits ++;
         }
         t |> equal(hits, 2);
     }

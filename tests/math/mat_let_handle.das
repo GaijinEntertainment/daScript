@@ -4,7 +4,7 @@ require dastest/testing_boost public
 
 [sideeffects]
 def test_mat(t : T?; m : float3x4) {
-    var mat : float3x4 = m
+    var mat : float3x4 = m // nolint:LINT003 the mutable handle is the point - line below reads the same cells through the const param
     for (x in range(3)) {
         for (y in range(4)) {
             t |> equal(mat[y][x], float(y * 3 + x))

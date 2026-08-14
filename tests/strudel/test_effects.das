@@ -72,7 +72,7 @@ def test_crush_pattern_modulator(t : T?) {
     // Pattern-valued modulator: a signal sampled at the event's onset
     let pat <- atom("bd") |> crush(signal_saw() |> signal_range(4.0, 12.0))
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
-    t |> success(length(haps) >= 1)
+    t |> success(!empty(haps))
     // signal_saw at t=0 → 0 → mapped to 4.0
     t |> success(abs(haps[0].value.crush - 4.0) < 0.1, "crush sampled from modulator = {haps[0].value.crush}")
 }
@@ -225,9 +225,7 @@ def private tick_chunks(var sched : Scheduler; var pat : Pattern; bank : SampleB
     for (c in range(numChunks)) {
         let wall = double(c) * double(chunkSec)
         tick(sched, pat, bank, wall, chunkSec)
-        for (s in sched.output) {
-            result |> push(s)
-        }
+        result |> push_from(sched.output)
     }
     return <- result
 }
@@ -237,7 +235,7 @@ def private rms(samples : array<float>) : float {
     for (s in samples) {
         sum += s * s
     }
-    if (length(samples) == 0) {
+    if (empty(samples)) {
         return 0.0
     }
     return sqrt(sum / float(length(samples)))
@@ -309,8 +307,8 @@ def test_scheduler_osc_voicefx_marked_active(t : T?) {
         let bank : SampleBank
         let pat <- atom("sawtooth") |> note(60.0) |> crush(6.0) |> bpf(1000.0)
         tick(sched, pat, bank, 0.0lf, 0.01)
-        t |> success(length(sched.osc_voices) >= 1)
-        if (length(sched.osc_voices) >= 1) {
+        t |> success(!empty(sched.osc_voices))
+        if (!empty(sched.osc_voices)) {
             t |> success(sched.osc_voices[0].fx.active, "osc voice should have active FX")
             t |> success(sched.osc_voices[0].fx.has_crush)
             t |> success(sched.osc_voices[0].fx.has_bpf)
@@ -528,7 +526,7 @@ def test_fx_apply_phaser_modulates(t : T?) {
     buf |> resize(512)
     // fill with a 440Hz sine (roughly in phaser sweep range)
     for (i in range(256)) {
-        let s = sin(float(i) * 440.0 * 2.0 * float(PI) / 48000.0) * 0.5
+        let s = sin(float(i) * 440.0 * 2.0 * PI / 48000.0) * 0.5
         buf[i * 2]     = s
         buf[i * 2 + 1] = s
     }
@@ -623,8 +621,8 @@ def test_scheduler_osc_tremolo_marks_fx(t : T?) {
         let bank : SampleBank
         let pat <- atom("sawtooth") |> note(60.0) |> tremolo(8.0)
         tick(sched, pat, bank, 0.0lf, 0.01)
-        t |> success(length(sched.osc_voices) >= 1)
-        if (length(sched.osc_voices) >= 1) {
+        t |> success(!empty(sched.osc_voices))
+        if (!empty(sched.osc_voices)) {
             t |> success(sched.osc_voices[0].fx.has_tremolo, "osc voice should have tremolo")
             t |> success(sched.osc_voices[0].fx.active)
         }

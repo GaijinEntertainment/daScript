@@ -104,7 +104,7 @@ def test_large_int_grow_rehash(t : T?) {
 [test]
 def test_large_int_churn(t : T?) {
     // insert/erase churn builds tombstones -> same-capacity rehash on the control-byte path.
-    var tab : table<int; int>    // nolint:STYLE027  churn under test
+    var tab : table<int; int>    // churn under test
     let lastRound = 5
     for (round in range(lastRound + 1)) {
         for (i in range(50)) {

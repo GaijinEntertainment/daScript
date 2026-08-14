@@ -14,7 +14,7 @@ require spirv/spirv_dis             // count_op, op_has_operand
 require spirv/spirv_grammar         // SpvOp, SpvCapability, SPV_VERSION_1_6
 
 [test]
-def test_coopmat(t : T?) {
+def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability assertions
     t |> run("cooperative matrix f16xf16->f32 GEMM tile: KHR coopmat opcodes + capability + 1.6 floor") <| @(t : T?) {
         var words <- coopmat_words()
         // capability + extension + the SPIR-V 1.6 version floor coopmat forces

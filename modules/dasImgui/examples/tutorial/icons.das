@@ -9,7 +9,7 @@ require live/glfw_live
 require live/live_api
 require live/live_commands
 require live/live_vars
-require live/opengl_live // nolint:STYLE030 - registers screenshot/record_* live commands for the recorder
+require live/opengl_live
 require live_host
 require imgui/imgui_live
 require imgui/imgui_boost_runtime

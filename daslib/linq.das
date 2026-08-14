@@ -3,7 +3,7 @@ options indenting = 4
 
 module linq shared public
 
-require math // nolint:STYLE030 — math::min(int,int) is used (zip_impl reserve, take helpers); linq's own min/max overloads shadow it so the usage scan misses it
+require math
 require daslib/option public
 require daslib/sort_boost
 
@@ -268,9 +268,7 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     //! Concatenates two arrays in place
     a.reserve(length(a) + length(b))
-    for (it in b) {
-        a.push_clone(it)
-    }
+    a |> push_clone_from(b)
 }
 
 // ===== concat — 3 sources =====
@@ -281,9 +279,9 @@ def private concat3_impl(var a; var b; var c; tt : auto(TT); reserveSize : int) 
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -333,10 +331,10 @@ def private concat4_impl(var a; var b; var c; var d; tt : auto(TT); reserveSize 
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
-    for (it in d) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -390,11 +388,11 @@ def private concat5_impl(var a; var b; var c; var d; var e; tt : auto(TT); reser
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
-    for (it in d) { r.push_clone(it) } // nolint:PERF022
-    for (it in e) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -452,12 +450,12 @@ def private concat6_impl(var a; var b; var c; var d; var e; var f; tt : auto(TT)
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
-    for (it in d) { r.push_clone(it) } // nolint:PERF022
-    for (it in e) { r.push_clone(it) } // nolint:PERF022
-    for (it in f) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -519,13 +517,13 @@ def private concat7_impl(var a; var b; var c; var d; var e; var f; var g; tt : a
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
-    for (it in d) { r.push_clone(it) } // nolint:PERF022
-    for (it in e) { r.push_clone(it) } // nolint:PERF022
-    for (it in f) { r.push_clone(it) } // nolint:PERF022
-    for (it in g) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -591,14 +589,14 @@ def private concat8_impl(var a; var b; var c; var d; var e; var f; var g; var h;
     if (reserveSize > 0) {
         r.reserve(reserveSize)
     }
-    for (it in a) { r.push_clone(it) } // nolint:PERF022
-    for (it in b) { r.push_clone(it) } // nolint:PERF022
-    for (it in c) { r.push_clone(it) } // nolint:PERF022
-    for (it in d) { r.push_clone(it) } // nolint:PERF022
-    for (it in e) { r.push_clone(it) } // nolint:PERF022
-    for (it in f) { r.push_clone(it) } // nolint:PERF022
-    for (it in g) { r.push_clone(it) } // nolint:PERF022
-    for (it in h) { r.push_clone(it) } // nolint:PERF022
+    for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in h) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
     return <- r
 }
 
@@ -1630,8 +1628,8 @@ def take_to_array(var src : iterator<auto(TT)>; from : range) : array<TT -& -con
 def take_inplace(var arr : array<auto(TT)>; from : range) {
     //! Keeps only a range of elements in an array in place
     let len = length(arr)
-    let start = (from.x < 0) ? 0 : ((from.x > len) ? len : from.x)
-    var end = (from.y < 0) ? 0 : ((from.y > len) ? len : from.y)
+    let start = clamp(from.x, 0, len)
+    var end = clamp(from.y, 0, len)
     if (end < start) {
         end = start
     }
@@ -2314,7 +2312,7 @@ def private join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, ke
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
-        tableb[k].push_clone(itb) // nolint:PERF006 per-key bucket size unknown ahead of time
+        tableb[k].push_clone(itb) // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
     }
     var buffer : array<typedecl(result(type<TA>, type<TB>)) -const -&>
     for (ita in srca) {
@@ -2373,7 +2371,7 @@ def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
-        tableb[k].push_clone(itb) // nolint:PERF006 per-key bucket size unknown ahead of time
+        tableb[k].push_clone(itb) // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
     }
     var buffer : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&>
     for (ita in srca) {
@@ -2436,7 +2434,7 @@ def private left_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); key
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
-        tableb[k].push_clone(itb) // nolint:PERF006 per-key bucket size unknown ahead of time
+        tableb[k].push_clone(itb) // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
     }
     var buffer : array<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&>
     for (ita in srca) {
@@ -2501,7 +2499,7 @@ def private right_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
     var inscope tablea : table<typedecl(_::unique_key(keya(type<TA>))); array<TA -const -&>>
     for (ita in srca) {
         let k = _::unique_key(keya(ita))
-        tablea[k].push_clone(ita) // nolint:PERF006 per-key bucket size unknown ahead of time
+        tablea[k].push_clone(ita) // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
     }
     var buffer : array<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&>
     for (itb in srcb) {
@@ -2568,8 +2566,8 @@ def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB
     var inscope srcb_arr : array<TB -const -&>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
-        tableb[k].push_clone(itb) // nolint:PERF006 per-key bucket size unknown ahead of time
-        srcb_arr |> push_clone(itb) // nolint:PERF006 srcb cardinality unknown ahead of time
+        tableb[k].push_clone(itb) // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
+        srcb_arr |> push_clone(itb) // nolint:PERF006,LINT019 srcb cardinality unknown ahead of time
     }
     var inscope seen_b : table<typedecl(_::unique_key(keyb(type<TB>))); bool>
     var buffer : array<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&>
@@ -2578,19 +2576,19 @@ def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB
         var matched = false
         tableb.get(k, $(arr) {
             for (itb in arr) {
-                buffer.push_clone(result(_::some(ita), _::some(itb))) // nolint:PERF006 per-bucket size unknown
+                buffer.push_clone(result(_::some(ita), _::some(itb))) // nolint:PERF006,LINT019 per-bucket size unknown
                 matched = true
             }
             seen_b[k] = true
         })
         if (!matched) {
-            buffer.push_clone(result(_::some(ita), _::none(type<TB>))) // nolint:PERF006 unmatched left rows
+            buffer.push_clone(result(_::some(ita), _::none(type<TB>))) // nolint:PERF006,LINT019 unmatched left rows
         }
     }
     for (itb in srcb_arr) {
         let k = _::unique_key(keyb(itb))
         if (!seen_b |> key_exists(k)) {
-            buffer.push_clone(result(_::none(type<TA>), _::some(itb))) // nolint:PERF006 unmatched right rows
+            buffer.push_clone(result(_::none(type<TA>), _::some(itb))) // nolint:PERF006,LINT019 unmatched right rows
         }
     }
     return <- buffer
@@ -2641,7 +2639,7 @@ def private cross_join_impl(var srca; srcb : array<auto(TB) -const -&>; ta : aut
     var buffer : array<typedecl(result(type<TA>, type<TB>)) -const -&>
     for (ita in srca) {
         for (itb in srcb) {
-            buffer.push_clone(result(ita, itb)) // nolint:PERF006 srca cardinality unknown ahead of time
+            buffer.push_clone(result(ita, itb)) // nolint:PERF006,LINT019 srca cardinality unknown ahead of time
         }
     }
     return <- buffer
@@ -3677,7 +3675,7 @@ def private prepend_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -
         buffer.reserve(reserveSize)
     }
     buffer.push_clone(value)
-    for (x in arr) {
+    for (x in arr) { // nolint:PERF022,LINT019 - one body serves array AND iterator sources; the bulk form binds only arrays
         buffer.push_clone(x)
     }
     return <- buffer
@@ -3728,7 +3726,7 @@ def private append_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -&
     if (reserveSize > 0) {
         buffer.reserve(reserveSize)
     }
-    for (x in arr) {
+    for (x in arr) { // nolint:PERF022,LINT019 - one body serves array AND iterator sources; the bulk form binds only arrays
         buffer.push_clone(x)
     }
     buffer.push_clone(value)
@@ -4017,7 +4015,7 @@ def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tup
         buffer |> reserve(min(length(a), length(b)))
     }
     for (itA, itB in a, b) {
-        buffer.emplace((itA, itB)) // nolint:PERF006 — iterator sources have no length to reserve; the array/dim case reserves above
+        buffer.emplace((itA, itB)) // nolint:PERF006,LINT019 — iterator sources have no length to reserve; the array/dim case reserves above
     }
     return <- buffer
 }

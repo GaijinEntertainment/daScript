@@ -16,9 +16,7 @@ def private tick_chunks(var sched : Scheduler; var pat : Pattern; bank : SampleB
     for (c in range(numChunks)) {
         let wall = double(c) * double(chunkSec)
         tick(sched, pat, bank, wall, chunkSec)
-        for (s in sched.output) {
-            result |> push(s)
-        }
+        result |> push_from(sched.output)
     }
     return <- result
 }

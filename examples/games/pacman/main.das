@@ -10,13 +10,13 @@ require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-require live/decs_live    // nolint:STYLE030 — load-bearing: registers decs live-reload hooks
-require live/opengl_live  // nolint:STYLE030 — load-bearing: registers opengl live-reload hooks
+require live/decs_live
+require live/opengl_live
 require live/live_commands
 require ?dashv live/live_api
-require live/live_watch_boost // nolint:STYLE030 — load-bearing: registers live-watch hooks
+require live/live_watch_boost
 require live/live_vars
-require live/audio_live       // nolint:STYLE030 — load-bearing: registers audio live-reload hooks
+require live/audio_live
 require daslib/json_boost
 require daslib/math_boost
 require daslib/archive
@@ -24,7 +24,7 @@ require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live  // nolint:STYLE030 — load-bearing: registers strudel live-reload hooks
+require strudel/strudel_live
 require daslib/strings_boost
 require live_host
 

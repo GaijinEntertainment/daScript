@@ -174,7 +174,7 @@ def private check_int16_surface(t : T?; words : array<uint>; what : string; sign
 }
 
 [test]
-def test_int16(t : T?) {
+def test_int16(t : T?) { // nolint:STYLE038 - flat list of opcode/capability assertions
     t |> run("short2 by value: Int16 capability, narrowing ctor, widening read") <| @(t : T?) {
         var words <- clone_to_move(i16_spv)
         check_int16_surface(t, words, "value form")

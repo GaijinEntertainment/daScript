@@ -144,7 +144,7 @@ def test_star_skip(t : T?) {
 
 [test]
 def test_plus_empty_fails(t : T?) {
-    parse_plus("") $(val; err) {
+    parse_plus("") $(_val; err) {
         t |> success(!empty(err), "one-or-more should require at least one match")
     }
 }

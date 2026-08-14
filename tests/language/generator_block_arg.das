@@ -30,39 +30,30 @@ def private pick(blk : block<(v : int) : int>) : int {
 [test]
 def test_generator_block_argument(t : T?) {
     t |> run("block literal under a callee loop") @(t : T?) {
-        var g <- generator<int>() <| $() {
+        var g <- generator<int> {
             yield transform_sum(4, $(v : int) { return v * 2; })
             yield 7
             return false
         }
-        var got : array<int>
-        for (x in g) {
-            got |> push(x)
-        }
+        let got <- [for (x in g); x]
         t |> equal(got, [12, 7])
     }
     t |> run("block literal read twice by the callee") @(t : T?) {
-        var g <- generator<int>() <| $() {
+        var g <- generator<int> {
             yield pick($(v : int) { return v * 10; })
             return false
         }
-        var got : array<int>
-        for (x in g) {
-            got |> push(x)
-        }
+        let got <- [for (x in g); x]
         t |> equal(got, [30])
     }
     t |> run("block argument inside a generator loop") @(t : T?) {
-        var g <- generator<int>() <| $() {
+        var g <- generator<int> {
             for (i in range(3)) {
                 yield transform_sum(i, $(v : int) { return v + 1; })
             }
             return false
         }
-        var got : array<int>
-        for (x in g) {
-            got |> push(x)
-        }
+        let got <- [for (x in g); x]
         t |> equal(got, [0, 1, 3])
     }
 }

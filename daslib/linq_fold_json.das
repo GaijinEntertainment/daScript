@@ -67,7 +67,7 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
     }
     ite.cond = flatten_row_to_locals(ite.cond, bindName, fieldToLocal)
     // Prepend the by-name full materialize to the guarded branch so only matching elements build the row.
-    var guarded : array<Expression?>   // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    var guarded : array<Expression?>
     guarded |> push <| qmacro_expr() {
         var $i(bindName) <- default<$t(declT)>
     }
@@ -263,7 +263,6 @@ class JsonAdapter : SourceAdapter {
         }
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }

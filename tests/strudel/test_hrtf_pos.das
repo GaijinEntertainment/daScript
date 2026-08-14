@@ -3,12 +3,10 @@ options indenting = 4
 
 require dastest/testing_boost
 require strudel/strudel
-require strudel/strudel_synth
 require strudel/strudel_scheduler
 require strudel/strudel_event
 require strudel/strudel_pattern
 require strudel/strudel_samples
-require math
 
 [test]
 def test_hrtf_setters_engage_active(t : T?) {
@@ -104,7 +102,7 @@ def test_hrtf_pattern_modulated(t : T?) {
             t |> success(v.hrtf_active, "every voice with pattern-valued hrtf_azimuth must be HRTF-active")
             any_voice = true
         }
-        t |> success(any_voice || length(sched.osc_voices) == 0, "ok — voices may have all completed by end of tick")
+        t |> success(any_voice || empty(sched.osc_voices), "ok — voices may have all completed by end of tick")
     }
 }
 

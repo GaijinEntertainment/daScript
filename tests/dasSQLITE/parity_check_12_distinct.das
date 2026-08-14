@@ -66,8 +66,8 @@ def string_arrays_eq(a : array<string>; b : array<string>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (ea, eb in a, b) {
+        if (ea != eb) {
             return false
         }
     }
@@ -78,8 +78,8 @@ def pair_arrays_eq(a : array<tuple<int; int>>; b : array<tuple<int; int>>) : boo
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i]._0 != b[i]._0 || a[i]._1 != b[i]._1) {
+    for (ea, eb in a, b) {
+        if (ea._0 != eb._0 || ea._1 != eb._1) {
             return false
         }
     }

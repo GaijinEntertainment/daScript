@@ -180,14 +180,14 @@ def test_stream_archive_variant(t : T?) {
             var last_ptr = 0ul
             s |> gather_archive() $(var c : CmdVariant) {
                 if (c is play) {
-                    plays += 1
+                    plays ++
                 } elif (c is stop) {
-                    stops += 1
+                    stops ++
                 } elif (c is handle) {
-                    handles += 1
+                    handles ++
                     last_ptr = (c as handle).ptr
                 } elif (c is shutdown) {
-                    shutdowns += 1
+                    shutdowns ++
                 }
             }
             t |> equal(1, plays)

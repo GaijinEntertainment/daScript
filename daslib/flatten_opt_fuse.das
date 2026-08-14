@@ -113,8 +113,8 @@ def private match_mad(var that : ExprOp2?; var ma, mb, mc : ExpressionPtr&) : bo
 // and `*-1` fold arms. Shared by fuser AND residual.
 def private match_neg_add(var that : ExprOp2?; var pos, neg : ExpressionPtr&) : bool {
     if (that == null || !is_mad_elem(expr_bt(that))) return false
-    return (qmatch(that, -$e(neg) + $e(pos)).matched ||    // nolint:STYLE016 (qmatch macro expansion)
-        qmatch(that, $e(pos) + -$e(neg)).matched)           // nolint:STYLE016 (qmatch macro expansion)
+    return (qmatch(that, -$e(neg) + $e(pos)).matched ||
+        qmatch(that, $e(pos) + -$e(neg)).matched)
 }
 
 // `mad(b - a, t, a)` → `lerp(a, b, t)`: the re-packed expansion shape, `a` matched by
@@ -124,8 +124,8 @@ def private match_lerp(var cll : ExprCall?; var la, lb, lt : ExpressionPtr&) : b
     if (cll == null) return false
     var da, db, aa, tt : ExpressionPtr
     if (!qmatch(cll, mad($e(db) - $e(da), $e(tt), $e(aa))).matched &&     // nolint:STYLE016 (qmatch macro expansion)
-        !qmatch(cll, mad(-$e(da) + $e(db), $e(tt), $e(aa))).matched &&    // nolint:STYLE016 (qmatch macro expansion)
-        !qmatch(cll, mad($e(db) + -$e(da), $e(tt), $e(aa))).matched) return false  // nolint:STYLE016 (qmatch macro expansion)
+        !qmatch(cll, mad(-$e(da) + $e(db), $e(tt), $e(aa))).matched &&
+        !qmatch(cll, mad($e(db) + -$e(da), $e(tt), $e(aa))).matched) return false
     if (describe(da) != describe(aa) ||
         !lerp_shape(expr_bt(da), expr_bt(db), expr_bt(tt))) return false
     la = aa
@@ -414,7 +414,7 @@ def private dot_term_lane(var e : ExpressionPtr; var baseKey : string&; var base
         return true
     }
     var l, r : ExpressionPtr
-    if (!qmatch(e, $e(l) * $e(r)).matched) return false    // nolint:STYLE016 (qmatch macro expansion)
+    if (!qmatch(e, $e(l) * $e(r)).matched) return false
     var c = 0.0
     if (scalar_float_const(r, c) && component_read_of(l, baseKey, base, comp)) {
         lane = lane_index(comp)
@@ -634,7 +634,7 @@ class private LerpFuseVisitor : AstVisitor {
 }
 
 // A horizontal-reduce lane that no better fuser already claims: a plain scalar `s` (weight 1) OR a const-weighted scalar `s*c` / `c*s` (weight c). `s` must not be const, a runtime*runtime product (left for mad), or a fuse-pass output call (`mad`/`dot`/`lerp`/`hadd` — already optimally fused, and re-claiming one across re-infer rounds would make the pass non-idempotent). A group of these packs into `hadd(floatN(s))` when all weights are 1, else `dot(floatN(s), floatN(weights))` — the weighted reduction beats the mad-chain at width>=3 (combine + dot = 2 nodes vs the N-node mad-chain). The fuser packs groups of width >=3 by default (width-2 is +1 node on a node-graph backend — pure combine overhead — so a bare pair stays scalar; `options _flatten_hadd_pack_pairs = true` lowers the floor to 2 for a SIMD CPU backend). `stripped` = the term carried a `*const`, so its scalar must be cloned (the `*` wrapper drops). The residual oracle counts the same predicate, so it mirrors the fuser exactly.
-def private reduce_lane(var t : ReTerm; var s : ExpressionPtr&; var w : float&; var stripped : bool&) : bool {   // nolint:LINT014 — `var t` is needed for NON-CONST field access (t.e feeds is_all_const / scalar_float_const), not to write t
+def private reduce_lane(var t : ReTerm; var s : ExpressionPtr&; var w : float&; var stripped : bool&) : bool {
     if (t.neg) return false
     var e = t.e
     w = 1.0

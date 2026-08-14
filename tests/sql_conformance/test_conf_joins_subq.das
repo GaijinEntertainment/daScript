@@ -37,7 +37,7 @@ def private seed(db) {
 }
 
 [test]
-def test_conf_join(t : T?) {
+def test_conf_join(t : T?) {   // nolint:STYLE038 flat list of independent join-contract arms
     t |> run("inner _join matches pairs") @(t : T?) {
         with_conf_db() $(db) {
             seed(db)

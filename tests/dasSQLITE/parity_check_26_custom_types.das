@@ -111,8 +111,8 @@ def bytes_eq(a : array<uint8>; b : array<uint8>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (ea, eb in a, b) {
+        if (ea != eb) {
             return false
         }
     }
@@ -131,8 +131,8 @@ def orders_eq(a : array<Order>; b : array<Order>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!order_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!order_eq(ea, eb)) {
             return false
         }
     }
@@ -159,8 +159,8 @@ def events_eq(a : array<Event>; b : array<Event>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!event_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!event_eq(ea, eb)) {
             return false
         }
     }

@@ -26,7 +26,7 @@ def addAll(var a : int?; count : int) {
 
 def ptrAdd(var a : int?; count : int) {
     var c = 0
-    for (i in range(count)) {
+    for (_i in range(count)) {
         c += *a
         unsafe {
             ++ a

@@ -31,9 +31,7 @@ def stepfn {
 }
 
 def private stepfn_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(stepfn_spv)
-    return <- w
+    return clone_to_move(stepfn_spv)
 }
 
 def private has_ext(words : array<uint>; op : GLSLstd450) : bool {

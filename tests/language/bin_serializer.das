@@ -8,11 +8,7 @@ struct Bar {
 }
 
 def make_10 {
-    var a : array<float>
-    for (i in range(10)) {
-        a |> push(float(i))
-    }
-    return <- a
+    return <- [for (i in range(10)); float(i)]
 }
 
 [safe_when_uninitialized]
@@ -28,7 +24,7 @@ struct Foo {
 def test_bin_serializer(t : T?) {
     let f0 <- Foo()
     var f1 : Foo
-    binary_save(f0) <| $(data) {
+    binary_save(f0) $(data) {
         binary_load(f1, data)
         t |> equal(f1.data_bool, true)
         t |> equal(f1.data_int, 1)

@@ -890,6 +890,8 @@ class PerfLintVisitor : AstVisitor {
         // PERF024: reset per-function candidate set.
         perf024_candidates |> clear
         perf024_skip_iptr = 0ul
+        // PERF030: release credit is per-function - another function's delete may run later or never
+        perf030_released |> clear
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {

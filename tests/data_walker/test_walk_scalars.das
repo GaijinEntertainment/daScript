@@ -11,7 +11,7 @@ require dw_common
 
 
 [test]
-def test_walk_int(t : T?) {
+def test_walk_int(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("int") @(t : T?) {
         var walker = new LogWalker()
         var x = 42

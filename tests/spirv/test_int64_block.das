@@ -39,7 +39,7 @@ def public int64_block_words : array<uint> {
 def test_int64_block(t : T?) {
     t |> run("int64/uint64 UBO members lower (Int64 cap + OpTypeInt 64), spirv-val clean") <| @(t : T?) {
         var words <- clone_to_move(int64_block_spv)
-        t |> success(length(words) > 0, "shader with int64/uint64 UBO members lowers")
+        t |> success(!empty(words), "shader with int64/uint64 UBO members lowers")
         t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.Int64)),
             "Int64 capability declared")
         t |> success(op_has_operand_at(words, SpvOp.TypeInt, 1, 64u),

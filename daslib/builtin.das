@@ -1080,7 +1080,7 @@ def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #, valu
 def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : void {
     //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
     if (!key_exists(tab, key)) {
-        var val : valT -const
+        let val : valT -const
         insert(tab, key, val)
     }
 }

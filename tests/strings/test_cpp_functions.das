@@ -115,7 +115,7 @@ def test_safe_unescape(t : T?) {
     t |> run("invalid escape kept safe") @@(t : T?) {
         // safe_unescape should handle invalid escapes without crashing
         let result = safe_unescape("\\z")
-        t |> success(length(result) > 0)
+        t |> success(!empty(result))
     }
 
     t |> run("empty string") @@(t : T?) {
@@ -181,19 +181,19 @@ def test_to_upper(t : T?) {
 [test]
 def test_character_at(t : T?) {
     t |> run("basic character_at") @@(t : T?) {
-        t |> equal(character_at("hello", 0), 'h')
-        t |> equal(character_at("hello", 1), 'e')
-        t |> equal(character_at("hello", 4), 'o')
+        t |> equal(character_at("hello", 0), 'h') // nolint:PERF003 character_at is the subject
+        t |> equal(character_at("hello", 1), 'e') // nolint:PERF003 character_at is the subject
+        t |> equal(character_at("hello", 4), 'o') // nolint:PERF003 character_at is the subject
     }
 
     t |> run("digits") @@(t : T?) {
-        t |> equal(character_at("012", 0), '0')
-        t |> equal(character_at("012", 2), '2')
+        t |> equal(character_at("012", 0), '0') // nolint:PERF003 character_at is the subject
+        t |> equal(character_at("012", 2), '2') // nolint:PERF003 character_at is the subject
     }
 
     t |> run("special chars") @@(t : T?) {
-        t |> equal(character_at("\t\n", 0), '\t')
-        t |> equal(character_at("\t\n", 1), '\n')
+        t |> equal(character_at("\t\n", 0), '\t') // nolint:PERF003 character_at is the subject
+        t |> equal(character_at("\t\n", 1), '\n') // nolint:PERF003 character_at is the subject
     }
 }
 

@@ -9,7 +9,6 @@ options no_coverage
 
 require dastest/testing_boost public
 require daslib/archive
-require strings
 require math
 
 struct Player {
@@ -99,9 +98,7 @@ def test_array_round_trip(t : T?) {
 [test]
 def test_table_round_trip(t : T?) {
     t |> run("string-int table") @(t : T?) {
-        var tab : table<string; int>
-        tab |> insert("a", 1)
-        tab |> insert("b", 2)
+        var tab <- {"a" => 1, "b" => 2}
         var buf <- mem_archive_save(tab)
         var loaded : table<string; int>
         mem_archive_load(buf, loaded)
@@ -157,7 +154,7 @@ def test_custom_serialize(t : T?) {
         var writer = new MemSerializer()
         var warch = Archive(reading = false, stream = writer)
         warch |> serialize(c)
-        var data <- writer->extractData()
+        let data <- writer->extractData()
         // 3 bytes, not 12 (3 floats × 4)
         t |> equal(length(data), 3)
         // r=1.0 -> 255, g=0.5 -> 127, b=0.0 -> 0

@@ -118,7 +118,7 @@ def test_channel_for_each_clone(t : T?) {
         with_channel() $(ch) {
             var count = 0
             ch |> for_each_clone() $(val : IntVal#) {
-                count += 1
+                count ++
             }
             t |> equal(0, count)
         }
@@ -204,7 +204,7 @@ def test_channel_each_clone_iterator(t : T?) {
             ch |> push_clone(IntVal(v = 100))
             ch |> push_clone(IntVal(v = 200))
             ch |> push_clone(IntVal(v = 300))
-            var results : array<int>
+            var results : array<int>   // nolint:STYLE027 each_clone yields a temporary (#); the comprehension form needs unsafe
             for (val in each_clone(ch, type<IntVal>)) {
                 results |> push(val.v)
             }

@@ -102,7 +102,7 @@ def test_reserved_and_small_resizes_pass(t : T?) {
         src.samples |> reserve(200000)
         src.samples |> resize(200000)
         var dst : BigPayload
-        binary_save(src) <| $(data) {
+        binary_save(src) $(data) {
             binary_load(dst, data)
         }
         t |> equal(length(dst.samples), 200000)

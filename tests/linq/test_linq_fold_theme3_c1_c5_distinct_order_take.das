@@ -193,9 +193,9 @@ def test_c1_parity_handwritten(t : T?) {
             |> to_array())
         let hand <- c1_handwritten(items)
         tt |> equal(length(spliced), length(hand))
-        for (i in range(length(spliced))) {
-            tt |> equal(spliced[i].user, hand[i].user)
-            tt |> equal(spliced[i].ts, hand[i].ts)
+        for (s, h in spliced, hand) {
+            tt |> equal(s.user, h.user)
+            tt |> equal(s.ts, h.ts)
         }
     }
 }

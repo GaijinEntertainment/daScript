@@ -37,7 +37,7 @@ def team_once_round(t : T?; nj, total : int) {
     var pr = unsafe(addr(hits[0]))
     team_parallel_for(0, total, nj) <| @(job_begin : int; job_end : int) {
         for (i in range(job_begin, job_end)) {
-            unsafe(pr[i]) += 1
+            unsafe(pr[i]) ++
         }
     }
     var bad = 0
@@ -86,17 +86,17 @@ def team_epoch_storm(t : T?; rounds : int) {
         }
         team_parallel_for(0, halfK, halfK) <| @(b : int; e : int) {
             for (i in range(b, e)) {
-                unsafe(pr[i]) += 1
+                unsafe(pr[i]) ++
             }
         }
         team_parallel_for(0, lanes, lanes) <| @(b : int; e : int) {
             for (i in range(b, e)) {
-                unsafe(pr[i]) += 1
+                unsafe(pr[i]) ++
             }
         }
         team_parallel_for(0, bigK, bigK) <| @(b : int; e : int) {
             for (i in range(b, e)) {
-                unsafe(pr[i]) += 1
+                unsafe(pr[i]) ++
             }
         }
         var bad = 0
@@ -119,7 +119,7 @@ def team_early_return_round(t : T?; nj, total : int) {
     var pr = unsafe(addr(hits[0]))
     team_parallel_for(0, total, nj) <| @(job_begin : int; job_end : int) {
         for (i in range(job_begin, job_end)) {
-            unsafe(pr[i]) += 1
+            unsafe(pr[i]) ++
         }
         return                              // explicit early return out of the chunk lambda
     }
@@ -146,7 +146,7 @@ def team_stages_round(t : T?; wide : int) {
     var pr = unsafe(addr(hits[0]))
     team_parallel_stages([int3(0, n0, 4), int3(n0, n0 + n1, wide), int3(n0 + n1, total, 2)]) <| @(stage : int; b : int; e : int) {
         for (i in range(b, e)) {
-            unsafe(pr[i]) += 1
+            unsafe(pr[i]) ++
         }
     }
     team_sum_round(t, 2, 8)
@@ -187,7 +187,7 @@ def team_indexed_round(t : T?; nj, total : int) {
     team_parallel_for_indexed(0, total, nj) <| @(slot : int; job_begin : int; job_end : int) {
         let cell = (slot >= 0 && slot < nslots) ? slot : nslots
         for (i in range(job_begin, job_end)) {
-            unsafe(pr[i]) += 1
+            unsafe(pr[i]) ++
             unsafe(pa[cell]) += i * 3 + 1
         }
     }
@@ -214,9 +214,9 @@ def team_indexed_single_invoke_round(t : T?; nj, total : int) {
     stats |> resize(3)
     var ps = unsafe(addr(stats[0]))
     team_parallel_for_indexed(0, total, nj) <| @(slot : int; job_begin : int; job_end : int) {
-        unsafe(ps[0]) += 1
+        unsafe(ps[0]) ++
         if (slot != 0) {
-            unsafe(ps[1]) += 1
+            unsafe(ps[1]) ++
         }
         for (i in range(job_begin, job_end)) {
             unsafe(ps[2]) += i
@@ -239,7 +239,7 @@ def team_indexed_storm(t : T?; rounds : int) {
 }
 
 [test]
-def test_jobque_team(t : T?) {
+def test_jobque_team(t : T?) {   // nolint:STYLE038 flat list of arms sharing one with_job_que scope
     with_job_que() {
         t |> run("mode off - inline fallback") @(t : T?) {
             team_sum_round(t, 4, 16)

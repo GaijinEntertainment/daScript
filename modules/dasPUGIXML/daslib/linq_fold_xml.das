@@ -271,7 +271,6 @@ class XmlAdapter : SourceAdapter {
         }
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }

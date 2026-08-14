@@ -47,7 +47,7 @@ def main() {
     let sin = fstdin()
     let sout = fstdout()
     while (!feof(sin)) {
-        let chunk = fgets(sin) // nolint:PERF003
+        let chunk = fgets(sin)
         let len = length(chunk)
         if (len == 0) break
         var line = chunk

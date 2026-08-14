@@ -15,7 +15,7 @@ require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_ttf
 require live/glfw_live
-require live/opengl_live  // nolint:STYLE030 — side-effect require: registers the screenshot/record live commands
+require live/opengl_live
 require live/live_commands
 require live/live_api
 require live_host
@@ -446,10 +446,10 @@ def create_gl_objects() {
     glGenBuffers(1, safe_addr(g_ebo))
     create_ttf_objects()
     delete g_font
-    g_font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])  // nolint:PERF030 - deleted on the line above; the check cannot see a struct delete
+    g_font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])
     if (!!empty(g_font.bitmap.bytes)) {
         delete g_font
-        g_font <- load_ttf("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])  // nolint:PERF030 - deleted on the line above; the check cannot see a struct delete
+        g_font <- load_ttf("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])
     }
     if (!empty(g_font.bitmap.bytes)) {
         upload_font_texture(g_font)

@@ -59,8 +59,8 @@ def int_arrays_eq(a : array<int>; b : array<int>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (ea, eb in a, b) {
+        if (ea != eb) {
             return false
         }
     }

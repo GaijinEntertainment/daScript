@@ -222,7 +222,7 @@ def test_pre_inc(t : T?; a : auto(TT)) {
     if (a != a) {
         return
     }
-    t |> strictEqual(a + TT(1), pre_inc_jit(a), "return ++ a")  // nolint:PERF020 generic -- cast redundant for TT=int, needed for other TT
+    t |> strictEqual(a + TT(1), pre_inc_jit(a), "return ++ a")  // the cast is redundant for TT=int, needed for other TT
 }
 
 def test_pre_dec(t : T?; a : auto(TT)) {
@@ -230,7 +230,7 @@ def test_pre_dec(t : T?; a : auto(TT)) {
     if (a != a) {
         return
     }
-    t |> strictEqual(a - TT(1), pre_dec_jit(a), "return -- a")  // nolint:PERF020 generic -- cast redundant for TT=int, needed for other TT
+    t |> strictEqual(a - TT(1), pre_dec_jit(a), "return -- a")  // the cast is redundant for TT=int, needed for other TT
 }
 
 def neg_jit(a) {
