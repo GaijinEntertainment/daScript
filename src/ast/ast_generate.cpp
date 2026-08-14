@@ -1423,8 +1423,10 @@ namespace das {
         auto cast = new ExprCast(at, new ExprVar(at, pVarName), ptrT);
         cast->reinterpret = true;
         cast->alwaysSafe = true;
+        cast->generated = true;
         auto deref = new ExprPtr2Ref(at, cast);
         deref->alwaysSafe = true;
+        deref->generated = true;
         return deref;
     }
 
@@ -1625,6 +1627,7 @@ namespace das {
             auto vit0 = new ExprVar(expr->at, srcVarName);
             auto adri = new ExprRef2Ptr(expr->at, vit0);
             adri->alwaysSafe = true;
+            adri->generated = true;
             auto pvoid = new TypeDecl(Type::tPointer);
             pvoid->at = expr->at;
             pvoid->firstType = new TypeDecl(Type::tVoid);
@@ -1632,6 +1635,7 @@ namespace das {
             auto rein = new ExprCast(expr->at, adri, pvoid);
             rein->reinterpret = true;
             rein->alwaysSafe = true;
+            rein->generated = true;
             auto veqt = new ExprLet();
             veqt->at = expr->at;
             veqt->atInit = expr->at;
