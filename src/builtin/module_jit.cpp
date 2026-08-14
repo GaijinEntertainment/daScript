@@ -862,6 +862,12 @@ extern "C" {
     void *das_get_jit_table_lock() { return (void *)&builtin_table_lock; }
     void *das_get_jit_table_unlock() { return (void *)&builtin_table_unlock; }
     void *das_get_jit_array_resize() { return (void *)&builtin_array_resize; }
+    // Field offsets the JIT emitter needs to inline what jit_call_or_fastcall does. Exported
+    // rather than assumed: a hardcoded offset in the emitter is a silent miscompile when the
+    // struct changes, while a stale accessor is a link error.
+    uint32_t das_get_jit_simfunction_jit_offset() { return uint32_t(offsetof(SimFunction, jitFunction)); }
+    uint32_t das_get_jit_context_stopflags_offset() { return uint32_t(offsetof(Context, stopFlags)); }
+
     void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
@@ -1615,6 +1621,10 @@ extern "C" {
                 SideEffects::none, "das_get_context_shared_size");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
                 SideEffects::none, "das_get_jit_str_cmp");
+            addExtern<DAS_BIND_FUN(das_get_jit_simfunction_jit_offset)>(*this, lib, "get_jit_simfunction_jit_offset",
+                SideEffects::none, "das_get_jit_simfunction_jit_offset");
+            addExtern<DAS_BIND_FUN(das_get_jit_context_stopflags_offset)>(*this, lib, "get_jit_context_stopflags_offset",
+                SideEffects::none, "das_get_jit_context_stopflags_offset");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
                 SideEffects::none, "das_get_jit_str_cat");
             addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",

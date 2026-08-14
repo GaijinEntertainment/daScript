@@ -42,6 +42,8 @@ namespace das {
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at );
+    uint32_t das_get_jit_simfunction_jit_offset ();
+    uint32_t das_get_jit_context_stopflags_offset ();
     void * das_get_jit_str_cmp ();
     void * das_get_jit_str_cat ();
     void * das_get_jit_ast_typedecl ();

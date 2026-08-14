@@ -5318,6 +5318,32 @@ class public LlvmJitVisitor : AstVisitor {
         return true
     }
 
+    // jit_call_or_fastcall's jitted-callee case, emitted in place: load SimFunction::jitFunction,
+    // call it, clear Context::stopFlags. Saves a PLT hop and the dispatcher frame per indirect
+    // call; the helper stays as the else-branch for interpreted / fastcall callees.
+    def build_call_or_fastcall(simfunc, args : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var slot = LLVMBuildGEP2(g_builder, types.t_int8,
+            LLVMBuildPointerCast(g_builder, simfunc, LLVMPointerType(types.t_int8, 0u), ""),
+            types.ConstI32(uint64(g_simfunction_jit_offset)), "simfn.jitp")
+        var jitfn = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), slot, "simfn.jitfn")
+        var direct = LLVMBuildIsNotNull(g_builder, jitfn, "simfn.jitted")
+        var res = build_select(direct, types.LLVMFloat4Type()) {
+            var r = LLVMBuildCall2(g_builder, g_t_jit_function, jitfn,
+                fixed_array(get_context_param(), args, LLVMConstPointerNull(types.LLVMVoidPtrType())), "")
+            var sfp = LLVMBuildGEP2(g_builder, types.t_int8,
+                LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), ""),
+                types.ConstI32(uint64(g_context_stopflags_offset)), "ctx.stopflagsp")
+            LLVMBuildStore(g_builder, LLVMConstInt(types.t_int32, 0ul, 0), sfp)
+            return r
+        }
+        lpipe() {
+            return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_OR_FASTCALL],
+                LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL),
+                fixed_array(simfunc, args, get_context_param()), "")
+        }
+        return res
+    }
+
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
         var cmresEval : LLVMOpaqueValue?
@@ -5367,9 +5393,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5391,9 +5421,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5418,9 +5452,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
