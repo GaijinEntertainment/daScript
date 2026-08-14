@@ -26,6 +26,13 @@ gate; a test that silently vanishes on one platform is a defect.
 **A test loading a model over 6 GiB sits behind `model_available`**, run only under
 `DASLLAMA_PARITY_FULL=1`: a final pre-PR gate, not the iteration loop. Check what a test loads first.
 
+**A vision oracle artifact is fetched or minted by a recorded command, never produced ad hoc.** Real
+image fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated;
+reference dumps live beside them in the oracle directory, each recording the exact `llama-mtmd-debug`
+/ `llama-mtmd-cli` invocation that minted it, so regeneration is a command, not archaeology.
+Procedural fixtures and their distilled expectations live in-repo and run model-free; a model-gated
+vision test skips-as-PASS explicitly.
+
 **Every function whose signature or body changed — new, moved, extracted, or rewritten — ships a
 test for the bit itself** (a signature widening with an unchanged body counts: the new receivers are
 the new bit) — feed the function, check the bytes; "the model still
