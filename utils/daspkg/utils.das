@@ -7,6 +7,8 @@ module utils shared public
 require daslib/fio
 require strings
 
+let COPY_WINDOW_BYTES = 1024 * 1024
+
 // ── Logging ──────────────────────────────────────────────────────────
 
 var log_file_path : string
@@ -365,11 +367,51 @@ def gitignore_remove(root, pattern : string) {
     }
 }
 
+// a package is its files, not its history: copying .git costs more than the whole
+// rest of the tree and installs nothing anyone requires
+def private is_package_content(name : string) : bool {
+    return name != "." && name != ".." && name != ".git"
+}
+
+// streamed through a fixed window: sizing a buffer by the file costs that file in
+// memory, and panics outright on one past max_unreserved_size
+def private copy_file_bytes(src, dst : string) : bool {
+    var ok = true
+    fopen(src, "rb") $(fin) {
+        if (fin == null) {
+            ok = false
+            return
+        }
+        fopen(dst, "wb") $(fout) {
+            if (fout == null) {
+                ok = false
+                return
+            }
+            var buf : array<uint8>
+            buf |> resize(COPY_WINDOW_BYTES)
+            while (true) {
+                let n = fread(fin, buf)
+                break if (n <= 0)
+                if (n < length(buf)) {
+                    buf |> resize(n)
+                }
+                if (fwrite(fout, buf) != length(buf)) {
+                    ok = false
+                    break
+                }
+                break if (n < COPY_WINDOW_BYTES)
+            }
+            delete buf
+        }
+    }
+    return ok
+}
+
 def copy_dir_rec(src, dst : string) : bool {
     mkdir(dst)
     var ok = true
     dir(src) $(name) {
-        if (name == "." || name == "..") return
+        return if (!is_package_content(name))
         let src_child = "{src}/{name}"
         let dst_child = "{dst}/{name}"
         let st = stat(src_child)
@@ -378,32 +420,8 @@ def copy_dir_rec(src, dst : string) : bool {
                 ok = false
             }
         } elif (st.is_reg) {
-            fopen(src_child, "rb") $(fin) {
-                if (fin != null) {
-                    let fs = fstat(fin)
-                    let sz = int(fs.size)
-                    if (sz == 0) {
-                        // empty file — just create it
-                        fopen(dst_child, "wb") $(fout) {
-                            if (fout == null) {
-                                ok = false
-                            }
-                        }
-                    } else {
-                        var buf : array<uint8>
-                        buf |> resize(sz)
-                        fread(fin, buf)
-                        fopen(dst_child, "wb") $(fout) {
-                            if (fout != null) {
-                                fwrite(fout, buf)
-                            } else {
-                                ok = false
-                            }
-                        }
-                    }
-                } else {
-                    ok = false
-                }
+            if (!copy_file_bytes(src_child, dst_child)) {
+                ok = false
             }
         }
     }
