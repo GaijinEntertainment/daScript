@@ -328,7 +328,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     t.mm2_b_off = tq_keep(nf, cblob, of, t.mm2_b_off, t.proj_dim)
     verify(og == qtotal)
     delete cblob
-    cblob <- nf   // nolint:PERF030 — the full blob is released on the line above
+    cblob <- nf
     t.cq8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the dense Q8_0 planes as-is

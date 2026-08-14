@@ -1144,7 +1144,7 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     }
     verify(og == qtotal)
     delete fblob
-    fblob <- nf   // nolint:PERF030 — the full blob is released on the line above
+    fblob <- nf
     t.q8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the dense Q8_0 planes as-is

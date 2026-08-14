@@ -429,6 +429,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
             _builtin_read(f, addr(sz), typeinfo sizeof(sz))
         }
         var data : array<uint8>
+        data |> reserve(int64(sz))   // the blob size is known: exact reserve, and the resize never grows
         data |> resize(int64(sz))
         fread(f, data)
         log::info("Deserializing {count:d} programs from {in_file}")
@@ -464,7 +465,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
 }
 
 [export]
-def main() : int {  // nolint:STYLE037 - CLI dispatch, one arm per mode
+def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so the
     // user can place either flag before or after the "--" separator.
     log::init_log()
