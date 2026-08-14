@@ -13,12 +13,19 @@ what it costs today and what the fix would change.
 ## Entries
 
 - **gemma4uv vision embedder: no quantized lane; the dlim rail is owed anyway (measured
-  2026-08-14, M1, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
-  projection, 3840×3840 output projection). Measured, 5 reps, cv ≈ 0: **54 ms at 130 soft
-  tokens** (a 640×480 photo) and **118 ms at 280** — the token ceiling the geometry can
-  produce, so 118 ms is the worst case any image can cost. Load is **29–37 ms** for the
-  190 MB blob. **A quantized plane pair is DECLINED:** it trades accuracy for ~2× on a path
-  already 1.4% of the 8.7 s time-to-first-token an image turn pays end to end. **The `.dlim`
+  2026-08-14, M1 Max, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
+  projection, 3840×3840 output projection). In a product-shaped turn — gemma-4-12B Q4_K_M
+  served q8 off the image rail, a 640×480 photo → 130 soft tokens — the whole image side
+  (geometry + letterbox + encode) costs **59 ms** against an **8.7 s** time-to-first-token
+  and 14 t/s decode: **0.7% of the turn**. Encode alone is ~54 ms at 130 tokens and ~118 ms
+  at 280, the ceiling the geometry can produce, so ~118 ms bounds what any image can cost.
+  Load is 29–37 ms for the 190 MB blob. **A quantized plane pair is DECLINED:** a second
+  plane format cannot be worth it against 0.7%.
+  ⚠ **Measurement provenance, because the first pass got it wrong twice:** the original
+  numbers came from a one-off script that (1) took `load_model_`'s `QuantMode.fp32` default,
+  dequantizing a K-quant 12B and reading 2 t/s instead of 14 — a 7× error — and (2) skipped
+  `tune_gate()`, worth a further ~9%. Both defaults are stated automatically by the profiling
+  rig, which is why model-level timing belongs there and not in a bench somebody writes. **The `.dlim`
   rail is NOT declined, and the timing above is the wrong instrument for it** — the rail is an
   ownership question, not a speed one. Every other model artifact loads mapped, with no
   allocation and no processing at load; the embedder's `blob : array<float>` is the second,

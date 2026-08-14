@@ -199,9 +199,12 @@ invariant — a transposed patch grid is only visible per-token).
   piece: file picker + paste → data URI → the content-parts array the API already takes. A
   route nobody can try is a feature nobody sees, and the page half is small next to the
   route half.
-- **G. Embedder planes** (measured 2026-08-14; dlim rail STILL OWED): 54 ms @ 130 tok,
-  118 ms @ 280 (the geometry's ceiling), 29 ms load. No quantized lane — that call is about
-  accuracy on a 118 ms path, and it stands. **The dlim rail is NOT declined**: the first
+- **G. Embedder planes** (re-measured 2026-08-14 at product shape; dlim rail STILL OWED):
+  the whole image side is **59 ms of an 8.7 s turn — 0.7%** (M1 Max, 12B Q4_K_M served q8 off
+  the image rail, 640×480 → 130 soft tokens, 14 t/s decode). Encode alone ~54 ms @ 130 tok,
+  ~118 ms @ 280 (the geometry's ceiling), 29 ms load. No quantized lane: a second plane
+  format cannot be worth 0.7%. Metal is deliberately NOT measured here — it gets measured
+  when GPU multimodal prefill is actually the work. **The dlim rail is NOT declined**: the first
   reading applied a milliseconds test to an architecture question. The rail is how every
   other model artifact loads — mapped planes, no allocation and no processing at load — and
   `dasllama_audio.das` states the doctrine outright ("a served tower is always image-backed,
@@ -210,11 +213,26 @@ invariant — a transposed patch grid is only visible per-token).
   are shared and evictable; a 190 MB owned widening is not) and zero load-time work, not the
   30 ms. Scope: `serialize_image_meta`, plane binding (`PlaneF`), image tags, the
   `stage_*`/`mint_*` pair, `IMAGE_VERSION` → 9, an image-suite arm — the gemma4a file almost
-  line for line. **Open first: the plane FORMAT.** f32 is a single slow path, not a serving
-  format; bf16 (converted in-tile) is the likely long-term answer and profiling decides.
-  The image format pins the plane layout, so settle the format before writing the serializer.
+  line for line. **Plane format: bf16, and it costs nothing** (settled 2026-08-14 by reading
+  the math layer rather than guessing). `matmul_bf16_batch` already exists, is `[tuned]`, and
+  carries an Accelerate/AMX override slot; `dot_bf16`'s widen is an exact high-half shift, so
+  it is documented BIT-FOR-BIT identical to the fp32 expand at half the weight read — tier-1
+  gates do not move by an ulp. `bf16blob : array<uint16>` is already a Model plane (PLE) and
+  already counted into the image, so bf16 planes already ride this rail. And the mmproj is
+  ITSELF bf16 on disk: bf16 planes are the file's own bytes, so there is no conversion at
+  mint and none at load, and the blob halves 190 MB → 95 MB. Today's f32 blob widens data
+  for no reason.
 - **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
   PERF_LEDGER entry, this findings section, predictions scored.
+- **J. The image turn joins the profiling app.** Model-level image timing (ttft, prefill,
+  decode; CPU and Metal arms) becomes a cell in the documented rig
+  (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
+  sidecar resolution, noise probes and box/engine provenance. Embedder-only timing is
+  sub-model and takes the kernel A/B lab shape instead. This is not bookkeeping: slice G's
+  first numbers came from a one-off script with no tune gate, so they measured FALLBACK
+  kernels — the same image turn runs 8.7 s ttft / 14 t/s under a real sidecar and
+  24.3 s / 2 t/s without one. A measurement rig that has to be remembered is a rig that
+  produces wrong numbers.
 
 ## Predictions
 
@@ -284,7 +302,16 @@ oracle's arithmetic, not only about the port.
    in the plan and a prefill-path question in reality. What made it decidable was naming the
    three obstacles separately (types, mask, cache identity) instead of one lump — each has a
    different cost, and only the mask one is deep.
-7. **The product's shape decides the ceiling, not the benchmark's.** dasllama-server is a
+7. **A measurement states its serving format, or it measures a format nobody serves.**
+   `load_model_` / `load_model` default to `QuantMode.fp32` — the bit-exact reference mode,
+   the right default for a correctness path and a trap for a timing one. A scratch bench on
+   that default dequantized a K-quant 12B to fp32 and read 2 t/s where the product's q8
+   serving reads 14 — a 7× gap with nothing to do with the code under test. The same script
+   also skipped `tune_gate()`, and the tuned sidecar turned out to be worth only ~9% here,
+   so the obvious suspect was the wrong one: two independent defaults, very different
+   magnitudes. This is exactly why timing lives in the profiling app (slice J) — the rig
+   states quant mode and tune gate as a matter of course, and neither has to be remembered.
+8. **The product's shape decides the ceiling, not the benchmark's.** dasllama-server is a
    LOCAL server: a few users, agent tools and local apps, with its page doubling as the test
    harness and the showcase. There is no concurrent-image load to batch, so the serialized
    image path is not a stopgap on the way to a batched rail — it is very likely the final
