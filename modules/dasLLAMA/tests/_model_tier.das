@@ -73,7 +73,7 @@ def family_on(t : T?; name : string) : bool {
     return false
 }
 
-// EYEBALL RAIL (CODEREVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
+// EYEBALL RAIL (REVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
 // streams — a red (or a stale-cache green) should read as TEXT in the log, not as an id diff.
 // Decoded model text may carry raw newlines that would split a one-line log record, so every
 // eyeball string renders through the \n escape.
@@ -112,7 +112,7 @@ def model_available(t : T?; path : string) : bool {
         }
     }
     if (!parity_full_mode() && total > LARGE_TIER_BYTES) {
-        t |> skip("{base_name(path)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) — set DASLLAMA_PARITY_FULL=1 to run")
+        t |> skip("{base_name(path)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run")
         return false
     }
     return true

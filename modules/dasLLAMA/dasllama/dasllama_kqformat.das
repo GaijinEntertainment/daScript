@@ -7,7 +7,7 @@ module dasllama_kqformat shared public
 // nothing dasllama: everything format-shaped keys off it (convert reads codec strides, repack the
 // layouts, layout/common the loader walks, gemm_schema the kernel side). Int format ids exist
 // only at the IR/kernel-param boundary — cast there via kq_schema_id, never carry an int format
-// across a module seam (CODEREVIEW.md rule 11).
+// across a module seam.
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes.

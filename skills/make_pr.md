@@ -21,32 +21,34 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
-### 0a. Folder-scoped review rules — CODEREVIEW.md discovery
+**If the rebase changed any `skills/*.md`, `REVIEW_COMMON.md`, or `REVIEW.md`, re-read the changed ones before continuing** — the checklist you are executing may have just changed under you.
 
-Right after the rebase, discover folder-scoped review rules for the changed set:
-for each file in `git diff --name-only origin/master..HEAD`, walk up its parent
-directories and collect every `CODEREVIEW.md` found (deduplicated). If any turn
-up, initiate the code review with those files' rules **listed explicitly** in the
-review context — they are binding for the folders they cover, on top of the
-repo-wide checklist below. One command finds them all:
+### 0a. Folder-scoped review rules — REVIEW.md discovery
+
+Right after the rebase, discover folder-scoped review rules for the changed set —
+every `REVIEW.md` in a parent directory of a changed file is binding for the files
+under it, on top of the repo-wide checklist below. One command finds them all:
 
 ```bash
-git diff --name-only origin/master..HEAD | xargs -I{} dirname {} | sort -u \
-  | while read d; do while [ "$d" != "." ]; do [ -f "$d/CODEREVIEW.md" ] && echo "$d/CODEREVIEW.md"; d=$(dirname "$d"); done; done | sort -u
+daslang utils/review-md/main.das -- --base origin/master
 ```
 
-Worked example: `modules/dasImgui/CODEREVIEW.md` (tests placement + pre-PR suite
+(`--base` defaults to `origin/master`; explicit paths as positionals skip git.) If any
+turn up, initiate the code review with those files' rules **listed explicitly** in the
+review context.
+
+Worked example: `modules/dasImgui/REVIEW.md` (tests placement + pre-PR suite
 run + multiplatform-tests rules for anything touching that module).
 
-The audit itself is the shared `codereview-md-auditor` agent
-(`.claude/agents/codereview-md-auditor.md`) — launch ONE instance per discovered
-CODEREVIEW.md (each audits only its assigned checklist, including the checklist itself
+The audit itself is the shared `review-md-auditor` agent
+(`.claude/agents/review-md-auditor.md`) — launch ONE instance per discovered
+REVIEW.md (each audits only its assigned checklist, including the checklist itself
 under the self-review rule) and merge the reports. Registry caveat: agent definitions
 snapshot at session start, so a just-pulled or just-edited definition only exists in the
 next session.
 
 Alongside the checklist auditors, launch the **`tdd-auditor` agent**
-(`.claude/agents/tdd-auditor.md`) — ONE instance for the whole diff, CODEREVIEW.md folders
+(`.claude/agents/tdd-auditor.md`) — ONE instance for the whole diff, REVIEW.md folders
 or not. It audits the constitutional test rule (a new or changed reachable branch has a
 test that fails without it — procedure in `skills/tdd_audit.md`), runs negative
 controls where reading can't settle a branch, and runs the cheat check over the diff's own
@@ -107,9 +109,9 @@ minutes before producing a non-representative result.
 
 ## 1. Lint all changed `.das` files — **zero warnings required**
 
-**Pre-push hook:** the repo ships `.githooks/pre-push`, which blocks any `git push` whose commit's base is **more than 3 merges behind `origin/master`** (the gate catches a branch tested against a long-stale master, not the normal churn of unrelated PRs landing mid-preflight — so a base within 3 merge commits of the tip pushes fine without re-rebasing) or lacks a fresh **full-preflight token**. The token is minted only by a clean, complete full run — `daslang utils/preflight/main.das -- --full` — and is bound to the HEAD sha. One-time enable per clone: `git config core.hooksPath .githooks`. Because runners are no longer free, local preflight *is* the test rig: commit your work, run full preflight, then push (typically one batched PR). See [.githooks/README.md](../.githooks/README.md). (The lint/format commands below remain useful for debugging a single gate ahead of the full run.)
+Because runners are no longer free, local preflight *is* the test rig: commit your work, run `daslang utils/preflight/main.das -- --full`, then push (typically one batched PR). (The lint/format commands below remain useful for debugging a single gate ahead of the full run.)
 
-**The full preflight runs ONCE per PR — never a second full run.** A clean run mints the token and you push normally. If the run FAILS: fix every failure, validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the failing test slice, a scratch probe — whatever proves that fix, minutes not tens of minutes), then push with `git push --no-verify` — announced in your summary, never silent — and let CI validate the complete tip. Fix commits after the run (including the fixes for its own findings) do NOT trigger a re-run; neither do Copilot/CI fix rounds later (`skills/babysit.md`). `--no-verify` is also the documented escape for deliberate WIP pushes.
+**The full preflight runs ONCE per PR — never a second full run.** If the run FAILS: fix every failure, validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the failing test slice, a scratch probe — whatever proves that fix, minutes not tens of minutes), say so in your summary, and let CI validate the complete tip. Fix commits after the run (including the fixes for its own findings) do NOT trigger a re-run; neither do Copilot/CI fix rounds later (`skills/babysit.md`).
 
 CI's `extended_checks` job runs the same lint utility on every `.das` file changed vs `origin/master` and **exits non-zero on any warning** (`./bin/daslang ./utils/lint/main.das -- <files> --quiet` → exit code 2 on ≥1 warning). One STYLE/LINT/PERF warning anywhere in your diff fails CI. Local lint must be clean before push — there is no "minor warning, will ignore" tier here.
 
@@ -399,13 +401,73 @@ Do NOT format files you didn't change — only format files that are part of the
 
 ### CI formatter = in-tree `utils/das-fmt/dasfmt.das`
 
-CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify` — the script is **in the repo tree** and wraps the same `daslib/das_source_formatter` engine as MCP `format_file`, so the two agree (probe-verified: both rewrite `Foo(a=1)` → `Foo(a = 1)`). The pre-push hook runs the exact CI command on tracked files; if the hook passes, the CI formatter gate passes.
+CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify` — the script is **in the repo tree** and wraps the same `daslib/das_source_formatter` engine as MCP `format_file`, so the two agree (probe-verified: both rewrite `Foo(a=1)` → `Foo(a = 1)`). Preflight's format gate runs the exact CI command on tracked files; if it passes, the CI formatter gate passes.
 
 **Not the converter:** `bin/Release/gen1_to_gen2.exe` (the CMake target from `utils/dasFormatter/`) is the **v1→v2 syntax converter**, a different tool. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`); CI additionally compiles the formatter itself to `bin/das-fmt.exe` via `-exe` and re-runs the verify with it.
 
 ## 6. Create the PR
 
 Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follow the commit message conventions from the repository (see recent `git log` for style).
+
+### The PR body — two layers, one artifact
+
+A short human document on top, a machine-readable ledger folded below. Humans read the top
+and stop; AI sessions (babysit, review rounds, archaeology) also read the fold.
+
+**Top — the reviewer document.** Plain prose, no headers.
+
+- **Line 1 = consumer impact, bold, when there is any** — an ABI break, a required rebuild,
+  a behavior change. It never hides in a bullet.
+- Then the story: the problem, what changed, why this way. One paragraph per topic;
+  a normal PR is 1–3 paragraphs (~150 words), the largest arcs at most ~300.
+- End with **where to look** — the entry points and risky spots a reviewer should read first.
+- Be very concise, but never at the cost of detail: cut what changes nothing for the
+  reader, keep every load-bearing fact. Write ESL-plain: short sentences, common words,
+  no idioms, one clause per thought.
+- Never narrate machinery (agents, review rounds, gate lists). State conclusions; a
+  finding's origin is at most a tag ("negative-controlled"), not a paragraph.
+
+**Fold — the ledger.** One `<details><summary>Validation, claims, ledger</summary>` block.
+Heading names are FIXED — later sessions grep for them. Omit an empty section; never
+rename one.
+
+- `### Validation` — exceptions only; a full green run is not news (CI re-proves it on
+  the PR) and carries no line. Report (a) evidence CI cannot produce — a local-only gate
+  (full AOT sweep, external shared_module rebuild after an ABI break, a WSL/platform
+  repro), where the local run is the only proof that exists — and (b) deviations: a gate
+  deliberately skipped, a partial result, a known-red cell with its control, each with
+  its reason. Numbers appear only where a result is partial — there the numbers are the
+  content.
+- `### Claims — stated, not tested` — every UNPROVEN claim (the TDD audit's
+  state-it-in-the-PR resolution lands here): the claim, how it was verified instead,
+  and what a break would look like.
+- `### Not done` — deliberate omissions, residuals, ledgered follow-ups.
+
+Skeleton:
+
+```markdown
+**ABI break: <impact> — <who> must <do what>.**   ← only when true
+
+<problem → change → why, 1–3 paragraphs>
+
+Where to look: <entry points, risky spots>.
+
+<details>
+<summary>Validation, claims, ledger</summary>
+
+### Validation
+- …
+
+### Claims — stated, not tested
+- …
+
+### Not done
+- …
+
+</details>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
 
 **Squashed branches:** If the user asked to squash the branch (single commit), keep it squashed. Any subsequent fixes (lint, test failures, formatting, CI issues, review-comment fixes) must be amended into the existing commit (`git commit --amend --no-edit`) and force-pushed — do NOT create new commits on a squashed branch.
 
@@ -428,7 +490,9 @@ Never merge solely because CI is green. CI green + Copilot reviewed current tip 
 
 ## 7. After the PR lands — sweep the untracked goo
 
-Once the PR is merged, list what the arc left behind and delete the session debris:
+Preflight's `untracked` gate already forced the working tree clean at PR time (commit /
+delete / ignore, per file). Babysit rounds mint new debris, so once the PR is merged, list
+what the arc left behind and delete the session debris:
 
 ```bash
 git ls-files --others --exclude-standard
@@ -447,7 +511,8 @@ created it.
 | Step | Tool/Command | Fix policy |
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
-| CODEREVIEW audit | step-0a walk → one `codereview-md-auditor` per discovered checklist | Binding rules; checklist defects fixed in the same batch |
+| Untracked files | preflight `untracked` gate (`git ls-files --others --exclude-standard`) | Empty at PR time — commit, delete, or ignore each (`.gitignore` pattern / `.git/info/exclude` for box-local) |
+| REVIEW audit | step-0a walk → one `review-md-auditor` per discovered checklist | Binding rules; checklist defects fixed in the same batch |
 | TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
@@ -460,7 +525,7 @@ created it.
 | Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx html | Any daslib/src-builtin/RST change triggers all five gates — `skills/preflight.md` |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
-| PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
+| PR | GitHub MCP `create_pull_request` or `gh pr create` | Body follows the two-layer template (step 6): short reviewer prose + fixed-heading `<details>` ledger |
 | Copilot round | Reply to every comment, resolve every thread, verify unresolved = 0 | A review round is not complete until all three are done |
 | Push after PR creation | Re-request Copilot review | Mandatory after every push; latest review must target current tip |
 | Review acceptance | Require realistic reachability, scale, and impact | Reject theoretical defensive programming; prose-only round → resolve and land |

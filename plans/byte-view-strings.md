@@ -11,7 +11,7 @@ Context: sweep v1 (branch `bbatkin/perf031-sweep`, unpushed) rewrote 111 sites b
 was vetoed — the hand-rolled `bytes_substr`/`span_str`/`write_char`-loop pattern is the wrong
 answer to a missing stdlib surface. Three v1 agents independently reported the gap. What
 survives v1: the PERF031 rule-precision commit + fixture, the env-registry master-red fix,
-four negative-controlled test gates, and the CODEREVIEW wording fixes (salvaged in phase 5).
+four negative-controlled test gates, and the REVIEW wording fixes (salvaged in phase 5).
 
 ## Design rulings (Boris, 2026-08-12)
 
@@ -167,7 +167,7 @@ The ~33 externs above, one commit. Each is entry-glue over a phase-1 core — no
 ## Phase 5 — mechanical re-sweep + salvage
 
 - Fresh branch; cherry-pick from v1: env-registry fix (`4076ee11d`), rule precision + fixture
-  (`6d81e072c`), the audit round (gates + CODEREVIEW fixes). The two gates that pinned v1
+  (`6d81e072c`), the audit round (gates + REVIEW fixes). The two gates that pinned v1
   semantics (`log_summary` unterminated-line widening, `tok_read_seed`) are honored or
   consciously adjusted by the re-sweep — never silently.
 - Opus agents redo the sites FROM MASTER BASELINE (not from v1) with the recipe; same fix bar
@@ -187,9 +187,9 @@ The ~33 externs above, one commit. Each is entry-glue over a phase-1 core — no
 
 ## Phase 6 — PR mechanics
 
-`skills/make_pr.md` in full: CODEREVIEW auditors over the changed set, detect-dupe, AST
+`skills/make_pr.md` in full: REVIEW auditors over the changed set, detect-dupe, AST
 verify (macro + daslib changes), workaround audit, docs gates, one `preflight --full`,
-push, Copilot babysit loop. `.md` diffs (skills, CODEREVIEW, this plan) listed for review
+push, Copilot babysit loop. `.md` diffs (skills, REVIEW, this plan) listed for review
 before push.
 
 ## Risks

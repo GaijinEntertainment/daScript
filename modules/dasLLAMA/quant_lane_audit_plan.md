@@ -216,7 +216,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
 - Mechanical batch (response 1/2): IMAGE_VERSION 8, --kv f32 arm + probe validation,
   profiler disarm, pin-leak fix, RPE wrapper, family kv defaults f16, mtmd log-line filter
   (the capture merges stderr), rel-rms cell moved to the image suite, inscope sweep,
-  doc-truth pass; CODEREVIEW.md gains the Documentation section; followup 18 = tutorial
+  doc-truth pass; REVIEW.md gains the Documentation section; followup 18 = tutorial
   resync; CLAUDE.md comment cap reworded to match STYLE014 (rest of the lint threshold
   question = Boris's separate session).
 - **COMPACT q8 planes (response 2/2, the auditor's memory UNPROVEN -> a fix)**: the shared

@@ -52,7 +52,7 @@ utils/dasweb-verify/
 .github/workflows/nightly_playground.yml
 ```
 
-CODEREVIEW.md + README.md gain the browser-leg rows (placement rule per file; pure helpers
+REVIEW.md + README.md gain the browser-leg rows (placement rule per file; pure helpers
 get node:test coverage; the driving loop is proven by the nightly itself — mirror the
 existing "orchestration exempt" wording).
 
@@ -165,7 +165,7 @@ with the just-built binary and catches sample rot per-PR. Currently tier 1 runs 
 3. **P3 — completeness**: console/audio kinds, all 39 rows, unknown-sample fail-closed,
    drift check, wedge recovery path exercised (physarum with the old source hash is a natural
    wedge fixture if needed — or accept untested-until-it-fires).
-4. **P4 — ship**: `nightly_playground.yml`, extended_checks tier-1 step, README/CODEREVIEW
+4. **P4 — ship**: `nightly_playground.yml`, extended_checks tier-1 step, README/REVIEW
    rows, node:test for protocol.mjs, PR (one PR — this is the samples arc's follow-up).
 
 ## Traps carried from the samples arc (implementation must respect)

@@ -1,6 +1,6 @@
 ---
 name: tdd-auditor
-description: Audits a diff against the constitutional branch-test rule — every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist codereview-md-auditor, ONE instance covers the whole diff, including folders no CODEREVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. Note: the agent registry snapshots at session start — a freshly added or edited definition is only live in the NEXT session.
+description: Audits a diff against the constitutional branch-test rule — every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist review-md-auditor, ONE instance covers the whole diff, including folders no REVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. Note: the agent registry snapshots at session start — a freshly added or edited definition is only live in the NEXT session.
 model: opus
 tools: Bash, Read, Grep, Glob, Edit
 color: green
@@ -16,7 +16,7 @@ this file adds only the harness rules.
 
 The prompt names the diff (a `base..head` range or a file list). Get it with `git diff` and
 enumerate branches per the skill. You own the WHOLE diff — you are not scoped to one folder
-the way the codereview-md-auditor is. Skip generated files (regenerated parsers, generated
+the way the review-md-auditor is. Skip generated files (regenerated parsers, generated
 docs, lockfiles) and prose-only changes. Test files are exempt from branch enumeration but
 are the subject of the skill's **cheat check**: every changed expectation, weakened or
 removed assertion, deleted case, or newly added skip/exclude gets a reverse control or a

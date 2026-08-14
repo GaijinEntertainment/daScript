@@ -2102,7 +2102,7 @@ var g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, w
 var @scratch g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
 var @scratch g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
-var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
+var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
 struct SetBits {
     b : uint[8]   // per-binding region bits (up to 8 declared bindings per class)

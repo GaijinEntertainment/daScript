@@ -152,7 +152,7 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
 
 ## Cross-backend parity — the kernel-model asymmetry ledger
 
-The mirror rule (CODEREVIEW.md, both emitters) keeps the kernel model symmetric with the MSL
+The mirror rule (REVIEW.md, both emitters) keeps the kernel model symmetric with the MSL
 emitter. The ledger of deliberate/pending asymmetries is shared — ONE list, not two — and
 lives in `modules/dasMetal/MASTERPLAN.md` under the same heading.
 

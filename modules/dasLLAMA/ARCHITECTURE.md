@@ -12,10 +12,10 @@ in two of them will drift:
 |---|---|---|
 | `README.md` | users | what each file *is*, one line, plus how to run things |
 | `ARCHITECTURE.md` | me | what *belongs* in each file and why the system is shaped this way |
-| `CODEREVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
+| `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
-**References flow one way: CODEREVIEW cites ARCHITECTURE, never the reverse.** Sections here are
-numbered so they can be cited (`ARCHITECTURE §2.2`). Nothing here may cite a CODEREVIEW rule —
+**References flow one way: REVIEW cites ARCHITECTURE, never the reverse.** Sections here are
+numbered so they can be cited (`ARCHITECTURE §2.2`). Nothing here may cite a REVIEW rule —
 those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
 moment the checklist is reordered.
 
@@ -41,7 +41,7 @@ never hand-edit the tables).
   in the module that owns the concern, and the facade re-exports it.
 - **`dasllama_version.das`** — `DASLLAMA_VERSION`, the module's own release counter, and nothing
   else. Decoupled from the daslang version and from `LLVM_JIT_CODEGEN_VERSION`; ANY kernel work
-  bumps it (CODEREVIEW.md), so equal versions mean an equal kernel roster — the sidecar exchange
+  bumps it (REVIEW.md), so equal versions mean an equal kernel roster — the sidecar exchange
   keys validity on (version, box). A zero-require leaf so the tuner's noise half, the benches,
   and the facade chain (`dasllama_common` re-exports it) all reach it without weight.
 - **`dasllama_common.das`** — the engine: `Model`/`Session`/`Config`, the forward loops, the
@@ -306,7 +306,8 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`dasllama_prefix.das`** — the prefix/page cache for evaluated token history.
 - **`performance/fetch_models.das`** — the committed model-provenance manifest: per catalog
   file, the exact HF repo + revision pin + sha256, or the on-box conversion recipe. Verify by
-  default, `--fetch` downloads; it never converts, never benches. BRINGUP.md §2 is the runbook.
+  default, `--fetch` downloads; it never converts, never benches, and it touches no tune
+  state (`tune_policy(missing="fallback")`). BRINGUP.md §2 is the runbook.
 - **`performance/exchange_schema.das`** — engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
 - **`performance/exchange_client.das`** — the sidecar-exchange client: the boot-time
@@ -331,7 +332,7 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 
 ## 2. Mechanisms
 
-The "why" behind criteria that CODEREVIEW states in one line each.
+The "why" behind criteria that REVIEW states in one line each.
 
 ### 2.1 There is ONE way to load a model
 

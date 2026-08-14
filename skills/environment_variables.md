@@ -100,7 +100,7 @@ a GENERATED `ENVIRONMENT.md`, and a registry test that fails on any raw read out
 drift. The scaffolding for all three is shared — `daslib/env_registry` carries the doc renderers,
 the enforcement scanners, and the sanctioned dynamic-name readers (`env_is_set`/`env_value_of`);
 worked examples: `dasllama/dasllama_env.das` and `llvm/daslib/llvm_env.das`, each with the
-matching CODEREVIEW rule banning raw reads outside the registry.
+matching REVIEW rule banning raw reads outside the registry.
 
 On the C++ side every core read goes through an accessor declared in
 `include/daScript/misc/env_cfg.h` rather than a `getenv` at the use site. The accessor is

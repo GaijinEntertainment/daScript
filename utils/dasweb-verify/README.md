@@ -11,7 +11,7 @@ committed copies — `web/stage_playground_imgui_samples.cmake` generates them
 into the staged site tree from canonical `examples/graphics` sources. For those
 entries the verifier compiles the canonical source in its real directory
 instead, via the mapping in `verify_core.das` (kept in lockstep with the cmake
-script — see `CODEREVIEW.md`).
+script — see `REVIEW.md`).
 
 ## Run
 

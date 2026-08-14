@@ -106,8 +106,7 @@ run bash -c '. "$1/emsdk_env.sh" >/dev/null 2>&1 && cd "$2" && ./bin/daslang uti
 # worktree is mounted read-only), so it runs here, host-side, per toolchain.
 # The build command and archives MIRROR modules/dasImgui/.das_package, minus
 # liblibDasModuleClipboard.a — that one is in daspkg's own in-tree list and is
-# staged by step 3. A change to either side without the other is a defect
-# (see CODEREVIEW.md).
+# staged by step 3. REVIEW.md: "changing one side without the other is a defect".
 say "4/6  bake the dasImgui wasm archives"
 run bash -c '
     set -euo pipefail

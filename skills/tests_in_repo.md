@@ -57,6 +57,13 @@ still calls jitted workers). Beware Release-blind divergence: memory bugs (doubl
 reuse-after-collect) only trip the Debug memory_model.h assert, so a green local Release
 sweep does NOT prove a lifted skip is sound — Debug CI is the oracle.
 
+## Module-owned test homes
+
+Some modules keep their tests inside the module folder, governed by that folder's
+`REVIEW.md`: dasImgui tests live under `modules/dasImgui/tests` (never `tests/dasImgui` —
+do not create that folder), dasLLAMA's under `modules/dasLLAMA/tests` (see its
+`tests/CLAUDE.md`). When adding a test for such a module, put it in the module's own home.
+
 ## Deep-engine model tests (dasLLAMA and friends)
 
 Two hard-won rules for tests that drive a deep JIT engine chain (`forward`/`forward_prefill`/

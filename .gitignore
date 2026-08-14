@@ -8,6 +8,9 @@ benchdata.db
 *.sf2
 
 # build artifacts
+web/build_pt/
+.codex/
+.agents/
 build/
 build-ninja/
 build-track/
@@ -52,6 +55,8 @@ _smoke*.cpp
 _smoke*.o
 
 modules/dasSFML/libsfml/
+# external-module detached worktree (see CLAUDE.md "Build all of your own modules")
+modules/dasVulkan/
 # site/doc/ is the Sphinx HTML output deployed by .github/workflows/pages.yml.
 # Source for site/* (forge.css, blog/_posts/*.md, _news/*.md, etc.) IS tracked;
 # the build-time output (blog/*.html, news/*.html, files/wasm/, etc.) is
@@ -112,6 +117,7 @@ modules/.daspkg_tmp/
 modules/.daspkg_backup/
 modules/.daspkg_cache/
 modules/.daspkg.log
+**/.daspkg.log.local*
 examples/**/modules/
 utils/**/modules/
 # Exception: MCP test fixture for project_root flag (utils/mcp/test_tools.das
@@ -159,8 +165,8 @@ drum_refs/
 # Dear ImGui auto-saved window layout (written to CWD by imgui apps)
 imgui.ini
 
-# per-box kernel tuning output (dasLLAMA tune_dot harness)
-box_profile.json
+# per-box kernel tuning output (dasLLAMA tune_dot harness) + local snapshots
+box_profile*.json
 
 # per-box llvm_tune scope manifests ([tune_scope] / [tune_manifest])
 *.tune.json
@@ -170,9 +176,13 @@ box_profile.json
 _bench_*.json
 build32/dasModuleGlfw.vcxproj.filters
 modules/dasLLAMA/performance/_rig/
+# dasllama-server saves its config beside itself (main.das save_config)
+utils/dasllama-server/dasllama-server.toml
 
 # my local box runbook (machine-specific paths; not for the shared repo)
 ZEN2.md
 
 # local playground rig scratch (web/serve_playground.py)
 web/_serve/
+web/build_pt/_deps/freetype_src-build/include/freetype/config/ftoption.h
+utils/watchdog/__pycache__/watchdog.cpython-313.pyc

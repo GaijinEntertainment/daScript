@@ -39,9 +39,12 @@ some (noted), C++/JS lints are follow-up work.
 
 ## Comments
 
-**Short or absent.** 1–2 lines preferred, 3 the cap (das: STYLE014 fires at 4+)
-*(lintable)*. A comment that doesn't fit is the signal to interrogate it: why does
-this need prose at all, and does the detail belong at the use site — or nowhere?
+**Short or absent.** 1–2 lines preferred, 3 the cap — das lint STYLE014 enforces it under
+`daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
+reviewer's. It covers per-symbol and in-body comments; a file-header map (below) is exempt —
+its test is prose-vs-enumeration, not length. A comment that doesn't fit is the signal to
+interrogate it: why does this need prose at all, and does the detail belong at the use
+site — or nowhere?
 
 **No banners, no preambles.** No `// ===== name — desc =====` block above a function
 that already carries its own doc-comment, and no multi-paragraph architectural essay

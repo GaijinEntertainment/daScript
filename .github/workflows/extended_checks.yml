@@ -429,6 +429,12 @@ jobs:
         set -eux
         python3 utils/lsp/test_crosstree_guard.py
 
+    - name: "Test review-md discovery"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/review-md/test_scan.das
+
     - name: "Test dasllama-server"
       # OpenAI-compatible server conformance test. Model-gated + JIT-only, so it
       # skips cleanly here (no GGUF, no -jit) — the value is the compile guard:
@@ -445,7 +451,7 @@ jobs:
     - name: "Test env-knob registries"
       # The [EnvConfig] enforcement tests (daslib/env_registry scanners): raw-read
       # ban, declaration coverage, generated-ENVIRONMENT.md drift. Model-free,
-      # sub-second — this lane is what makes each CODEREVIEW's "the registry test
+      # sub-second — this lane is what makes each REVIEW's "the registry test
       # enforces it" sentence true.
       if: matrix.target == 'linux'
       run: |

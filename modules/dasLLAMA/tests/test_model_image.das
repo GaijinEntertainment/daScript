@@ -1119,7 +1119,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         var lang = ""
         with_job_que() {
             setup_dasllama_jobque_()
-            // decoder off-rail (CODEREVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
+            // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             var inscope enc <- load_gemma4a_encoder(mmp_path)
             var inscope s <- create_gemma4a_asr_session(dec)
@@ -1221,7 +1221,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         var lang = ""
         with_job_que() {
             setup_dasllama_jobque_()
-            // decoder off-rail (CODEREVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
+            // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
             var inscope tw <- load_qwen3a_tower(mmp_path)

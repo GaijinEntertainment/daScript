@@ -115,10 +115,10 @@ branches and tests is a real result; "tests pass" is not an audit.
 
 ## Where this runs in the daslang repo (repo-only)
 
-- The rule is constitutional: every `CODEREVIEW.md` carries it verbatim in its opening
-  (template: `skills/codereview_md.md`).
+- The rule is constitutional: every `REVIEW.md` carries it verbatim in its opening
+  (template: `skills/review_md.md`).
 - The per-PR audit is the `tdd-auditor` agent (`.claude/agents/tdd-auditor.md`), launched
-  in `skills/make_pr.md` step 0a beside the CODEREVIEW.md auditors — one instance for the
+  in `skills/make_pr.md` step 0a beside the REVIEW.md auditors — one instance for the
   whole diff, so folders with no checklist (`daslib/`, `src/`, `utils/`) are covered too.
 - Repo test placement (AOT registration, the `tests/.das_test` gate) is
   `skills/tests_in_repo.md`.

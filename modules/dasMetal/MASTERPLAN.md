@@ -261,7 +261,7 @@ Three behavioral layers + enforcement gates:
 
 ## Cross-backend parity — the kernel-model asymmetry ledger
 
-The mirror rule (CODEREVIEW.md, both emitters) records deliberate or pending kernel-model
+The mirror rule (REVIEW.md, both emitters) records deliberate or pending kernel-model
 asymmetries HERE — one ledger for both backends (dasSpirv's MASTERPLAN points at this
 section). The primary correctness oracle remains the CPU-reference run of the same das body,
 cheaper and stricter than a second GPU; cross-GPU parity of one source is a nice-to-have now

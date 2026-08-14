@@ -646,7 +646,7 @@ class UserFns {
     }
 }
 
-// Shape stays compile-time (dasLLAMA CODEREVIEW "shape is compile-time"): the per-type overload does the indexing
+// Shape stays compile-time (dasLLAMA REVIEW "shape is compile-time"): the per-type overload does the indexing
 // ITSELF, so the stride is a literal inside each instance and never crosses a call boundary as a
 // value. The array argument is the codec discriminator, not data — hence the unused annotation.
 [unused_argument(sel)]

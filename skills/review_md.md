@@ -1,56 +1,29 @@
-# CODEREVIEW.md — folder-scoped review rules
+# REVIEW.md — folder-scoped review rules
 
-Read this before creating any `CODEREVIEW.md`, editing one, or reviewing a diff that changes
-one. A `CODEREVIEW.md` is a folder-scoped review checklist: when a PR touches files under its
+Read this before creating any `REVIEW.md`, editing one, or reviewing a diff that changes
+one. A `REVIEW.md` is a folder-scoped review checklist: when a PR touches files under its
 folder, the review applies every entry (`skills/make_pr.md` step 0a discovers these after the
 master rebase — placing the file IS the registration).
 
-## The contract
+## The contract — one file, shared
 
-The opening of every CODEREVIEW.md is this block, verbatim except for the module name and
-the module's architecture document — an opening that deviates from it is a self-review
-finding, fixed like any other. It is not boilerplate — it is the mechanism that keeps
-the file short, and each file's own rules bind changes to that file too. Two of its
-paragraphs are constitutional rules duplicated by design into every checklist: the
-self-review rule, and the branch-test rule (whose audit procedure is `skills/tdd_audit.md`).
+The rules every checklist lives under — what a checklist may contain (diff-checkable
+criteria only), the self-review rule, the branch-test rule, and the Form hard limits —
+live ONCE, in `REVIEW_COMMON.md` at the repo root. A checklist does not restate them;
+its opening is this block, verbatim except for the name and the two facts it declares:
 
 ```markdown
 # <Module> Code Review Checklist
 
-Run this list on every <module> change before it ships — including changes to this file.
-
-**What stays in this document:** criteria that can be checked against a diff. Nothing else.
-A reader must be able to apply every entry below **without reading the code and without prior
-knowledge of the module.** A rule may cite `<ARCH-DOC>` for the reason behind it; it may
-not require that section to be read before the criterion can be applied. If an entry needs
-code-reading or prior knowledge, it is not a review criterion — move it to `<ARCH-DOC>`
-and leave a one-line criterion here.
-
-**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
-file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
-rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
-
-**New functionality ships with tests — same PR, no follow-up promises.** A new or changed
-reachable branch ships a test that fails without it; a diff that adds a branch no test
-distinguishes is a defect. The audit procedure — including the negative control that settles
-"would it fail?" — is `skills/tdd_audit.md`.
-
-**Form, and it is a hard limit:**
-
-- **One rule is one short paragraph.** An entry that needs more than that is describing how
-  to write code, not how to review it. Split it or move it.
-- **Rules are unnumbered.** No ordinal labels and no section numbers — numbering invites
-  citation. Anything that needs a stable reference lives in `<ARCH-DOC>`, which is numbered
-  for that purpose.
-- **Cite files by name; cite `<ARCH-DOC>` by section.** Never cite an entry in this file.
-- **Name the API a rule is about; never name an example of it.** A rule governing specific
-  functions or files must name them or it cannot be checked — that name is the criterion. An
-  illustrative aside ("the way the X family does it") has no such excuse: nothing keeps it
-  in sync with the code, and a stale example is worse than none.
-- **One sentence of WHY is allowed where it makes the criterion decidable; anything longer
-  belongs in `<ARCH-DOC>`.** No history, no PR numbers, no direction of travel; planned
-  work lives in the follow-up ledgers.
+**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+`<ARCH-DOC>`.
 ```
+
+A checklist that keeps its follow-up ledger somewhere non-obvious appends
+`` Planned work: `<ledger>`. `` to the same line. An opening that deviates from this block —
+or a checklist that restates contract text instead of pointing — is a self-review finding,
+fixed like any other. An external repo that adopts `REVIEW.md` vendors a copy of
+`REVIEW_COMMON.md` at its root, so the pointer resolves there too.
 
 `<ARCH-DOC>` is the module's own design document — `ARCHITECTURE.md` (dasLLAMA),
 `MASTERPLAN.md` (dasMetal), or the module's `CLAUDE.md` when no separate design doc exists.
@@ -60,7 +33,7 @@ grow one.
 ## Why "no numbers" is load-bearing
 
 A numbered entry gets cited — from other modules, from commit messages, from other rule
-files — and the citation outlives the numbering. (dasMetal once cited "dasLLAMA CODEREVIEW
+files — and the citation outlives the numbering. (dasMetal once cited "dasLLAMA REVIEW
 #21"; dasLLAMA's entries are unnumbered, so the citation pointed at nothing.) Cross-module
 references restate the criterion in place and cite the other module's architecture doc by
 section for the reason.
@@ -107,12 +80,12 @@ Size is a symptom, not a criterion: a file where every rule survives these class
 long as its module needs. But "a reviewer reports they can no longer follow the file" is
 itself a finding, and its fix is applying the classes above — never a table of contents.
 
-## Reviewing a CODEREVIEW.md diff
+## Reviewing a REVIEW.md diff
 
-Check the change against the file's own header: is every new entry diff-checkable in
+Check the change against `REVIEW_COMMON.md`: is every new entry diff-checkable in
 isolation? one paragraph? unnumbered? example-free? at most one sentence of WHY, and only
 where it makes the criterion decidable? Does a moved rationale actually land in the
-architecture doc, or did it just get deleted? Then apply the self-review paragraph literally
+architecture doc, or did it just get deleted? Then apply the self-review rule literally
 — an entry a reviewer cannot apply as written is itself a finding — and run the
 followability classes above over the touched sections. The canonical conforming file is
-`modules/dasLLAMA/CODEREVIEW.md`.
+`modules/dasLLAMA/REVIEW.md`.

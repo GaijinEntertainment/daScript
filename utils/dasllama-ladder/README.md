@@ -3,7 +3,7 @@
 The store (and, in later slices, the HTTP surface) behind dasllama.io: community tune
 sidecars are the product, bench-record measurements are the community bonus riding along.
 The site plan and trust model live in `plans/dasllama_io_site.md`; the checklist for every
-change here is `CODEREVIEW.md`.
+change here is `REVIEW.md`.
 
 ## 1. Layout
 
@@ -56,7 +56,7 @@ byte-identical and dedups).
 
 The service builds and runs without dasLLAMA, dasLLVM, or any model machinery — dasweb-1 has
 no GPU and no reason to compile an inference engine. `exchange_schema` carries the same rule
-on its side (`modules/dasLLAMA/CODEREVIEW.md`).
+on its side (`modules/dasLLAMA/REVIEW.md`).
 
 ## 4. Running the tests
 

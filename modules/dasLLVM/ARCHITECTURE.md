@@ -1,6 +1,6 @@
 # dasLLVM Architecture
 
-The design document `CODEREVIEW.md` cites. Numbered sections are the stable reference targets;
+The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
 
 ## 1. The jit backend pipeline

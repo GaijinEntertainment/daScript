@@ -38,6 +38,19 @@ def test_preflight_config(tt : T?) {
         t |> equal(settings.jit_max_file_time, 75.5)
     }
 
+    tt |> run("untracked_from_ls drops CR and blank lines") <| @(t : T?) {
+        var inscope files <- untracked_from_ls("a.txt\r\nb/c.txt\n")
+        t |> equal(2, length(files))
+        t |> equal("a.txt", files[0])
+        t |> equal("b/c.txt", files[1])
+
+        var inscope none <- untracked_from_ls("")
+        t |> equal(0, length(none))
+
+        var inscope blanks <- untracked_from_ls("\n\r\n   \n")
+        t |> equal(0, length(blanks))
+    }
+
     tt |> run("invalid settings fail closed to defaults") <| @(t : T?) {
         let temp = create_temp_file_result("preflight_config_bad", ".toml")
         t |> success(temp is value, "temporary config created")

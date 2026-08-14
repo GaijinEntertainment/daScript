@@ -9,12 +9,19 @@ mirror, or says honestly that there isn't one.
 **`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
 runs the fast tier (format + lint + clang frontend pass on changed C++ —
 escalating to a full src+tests-cpp sweep when a header changed; seconds);
-`-- --full` adds dasgen freshness, the CI-only-das compile sweep, the doc
-gates, ctest, the interp/JIT/AOT suites, and the sequence smoke. `--list-gates`
-shows the menu; `--only <names>` / `--skip <names>` select subsets. Gates whose
-host tool or module is missing report `SKIP` with an install/rebuild hint. The
-tables below remain the reference for what each gate mirrors and for running
-any step by hand.
+`-- --full` adds the untracked-files gate, dasgen freshness, the CI-only-das
+compile sweep, the doc gates, ctest, the interp/JIT/AOT suites, and the
+sequence smoke. `--list-gates` shows the menu; `--only <names>` /
+`--skip <names>` select subsets. Gates whose host tool or module is missing
+report `SKIP` with an install/rebuild hint. The tables below remain the
+reference for what each gate mirrors and for running any step by hand.
+
+The **untracked gate** has no CI lane to mirror — it is PR-time hygiene:
+`git ls-files --others --exclude-standard` must print nothing, so every
+leftover file forces one durable decision — commit it, delete it, or ignore it
+(a `.gitignore` pattern when every clone mints one, `.git/info/exclude` for
+box-local keeps). Session goo that would otherwise ride into a PR or linger
+for weeks fails the run instead.
 
 A complete `--full` run is Release-only and fails immediately for a Debug
 host. Debug may be used for intentional subset diagnosis with `--only` or

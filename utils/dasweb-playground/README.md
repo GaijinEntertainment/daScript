@@ -2,7 +2,7 @@
 
 The daslang.io playground backend: permanent share links (`daslang.io/s/<hash>`) over a
 content-addressed sample store. Phase 1 of `plans/dasweb_backend.md`; later phases add the
-curated-sample listing and the wasm build queue. Review rules: `CODEREVIEW.md` (binding).
+curated-sample listing and the wasm build queue. Review rules: `REVIEW.md` (binding).
 
 ## Run
 
@@ -129,7 +129,7 @@ toolchains are simply never claimed again; rows stay for the audit trail.
 
 ## Files
 
-One file, one rule — the authoritative placement table is in `CODEREVIEW.md`. Data lives in
+One file, one rule — the authoritative placement table is in `REVIEW.md`. Data lives in
 SQLite (`samples` table, append-only `[sql_migration]` stream); every request and store
 mutation is logged as ndjson to `logs/dasweb-playground.log` (rotation is the watchdog's job).
 

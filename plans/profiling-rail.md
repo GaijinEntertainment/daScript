@@ -69,7 +69,7 @@ readers' silent-default.
    one registered raw read for pedagogy; dynamic names (bench repro forwarder, lcpp
    levers) go through sanctioned `env_is_set`/`env_value_of`. ENVIRONMENT.md regenerates
    from the info; test_env_registry gained STRICT teeth (zero raw env reads in
-   modules/dasLLAMA + utils/dasllama-* outside dasllama_env.das) and the CODEREVIEW env
+   modules/dasLLAMA + utils/dasllama-* outside dasllama_env.das) and the REVIEW env
    rule is live. Three previously-invisible lab filters (DASMETAL_LAB_ARMS/SHAPES/
    VARIANTS) got declared. Delta sweeps came back clean: no `VAR=`-empty disable idioms
    (the two hits target the tune framework's own readers), no `=0` presence-flag users.

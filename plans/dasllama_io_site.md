@@ -23,14 +23,14 @@ dasllama.io stops mirroring daslang.io and becomes dasLLAMA's working site:
 Hosting: dasweb-1 (Caddy vhost + `/srv/dasllama.io` already provisioned). Site source:
 `site-dasllama/` beside `site/`, second rsync step in pages.yml. Service:
 `dasllama-ladder` on 127.0.0.1:8201 behind Caddy, dasHV + dasSQLITE, same anatomy as
-`utils/dasweb-playground` (config/store/server/launcher split, in-dir tests, CODEREVIEW.md
+`utils/dasweb-playground` (config/store/server/launcher split, in-dir tests, REVIEW.md
 from the first commit, watchdog contract, ndjson logging).
 
 ## Versioning decisions (Boris, 2026-08-10)
 
 - **dasLLAMA gets its own version**, decoupled from daslang's version AND from
   `LLVM_JIT_CODEGEN_VERSION`. **Any kernel work bumps it.** The rule is enforced in
-  `modules/dasLLAMA/CODEREVIEW.md`; the constant (`DASLLAMA_VERSION`) lands in the same
+  `modules/dasLLAMA/REVIEW.md`; the constant (`DASLLAMA_VERSION`) lands in the same
   commit as the rule. Bench records and sidecar provenance carry it.
 - v1 sidecar validity keys on (dasLLAMA version × box). Because any kernel work bumps the
   version, "same version" ⇒ same kernel roster — the version IS the roster key in v1.
@@ -46,8 +46,8 @@ from the first commit, watchdog contract, ndjson logging).
 - **Only real news.** Entries state shipped events; the seed entry is
   `_news/2026-08-10-dasllama-io-is-live.md`.
 - **No invented shell commands or code samples anywhere on either site** — every command
-  shown must run verbatim and produce the shown result. Enforced by `site/CODEREVIEW.md`
-  and `site-dasllama/CODEREVIEW.md` (template: `skills/codereview_md.md`). The sidecars-page
+  shown must run verbatim and produce the shown result. Enforced by `site/REVIEW.md`
+  and `site-dasllama/REVIEW.md` (template: `skills/review_md.md`). The sidecars-page
   startup transcript is comment-marked as the client-integration contract and gets verified
   verbatim against the real dasllama-server before ship.
 - **Ladder table fix rides the data hookup (slice 5):** the dasllama.html tables on
@@ -72,7 +72,7 @@ knob → clamp).
 
 ## Build slices (each lands tested; one PR per the no-small-PRs maxim)
 
-1. **`DASLLAMA_VERSION`** + CODEREVIEW.md bump rule + records/sidecar provenance carry it.
+1. **`DASLLAMA_VERSION`** + REVIEW.md bump rule + records/sidecar provenance carry it.
 2. **Schema module** — bench-record + sidecar parse/validate (shared by service and
    submitting tools), tests.
 3. **Ladder store** — sqlite: records, sidecars (content-addressed), verified flag,
