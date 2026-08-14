@@ -49,6 +49,7 @@ def public record_to_wav(fname : string; seconds : float; rate : int = 44100; ch
         if (n > 0) {
             let take = min(n, total_frames - got_frames)   // cap to remaining — never overshoot `seconds`
             let base = length(samples)
+            samples |> ensure_capacity(base + take * channels)
             samples |> resize(base + take * channels)
             for (i in range(take * channels)) {
                 samples[base + i] = scratch[i]

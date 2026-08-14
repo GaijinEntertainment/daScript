@@ -240,8 +240,8 @@ tells the linter "this buffer is reused". The same statement is exactly the prec
   up-size becomes a no-op instead of a realloc.
 - **Skip the zero-fill.** `resize` init-fills new elements; a scratch buffer is fully rewritten by
   the step that sizes it, so `@scratch` licenses `resize_no_init` implicitly. dasLLAMA already
-  hand-rolls exactly this in `scratch_resize` (delete-on-shrink, then `resize_no_init`) — the
-  annotation could make that the default rather than a hand-written idiom.
+  hand-rolls exactly this in `scratch_resize` (delete-on-grow, exact `reserve`, then
+  `resize_no_init`) — the annotation could make that the default rather than a hand-written idiom.
 - **Hoist the sizing.** With the reuse promise, a `resize(n)` whose `n` is loop-invariant can be
   lifted out of the step loop entirely.
 

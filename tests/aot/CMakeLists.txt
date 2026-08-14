@@ -355,11 +355,13 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_glob.das
     tests/language/_helper_foo.das
     tests/language/_inline_constant_expression_helper.das
+    tests/language/_inline_counter_helper.das
     tests/language/_inline_generic_helper.das
     tests/language/_inline_scope_helper.das
     tests/language/_inline_unsafe_helper.das
     tests/language/_lambda_vis_inner.das
     tests/language/_lambda_vis_mid.das
+    tests/language/_never_inline_module.das
     tests/language/_operators_derived.das
     tests/language/_operators_parent.das
     tests/language/_string_clone_init_helper.das

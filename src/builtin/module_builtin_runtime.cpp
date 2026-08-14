@@ -1056,6 +1056,14 @@ namespace das
         return context->heap->totalAlignedMemoryAllocated();
     }
 
+    uint64_t max_unreserved_size ( Context * context ) {
+        return context->maxUnreservedSize;
+    }
+
+    void set_max_unreserved_size ( uint64_t bytes, Context * context ) {
+        context->maxUnreservedSize = bytes;
+    }
+
     int32_t heap_depth ( Context * context ) {
         return (int32_t) context->heap->depth();
     }
@@ -2441,6 +2449,12 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_total_allocated)>(*this, lib, "heap_total_allocated",
             SideEffects::modifyExternal, "heap_total_allocated")
                 ->arg("context");
+        addExtern<DAS_BIND_FUN(max_unreserved_size)>(*this, lib, "max_unreserved_size",
+            SideEffects::modifyExternal, "max_unreserved_size")
+                ->arg("context");
+        addExtern<DAS_BIND_FUN(set_max_unreserved_size)>(*this, lib, "set_max_unreserved_size",
+            SideEffects::modifyExternal, "set_max_unreserved_size")
+                ->args({"bytes","context"});
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth",
             SideEffects::modifyExternal, "heap_depth")
                 ->arg("context");

@@ -36,8 +36,8 @@ require daslib/apply  // the Model finalizer + the image save/load walk both ite
 // (the embedding table + the norm weights, which forward always reads as fp32) and the big 2D
 // weight matrices (attn q/k/v/o, ffn gate/down/up, untied classifier). Only the big weights are
 // quantized, and only ONE representation is held — so a Q8 model never materializes the fp32
-// weights ("load as stored"). All big-weight arrays are reserve()'d to exact size to avoid the
-// allocator's power-of-2 rounding.
+// weights ("load as stored"). All big-weight arrays are reserve()'d to exact size — no pow2
+// slack, and a reserved resize never trips max_unreserved_size.
 
 //! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
 //! q8 selects the fast integer rails (K-quant / mxfp4 / Q4_0 files keep their native planes);
@@ -911,6 +911,7 @@ def private ptr_key(p : void?) : uint64 {
 def image_chunk_alloc(bytes : uint64; align : uint64) : void? {
     var raw : array<uint8>
     let total = int64(bytes + align)
+    raw |> reserve(total)
     raw |> resize_no_init(total)
     if (long_length(raw) != total) {
         delete raw
@@ -1093,9 +1094,16 @@ def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
-// Reserve exact capacity then size — avoids the array allocator's power-of-2 rounding on big arrays.
-def reserve_resize(var a : array<float>; n : int64) {
+// Exact reserve then size — no pow2 slack, and the reserved resize never trips max_unreserved_size.
+def reserve_resize(var a : array<auto(numT)>; n : int | int64) {
     a |> reserve(n)
+    a |> resize(n)
+}
+
+// Amortized grow-then-size for reused scratch whose need varies per call: capacity at least
+// doubles on growth (no per-call realloc churn), and a reserved resize never trips max_unreserved_size.
+def grow_resize(@scratch var a : array<auto(numT)>; n : int | int64) {
+    a |> ensure_capacity(n)
     a |> resize(n)
 }
 
@@ -1406,7 +1414,7 @@ def wscale_convert_f16(var t : Model) {
     if (n == 0l) {   // every big weight lives in a native plane (kq/mx4) — nothing to convert
         return
     }
-    t.qscales16 |> resize(n)   // int64 resize — an 80B-weight Q8 model has >2^31 scales
+    t.qscales16 |> reserve_resize(n)   // int64 resize — an 80B-weight Q8 model has >2^31 scales
     unsafe {
         var dp = addr(t.qscales16[0])
         let sp = addr < float const? >(t.qscales[0])
@@ -1916,8 +1924,8 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         }
     }
     if (alloc_cache) {
-        s.key_cache |> resize(c.seq_len * krow)
-        s.value_cache |> resize(c.seq_len * vrow)
+        s.key_cache |> reserve_resize(c.seq_len * krow)
+        s.value_cache |> reserve_resize(c.seq_len * vrow)
     }
     s.sample_scratch |> resize(c.vocab_size)
     s.rng = random_seed(1234)
@@ -2297,8 +2305,8 @@ def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
     for (b in range64(p.nblobs)) {
-        p.kblobs[b] |> resize(newcap * p.page_rows * p.krow_bytes[b])
-        p.vblobs[b] |> resize(newcap * p.page_rows * p.vrow_bytes[b])
+        p.kblobs[b] |> reserve_resize(newcap * p.page_rows * p.krow_bytes[b])
+        p.vblobs[b] |> reserve_resize(newcap * p.page_rows * p.vrow_bytes[b])
     }
     p.refcnt |> resize(newcap)
     var g = int(newcap)
@@ -4606,6 +4614,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
 def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     if (long_length(a) < need) {
         delete a
+        a |> reserve(need)
     }
     a |> resize_no_init(need)
 }

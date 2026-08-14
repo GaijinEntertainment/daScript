@@ -398,7 +398,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
         }
         fwrite(f, res.total)
         ast_serializer_get_data(ser) $(data) {
-            let sz = uint64(long_length(data))
+            let sz = long_length(data)
             fwrite(f, sz)
             fwrite(f, data)
         }
@@ -424,12 +424,13 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
         unsafe {
             _builtin_read(f, addr(count), typeinfo sizeof(count))
         }
-        var sz = 0 |> uint64()
+        var sz = 0l
         unsafe {
             _builtin_read(f, addr(sz), typeinfo sizeof(sz))
         }
         var data : array<uint8>
-        data |> resize(int64(sz))
+        data |> reserve(sz)   // the blob size is known: exact reserve, and the resize never grows
+        data |> resize(sz)
         fread(f, data)
         log::info("Deserializing {count:d} programs from {in_file}")
         var ser = create_ast_deserializer(data)
@@ -464,7 +465,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
 }
 
 [export]
-def main() : int {  // nolint:STYLE037 - CLI dispatch, one arm per mode
+def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so the
     // user can place either flag before or after the "--" separator.
     log::init_log()

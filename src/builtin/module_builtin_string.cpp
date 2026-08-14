@@ -833,6 +833,9 @@ namespace das
         das_zero(bytes);
         uint32_t len = stringLengthSafe(*context, str);
         if ( len ) {
+            // exact reserve first: known final size, so the resize never grows - no pow2
+            // slack on big strings, and no max_unreserved_size panic
+            array_reserve(*context, bytes, len, uint32_t(sizeof(uint8_t)), at);
             array_resize(*context, bytes, len, uint32_t(sizeof(uint8_t)), false, at);
             memcpy(bytes.data, str, len);
         }

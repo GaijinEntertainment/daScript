@@ -547,7 +547,9 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
     //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++
     for (c, comp in arch.components, cmp) {
-        c.data |> resize(long_length(c.data) + int64(c.stride))
+        let newSize = long_length(c.data) + int64(c.stride)
+        c.data |> ensure_capacity(newSize)
+        c.data |> resize(newSize)
         unsafe {
             memcpy(addr(c.data[eidx * int64(c.stride)]), addr(comp.data), c.stride)
         }
@@ -927,6 +929,14 @@ def private store_entity_row(var arch : Archetype; var cmp : ComponentMap; index
     decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = index)
 }
 
+def private grow_components(var arch : Archetype; entity_count : int) {
+    for (c in arch.components) {
+        let newSize = long_length(c.data) + int64(c.stride) * int64(entity_count)
+        c.data |> ensure_capacity(newSize)
+        c.data |> resize(newSize)
+    }
+}
+
 def public create_entities(count : int; blk : block<(eid : EntityId; i : int; var cmp : ComponentMap) : void>) {
     //! Creates `count` entities in bulk. All entities must have the same archetype (same set of components). This is much faster than calling `create_entity` in a loop because it does a single archetype lookup and a single resize per component array for the entire batch.
     if (count <= 0) return
@@ -944,11 +954,8 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)
         }
-        // Pre-resize all component arrays for count entities at once
         let base = arch.size
-        for (c in arch.components) {
-            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
-        }
+        arch |> grow_components(count)
         // Fill first entity
         store_entity_row(arch, cmp, base, first_eid, ahash)
         // Fill remaining entities (reuse cmp — set overwrites existing entries)
@@ -983,9 +990,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
             arch |> create_archetype(cmp, arch_idx)
         }
         let base = arch.size
-        for (c in arch.components) {
-            c.data |> resize(long_length(c.data) + int64(c.stride) * int64(count))
-        }
+        arch |> grow_components(count)
         // Bulk-create: same UINT_MAX cap as the per-entity path. Widening
         // EntityId.id to uint64 is an architectural followup.
         let id_base_long = long_length(decsState.entityLookup)
@@ -996,6 +1001,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
             panic("decs: create_entities_from_cmp would push entityLookup past UINT_MAX (current = {id_base_long}, count = {count}); EntityId.id (uint) widening is required")
         }
         let id_base = uint(id_base_long)
+        decsState.entityLookup |> ensure_capacity(id_base_long + int64(count))
         decsState.entityLookup |> resize(id_base_long + int64(count))
         // After the cascade widening, base + count can exceed INT_MAX, so a per-iteration int(eidx) cast would silently truncate. Hoist the cap check before the loop — fill_blk is part of the public API and macro- generated callers in decs_boost.das emit `eidx : int`; widening blk to int64 is the followup. Highest eidx is `base + count - 1`; the boundary case (max eidx == INT_MAX) still succeeds.
         if (base + int64(count) - 1_l > int64(INT_MAX)) {

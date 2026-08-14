@@ -226,6 +226,7 @@ def private metal_blob_materialize(var t : Model) {
         return
     }
     let ts = ref_time_ticks()
+    t.mblob |> reserve(sh.blocks * sh.stride)
     t.mblob |> resize_no_init(sh.blocks * sh.stride)
     metal_blob_fill_blocks(t, 0l, sh.blocks, t.mblob)
     delete t.qblob
@@ -597,8 +598,8 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
                          var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
     assert(rows * n <= 2147483647l, "GPU MoE stack exceeds the int32 gather-buffer rail")
-    wq |> resize(rows * n)
-    ws |> resize(rows * nb * Q8_SPB)
+    wq |> grow_resize(rows * n)
+    ws |> grow_resize(rows * nb * Q8_SPB)
     assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -666,8 +667,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> resize(rows * nsb * qsb)
-    ws |> resize(rows * nsb * KQ_DEV_SSB)
+    wq |> grow_resize(rows * nsb * qsb)
+    ws |> grow_resize(rows * nsb * KQ_DEV_SSB)
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb

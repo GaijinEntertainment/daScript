@@ -121,6 +121,9 @@ wins, end of file closes an unterminated final line, doubled marker yields one l
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
 `test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
+`test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
+`grow_resize` geometric reuse, `scratch_resize` grow-only no-init) fed directly, including
+grows past the `max_unreserved_size` guard that must not panic.
 
 ## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 

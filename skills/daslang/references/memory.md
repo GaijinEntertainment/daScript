@@ -352,4 +352,5 @@ Use it to shorten deeply nested access. `typedef name = Type` is the type-level 
 | `error[31000] address of reference requires unsafe` | wrap the `addr` itself, not the enclosing call |
 | `error[31023] index of the pointer must be inside the 'unsafe' block` | pointer indexing needs its own `unsafe` |
 | `EXCEPTION: can't resize locked array` | mutating a container while iterating it |
+| `EXCEPTION: array resize … grows past max_unreserved_size` | a growing `resize` over the byte limit (64 MB default); `reserve` the exact size first, `ensure_capacity` for appends, or raise `options max_unreserved_size` |
 | leak reported at exit | a local container or `new` with no `inscope`, `delete`, or `<-` out |

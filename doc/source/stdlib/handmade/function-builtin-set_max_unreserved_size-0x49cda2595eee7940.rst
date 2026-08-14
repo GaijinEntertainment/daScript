@@ -1,0 +1,1 @@
+Sets the context's `max_unreserved_size` limit to `bytes`: an array `resize` that has to grow past this many bytes without a prior `reserve` panics. Raising it admits larger unreserved resizes; prefer an exact `reserve` (or `ensure_capacity` for appends) over raising the limit.

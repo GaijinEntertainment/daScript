@@ -33,28 +33,28 @@ def private batch_decode_alloc(t : Model; var s : Session; nrows : int64) {
     let qd = c.n_heads * head_size
     let xdim = max(dim, qd)
     let maxn = max(xdim, hidden)
-    s.x_b |> resize(nrows * dim)
-    s.xb_b |> resize(nrows * xdim)
-    s.xb2_b |> resize(nrows * dim)
-    s.q_b |> resize(nrows * qd)
-    s.k_b |> resize(nrows * kv_dim)
-    s.v_b |> resize(nrows * kv_dim)
-    s.hb_b |> resize(nrows * hidden)
-    s.hb2_b |> resize(nrows * hidden)
-    s.xqb |> resize(nrows * maxn)
-    s.xsb |> resize(nrows * maxn / 32l)
+    s.x_b |> grow_resize(nrows * dim)
+    s.xb_b |> grow_resize(nrows * xdim)
+    s.xb2_b |> grow_resize(nrows * dim)
+    s.q_b |> grow_resize(nrows * qd)
+    s.k_b |> grow_resize(nrows * kv_dim)
+    s.v_b |> grow_resize(nrows * kv_dim)
+    s.hb_b |> grow_resize(nrows * hidden)
+    s.hb2_b |> grow_resize(nrows * hidden)
+    s.xqb |> grow_resize(nrows * maxn)
+    s.xsb |> grow_resize(nrows * maxn / 32l)
     if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
-        s.xbsb |> resize(nrows * maxn / 16l)
+        s.xbsb |> grow_resize(nrows * maxn / 16l)
     }
     if (s.kv_dtype_k == KVDtype.q8_0 || s.kv_dtype_k == KVDtype.tq4) {   // batch query-quant planes (dtypes snapshotted before this)
-        s.attq |> resize(nrows * qd)
-        s.atts |> resize(nrows * qd / 32l)
+        s.attq |> grow_resize(nrows * qd)
+        s.atts |> grow_resize(nrows * qd / 32l)
     }
     if (has_ple(c)) {   // gemma-4 E-series PLE scratch (one row per batch slot)
         let all = c.n_layers * c.n_embd_per_layer
-        s.ple_inp |> resize(nrows * all)
-        s.ple_proj |> resize(nrows * all)
-        s.ple_gate |> resize(nrows * c.n_embd_per_layer)
+        s.ple_inp |> grow_resize(nrows * all)
+        s.ple_proj |> grow_resize(nrows * all)
+        s.ple_gate |> grow_resize(nrows * c.n_embd_per_layer)
     }
 }
 
@@ -125,8 +125,8 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     var work = 0l   // Σ 2·cnt_i·head_size MACs per head
     // runs_b row stride: a flat row is always one run; a paged row can span every page of the context
     let maxruns = paged ? (c.seq_len + ws.scr.kv_pool.page_rows - 1l) / ws.scr.kv_pool.page_rows + 1l : 1l
-    ws.runs_b |> resize(nrows * maxruns)
-    ws.nrun_b |> resize(nrows)
+    ws.runs_b |> grow_resize(nrows * maxruns)
+    ws.nrun_b |> grow_resize(nrows)
     for (i in range64(nrows)) {
         let pos = ws.positions[i]
         let kstart = (is_sliding && pos + 1l > swin) ? (pos + 1l - swin) : 0l
@@ -134,7 +134,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
         work += 2l * (pos + 1l - kstart) * head_size
         ws.nrun_b[i] = kv_runs(*sessions[i], kstart, pos + 1l, ws.runs_b, i * maxruns)   // flat: 1 identity run
     }
-    ws.scr.att_b |> resize(nrows * n_heads * maxctx)
+    ws.scr.att_b |> grow_resize(nrows * n_heads * maxctx)
     let attn_softcap = c.attn_logit_softcap
     let attn_lanes = min(int(nrows * n_heads), lanes_for_work(work * n_heads, g_gemv_lane_cap))
     let sinksp = (c.attn_sinks
@@ -239,9 +239,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     ws.scr.kv_bprefix_k := s0.kv_bprefix_k
     ws.scr.kv_bprefix_v := s0.kv_bprefix_v
     ws.scr.kv_pool = s0.kv_pool
-    ws.positions |> resize(nrows)
-    ws.kbase |> resize(nrows)
-    ws.vbase |> resize(nrows)
+    ws.positions |> grow_resize(nrows)
+    ws.kbase |> grow_resize(nrows)
+    ws.vbase |> grow_resize(nrows)
     for (i in range64(nrows)) {
         var sp = sessions[i]
         kv_ensure(*sp, sp.n_past + 1l)
@@ -302,7 +302,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (!(stack_done && batch_decode_logits_done())) {
         blob_only_panic(t, "batch-decode final-norm/classifier step")
         rms_batch(ws.scr.xb_b, ws.scr.x_b, t, t.rms_final_off, dim, nrows)
-        ws.logits_b |> resize(nrows * vocab)
+        ws.logits_b |> grow_resize(nrows * vocab)
         let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
         if (c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
             // tied weights (fp32/q4_0 loads): the classifier IS the fp32 embedding table
@@ -315,7 +315,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         // per-row softcap + scatter into each session's logits + suppress pins, ONE row-parallel
         // dispatch — the serial tail here was most of a ~6ms all-lane hole every step at B=8
         // (B x vocab ≈ 5MB of copy). Rows are disjoint (row i writes only sessions[i].logits).
-        ws.lrow |> resize(nrows)
+        ws.lrow |> grow_resize(nrows)
         unsafe {
             for (i in range64(nrows)) {
                 ws.lrow[i] = addr(sessions[i].logits[0])

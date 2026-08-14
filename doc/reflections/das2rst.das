@@ -181,11 +181,11 @@ def document_module_builtin(_root : string) {
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|get_key|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_from|push_clone|push_clone_from|back|sort|stable_sort|to_array|to_table|to_array_move|
 to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|remove_value|erase_if|resize_and_init|
-get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify|long_length|long_capacity|long_find_index)$%%),
+get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify|long_length|long_capacity|long_find_index|ensure_capacity)$%%),
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%),
-        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report|tag_array|tag_table)%%),
+        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report|tag_array|tag_table|max_unreserved_size|set_max_unreserved_size)%%),
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%),
         group_by_regex("16/8-bit lattice converts", mod, %regex~(short2_sat|short3_sat|short4_sat|ushort2_sat|ushort3_sat|ushort4_sat|byte2_sat|byte3_sat|byte4_sat|byte8_sat|ubyte2_sat|ubyte3_sat|ubyte4_sat|ubyte8_sat|half8_lo|half8_hi)$%%),
         group_by_regex("16/8-bit lattice integer dots", mod, %regex~(idot|idot4|shuffle)$%%),

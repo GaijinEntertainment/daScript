@@ -55,6 +55,7 @@ class public MemSerializer : Serializer {
     def override write(bytes : void? implicit; size : int) : bool {
         //! Appends bytes at the end of the data.
         let pos = length(data)
+        data |> ensure_capacity(pos + size)
         data |> resize_no_init(pos + size)
         unsafe {
             memcpy(addr(data[pos]), bytes, size)
@@ -218,11 +219,13 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
         }
         arch |> read_raw(len)
         static_if (typeinfo is_workhorse(type<TT>) && typeinfo is_raw(type<TT>)) {
+            value |> reserve(len)   // read side knows the final size: the resize never grows
             value |> resize_no_init(len)
             if (len > 0) {
                 arch.stream->read(unsafe(addr(value[0])), len * typeinfo sizeof(type<TT>))
             }
         } else {
+            value |> reserve(len)
             unsafe(value |> resize(len))
             for (element in value) {
                 arch |> _::serialize(element)

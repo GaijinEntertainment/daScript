@@ -198,6 +198,24 @@ def reserve(var Arr : array<auto(numT)>; newSize : int64) {
     __builtin_array_reserve_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
+//! Grows capacity to at least `newSize`, at least doubling on each growth once non-empty,
+//! so an append-by-resize loop stays amortized O(1). This is the deliberate-unbounded-append
+//! spelling: a following `resize` never grows, so it cannot trip `max_unreserved_size`.
+def ensure_capacity(var Arr : array<auto(numT)>; newSize : int) {
+    ensure_capacity(Arr, int64(newSize))
+}
+
+//! Int64 form of `ensure_capacity`.
+def ensure_capacity(var Arr : array<auto(numT)>; newSize : int64) {
+    if (newSize > long_capacity(Arr)) {
+        var want = long_capacity(Arr) * 2l
+        if (newSize > want) {
+            want = newSize
+        }
+        Arr |> reserve(want)
+    }
+}
+
 def pop(var Arr : array<auto(numT)>) {
     unsafe(resize(Arr, length(Arr) - 1))// resize will throw if negative
 }
@@ -1196,6 +1214,7 @@ def clone_dim(var a; b : auto | #) {
 
 def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
     let ln = length(b)
+    reserve(a, ln)   // clone knows the final size: exact reserve, and the resize never grows
     unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
     return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {
@@ -1211,6 +1230,7 @@ def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
 
 def clone(var a : array<auto(TT)>; var b : array<TT> ==const | #) {
     let ln = length(b)
+    reserve(a, ln)   // clone knows the final size: exact reserve, and the resize never grows
     unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
     return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {

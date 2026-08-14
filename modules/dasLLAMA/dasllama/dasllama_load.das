@@ -722,16 +722,16 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         let sh = stream_job_shape(t, j)
         stream_zero_fill(stream_job_qoff(t, j) - cursor, zeros, append)
         cursor = stream_job_qoff(t, j) + sh.qb
-        temp_q |> resize(int(sh.qb))
+        temp_q |> grow_resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = ""
         if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
-            temp_s |> resize(int(sh.sb))
+            temp_s |> grow_resize(int(sh.sb))
             kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
         } else {
             // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
-            temp_q8 |> resize(int(j.n))
-            temp_sf |> resize(int(j.n / 32l))
+            temp_q8 |> grow_resize(int(j.n))
+            temp_sf |> grow_resize(int(j.n / 32l))
             kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
         }
         conv_note(kind, t0, j.n)
@@ -818,7 +818,9 @@ def private blob_pack_job(q : array<int8>; s : array<float>; nblk : int64;
         return
     }
     let mbb = Q8_QPB + Q8_SPB
+    dst |> ensure_capacity(nblk * mbb)
     dst |> resize_no_init(nblk * mbb)
+    s16 |> ensure_capacity(nblk)
     s16 |> resize_no_init(nblk)
     unsafe {
         cvt_f32_to_f16(addr(s16[0]), addr < float const? >(s[0]), nblk)
@@ -961,9 +963,9 @@ def private load_dn_grouped(m : GGUFMeta; bytes : array<uint8> | #; var t : Mode
     }
     let n = t.config.ssm_d_inner * dim
     var raw : array<float>
-    raw |> resize(n)
+    raw |> reserve_resize(n)
     gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_out.weight", raw, 0l, n)
-    scratch |> resize(n)
+    scratch |> grow_resize(n)
     let din = t.config.ssm_d_inner
     unsafe {   // column-permute threaded over output rows (disjoint writes per row)
         let rawp = addr < float const? >(raw[0])

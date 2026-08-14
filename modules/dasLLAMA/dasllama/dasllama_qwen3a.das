@@ -218,7 +218,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         o += c.n_layer * c.layer_stride
         c.lnp_w_off = o; o += d
         c.lnp_b_off = o; o += d
-        st.core.fblob |> resize(o)
+        st.core.fblob |> reserve_resize(o)
         for (l in range64(c.n_layer)) {
             let lo = enc_layer_offsets(c, l)
             gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", st.core.fblob, lo.ln1_w, d)
@@ -272,7 +272,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         st.e.mm1_b_off = co; co += d
         st.e.mm2_w_off = co; co += st.e.proj_dim * d
         st.e.mm2_b_off = co; co += st.e.proj_dim
-        st.cblob |> resize(co)
+        st.cblob |> reserve_resize(co)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.1.weight", st.cblob, st.e.c1_w_off, nch * 9l)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.1.bias", st.cblob, st.e.c1_b_off, nch)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.2.weight", st.cblob, st.e.c2_w_off, nch * nch * 9l)
@@ -306,10 +306,10 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
         panic("qwen3a cblob q8: d {d} / feat {feat} / proj {t.proj_dim} are not 32-multiples - the compact trio cannot serve this tower")
     }
     let qtotal = d * feat + d * d + t.proj_dim * d
-    qblob |> resize(qtotal)
-    qscales |> resize(qtotal / 32l)
+    qblob |> reserve_resize(qtotal)
+    qscales |> reserve_resize(qtotal / 32l)
     var nf : array<float>
-    nf |> resize(long_length(cblob) - qtotal)
+    nf |> reserve_resize(long_length(cblob) - qtotal)
     var og = 0l
     var of = 0l
     let nch = t.n_ch
@@ -328,7 +328,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     t.mm2_b_off = tq_keep(nf, cblob, of, t.mm2_b_off, t.proj_dim)
     verify(og == qtotal)
     delete cblob
-    cblob <- nf   // nolint:PERF030 — the full blob is released on the line above
+    cblob <- nf
     t.cq8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
@@ -346,7 +346,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let head = AUDIO_N_FFT / 2l                        // 200 reflection each side
     let n_padded = n_in + 2l * head
     var padded : array<float>
-    padded |> resize(int(n_padded))
+    padded |> reserve_resize(int(n_padded))
     for (i in range(int(n_in))) {
         padded[int(head) + i] = samples[i]
     }
@@ -365,14 +365,14 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let n_full = (n_padded - n_fft) / AUDIO_HOP + 1l
     m.n_len = min(n_full, n_in / AUDIO_HOP + 1l)       // the preprocessor's effective count
     m.n_len_org = m.n_len
-    m.data |> resize(int(n_mel * m.n_len))
+    m.data |> reserve_resize(int(n_mel * m.n_len))
 
     let hann <- build_hann_window(n_fft)
     let twiddles <- build_dft_twiddles(n_fft)
     let filters <- build_mel_filterbank(n_mel, n_fft, AUDIO_SAMPLE_RATE)
 
     var xw : array<float>
-    xw |> resize(int(m.n_len * n_fft))
+    xw |> reserve_resize(int(m.n_len * n_fft))
     for (i in range64(m.n_len)) {
         let off = i * AUDIO_HOP
         let valid = min(n_fft, n_padded - off)
@@ -381,7 +381,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
         }
     }
     var reim : array<float>
-    reim |> resize(int(m.n_len * n_bins * 2l))
+    reim |> reserve_resize(int(m.n_len * n_bins * 2l))
     gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
              m.n_len, n_fft, n_bins * 2l)
 
@@ -519,8 +519,8 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     }
     if (t.cq8) {   // requant image for the cblob trio (cout: 13×feat rows; mm1/mm2: npos×d)
         let need = max(QWEN3A_TOK_PER_CHUNK * 16l * nch, npos * d)
-        cs.xq |> resize(need)
-        cs.xs |> resize(need / 32l)
+        cs.xq |> grow_resize(need)
+        cs.xs |> grow_resize(need / 32l)
     }
 
     // conv frontend per chunk -> rows of s.x
@@ -658,7 +658,7 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     let n_tail = long_length(tail)
     let npos = n_head + n_audio + n_tail
     var embd : array<float>
-    embd |> resize(int(npos * dim))
+    embd |> reserve_resize(int(npos * dim))
     embed_text_rows(dec, head, embd, 0l)
     for (i in range64(n_audio * dim)) {
         embd[n_head * dim + i] = rows[i]
@@ -749,7 +749,7 @@ def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
     var embd : array<float>
-    embd |> resize(int(npos * dim))
+    embd |> reserve_resize(int(npos * dim))
     embed_text_rows(dec, head, embd, 0l)
     for (i in range64(n_audio * dim)) {
         embd[n_head * dim + i] = arows[i]

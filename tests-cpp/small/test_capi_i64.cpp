@@ -156,6 +156,7 @@ TEST_CASE("das_array _i64 API: resize past UINT32_MAX (gated)") {
     const uint64_t HUGE_N = uint64_t(5) * 1024 * 1024 * 1024;  // 5 GiB > UINT32_MAX
     static_assert(uint64_t(5) * 1024 * 1024 * 1024 > uint64_t(UINT32_MAX),
                   "HUGE_N must exceed UINT32_MAX to exercise the _i64 path");
+    das_array_reserve_i64(ic.ctx, &a, HUGE_N, /*stride=*/1);  // exact reserve: keeps the resize from pow2-doubling 5 GiB (and from the max_unreserved_size panic)
     das_array_resize_i64(ic.ctx, &a, HUGE_N, /*stride=*/1, /*zero=*/0);
     REQUIRE(a.data != nullptr);
     REQUIRE(das_context_get_exception(ic.ctx) == nullptr);

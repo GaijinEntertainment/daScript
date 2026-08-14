@@ -1,0 +1,1 @@
+Returns the context's `max_unreserved_size` limit in bytes: an array `resize` that has to grow past this many bytes without a prior `reserve` panics. Defaults to 64 MB; set at compile time via `options max_unreserved_size` or at runtime via `set_max_unreserved_size`.

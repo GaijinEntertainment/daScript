@@ -777,7 +777,8 @@ typedef enum das_int_policy {
     DAS_POLICY_MAX_STRING_HEAP_ALLOCATED,         // Max string heap allocated in bytes (uint64, 0 = unlimited)
     DAS_POLICY_HEAP_SIZE_HINT,                   // Initial heap size hint in bytes (uint32)
     DAS_POLICY_STRING_HEAP_SIZE_HINT,            // Initial string heap size hint in bytes (uint32)
-    DAS_POLICY_AUTO_INLINE_COST                  // auto_inline_functions node budget (int32, default 32)
+    DAS_POLICY_AUTO_INLINE_COST,                 // auto_inline_functions node budget (int32, default 32)
+    DAS_POLICY_MAX_UNRESERVED_SIZE               // a growing array resize past this byte size without a prior reserve panics (uint64, default 64 MB)
 } das_int_policy;
 
 // Create a new policies object with default values.

@@ -943,6 +943,9 @@ int das_policies_set_int ( das_policies * policies, das_int_policy field, int64_
         case DAS_POLICY_HEAP_SIZE_HINT:             p->heap_size_hint = checked_u32_from_i64(value, "DAS_POLICY_HEAP_SIZE_HINT"); break;
         case DAS_POLICY_STRING_HEAP_SIZE_HINT:      p->string_heap_size_hint = checked_u32_from_i64(value, "DAS_POLICY_STRING_HEAP_SIZE_HINT"); break;
         case DAS_POLICY_AUTO_INLINE_COST:           p->auto_inline_cost = checked_i32(value, "DAS_POLICY_AUTO_INLINE_COST"); break;
+        case DAS_POLICY_MAX_UNRESERVED_SIZE:
+            if ( value < 0 ) DAS_FATAL_ERROR("DAS_POLICY_MAX_UNRESERVED_SIZE must not be negative (%lld)\n", (long long)value);
+            p->max_unreserved_size = uint64_t(value); break;
         default: return 0;
     }
     return 1;

@@ -379,6 +379,7 @@ class private WatcherHostLink : HvWebSocketClient {
         }
         if (byte_count <= 0) return
         let offset = length(received)
+        received |> ensure_capacity(offset + byte_count)
         received |> resize_no_init(offset + byte_count)
         unsafe {
             memcpy(addr(received[offset]), reinterpret<void?>(msg), byte_count)
@@ -1082,7 +1083,7 @@ def public watcher_adopt_hosts : int {
     return adopted
 }
 
-def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult { // nolint:STYLE037
+def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult { // nolint:STYLE037,STYLE038 — flat launch sequence: validate, spawn, handshake, register, each step one-shot
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }

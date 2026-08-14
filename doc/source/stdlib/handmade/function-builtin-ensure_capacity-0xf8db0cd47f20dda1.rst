@@ -1,0 +1,1 @@
+The int64 form of `ensure_capacity`: grows the capacity of `Arr` to at least `newSize` elements, at least doubling on each growth, so a following `resize` never grows and never trips the `max_unreserved_size` guard.
