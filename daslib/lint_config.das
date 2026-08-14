@@ -206,6 +206,16 @@ def public is_core_library_source(prog : ProgramPtr) : bool {
         && !path_has_segment(file, "modules"))
 }
 
+//! True when `fn` is user-authored code from lint's point of view: not generated, or a
+//! generated CARRIER whose body is a verbatim clone of user-typed AST - a lambda
+//! (`@(...)`), a local function (`@@(...)`), or a generator body. The emit gates in
+//! `daslib/style_lint` / `daslib/perf_lint` use this instead of `flags.generated`, so
+//! lambda bodies are linted like any other user code.
+def public user_authored_body(fn : Function?) : bool {
+    return true if (fn == null || !fn.flags.generated)
+    return fn.flags._lambda || fn.flags._generator || fn.moreFlags2.localFunction
+}
+
 //! True for the lint-fixture naming convention: an underscore-led basename containing
 //! ``fixture``. Such files violate rules BY DESIGN, for tests that compile them or spawn
 //! the lint CLI over them, so the runner skips them (re-enabled via ``--lint-fixtures``).
