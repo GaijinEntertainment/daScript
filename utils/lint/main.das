@@ -38,7 +38,7 @@ struct Config {
     @clarg_doc = "Enable STYLE014/STYLE015 comment-length checks"
     comment_hygiene : bool
 
-    @clarg_doc = "Lint _fixture_*.das files too (for tests exercising this tool)"
+    @clarg_doc = "Lint fixture-named files too (underscore-led names containing 'fixture'; for tests exercising this tool)"
     lint_fixtures : bool
 
     @clarg_doc = "Only run paranoid lint (skip perf and style)"
@@ -233,10 +233,10 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
     // files carry no `expect` directive, so the content skip above misses them).
     // normalize() emits the platform's preferred separator - fold to forward slashes
-    // _fixture_*.das is the e2e-fixture naming convention (tests/lint/* dirs) - those
-    // files violate rules BY DESIGN too, for tests that spawn this CLI over them
+    // fixture-named files (is_lint_fixture_name: underscore-led, "fixture" anywhere)
+    // violate rules BY DESIGN too, for tests that spawn this CLI over them
     if (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
-            || (!lint_fixtures && base_name(file) |> starts_with("_fixture_"))) {
+            || (!lint_fixtures && is_lint_fixture_name(base_name(file)))) {
         result.skip_reason = "(lint rule fixture)"
         return <- result
     }

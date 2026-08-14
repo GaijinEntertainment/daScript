@@ -206,6 +206,13 @@ def public is_core_library_source(prog : ProgramPtr) : bool {
         && !path_has_segment(file, "modules"))
 }
 
+//! True for the lint-fixture naming convention: an underscore-led basename containing
+//! ``fixture``. Such files violate rules BY DESIGN, for tests that compile them or spawn
+//! the lint CLI over them, so the runner skips them (re-enabled via ``--lint-fixtures``).
+def public is_lint_fixture_name(base : string) : bool {
+    return starts_with(base, "_") && find(base, "fixture") >= 0
+}
+
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).
 struct public LintIssue {
     code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none
