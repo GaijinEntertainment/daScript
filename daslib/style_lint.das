@@ -47,6 +47,7 @@ module style_lint shared private
 //!   STYLE038 — function exceeds the line-count limit (physical lines; override per module with 'options _function_length = N'; 0 disables) — split it into smaller functions
 //!   STYLE040 — a run of statements duplicated elsewhere in the module that a helper function could absorb (on by default under daslib/ and utils/, override per module with 'options _duplicate_regions'; thresholds via 'options _dupe_min_nodes' / '_dupe_min_statements'; suppress with '// nolint:STYLE040' on the reported line)
 //!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
+//!   STYLE041 — bool flag initialized false, set true on terminal paths, then consumed by a single 'if (flag) return ...' — a return value in disguise; return directly at each set site (walk-abort callbacks, negative polarity, non-terminal sets, and init-true flags are exempt)
 
 require daslib/ast_boost
 require daslib/dupe_detect
@@ -74,6 +75,28 @@ struct UnsafeFrame {
     //! Per-expression subtree summary tracked on `StyleLintVisitor.unsafe_stack`.
     count : int
     has_non_local_let_ref : bool
+}
+
+struct St041Scan {
+    //! Transient per-candidate classification state for check_style041_flag_return.
+    rejected : bool
+    write_count : int
+    write_top : int = -1            // top-level index owning ALL writes (one setter statement)
+    writes_terminal : bool = true
+    plumb_count : int
+    plumb_tops : array<int>         // top-level index of each `if (flag) break/continue` read
+    consume_count : int
+    consume_top : int = -1
+    consume_top_level : bool
+    consume_ok : bool               // st041_consume_body_ok, evaluated at classification time
+    consume_moved : bool
+}
+
+struct St041Candidate {
+    //! Armed candidate awaiting the visitFunction reference-count cross-check.
+    expected : int
+    seen : int
+    msg : string
 }
 
 class StyleLintVisitor : AstVisitor {
@@ -112,6 +135,8 @@ class StyleLintVisitor : AstVisitor {
     // Calls inside UNINSTANCED generic bodies stay unresolved at lint time (func==null)
     // and leave no used_modules trace; their names gate STYLE030 instead.
     unresolved_call_names : table<string>
+    // STYLE041 — armed flag-return candidates for the current function, flushed at visitFunction
+    @do_not_delete st041_candidates : table<Variable?; St041Candidate>
 
     def StyleLintVisitor() {
         pass
@@ -137,7 +162,7 @@ class StyleLintVisitor : AstVisitor {
 
     def style_warning(text : string; at : LineInfo) : void {
         // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
-        if ((current_function != null && current_function.flags.generated) || is_suppressed(text, at)) return
+        if (!user_authored_body(current_function) || is_suppressed(text, at)) return
         let key = location_key(at) ^ hash(extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
@@ -182,6 +207,7 @@ class StyleLintVisitor : AstVisitor {
         current_function = fn
         unsafe_block_stack |> push(0)
         complexity_stack |> push(1)
+        st041_candidates |> clear()
         check_defer_pipe(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
@@ -234,6 +260,7 @@ class StyleLintVisitor : AstVisitor {
         if (fn.body != null) {
             st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, fn.body.at)
         }
+        st041_flush()
         current_function = null
         unsafe_block_stack |> pop
         return <- fn
@@ -245,7 +272,10 @@ class StyleLintVisitor : AstVisitor {
 
     def st038_check_length(what : string; fix : string; at : LineInfo; body_at : LineInfo) : void {
         // max_function_length == 0 disables the rule (per-module `options _function_length = 0`)
-        if (max_function_length <= 0 || at.line == 0u || foreign_module_code()) return
+        // generated carriers (lambda/generator bodies) stay unmetered: a `_lambda_...` name
+        // means nothing to the reader, and the host's own span already covers the source
+        if (max_function_length <= 0 || at.line == 0u || foreign_module_code()
+                || (current_function != null && current_function.flags.generated)) return
         let nlines = int(body_at.last_line) - int(at.line) + 1
         if (nlines > max_function_length) {
             style_warning("STYLE038: {what} is {nlines} lines long (max {max_function_length}); {fix}", at)
@@ -277,7 +307,9 @@ class StyleLintVisitor : AstVisitor {
         let cc = complexity_stack[n - 1]
         complexity_stack |> pop
         // max_complexity == 0 disables the rule (per-module `options _cyclomatic_complexity = 0`)
-        if (max_complexity > 0 && cc > max_complexity && !foreign_module_code()) {
+        // generated carriers (lambda/generator bodies) stay unmetered, matching STYLE038
+        if (max_complexity > 0 && cc > max_complexity && !foreign_module_code()
+                && !(current_function != null && current_function.flags.generated)) {
             style_warning("STYLE037: {what} has cyclomatic complexity {cc} (max {max_complexity}); {fix}", at)
         }
     }
@@ -518,6 +550,17 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE003: redundant $() on parameterless blocks (all contexts) ---
 
     def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
+        // STYLE041: a lambda capture of an armed candidate may not surface as ExprVar - poison
+        // by name (over-killing on shadowing is fail-closed and fine)
+        if (!empty(st041_candidates)) {
+            for (cap in expr._capture) {
+                for (vk, cv in keys(st041_candidates), values(st041_candidates)) {
+                    if (vk != null && vk.name == cap.name) {
+                        cv.seen += 1000
+                    }
+                }
+            }
+        }
         var blk = expr._block
         if (!(blk is ExprBlock)) return
         var eblk = blk as ExprBlock
@@ -1055,7 +1098,246 @@ class StyleLintVisitor : AstVisitor {
             check_style027_for_loop_comprehension(blk, expr as ExprLet)
             check_style031_table_init(blk, expr as ExprLet)
             check_style032_clone_init(blk, expr as ExprLet)
+            check_style041_flag_return(blk, expr as ExprLet)
         }
+    }
+
+    // --- STYLE041: a bool flag set-then-returned is a return value in disguise ---
+    // `var flag = false` whose writes are terminal `flag = true` sites inside ONE later top
+    // statement, read only as `if (flag) break/continue` plumbing there, then consumed by a
+    // single immediately-following `if (flag) return ...` - collapse to direct returns.
+    // Phase A/B classify structurally; phase C (preVisitExprVar + st041_flush) reconciles an
+    // expected reference count so ANY unclassified reference - a callback body, `flag && x`,
+    // an argument pass, a read after the consume - silently kills the candidate. Out of scope
+    // by design: init-true flags (separator idiom), cross-block decl/consume, walk-abort
+    // callbacks (the legitimate way to get a value out of a block-callback walk).
+
+    def check_style041_flag_return(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function == null || current_function.fromGeneric != null) return
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        // need at least a setter statement and a consuming statement after the decl
+        if (idx < 0 || idx + 2 >= n) return
+        for (v in elet.variables) {
+            if (v.init == null || v.flags.generated || v.flags.inScope
+                    || v._type == null || v._type.baseType != Type.tBool) continue
+            let ini = peel_ref2value_const(v.init)
+            if (ini == null || !(ini is ExprConstBool) || (ini as ExprConstBool).value) continue
+            st041_analyze_candidate(blk, idx, n, v)
+        }
+    }
+
+    def st041_analyze_candidate(blk : ExprBlock?; idx, n : int; v : VariablePtr) : void {
+        var inscope st = St041Scan()
+        for (t in range(idx + 1, n)) {
+            st041_scan_stmt(blk.list[t], blk, t, t, true, v, st)
+            return if (st.rejected)
+        }
+        return if (st.write_count == 0 || !st.writes_terminal || st.write_top < 0)
+        return if (st.consume_count != 1 || !st.consume_top_level || st.consume_top != st.write_top + 1)
+        for (pt in st.plumb_tops) {
+            return if (pt != st.write_top)
+        }
+        return if (!st.consume_ok)
+        let msg = (st.consume_moved
+            ? "STYLE041: bool flag '{v.name}' is a return value in disguise; move the 'if ({v.name})' body to each '{v.name} = true' site and drop the flag"
+            : "STYLE041: bool flag '{v.name}' is a return value in disguise; return directly at each '{v.name} = true' site and drop the flag")
+        st041_candidates[v] = St041Candidate(
+            expected = st.write_count + st.plumb_count + 1,
+            seen = 0,
+            msg = msg)
+    }
+
+    def st041_scan_stmt(stmt : ExpressionPtr; arm : ExprBlock?; pos, top : int; is_top : bool;
+                        v : VariablePtr; var st : St041Scan) : void {
+        return if (stmt == null || st.rejected || stmt.genFlags.generated)
+        if (stmt is ExprCopy) {
+            let cp = stmt as ExprCopy
+            return if (find_assign_var(cp.left) != v)
+            let rhs = peel_ref2value_const(cp.right)
+            if (rhs == null || !(rhs is ExprConstBool) || !(rhs as ExprConstBool).value || arm == null) {
+                st.rejected = true      // written with anything but literal `true`, or not a direct arm statement
+                return
+            }
+            st.write_count++
+            if (st.write_top == -1) {
+                st.write_top = top
+            } elif (st.write_top != top) {
+                st.rejected = true      // sets span more than one top statement
+                return
+            }
+            if (!st041_terminal_at(arm, pos)) {
+                st.writes_terminal = false
+            }
+            return
+        }
+        if (stmt is ExprIfThenElse) {
+            let ifte = stmt as ExprIfThenElse
+            return if (ifte.if_flags.isStatic)
+            if (st041_is_flag_read(ifte.cond, v)) {
+                let term = single_terminator_body(ifte.if_true)
+                if (ifte.if_false == null && term != null && (term is ExprBreak || term is ExprContinue)) {
+                    st.plumb_count++
+                    st.plumb_tops |> push(top)
+                } elif (st.consume_count == 0) {
+                    st.consume_count = 1
+                    st.consume_top = top
+                    st.consume_top_level = is_top
+                    st.consume_ok = st041_consume_body_ok(ifte, st.consume_moved)
+                } else {
+                    st.consume_count++
+                }
+                // deliberately no descent into a flag-read if's arms: any flag reference
+                // inside stays unclassified and the phase C count check rejects
+                return
+            }
+            st041_scan_arm(ifte.if_true, top, v, st)
+            st041_scan_arm(ifte.if_false, top, v, st)
+            return
+        }
+        if (stmt is ExprFor) {
+            st041_scan_arm((stmt as ExprFor).body, top, v, st)
+            return
+        }
+        if (stmt is ExprWhile) {
+            st041_scan_arm((stmt as ExprWhile).body, top, v, st)
+            return
+        }
+        if (stmt is ExprBlock) {
+            st041_scan_arm(stmt, top, v, st)
+        }
+        // everything else is not statement skeleton - ignored; phase C guards any flag refs inside
+    }
+
+    def st041_scan_arm(body : ExpressionPtr; top : int; v : VariablePtr; var st : St041Scan) : void {
+        return if (body == null || st.rejected)
+        if (body is ExprIfThenElse) {
+            // elif chain link; arm==null - a direct write here cannot prove terminality
+            st041_scan_stmt(body, null, 0, top, false, v, st)
+            return
+        }
+        return if (!(body is ExprBlock))
+        let ab = body as ExprBlock
+        let m = length(ab.list)
+        for (p in range(m)) {
+            st041_scan_stmt(ab.list[p], ab, p, top, false, v, st)
+            return if (st.rejected)
+        }
+        // ab.finalList deliberately not scanned - finally refs stay unclassified; phase C rejects
+    }
+
+    def st041_is_flag_read(e : Expression? const; v : VariablePtr) : bool {
+        // bare positive read only: `!flag` / `flag && x` do not match
+        let pe = peel_ref2value_const(e)
+        if (pe == null || !(pe is ExprVar)) return false
+        return (pe as ExprVar).variable == v
+    }
+
+    def st041_terminal_at(arm : ExprBlock?; pos : int) : bool {
+        // the set is its arm's last statement, or followed only by a break/continue;
+        // a finally section counts as trailing work
+        return false if (!empty(arm.finalList))
+        let m = length(arm.list)
+        return true if (pos == m - 1)
+        return pos == m - 2 && (arm.list[m - 1] is ExprBreak || arm.list[m - 1] is ExprContinue)
+    }
+
+    def st041_consume_body_ok(ifte : ExprIfThenElse?; var moved_body : bool&) : bool {
+        // no else; body ends in a return whose payload is value-stable at any earlier site;
+        // prefix statements are report-ish calls over entry-scope names, duplicable per site
+        if (ifte == null || ifte.if_false != null || ifte.if_true == null) return false
+        if (ifte.if_true is ExprReturn) {
+            moved_body = false
+            return st041_return_value_ok((ifte.if_true as ExprReturn).subexpr)
+        }
+        return false if (!(ifte.if_true is ExprBlock))
+        let body = ifte.if_true as ExprBlock
+        return false if (!empty(body.finalList))
+        let m = length(body.list)
+        return false if (m < 1 || !(body.list[m - 1] is ExprReturn))
+        for (p in range(m - 1)) {
+            let stmt = body.list[p]
+            return false if (!(stmt is ExprCall))
+            for (a in (stmt as ExprCall).arguments) {
+                return false if (!st041_dup_ok(a, 0))
+            }
+        }
+        moved_body = m > 1
+        return st041_return_value_ok((body.list[m - 1] as ExprReturn).subexpr)
+    }
+
+    def st041_is_const_literal(e : Expression? const) : bool {
+        return (e is ExprConstBool || e is ExprConstInt || e is ExprConstUInt
+            || e is ExprConstInt64 || e is ExprConstUInt64 || e is ExprConstFloat
+            || e is ExprConstDouble || e is ExprConstString || e is ExprConstEnumeration
+            || e is ExprConstBitfield || e is ExprConstPtr)
+    }
+
+    def st041_return_value_ok(e0 : Expression? const) : bool {
+        // value provably identical at every set site: void, a literal constant (a unary op
+        // over one included - `-1` does not fold under lint policies), a const argument, or
+        // a const global. Mutable locals are rejected: in scope earlier, but the value can
+        // change between the set and the read (the `negative`-then-`value` parser shape)
+        if (e0 == null) return true
+        let e = peel_ref2value_const(e0)
+        if (e == null) return false
+        if (e is ExprVar) {
+            let ev = e as ExprVar
+            if (ev.variable == null || ev.variable._type == null) return false
+            if (ev.varFlags.argument) return ev.variable._type.flags.constant
+            if (ev.variable.flags.global) return ev.variable._type.flags.constant
+            return false
+        }
+        if (e is ExprOp1) {
+            let sub = peel_ref2value_const((e as ExprOp1).subexpr)
+            return sub != null && st041_is_const_literal(sub)
+        }
+        return st041_is_const_literal(e)
+    }
+
+    def st041_dup_ok(e0 : Expression? const; depth : int) : bool {
+        // whitelist for report-call arguments: constants, entry-scope names (arguments and
+        // globals), field chains / calls / string builders over those. Unknown fails closed.
+        return false if (depth > 8)
+        let e = peel_ref2value_const(e0)
+        if (e == null) return false
+        // infer appends fake context/lineinfo arguments to builtin calls - duplicable by construction
+        return true if (e is ExprFakeContext || e is ExprFakeLineInfo)
+        if (e is ExprVar) {
+            let ev = e as ExprVar
+            return ev.varFlags.argument || (ev.variable != null && ev.variable.flags.global)
+        }
+        return true if (st041_is_const_literal(e))
+        if (e is ExprField) return st041_dup_ok((e as ExprField).value, depth + 1)
+        if (e is ExprStringBuilder) {
+            for (el in (e as ExprStringBuilder).elements) {
+                return false if (!st041_dup_ok(el, depth + 1))
+            }
+            return true
+        }
+        if (e is ExprCall) {
+            for (a in (e as ExprCall).arguments) {
+                return false if (!st041_dup_ok(a, depth + 1))
+            }
+            return true
+        }
+        return false
+    }
+
+    def st041_flush() : void {
+        for (vk, cv in keys(st041_candidates), values(st041_candidates)) {
+            // fires only when every reference in the function is one the analysis classified
+            if (vk != null && cv.seen == cv.expected) {
+                style_warning(cv.msg, vk.at)
+            }
+        }
+        st041_candidates |> clear()
     }
 
     // --- STYLE012: array<T> var then contiguous push/emplace instead of literal ---
@@ -2455,6 +2737,10 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprClone(expr : ExprClone?) : void { st029_record_func(expr.func) }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.variable != null) st029_record_mod(expr.variable._module)
+        // STYLE041: count every reference to an armed candidate; st041_flush reconciles
+        if (!empty(st041_candidates) && expr.variable != null && key_exists(st041_candidates, expr.variable)) {
+            st041_candidates[expr.variable].seen++
+        }
     }
     def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
         if (expr.enumType != null) st029_record_mod(expr.enumType._module)
