@@ -604,6 +604,7 @@ def public sf2_load(path : string) : SF2File? {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
+                data |> reserve(int64(st.size))     // soundfonts run past max_unreserved_size
                 data |> resize(int64(st.size))
                 fread(f, data)
             }
@@ -684,6 +685,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037,STYLE
                         smpl_offset = cursor
                         smpl_size = sub_size
                         let num_samples = sub_size / 2
+                        result.sample_data |> reserve(num_samples)     // whole-soundfont PCM outgrows max_unreserved_size
                         result.sample_data |> resize(num_samples)
                         // bulk copy — data is little-endian int16, same as native on x86/x64
                         unsafe {

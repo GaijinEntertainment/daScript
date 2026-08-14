@@ -29,7 +29,8 @@ def main {
         let name = slice(rest, 0, q2)
         if (starts_with(name, "GL_")) { defined[name] = true }
     }
-    // 2. emit extras from opengl_const.das (format: `let GL_X = uint(0xNu)` / `int(N)`)
+    // 2. emit extras from opengl_const.das (format: `let GL_X = 0xNu` / `N` bare literals,
+    //    or `TYPE(VALUE)` when the emitter kept a genuine cast)
     let out = "{root}/modules/dasOpenGL/src/dasOpenGL.const.desktop_extras.inc"
     var count = 0
     fopen(out, "wb") $(f) {
@@ -38,12 +39,18 @@ def main {
         for (line in split(fread("{root}/modules/dasOpenGL/opengl/opengl_const.das"), "\n")) {
             if (!starts_with(line, "let GL_")) { continue }
             let toks <- nonempty(split_by_chars(line, " =()"))
-            if (length(toks) < 4) { continue }       // let NAME TYPE VALUE
+            if (length(toks) < 3) { continue }
             let name = toks[1]
-            let dtype = toks[2]
-            let value = toks[3]
+            var ctype = ""
+            var value = ""
+            if (length(toks) >= 4) {                 // let NAME TYPE VALUE
+                ctype = toks[2] == "int" ? "int32_t" : "uint32_t"
+                value = toks[3]
+            } else {                                 // let NAME VALUE (bare literal)
+                value = toks[2]
+                ctype = ends_with(value, "u") || ends_with(value, "ul") ? "uint32_t" : "int32_t"
+            }
             if (defined?[name] ?? false) { continue }
-            let ctype = dtype == "int" ? "int32_t" : "uint32_t"
             fprint(f, "addConstant<{ctype}>(*this,\"{name}\",{ctype}({value}));\n")
             count ++
         }

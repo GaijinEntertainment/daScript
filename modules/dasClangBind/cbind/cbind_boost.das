@@ -705,7 +705,15 @@ class AnyGenBind {
                     let ctt = getGenConstType(DEF, defTName)
                     if (!dup[DEF]) {
                         if (define_const_style_das) {
-                            fprint(define_const_file, "let {DEF} = {ctt}({VAL}{suf})\n")
+                            // drop the cast when the literal already has the target type (PERF020)
+                            let no_op_cast = ((ctt == "uint" && hex && suf == "u")
+                                || (ctt == "int" && !hex && suf == "")
+                                || (ctt == "uint64" && suf == "ul"))
+                            if (no_op_cast) {
+                                fprint(define_const_file, "let {DEF} = {VAL}{suf}\n")
+                            } else {
+                                fprint(define_const_file, "let {DEF} = {ctt}({VAL}{suf})\n")
+                            }
                         } else {
                             fprint(define_const_file, "addConstant<{ctt}>(*this,\"{DEF}\",{ctt}({VAL}{suf}));\n")
                         }
