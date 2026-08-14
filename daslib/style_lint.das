@@ -272,9 +272,7 @@ class StyleLintVisitor : AstVisitor {
     // always trips first — a separate closure check would only ever double-report.
 
     def st038_check_length(what : string; fix : string; at : LineInfo; body_at : LineInfo) : void {
-        // max_function_length == 0 disables the rule (per-module `options _function_length = 0`)
-        // generated carriers (lambda/generator bodies) stay unmetered: a `_lambda_...` name
-        // means nothing to the reader, and the host's own span already covers the source
+        // 0 disables (per-module `options _function_length = 0`); generated carriers (lambda/generator bodies) stay unmetered - a `_lambda_...` name means nothing to the reader
         if (max_function_length <= 0 || at.line == 0u || foreign_module_code()
                 || (current_function != null && current_function.flags.generated)) return
         let nlines = int(body_at.last_line) - int(at.line) + 1
@@ -307,8 +305,7 @@ class StyleLintVisitor : AstVisitor {
         if (n == 0) return
         let cc = complexity_stack[n - 1]
         complexity_stack |> pop
-        // max_complexity == 0 disables the rule (per-module `options _cyclomatic_complexity = 0`)
-        // generated carriers (lambda/generator bodies) stay unmetered, matching STYLE038
+        // 0 disables (per-module `options _cyclomatic_complexity = 0`); generated carriers stay unmetered, matching STYLE038
         if (max_complexity > 0 && cc > max_complexity && !foreign_module_code()
                 && !(current_function != null && current_function.flags.generated)) {
             style_warning("STYLE037: {what} has cyclomatic complexity {cc} (max {max_complexity}); {fix}", at)
@@ -551,8 +548,7 @@ class StyleLintVisitor : AstVisitor {
     // --- STYLE003: redundant $() on parameterless blocks (all contexts) ---
 
     def override preVisitExprMakeBlock(var expr : ExprMakeBlock?) : void {
-        // STYLE041: a lambda capture of an armed candidate may not surface as ExprVar - poison
-        // by name (over-killing on shadowing is fail-closed and fine)
+        // STYLE041: a lambda capture of an armed candidate may not surface as ExprVar - poison by name (over-killing on shadowing is fail-closed and fine)
         if (!empty(st041_candidates)) {
             for (cap in expr._capture) {
                 for (vk, cv in keys(st041_candidates), values(st041_candidates)) {
@@ -1104,14 +1100,8 @@ class StyleLintVisitor : AstVisitor {
     }
 
     // --- STYLE041: a bool flag set-then-returned is a return value in disguise ---
-    // `var flag = false` whose writes are terminal `flag = true` sites inside ONE later top
-    // statement, read only as `if (flag) break/continue` plumbing there, then consumed by a
-    // single immediately-following `if (flag) return ...` - collapse to direct returns.
-    // Phase A/B classify structurally; phase C (preVisitExprVar + st041_flush) reconciles an
-    // expected reference count so ANY unclassified reference - a callback body, `flag && x`,
-    // an argument pass, a read after the consume - silently kills the candidate. Out of scope
-    // by design: init-true flags (separator idiom), cross-block decl/consume, walk-abort
-    // callbacks (the legitimate way to get a value out of a block-callback walk).
+    // Structural phases classify writes/plumb-reads/the consuming if; a reference-count check
+    // (preVisitExprVar + st041_flush) then kills any candidate with an unclassified reference - fail-closed. Full semantics: lint.rst.
 
     def check_style041_flag_return(blk : ExprBlock?; elet : ExprLet?) : void {
         if (current_function == null || current_function.fromGeneric != null) return
@@ -1140,8 +1130,8 @@ class StyleLintVisitor : AstVisitor {
             st041_scan_stmt(blk.list[t], blk, t, t, true, v, st)
             return if (st.rejected)
         }
-        return if (st.write_count == 0 || !st.writes_terminal || st.write_top < 0)
-        return if (st.consume_count != 1 || !st.consume_top_level || st.consume_top != st.write_top + 1)
+        return if (st.write_count == 0 || !st.writes_terminal || st.write_top < 0
+            || st.consume_count != 1 || !st.consume_top_level || st.consume_top != st.write_top + 1)
         for (pt in st.plumb_tops) {
             return if (pt != st.write_top)
         }
@@ -1155,42 +1145,39 @@ class StyleLintVisitor : AstVisitor {
             msg = msg)
     }
 
+    def st041_classify_write(cp : ExprCopy?; arm : ExprBlock?; pos, top : int;
+                             v : VariablePtr; var st : St041Scan) : void {
+        return if (find_assign_var(cp.left) != v)
+        let rhs = peel_ref2value_const(cp.right)
+        if (rhs == null || !(rhs is ExprConstBool) || !(rhs as ExprConstBool).value || arm == null) {
+            st.rejected = true      // written with anything but literal `true`, or not a direct arm statement
+            return
+        }
+        st.write_count++
+        if (st.write_top == -1) {
+            st.write_top = top
+        } elif (st.write_top != top) {
+            st.rejected = true      // sets span more than one top statement
+            return
+        }
+        // the set must ESCAPE the top statement: break needs `if (flag) break` guards on every loop above; continue/arm-end need them on every level - an unguarded loop that keeps working is the deliberate collect-all-diagnostics shape and the collapse would eat its reports
+        let kind = st041_terminal_kind(arm, pos)
+        var guarded = kind != 0
+        for (i in range(length(st.guard_stack) - (kind == 1 ? 1 : 0))) {
+            if (!st.guard_stack[i]) {
+                guarded = false
+            }
+        }
+        if (!guarded) {
+            st.writes_terminal = false
+        }
+    }
+
     def st041_scan_stmt(stmt : ExpressionPtr; arm : ExprBlock?; pos, top : int; is_top : bool;
                         v : VariablePtr; var st : St041Scan) : void {
         return if (stmt == null || st.rejected || stmt.genFlags.generated)
         if (stmt is ExprCopy) {
-            let cp = stmt as ExprCopy
-            return if (find_assign_var(cp.left) != v)
-            let rhs = peel_ref2value_const(cp.right)
-            if (rhs == null || !(rhs is ExprConstBool) || !(rhs as ExprConstBool).value || arm == null) {
-                st.rejected = true      // written with anything but literal `true`, or not a direct arm statement
-                return
-            }
-            st.write_count++
-            if (st.write_top == -1) {
-                st.write_top = top
-            } elif (st.write_top != top) {
-                st.rejected = true      // sets span more than one top statement
-                return
-            }
-            // the set must ESCAPE the top statement, not just end its arm: a `break` exits
-            // its own loop and needs `if (flag) break` guards on every level above; a
-            // `continue` or arm-end set reaches its loop's next iteration and needs the
-            // guard on every level, the innermost included. An unguarded loop that keeps
-            // working after the set is the deliberate collect-all-diagnostics shape
-            // (utils/hygiene) - the collapse would eat its remaining reports.
-            let kind = st041_terminal_kind(arm, pos)
-            let d = length(st.guard_stack)
-            var guarded_above = kind != 0
-            let skip_innermost = kind == 1
-            for (i in range(d - (skip_innermost ? 1 : 0))) {
-                if (!st.guard_stack[i]) {
-                    guarded_above = false
-                }
-            }
-            if (kind == 0 || !guarded_above) {
-                st.writes_terminal = false
-            }
+            st041_classify_write(stmt as ExprCopy, arm, pos, top, v, st)
             return
         }
         if (stmt is ExprIfThenElse) {
@@ -1209,9 +1196,7 @@ class StyleLintVisitor : AstVisitor {
                 } else {
                     st.consume_count++
                 }
-                // deliberately no descent into a flag-read if's arms: any flag reference
-                // inside stays unclassified and the phase C count check rejects
-                return
+                return      // no descent into a flag-read if's arms - unclassified refs there reject in the count check
             }
             st041_scan_arm(ifte.if_true, top, v, st)
             st041_scan_arm(ifte.if_false, top, v, st)
@@ -1232,7 +1217,7 @@ class StyleLintVisitor : AstVisitor {
         if (stmt is ExprBlock) {
             st041_scan_arm(stmt, top, v, st)
         }
-        // everything else is not statement skeleton - ignored; phase C guards any flag refs inside
+        // everything else is not statement skeleton - ignored; the count check guards refs inside
     }
 
     def st041_scan_arm(body : ExpressionPtr; top : int; v : VariablePtr; var st : St041Scan) : void {
@@ -1260,8 +1245,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st041_terminal_kind(arm : ExprBlock?; pos : int) : int {
-        // 0 = not terminal (trailing work, or a finally section); 1 = followed by break;
-        // 2 = followed by continue; 3 = last statement of its arm (falls through)
+        // 0 = not terminal (trailing work or finally); 1 = +break; 2 = +continue; 3 = arm end
         return 0 if (!empty(arm.finalList))
         let m = length(arm.list)
         return 3 if (pos == m - 1)
@@ -1272,8 +1256,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st041_loop_guarded(body : Expression? const; v : VariablePtr) : bool {
-        // a loop is guarded when its body's FIRST statement is `if (flag) break` -
-        // the next iteration provably stops working once the flag is set
+        // guarded = body's FIRST statement is `if (flag) break`, so iteration provably stops
         if (body == null || !(body is ExprBlock)) return false
         let ab = body as ExprBlock
         return false if (empty(ab.list))
@@ -1286,8 +1269,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st041_consume_body_ok(ifte : ExprIfThenElse?; var moved_body : bool&) : bool {
-        // no else; body ends in a return whose payload is value-stable at any earlier site;
-        // prefix statements are report-ish calls over entry-scope names, duplicable per site
+        // no else; body = duplicable report-ish calls ending in a value-stable return
         if (ifte == null || ifte.if_false != null || ifte.if_true == null) return false
         if (ifte.if_true is ExprReturn) {
             moved_body = false
@@ -1317,18 +1299,14 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st041_return_value_ok(e0 : Expression? const) : bool {
-        // value provably identical at every set site: void, a literal constant (a unary op
-        // over one included - `-1` does not fold under lint policies), a const argument, or
-        // a const global. Mutable locals are rejected: in scope earlier, but the value can
-        // change between the set and the read (the `negative`-then-`value` parser shape)
+        // payload provably identical at every set site: void, literal const (`-1` = op1 over one - no folding under lint policies), const argument, const global; mutable locals can change between set and read
         if (e0 == null) return true
         let e = peel_ref2value_const(e0)
         if (e == null) return false
         if (e is ExprVar) {
             let ev = e as ExprVar
             if (ev.variable == null || ev.variable._type == null) return false
-            if (ev.varFlags.argument) return ev.variable._type.flags.constant
-            if (ev.variable.flags.global) return ev.variable._type.flags.constant
+            if (ev.varFlags.argument || ev.variable.flags.global) return ev.variable._type.flags.constant
             return false
         }
         if (e is ExprOp1) {
@@ -1339,8 +1317,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st041_dup_ok(e0 : Expression? const; depth : int) : bool {
-        // whitelist for report-call arguments: constants, entry-scope names (arguments and
-        // globals), field chains / calls / string builders over those. Unknown fails closed.
+        // report-arg whitelist: constants, entry-scope names, chains over those; unknown fails closed
         return false if (depth > 8)
         let e = peel_ref2value_const(e0)
         if (e == null) return false

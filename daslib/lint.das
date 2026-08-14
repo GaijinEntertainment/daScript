@@ -1208,9 +1208,7 @@ def private is_nolint_space(b : uint8) : bool {
     return int(b) == ' ' || int(b) == '\t'
 }
 
-// quote-aware comment locator: a `//` inside a string or char literal does not open a
-// comment (backslash escapes honored; a char literal skips as a unit so '"' cannot flip
-// string state). Mirrors the C-side scanner in rtti_is_nolint_suppressed - lockstep.
+// quote-aware comment locator: a `//` inside a string/char literal (escapes honored) does not open a comment; mirrors the C-side rtti_is_nolint_suppressed - change in lockstep
 def private nolint_comment_start(d : array<uint8> const# implicit) : int {
     let n = length(d)
     var p = 0
@@ -1231,6 +1229,62 @@ def private nolint_comment_start(d : array<uint8> const# implicit) : int {
     return -1
 }
 
+// one line's directive walk; recognition mirrors the C-side rtti_is_nolint_suppressed (module_builtin_rtti.cpp) - change them in lockstep
+def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string; line_no : int;
+                            disabled_codes, enabled_codes : table<string>;
+                            var stale_codes : array<string>; var self_suppressed : bool&) : void {
+    let n = length(bytes)
+    var p = nolint_comment_start(bytes)
+    return if (p < 0)
+    p += 2
+    while (p < n && (int(bytes[p]) == '/' || int(bytes[p]) == '!')) {
+        p++     // `//!` docs, `///` piles
+    }
+    while (p < n && is_nolint_space(bytes[p])) {
+        p++
+    }
+    // positional gate: the comment's first token must open a directive
+    return if (find(bytes, "nolint:", p) != p)
+    // whitespace-split tokens; each `nolint:`-led token opens a comma-list
+    while (p < n) {
+        while (p < n && is_nolint_space(bytes[p])) {
+            p++
+        }
+        break if (p >= n)
+        if (find(bytes, "nolint:", p) == p) {
+            p += length("nolint:")
+            while (p < n) {     // comma-list of codes
+                while (p < n && is_nolint_space(bytes[p])) {
+                    p++
+                }
+                let tok_start = p
+                while (p < n && int(bytes[p]) != ',' && !is_nolint_space(bytes[p])) {
+                    p++
+                }
+                break if (p == tok_start)
+                let code = slice(bytes, tok_start, p)
+                if (code == "LINT019") {
+                    self_suppressed = true
+                } elif (is_rule_code(code)
+                        && !key_exists(disabled_codes, code)
+                        && (empty(enabled_codes) || key_exists(enabled_codes, code))
+                        && !was_nolint_consumed(fname, line_no, code)) {
+                    stale_codes |> push(code)
+                }
+                while (p < n && is_nolint_space(bytes[p])) {
+                    p++
+                }
+                break if (p >= n || int(bytes[p]) != ',')
+                p++
+            }
+        } else {
+            while (p < n && !is_nolint_space(bytes[p])) {
+                p++
+            }
+        }
+    }
+}
+
 //! LINT019 - stale nolint detection: reports every ``// nolint:CODE`` in `source` whose code
 //! suppressed nothing this process (run-disabled codes are skipped - their rules cannot prove
 //! themselves). Call AFTER all lint passes ran; a partial run under-consumes and would lie.
@@ -1249,61 +1303,8 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
         stale_codes |> clear()
         var self_suppressed = false
         peek_data(line) $(bytes) {
-            // directive recognition mirrors the C-side scanner in rtti_is_nolint_suppressed
-            // (module_builtin_rtti.cpp) - change them in lockstep
-            let n = length(bytes)
-            var p = nolint_comment_start(bytes)
-            if (p >= 0) {
-                p += 2
-                while (p < n && (int(bytes[p]) == '/' || int(bytes[p]) == '!')) {
-                    p++     // `//!` docs, `///` piles
-                }
-                while (p < n && is_nolint_space(bytes[p])) {
-                    p++
-                }
-                // positional gate: the comment's first token must open a directive
-                if (find(bytes, "nolint:", p) != p) {
-                    p = n
-                }
-                // whitespace-split tokens; each `nolint:`-led token opens a comma-list
-                while (p < n) {
-                    while (p < n && is_nolint_space(bytes[p])) {
-                        p++
-                    }
-                    break if (p >= n)
-                    if (find(bytes, "nolint:", p) == p) {
-                        p += length("nolint:")
-                        while (p < n) {     // comma-list of codes
-                            while (p < n && is_nolint_space(bytes[p])) {
-                                p++
-                            }
-                            let tok_start = p
-                            while (p < n && int(bytes[p]) != ',' && !is_nolint_space(bytes[p])) {
-                                p++
-                            }
-                            break if (p == tok_start)
-                            let code = slice(bytes, tok_start, p)
-                            if (code == "LINT019") {
-                                self_suppressed = true
-                            } elif (is_rule_code(code)
-                                    && !key_exists(disabled_codes, code)
-                                    && (empty(enabled_codes) || key_exists(enabled_codes, code))
-                                    && !was_nolint_consumed(fname, line_no, code)) {
-                                stale_codes |> push(code)
-                            }
-                            while (p < n && is_nolint_space(bytes[p])) {
-                                p++
-                            }
-                            break if (p >= n || int(bytes[p]) != ',')
-                            p++
-                        }
-                    } else {
-                        while (p < n && !is_nolint_space(bytes[p])) {
-                            p++
-                        }
-                    }
-                }
-            }
+            stale_scan_line(bytes, fname, line_no, disabled_codes, enabled_codes,
+                stale_codes, self_suppressed)
         }
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))

@@ -557,7 +557,7 @@ def test_format_file(t : T?) {
             return
         }
 
-        t |> success(length(parsed.value as _array) >= 1, "array should contain at least one result")
+        t |> success(!empty(parsed.value as _array), "array should contain at least one result")
         let first = (parsed.value as _array)[0]
         t |> success(first != null, "first result should exist")
         if (first != null) {
@@ -606,6 +606,10 @@ def test_format_file(t : T?) {
         unsafe { delete parsed; }
     }
 
+}
+
+[test]
+def test_format_file_batches(t : T?) {
     t |> run("glob pattern expands and returns matching file entry") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -2480,8 +2484,8 @@ def test_cpp_compile_check(t : T?) {
         var text : string
         var is_error = false
         parse_result(do_cpp_compile_check("src/misc/sysos.cpp", "", true), text, is_error)
-        if (!has_compile_db(text)) return
-        if (find(text, "no compile DB entry") >= 0) return  // DB present but TU absent (alt build dir)
+        // second arm: DB present but TU absent (alt build dir)
+        if (!has_compile_db(text) || find(text, "no compile DB entry") >= 0) return
         t |> success(find(text, "\"success\"") >= 0, "json has success field -- text={text}")
         t |> success(find(text, "\"file\"") >= 0, "json has file field -- text={text}")
     }
@@ -3122,9 +3126,7 @@ def test_live_args_load_module_only(t : T?) {
 [test]
 def test_live_args_load_module_multi(t : T?) {
     t |> run("two load_modules: both pairs preserved in source order") <| @(t : T?) {
-        var lm : array<string>
-        lm |> push("/p1")
-        lm |> push("/p2")
+        let lm <- ["/p1", "/p2"]
         let s = build_live_script_args("/path/foo.das", "", "", false, lm)
         t |> equal(s, "-load_module \"/p1\" -load_module \"/p2\" -cwd \"/path/foo.das\"",
                    "two load_module pairs preserved in source order")
@@ -3134,9 +3136,7 @@ def test_live_args_load_module_multi(t : T?) {
 [test]
 def test_live_args_all_set(t : T?) {
     t |> run("project_root + load_modules + project + cwd: ordered project_root → load_module → project → cwd") <| @(t : T?) {
-        var lm : array<string>
-        lm |> push("/m1")
-        lm |> push("/m2")
+        let lm <- ["/m1", "/m2"]
         let s = build_live_script_args("/path/foo.das", "/p.das_project", "/proj_root", false, lm)
         t |> equal(s,
                    "-project_root \"/proj_root\" -load_module \"/m1\" -load_module \"/m2\" -project \"/p.das_project\" -cwd \"/path/foo.das\"",
@@ -3188,9 +3188,7 @@ def test_resolve_load_modules_empty(t : T?) {
 [test]
 def test_resolve_load_modules_absolutizes_relative(t : T?) {
     t |> run("relative paths become absolute") <| @(t : T?) {
-        var src : array<string>
-        src |> push("foo")
-        src |> push("./bar/baz")
+        let src <- ["foo", "./bar/baz"]
         let out <- resolve_load_modules(src)
         t |> equal(length(out), 2, "preserves entry count")
         // resolve_path uses get_das_root() as the base for relative paths.
@@ -3297,9 +3295,7 @@ def test_build_subtool_argv_with_load_module(t : T?) {
 def test_build_subtool_argv_with_load_modules_multi(t : T?) {
     t |> run("two load_module pairs preserved in source order") <| @(t : T?) {
         let args : array<string>
-        var lm : array<string>
-        lm |> push("/m1")
-        lm |> push("/m2")
+        let lm <- ["/m1", "/m2"]
         let argv <- build_subtool_argv("daslang.exe", "sub.das", args, "", lm)
         t |> equal(length(argv), 7, "argv length should be 7")
         t |> equal(argv[1], "-load_module", "argv[1]=first -load_module flag")
