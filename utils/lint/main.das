@@ -256,8 +256,9 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
                     var first_diag = ""
                     let err_start = find(issue_str, "error[")
                     if (err_start >= 0) {
-                        let nl = find(issue_str, "\n", err_start)
-                        first_diag = nl >= 0 ? slice(issue_str, err_start, nl) : slice(issue_str, err_start)
+                        // the first diagnostic's BLOCK, not just its header: the [extern] dlopen
+                        // miss puts "can't load library" on the message's second line
+                        first_diag = slice(issue_str, err_start, min(err_start + 240, length(issue_str)))
                     }
                     // error[20605] = missing prerequisite (e.g. daspkg-installed `anthropic/anthropic`) —
                     // out-of-tree as far as a stock daslang build can tell.

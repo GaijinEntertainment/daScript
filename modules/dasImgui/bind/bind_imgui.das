@@ -172,10 +172,9 @@ class ImguiGen : CppGenBind {
             // also pulls ImGuiNavRenderCursorFlags_, bound as an int arg.
             "ImGui::RenderDragDropTargetRectForItem", "ImGui::RenderNavCursor",
             "ImGui::RenderRectFilledWithHole",
-            // GetIDWithSeed(begin, end) reads out of bounds unless both point into the SAME
-            // buffer - from das, seed with with_override_id(seed){GetID(str)} instead. ONE
-            // entry covers both GetIDWithSeed overloads (the gate keys on the bare spelling).
-            // GetActiveID stays out: the das::GetActiveID manual wrapper already binds it.
+            // GetIDWithSeed(begin, end) reads out of bounds unless both point into the SAME buffer -
+            // seed via with_override_id(seed){GetID(str)}; ONE entry covers both overloads (the gate
+            // keys on the bare spelling). GetActiveID stays out: the manual wrapper already binds it.
             "ImGui::GetFocusID", "ImGui::GetHoveredID",
             "ImGui::KeepAliveID", "ImGui::MarkItemEdited", "ImGui::PushOverrideID",
             "ImGui::GetIDWithSeed", "ImGui::TreePushOverrideID",
