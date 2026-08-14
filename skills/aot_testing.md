@@ -79,14 +79,14 @@ tests/aot/
 # Build the test_aot binary
 cmake --build build --config Release --target test_aot
 
-# Run all AOT tests (test_aot detects its own AOT stubs via is_in_aot())
-bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot
+# Run all AOT tests — --use-aot is REQUIRED, there is no auto-detection at runtime
+bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests/aot
 
 # Run with the regular daslang binary (no AOT, interpreter mode)
 bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot
 ```
 
-The `-use-aot` flag enables AOT for sub-compiled test files even when the host binary has stubs. But `test_aot` auto-detects via `is_in_aot()` in `dastest/suite.das`.
+`--use-aot` (the dastest flag, after `--`) is what sets `cop.aot` + `cop.fail_on_no_aot` on each compiled test file. **Without it the stubs are simply never linked and every test silently interprets** — the run still passes, so a lane that forgets the flag measures/tests nothing. `is_in_aot()` is true only while the AOT emitter itself runs (`daslib/aot_cpp` calls `set_aot()`), never in a plain `test_aot` run, and `dastest`'s `[INTERP]`/`[JIT]` benchmark label is derived from it — so an AOT run still prints `[INTERP]`. The `run_tests_aot` / `run_tests_aot_subset` targets pass both `-use-aot` (host) and `--use-aot` (dastest); copy them.
 
 ## Adding Tests to AOT — CRITICAL
 
@@ -144,7 +144,7 @@ def test_basic(t : T?) {
 The AOT flag flows through three layers:
 
 1. **`main.cpp`**: `-use-aot` sets `useAot = true`. Does NOT set `policies.aot` on the host (dastest framework functions don't have AOT stubs in every binary).
-2. **`dastest/suite.das`**: `--use-aot` (or auto-detected via `is_in_aot()`) sets `ctx.use_aot = true`. When compiling test files, sets `cop.aot = true` and `cop.fail_on_no_aot = true`.
+2. **`dastest/suite.das`**: `--use-aot` sets `ctx.use_aot = true` (the `|| is_in_aot()` beside it never fires at run time — see above). When compiling test files, sets `cop.aot = true` and `cop.fail_on_no_aot = true`.
 3. **`dastest/dastest.das`**: In isolated mode, forwards `-use-aot` to child processes when `is_in_aot()` is true.
 
 **Critical**: The host program must NOT set `policies.aot = true` because the host compiles dastest framework scripts (like `suite.das`), which don't have AOT stubs in the host binary. Only the sub-compiled test files get `cop.aot = true`.
