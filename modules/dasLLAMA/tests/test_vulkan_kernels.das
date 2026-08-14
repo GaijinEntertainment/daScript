@@ -79,7 +79,7 @@ def test_vkd_class_dispatch(t0 : T?) {
                 delete k
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -179,7 +179,7 @@ def test_vkd_ar_class(t0 : T?) {
             delete xc
             delete ysent
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -480,7 +480,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -637,7 +637,7 @@ def test_vkd_act_family(t0 : T?) {
             delete gh
             delete uh
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -874,7 +874,7 @@ def test_vkd_rope_family(t0 : T?) {
                 delete cls_k
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -982,7 +982,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
             delete xsh
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1104,7 +1104,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1276,7 +1276,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 feint("no coopmat batch pipes in this mode - set DASLLAMA_COOPMAT to cover\n")
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1390,7 +1390,7 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
             delete xsh
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1495,7 +1495,7 @@ def test_vkd_cm2l_batch(t0 : T?) {
             delete xfh
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1599,7 +1599,7 @@ def test_vkd_cm2m_batch(t0 : T?) {
             delete xfh
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1708,7 +1708,7 @@ def test_vkd_cm2l_split(t0 : T?) {
             delete xfh
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1790,7 +1790,7 @@ def test_vkd_da_attn(t0 : T?) {
             delete y_ref
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -1890,7 +1890,7 @@ def test_vkd_at_attn(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2010,7 +2010,7 @@ def test_vkd_fa_cm2(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2104,7 +2104,7 @@ def test_vkd_da_attn_b(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2203,7 +2203,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
             delete y_ref
             delete y_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2369,7 +2369,7 @@ def test_vkd_requant_family(t0 : T?) {
                 delete s_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2481,7 +2481,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
                 delete y_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2614,7 +2614,7 @@ def test_vkd_cvt_family(t0 : T?) {
                 delete h_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -2896,7 +2896,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
                 delete m_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -3063,7 +3063,7 @@ def test_vkd_at_prep(t0 : T?) {
             delete o_ref
             delete o_cls
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -3525,7 +3525,7 @@ def test_vkd_dn_family(t0 : T?) {
                 delete o_cls
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -3921,7 +3921,7 @@ def test_vkd_kv16_writers(t0 : T?) {
                 delete m16
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
@@ -4170,7 +4170,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 feint("no coopmat on this device - h128 f16 arm skipped\n")
             }
         } else {
-            feint("dasVulkan not present — skipping\n")
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
