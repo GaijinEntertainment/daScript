@@ -216,8 +216,8 @@ namespace das {
     bool builtin_spawn_argv ( const Array & args_arr, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_system ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
-    bool has_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
-    char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool has_env_variable ( const char *, Context *, LineInfoArg * ) { return false; }
+    char * get_env_variable ( const char *, Context *, LineInfoArg * ) { return nullptr; }
     void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
