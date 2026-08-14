@@ -7,7 +7,6 @@ options persistent_heap
 module lockfile shared public
 
 require daslib/fio
-require strings
 require daslib/json
 require daslib/json_boost
 
@@ -84,7 +83,8 @@ def read_lock_file_at(path : string; var lf : LockFile) : bool {
             to_log(LOG_ERROR, "Error reading {path}: {error}\n")
             return
         }
-        lf = from_JV(parsed, type<LockFile>)
+        delete lf
+        lf = from_JV(parsed, type<LockFile>)   // nolint:PERF030 - the delete above releases the old contents; the check cannot see a struct delete
         ok = true
     }
     return ok

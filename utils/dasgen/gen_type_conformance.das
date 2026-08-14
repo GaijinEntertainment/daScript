@@ -315,7 +315,7 @@ def emit_convert_section(var writer; spec : TypeSpec) {
     writer |> write("    \}\n")
 }
 
-def emit_test_file(spec : TypeSpec) {
+def emit_test_file(spec : TypeSpec) {  // nolint:STYLE038 — flat emitter, one write per generated line; the conditional sections are already helpers
     let t0 = ref_time_ticks()
     let path = get_das_root() + "/tests/type_lattice/test_{spec.name}.das"
     to_log(LOG_INFO, "[gen_type_conformance] START {path}\n")

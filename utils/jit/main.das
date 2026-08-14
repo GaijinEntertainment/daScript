@@ -157,37 +157,19 @@ struct JitWorkResult {
     captured : string
 }
 
-def run_parallel(files : array<string>; tool : JitToolArgs; jit : JitCliOptions) : int {
-    let argv0 <- get_command_line_arguments()
-    if (empty(argv0)) {
-        to_log(LOG_ERROR, "jit: --parallel: cannot determine own exe path (argv empty)\n")
-        return 1
-    }
-    let exe_path = argv0[0]
-    // --parallel 0 (or bare flag) → auto-pick hw threads, matching dastest's
-    // isolated-mode policy.
-    var totalThreads = tool.parallel |> unwrap_or(0)
-    if (totalThreads <= 0) {
-        totalThreads = get_total_hw_threads()
-        if (totalThreads <= 0) {
-            totalThreads = 1
-        }
-    }
-    if (totalThreads > length(files)) {
-        totalThreads = length(files)
-    }
-    // Pick chunk size from worker count first: ceil(files / threads) gives
-    // each worker roughly equal work. Cap at WORKER_CHUNK_SIZE so a huge file
-    // set doesn't blow OS argv limits — extra chunks just queue up.
-    var chunk_size = (length(files) + totalThreads - 1) / totalThreads
+// One JitWorkItem per chunk, argv pre-composed here (main thread) so workers do no
+// per-task setup. Chunk size comes from the worker count first — ceil(files/workers)
+// gives each worker roughly equal work — capped at WORKER_CHUNK_SIZE so a huge file
+// set doesn't blow OS argv limits; extra chunks just queue up.
+def build_chunks(files : array<string>; worker_count : int; exe_path : string;
+                 tool : JitToolArgs; jit : JitCliOptions) : array<JitWorkItem> {
+    var chunk_size = (length(files) + worker_count - 1) / worker_count
     if (chunk_size > WORKER_CHUNK_SIZE) {
         chunk_size = WORKER_CHUNK_SIZE
     }
     if (chunk_size < 1) {
         chunk_size = 1
     }
-    // Build one JitWorkItem per chunk. Pre-compose argv here (in main thread)
-    // so workers do no per-task setup.
     var chunks : array<JitWorkItem>
     var idx = 0
     while (idx < length(files)) {
@@ -207,6 +189,29 @@ def run_parallel(files : array<string>; tool : JitToolArgs; jit : JitCliOptions)
         chunks |> emplace(item)
         idx = stop
     }
+    return <- chunks
+}
+
+def run_parallel(files : array<string>; tool : JitToolArgs; jit : JitCliOptions) : int {
+    let argv0 <- get_command_line_arguments()
+    if (empty(argv0)) {
+        to_log(LOG_ERROR, "jit: --parallel: cannot determine own exe path (argv empty)\n")
+        return 1
+    }
+    let exe_path = argv0[0]
+    // --parallel 0 (or bare flag) → auto-pick hw threads, matching dastest's
+    // isolated-mode policy.
+    var totalThreads = tool.parallel |> unwrap_or(0)
+    if (totalThreads <= 0) {
+        totalThreads = get_total_hw_threads()
+        if (totalThreads <= 0) {
+            totalThreads = 1
+        }
+    }
+    if (totalThreads > length(files)) {
+        totalThreads = length(files)
+    }
+    var chunks <- build_chunks(files, totalThreads, exe_path, tool, jit)
     let totalChunks = length(chunks)
     if (totalThreads > totalChunks) {
         totalThreads = totalChunks
@@ -217,17 +222,19 @@ def run_parallel(files : array<string>; tool : JitToolArgs; jit : JitCliOptions)
         with_channel(totalChunks) $(outputChannel) {
             with_job_status(totalThreads) $(completion) {
                 for (_t in range(totalThreads)) {
-                    new_thread <| @capture(= _t) { // nolint:LINT002 — `_t` placates the new_thread macro (capture frame must be non-empty); body never references it
+                    new_thread <| @capture(= _t) { // `_t` placates the new_thread macro (capture frame must be non-empty); body never references it
                         for_each_clone(inputChannel) $(input : JitWorkItem#) {
                             var local_argv : array<string>
                             local_argv |> reserve(length(input.argv))
                             for (a in input.argv) {
                                 local_argv |> push(clone_string(a))
                             }
-                            var res : JitWorkResult
-                            res.chunk_id = input.chunk_id
-                            res.file_count = input.file_count
-                            res.exit_code = run_and_capture(local_argv, res.captured)
+                            var captured : string
+                            let code = run_and_capture(local_argv, captured)
+                            let res = JitWorkResult(chunk_id = input.chunk_id,
+                                                    file_count = input.file_count,
+                                                    exit_code = code,
+                                                    captured = captured)
                             outputChannel |> push_clone(res)
                             outputChannel |> notify()
                         }

@@ -74,7 +74,7 @@ def test_loader_new_format(t : T?) {
         // span covers the longest event end
         t |> equal(32.5lf, doc.span)
         // mips built (level 0 at least)
-        t |> success(length(doc.lanes[0].mips) >= 1, "mips built")
+        t |> success(!empty(doc.lanes[0].mips), "mips built")
     }
 }
 

@@ -20,26 +20,27 @@ def private count_braces(s : string; var block_depth : int&) : tuple<int; int> {
     var opens = 0
     var closes = 0
     var in_string = false
-    var quote = uint8(0)
+    var quote = 0
     var escape = false
     var prev_slash = false
     var prev_star = false
     peek_data(s) $(arr) {
-        for (b in arr) {
+        for (raw in arr) {
+            let b = int(raw)
             if (block_depth > 0) {
                 // Inside a block comment — only `*/` (close) and `/*` (nest)
                 // matter; strings, escapes, `//` are inert.
-                if (prev_star && b == uint8('/')) {
+                if (prev_star && b == '/') {
                     block_depth--
                     prev_star = false
                     prev_slash = false
-                } elif (prev_slash && b == uint8('*')) {
+                } elif (prev_slash && b == '*') {
                     block_depth++
                     prev_slash = false
                     prev_star = false
                 } else {
-                    prev_star = b == uint8('*')
-                    prev_slash = b == uint8('/')
+                    prev_star = b == '*'
+                    prev_slash = b == '/'
                 }
                 continue
             }
@@ -50,7 +51,7 @@ def private count_braces(s : string; var block_depth : int&) : tuple<int; int> {
                 continue
             }
             if (in_string) {
-                if (b == uint8('\\')) {
+                if (b == '\\') {
                     escape = true
                 } elif (b == quote) {
                     in_string = false
@@ -59,25 +60,25 @@ def private count_braces(s : string; var block_depth : int&) : tuple<int; int> {
                 prev_star = false
                 continue
             }
-            if (b == uint8('"') || b == uint8('\'')) {
+            if (b == '"' || b == '\'') {
                 in_string = true
                 quote = b
                 prev_slash = false
                 prev_star = false
                 continue
             }
-            if (prev_slash && b == uint8('/')) return  // `//` line comment — rest of line is comment text
-            if (prev_slash && b == uint8('*')) {
+            if (prev_slash && b == '/') return  // `//` line comment — rest of line is comment text
+            if (prev_slash && b == '*') {
                 block_depth = 1
                 prev_slash = false
                 prev_star = false
                 continue
             }
-            prev_slash = b == uint8('/')
+            prev_slash = b == '/'
             prev_star = false
-            if (b == uint8('{')) {
+            if (b == '{') {
                 opens++
-            } elif (b == uint8('}')) {
+            } elif (b == '}') {
                 closes++
             }
         }

@@ -97,8 +97,7 @@ struct Config {
 // rules (`builtin.das`, debugger/profiler) apply.
 def resolve_against_files(against : array<string>; from_stdin : bool;
                           var out_set : table<string; void?>) {
-    var raw : array<string>
-    raw |> push_from(against)
+    var raw := against
     if (from_stdin) {
         read_path_lines(fstdin(), raw)
     }
@@ -161,6 +160,7 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
         if (key_exists(baseline_canonicals, c.canonical_sample)) continue
         kept |> push_clone(c)
     }
+    delete clusters
     clusters <- kept
 }
 
@@ -170,6 +170,47 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
 // supplied is by definition writable.
 def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string {
     return "{out_path}.{tag}.{kind}-{index}"
+}
+
+
+// Write one chunk's file list as the newline-delimited `--paths-from`
+// input the child compiling that chunk reads.
+def write_chunk_file(path : string; entries : array<string>) : bool {
+    var ok = false
+    fopen(path, "wb") $(fw) {
+        if (fw == null) return
+        ok = true
+        for (entry in entries) {
+            fw |> fprint("{entry}\n")
+        }
+    }
+    return ok
+}
+
+
+// Child command line for one chunk: one chunk file in, one shard out,
+// `--workers 1` so the child never fans out again.
+def child_argv_for_chunk(spawn_prefix : array<string>; chunk_path : string;
+                         shard_path : string; cfg : Config) : array<string> {
+    var argv : array<string>
+    argv |> reserve(length(spawn_prefix) + 12)
+    argv |> push_from(spawn_prefix)
+    argv |> push("--")
+    argv |> push("--paths-from")
+    argv |> push(chunk_path)
+    argv |> push("--export-functions")
+    argv |> push(shard_path)
+    argv |> push("--workers")
+    argv |> push("1")
+    argv |> push("--min-tokens")
+    argv |> push("{cfg.min_tokens}")
+    if (cfg.lambdas_only) {
+        argv |> push("--lambdas-only")
+    }
+    if (cfg.no_fuzzy) {
+        argv |> push("--no-fuzzy")
+    }
+    return <- argv
 }
 
 
@@ -195,15 +236,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
     for (k in range(n_chunks)) {
         let cp = shard_path_for(cfg.export_functions, tag, "chunk", k) + ".txt"
         let sp = shard_path_for(cfg.export_functions, tag, "shard", k) + ".json"
-        var write_ok = false
-        fopen(cp, "wb") $(fw) {
-            if (fw == null) return
-            write_ok = true
-            for (entry in chunks[k]) {
-                fw |> fprint("{entry}\n")
-            }
-        }
-        if (!write_ok) {
+        if (!write_chunk_file(cp, chunks[k])) {
             for (p in chunk_paths) {
                 remove(p)
             }
@@ -212,24 +245,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         }
         chunk_paths |> push(cp)
         shard_paths |> push(sp)
-        var argv : array<string>
-        argv |> reserve(length(spawn_prefix) + 12)
-        argv |> push_from(spawn_prefix)
-        argv |> push("--")
-        argv |> push("--paths-from")
-        argv |> push(cp)
-        argv |> push("--export-functions")
-        argv |> push(sp)
-        argv |> push("--workers")
-        argv |> push("1")
-        argv |> push("--min-tokens")
-        argv |> push("{cfg.min_tokens}")
-        if (cfg.lambdas_only) {
-            argv |> push("--lambdas-only")
-        }
-        if (cfg.no_fuzzy) {
-            argv |> push("--no-fuzzy")
-        }
+        var argv <- child_argv_for_chunk(spawn_prefix, cp, sp, cfg)
         argvs |> emplace(argv)
     }
 
@@ -278,7 +294,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
 
 
 [export]
-def main() {
+def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one linear pipeline; splitting hides the control flow
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")
@@ -379,8 +395,7 @@ def main() {
             }
         }
     } else {
-        var seeds : array<string>
-        seeds |> push_from(cfg.path)
+        var seeds := cfg.path
         if (!empty(cfg.paths_from)) {
             var perr : string
             if (!read_path_lines_from_file(cfg.paths_from, seeds, perr)) {
@@ -592,12 +607,6 @@ def main() {
         }
     }
     sort_clusters(clusters)
-    var pairs : array<FuzzyPair>
-    if (!cfg.no_fuzzy) {
-        to_log(LOG_INFO, "scanning {length(records)} records for fuzzy near-duplicates (threshold {threshold})...\n")
-        pairs <- fuzzy_pairs(records, threshold, min_tokens, filter_candidates)
-        sort_pairs(pairs)
-    }
 
     var rep : Report
     rep.summary.files_scanned = files_scanned
@@ -605,7 +614,11 @@ def main() {
     rep.summary.threshold = threshold
     rep.summary.min_tokens = min_tokens
     rep.exact_clusters <- clusters
-    rep.fuzzy_pairs <- pairs
+    if (!cfg.no_fuzzy) {
+        to_log(LOG_INFO, "scanning {length(records)} records for fuzzy near-duplicates (threshold {threshold})...\n")
+        rep.fuzzy_pairs <- fuzzy_pairs(records, threshold, min_tokens, filter_candidates)
+        sort_pairs(rep.fuzzy_pairs)
+    }
     rep.summary.exact_clusters = length(rep.exact_clusters)
     rep.summary.fuzzy_pairs = length(rep.fuzzy_pairs)
 

@@ -4,7 +4,6 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/fio
 require daslib/strings_boost
-require math
 require strings
 require canonical
 require cluster
@@ -53,7 +52,7 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
         read_path_lines(f, paths)
     }
     if (!ok) {
-        error := "could not open paths-from file: {path}"
+        error = "could not open paths-from file: {path}"
     }
     return ok
 }
@@ -189,7 +188,7 @@ def private collect_one_function(var func : FunctionPtr;
         rec.ref.end_line = int(func.at.last_line)
     }
     rec.ref.is_lambda = func.flags._lambda
-    rec.canonical := canon
+    rec.canonical = canon
     derive_sig_and_count(rec, want_sigs, min_tokens)
     records |> emplace(rec)
 }
@@ -244,6 +243,7 @@ def public drop_records_under_files(var records : array<FuncRecord>;
         }
         kept |> push_clone(r)
     }
+    delete records
     records <- kept
     return dropped
 }
@@ -282,6 +282,7 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
             skip_counts |> insert(hit.name, 1)
         }
     }
+    delete records
     records <- kept_records
     return <- skip_counts
 }

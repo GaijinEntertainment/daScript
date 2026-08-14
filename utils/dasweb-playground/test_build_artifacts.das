@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require build_artifacts
 require daslib/sha_256
 require daslib/fio
+require strings
 
 let TC = "abc1234def5678900000000000000000000000000"
 let H1 = "1111111111111111111111111111111111111111111111111111111111111111"
@@ -37,10 +38,7 @@ def test_filename_validation(t : T?) {
         tt |> success(!is_valid_artifact_filename("a\\b.wasm"), "backslash")
         tt |> success(!is_valid_artifact_filename("a b.wasm"), "space")
         tt |> success(!is_valid_artifact_filename("wasm"), "no dot at all")
-        var long_name = ""
-        for (_i in range(13)) {
-            long_name += "aaaaaaaaaa"
-        }
+        let long_name = repeat("aaaaaaaaaa", 13)
         tt |> success(!is_valid_artifact_filename(long_name + ".wasm"), "over length cap")
     }
 }

@@ -66,7 +66,7 @@ def parse_bench_output(data : string) : array<BenchmarkRunStats> {
 def make_sample_sets(entries : array<Benchmark>) : table<string, BenchmarkSampleSet?> {
     var result : table<string, BenchmarkSampleSet?>
     for (e in entries) {
-        let key := e.name + "/" + e.sub_name
+        let key = e.name + "/" + e.sub_name
         var samples : BenchmarkSampleSet?
         if (key_exists(result, key)) {
             samples = unsafe(result[key])

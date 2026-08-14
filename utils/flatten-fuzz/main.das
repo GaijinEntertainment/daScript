@@ -345,7 +345,7 @@ def make_helper(var g : Gen&) : string {
     let hn = "helper_{g.unitIdx}_{next_id(g)}"
     let savedNo = g.noHelpers
     g.noHelpers = true
-    var hscope <- [Var(name = "p0", mutable = false), Var(name = "p1", mutable = false)]   // nolint:LINT003 -- gen_branch mutates scope by-ref
+    var hscope <- [Var(name = "p0", mutable = false), Var(name = "p1", mutable = false)]
     add_globals(hscope)
     let br = gen_branch(g, hscope, min(2, g.cfg.maxDepth), 0, "    ", false)
     let fin = gen_expr(g, hscope, 2)
@@ -658,18 +658,19 @@ def run_batch(units : array<string>; inputs : array<int3>; seedArg : int; strict
     return mismatches => compiled
 }
 
+// The bool domain is small enough to enumerate exhaustively; ints get random triples.
+def batch_inputs(var g : Gen&; nInputs : int; cfg : GenCfg) : array<int3> {
+    if (cfg.boolDomain) return <- enum_bool_inputs()
+    return <- gen_inputs(g, nInputs)
+}
+
 // One batch at a given seed: generate units, compile, run the differential (plus, in
 // strict mode, the post-compile fold-residual walk). Returns true on a clean batch. A
 // compile failure triggers bisect+dump.
 def fuzz_one(seedArg, nUnits, nInputs : int; cfg : GenCfg; strict, keep : bool) : bool {
     var g = Gen(seed = random_seed(seedArg), cfg = cfg)
     let units <- [for (i in range(nUnits)); gen_unit(g, i)]
-    var inputs : array<int3>
-    if (cfg.boolDomain) {
-        inputs <- enum_bool_inputs()
-    } else {
-        inputs <- gen_inputs(g, nInputs)
-    }
+    let inputs <- batch_inputs(g, nInputs, cfg)
     let r = run_batch(units, inputs, seedArg, strict, keep)
     if (!r._1) {
         to_log(LOG_ERROR, "seed {seedArg}: batch compile failed — isolating\n")

@@ -338,7 +338,7 @@ def private append_journal(bytes : array<uint8>) {
 }
 
 [export]
-def main : int {
+def main : int {  // nolint:STYLE037,STYLE038 — linear daemon startup/serve/teardown, one exit code per setup gate
     var parsed <- parse_args(type<HostConfig>)
     if (parsed |> is_err) {
         to_log(LOG_ERROR, "dasherd-ptyhost: {parsed |> unwrap_err}\n")

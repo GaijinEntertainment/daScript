@@ -149,7 +149,7 @@ def test_compound_expr {
     tab[key] -= val * 2
 
     // get_value with ternary-like: conditional add
-    tab[key] += (val > 5 ? 1 : 0)  // nolint:PERF013 — fixture: tests migration of += with conditional rhs
+    tab[key] += (val > 5 ? 1 : 0)  // fixture: tests migration of += with conditional rhs
 
     // deeply nested: tab[i].insert with compound expr
     var tabtab : table<int; table<int; int>>

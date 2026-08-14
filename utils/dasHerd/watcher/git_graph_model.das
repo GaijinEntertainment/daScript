@@ -182,7 +182,7 @@ def private graph_append_ref_label(var text : string&; name : string;
     count++
 }
 
-def public git_tree_build_model(repository : RepositorySnapshot const;
+def public git_tree_build_model(repository : RepositorySnapshot const; // nolint:STYLE037,STYLE038 — one commit-graph layout pipeline; every phase consumes the tables the previous phase built
                                 worktree : WorktreeState const;
                                 filter : GitTreeFilter;
                                 requested_focus_ref : string;

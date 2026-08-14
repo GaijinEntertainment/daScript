@@ -103,7 +103,7 @@ def private default_profile_index : int {
     return empty(g_client.herd_profiles) ? -1 : 0
 }
 
-def draw_launcher_form() { // nolint:STYLE037
+def draw_launcher_form() { // nolint:STYLE037,STYLE038 — one widget block per form field, in the order they appear on screen
     if (g_client == null || !g_client.connected) {
         text_disabled("Waiting for the watcher connection...")
         return

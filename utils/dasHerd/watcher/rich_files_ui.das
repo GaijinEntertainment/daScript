@@ -81,7 +81,7 @@ def private project_folder_node(parent_index : int; name, path : string) : int {
         parent = parent_index, is_folder = true,
         hidden = starts_with(name, ".")))
     g_project_index[path] = index
-    g_project_nodes[parent_index].children |> push(index)  // nolint:PERF006 -- per-folder child lists are small and unknowable up front
+    g_project_nodes[parent_index].children |> push(index)
     return index
 }
 
@@ -202,7 +202,7 @@ def private ensure_project_model() {
         g_project_nodes |> emplace(ProjectNode(name = name, path = path,
             parent = parent, hidden = starts_with(name, ".")))
         g_project_index[path] = index
-        g_project_nodes[parent].children |> push(index)  // nolint:PERF006 -- per-folder child lists are small and unknowable up front
+        g_project_nodes[parent].children |> push(index)
     }
     if (project_stats_needed()) {
         project_fill_stats()

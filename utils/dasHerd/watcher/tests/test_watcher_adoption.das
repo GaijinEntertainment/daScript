@@ -61,6 +61,13 @@ class private PortBlocker : HvWebServer {
 [test]
 def test_watcher_host_adoption(t : T?) {
     if (get_platform_name() != "windows") return
+    adopt_survives_watcher_restart(t)
+    adopt_dead_host_folds_to_exited(t)
+    adopt_host_death_fails_one_session(t)
+    adopt_bind_collision_retries(t)
+}
+
+def private adopt_survives_watcher_restart(t : T?) {  // nolint:STYLE038 — one linear launch/restart/adopt/teardown script; the stages share the launched session
     t |> run("host-backed session survives a watcher restart and resurrects as running") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_adopt_")
         if (!(temp is value)) {
@@ -100,7 +107,7 @@ def test_watcher_host_adoption(t : T?) {
 
         t |> equal(watcher_input(session_id, "echo ADOPT-A\r\n"), "")
         t |> success(pump_until(15000l)
-                $() => find(watcher_output_text(session_id), "ADOPT-A") >= 0,
+                $ => find(watcher_output_text(session_id), "ADOPT-A") >= 0,
             "child echoed through the detached host")
         t |> success(fexist(path_join(ptyhost_root, "{session_id}.lock")),
             "host holds its liveness lock")
@@ -126,7 +133,7 @@ def test_watcher_host_adoption(t : T?) {
         t |> equal(record.reason, "", "resurrected record carries no watcher_restart scar")
 
         t |> success(pump_until(15000l)
-                $() => find(watcher_output_text(session_id), "ADOPT-A") >= 0,
+                $ => find(watcher_output_text(session_id), "ADOPT-A") >= 0,
             "journal replay restored pre-restart output")
         var replayed = WatcherSessionInfo()
         t |> success(watcher_get_session_info(session_id, replayed))
@@ -134,20 +141,20 @@ def test_watcher_host_adoption(t : T?) {
             "byte offsets continue the journal numbering")
         t |> equal(watcher_input(session_id, "echo ADOPT-B\r\n"), "")
         t |> success(pump_until(15000l)
-                $() => find(watcher_output_text(session_id), "ADOPT-B") >= 0,
+                $ => find(watcher_output_text(session_id), "ADOPT-B") >= 0,
             "adopted session still accepts input")
 
         var pty_to_terminate : string
         t |> equal(herd_close(herd_id, pty_to_terminate), "")
         t |> equal(pty_to_terminate, session_id)
         t |> equal(watcher_terminate(session_id, "test_cleanup"), "")
-        t |> success(pump_until(15000l) $() {
+        t |> success(pump_until(15000l) $ {
                 var closing = WatcherSessionInfo()
                 return (watcher_get_session_info(session_id, closing)
                     && closing.state == "exited" && closing.drained)
             }, "terminate folds back through the host")
         t |> success(pump_until(15000l)
-                $() => fexist(path_join(path_join(ptyhost_root, "archive"),
+                $ => fexist(path_join(path_join(ptyhost_root, "archive"),
                     "{session_id}.host.json")),
             "released host archived its discovery stamp")
         t |> success(fexist(path_join(path_join(ptyhost_root, "archive"),
@@ -158,6 +165,9 @@ def test_watcher_host_adoption(t : T?) {
         watcher_shutdown()
         herd_shutdown()
     }
+}
+
+def private adopt_dead_host_folds_to_exited(t : T?) {
     t |> run("a dead host's exit stamp folds into an exited, replayable session") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_deadfold_")
         if (!(temp is value)) {
@@ -227,6 +237,9 @@ def test_watcher_host_adoption(t : T?) {
             "restored id counters prevent duplicate mailbox ids")
         watcher_shutdown()
     }
+}
+
+def private adopt_host_death_fails_one_session(t : T?) {
     t |> run("a host dying under a live watcher fails that one session only") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_hostdeath_")
         if (!(temp is value)) {
@@ -253,7 +266,7 @@ def test_watcher_host_adoption(t : T?) {
             "{session_id}.host.json")), stamp), "stamp is readable")
         var killer = new HostKiller(token = stamp.token)
         t |> equal(killer->init("ws://127.0.0.1:{stamp.port}/"), 0)
-        t |> success(pump_until(15000l) $() {
+        t |> success(pump_until(15000l) $ {
                 killer->process_event_que()
                 var info = WatcherSessionInfo()
                 return (watcher_get_session_info(session_id, info)
@@ -269,6 +282,9 @@ def test_watcher_host_adoption(t : T?) {
         }
         watcher_shutdown()
     }
+}
+
+def private adopt_bind_collision_retries(t : T?) {
     t |> run("a bind collision retries onto the next port") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_bindretry_")
         if (!(temp is value)) {
@@ -321,7 +337,7 @@ def test_watcher_host_adoption(t : T?) {
         }
         let _t1 = watcher_terminate(first.session_id, "test_cleanup")
         let _t2 = watcher_terminate(second.session_id, "test_cleanup")
-        t |> success(pump_until(20000l) $() {
+        t |> success(pump_until(20000l) $ {
                 var first_info = WatcherSessionInfo()
                 var second_info = WatcherSessionInfo()
                 return (watcher_get_session_info(first.session_id, first_info)

@@ -188,11 +188,11 @@ def test_ptyhost_lifecycle(t : T?) {
         g_last_stat = ""
         var client = new ProbeClient(token = "t1token")
         t |> equal(client->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
-        t |> success(pump_until(client, 15000l) $() => g_attached_seen,
+        t |> success(pump_until(client, 15000l) $ => g_attached_seen,
             "hello + attach handshake completed")
         client->send_input("echo PTYHOST-OK:%PTYHOST_TEST%\r\n")
         t |> success(pump_until(client, 15000l)
-                $() => find(g_output_text, "PTYHOST-OK:from-test-env") >= 0,
+                $ => find(g_output_text, "PTYHOST-OK:from-test-env") >= 0,
             "child echoed input with the forwarded env var: {slice(g_output_text, max(0, length(g_output_text) - 400))}")
 
         // Stage 3.5: liveness lock + adversarial clients. The lock is HELD -
@@ -205,7 +205,7 @@ def test_ptyhost_lifecycle(t : T?) {
 
         // Stage 4: terminate the child; the host stamps the exit.
         client->send("\{\"op\":\"terminate\",\"exit_code\":0\}")
-        t |> success(pump_until(client, 15000l) $() {
+        t |> success(pump_until(client, 15000l) $ {
                 client->send("\{\"op\":\"stat\"\}")
                 return find(g_last_stat, "\"exited\":true") >= 0
             }, "host observed child exit: {g_last_stat}")

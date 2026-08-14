@@ -178,7 +178,7 @@ def private load_profiles(profiles_path : string) {
         }
     }
     g_herd_revision++
-    g_profiles <- default_profiles()
+    g_profiles <- default_profiles()  // nolint:PERF030 - the delete at the top of the function releases it; the two fills are mutually exclusive
     var inscope file = HerdProfilesFile()
     file.profiles := g_profiles
     var error : string
