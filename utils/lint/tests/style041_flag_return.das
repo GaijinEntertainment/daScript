@@ -200,6 +200,22 @@ def neg_separator(xs : array<int>) : string {
     return s
 }
 
+// set + continue in an UNGUARDED loop that deliberately keeps reporting - the
+// collapse would eat the remaining diagnostics (the utils/hygiene shape)
+def neg_collect_diagnostics(xs : array<int>) : int {
+    var any_missing = false
+    for (x in xs) {
+        if (x < 0) {
+            to_log(LOG_ERROR, "missing {x}\n")
+            any_missing = true
+            continue
+        }
+        to_log(LOG_INFO, "ok {x}\n")
+    }
+    if (any_missing) return 2
+    return 0
+}
+
 // sets span two top statements - collect-all shape
 def neg_two_writers(xs : array<int>) : int {
     var bad = false
@@ -223,5 +239,5 @@ def main() {
     print("{bad_simple(xs)} {bad_report_return("n", xs)} {bad_break_plumbing(xs)}\n")
     print("{neg_global_latch()} {neg_callback_set(xs)} {neg_search_miss(xs, 2)} {neg_nonterminal(xs)}\n")
     print("{neg_between(xs)} {neg_unstable_payload(xs)} {neg_two_consumers(xs)} {neg_combined_read(xs, false)}\n")
-    print("{neg_read_after(xs)} {neg_separator(xs)} {neg_two_writers(xs)}\n")
+    print("{neg_read_after(xs)} {neg_separator(xs)} {neg_collect_diagnostics(xs)} {neg_two_writers(xs)}\n")
 }

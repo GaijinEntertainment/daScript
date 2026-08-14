@@ -83,6 +83,7 @@ struct St041Scan {
     write_count : int
     write_top : int = -1            // top-level index owning ALL writes (one setter statement)
     writes_terminal : bool = true
+    guard_stack : array<bool>       // per enclosing loop: first statement is `if (flag) break`
     plumb_count : int
     plumb_tops : array<int>         // top-level index of each `if (flag) break/continue` read
     consume_count : int
@@ -1172,7 +1173,22 @@ class StyleLintVisitor : AstVisitor {
                 st.rejected = true      // sets span more than one top statement
                 return
             }
-            if (!st041_terminal_at(arm, pos)) {
+            // the set must ESCAPE the top statement, not just end its arm: a `break` exits
+            // its own loop and needs `if (flag) break` guards on every level above; a
+            // `continue` or arm-end set reaches its loop's next iteration and needs the
+            // guard on every level, the innermost included. An unguarded loop that keeps
+            // working after the set is the deliberate collect-all-diagnostics shape
+            // (utils/hygiene) - the collapse would eat its remaining reports.
+            let kind = st041_terminal_kind(arm, pos)
+            let d = length(st.guard_stack)
+            var guarded_above = kind != 0
+            let skip_innermost = kind == 1
+            for (i in range(d - (skip_innermost ? 1 : 0))) {
+                if (!st.guard_stack[i]) {
+                    guarded_above = false
+                }
+            }
+            if (kind == 0 || !guarded_above) {
                 st.writes_terminal = false
             }
             return
@@ -1202,11 +1218,15 @@ class StyleLintVisitor : AstVisitor {
             return
         }
         if (stmt is ExprFor) {
+            st.guard_stack |> push(st041_loop_guarded((stmt as ExprFor).body, v))
             st041_scan_arm((stmt as ExprFor).body, top, v, st)
+            st.guard_stack |> pop
             return
         }
         if (stmt is ExprWhile) {
+            st.guard_stack |> push(st041_loop_guarded((stmt as ExprWhile).body, v))
             st041_scan_arm((stmt as ExprWhile).body, top, v, st)
+            st.guard_stack |> pop
             return
         }
         if (stmt is ExprBlock) {
@@ -1239,13 +1259,30 @@ class StyleLintVisitor : AstVisitor {
         return (pe as ExprVar).variable == v
     }
 
-    def st041_terminal_at(arm : ExprBlock?; pos : int) : bool {
-        // the set is its arm's last statement, or followed only by a break/continue;
-        // a finally section counts as trailing work
-        return false if (!empty(arm.finalList))
+    def st041_terminal_kind(arm : ExprBlock?; pos : int) : int {
+        // 0 = not terminal (trailing work, or a finally section); 1 = followed by break;
+        // 2 = followed by continue; 3 = last statement of its arm (falls through)
+        return 0 if (!empty(arm.finalList))
         let m = length(arm.list)
-        return true if (pos == m - 1)
-        return pos == m - 2 && (arm.list[m - 1] is ExprBreak || arm.list[m - 1] is ExprContinue)
+        return 3 if (pos == m - 1)
+        return 0 if (pos != m - 2)
+        return 1 if (arm.list[m - 1] is ExprBreak)
+        return 2 if (arm.list[m - 1] is ExprContinue)
+        return 0
+    }
+
+    def st041_loop_guarded(body : Expression? const; v : VariablePtr) : bool {
+        // a loop is guarded when its body's FIRST statement is `if (flag) break` -
+        // the next iteration provably stops working once the flag is set
+        if (body == null || !(body is ExprBlock)) return false
+        let ab = body as ExprBlock
+        return false if (empty(ab.list))
+        let stmt = ab.list[0]
+        return false if (!(stmt is ExprIfThenElse))
+        let ifte = stmt as ExprIfThenElse
+        return false if (ifte.if_false != null || !st041_is_flag_read(ifte.cond, v))
+        let term = single_terminator_body(ifte.if_true)
+        return term != null && term is ExprBreak
     }
 
     def st041_consume_body_ok(ifte : ExprIfThenElse?; var moved_body : bool&) : bool {
