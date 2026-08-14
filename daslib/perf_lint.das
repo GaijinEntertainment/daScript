@@ -915,6 +915,7 @@ class PerfLintVisitor : AstVisitor {
         perf023_splice_depth = 0
         perf024_candidates |> clear
         perf024_skip_iptr = 0ul
+        perf030_released |> clear
         current_function = null
         in_template = false
         return <- fn
@@ -2054,10 +2055,11 @@ class PerfLintVisitor : AstVisitor {
         if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
             perf023_splice_depth++
         }
-        // PERF030 release tracking: deletes lower to builtin`finalize`/`_::finalize` calls; deferred bodies run later so they must not credit the move site
-        if (in_deferred == 0 && !empty(expr.arguments)
+        // PERF030 release credit: the lowered delete family; deferred bodies run later so they never credit, inline block args count though they may not run - erring silent
+        if (in_deferred == 0 && length(expr.arguments) == 1
                 && (expr.name == "_::finalize" || expr.func.name == "finalize"
-                    || expr.func.name |> starts_with("builtin`finalize`"))) {
+                    || expr.func.name |> starts_with("builtin`finalize`")
+                    || expr.func.name |> starts_with("builtin`finalize_dim`"))) {
             perf030_mark_released(expr.arguments[0])
         }
         // Loop/while-aware rules below skip closure bodies (they run later, not in the loop)
@@ -2217,6 +2219,13 @@ class PerfLintVisitor : AstVisitor {
         if (e is ExprRef2Value) {
             e = (e as ExprRef2Value.subexpr)
         }
+        // peel field chains to the root var: `delete a.xs` (hand-rolled or optimizer-inlined teardown) counts as managing a's heap - erring silent
+        while (e != null && e is ExprField) {
+            e = (e as ExprField).value
+            if (e is ExprRef2Value) {
+                e = (e as ExprRef2Value.subexpr)
+            }
+        }
         if (e == null || !(e is ExprVar)) return
         var v = (e as ExprVar).variable
         if (v != null && perf030_released |> find_index(v) < 0) {
@@ -2225,7 +2234,10 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprDelete(var expr : ExprDelete?) : void {
-        perf030_mark_released(expr.subexpr)
+        // same contract as the lowered-finalize path: a deferred body runs later, so its delete must not credit the move site
+        if (in_deferred == 0) {
+            perf030_mark_released(expr.subexpr)
+        }
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {

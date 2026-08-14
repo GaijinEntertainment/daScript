@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
-options _cyclomatic_complexity = 62
+options _cyclomatic_complexity = 62     // driven by emit_zip (277 lines), the per-shape emitter
 options _function_length = 278
 
 module linq_fold_array shared public

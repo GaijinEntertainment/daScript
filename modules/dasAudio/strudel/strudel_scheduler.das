@@ -483,7 +483,7 @@ def private prepare_hrtf_scratch(var sched : Scheduler; chunkFrames : int) {
     }
 }
 
-// Release a voice's HRTF filter pair, leaving both fields null.
+// ma_hrtf owns miniaudio-side state: uninit before delete.
 def private release_hrtf_pair(var hrtf_l : ma_hrtf?&; var hrtf_r : ma_hrtf?&) {
     if (hrtf_l != null) {
         ma_hrtf_uninit(hrtf_l)
@@ -1000,7 +1000,7 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
     }
 }
 
-def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time : double; chunk_seconds : float = 0.05; lookAhead : float = 0.1) : void {   // nolint:STYLE037,STYLE038 - per-block mixing kernel; the voice arms share the chunk cursor (dstStart/srcStart/count/nf), the orbit send buffers and the gain save/restore
+def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time : double; chunk_seconds : float = 0.05; lookAhead : float = 0.1) : void {   // nolint:STYLE037,STYLE038 - per-block mixing kernel; the voice arms share the chunk cursor, the orbit send buffers and the gain save/restore
     //! Advance one audio block: query the pattern for new events, spawn voices, mix all voices through the per-orbit reverb/delay/chorus buses into sched.output.
     //! chunk_seconds controls how much audio is produced this tick; lookAhead is how far ahead in time to query for new events.
     let cycleNow = current_cycle(sched, wall_time)

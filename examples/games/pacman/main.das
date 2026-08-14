@@ -172,7 +172,7 @@ var @live snd_level_win   : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
-    // release whatever a previous run left in the @live buffers before regenerating
+    // release the @live buffers before the move-assigns refill them
     delete snd_eat_pellet
     delete snd_eat_power
     delete snd_eat_ghost

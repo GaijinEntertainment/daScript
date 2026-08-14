@@ -97,6 +97,26 @@ def good_struct_delete_first {
     delete h
 }
 
+def good_fixed_array_delete_first {
+    // a dim delete lowers to builtin`finalize_dim`, not builtin`finalize` -
+    // the release must still credit the move below
+    var a : array<int>[2]
+    a[0] |> push(1)
+    delete a
+    var b : array<int>[2]
+    a <- b
+    delete a
+}
+
+def good_field_delete_first {
+    // hand-rolled field teardown (or a user finalize body the optimizer inlined)
+    // counts as managing the root var's heap - erring silent
+    var h <- make_holder()
+    delete h.xs
+    h <- make_holder()
+    delete h
+}
+
 def run_inline(blk : block<() : void>) {
     invoke(blk)
 }
@@ -136,6 +156,8 @@ def main {
     good_element_target()
     let _ = good_hoisted_inscope_init(false)
     good_struct_delete_first()
+    good_fixed_array_delete_first()
+    good_field_delete_first()
     good_delete_in_block_arg()
     bad_delete_only_in_lambda()
 }

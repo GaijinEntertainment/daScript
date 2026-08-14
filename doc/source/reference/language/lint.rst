@@ -140,10 +140,12 @@ The suppression is exact: ``// nolint:PERF003`` only suppresses PERF003, not oth
 rules. An optional explanation after the code is recommended but not required.
 
 A file whose *subject* conflicts with the lint pipeline's compile policies can opt
-out entirely with a ``// lint-skip-file: <reason>`` comment anywhere in the file
-(canonical user: ``tests/language/static_if.das``, which tests the infer-time
+out entirely with a ``// lint-skip-file: <reason>`` comment in the file header (the
+first 16 lines — deeper occurrences are treated as prose, so quoting the directive
+in a doc comment cannot silently unlint a file). Canonical user:
+``tests/language/static_if.das``, which tests the infer-time
 folding the pipeline's ``no_infer_time_folding`` policy disables — it cannot even
-compile under lint). The runner reports the file as skipped with the reason, so
+compile under lint. The runner reports the file as skipped with the reason, so
 coverage accounting still sees it.
 
 ---------------------------
@@ -1395,6 +1397,15 @@ fresh-slot inserts where nothing leaks. Compiler temps, the ``return <- r``
 lowering, and generated moves are excluded — in particular the early-out
 relocation that splits ``var inscope x <- init`` into a hoisted declaration
 plus a generated move (the target is fresh and the ``finally`` releases it).
+
+The release credit: a ``delete`` of the variable — or of a field chain rooted at
+it, the hand-rolled-teardown shape — before the move silences the warning, as
+does the lowered form of any of those (``_::finalize``, ``builtin`finalize```,
+``builtin`finalize_dim``` for fixed arrays, or a call named ``finalize``).
+Credit is per function and per site: it does not cross into or out of deferred
+bodies (a lambda's ``delete`` runs later and never credits; an inline block
+argument's counts, though the block may never run — the rule errs silent), and
+a conditional fill is best folded into the declaration as ``var a <- c ? x : y``.
 
 .. das-doc: fragment
 .. code-block:: das

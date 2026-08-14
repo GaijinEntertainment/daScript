@@ -688,9 +688,9 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
                 changelist_selection_actions(repository, worktree,
                     stage_paths, unstage_paths)
                 if (args.action == "stage") {
-                    paths <- stage_paths  // nolint:PERF030 - target is the fresh empty decl above; the two fills are mutually exclusive branches
+                    paths <- stage_paths  // nolint:PERF030 - the id/path guards admit at most one filling iteration
                 } else {
-                    paths <- unstage_paths  // nolint:PERF030 - target is the fresh empty decl above; the two fills are mutually exclusive branches
+                    paths <- unstage_paths  // nolint:PERF030 - the id/path guards admit at most one filling iteration
                 }
             }
         }

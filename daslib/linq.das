@@ -200,10 +200,10 @@ def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<
     }
     // generic over array and iterator sources; push_clone_from is only valid for arrays, so the
     // element-wise loop is required here (PERF022 fires on the array instantiations only)
-    for (it in a) { // nolint:PERF022
+    for (it in a) { // nolint:PERF022,LINT019 - fires only when a consumer instantiates an array source
         c.push_clone(it)
     }
-    for (it in b) { // nolint:PERF022
+    for (it in b) { // nolint:PERF022,LINT019
         c.push_clone(it)
     }
     return <- c
@@ -267,7 +267,6 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 
 def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     //! Concatenates two arrays in place
-    a.reserve(length(a) + length(b))
     a |> push_clone_from(b)
 }
 
@@ -280,8 +279,8 @@ def private concat3_impl(var a; var b; var c; tt : auto(TT); reserveSize : int) 
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 
@@ -332,9 +331,9 @@ def private concat4_impl(var a; var b; var c; var d; tt : auto(TT); reserveSize 
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 
@@ -389,10 +388,10 @@ def private concat5_impl(var a; var b; var c; var d; var e; tt : auto(TT); reser
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 
@@ -451,11 +450,11 @@ def private concat6_impl(var a; var b; var c; var d; var e; var f; tt : auto(TT)
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 
@@ -518,12 +517,12 @@ def private concat7_impl(var a; var b; var c; var d; var e; var f; var g; tt : a
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 
@@ -590,13 +589,13 @@ def private concat8_impl(var a; var b; var c; var d; var e; var f; var g; var h;
         r.reserve(reserveSize)
     }
     for (it in a) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
-    for (it in h) { r.push_clone(it) } // nolint:PERF022,LINT019 - fires per concat arity; wider arities have no in-tree instantiator
+    for (it in b) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in c) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in d) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in e) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in f) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in g) { r.push_clone(it) } // nolint:PERF022,LINT019
+    for (it in h) { r.push_clone(it) } // nolint:PERF022,LINT019
     return <- r
 }
 

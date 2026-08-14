@@ -271,6 +271,29 @@ def public is_lint_fixture_name(base : string) : bool {
     return starts_with(base, "_") && find(base, "fixture") >= 0
 }
 
+// The `// lint-skip-file` directive is honored in the first lines only, so prose
+// QUOTING it deeper in a file (a doc comment, a commented-out example) cannot
+// silently unlint the file.
+let public LINT_SKIP_HEADER_LINES = 16
+
+//! Content-based skip probe shared by the CLI runner and the MCP lint tool: ``expect <code>``
+//! files declare intentional compile errors (dastest), and a header ``// lint-skip-file: <reason>``
+//! opts a policy-conflicted file out entirely. Returns the skip reason, or "" to lint the file.
+def public lint_file_skip_reason(file : string) : string {
+    let text = fread(file)
+    return "" if (empty(text))
+    for (line, ln in split(text, "\n"), count()) {
+        let trimmed = line |> strip
+        return "(intentional compile errors via `expect`)" if (trimmed |> starts_with("expect "))
+        if (ln < LINT_SKIP_HEADER_LINES && trimmed |> starts_with("// lint-skip-file")) {
+            let colon = find(trimmed, ":")
+            let reason = colon >= 0 ? strip(slice(trimmed, colon + 1)) : ""
+            return empty(reason) ? "(lint-skip-file directive)" : "(lint-skip-file: {reason})"
+        }
+    }
+    return ""
+}
+
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).
 struct public LintIssue {
     code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none

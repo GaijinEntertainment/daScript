@@ -70,7 +70,7 @@ def target_kill(x : int) : int {
 
 [export]
 def target_branch_avail(x : int; c : bool) : int {
-    var t = 0 // nolint:LINT010 -- dead init, DSE fodder
+    var t = 0 // dead init, DSE fodder
     if (c) { // nolint:LINT009 -- identical arms are the point: pair available on both paths
         t = x * 7
     } else {

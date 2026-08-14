@@ -856,7 +856,7 @@ def test_chat_strip_think(t : T?) {
     t |> run("leading think block is stripped from history content") @(t : T?) {
         t |> equal(strip_think("<think>\nreasoning here\n</think>\n\nThe answer is 42."), "The answer is 42.")
         t |> equal(strip_think("  \n<think>r</think>answer"), "answer")   // leading whitespace before the block is fine
-        t |> equal(strip_think("<think>never closed - budget ran out"), "")
+        t |> equal(strip_think("<think>never closed — budget ran out"), "")  // nolint:STYLE039 - the em-dash IS the test input: multibyte content inside an unclosed think block
     }
     t |> run("replies without a leading think block pass through") @(t : T?) {
         t |> equal(strip_think("The answer is 42."), "The answer is 42.")

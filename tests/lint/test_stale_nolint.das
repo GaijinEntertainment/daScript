@@ -31,8 +31,8 @@ def test_stale_nolint(t : T?) {
     t |> run("stale directive reported, live one consumed") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
         var output = ""
-        // --lint-excluded-paths: the fixture lives under tests/**, which the repo
-        // [paths] policy excludes; this test pins the SCANNER, not the policy
+        // --lint-excluded-paths keeps this test pinned to the SCANNER regardless of
+        // whatever the repo [paths] policy excludes at the time
         run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "LINT019") >= 0, "LINT019 fires on the fixture: {output}")
         t |> success(find(output, "PERF006 suppresses nothing") >= 0,
@@ -74,5 +74,12 @@ def test_stale_nolint(t : T?) {
         run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "lint-skip-file") >= 0, "skip reason printed: {output}")
         t |> success(find(output, "LINT010") < 0, "the deliberate finding is not reported: {output}")
+    }
+    t |> run("lint-skip-file outside the header is prose, not a directive") @(t : T?) {
+        let fixture = "{root}/tests/lint/stale_fixtures/_fixture_lint_skip_deep.das"
+        var output = ""
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
+        t |> success(find(output, "lint-skip-file") < 0, "the deep occurrence is not honored: {output}")
+        t |> success(find(output, "PASS") >= 0, "the file lints normally: {output}")
     }
 }

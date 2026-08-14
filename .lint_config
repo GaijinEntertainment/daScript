@@ -7,8 +7,9 @@
 # This is a RATCHET: narrow or remove entries as they reach zero findings.
 # The CLI escape --lint-excluded-paths shows what the policy is hiding; the MCP lint
 # tool always shows raw findings (same deliberate split as --lint-fixtures).
-# test_interfaces.das: 14x STYLE036 from the un-stamped const-adaptation cast infer
-# inserts on interface accessor calls - drops when the C++ genFlags fix lands.
+# test_interfaces.das: 14x STYLE036 from daslib/interfaces.das:228's qmacro splice
+# (`addr<$t(st)? -const>(self)`) - at-stamped onto the caller but never generated-
+# stamped; drops when that splice (or infer's const-adaptation cast) gets the stamp.
 exclude = ["tests/interfaces/test_interfaces.das"]
 
 [rules]

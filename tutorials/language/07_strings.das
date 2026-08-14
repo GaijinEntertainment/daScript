@@ -56,6 +56,8 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // reads any index, but walks the string to get there (use peek_data in loops)
     let ch = first_character(text)
     print("first char code of \"{text}\" = {ch}\n")
+    let ch1 = character_at(text, 1)     // nolint:PERF003 - the tutorial demonstrates the indexed accessor; the comment above states the cost
+    print("second char code of \"{text}\" = {ch1}\n")
     // character_uat returns the character as int as well
     // to_char converts int back to a single-character string
     print("first char = {to_char(ch)}\n")

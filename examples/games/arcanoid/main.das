@@ -128,7 +128,7 @@ var @live snd_game_over : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
-    // release whatever a previous run left in the @live buffers before regenerating
+    // release the @live buffers before the move-assigns refill them
     delete snd_paddle_hit
     delete snd_brick_break
     delete snd_wall_bounce

@@ -437,7 +437,7 @@ class AnyGenBind {
         return true
     }
     def parse(var cursor : CXCursor) {   // nolint:STYLE038 - flat ladder - one arm per CXCursorKind
-        clang_visitChildren(cursor) $(var c, parent) {   // nolint:STYLE037 - flat ladder - one arm per CXCursorKind
+        clang_visitChildren(cursor) $(var c, parent) {   // nolint:STYLE037 - same ladder
             var file : CXFile
             var line, column, offset : uint
             clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
@@ -705,7 +705,7 @@ class AnyGenBind {
                     let ctt = getGenConstType(DEF, defTName)
                     if (!dup[DEF]) {
                         if (define_const_style_das) {
-                            // drop the cast when the literal already has the target type (PERF020)
+                            // the emitted opengl_const.das is linted - a cast to the literal's own type trips PERF020
                             let no_op_cast = ((ctt == "uint" && hex && suf == "u")
                                 || (ctt == "int" && !hex && suf == "")
                                 || (ctt == "uint64" && suf == "ul"))

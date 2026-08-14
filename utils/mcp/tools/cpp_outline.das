@@ -46,7 +46,7 @@ def do_cpp_outline(file, glob_filter, mode : string) : string {
         if (!key_exists(by_file, fp)) {
             file_order |> push(fp)
         }
-        by_file[fp] |> push(i) // nolint:PERF006
+        by_file[fp] |> push(i) // nolint:PERF006 - group-by bucket; per-key size unknowable up front
     }
     let multi_file = length(file_order) > 1
     let output = build_string() $(var w) {
@@ -194,13 +194,13 @@ def cpp_inject_qualifier(signature : string; prefix : string) : string {
     let op = find_open_paren(signature)
     if (op <= 0) return "{prefix}{signature}"
     var nm = op - 1
-    while (nm >= 0 && (character_at(signature, nm) == ' ' || character_at(signature, nm) == '\t')) { // nolint:PERF003
+    while (nm >= 0 && (character_at(signature, nm) == ' ' || character_at(signature, nm) == '\t')) { // nolint:PERF003 - bounded backward walk near the paren of a short signature
         nm--
     }
-    while (nm >= 0 && is_cpp_op_char(character_at(signature, nm))) { // nolint:PERF003
+    while (nm >= 0 && is_cpp_op_char(character_at(signature, nm))) { // nolint:PERF003 - bounded backward walk near the paren of a short signature
         nm--
     }
-    while (nm >= 0 && is_cpp_ident_char(character_at(signature, nm))) { // nolint:PERF003
+    while (nm >= 0 && is_cpp_ident_char(character_at(signature, nm))) { // nolint:PERF003 - bounded backward walk near the paren of a short signature
         nm--
     }
     let name_start = nm + 1

@@ -2322,8 +2322,8 @@ class StyleLintVisitor : AstVisitor {
         return module_has_comment_reader(mod)
     }
 
-    def st029_module_has_init(mod : Module?) : bool {
-        // A lifecycle hook ([init]/[finalize]/[before_reload]/[after_reload]/[live_command]) acts by being required alone - never "unused"
+    def st029_module_has_lifecycle_hook(mod : Module?) : bool {
+        // a module required only for its lifecycle hooks has no referenced symbol - never "unused"
         var found = false
         for_each_function(mod, "") $(fn) {
             if (found) return
@@ -2385,7 +2385,7 @@ class StyleLintVisitor : AstVisitor {
             if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
                 || key_exists(used_modules, mname)
                 || st029_module_provides_macro(mod)
-                || st029_module_has_init(mod)
+                || st029_module_has_lifecycle_hook(mod)
                 || st030_exports_unresolved_name(mod)) return
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
@@ -2799,8 +2799,9 @@ class StyleLintVisitor : AstVisitor {
                 && !expr.subexpr.genFlags.generated) {
             style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at)
         }
-        // ===== STYLE036 — type contract that cannot act on a resolved cast type (instances skipped: their SOURCE target was auto/alias, the contract real at substitution) =====
+        // ===== STYLE036 — type contract that cannot act on a resolved cast type =====
         if (!expr.genFlags.generated && expr.castType != null
+                // a generic instance's source target was auto/alias - the contract already acted at substitution
                 && (current_function == null || current_function.fromGeneric == null)) {
             let inert = style036_inert_contract(expr.castType)
             if (!empty(inert)) {

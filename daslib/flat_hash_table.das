@@ -283,7 +283,7 @@ struct template TFlatHashTable {
                     index = lastTombstone
                     tombstones --
                 }
-                key_data[index] := key
+                key_data[index] := key  // nolint:LINT016,LINT019 - generic clone-assign (deep keys need it); a string key stays a same-context pointer copy by design
                 hashes[index] = hash
                 data_length ++
                 unsafe {

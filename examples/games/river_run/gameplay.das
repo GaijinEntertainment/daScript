@@ -251,7 +251,7 @@ def spawn_section_bridges(base_y, section_mult : float) {
 def spawn_section_islands(base_y, section_mult : float) {
     let island_count = int(section_mult * 0.8 + random_f() * 2.0)
     for (_i in range(island_count)) {
-        var placed = false
+        // six tries; the island is skipped when only split terrain gets sampled
         for (_try in range(6)) {
             let iy = base_y + random_range(10.0, SECTION_LENGTH - 10.0)
             let seg = sample_river_segment(iy)
@@ -261,11 +261,7 @@ def spawn_section_islands(base_y, section_mult : float) {
             let ibounds = river_clamp_x_for(iy, random_sign() * 20.0)
             let icx = (ibounds.x + ibounds.y) * 0.5 + random_range(-1.5, 1.5)
             spawn_island(float3(icx, iy, ISLAND_Z))
-            placed = true
             break
-        }
-        if (!placed) {
-            // Skip island if only split terrain was sampled in this pass.
         }
     }
     commit()
@@ -301,7 +297,7 @@ def spawn_section_houses(base_y : float) {
         if (random_f() > 0.42) {
             continue
         }
-        var placed = false
+        // eight tries; the house is skipped when no clear spot near the bank turns up
         for (_try in range(8)) {
             let hy = base_y + random_range(12.0, SECTION_LENGTH - 12.0)
             let seg = sample_river_segment(hy)
@@ -329,11 +325,7 @@ def spawn_section_houses(base_y : float) {
             let body_tint = random_range(0.0, 1.0)
             let roof_tint = random_range(0.0, 1.0)
             spawn_river_house(float3(hx, hy, 0.0), hsize, body_tint, roof_tint)
-            placed = true
             break
-        }
-        if (!placed) {
-            // Skip this house when no clear spot near the bank was found.
         }
     }
     commit()
@@ -345,7 +337,6 @@ def spawn_section_depots(base_y : float) {
     let depot_spacing = 70.0
     let depot_count = int(SECTION_LENGTH / depot_spacing)
     for (i in range(depot_count)) {
-        var placed = false
         for (_try in range(12)) {
             let depot_y = base_y + depot_spacing * (float(i) + 0.3 + random_f() * 0.4)
             let depot_bounds = river_clamp_x_for(depot_y, random_sign() * 20.0)
@@ -371,7 +362,6 @@ def spawn_section_depots(base_y : float) {
 
             if (!blocked) {
                 spawn_fuel_depot(candidate)
-                placed = true
                 break
             }
         }

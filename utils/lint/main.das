@@ -1,5 +1,6 @@
 options gen2
 options gc
+options persistent_heap     // heap_collect requires it; declared rather than inherited from the host's defaults
 
 require daslib/lint
 require daslib/perf_lint
@@ -138,37 +139,6 @@ def is_skip_dir(name : string) : bool {
     return name |> starts_with(".")
 }
 
-def has_expect_directive(file : string) : bool {
-    // Files with `expect <code>:<count>` declare intentional compile errors
-    // for dastest. Lint cannot evaluate them — the program never reaches
-    // the AST stage paranoid/perf/style passes need. Skip them.
-    let text = fread(file)
-    return false if (empty(text))
-    let lines <- text |> split("\n")
-    for (line in lines) {
-        let trimmed = line |> strip
-        return true if (trimmed |> starts_with("expect "))
-    }
-    return false
-}
-
-// `// lint-skip-file: <reason>` opts a file out of linting entirely — for files whose
-// SUBJECT conflicts with the lint pipeline's policies (e.g. tests/language/static_if.das
-// tests the infer-time folding the policies disable, so it cannot even compile here).
-def lint_skip_reason(file : string) : string {
-    let text = fread(file)
-    return "" if (empty(text))
-    for (line in split(text, "\n")) {
-        let trimmed = line |> strip
-        if (trimmed |> starts_with("// lint-skip-file")) {
-            let colon = find(trimmed, ":")
-            let reason = colon >= 0 ? strip(slice(trimmed, colon + 1)) : ""
-            return empty(reason) ? "(lint-skip-file directive)" : "(lint-skip-file: {reason})"
-        }
-    }
-    return ""
-}
-
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
     return if (!st.is_valid)
@@ -245,15 +215,10 @@ def normalize_rule_list(raw : array<string>; var dest : table<string>) : string 
     return ""
 }
 
-// expect / lint-skip-file / fixture-name skips - true when result carries the skip reason
-def resolve_skip(file : string; lint_fixtures : bool; var result : LintResult) : bool {
-    if (has_expect_directive(file)) {
-        result.skip_reason = "(intentional compile errors via `expect`)"
-        return true
-    }
-    let skip_directive = lint_skip_reason(file)
-    if (!empty(skip_directive)) {
-        result.skip_reason = skip_directive
+def set_skip_reason(file : string; lint_fixtures : bool; var result : LintResult) : bool {
+    let content_skip = lint_file_skip_reason(file)
+    if (!empty(content_skip)) {
+        result.skip_reason = content_skip
         return true
     }
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
@@ -267,10 +232,10 @@ def resolve_skip(file : string; lint_fixtures : bool; var result : LintResult) :
     return false
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, defer_stale : bool;
-              disabled_codes, enabled_codes : table<string>) : LintResult {
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
+              disabled_codes, enabled_codes : table<string>; defer_stale : bool) : LintResult {
     var result = LintResult(file = file)
-    if (resolve_skip(file, lint_fixtures, result)) {
+    if (set_skip_reason(file, lint_fixtures, result)) {
         return <- result
     }
     var inscope access <- make_file_access("")
@@ -284,16 +249,26 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     let issue_str = string(issues)
-                    // Files that can't resolve a require (e.g. daspkg-installed `anthropic/anthropic`)
-                    // are out-of-tree as far as a stock daslang build can tell — treat as skip, not fail.
-                    if (find(issue_str, "missing prerequisite") >= 0) {
+                    // Environment classes downgrade to SKIP only off the FIRST diagnostic's header
+                    // line: a genuine environment failure aborts the compile before any other error,
+                    // while a whole-string substring match would let one env line mask real errors
+                    // (or match the literal echoed from an erroring source line).
+                    var first_diag = ""
+                    let err_start = find(issue_str, "error[")
+                    if (err_start >= 0) {
+                        let nl = find(issue_str, "\n", err_start)
+                        first_diag = nl >= 0 ? slice(issue_str, err_start, nl) : slice(issue_str, err_start)
+                    }
+                    // error[20605] = missing prerequisite (e.g. daspkg-installed `anthropic/anthropic`) —
+                    // out-of-tree as far as a stock daslang build can tell.
+                    if (find(first_diag, "error[20605]") >= 0) {
                         result.skip_reason = "(missing prerequisite — install daspkg deps to lint)"
                         result.compile_errors = issue_str
                         return
                     }
                     // A [extern] dlopen miss (e.g. dasSMT without libz3) is the environment, not the
                     // code — skip with a visible reason so nightly coverage counting still sees it.
-                    if (find(issue_str, "can't load library") >= 0) {
+                    if (find(first_diag, "can't load library") >= 0) {
                         result.skip_reason = "(native library unavailable — install it to lint this file)"
                         result.compile_errors = issue_str
                         return
@@ -355,8 +330,9 @@ def apply_path_excludes(var result : LintResult) {
     }
 }
 
-// Print a single LintResult in the user-facing format. Shared by serial
-// and parallel paths so output is byte-identical regardless of mode.
+// Print a single LintResult in the user-facing format. Shared by serial and
+// parallel paths; per-file output matches, though serial mode appends its
+// LINT019 findings as a trailing block while parallel reports them inline.
 def print_result(result : LintResult; quiet, silent : bool) {
     if (!empty(result.skip_reason)) {
         if (!quiet) {
@@ -392,9 +368,6 @@ def read_paths_from(path : string; var out : array<string>) : bool {
     return true
 }
 
-// Worker entry: lint every file in `paths`, emit one JSON-wrapped
-// LintResult per file between `##lint##\n` markers. Caller (driver)
-// parses the stream and aggregates.
 // Each compile_file leaves AST/module residue only the GC can reclaim - on a
 // whole-tree run that grows to gigabytes. Collect every N files (needs `options gc`).
 let COLLECT_EVERY = 100
@@ -403,18 +376,21 @@ def maybe_collect(var since_collect : int&) {
     since_collect ++
     if (since_collect >= COLLECT_EVERY) {
         since_collect = 0
-        // a JIT'd context cannot collect - the run just keeps the old grow-only behavior there
+        // a JIT'd context cannot collect - the run stays grow-only there
         if (!jit_enabled()) {
             unsafe(heap_collect(true, false))
         }
     }
 }
 
+// Worker entry: lint every file in `paths`, emit one JSON-wrapped
+// LintResult per file between `##lint##\n` markers. Caller (driver)
+// parses the stream and aggregates.
 def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
                disabled_codes, enabled_codes : table<string>) {
     var since_collect = 0
     for (f in paths) {
-        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, false, disabled_codes, enabled_codes)
+        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes, defer_stale = false)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
         maybe_collect(since_collect)
     }
@@ -423,7 +399,7 @@ def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment
 // Worker argv: spawn prefix + `--paths-from <chunk>` + the driver's pass/filter flags.
 def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : Config) : array<string> {
     var argv : array<string>
-    argv |> reserve(length(spawn_prefix) + 12)
+    argv |> reserve(length(spawn_prefix) + 14)
     argv |> push_from(spawn_prefix)
     argv |> push("--")
     argv |> push("--paths-from")
@@ -472,8 +448,8 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
 
     let spawn_prefix <- parallel_workers::spawn_argv_prefix()
     if (length(spawn_prefix) < 2) {
-        print("error: --workers requires `daslang main.das` invocation ({length(spawn_prefix)} argv entries)\n")
-        return <- results
+        // fail hard: returning empty results here would print a clean summary and exit 0 with nothing linted
+        panic("--workers requires `daslang main.das` invocation ({length(spawn_prefix)} argv entries)")
     }
     let tag = "{ref_time_ticks()}"
     var tmperr : string
@@ -615,11 +591,13 @@ def collect_input_files(var files : array<string>&) : int {
 }
 
 // Stale scan LAST, over the whole run's consumption ledger: a directive is consumed
-// by ANY compile in the run, including files sorted after it - the per-file scan
-// under-credited whatever sorts first (daslib), calling live directives stale.
-// Worker mode still scans per-file; the driver-merged ledger is a known follow-up.
+// by ANY compile in the run, including files sorted after it. Worker mode still
+// scans per-file - its ledger is per-process.
 def stale_scan_at_end(stale_eligible : array<string>; cfg : Config; disabled_codes, enabled_codes : table<string>;
                       var total_issues : int&; var total_errors : int&; var total_skipped : int&; var total_excluded : int&) : void {
+    // the collector no-ops per file when LINT019 is off - skip the whole fread loop then
+    return if (key_exists(disabled_codes, "LINT019")
+                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT019")))
     for (file in stale_eligible) {
         let src = fread(file)
         continue if (empty(src))
@@ -631,7 +609,11 @@ def stale_scan_at_end(stale_eligible : array<string>; cfg : Config; disabled_cod
             apply_path_excludes(result)
         }
         if (result.count > 0 || result.excluded > 0) {
-            print_result(result, cfg.quiet, cfg.silent)
+            // count == 0 with excluded > 0 still tallies, but a print would emit a
+            // second PASS line for a file the main pass already reported
+            if (result.count > 0) {
+                print_result(result, cfg.quiet, cfg.silent)
+            }
             tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
         }
     }
@@ -722,19 +704,18 @@ def main() : int {
         if (!cfg.quiet) {
             print("Linting {length(files)} file(s)...\n\n")
         }
-        var since_collect = 0
         var stale_eligible : array<string>
         for (file in files) {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, true, disabled_codes, enabled_codes)
+            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes, defer_stale = true)
             if (!result.failed && empty(result.skip_reason)) {
                 stale_eligible |> push(file)
             }
             print_result(result, cfg.quiet, cfg.silent)
             tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
-            maybe_collect(since_collect)
+            // NO maybe_collect here: a collect in THIS loop corrupts live strings (worker mode collects identically and survives) - serial stays grow-only until the runtime cause is fixed
         }
         if (run_paranoid && run_perf && run_style) {
             stale_scan_at_end(stale_eligible, cfg, disabled_codes, enabled_codes,

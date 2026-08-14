@@ -211,7 +211,7 @@ def test_least_padding_wins(t : T?) {
 [test]
 def test_aligned_distance_tiebreak(t : T?) {
     t |> run("equal padding, exact constness wins") @(t : T?) {
-        var v = 5 // nolint:LINT003 - `let` would flip resolution to the const overload
+        var v = 5 // `let` would flip resolution to the const overload
         let r = cdist(v) $ {
             return 1;
         }

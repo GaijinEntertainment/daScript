@@ -685,11 +685,15 @@ def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037,STYLE
                         smpl_offset = cursor
                         smpl_size = sub_size
                         let num_samples = sub_size / 2
-                        result.sample_data |> reserve(num_samples)     // whole-soundfont PCM outgrows max_unreserved_size
-                        result.sample_data |> resize(num_samples)
-                        // bulk copy — data is little-endian int16, same as native on x86/x64
-                        unsafe {
-                            memcpy(addr(result.sample_data[0]), addr(data[cursor]), sub_size)
+                        // a truncated file's sub_size can run past the data; skip the copy rather than
+                        // read out of bounds (length - cursor form: cursor + sub_size could wrap int)
+                        if (num_samples > 0 && sub_size <= length(data) - cursor) {
+                            result.sample_data |> reserve(num_samples)     // whole-soundfont PCM outgrows max_unreserved_size
+                            result.sample_data |> resize(num_samples)
+                            // bulk copy — data is little-endian int16, same as native on x86/x64
+                            unsafe {
+                                memcpy(addr(result.sample_data[0]), addr(data[cursor]), sub_size)
+                            }
                         }
                         cursor += sub_size
                     } else {

@@ -20,7 +20,7 @@ struct public LlvmCodeCtx {
     fn : Function const?
     //! the LLVM function to fill; the ABI is already built — one typed parameter per das argument
     //! in order, then the context pointer, then the CMRES pointer for by-memory results. A generator
-    //! appends basic blocks and terminates them, or declines without touching `impl`.
+    //! must append and terminate its basic blocks, and must not touch `impl` if it declines.
     impl : LLVMOpaqueValue?
     impl_type : LLVMOpaqueType?
     //! the [llvm_code(...)] declaration; generator parameters live in `.arguments`

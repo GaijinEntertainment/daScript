@@ -1264,6 +1264,7 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
                 break if (p == tok_start)
                 let code = slice(bytes, tok_start, p)
                 if (code == "LINT019") {
+                    // the marker exempts the WHOLE line's list - a genuinely dead sibling code rides along unreported
                     self_suppressed = true
                 } elif (is_rule_code(code)
                         && !key_exists(disabled_codes, code)

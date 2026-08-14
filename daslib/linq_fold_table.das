@@ -3,7 +3,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options _comment_hygiene = true
-options _cyclomatic_complexity = 25
+options _cyclomatic_complexity = 25     // driven by try_table_point_lookup (136 lines), the rewrite planner
 options _function_length = 137
 
 module linq_fold_table shared public

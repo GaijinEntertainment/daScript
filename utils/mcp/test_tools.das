@@ -1603,6 +1603,17 @@ def test_lint_skip_expect(t : T?) {
         t |> success(find(text, "SKIP") >= 0, "should report SKIP")
         t |> success(find(text, "intentional compile errors") >= 0, "should explain the skip reason")
     }
+    t |> run("a `lint-skip-file` header skips instead of hard-failing on policy-conflicted files") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // the CLI runner and the MCP tool share lint_file_skip_reason - without it this file
+        // compile-errors under the lint policies (it pins infer-time-folding behavior)
+        let ok = parse_result(do_lint("{get_das_root()}/tests/language/static_if.das"), text, is_error)
+        t |> success(ok, "skip result is a valid envelope")
+        t |> success(!is_error, "skip is not an error")
+        t |> success(find(text, "SKIP") >= 0, "should report SKIP: {text}")
+        t |> success(find(text, "lint-skip-file") >= 0, "should carry the directive reason: {text}")
+    }
 }
 
 [test]

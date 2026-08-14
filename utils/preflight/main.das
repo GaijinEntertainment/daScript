@@ -405,6 +405,8 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // static_if halves compile out, so their requires/args read unused there and nowhere else),
 // and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
 // A host-flavor pass alone is structurally blind to both — so this gate runs three rails.
+// LINT019 is OFF on all three (mirrors CI): a changed-set ledger cannot see consumers
+// outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_das)) {
@@ -415,6 +417,8 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
     var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
     host_args |> push_from(files)
     host_args |> push("--quiet")
+    host_args |> push("--disable")
+    host_args |> push("LINT019")
     let host = run_argv(host_args)
     if (host.rc != 0) {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
@@ -424,6 +428,8 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
                         "utils/lint/main.das", "--"]
     mirror_args |> push_from(files)
     mirror_args |> push("--quiet")
+    mirror_args |> push("--disable")
+    mirror_args |> push("LINT019")
     let mirror = run_argv(mirror_args)
     if (mirror.rc != 0) {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
@@ -446,6 +452,8 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
     var exe_args <- ["{lint_exe_base}.exe"]
     exe_args |> push_from(files)
     exe_args |> push("--quiet")
+    exe_args |> push("--disable")
+    exe_args |> push("LINT019")
     let exe = run_argv(exe_args)
     remove("{lint_exe_base}.exe")
     remove("{lint_exe_base}.o")

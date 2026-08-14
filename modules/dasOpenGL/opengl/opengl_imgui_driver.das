@@ -146,7 +146,7 @@ def public imgui_gl_update_textures(var r : ImguiGlRenderer) {
     // `GetPlatformIO().Textures` -- the canonical place a backend drains texture create/update requests.
     let pio & = unsafe(GetPlatformIO())
     for (i in range(length(pio.Textures))) {
-        // const-strip: `pio` is const, so the element is a const-pointee pointer; SetTexID/SetStatus
+        // `pio` is const, so the element reads as a const-pointee pointer; SetTexID/SetStatus
         // below need a mutable ImTextureData.
         var tex = unsafe(reinterpret<ImTextureData?>(pio.Textures[i]))
         if (tex == null) {

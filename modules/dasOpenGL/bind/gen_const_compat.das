@@ -38,17 +38,40 @@ def main {
         fprint(f, "// desktop GL constants absent from GLES3, for boost-layer compile compat on web\n")
         for (line in split(fread("{root}/modules/dasOpenGL/opengl/opengl_const.das"), "\n")) {
             if (!starts_with(line, "let GL_")) { continue }
-            let toks <- nonempty(split_by_chars(line, " =()"))
+            let toks <- nonempty(split_by_chars(strip(line), " =()"))
             if (length(toks) < 3) { continue }
+            // exactly `let NAME VALUE` or `let NAME TYPE VALUE` - anything longer (a trailing
+            // comment, an expression) would silently mistype the constant, so fail loudly
+            if (length(toks) > 4) {
+                panic("gen_const_compat: unexpected token shape in `{line}`")
+            }
             let name = toks[1]
             var ctype = ""
             var value = ""
-            if (length(toks) >= 4) {                 // let NAME TYPE VALUE
-                ctype = toks[2] == "int" ? "int32_t" : "uint32_t"
+            if (length(toks) == 4) {                 // let NAME TYPE VALUE
                 value = toks[3]
+                if (toks[2] == "int") {
+                    ctype = "int32_t"
+                } elif (toks[2] == "uint") {
+                    ctype = "uint32_t"
+                } elif (toks[2] == "int64") {
+                    ctype = "int64_t"
+                } elif (toks[2] == "uint64") {
+                    ctype = "uint64_t"
+                } else {
+                    panic("gen_const_compat: unknown cast type `{toks[2]}` in `{line}`")
+                }
             } else {                                 // let NAME VALUE (bare literal)
                 value = toks[2]
-                ctype = ends_with(value, "u") || ends_with(value, "ul") ? "uint32_t" : "int32_t"
+                if (ends_with(value, "ul")) {        // uint64 literal - never truncate to 32 bits
+                    ctype = "uint64_t"
+                } elif (ends_with(value, "u")) {
+                    ctype = "uint32_t"
+                } elif (ends_with(value, "l")) {
+                    ctype = "int64_t"
+                } else {
+                    ctype = "int32_t"
+                }
             }
             if (defined?[name] ?? false) { continue }
             fprint(f, "addConstant<{ctype}>(*this,\"{name}\",{ctype}({value}));\n")
