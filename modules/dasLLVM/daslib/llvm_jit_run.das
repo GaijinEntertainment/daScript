@@ -36,11 +36,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x52ul   // array push-back inlines the fits-in-capacity path (0x51: each(array/fixed array) for-loop sources walk inline)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x54ul   // indirect calls to jitted functions inline the dispatcher, cmres included (0x52: array push-back inlines the fits-in-capacity path)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xc55144c99694597bul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x90e94d70a17cd771ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 

@@ -1784,16 +1784,11 @@ class public LlvmJitVisitor : AstVisitor {
                         glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
                     }
                 }
-                var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-                params |> push(glob_fn_ptr)  // mnh
-                params |> push(args)
+                var cmresPtr : LLVMOpaqueValue?
                 if (cmresEval != null) {
-                    params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
+                    cmresPtr = LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
                 }
-                params |> push(get_context_param())
-                var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-                var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-                var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+                var ccall = build_call_helper(glob_fn_ptr, args, cmresPtr)
                 if (cmresEval != null) {
                     setE(expr, cmresEval)
                 } elif (expr.func.result.isVoid) {
@@ -4364,15 +4359,9 @@ class public LlvmJitVisitor : AstVisitor {
                     ctor = save_address_global(name, MNH_ADDR)
                 }
             }
-            var params <- [
-                ctor,  // mnh
-                LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)), // args
-                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""),
-                get_context_param()
-            ]
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+            var ccall = build_call_helper(ctor,
+                LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)),
+                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
         }
     }
 
@@ -5292,6 +5281,39 @@ class public LlvmJitVisitor : AstVisitor {
         return true
     }
 
+    def build_call_helper(simfunc, args : LLVMOpaqueValue?; cmres : LLVMOpaqueValue? = null) : LLVMOpaqueValue? {
+        if (cmres == null) {
+            return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_OR_FASTCALL],
+                LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL),
+                fixed_array(simfunc, args, get_context_param()), "")
+        }
+        return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES],
+            LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES),
+            fixed_array(simfunc, args, cmres, get_context_param()), "")
+    }
+
+    def build_call_dispatch(simfunc, args : LLVMOpaqueValue?; cmres : LLVMOpaqueValue? = null) : LLVMOpaqueValue? {
+        var slot = LLVMBuildGEP2(g_builder, types.t_int8,
+            LLVMBuildPointerCast(g_builder, simfunc, LLVMPointerType(types.t_int8, 0u), ""),
+            types.ConstI32(uint64(SIMFUNCTION_OFFSET_OF_JIT_FUNCTION)), "simfn.jitp")
+        var jitfn = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), slot, "simfn.jitfn")
+        var direct = LLVMBuildIsNotNull(g_builder, jitfn, "simfn.jitted")
+        let cmresArg = cmres != null ? cmres : LLVMConstPointerNull(types.LLVMVoidPtrType())
+        var res = build_select(direct, types.LLVMFloat4Type()) {
+            var r = LLVMBuildCall2(g_builder, g_t_jit_function, jitfn,
+                fixed_array(get_context_param(), args, cmresArg), "")
+            var sfp = LLVMBuildGEP2(g_builder, types.t_int8,
+                LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), ""),
+                types.ConstI32(uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)), "ctx.stopflagsp")
+            LLVMBuildStore(g_builder, LLVMConstInt(types.t_int32, 0ul, 0), sfp)
+            return r
+        }
+        lpipe() {
+            return build_call_helper(simfunc, args, cmres)
+        }
+        return res
+    }
+
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
         var cmresEval : LLVMOpaqueValue?
@@ -5334,16 +5356,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null method")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5358,16 +5371,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null function")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5385,16 +5389,8 @@ class public LlvmJitVisitor : AstVisitor {
             LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            check_ptr_zero(SIMFUNCTION, expr.at, "invoke null lambda")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5639,10 +5635,8 @@ class public LlvmJitVisitor : AstVisitor {
         LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
         var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.FINALIZER), "FINALIZER")
         SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-        var params <- [SIMFUNCTION, args, get_context_param()]
-        var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
-        var typ = g_fn_types[FN_JIT_CALL_OR_FASTCALL]
-        LLVMBuildCall2(g_builder, typ, func, params, "delete_lambda")
+        check_ptr_zero(SIMFUNCTION, at, "lambda finalizer is a null function")
+        build_call_dispatch(SIMFUNCTION, args)
         LLVMBuildBr(g_builder, end)
         LLVMPositionBuilderAtEnd(g_builder, end)
     }

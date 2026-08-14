@@ -240,13 +240,6 @@ extern "C" {
 
     DAS_API vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
         if ( !fn ) context->throw_error("jit_call_or_fastcall: null function (unresolved LLVM-AOT call target)");
-        if ( fn->jitFunction ) {
-            // JIT->JIT direct call: skip the stack push/prologue (JIT'd bodies push their own
-            // frame via jit_prologue when they need one) and the virtual SimNode_Jit::eval.
-            auto res = ((JitFunction) fn->jitFunction)(context, args, nullptr);
-            context->stopFlags = 0;     // mirror callOrFastcall (an invoked interpreted block may leak stopForReturn)
-            return res;
-        }
         return context->callOrFastcall(fn, args, nullptr);
     }
 
@@ -862,6 +855,7 @@ extern "C" {
     void *das_get_jit_table_lock() { return (void *)&builtin_table_lock; }
     void *das_get_jit_table_unlock() { return (void *)&builtin_table_unlock; }
     void *das_get_jit_array_resize() { return (void *)&builtin_array_resize; }
+
     void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
@@ -1689,6 +1683,8 @@ extern "C" {
             addConstant<uint32_t>(*this, "SIZE_OF_SIMNODE_INTEROP", uint32_t(sizeof(SimNode_AotInteropBase)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
+            addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_STOP_FLAGS", uint32_t(uint32_t(offsetof(Context, stopFlags))));
+            addConstant<uint32_t>(*this, "SIMFUNCTION_OFFSET_OF_JIT_FUNCTION", uint32_t(uint32_t(offsetof(SimFunction, jitFunction))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_SHARED", uint32_t(uint32_t(offsetof(Context, shared))));
             // lets make sure its all aot ready
             verifyAotReady();
