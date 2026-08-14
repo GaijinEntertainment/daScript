@@ -80,7 +80,8 @@ class AsyncMacro : AstFunctionAnnotation {
 
             retT.argTypes |> resize(2)
             retT.argTypes[0] = clone_type(func.result)
-            retT.argTypes[1] = typeinfo ast_typedecl(type<bool>)
+            // qmacro_type, not `typeinfo ast_typedecl` - the latter needs infer-time folding
+            retT.argTypes[1] = qmacro_type(type<bool>)
         }
 
         var astVisitor = new CollectAndReplaceIteratorFields(voidRoutine = voidRoutine, retType := retT)
@@ -152,6 +153,15 @@ enum AssignOp {
 }
 
 [macro_function]
+def make_await_yield_step(voidRoutine : bool; retType : TypeDecl?) : ExpressionPtr {
+    // macro-time branch: an `if ($v(voidRoutine))` keeps its dead arm in the generated AST, and without infer-time folding the never-taken `variant type<bool>` arm fails type-check
+    if (voidRoutine) {
+        return <- qmacro_expr(${ yield true; })
+    }
+    return <- qmacro_expr(${ yield <- variant type<$t(retType)>(wait = true); })
+}
+
+[macro_function]
 def move_clone_copy(var expr; voidRoutine : bool; var retType : TypeDecl?&; assignOp : AssignOp) : ExpressionPtr {
     if (expr.right is ExprCall) {
         var call = expr.right as ExprCall
@@ -168,6 +178,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : TypeDecl?&; assi
                 let name = make_unique_private_name("_async_iterator", expr.at)
                 let useMove = assignOp == AssignOp.move
                 let useClone = assignOp == AssignOp.clone
+                var yieldStep <- make_await_yield_step(voidRoutine, retType)
                 var blk = qmacro_block() {
                     for ($i(name) in $e(call.arguments[0])) {
                         if ($i(name) is res) {
@@ -179,11 +190,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : TypeDecl?&; assi
                                 $e(expr.left) = $i(name) as res
                             }
                         }
-                        if ($v(voidRoutine)) {
-                            yield true
-                        } else {
-                            yield <- variant type<$t(retType)>(wait = true)
-                        }
+                        $e(yieldStep)
                     }
                 }
                 blk |> force_at(expr.at)
@@ -290,6 +297,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                     let name = make_unique_private_name("_async_iterator", expr.at)
                     let useMove = v.flags.init_via_move
                     let useClone = v.flags.init_via_clone
+                    var yieldStep <- make_await_yield_step(voidRoutine, retType)
                     var blk = qmacro_block() {
                         var $i(v.name) : $t(v._type)
                         for ($i(name) in $e(call.arguments[0])) {
@@ -302,11 +310,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                                     $i(v.name) = $i(name) as res
                                 }
                             }
-                            if ($v(voidRoutine)) {
-                                yield true
-                            } else {
-                                yield <- variant type<$t(retType)>(wait = true)
-                            }
+                            $e(yieldStep)
                         }
                     }
                     blk |> force_at(expr.at)
