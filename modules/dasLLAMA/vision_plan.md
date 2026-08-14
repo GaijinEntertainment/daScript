@@ -224,15 +224,18 @@ invariant — a transposed patch grid is only visible per-token).
   for no reason.
 - **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
   PERF_LEDGER entry, this findings section, predictions scored.
-- **J. The image turn joins the profiling app.** Model-level image timing (ttft, prefill,
-  decode; CPU and Metal arms) becomes a cell in the documented rig
-  (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
-  sidecar resolution, noise probes and box/engine provenance. Embedder-only timing is
-  sub-model and takes the kernel A/B lab shape instead. This is not bookkeeping: slice G's
-  first numbers came from a one-off script with no tune gate, so they measured FALLBACK
-  kernels — the same image turn runs 8.7 s ttft / 14 t/s under a real sidecar and
-  24.3 s / 2 t/s without one. A measurement rig that has to be remembered is a rig that
-  produces wrong numbers.
+- **J. The image turn joins the profiling app — and NO separate benches, ever.** Model-level
+  image timing (ttft, prefill, decode; CPU and Metal arms) becomes a cell in the documented
+  rig (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
+  sidecar resolution, noise probes and box/engine provenance; embedder-only timing takes the
+  kernel A/B lab shape instead. **The rule this arc earned, now in `CODEREVIEW.md`: a new
+  servable capability updates the profiling app in the same arc, and a timing figure that
+  reaches a doc, a ledger or a PR without a cell behind it is a defect.** The old rule already
+  called a one-off measurement script a defect — what was missing was the positive obligation,
+  and this arc paid for the gap twice over: the scratch bench took `load_model_`'s fp32
+  default (2 t/s where the product reads 14) and skipped the tune gate (a further ~9%), and
+  both wrong numbers reached the ledger before anyone noticed. A rig you have to remember to
+  use is a rig that produces wrong numbers.
 
 ## Predictions
 

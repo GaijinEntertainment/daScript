@@ -85,6 +85,14 @@ exempt, as is the `--tok` cell in `benchmarks/lcpp_bench.das`, which dispatches 
 rig is a defect; the one sanctioned sub-model instrument is the kernel A/B lab. A tutorial's printed
 wall-clock is teaching output, feeding no board (`ARCHITECTURE.md` §2.5).
 
+**A new servable capability updates the profiling app in the same arc.** A modality, a family,
+or a serving path that a user can wait on gets its cell in the rigs `PROFILE.md` documents — not
+a bench beside it, and not a number quoted from a script that no longer exists. The cell is what
+makes the measurement reproducible by someone else and comparable to the next one: it states its
+quant mode, calls `tune_gate()`, and stamps box and engine provenance, so a number can never
+silently describe a format nobody serves or a kernel set nobody ships. A timing figure that
+reaches a doc, a ledger, or a PR without a cell behind it is a defect.
+
 **A kernel A/B lab under `benchmarks/` is a decision instrument, not a record rig.** It answers a
 kernel-join question by interleaved same-instrument A/B under a bit-exact cross-arm gate; hand-rolled
 bind lists are legal there, so a binding renumber fixes or deletes the arms it rots. Adoption deletes
