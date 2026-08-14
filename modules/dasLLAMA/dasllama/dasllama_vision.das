@@ -48,6 +48,7 @@ def public vision_token_count(target : int2; align : int) : int => (target.x / a
 // lerp into, and deterministic across interp/JIT/AOT (unfused floats missed 2/112896 px by 1).
 def private resize_bilinear(src : VisionImage; tw, th : int) : VisionImage {
     var dst = VisionImage(width = tw, height = th)
+    dst.rgb |> reserve(tw * th * 3)
     dst.rgb |> resize(tw * th * 3)
     let x_ratio = tw > 1 ? float(src.width - 1) / float(tw - 1) : 0.0
     let y_ratio = th > 1 ? float(src.height - 1) / float(th - 1) : 0.0
@@ -104,6 +105,7 @@ def public vision_letterbox(src : VisionImage; target : int2) : VisionImage {
     let new_h = min(ceili(float(src.height) * scale), target.y)
     let content <- content_for(src, new_w, new_h)
     var dst = VisionImage(width = target.x, height = target.y)
+    dst.rgb |> reserve(target.x * target.y * 3)
     dst.rgb |> resize(target.x * target.y * 3)   // fresh elements are zero — the black canvas
     let off_x = (target.x - new_w) / 2
     let off_y = (target.y - new_h) / 2
@@ -152,6 +154,7 @@ def public maybe_dump_vision(img : VisionImage; tag : string) {
 //! `image_mean`/`image_std` are identity and nothing else touches the values.
 def public vision_normalize(img : VisionImage) : array<float> {
     var planes : array<float>
+    planes |> reserve(length(img.rgb))
     planes |> resize(length(img.rgb))
     for (d, s in planes, img.rgb) {
         d = float(s) / 255.0

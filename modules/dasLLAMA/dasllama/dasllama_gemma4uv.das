@@ -207,8 +207,8 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         st.e.ln3_b = off; off += d
         st.e.pos_w = off; off += 2l * st.e.pos_entries * d
         st.e.proj_w = uv_gemm_off(st.e.proj_bf16, off, woff, d * st.e.proj_dim)
-        st.blob |> resize(off)
-        st.wblob |> resize(woff)
+        st.blob |> reserve_resize(off)
+        st.wblob |> reserve_resize(woff)
         uv_read_gemm(m, bytes, "v.patch_embd.weight", st, st.e.patch_bf16, st.e.patch_w, pd * d)
         gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.e.patch_b, d)
         gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.weight", st.blob, st.e.ln1_w, pd)

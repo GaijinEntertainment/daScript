@@ -647,6 +647,7 @@ def private embd_span_generate(m : Model; prompt : array<int64>; lo, hi : int64;
                                params : SamplingParams; max_new : int64) : array<int64> {
     var s <- create_session(m)
     var e : array<float>
+    e |> reserve(long_length(prompt) * m.config.dim)
     e |> resize(long_length(prompt) * m.config.dim)
     embed_text_rows(m, prompt, e, 0l)
     var out : array<int64>

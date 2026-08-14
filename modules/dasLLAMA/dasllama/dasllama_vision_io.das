@@ -22,6 +22,7 @@ def public load_image_rgb(path : string) : VisionImage {
     }
     img.width = x
     img.height = y
+    img.rgb |> reserve(x * y * 3)   // a decoded photo can exceed max_unreserved_size; size it exactly
     img.rgb |> resize(x * y * 3)
     for (i in range(x * y * 3)) {
         img.rgb[i] = unsafe(pixels[i])
@@ -43,6 +44,7 @@ def public load_image_rgb(bytes : array<uint8>) : VisionImage {
     }
     img.width = x
     img.height = y
+    img.rgb |> reserve(x * y * 3)   // a decoded photo can exceed max_unreserved_size; size it exactly
     img.rgb |> resize(x * y * 3)
     for (i in range(x * y * 3)) {
         img.rgb[i] = unsafe(pixels[i])
