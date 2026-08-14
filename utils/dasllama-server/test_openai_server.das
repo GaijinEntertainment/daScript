@@ -74,6 +74,9 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
+            // serving test, not a kernel test: the CPU batched prefill arm is the intent whenever
+            // metal is off (and harmless when it is on — it permits the arm, it does not select it)
+            allow_cpu_prefill()
             var m <- load_model(model_path, QuantMode.q8)
             set_model(m, "test-llm")
             set_default_max_tokens(4l)   // per-context global — exercised by the default-budget completion test
@@ -281,6 +284,30 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[\{\"type\":\"function\",\"function\":\{\"name\":\"f\"}}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+            }
+            // an image_url part on a slot with NO vision arm: a named 400, never a silent drop
+            // (a client that asked about a picture must not get an answer about nothing)
+            let one_img = "\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"text\",\"text\":\"what is this\"}]}"
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":[{one_img}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "no vision arm") >= 0, "the 400 names the missing vision arm")
+            }
+            // two images in one message: v1 splices one span, so this is a 400 BEFORE any decode
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,BBBB\"}}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
+            }
+            // /v1/stats declares the arm so the page can show its attach button
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && !(js?["vision"] ?? true), "stats reports no vision arm for a text-only slot")
+                if (js != null) {
+                    unsafe {
+                        delete js
+                    }
+                }
             }
             // unknown endpoint hits the ANY("*") catch-all: logged server-side, OpenAI-shaped 404 back
             POST("{base_url}/v1/responses", "\{\"input\":\"hi\"}") $(resp) {
@@ -599,6 +626,7 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(MetalMode.off)
+            allow_cpu_prefill()   // routing test: both slots serve off the CPU arm by design
             var ma <- load_model(path_a, QuantMode.q8)
             add_model(ma, "tiny")
             var mb <- load_model(path_b, QuantMode.q8)

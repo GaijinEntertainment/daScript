@@ -6,6 +6,8 @@ module dasllama_gemma4uv shared public
 require daslib/fio
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + normalize ahead of the encoder
+require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
 require math
 
 //! The gemma4uv "unified" vision embedder (gemma-4 dense 12B/26B): eleven tensors, no
@@ -220,4 +222,21 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     uv_ensure(out, npos * t.proj_dim)
     mm_blob_b(out, t.blob, t.proj_w, s.x1, d, t.proj_dim, npos)
     return npos
+}
+
+//! The whole image path in one call: geometry → letterbox → normalize → `gemma4uv_encode` into
+//! `out` = npos × proj_dim soft tokens (returns npos); `tag` names the `DASLLAMA_VISION_DUMP`
+//! artifact. `add_user_image` is this plus queueing onto a chat turn.
+def encode_image_(t : Gemma4uvEmbedder; var s : Gemma4uvState; img : VisionImage; tag : string;
+                  var out : array<float>) : int64 {
+    if (img.width <= 0 || img.height <= 0) {
+        panic("dasLLAMA gemma4uv: encode_image_ got an empty image (decode failed?)")
+    }
+    let align = int(t.patch)
+    let target = vision_target_size(img.width, img.height, align,
+        g_env_vision.image_min_tokens, g_env_vision.image_max_tokens)
+    let boxed <- vision_letterbox(img, target)
+    maybe_dump_vision(boxed, tag)
+    let planes <- vision_normalize(boxed)
+    return gemma4uv_encode(t, s, planes, int64(target.x), int64(target.y), out)
 }

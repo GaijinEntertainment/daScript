@@ -90,6 +90,10 @@ struct ServerArgs {
     @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr)"
     mmproj : string
 
+    @clarg_name = "image-mmproj"
+    @clarg_doc = "Vision mmproj (gemma4uv) for the default model — enables image_url parts on /v1/chat/completions"
+    image_mmproj : string
+
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"
     asr_workers : int
 
@@ -155,6 +159,7 @@ struct ModelEntry {
     page_rows : int = -1    // 0 = flat is meaningful, -1 = inherit
     prefix : int = -2       // -1 = unbounded is meaningful, -2 = inherit
     mtp : int = -1          // -1 inherit | 0 off | 1 on
+    image_mmproj : string   // vision mmproj (gemma4uv); empty = this model takes text only
     is_default : bool = false
 }
 
@@ -222,7 +227,7 @@ var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
-    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "asr_workers",
+    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
     "prefix", "flat", "mtp", "lcpp_bin", "models")
 
@@ -305,6 +310,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (!empty(cfg.mmproj)) {
         g_cfg_sources["mmproj"] = "cli"
     }
+    if (!empty(cfg.image_mmproj)) {
+        g_cfg_sources["image_mmproj"] = "cli"
+    }
     if (cfg.asr_workers > 0) {
         g_cfg_sources["asr_workers"] = "cli"
     }
@@ -377,6 +385,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "gpu_vram_mb", cfg.gpu_vram_mb, auth)
     cfg_from_toml(root, "asr", cfg.asr, auth)
     cfg_from_toml(root, "mmproj", cfg.mmproj, auth)
+    cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
     cfg_from_toml(root, "ctx", cfg.ctx, auth)
     cfg_from_toml(root, "max_tokens", cfg.max_tokens, auth)
@@ -421,6 +430,7 @@ def private apply_models_roster(root : JsonValue?) {
             streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
             page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
             mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
+            image_mmproj = e?["image_mmproj"] ?? "",
             is_default = e?["default"] ?? false)
         if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
             to_log(LOG_WARNING, "dasllama-server: [[models]] '{base_name(ent.path)}' backend '{ent.backend}' is not auto | cpu | gpu — using auto\n")
@@ -519,6 +529,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         gpu_vram_mb = cfg.gpu_vram_mb,
         asr = cfg.asr,
         mmproj = cfg.mmproj,
+        image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
         max_tokens = cfg.max_tokens > 0 ? cfg.max_tokens : 256,
@@ -543,7 +554,8 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
             "ctx" => JV(int64(ent.ctx)), "quant" => JV(ent.quant), "kv_dtype" => JV(ent.kv_dtype),
             "streams" => JV(int64(ent.streams)), "chunk" => JV(int64(ent.chunk)),
             "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
-            "mtp" => JV(int64(ent.mtp)), "default" => JV(ent.is_default)
+            "mtp" => JV(int64(ent.mtp)), "image_mmproj" => JV(ent.image_mmproj),
+            "default" => JV(ent.is_default)
         }
         mentries |> push(JV(etab))
     }
@@ -857,6 +869,14 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     set_default_model(g_models[def_idx].name)
     set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 256l)
+    // vision arms: a per-entry image_mmproj wins, the flat --image-mmproj covers the default model
+    for (i in range(length(g_models))) {
+        let path = (!empty(g_models[i].image_mmproj) ? g_models[i].image_mmproj
+                                                     : (i == def_idx ? g_cfg.image_mmproj : ""))
+        if (!empty(path)) {
+            set_model_vision(g_models[i].name, path)
+        }
+    }
 
     // the dlim GC rides server start (and every bake): only never-loadable images go
     for (ent in g_models) {

@@ -5,6 +5,7 @@ options persistent_heap   // each test frees its model/scheduler before the next
 require dastest/testing_boost public
 require dasllama/dasllama_scheduler   // the scheduler under test
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
+require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -568,5 +569,138 @@ def test_scheduler_mtp(t : T?) {
         set_prefill_attn_mode(prev_attn)
         set_act_vec(prev_act)
         set_deltanet_prefill_mode(prev_dn)
+    }
+}
+
+// ===== media splice: soft-token rows prefill between two token spans =====
+
+// Build a media request whose ROWS are the prompt's own embedding rows for [lo, hi): the tokens
+// outside the span stay ids, so the stream must reproduce the all-token reference exactly. Any
+// splice bug — wrong position, a head chunk running past media_at, rows evaled twice or never —
+// changes the KV and diverges.
+def private media_req(m : Model; id : int64; prompt : array<int64>; lo, hi : int64;
+                      non_causal : bool; params : SamplingParams; max_new : int64) : PendingReq {
+    let np = long_length(prompt)
+    var r <- PendingReq(id = id, params = params, max_new = max_new,
+                        media_at = lo, n_media = hi - lo, media_non_causal = non_causal)
+    r.prompt <- [for (k in range64(np)); prompt[k]; where k < lo || k >= hi]
+    var mid <- [for (k in range64(lo, hi)); prompt[k]]
+    r.media |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, r.media, 0l)
+    delete mid
+    return <- r
+}
+
+// The whole prompt as embedding rows — `generate_embd`'s non-causal-span form is the reference
+// the scheduler's non-causal media arm must reproduce (chat.das's image turn runs on it).
+def private embd_span_generate(m : Model; prompt : array<int64>; lo, hi : int64;
+                               params : SamplingParams; max_new : int64) : array<int64> {
+    var s <- create_session(m)
+    var e : array<float>
+    e |> resize(long_length(prompt) * m.config.dim)
+    embed_text_rows(m, prompt, e, 0l)
+    var out : array<int64>
+    generate_embd(m, s, e, long_length(prompt), params, max_new, lo, hi) $(id, _pc) {
+        out |> push(id)
+        return true
+    }
+    delete e
+    delete s
+    return <- out
+}
+
+[test]
+def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
+    t |> run("media rows == the same tokens as ids: splice at head/middle/tail (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_capped(128l)
+            // classic prefill: the splice necessarily moves the eval boundaries, and only classic
+            // is bit-exact under re-chunking — the same pin as the chunk-size arm above
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            let np = long_length(prompt)
+            t |> success(np > 12l, "prompt is long enough to splice ({np} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var base <- ref_generate(m, prompt, greedy, 6l, none)
+            t |> success(!empty(base.toks), "the all-token reference produced tokens")
+            // head (no leading tokens), middle (both spans), tail (no trailing tokens)
+            for (arm, lo, hi in range(3), [0l, 4l, np - 5l], [5l, 4l + 6l, np]) {
+                var sch <- create_scheduler(m, 1l, 4l, 64l)
+                var events : array<SchedEvent>
+                var req <- media_req(m, 1l, prompt, lo, hi, false, greedy, 6l)
+                t |> success(submit(m, sch, req), "media stream queued (arm {arm}: rows [{lo},{hi}))")
+                drain(m, sch, events)
+                var got <- toks_of(events, 1l)
+                t |> success(same(got, base.toks), "arm {arm}: media stream == the all-token stream")
+                t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
+                delete got
+                delete events
+                unsafe {
+                    delete sch
+                }
+            }
+            // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
+            // match generate_embd's span form, not the causal one. The span is [1, np) — everything
+            // past BOS — because a narrow span leaves greedy top-1 unmoved and the check goes vacuous
+            let lo = 1l
+            let hi = np
+            var causal_ref <- embd_span_generate(m, prompt, 0l, 0l, greedy, 8l)
+            var span_ref <- embd_span_generate(m, prompt, lo, hi, greedy, 8l)
+            t |> success(!same(span_ref, causal_ref), "the span moves the stream (the flag is load-bearing here)")
+            var sch_nc <- create_scheduler(m, 1l, 4l, 64l)
+            var events_nc : array<SchedEvent>
+            var req_nc <- media_req(m, 7l, prompt, lo, hi, true, greedy, 8l)
+            t |> success(submit(m, sch_nc, req_nc), "non-causal media stream queued")
+            drain(m, sch_nc, events_nc)
+            var got_nc <- toks_of(events_nc, 7l)
+            t |> success(same(got_nc, span_ref), "non-causal arm == generate_embd's span form")
+            delete causal_ref
+            delete got_nc
+            delete events_nc
+            unsafe {
+                delete sch_nc
+            }
+            delete span_ref
+
+            // paged: the prefix cache is keyed on TOKEN IDS, and a media stream's KV past the splice
+            // does not follow from them — it must neither attach a hit nor donate. Prime the cache
+            // with a plain stream carrying the media stream's EXACT token prompt: the ids match, so
+            // only the bypass keeps those pages from being attached over the splice.
+            let mlo = 20l
+            let mhi = 26l
+            var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var ev : array<SchedEvent>
+            var text_only <- [for (k in range64(np)); prompt[k]; where k < mlo || k >= mhi]
+            t |> success(long_length(text_only) > 16l, "the priming prompt fills a page ({length(text_only)} tokens)")
+            t |> success(submit(m, schp, make_req(9l, text_only, greedy, 4l, none)), "priming text stream queued")
+            drain(m, schp, ev)
+            let primed = prefix_held_groups(schp.prefix)
+            t |> success(primed > 0l, "the priming stream donated its pages")
+            ev |> clear()
+            var r1 <- media_req(m, 10l, prompt, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r1), "paged media stream queued")
+            drain(m, schp, ev)
+            t |> equal(finished_of(ev, 10l).n_cached, 0l)   // no attach: those ids are not this KV
+            t |> equal(schp.cached_tokens, 0l)
+            var paged_toks <- toks_of(ev, 10l)
+            t |> success(same(paged_toks, base.toks), "paged media stream == the all-token stream")
+            t |> equal(prefix_held_groups(schp.prefix), primed)   // and no donate on the way out
+            delete paged_toks
+            delete text_only
+            delete ev
+            unsafe {
+                delete schp
+            }
+            set_prefill_attn_mode(saved_mode)
+            delete base
+            delete prompt
+            delete m
+        }
     }
 }

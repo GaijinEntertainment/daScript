@@ -140,11 +140,11 @@ def eval(model : Model; var session : Session; tokens : array<int64>) {
     eval_(model, session, tokens)
 }
 
-def eval_embd(model : Model; var session : Session; embd : array<float>; npos : int64) {
+def eval_embd(model : Model; var session : Session; embd : array<float>; npos : int64; non_causal : bool = false) {
     //! ``eval``'s embedding-input twin: prefill ``npos`` pre-built embedding rows (``npos × dim``,
-    //! token-major) at the session's current position and advance it — the multimodal splice entry
-    //! (text via ``embed_text_rows``, media via an encoder tower's soft tokens).
-    eval_embd_(model, session, embd, npos)
+    //! token-major) at the session's current position and advance it — the multimodal splice entry.
+    //! ``non_causal`` marks the whole call as one image span (gemma vision); audio rows stay causal.
+    eval_embd_(model, session, embd, npos, non_causal)
 }
 
 def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
@@ -265,6 +265,14 @@ def add_user_image(var chat : ChatSession; img : VisionImage) {
     add_user_image_(chat, img)
 }
 
+def encode_image(embedder : Gemma4uvEmbedder; var scratch : Gemma4uvState; img : VisionImage;
+                 tag : string; var out : array<float>) : int64 {
+    //! The whole image path in one call — geometry, letterbox, normalize, encode — into ``out`` =
+    //! npos × proj_dim soft tokens (returns npos). ``add_user_image`` is this plus queueing onto a
+    //! chat turn; a scheduler owning its own embedder calls this. ``tag`` names the vision dump.
+    return encode_image_(embedder, scratch, img, tag, out)
+}
+
 def add_assistant(model : Model; var chat : ChatSession; text : string) {
     //! Inject a KNOWN assistant reply (no generation): prefill the pending user turn and ``text``
     //! into the KV cache, then close the turn — like ``respond`` but with a supplied reply. The
@@ -290,6 +298,13 @@ def render_turn(model : Model; chat : ChatSession) : array<int64> {
     //! Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn
     //! and the generation prompt — WITHOUT running the model. For inspection, token budgeting, tests.
     return <- render_turn_(model, chat)
+}
+
+def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    //! ``render_turn``'s IMAGE twin: the turn's prefill as the two token spans that bracket the
+    //! image soft-token splice — ``head`` before the rows, ``tail`` after. Render-only (no KV, no
+    //! embedder): the rows come from ``gemma4uv_encode``, and a scheduler prefills head, rows, tail.
+    render_turn_image_(model, chat, head, tail)
 }
 
 def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {

@@ -8,7 +8,6 @@ require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" cha
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
 require dasllama/dasllama_vision     // VisionImage + geometry/letterbox/normalize for the image turn
 require dasllama/dasllama_gemma4uv   // Gemma4uvEmbedder: chat sessions can carry a vision embedder
-require dasllama/dasllama_env        // the image token bounds + the dump knob
 require dasllama/dasllama_tools public   // the per-ToolMode wire codecs; public: parse_calls_ returns its ToolReply
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 require math   // min/max in the reply-side reasoning matcher
@@ -682,16 +681,7 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
     if (c.n_image_rows > 0l) {
         panic("dasLLAMA chat: one image per turn in v1 - respond() before adding another")
     }
-    if (img.width <= 0 || img.height <= 0) {
-        panic("dasLLAMA chat: add_user_image got an empty image (decode failed?)")
-    }
-    let align = int(c.vision.patch)
-    let target = vision_target_size(img.width, img.height, align,
-        g_env_vision.image_min_tokens, g_env_vision.image_max_tokens)
-    let boxed <- vision_letterbox(img, target)
-    maybe_dump_vision(boxed, "turn{length(c.history)}")
-    let planes <- vision_normalize(boxed)
-    c.n_image_rows = gemma4uv_encode(c.vision, c.venc, planes, int64(target.x), int64(target.y), c.image_rows)
+    c.n_image_rows = encode_image_(c.vision, c.venc, img, "turn{length(c.history)}", c.image_rows)
 }
 
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
@@ -736,6 +726,14 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
     render_prompt(m, c, out)
     render_think_suppress(m, c, out)
     return <- out
+}
+
+//! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image
+//! soft-token splice — `head` before the rows, `tail` (generation prompt, think-suppress) after.
+//! Render-only: no KV, no embedder — the rows come from `gemma4uv_encode` on the caller's own.
+def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    render_prompt_image(m, c, head, tail)
+    render_think_suppress(m, c, tail)
 }
 
 //! Render the tokens that TERMINATE an assistant turn — the template's explicit assistant_close,

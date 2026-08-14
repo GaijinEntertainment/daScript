@@ -188,7 +188,7 @@ invariant — a transposed patch grid is only visible per-token).
 - **D. Non-causal**: flag + CPU arm + guard; toy-config unit test proving span output
   differs from causal and matches a reference computed in-test (branch-test rule).
 - **E. Splice**: chat arm + eval → tier-2 parity; `ask.das --image`; tier-3 captions.
-- **F. Server + demo page** (SETTLED 2026-08-14, decision below): `/v1/chat/completions`
+- **F. Server + demo page** (DONE 2026-08-14 — built as one piece, exactly as settled): `/v1/chat/completions`
   renders through `create_chat_renderer` to TOKEN IDS and the scheduler admits streams by
   ids, so soft-token rows have no path through admission, the prefix cache, or batch
   stepping — the work is a prefill path, not a data-URI decode. **v1 takes the serialized
@@ -199,6 +199,19 @@ invariant — a transposed patch grid is only visible per-token).
   piece: file picker + paste → data URI → the content-parts array the API already takes. A
   route nobody can try is a feature nobody sees, and the page half is small next to the
   route half.
+  **How it landed.** The serialized path turned out NOT to need a session beside the scheduler:
+  the mask only matters during PREFILL, and the scheduler already prefills one stream per tick, so
+  an image stream takes its rows as ONE prefill quantum and then joins the ordinary batched decode.
+  `PendingReq` gained `(media, media_at, n_media, media_non_causal)`; head tokens chunk up to
+  `media_at`, the rows eval in one `eval_embd`, the tail resumes. The prefix cache is bypassed at
+  both ends (keys are token ids; the KV past the splice is not derivable from them). Engine seam:
+  `render_turn_image_` (`render_turn_`'s two-span twin) and `encode_image_` (geometry+letterbox+
+  normalize+encode, which `add_user_image_` now also rides). The server keeps one embedder per
+  slot (`--image-mmproj`, or `image_mmproj` per `[[models]]` entry) and encodes at parse time.
+  v1 reads the image on the LAST user message only; the page compensates by keeping an attached
+  image sticky across turns, which is also why follow-up questions work. Measured over HTTP on the
+  M1 Max: 640x480 -> 130 soft tokens in 62 ms, 158 positions prefilled in 7.9 s, 14 t/s decode -
+  the same shape slice G measured through `ask.das`, so the route costs nothing over the CLI.
 - **G. Embedder planes** (re-measured 2026-08-14 at product shape; dlim rail STILL OWED):
   the whole image side is **59 ms of an 8.7 s turn — 0.7%** (M1 Max, 12B Q4_K_M served q8 off
   the image rail, 640×480 → 130 soft tokens, 14 t/s decode). Encode alone ~54 ms @ 130 tok,

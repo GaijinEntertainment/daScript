@@ -317,6 +317,17 @@ media, and a new media kind adds its marker pair to the chat template rather tha
 renderer. A family whose template declares no marker pair has no arm for that media kind, and
 `create_chat_` panics at create.
 
+**A scheduler stream carrying media rows neither reads nor writes the prefix cache.** Cache keys
+are token ids and the KV past the splice does not follow from them, so a media stream skips
+`prefix_attach` at admit and `donate_stream` at reap. Its rows also eval as ONE prefill quantum:
+the non-causal flag is per call, so a chunk boundary inside the span would change the mask.
+
+**A media splice is expressed as two token spans plus a row block, everywhere it appears.** The
+engine's `render_turn_image_`, the scheduler's `(prompt, media_at, media)` triple and the server's
+request path all carry the same shape; a second representation — a placeholder token, a
+pre-flattened embedding buffer at the seam — is a defect. A new media kind adds its render seam
+beside the existing one, not a parallel prefill path.
+
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode
 loop, a caps value, or a language rule in the facade is a defect.

@@ -23,6 +23,8 @@ require daslib/module_path      // get_this_module_dir: control.html ships besid
 require strings
 require math
 require dasllama/dasllama_audio_io   // load_audio_16k_mono: any uploaded audio format -> 16 kHz mono f32
+require dasllama/dasllama_vision_io  // load_image_rgb(bytes): the chat route's data-URI image parts
+require daslib/base64                // base64_decode: the data: URI payload
 require dasllama/dasllama_vad        // POST /vad: silero speech spans for the page's waveform overlay
 require dasllama/dasllama_gpu_resident   // multi-model slot switch (marks save/restore) + the resident-prefill pin
 
@@ -71,6 +73,11 @@ struct ModelSlot {
     gpu_want : GpuTierWant = GpuTierWant()   // the tier request this slot re-arms with on switch-in
     gpu_capable : bool              // want is non-zero and backend != cpu (set_slot_gpu_want)
     gpu_marks : GpuModelMarks <- GpuModelMarks()   // this model's tier routing marks while NOT installed
+    // vision arm (set_model_vision): proj_dim == 0 means this slot takes text only. The scratch is
+    // shared because handlers run serially on the tick thread — one encode is in flight at a time.
+    vision : Gemma4uvEmbedder = Gemma4uvEmbedder()
+    venc : Gemma4uvState = Gemma4uvState()
+    vision_path : string
 }
 
 var g_slots : array<ModelSlot>
@@ -308,6 +315,29 @@ def set_default_model(name : string) {
 //! clamped to the context length per request like an explicit value).
 def set_default_max_tokens(n : int64) {
     g_default_max_new = n
+}
+
+//! Give slot `name` a vision arm: load the gemma4uv mmproj at `path` so its chat route accepts
+//! `image_url` content parts. Call after ``add_model``, before ``run_server``. A mismatched
+//! decoder/mmproj pair or a family with no image markers PANICS here, not on the first request.
+def set_model_vision(name : string; path : string) {
+    let mi = slot_index(name)
+    if (mi < 0) {
+        panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
+    }
+    var emb <- load_gemma4uv_embedder(path)
+    if (emb.proj_dim != g_slots[mi].model.config.dim) {
+        panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
+    }
+    var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
+    let no_markers = empty(probe.tmpl.image_pre.parts)
+    delete probe
+    if (no_markers) {
+        panic("dasllama-server: {name}'s chat template declares no image span markers - it has no vision arm")
+    }
+    g_slots[mi].vision <- emb
+    g_slots[mi].vision_path = path
+    to_log(LOG_INFO, "dasllama-server: {name} vision arm: {base_name(path)} ({g_slots[mi].vision.proj_dim}-wide, {g_slots[mi].vision.patch}px superpatch)\n")
 }
 
 //! Configure long-lived ASR worker threads. Each worker loads and owns its model in its cloned
@@ -1339,10 +1369,10 @@ def private warn_ignored_fields(js : JsonValue?; known : table<string>; route : 
     }
 }
 
-// A message's text content: a plain string, or the OpenAI content-parts array (agents send
-// [\{type:"text", text:"..."}] even for pure text) — text parts concatenate; other part kinds
-// (image_url, ...) log and are skipped.
-def private message_text(mv : JsonValue?; route : string) : string {
+// A message's content: a plain string, or the OpenAI content-parts array (agents send
+// [\{type:"text", text:"..."}] even for pure text). Text parts concatenate into the return value;
+// `image_url` parts push their url into `images` for the caller to decide on; anything else logs.
+def private message_parts(mv : JsonValue?; route : string; var images : array<string>) : string {
     let cv = mv?["content"]
     if (cv == null || cv.value is _null) {
         return ""
@@ -1356,6 +1386,8 @@ def private message_text(mv : JsonValue?; route : string) : string {
             let ptype = pv?["type"] ?? ""
             if (ptype == "text") {
                 parts |> push(pv?["text"] ?? "")
+            } elif (ptype == "image_url") {
+                images |> push(pv?["image_url"]?["url"] ?? "")
             } else {
                 to_log(LOG_WARNING, "{route}: skipping non-text content part '{ptype}'\n")
             }
@@ -1366,6 +1398,46 @@ def private message_text(mv : JsonValue?; route : string) : string {
     }
     to_log(LOG_WARNING, "{route}: message content is neither a string nor a parts array — parsed as empty\n")
     return ""
+}
+
+// `message_parts` for the routes with no image path of their own: an image part there is dropped
+// with a warning, exactly as before vision existed.
+def private message_text(mv : JsonValue?; route : string) : string {
+    var images : array<string>
+    let s = message_parts(mv, route, images)
+    if (!empty(images)) {
+        to_log(LOG_WARNING, "{route}: skipping {length(images)} image content part(s) — no vision arm on this path\n")
+    }
+    delete images
+    return s
+}
+
+// `data:image/png;base64,<payload>` -> RGB8. The ONLY image_url form the server accepts: a remote
+// URL would make the server fetch on its request thread (v2 ledger). An undecodable payload comes
+// back as a zero-size image with `why` set — the caller answers 400.
+def private decode_data_uri_image(url : string; var why : string&) : VisionImage {
+    if (!starts_with(url, "data:")) {
+        why = "image_url must be a data: URI (remote URLs are not fetched) — got '{slice(url, 0, min(length(url), 40))}'"
+        return VisionImage()
+    }
+    let marker = find(url, ";base64,")
+    if (marker < 0) {
+        why = "image_url must be base64-encoded (data:<mime>;base64,<payload>)"
+        return VisionImage()
+    }
+    var bytes : array<uint8>
+    defer() { delete bytes }
+    let n = base64_decode(slice(url, marker + length(";base64,")), bytes)
+    if (n <= 0) {
+        why = "image_url payload is not valid base64"
+        return VisionImage()
+    }
+    bytes |> resize(n)
+    var img <- load_image_rgb(bytes)
+    if (img.width == 0) {
+        why = "could not decode the image ({n} bytes) — png, jpeg, bmp, gif, tga and psd are supported"
+    }
+    return <- img
 }
 
 // Unknown endpoint: log the probe (method, path, body head) and 404 with an OpenAI error body.
@@ -1515,12 +1587,13 @@ def private resolve_stream_slot(srv : WebSocketServer; var writer : HttpResponse
 // would panic) and the 503 (queue full). Moves prompt/stop_ids/close_toks into the request.
 def private register_request(srv : WebSocketServer; var writer : HttpResponseWriter?;
                              var prompt, stop_ids, close_toks : array<int64>;
+                             var media : array<float>; media_at, n_media : int64;
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none) {
-    let np = long_length(prompt)
+    let np = long_length(prompt) + n_media
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
@@ -1528,10 +1601,13 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let rid = next_id()
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
+                           media_at = media_at, n_media = n_media,
+                           media_non_causal = n_media > 0l)   // gemma vision: the image span is non-causal
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.close_toks <- close_toks
+    preq.media <- media
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
@@ -1560,10 +1636,10 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
-                               max_new : int64; start : int; think_set, think_val : bool;
+                               max_new : int64; start : int; think_set, think_val, has_image : bool;
                                var prompt, stop_ids, close : array<int64>&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&) : string {
+                               var tool_mode_out : ToolMode&; var media_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -1596,6 +1672,8 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     }
     var rendered : array<int64>
     var pending = false
+    var seen_images : array<string>   // collected so the parts walk stays silent; the handler ruled
+    defer() { delete seen_images }
     var tool_results : array<string>
     var tool_names : array<string>
     defer() {
@@ -1608,7 +1686,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         if (role != "system" && i < start) {
             continue
         }
-        let content = message_text(mv, "/v1/chat/completions")
+        let content = message_parts(mv, "/v1/chat/completions", seen_images)   // the handler already ruled on them
         if (role != "tool" && !empty(tool_results)) {
             add_tool_results(chat, tool_results, tool_names)
             tool_results |> clear()
@@ -1668,9 +1746,22 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         delete rendered
         return "the last message must be a user or tool message"
     }
-    var turn <- render_turn(cur_model(), chat)
-    rendered |> push_from(turn)
-    delete turn
+    media_at = 0l
+    if (has_image) {
+        // the image turn renders as TWO token spans; the soft-token rows prefill between them, so
+        // the scheduler gets one flat prompt plus the index the rows splice at
+        var head : array<int64>
+        var tail : array<int64>
+        render_turn_image(cur_model(), chat, head, tail)
+        media_at = long_length(rendered) + long_length(head)
+        rendered |> push_from(head, tail)
+        delete head
+        delete tail
+    } else {
+        var turn <- render_turn(cur_model(), chat)
+        rendered |> push_from(turn)
+        delete turn
+    }
     // out-params: the sole caller hands them in empty and deletes them before every re-render
     prompt <- rendered      // nolint:PERF030 — empty on entry
     stop_ids <- effective_stop_ids(chat)   // nolint:PERF030 — empty on entry; + thinking-off extras
@@ -1788,6 +1879,51 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     let think_set = (tv != null && tv.value is _bool) || (cv != null && cv.value is _bool)
     let think_val = (tv ?? true) && (cv ?? true)
     let has_tools = !empty(tools)
+    // v1 vision: ONE image, on the LAST user message. An image on an earlier turn has no render
+    // seam yet (a replayed turn renders through render_assistant, which has no splice) — it warns
+    // and is dropped, so a follow-up question re-attaches the image.
+    var media : array<float>
+    defer() { delete media }
+    var n_media = 0l
+    {
+        var images : array<string>
+        defer() { delete images }
+        var last_user = -1
+        for (i in range(length(msgs_v.value as _array))) {
+            if (((msgs_v.value as _array)[i]?["role"] ?? "") == "user") {
+                last_user = i
+            }
+        }
+        for (i in range(length(msgs_v.value as _array))) {
+            var here : array<string>
+            message_parts((msgs_v.value as _array)[i], "/v1/chat/completions", here)
+            if (!empty(here) && i != last_user) {
+                to_log(LOG_WARNING, "/v1/chat/completions: dropping {length(here)} image(s) on message {i} — v1 reads the image on the LAST user message only\n")
+            } elif (!empty(here)) {
+                images |> push_from(here)
+            }
+            delete here
+        }
+        if (!empty(images)) {
+            if (length(images) > 1) {
+                bad_request(srv, writer, "one image per request in v1 — this message carries {length(images)}")
+                return
+            }
+            if (g_slots[g_cur].vision.proj_dim == 0l) {
+                bad_request(srv, writer, "model '{cur_name()}' has no vision arm — start the server with an image mmproj for it to accept image_url parts")
+                return
+            }
+            var why = ""
+            var inscope img <- decode_data_uri_image(images[0], why)
+            if (img.width == 0) {
+                bad_request(srv, writer, why)
+                return
+            }
+            let t_enc = ref_time_ticks()
+            n_media = encode_image(g_slots[g_cur].vision, g_slots[g_cur].venc, img, "chat", media)
+            to_log(LOG_INFO, "/v1/chat/completions: image {img.width}x{img.height} -> {n_media} soft tokens in {int64(get_time_usec(t_enc)) / 1000l}ms\n")
+        }
+    }
     var prompt : array<int64>
     defer() { delete prompt }
     var stop_ids : array<int64>
@@ -1798,16 +1934,17 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
     var call_close = ""
     var think_stream = ThinkStream()
     var wire_tool_mode = ToolMode.none
+    var media_at = 0l
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
-                                              prompt, stop_ids, close, call_open, call_close, think_stream,
-                                              wire_tool_mode)
+                                              n_media > 0l, prompt, stop_ids, close, call_open, call_close,
+                                              think_stream, wire_tool_mode, media_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
         }
-        let required = long_length(prompt) + (truncation == "auto" ? max_new : 1l)
+        let required = long_length(prompt) + n_media + (truncation == "auto" ? max_new : 1l)
         if (required <= cur_model().config.seq_len || truncation != "auto") {
             break
         }
@@ -1823,7 +1960,8 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
         delete stop_ids
         delete close
     }
-    register_request(srv, writer, prompt, stop_ids, close, params, max_new, streaming, true, "chatcmpl",
+    register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
+                     streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode)
 }
 
@@ -1856,7 +1994,9 @@ def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var
     // no stop ids and no close: raw completions run to the budget, matching bare generate()
     var none_stop : array<int64>
     var none_close : array<int64>
-    register_request(srv, writer, toks, none_stop, none_close, params, max_new, streaming, false, "cmpl",
+    var no_media : array<float>
+    register_request(srv, writer, toks, none_stop, none_close, no_media, 0l, 0l,
+                     params, max_new, streaming, false, "cmpl",
                      [seed = seed])
 }
 
@@ -2101,6 +2241,7 @@ struct private OaiSlotStats {
     prefix_pages : int64
     weights_bytes : int64
     kv_bytes : int64
+    vision : bool             // a gemma4uv arm is attached: this slot's chat route takes image_url parts
     last_used_s : float       // seconds since this slot last admitted a request (-1 = never)
     sw_count : int64          // P2 gpu-switch telemetry
     sw_avg_ms : float
@@ -2144,6 +2285,7 @@ struct private OaiStatsResponse {
     hardware : string
     asr_done_jobs : int64
     asr_audio_s : float
+    vision : bool             // the ACTIVE slot's vision arm (the page shows its attach button on this)
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
@@ -2179,7 +2321,8 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         gpu_vram_bytes = tier.vram_bytes,
         gpu_budget_bytes = !empty(tier.device) ? moe_gpu_weight_budget() : 0l,
         hardware = g_hardware_line,
-        asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s)
+        asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
+        vision = g_slots[g_active].vision.proj_dim > 0l)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -2187,7 +2330,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             name = s.name, is_default = s.is_default, is_active = i == g_active,
             holds_gpu = i == g_gpu_owner,
             backend = s.opts.backend, backend_effective = s.backend_effective,
-            flavor = slot_flavor(s),
+            flavor = slot_flavor(s), vision = s.vision.proj_dim > 0l,
             ctx = s.model.config.seq_len,
             active = n_active(s.sched), queued = n_queued(s.sched),
             admitted = s.sched.n_admitted, finished = s.sched.n_finished,
