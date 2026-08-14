@@ -130,7 +130,9 @@ namespace das
             if ( newCapacity > uint64_t(INT64_MAX) ) newCapacity = uint64_t(INT64_MAX);
             array_reserve(context, arr, newCapacity, stride, at);
         }
-        if ( zero && newSize>arr.size ) {
+        // stride 0 (zero-size elements) allocates nothing, so arr.data stays null - and
+        // memset's first argument is declared nonnull even for a zero byte count (UBSan)
+        if ( zero && newSize>arr.size && stride ) {
             memset ( arr.data + arr.size*stride, 0, size_t(newSize-arr.size)*size_t(stride) );
         }
         arr.size = newSize;
