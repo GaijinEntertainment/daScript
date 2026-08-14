@@ -95,12 +95,11 @@ def private sample_jack_positions(game : GameState; card : Card; player_idx : in
     // Score each position, keep top max_count
     var scored : array<float>
     scored |> resize(length(all_pos))
-    for (i in range(length(all_pos))) {
-        let pos = all_pos[i]
+    for (pos, s in all_pos, scored) {
         if (is_black_jack(card)) {
-            scored[i] = score_removal(game, pos.x, pos.y, player_idx, w)
+            s = score_removal(game, pos.x, pos.y, player_idx, w)
         } else {
-            scored[i] = score_placement(game, pos.x, pos.y, player_idx, w)
+            s = score_placement(game, pos.x, pos.y, player_idx, w)
         }
     }
     // Simple selection: find top max_count by repeated max extraction
@@ -161,7 +160,7 @@ def private sim_apply(var game : GameState; card : Card; row, col : int; color :
 def private eval_future(game : GameState; remaining_cards : array<Card>;
                         player_idx : int; w : LookaheadWeights;
                         current_depth, max_depth : int) : float {
-    if (current_depth > max_depth || length(remaining_cards) == 0) {
+    if (current_depth > max_depth || empty(remaining_cards)) {
         return 0.0
     }
     let color = player_chip_color(player_idx)

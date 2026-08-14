@@ -13,12 +13,12 @@ require daslib/fio
 [test]
 def test_stream_chunk_decode(t : T?) {
     t |> run("chat.completion.chunk round-trips through sprint_json/sscan_json") @(t : T?) {
-        var frame : ChatCompletionChunk
-        frame.id = "chunk-1"
-        frame._object = "chat.completion.chunk"
-        frame.choices <- [ChunkChoice(index = 0,
-            delta <- ChatMessageDelta(role = "assistant", content = "Hel"),
-            finish_reason = "")]
+        let frame = ChatCompletionChunk(
+            id = "chunk-1",
+            _object = "chat.completion.chunk",
+            choices <- [ChunkChoice(index = 0,
+                delta <- ChatMessageDelta(role = "assistant", content = "Hel"),
+                finish_reason = "")])
         let js = sprint_json(frame, false)
         t |> success(find(js, "\"object\":\"chat.completion.chunk\"") >= 0, "renamed object key emitted")
 
@@ -37,10 +37,10 @@ def test_stream_chunk_decode(t : T?) {
 def test_stream_live_ollama(t : T?) {
     t |> run("live streaming against Ollama") @(t : T?) {
         let client = openai_client("http://localhost:11434/v1")
-        var req : ChatCompletionRequest
-        req.model = "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M"
-        req.messages <- [ChatMessage(role = "user", content = "Say: streaming works")]
-        req.max_tokens = 32
+        var req = ChatCompletionRequest(
+            model = "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M",
+            messages <- [ChatMessage(role = "user", content = "Say: streaming works")],
+            max_tokens = 32)
         var deltas = 0
         var acc = ""
         let res = chat_stream(client, req) $(delta : string) {
@@ -64,10 +64,10 @@ def test_stream_live_openrouter(t : T?) {
             return
         }
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
-        var req : ChatCompletionRequest
-        req.model = "liquid/lfm-2.5-1.2b-instruct:free"
-        req.messages <- [ChatMessage(role = "user", content = "Say: streaming works")]
-        req.max_tokens = 32
+        var req = ChatCompletionRequest(
+            model = "liquid/lfm-2.5-1.2b-instruct:free",
+            messages <- [ChatMessage(role = "user", content = "Say: streaming works")],
+            max_tokens = 32)
         var deltas = 0
         let res = chat_stream(client, req) $(delta : string) {
             deltas++

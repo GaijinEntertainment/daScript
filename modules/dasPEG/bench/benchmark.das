@@ -50,7 +50,7 @@ def into_table(var src : array<tuple<auto(K); auto(V)>>) : table<K; V> {
 }
 
 
-def get_parser_with(json : string; blk : block<(var res_json : JsonValue?# implicit; errors : array<ParsingError>) : void>) {
+def get_parser_with(json : string; blk : block<(var res_json : JsonValue?# implicit; errors : array<ParsingError>) : void>) { // nolint:STYLE038 - flat PEG grammar declaration; the rules are the JSON spec, one per production
     parse(json) {
         var JsonValue : JsonValue?
 

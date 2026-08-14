@@ -10,8 +10,6 @@ options debugger
 
 require dastest/testing_boost
 require daslib/strings_boost
-require daslib/utf8_utils
-require daslib/fio
 require peg/peg
 
 options stack = 1000000000
@@ -68,7 +66,7 @@ def get_parser_with(email : string; blk : block<(email : Email; err : array<Pars
 def test_email_1(t : T?) {
     let input = "abc@mail.example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("abc", email.username)
         t |> equal("mail.example.com", email.domain)
     }
@@ -78,7 +76,7 @@ def test_email_1(t : T?) {
 def test_email_2(t : T?) {
     let input = "john.doe@example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("john.doe", email.username)
         t |> equal("example.com", email.domain)
     }
@@ -88,7 +86,7 @@ def test_email_2(t : T?) {
 def test_email_3(t : T?) {
     let input = "this_is_a_very_long_username@example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("this_is_a_very_long_username", email.username)
         t |> equal("example.com", email.domain)
     }
@@ -98,7 +96,7 @@ def test_email_3(t : T?) {
 def test_email_4(t : T?) {
     let input = "12345@example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("12345", email.username)
         t |> equal("example.com", email.domain)
     }
@@ -108,7 +106,7 @@ def test_email_4(t : T?) {
 def test_email_5(t : T?) {
     let input = "jane-doe@mail-example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("jane-doe", email.username)
         t |> equal("mail-example.com", email.domain)
     }
@@ -118,7 +116,7 @@ def test_email_5(t : T?) {
 def test_email_6(t : T?) {
     let input = "user_name@example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("user_name", email.username)
         t |> equal("example.com", email.domain)
     }
@@ -128,7 +126,7 @@ def test_email_6(t : T?) {
 def test_email_7(t : T?) {
     let input = "user@subdomain1.subdomain2.example.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(email; _err) {
         t |> equal("user", email.username)
         t |> equal("subdomain1.subdomain2.example.com", email.domain)
     }
@@ -140,7 +138,7 @@ def test_email_7(t : T?) {
 def test_email_error_1(t : T?) {
     let input = "@"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(_email; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }
@@ -151,7 +149,7 @@ def test_email_error_1(t : T?) {
 def test_email_error_2(t : T?) {
     let input = "john.gmail.com"
 
-    get_parser_with(input) $(email; err) {
+    get_parser_with(input) $(_email; err) {
         if (err |> empty) {
             t |> failure("Should fail")
         }

@@ -23,9 +23,9 @@ def private write_manifest(dir : string; text : string) : string {
 def test_load_manifest(t : T?) {
     with_temp_dir("dasweb_verify_") $(dir) {
         t |> run("a well-formed manifest parses into entries") @(tt : T?) {
-            var m = SamplesManifest()
-            m.examples |> emplace(SampleEntry(name = "Hello", files <- ["examples/hello.das"]))
-            m.examples |> emplace(SampleEntry(name = "Game", files <- ["examples/game/main.das", "examples/game/stub.das"]))
+            let m <- SamplesManifest(examples <- [
+                SampleEntry(name = "Hello", files <- ["examples/hello.das"]),
+                SampleEntry(name = "Game", files <- ["examples/game/main.das", "examples/game/stub.das"])])
             let path = write_manifest(dir, sprint_json(m, true))
             var error = ""
             let samples <- load_manifest(path, error)

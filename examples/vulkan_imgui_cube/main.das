@@ -95,7 +95,7 @@ def rotate_y(angle : float) : float4x4 {
 
 // ===== cube pipeline: pos+normal vertex input, back-face cull, no depth, no blend, dynamic vp =====
 
-def build_cube_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
+def build_cube_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat Vulkan create-info fill, one field per line
                         vert, frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -122,9 +122,7 @@ def build_cube_pipeline(device : Device; render_pass : RenderPass; layout : Pipe
     a_nrm.location = 1u
     a_nrm.format = VkFormat.R32G32B32_SFLOAT
     a_nrm.offset = 12u
-    var vattrs : array<VkVertexInputAttributeDescription>
-    vattrs |> push(a_pos)
-    vattrs |> push(a_nrm)
+    var vattrs <- [a_pos, a_nrm]
 
     var vinput = VkPipelineVertexInputStateCreateInfo()
     vinput.vertexBindingDescriptionCount = 1u
@@ -152,9 +150,7 @@ def build_cube_pipeline(device : Device; render_pass : RenderPass; layout : Pipe
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
 
-    var dyn_states : array<VkDynamicState>
-    dyn_states |> push(VkDynamicState.VIEWPORT)
-    dyn_states |> push(VkDynamicState.SCISSOR)
+    var dyn_states <- [VkDynamicState.VIEWPORT, VkDynamicState.SCISSOR]
     var dynstate = VkPipelineDynamicStateCreateInfo()
     dynstate.dynamicStateCount = 2u
 
@@ -216,7 +212,7 @@ def init() {
     delete indices_copy
 
     var cube_refl <- [decode_reflection(cube_vert_spv_reflect), decode_reflection(cube_frag_spv_reflect)]
-    g_cube_set_layouts <- build_descriptor_set_layouts(device, cube_refl)
+    g_cube_set_layouts <- build_descriptor_set_layouts(device, cube_refl)   // nolint:PERF030 - module global, first and only write (init runs once)
     g_cube_pipe_layout <- build_pipeline_layout(device, g_cube_set_layouts, cube_refl)
     delete cube_refl
     var inscope cube_vert <- create_shader_module(device, cube_vert_spv)
@@ -231,7 +227,7 @@ def update() {
     }
     harness_new_frame()
 
-    var io & = unsafe(GetIO())
+    let io & = unsafe(GetIO())
     g_angle += g_speed * io.DeltaTime
 
     window(CUBE_WIN, (text = "Controls", closable = false,

@@ -143,7 +143,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
             drain(m, sch, events)
             var got <- toks_of(events, 1l)
             var gotp <- pieces_of(events, 1l)
-            t |> success(same(got, ref.toks), "greedy tokens ≡ generate() bit-exact")
+            t |> success(same(got, ref.toks), "greedy tokens == generate() bit-exact")
             t |> equal(length(gotp), length(ref.pieces))
             for (i in range(length(gotp))) {
                 t |> equal(gotp[i], ref.pieces[i])
@@ -163,7 +163,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
             t |> success(submit(m, sch, make_req(2l, prompt, sp, 10l, none, 4242)), "seeded stream queued")
             drain(m, sch, events)
             var got2 <- toks_of(events, 2l)
-            t |> success(same(got2, ref2.toks), "seeded sampled tokens ≡ generate()")
+            t |> success(same(got2, ref2.toks), "seeded sampled tokens == generate()")
             // stop finish: pick the first greedy token that did not occur earlier in the stream,
             // declare it a stop id — the scheduler must end there, stop token unemitted
             var kstop = -1
@@ -185,7 +185,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
                 drain(m, sch, events)
                 var got3 <- toks_of(events, 3l)
                 t |> equal(length(got3), kstop)
-                t |> success(same(got3, ref3.toks), "stop-bounded tokens ≡ generate()")
+                t |> success(same(got3, ref3.toks), "stop-bounded tokens == generate()")
                 let fin3 = finished_of(events, 3l)
                 t |> equal(fin3.finish, "stop")
                 t |> equal(fin3.n_gen, int64(kstop))
@@ -193,7 +193,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
                 delete ref3
                 delete stops
             } else {
-                t |> success(true, "no unique stop candidate in 10 greedy tokens — stop arm skipped")
+                t |> success(true, "no unique stop candidate in 10 greedy tokens - stop arm skipped")
             }
             delete got
             delete gotp
@@ -237,7 +237,7 @@ def test_scheduler_chunk_sizes(t : T?) {
                 t |> success(submit(m, sch, make_req(int64(ci), prompt, greedy, 6l, none)), "stream queued (K={K})")
                 drain(m, sch, events)
                 var got <- toks_of(events, int64(ci))
-                first[ci] = length(got) > 0 ? got[0] : -1l
+                first[ci] = !empty(got) ? got[0] : -1l
                 streams |> emplace(got)
                 delete events
                 unsafe {
@@ -307,7 +307,7 @@ def test_scheduler_batching(t : T?) {
             t |> equal(sch.peak_active, 2l)
             t |> equal(sch.n_evicted, 1l)
             t |> equal(sch.n_finished, 3l)
-            t |> success(sch.sum_batch >= 2l * 2l, "decode steps actually batched (Σ batch {sch.sum_batch})")
+            t |> success(sch.sum_batch >= 2l * 2l, "decode steps actually batched (sum batch {sch.sum_batch})")
             set_fused_decode(prev_fused)
             delete ga
             delete gb
@@ -414,7 +414,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
                 t |> success(submit(m, sch3, make_req(52l, prompt4, greedy, 6l, none)), "cold continuation queued")
                 drain(m, sch3, events)
                 var cold4 <- toks_of(events, 52l)
-                t |> success(same(warm4, cold4), "continuation attach bit-exact vs cold — donated rows aligned")
+                t |> success(same(warm4, cold4), "continuation attach bit-exact vs cold - donated rows aligned")
                 delete cold4
                 unsafe {
                     delete sch3
@@ -428,7 +428,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
                 delete close
                 delete stops
             } else {
-                t |> success(true, "no unique stop candidate in 8 greedy tokens — continuation arm skipped")
+                t |> success(true, "no unique stop candidate in 8 greedy tokens - continuation arm skipped")
             }
             delete ref3
             delete prompt3
@@ -551,7 +551,7 @@ def test_scheduler_mtp(t : T?) {
             drain(m, sch, events)
             set_mtp_spec(prev_spec)
             var got <- toks_of(events, 2l)
-            t |> success(same(got, ref_toks), "spec stream tokens ≡ plain scheduler")
+            t |> success(same(got, ref_toks), "spec stream tokens == plain scheduler")
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)

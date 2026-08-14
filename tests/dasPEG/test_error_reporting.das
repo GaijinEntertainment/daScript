@@ -49,7 +49,7 @@ def test_commit_generates_errors(t : T?) {
 
 [test]
 def test_commit_error_has_index(t : T?) {
-    parse_with_commit("val = ;") $(val; err) {
+    parse_with_commit("val = ;") $(_val; err) {
         if (!empty(err)) {
             t |> success(err[0].index > 0, "error should have positive index")
         } else {
@@ -60,9 +60,9 @@ def test_commit_error_has_index(t : T?) {
 
 [test]
 def test_commit_error_has_text(t : T?) {
-    parse_with_commit("val = ;") $(val; err) {
+    parse_with_commit("val = ;") $(_val; err) {
         if (!empty(err)) {
-            t |> success(length(err[0].text) > 0, "error should have non-empty text")
+            t |> success(!empty(err[0].text), "error should have non-empty text")
         } else {
             t |> failure("expected errors")
         }
@@ -79,7 +79,7 @@ def test_successful_parse_no_errors(t : T?) {
 
 [test]
 def test_error_position_after_keyword(t : T?) {
-    parse_keyword("print") $(val; err) {
+    parse_keyword("print") $(_val; err) {
         if (!empty(err)) {
             // Error should be at or after position 5 ("print" length)
             t |> success(err[0].index >= 5, "error position should be after 'print' keyword")
@@ -91,7 +91,7 @@ def test_error_position_after_keyword(t : T?) {
 
 [test]
 def test_multiple_error_sources(t : T?) {
-    parse_with_commit("val =") $(val; err) {
+    parse_with_commit("val =") $(_val; err) {
         t |> success(!empty(err), "incomplete input should produce errors")
     }
 }

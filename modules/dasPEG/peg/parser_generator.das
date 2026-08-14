@@ -1197,7 +1197,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                     parser |> log_success <| "Matched a decimal number {$i(name).value}"
                 }
 
-                var $i(handle) = $i(name).value // nolint:LINT003 nolint:LINT019
+                var $i(handle) = $i(name).value // nolint:LINT002,LINT003,LINT019 - instantiation-dependent handle use
             }
         }
 
@@ -1303,7 +1303,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 if ($v(gen.tracing)) {
                     parser |> log_success <| "Matched a string {$i(name).value}"
                 }
-                var $i(handle) : string = $i(name).value // nolint:LINT003 nolint:LINT019
+                var $i(handle) : string = $i(name).value // nolint:LINT002,LINT003,LINT019 - instantiation-dependent handle use
             }
         }
 
@@ -1326,7 +1326,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 }
 
                 if ($v(gen.tracing)) parser |> log_success <| "Matched a double {$i(name).value}"
-                var $i(handle) = $i(name).value // nolint:LINT003 nolint:LINT019
+                var $i(handle) = $i(name).value // nolint:LINT002,LINT003,LINT019 - instantiation-dependent handle use
             }
         }
     }

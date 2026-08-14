@@ -186,9 +186,7 @@ def test_can_visit_array_data(t : T?) {
 def test_can_visit_table_data(t : T?) {
     t |> run("skip table data entries") @(t : T?) {
         var walker = new SkipTableDataWalker()
-        var tab : table<string; int>
-        tab |> insert("a", 1)
-        tab |> insert("b", 2)
+        var tab <- {"a" => 1, "b" => 2}
         make_data_walker(walker) $(adapter) {
             unsafe {
                 adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))

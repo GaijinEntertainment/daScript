@@ -579,6 +579,78 @@ def is_excluded(file : string; exclude_prefixes : array<string>) : bool {
 }
 
 
+// One LCOV record line for `currentFile`. `funcStarts` accumulates FN start lines so the caller can
+// map DA lines back onto functions once the whole file is read.
+def private parse_lcov_record(line : string; currentFile : string; var cov : CoverageData; var funcStarts : table<string; array<tuple<uint; string>>>) {
+    if (line |> starts_with("FN:")) {
+        // FN:line,name
+        let rest = slice(line, 3)
+        let comma = find(rest, ",")
+        if (comma >= 0) {
+            let fline = uint(to_int(slice(rest, 0, comma)))
+            let fname = slice(rest, comma + 1)
+            cov.func_cov |> get_with_default(fname) $(var fc) {
+                fc.line = fline
+            }
+            funcStarts |> get_with_default(currentFile) $(var starts) {
+                starts |> push(tuple(fline, fname))
+            }
+        }
+    } elif (line |> starts_with("FNDA:")) {
+        // FNDA:hit_count,function_name
+        let rest = slice(line, 5)
+        let comma = find(rest, ",")
+        if (comma >= 0) {
+            let hits = uint(to_int(slice(rest, 0, comma)))
+            let fname = slice(rest, comma + 1)
+            cov.func_cov |> get_with_default(fname) $(var fc) {
+                fc.hits += hits
+            }
+        }
+    } elif (line |> starts_with("DA:")) {
+        // DA:line_number,hit_count
+        let rest = slice(line, 3)
+        let comma = find(rest, ",")
+        if (comma >= 0) {
+            let ln = uint(to_int(slice(rest, 0, comma)))
+            let hits = uint(to_int(slice(rest, comma + 1)))
+            if (cov.line_cov.lines |> key_exists(ln)) {
+                unsafe(cov.line_cov.lines[ln]) += hits
+            } else {
+                cov.line_cov.lines |> insert(ln, hits)
+            }
+        }
+    } elif (line |> starts_with("BRDA:")) {
+        // BRDA:line,block,branch,taken
+        let rest = slice(line, 5)
+        let last_comma = rfind(rest, ",")
+        if (last_comma >= 0) {
+            let taken = slice(rest, last_comma + 1)
+            let hits = taken == "-" ? 0u : uint(to_int(taken))
+            // parse line,block,branch from the key part
+            let key_part = slice(rest, 0, last_comma)
+            let c1 = find(key_part, ",")
+            if (c1 >= 0) {
+                let br_line = uint(to_int(slice(key_part, 0, c1)))
+                let rest2 = slice(key_part, c1 + 1)
+                let c2 = find(rest2, ",")
+                if (c2 >= 0) {
+                    let block_num = uint(to_int(slice(rest2, 0, c2)))
+                    let branch_num = uint(to_int(slice(rest2, c2 + 1)))
+                    let idx = uint(cov.branch_cov |> length)
+                    cov.branch_cov |> insert(idx, BranchCov(
+                        line = br_line,
+                        block_num = block_num,
+                        branch_num = branch_num,
+                        hits = hits
+                    ))
+                }
+            }
+        }
+    }
+}
+
+
 def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<string; CoverageData> {
     // Parses an LCOV file (possibly containing multiple records for the same
     // source file), populates coverageData, and calls get_coverage_summary.
@@ -602,72 +674,7 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
             }
             if (skipFile) continue
             result |> get_with_default(currentFile) $(var cov) {
-                if (line |> starts_with("FN:")) {
-                    // FN:line,name
-                    let rest = slice(line, 3)
-                    let comma = find(rest, ",")
-                    if (comma >= 0) {
-                        let fline = uint(to_int(slice(rest, 0, comma)))
-                        let fname = slice(rest, comma + 1)
-                        cov.func_cov |> get_with_default(fname) $(var fc) {
-                            fc.line = fline
-                        }
-                        funcStarts |> get_with_default(currentFile) $(var starts) {
-                            starts |> push(tuple(fline, fname))
-                        }
-                    }
-                } elif (line |> starts_with("FNDA:")) {
-                    // FNDA:hit_count,function_name
-                    let rest = slice(line, 5)
-                    let comma = find(rest, ",")
-                    if (comma >= 0) {
-                        let hits = uint(to_int(slice(rest, 0, comma)))
-                        let fname = slice(rest, comma + 1)
-                        cov.func_cov |> get_with_default(fname) $(var fc) {
-                            fc.hits += hits
-                        }
-                    }
-                } elif (line |> starts_with("DA:")) {
-                    // DA:line_number,hit_count
-                    let rest = slice(line, 3)
-                    let comma = find(rest, ",")
-                    if (comma >= 0) {
-                        let ln = uint(to_int(slice(rest, 0, comma)))
-                        let hits = uint(to_int(slice(rest, comma + 1)))
-                            if (cov.line_cov.lines |> key_exists(ln)) {
-                                unsafe(cov.line_cov.lines[ln]) += hits
-                            } else {
-                                cov.line_cov.lines |> insert(ln, hits)
-                            }
-                    }
-                } elif (line |> starts_with("BRDA:")) {
-                    // BRDA:line,block,branch,taken
-                    let rest = slice(line, 5)
-                    let last_comma = rfind(rest, ",")
-                    if (last_comma >= 0) {
-                        let taken = slice(rest, last_comma + 1)
-                        let hits = taken == "-" ? 0u : uint(to_int(taken))
-                        // parse line,block,branch from the key part
-                        let key_part = slice(rest, 0, last_comma)
-                        let c1 = find(key_part, ",")
-                        if (c1 >= 0) {
-                            let br_line = uint(to_int(slice(key_part, 0, c1)))
-                            let rest2 = slice(key_part, c1 + 1)
-                            let c2 = find(rest2, ",")
-                            if (c2 >= 0) {
-                                let block_num = uint(to_int(slice(rest2, 0, c2)))
-                                let branch_num = uint(to_int(slice(rest2, c2 + 1)))
-                                let idx = uint(cov.branch_cov |> length)
-                                cov.branch_cov |> insert(idx, BranchCov(
-                                    line = br_line,
-                                    block_num = block_num,
-                                    branch_num = branch_num,
-                                    hits = hits
-                                ))
-                            }
-                        }
-                    }
-                }
+                parse_lcov_record(line, currentFile, cov, funcStarts)
             }
         }
     }

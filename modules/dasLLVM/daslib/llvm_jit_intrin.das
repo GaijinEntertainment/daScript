@@ -725,7 +725,7 @@ def lattice_scalar_to_elem(var ctx : JitCtx; val : LLVMOpaqueValue?; srcBt : Typ
     return LLVMBuildTruncOrBitCast(ctx.builder, val, dstT, "")      // int/uint -> C truncation
 }
 
-def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume resType = expr._type
     let dstVecT = type_to_llvm_type(resType)
     if (empty(arguments)) {
@@ -794,7 +794,7 @@ def build_int_minmax_call(var ctx : JitCtx; iname : string; a, b : LLVMOpaqueVal
     return LLVMBuildCall2(ctx.builder, typ, decl, args, "")
 }
 
-def intrinsic_builtin_lattice_sat(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_builtin_lattice_sat(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // saturating narrow: clamp to the target range, then trunc. The clamp+trunc shape is
     // what both backends pattern-match to native saturating narrows (aarch64 sqxtn/uqxtn,
     // x64 packs/packus) — no target-specific gate needed, semantics match das_sv_cvt_sat.
@@ -821,7 +821,7 @@ def intrinsic_builtin_float16(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
     return LLVMBuildFPTrunc(ctx.builder, arguments[0], ctx.types.t_half, string(expr.name))
 }
 
-def intrinsic_half8_lo_hi(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_half8_lo_hi(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let base = expr.name == "half8_lo" ? 0 : 4
     let mask <- [for (i in range(4)); base + i]
     var quad = LLVMBuildShuffleVector(ctx.builder, ctx.types, arguments[0], arguments[0], mask, string(expr.name))
@@ -1265,7 +1265,7 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "idot4")
 }
 
-def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
     if (g_target_is_aarch64 && g_target_host_features && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
@@ -1295,7 +1295,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
     return LLVMBuildCall2(ctx.builder, ftyp, decl, fargs, "idot")
 }
 
-def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
@@ -1324,7 +1324,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
 // (baseline NEON — same gate as the tbl16 intrinsics); elsewhere 16 dynamically-indexed lane
 // reads, generic IR every backend accepts (pshufb single-op = the x64 wave)
 [unused_argument(expr)]
-def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     var idx = LLVMBuildAnd(ctx.builder, arguments[1], splat_v16i8(ctx, 15), "shuffle_idx")
     if (g_target_is_aarch64) {
@@ -1856,7 +1856,7 @@ def intrinsic_f32_to_f16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : ar
 // aarch64_neon::sdot4(acc:int4; w,x:int8 const?):int4 — one @llvm.aarch64.neon.sdot: 16 int8·int8
 // MACs into the 4 lanes of `acc`, exact int32 accumulate, NO horizontal reduce (the per-block addv
 // is what drains the auto-vectorized path). Pointers arrive PRE-offset — just unaligned v16i8 loads.
-def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var wptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
@@ -1882,7 +1882,7 @@ def intrinsic_sdot4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
 // `w` is 4 interleaved weight rows, and `x`'s 32-bit group `lane` is splatted across all 4 lanes
 // via the i32-view shufflevector the AArch64 backend folds into the `Vm.4b[lane]` indexed sdot
 // form. No addv: each accumulator lane is a distinct output row.
-def intrinsic_sdot4_laneq(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_sdot4_laneq(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var wptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
@@ -1920,7 +1920,7 @@ def intrinsic_sdot4_laneq(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : a
 
 // aarch64_neon::sdot4_w — sdot4 with the weight operand as a VALUE (a tbl16_lo/tbl16_hi result,
 // bitcast v4i32->v16i8 in-register), so LUT-dequantized weights feed SDOT with no memory round-trip.
-def intrinsic_sdot4_w(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_sdot4_w(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var wvec = LLVMBuildBitCast(ctx.builder, arguments[1], v16i8, "")
@@ -1943,7 +1943,7 @@ def intrinsic_sdot4_w(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array
 // aarch64_neon::smmla (i8mm gate): a and b are each a 2x8 int8 matrix (rows 0/1 at bytes 0..7 /
 // 8..15); the 2x2 int32 product a*bT accumulates into `acc` laid out [a0b0, a0b1, a1b0, a1b1] —
 // 32 int8 MACs per instruction (2x sdot4), no horizontal reduce.
-def intrinsic_smmla(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_smmla(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var aptr = LLVMBuildPointerCast(ctx.builder, arguments[1], LLVMPointerType(v16i8, 0u), "")
@@ -1967,7 +1967,7 @@ def intrinsic_smmla(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
 
 // aarch64_neon::sdot4_laneq_w — sdot4_laneq with the interleaved weight operand as a VALUE
 // (bitcast in-register, as in sdot4_w); lane splat and const-lane contract as in sdot4_laneq.
-def intrinsic_sdot4_laneq_w(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_sdot4_laneq_w(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var wvec = LLVMBuildBitCast(ctx.builder, arguments[1], v16i8, "")
@@ -2014,7 +2014,7 @@ def private splat_v32i8(ctx : JitCtx; v : int) : LLVMOpaqueValue? {
 // aarch64_neon::tbl16_lo / tbl16_hi — one @llvm.aarch64.neon.tbl1 nibble-LUT lookup; the int8
 // result is bitcast to v4i32 so it flows as a das int4 straight into sdot4_w. The masked/shifted
 // index is always 0..15, so TBL's out-of-range-to-zero path never fires.
-def intrinsic_tbl16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_tbl16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v4i32 = ctx.types.LLVMInt4Type()
     var tptr = LLVMBuildPointerCast(ctx.builder, arguments[0], LLVMPointerType(v16i8, 0u), "")
@@ -2048,7 +2048,7 @@ def intrinsic_tbl16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
 // u8 128), sx = PSIGNB(x, w) (x with w's sign, 0 where w is 0), PMADDUBSW(uw, sx) sums u8xs8
 // pairs into v8i16 — saturating, but it cannot fire: the dot4 precondition |x| <= 127 bounds every
 // pair sum by 128*127*2 = 32512 < 32767 — then PMADDWD(pairs, 1) sums i16 pairs exactly into v4i32.
-def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
     let v4i32 = ctx.types.LLVMInt4Type()
@@ -2109,7 +2109,7 @@ def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : arra
 // on ymm, then the v8i32 quads fold to int4 by adding the high 128-bit half onto the low. Lane j
 // therefore sums quads j and j+4 — exactly the daslang fallback's grouping, so both paths agree
 // bit for bit. Saturation analysis is dot4's, unchanged.
-def intrinsic_dot32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var folded = emit_dot32_folded(ctx, _expr, arguments[1], arguments[2], false)
     if (folded == null) {
         return null
@@ -2119,7 +2119,7 @@ def intrinsic_dot32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : arr
 
 // Emitter for x64_avx::dot32_vnni (gated by g_x64_vnni256_intrin_lookup): dot32's chain and fold
 // with the VPMADDUBSW+VPMADDWD pair replaced by ONE VPDPBUSD — identical exact int4 result.
-def intrinsic_dot32_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var folded = emit_dot32_folded(ctx, _expr, arguments[1], arguments[2], true)
     if (folded == null) {
         return null
@@ -2130,7 +2130,7 @@ def intrinsic_dot32_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments 
 // x64_avx::dot32_ps — dot32's exact chain and fold, then int->float convert (partials bounded
 // < 2^24, so exact), scale-multiply, accumulate. Lane for lane the daslang fallback under strict
 // FP; _jit_fast_math may contract the mul+add, the same laxity as every float kernel.
-def intrinsic_dot32_ps_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_ps_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var folded = emit_dot32_folded(ctx, _expr, arguments[1], arguments[2], false)
     if (folded == null) {
         return null
@@ -2149,13 +2149,13 @@ def intrinsic_dot32_ps_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : 
 // promotes it to a ymm across a block loop — the llama.cpp vec_dot shape: no per-block fold or
 // hsum, ONE reduce per row in the caller). The das call is void — the non-null return only marks
 // "intrinsic emitted" for make_call.
-def intrinsic_dot32_acc8_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_acc8_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot32_acc8(ctx, _expr, arguments, false)
 }
 
 // Emitter for x64_avx::dot32_acc8_vnni (gated by g_x64_vnni256_intrin_lookup): the acc8 shape with
 // the quads from ONE VPDPBUSD — identical exact quads, identical float tail.
-def intrinsic_dot32_acc8_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_acc8_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot32_acc8(ctx, _expr, arguments, true)
 }
 
@@ -2182,13 +2182,13 @@ def emit_dot32_acc8(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
 // x64_avx::dot32_mx4 — LUT dequant in-register (emit_mx4_dequant_v), then dot32's exact chain +
 // fold on the dequantized bytes (|lut| <= 12 bounds PMADDUBSW pair sums to 3072 — no saturation).
 // Integer arithmetic throughout, so this and the daslang fallback agree bit for bit.
-def intrinsic_dot32_mx4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_mx4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot32_mx4(ctx, _expr, arguments, false)
 }
 
 // Emitter for x64_avx::dot32_mx4_vnni (gated by g_x64_vnni256_intrin_lookup): the mx4 LUT dequant
 // unchanged, the dot step as ONE VPDPBUSD — identical exact int4 result.
-def intrinsic_dot32_mx4_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot32_mx4_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot32_mx4(ctx, _expr, arguments, true)
 }
 
@@ -2214,7 +2214,7 @@ def emit_dot32_mx4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LL
 // x64_avx::mx4_dequant32 — the same in-register LUT dequant, stored as one 32-byte write instead
 // of feeding the dot chain (fills the mx4 batch kernels' Q8 strip scratch — ~8x fewer ops than the
 // scalar loop). Void das call — the non-null return only marks "intrinsic emitted" for make_call.
-def intrinsic_mx4_dequant32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_mx4_dequant32_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v32i8 = LLVMVectorType(ctx.types.t_int8, 32u)
     var wvec = emit_mx4_dequant_v(ctx, _expr, arguments[0], arguments[1])
     if (wvec == null) {
@@ -2354,11 +2354,11 @@ def emit_dot32_quads_v(var ctx : JitCtx; _expr : ExprCallFunc?; wvec, xvec : LLV
     return LLVMBuildCall2(ctx.builder, maddwdTy, maddwd_decl, maddwdArgs, "dot32.quads")
 }
 
-def intrinsic_dot64_acc16_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot64_acc16_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot64_acc16(ctx, _expr, arguments, false)
 }
 
-def intrinsic_dot64_acc16_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_dot64_acc16_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     return emit_dot64_acc16(ctx, _expr, arguments, true)
 }
 
@@ -2452,7 +2452,7 @@ def emit_dot64_acc16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<
 // lanes (indices 0..15, bit 7 clear — zeroing never fires, per-lane semantics match the layout),
 // one 64-byte store. Byte-for-byte the daslang fallback (two mx4_dequant32 calls). Void das call —
 // the non-null return only marks "intrinsic emitted".
-def intrinsic_mx4_dequant64_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_mx4_dequant64_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     let v32i8 = LLVMVectorType(ctx.types.t_int8, 32u)
     let v64i8 = LLVMVectorType(ctx.types.t_int8, 64u)

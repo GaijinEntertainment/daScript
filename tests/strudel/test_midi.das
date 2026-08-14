@@ -225,7 +225,7 @@ def test_format1_merge(t : T?) {
         t |> equal(midi.format, 1)
         t |> equal(length(midi.tracks), 2)
         var merged <- merge_tracks(midi)
-        t |> success(length(merged) > 0, "merged has events")
+        t |> success(!empty(merged), "merged has events")
         var sorted = true
         for (i in range(1, length(merged))) {
             if (merged[i].tick < merged[i - 1].tick) {

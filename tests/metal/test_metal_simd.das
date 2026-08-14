@@ -60,7 +60,7 @@ def private find_lane(tg0, tg1 : int; sgs, lanes : array<uint>; want_sg, want_la
 }
 
 [test]
-def test_simd_gpu_vs_reported_membership(t : T?) {
+def test_simd_gpu_vs_reported_membership(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("simdgroup sum + shuffles: GPU == membership-recomputed expected") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var vs : array<uint>

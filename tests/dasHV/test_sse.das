@@ -85,7 +85,7 @@ def test_request_cb_streaming(t : T?) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
                 }
                 // We should have received at least one chunk
-                t |> success(length(chunks) > 0, "received {length(chunks)} chunk(s)")
+                t |> success(!empty(chunks), "received {length(chunks)} chunk(s)")
                 // All chunks concatenated should contain our events
                 var full = ""
                 for (chunk in chunks) {

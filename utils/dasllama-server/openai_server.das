@@ -2746,7 +2746,7 @@ def private process_asr_job(
         if (has_session) {
             delete session
         }
-        session <- create_session(model, language)   // nolint:PERF030 — the previous session is released by the delete above
+        session <- create_session(model, language)
         session_language = language
         has_session = true
     }

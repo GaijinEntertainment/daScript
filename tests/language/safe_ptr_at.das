@@ -131,7 +131,7 @@ def test_ptr_safe_at_struct(t : T?) {
     t |> run("struct pointer safe at - non null") @(t : T?) {
         var ar = fixed_array(Foo(a = 1, b = 2), Foo(a = 3, b = 4))
         var p : Foo? = unsafe(addr(ar[0]))
-        var dummy = Foo()
+        let dummy = Foo()
         unsafe {
             let val = p?[1] ?? dummy
             t |> equal(val.a, 3)
@@ -140,7 +140,7 @@ def test_ptr_safe_at_struct(t : T?) {
     }
     t |> run("struct pointer safe at - null") @(t : T?) {
         var p : Foo?
-        var dummy = Foo(a = 99, b = 88)
+        let dummy = Foo(a = 99, b = 88)
         unsafe {
             let val = p?[0] ?? dummy
             t |> equal(val.a, 99)

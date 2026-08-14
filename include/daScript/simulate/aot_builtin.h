@@ -123,6 +123,8 @@ namespace das {
     DAS_API vec4f builtin_scope_free ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     DAS_API void toLog ( int level, const char * text, Context * context, LineInfoArg * at );
+    DAS_API void diagnosticsToStderr();
+    DAS_API bool diagnosticsToFile ( const char * path );
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
 
     DAS_API bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at );

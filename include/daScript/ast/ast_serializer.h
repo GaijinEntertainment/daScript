@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 114;   // 114: CodeOfPolicies::max_unreserved_size rides the policy record
+            return 115;   // 115: generator lowering stamps genFlags.generated (serialized per-node)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

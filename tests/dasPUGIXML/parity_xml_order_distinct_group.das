@@ -43,8 +43,8 @@ def fixture_array() : array<Car> {
 
 def cars_equal(a : array<Car>; b : array<Car>) : bool {
     if (length(a) != length(b)) { return false }
-    for (i in range(length(a))) {
-        if (a[i].id != b[i].id || a[i].price != b[i].price || a[i].qty != b[i].qty || a[i].brand != b[i].brand) {
+    for (ca, cb in a, b) {
+        if (ca.id != cb.id || ca.price != cb.price || ca.qty != cb.qty || ca.brand != cb.brand) {
             return false
         }
     }
@@ -58,8 +58,8 @@ def check3(t : T?; var m5f, m3f, m3 : array<Car>) {
 
 def strings_equal(a : array<string>; b : array<string>) : bool {
     if (length(a) != length(b)) { return false }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) { return false }
+    for (sa, sb in a, b) {
+        if (sa != sb) { return false }
     }
     return true
 }

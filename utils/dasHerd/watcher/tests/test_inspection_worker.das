@@ -299,7 +299,7 @@ def test_inspection_prepare_worker(t : T?) { // nolint:STYLE038
             inspector_prepare_worker_try_event(worker) $(event : InspectorPrepareEvent const) {
                 if (event.kind == InspectorPrepareEventKind.completed) {
                     completed = true
-                    tt |> success(length(event.view_document.folds) > 0,
+                    tt |> success(!empty(event.view_document.folds),
                         "the View document lists foldable regions")
                     tt |> equal(length(event.old_document.folds), 0,
                         "the BEFORE pane stays fold-free")

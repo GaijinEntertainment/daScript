@@ -2170,8 +2170,7 @@ def test_cmd_release_portable_on_macos(t : T?) { // nolint:STYLE038
         var real_dylib = ""
         var dylib_count = 0
         dir(glfw_dir) $(filename) {
-            if (filename == "." || filename == "..") return
-            if (!ends_with(filename, ".dylib")) return
+            if (filename == "." || filename == ".." || !ends_with(filename, ".dylib")) return
             let p = path_join(glfw_dir, filename)
             var sym_err : string
             if (is_symlink(p, sym_err)) return
@@ -2185,8 +2184,7 @@ def test_cmd_release_portable_on_macos(t : T?) { // nolint:STYLE038
         var install_name = ""
         for (line in split(id_out, "\n")) {
             let s = strip(line)
-            if (empty(s)) continue
-            if (ends_with(s, ":")) continue
+            if (empty(s) || ends_with(s, ":")) continue
             install_name = s
         }
         tt |> success(starts_with(install_name, "@rpath/"),

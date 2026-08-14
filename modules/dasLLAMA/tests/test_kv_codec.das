@@ -306,7 +306,7 @@ def test_kv_codec_signs(t : T?) {
         for (x in signs) {
             ok_pm &&= (x == 1.0 || x == -1.0)
         }
-        t |> success(ok_pm, "signs are ±1")
+        t |> success(ok_pm, "signs are +/-1")
         var pre : array<float>
         tq4_fill_signs(pre, 32l)
         var ok_prefix = true
@@ -385,8 +385,8 @@ def test_kv_codec_tq4_roundtrip(t : T?) {
             blk2 |> resize(int(n / 32l * 18l))
             quantize_tq4kv_row(addr(blk2[0]), addr<float const?>(dq[0]), n)
             var idem = true
-            for (b in range64(long_length(blk))) {
-                idem &&= blk[b] == blk2[b]
+            for (x, y in blk, blk2) {
+                idem &&= x == y
             }
             t |> success(idem, "quantize(dequantize(row)) is byte-identical")
             delete blk2
@@ -736,10 +736,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
             set_prefill_attn_mode(AttnPrefillMode.blocked)   // blocked/classic are the bit-exact modes (flash reorders)
-            var prompt : array<int64>
-            for (i in range(16)) {
-                prompt |> push(int64(i % 50 + 2))
-            }
+            var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
             forward_batch(tr, sp, prompt, n, 0l)
@@ -892,10 +889,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 64l)
             let c = tr.config
-            var prompt : array<int64>
-            for (i in range(16)) {
-                prompt |> push(int64(i % 50 + 2))
-            }
+            var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
             forward_batch(tr, sp, prompt, n, 0l)

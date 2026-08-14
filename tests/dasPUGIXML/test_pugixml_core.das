@@ -14,7 +14,7 @@ require dastest/testing_boost public
 [test]
 def test_node_last_child(t : T?) {
     t |> run("last_child returns final child element") <| @(t : T?) {
-        parse_xml("<root><a/><b/><c/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/><c/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(root.last_child.name, "c")
@@ -25,7 +25,7 @@ def test_node_last_child(t : T?) {
 [test]
 def test_node_previous_sibling(t : T?) {
     t |> run("previous_sibling navigates backward") <| @(t : T?) {
-        parse_xml("<root><a/><b/><c/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/><c/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let c_node = root.last_child
@@ -38,7 +38,7 @@ def test_node_previous_sibling(t : T?) {
 [test]
 def test_node_parent(t : T?) {
     t |> run("parent returns containing element") <| @(t : T?) {
-        parse_xml("<root><child><nested/></child></root>") <| $(doc, ok) {
+        parse_xml("<root><child><nested/></child></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let nested = child(child(root, "child"), "nested")
@@ -51,7 +51,7 @@ def test_node_parent(t : T?) {
 [test]
 def test_node_root(t : T?) {
     t |> run("root returns document node from any depth") <| @(t : T?) {
-        parse_xml("<root><a><b><c/></b></a></root>") <| $(doc, ok) {
+        parse_xml("<root><a><b><c/></b></a></root>") $(doc, ok) {
             t |> success(ok)
             let deep = child(child(child(doc.document_element, "a"), "b"), "c")
             let r = deep.root
@@ -65,7 +65,7 @@ def test_node_root(t : T?) {
 [test]
 def test_node_last_attribute(t : T?) {
     t |> run("last_attribute returns final attribute") <| @(t : T?) {
-        parse_xml("<root x=\"1\" y=\"2\" z=\"3\"/>") <| $(doc, ok) {
+        parse_xml("<root x=\"1\" y=\"2\" z=\"3\"/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(root.last_attribute.name, "z")
@@ -76,7 +76,7 @@ def test_node_last_attribute(t : T?) {
 [test]
 def test_node_child_value(t : T?) {
     t |> run("child_value returns PCDATA text content") <| @(t : T?) {
-        parse_xml("<root>hello world</root>") <| $(doc, ok) {
+        parse_xml("<root>hello world</root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(root.child_value, "hello world")
@@ -87,7 +87,7 @@ def test_node_child_value(t : T?) {
 [test]
 def test_node_child_value_by_name(t : T?) {
     t |> run("child_value(name) returns named child text") <| @(t : T?) {
-        parse_xml("<root><title>My Title</title><body>Content</body></root>") <| $(doc, ok) {
+        parse_xml("<root><title>My Title</title><body>Content</body></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(child_value(root, "title"), "My Title")
@@ -100,7 +100,7 @@ def test_node_child_value_by_name(t : T?) {
 [test]
 def test_find_child_by_attribute(t : T?) {
     t |> run("find_child_by_attribute locates element") <| @(t : T?) {
-        parse_xml("<root><item id=\"a\"/><item id=\"b\"/><item id=\"c\"/></root>") <| $(doc, ok) {
+        parse_xml("<root><item id=\"a\"/><item id=\"b\"/><item id=\"c\"/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let found = find_child_by_attribute(root, "item", "id", "b")
@@ -113,7 +113,7 @@ def test_find_child_by_attribute(t : T?) {
 [test]
 def test_find_child_by_attribute_any_name(t : T?) {
     t |> run("find_child_by_attribute without element name") <| @(t : T?) {
-        parse_xml("<root><foo key=\"x\"/><bar key=\"y\"/></root>") <| $(doc, ok) {
+        parse_xml("<root><foo key=\"x\"/><bar key=\"y\"/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let found = find_child_by_attribute(root, "key", "y")
@@ -126,7 +126,7 @@ def test_find_child_by_attribute_any_name(t : T?) {
 [test]
 def test_first_element_by_path(t : T?) {
     t |> run("first_element_by_path traverses path") <| @(t : T?) {
-        parse_xml("<root><a><b><c>deep</c></b></a></root>") <| $(doc, ok) {
+        parse_xml("<root><a><b><c>deep</c></b></a></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let found = first_element_by_path(root, "a/b/c")
@@ -140,7 +140,7 @@ def test_first_element_by_path(t : T?) {
 [test]
 def test_node_path(t : T?) {
     t |> run("path returns slash-separated path") <| @(t : T?) {
-        parse_xml("<root><a><b/></a></root>") <| $(doc, ok) {
+        parse_xml("<root><a><b/></a></root>") $(doc, ok) {
             t |> success(ok)
             let b_node = child(child(doc.document_element, "a"), "b")
             let p = path(b_node, "/")
@@ -154,7 +154,7 @@ def test_node_path(t : T?) {
 [test]
 def test_node_hash_value(t : T?) {
     t |> run("hash_value is consistent for same node") <| @(t : T?) {
-        parse_xml("<root><a/><b/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let a_node = root.first_child
@@ -170,7 +170,7 @@ def test_node_hash_value(t : T?) {
 [test]
 def test_node_comparison(t : T?) {
     t |> run("node == and != operators") <| @(t : T?) {
-        parse_xml("<root><a/><b/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let a1 = child(root, "a")
@@ -185,7 +185,7 @@ def test_node_comparison(t : T?) {
 [test]
 def test_node_empty(t : T?) {
     t |> run("node empty and ok properties") <| @(t : T?) {
-        parse_xml("<root/>") <| $(doc, ok) {
+        parse_xml("<root/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> success(root.ok)
@@ -200,7 +200,7 @@ def test_node_empty(t : T?) {
 [test]
 def test_node_type(t : T?) {
     t |> run("node type returns correct xml_node_type") <| @(t : T?) {
-        parse_xml("<root>text<!-- comment --></root>") <| $(doc, ok) {
+        parse_xml("<root>text<!-- comment --></root>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(int(root._type), int(xml_node_type.node_element))
@@ -213,7 +213,7 @@ def test_node_type(t : T?) {
 [test]
 def test_attribute_previous(t : T?) {
     t |> run("previous_attribute navigates backward") <| @(t : T?) {
-        parse_xml("<root a=\"1\" b=\"2\" c=\"3\"/>") <| $(doc, ok) {
+        parse_xml("<root a=\"1\" b=\"2\" c=\"3\"/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let last = root.last_attribute
@@ -227,7 +227,7 @@ def test_attribute_previous(t : T?) {
 [test]
 def test_attribute_hash_value(t : T?) {
     t |> run("attribute hash_value is consistent") <| @(t : T?) {
-        parse_xml("<root x=\"1\" y=\"2\"/>") <| $(doc, ok) {
+        parse_xml("<root x=\"1\" y=\"2\"/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let x_attr = attribute(root, "x")
@@ -241,7 +241,7 @@ def test_attribute_hash_value(t : T?) {
 [test]
 def test_attribute_comparison(t : T?) {
     t |> run("attribute == and != operators") <| @(t : T?) {
-        parse_xml("<root x=\"1\" y=\"2\"/>") <| $(doc, ok) {
+        parse_xml("<root x=\"1\" y=\"2\"/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let x1 = attribute(root, "x")
@@ -256,7 +256,7 @@ def test_attribute_comparison(t : T?) {
 [test]
 def test_attribute_empty(t : T?) {
     t |> run("missing attribute is empty/not ok") <| @(t : T?) {
-        parse_xml("<root x=\"1\"/>") <| $(doc, ok) {
+        parse_xml("<root x=\"1\"/>") $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let x_attr = attribute(root, "x")
@@ -272,7 +272,7 @@ def test_attribute_empty(t : T?) {
 [test]
 def test_attribute_name_value(t : T?) {
     t |> run("attribute name and value properties") <| @(t : T?) {
-        parse_xml("<root color=\"red\"/>") <| $(doc, ok) {
+        parse_xml("<root color=\"red\"/>") $(doc, ok) {
             t |> success(ok)
             let a = attribute(doc.document_element, "color")
             t |> equal(a.name, "color")
@@ -286,7 +286,7 @@ def test_attribute_name_value(t : T?) {
 [test]
 def test_text_get(t : T?) {
     t |> run("text get property returns raw text") <| @(t : T?) {
-        parse_xml("<root>hello</root>") <| $(doc, ok) {
+        parse_xml("<root>hello</root>") $(doc, ok) {
             t |> success(ok)
             let tx = doc.document_element.text
             t |> success(tx.ok)
@@ -299,7 +299,7 @@ def test_text_get(t : T?) {
 [test]
 def test_text_data(t : T?) {
     t |> run("text data returns PCDATA node") <| @(t : T?) {
-        parse_xml("<root>hello</root>") <| $(doc, ok) {
+        parse_xml("<root>hello</root>") $(doc, ok) {
             t |> success(ok)
             let tx = doc.document_element.text
             let data_node = tx.data
@@ -321,7 +321,7 @@ def test_parse_result_success(t : T?) {
         let ok = load_string(doc, "<root/>", result, parse_default)
         t |> success(ok)
         t |> equal(int(result.status), int(xml_parse_status.status_ok))
-        t |> success(length(result.description) > 0)
+        t |> success(!empty(result.description))
         unsafe { delete doc; }
     }
 }
@@ -343,7 +343,7 @@ def test_parse_result_failure(t : T?) {
 [test]
 def test_document_element(t : T?) {
     t |> run("document_element returns root element") <| @(t : T?) {
-        parse_xml("<myroot/>") <| $(doc, ok) {
+        parse_xml("<myroot/>") $(doc, ok) {
             t |> success(ok)
             t |> equal(doc.document_element.name, "myroot")
         }
@@ -366,11 +366,11 @@ def test_document_reset(t : T?) {
 [test]
 def test_save_string(t : T?) {
     t |> run("save_string serializes document") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "test")
             add_child(root, "item", "value")
             let s = save_string(doc, "\t", format_default, xml_encoding.encoding_auto)
-            t |> success(length(s) > 0)
+            t |> success(!empty(s))
             t |> success(find(s, "test") >= 0)
             t |> success(find(s, "value") >= 0)
         }
@@ -382,12 +382,12 @@ def test_save_string(t : T?) {
 [test]
 def test_xpath_evaluate_boolean(t : T?) {
     t |> run("evaluate_boolean returns bool result") <| @(t : T?) {
-        parse_xml("<root><item/></root>") <| $(doc, ok) {
+        parse_xml("<root><item/></root>") $(doc, ok) {
             t |> success(ok)
-            with_xpath("boolean(//item)") <| $(q) {
+            with_xpath("boolean(//item)") $(q) {
                 t |> success(evaluate_boolean(q, doc.document_element))
             }
-            with_xpath("boolean(//missing)") <| $(q) {
+            with_xpath("boolean(//missing)") $(q) {
                 t |> success(!evaluate_boolean(q, doc.document_element))
             }
         }
@@ -397,9 +397,9 @@ def test_xpath_evaluate_boolean(t : T?) {
 [test]
 def test_xpath_evaluate_number(t : T?) {
     t |> run("evaluate_number returns numeric result") <| @(t : T?) {
-        parse_xml("<root><a/><a/><a/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><a/><a/></root>") $(doc, ok) {
             t |> success(ok)
-            with_xpath("count(//a)") <| $(q) {
+            with_xpath("count(//a)") $(q) {
                 t |> success(abs(evaluate_number(q, doc.document_element) - 3.0lf) < 0.001lf)
             }
         }
@@ -409,9 +409,9 @@ def test_xpath_evaluate_number(t : T?) {
 [test]
 def test_xpath_evaluate_string(t : T?) {
     t |> run("evaluate_string returns string result") <| @(t : T?) {
-        parse_xml("<root><title>Hello</title></root>") <| $(doc, ok) {
+        parse_xml("<root><title>Hello</title></root>") $(doc, ok) {
             t |> success(ok)
-            with_xpath("string(//title)") <| $(q) {
+            with_xpath("string(//title)") $(q) {
                 t |> equal(evaluate_string(q, doc.document_element), "Hello")
             }
         }
@@ -421,9 +421,9 @@ def test_xpath_evaluate_string(t : T?) {
 [test]
 def test_xpath_evaluate_node_set(t : T?) {
     t |> run("evaluate_node_set returns node set") <| @(t : T?) {
-        parse_xml("<root><a/><b/><c/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/><c/></root>") $(doc, ok) {
             t |> success(ok)
-            with_xpath("/root/*") <| $(q) {
+            with_xpath("/root/*") $(q) {
                 var ns = evaluate_node_set(q, doc.document_element)
                 t |> equal(ns.size, 3)
                 t |> success(!ns.empty)
@@ -438,11 +438,11 @@ def test_xpath_evaluate_node_set(t : T?) {
 [test]
 def test_xpath_query_properties(t : T?) {
     t |> run("xpath_query exposes return_type and result") <| @(t : T?) {
-        with_xpath("count(//a)") <| $(q) {
+        with_xpath("count(//a)") $(q) {
             t |> success(q.ok)
             t |> equal(int(q.return_type), int(xpath_value_type.xpath_type_number))
         }
-        with_xpath("boolean(//a)") <| $(q) {
+        with_xpath("boolean(//a)") $(q) {
             t |> equal(int(q.return_type), int(xpath_value_type.xpath_type_boolean))
         }
     }
@@ -451,7 +451,7 @@ def test_xpath_query_properties(t : T?) {
 [test]
 def test_xpath_node_set_sort(t : T?) {
     t |> run("xpath_node_set sort reverses order") <| @(t : T?) {
-        parse_xml("<root><a/><b/><c/></root>") <| $(doc, ok) {
+        parse_xml("<root><a/><b/><c/></root>") $(doc, ok) {
             t |> success(ok)
             var ns = select_nodes(doc.document_element, "*")
             t |> equal(at(ns, 0).node.name, "a")
@@ -465,7 +465,7 @@ def test_xpath_node_set_sort(t : T?) {
 [test]
 def test_xpath_node_accessors(t : T?) {
     t |> run("xpath_node node/attribute/parent accessors") <| @(t : T?) {
-        parse_xml("<root><item key=\"val\"/></root>") <| $(doc, ok) {
+        parse_xml("<root><item key=\"val\"/></root>") $(doc, ok) {
             t |> success(ok)
             // Node result
             let nr = select_node(doc.document_element, "item")
@@ -485,7 +485,7 @@ def test_xpath_node_accessors(t : T?) {
 [test]
 def test_xpath_variables(t : T?) {
     t |> run("xpath with variable substitution") <| @(t : T?) {
-        parse_xml("<root><item n=\"1\"/><item n=\"2\"/><item n=\"3\"/></root>") <| $(doc, ok) {
+        parse_xml("<root><item n=\"1\"/><item n=\"2\"/><item n=\"3\"/></root>") $(doc, ok) {
             t |> success(ok)
             var vars = new xpath_variable_set()
             set(vars, "target", 2.0lf)

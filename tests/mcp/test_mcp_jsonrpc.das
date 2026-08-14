@@ -127,9 +127,7 @@ def test_initialize(t : T?) {
 def test_tools_list_non_empty(t : T?) {
     t |> run("tools/list returns a non-empty tools array") @(t : T?) {
         var responses : array<string>
-        var reqs : array<string>
-        reqs |> push(MCP_INITIALIZE_REQ)
-        reqs |> push(MCP_TOOLS_LIST_REQ)
+        let reqs <- [MCP_INITIALIZE_REQ, MCP_TOOLS_LIST_REQ]
         let exit_code = run_mcp_session(reqs, responses)
         t |> equal(exit_code, 0)
         t |> equal(length(responses), 2)
@@ -141,7 +139,7 @@ def test_tools_list_non_empty(t : T?) {
             return
         }
         let arr & = unsafe(tools.value as _array)
-        t |> success(length(arr) > 0, "expected ≥1 tool, got {length(arr)}")
+        t |> success(!empty(arr), "expected ≥1 tool, got {length(arr)}")
         // Every tool advertises name + description + inputSchema
         for (tool in arr) {
             let n = tool?["name"]
@@ -158,9 +156,7 @@ def test_tools_list_non_empty(t : T?) {
 def test_tools_call_list_modules(t : T?) {
     t |> run("tools/call list_modules returns non-empty content") @(t : T?) {
         var responses : array<string>
-        var reqs : array<string>
-        reqs |> push(MCP_INITIALIZE_REQ)
-        reqs |> push(MCP_LIST_MODULES_REQ)
+        let reqs <- [MCP_INITIALIZE_REQ, MCP_LIST_MODULES_REQ]
         let exit_code = run_mcp_session(reqs, responses)
         t |> equal(exit_code, 0)
         t |> equal(length(responses), 2)
@@ -178,7 +174,7 @@ def test_tools_call_list_modules(t : T?) {
             return
         }
         let arr & = unsafe(content.value as _array)
-        t |> success(length(arr) >= 1, "expected ≥1 content item")
+        t |> success(!empty(arr), "expected ≥1 content item")
         // isError must be false (or absent — both are "success")
         let is_err = r?["result"]?["isError"]
         if (is_err != null && is_err.value is _bool) {
@@ -191,9 +187,7 @@ def test_tools_call_list_modules(t : T?) {
 def test_method_not_found(t : T?) {
     t |> run("unknown method returns JSON-RPC error") @(t : T?) {
         var responses : array<string>
-        var reqs : array<string>
-        reqs |> push(MCP_INITIALIZE_REQ)
-        reqs |> push("\{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"this/does/not/exist\"}")
+        let reqs <- [MCP_INITIALIZE_REQ, "\{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"this/does/not/exist\"}"]
         let exit_code = run_mcp_session(reqs, responses)
         t |> equal(exit_code, 0)
         t |> equal(length(responses), 2)

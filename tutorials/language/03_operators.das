@@ -15,7 +15,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Arithmetic ===
     // Both operands must be the same type — no implicit promotion.
@@ -34,11 +34,11 @@ def main {
     print("x / y = {x / y}\n")     // float division
 
     // === Comparison ===
-    print("5 == 5 is {5 == 5}\n")  // nolint:LINT007 — tutorial demonstrates the `==` operator
+    print("5 == 5 is {5 == 5}\n")
     print("5 != 3 is {5 != 3}\n")
     print("5 > 3 is {5 > 3}\n")
     print("5 < 3 is {5 < 3}\n")
-    print("5 >= 5 is {5 >= 5}\n")  // nolint:LINT007 — tutorial demonstrates the `>=` operator
+    print("5 >= 5 is {5 >= 5}\n")
     print("5 <= 4 is {5 <= 4}\n")
 
     // === Logical ===
@@ -88,7 +88,7 @@ def main {
     // = is copy assignment — works for simple types and copyable values.
     let p = 10
     var q = p       // q is a copy of p  // nolint:LINT010 — demonstrating reassignment after copy
-    q = 99
+    q += 89         // mutating the copy cannot reach p
     print("p={p}  q={q}\n")    // p is unchanged
 
     // <- is move assignment — transfers ownership, zeroes the source.

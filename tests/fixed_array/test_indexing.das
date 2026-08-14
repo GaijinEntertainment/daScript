@@ -74,10 +74,7 @@ def test_subarray(t : T?) {
         for (i in range(4)) {
             s[i] = i * 10
         }
-        var got : array<int>
-        for (v in subarray(s, range(1, 3))) {
-            got |> push(v)
-        }
+        var got <- [for (v in subarray(s, range(1, 3))); v]
         t |> equal(length(got), 2)
         t |> equal(got[0], 10)
         t |> equal(got[1], 20)

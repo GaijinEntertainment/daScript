@@ -22,9 +22,9 @@ def private weather_tool() : Tool {
 [test]
 def test_tool_serialization(t : T?) {
     t |> run("tool serializes into request with function + parameters") @(t : T?) {
-        var req : ChatCompletionRequest
-        req.model = "m"
-        req.messages <- [ChatMessage(role = "user", content = "weather?")]
+        var req = ChatCompletionRequest(
+            model = "m",
+            messages <- [ChatMessage(role = "user", content = "weather?")])
         req.tools |> push(weather_tool())
         req.tool_choice = "auto"
         let js = sprint_json(req, false)
@@ -40,9 +40,7 @@ def test_tool_serialization(t : T?) {
 def test_tool_call_response_decode(t : T?) {
     t |> run("assistant tool_calls round-trip through sprint_json/sscan_json") @(t : T?) {
         let args = write_json(%json~ {"location":"Paris"} %%)
-        var resp : ChatCompletionResponse
-        resp.id = "x"
-        resp._object = "chat.completion"
+        var resp = ChatCompletionResponse(id = "x", _object = "chat.completion")
         var msg : ChatMessage
         msg.role = "assistant"
         msg.tool_calls |> push(ToolCall(id = "call_1", _type = "function",
@@ -66,9 +64,9 @@ def test_tools_live_openrouter(t : T?) {
             return
         }
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
-        var req : ChatCompletionRequest
-        req.model = "deepseek/deepseek-v4-flash:free"
-        req.messages <- [ChatMessage(role = "user", content = "What is the weather in Paris? Use the get_weather tool.")]
+        var req = ChatCompletionRequest(
+            model = "deepseek/deepseek-v4-flash:free",
+            messages <- [ChatMessage(role = "user", content = "What is the weather in Paris? Use the get_weather tool.")])
         req.tools |> push(weather_tool())
         req.tool_choice = "auto"
         let res = chat(client, req)

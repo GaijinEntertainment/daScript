@@ -90,7 +90,7 @@ def private collect_var_hashes(e : ExpressionPtr) : table<uint64> {
 // Vectorize N parallel scalar exprs into one width-N (2..4) vector expr (CLONE-built): invariants
 // splat to floatN, differing float consts → a floatN const, lane-local vars → the role-vector
 // temp, op/call nodes rebuild over vectorized children. null on any unpackable shape (bails clean).
-def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; int>;
+def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; int>;   // nolint:STYLE037,STYLE038 — one arm per lane node class, each collect-columns → recurse → rebuild
                       roleVecName : array<string>; at : LineInfo) : ExpressionPtr {
     let N = length(exprs)
     let key0 = describe(exprs[0])
@@ -261,6 +261,250 @@ def private hreduce(vecName : string; width : int; op : string; at : LineInfo) :
     return call
 }
 
+// The head accumulator's const-init let: the statement before `h` declaring `accRef` with an
+// all-const initializer, or -1.
+def private find_chain_init(var blk : ExprBlock?; accRef : string; h : int) : int {
+    for (j in range(h)) {
+        if (!(blk.list[j] is ExprLet)) continue
+        let lc = blk.list[j] as ExprLet
+        if (length(lc.variables) == 1 && "{lc.variables[0].name}" == accRef &&
+                lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
+            return j
+        }
+    }
+    return -1
+}
+
+// Follow the reduction chain from head `h`; each intermediate accumulator must be single-use (its
+// successor link) and carry the head's op. Fills `chainIdx` + the per-link lane operand names.
+def private follow_chain(links : array<LinkInfo>; var accRefToIdx : table<string; int>; var ub : FlatUsesBuilder?;
+                         h : int; var chainIdx : array<int>; var dNames : array<string>) {
+    let op = links[h].op
+    var cur = h
+    while (true) {
+        chainIdx |> push(cur)
+        dNames |> push(links[cur].dName)
+        let dn = links[cur].defName
+        // stop: no successor link consumes dn (chain end), or dn escapes (multi-use accumulator)
+        if (!key_exists(accRefToIdx, dn) ||
+                !key_exists(ub.nameUses, hash(dn)) || length(ub.nameUses[hash(dn)]) != 1) break
+        let nx = accRefToIdx[dn]
+        if (nx <= cur || !links[nx].ok || links[nx].op != op) break
+        cur = nx
+    }
+}
+
+// Per-lane let inits in role order (R of them between each pair of consecutive links, and after the
+// init); the last let of a lane must define that link's operand. False when the shape isn't uniform.
+def private collect_lane_lets(var blk : ExprBlock?; chainIdx : array<int>; dNames : array<string>;
+                              initIdx, R, M : int; var laneInit : array<array<ExpressionPtr>>;
+                              var laneNames : array<array<string>>; var laneOwnHash : array<table<uint64>>;
+                              var nameToRole : table<string; int>; var roleHash : table<uint64>) : bool {
+    laneInit |> reserve(M)
+    laneNames |> reserve(M)
+    laneOwnHash |> reserve(M)
+    for (k in range(M)) {
+        let prev = k == 0 ? initIdx : chainIdx[k - 1]
+        var inits : array<ExpressionPtr>
+        var names : array<string>
+        var own : table<uint64>
+        var bail = false
+        inits |> reserve(R)
+        names |> reserve(R)
+        for (idx in range(prev + 1, chainIdx[k])) {
+            if (!(blk.list[idx] is ExprLet) || length((blk.list[idx] as ExprLet).variables) != 1) {
+                bail = true
+                break
+            }
+            var lc = blk.list[idx] as ExprLet
+            inits |> push(lc.variables[0].init)
+            let nm = "{lc.variables[0].name}"
+            names |> push(nm)
+            own |> insert(hash(nm))
+            nameToRole |> insert(nm, length(names) - 1)
+            roleHash |> insert(hash(nm))
+        }
+        if (!bail && (empty(names) || names[length(names) - 1] != dNames[k])) {
+            bail = true
+        }
+        laneInit |> emplace(inits)
+        laneNames |> emplace(names)
+        laneOwnHash |> emplace(own)
+        if (bail) return false
+    }
+    return true
+}
+
+// Independence: no lane let may read a spine accumulator or another lane's temp.
+def private lanes_independent(links : array<LinkInfo>; headAccRef : string; chainIdx : array<int>;
+                              laneInit : array<array<ExpressionPtr>>; roleHash : table<uint64>;
+                              laneOwnHash : array<table<uint64>>; M, R : int) : bool {
+    var spineHash : table<uint64>
+    spineHash |> insert(hash(headAccRef))
+    for (ci in chainIdx) {
+        spineHash |> insert(hash(links[ci].defName))
+    }
+    var ok = true
+    for (k in range(M)) {
+        if (!ok) break
+        for (r in range(R)) {
+            var refs <- collect_var_hashes(laneInit[k][r])
+            for (rh in keys(refs)) {
+                if (key_exists(spineHash, rh) ||
+                        (key_exists(roleHash, rh) && !key_exists(laneOwnHash[k], rh))) {
+                    ok = false
+                }
+            }
+            delete refs
+            if (!ok) break
+        }
+    }
+    delete spineHash
+    return ok
+}
+
+// One packed let per (group, role) plus each group's d-vector name and width. False when a column
+// doesn't vectorize.
+def private build_packed_lets(var blk : ExprBlock?; groups : array<int>; var laneInit : array<array<ExpressionPtr>>;
+                              nameToRole : table<string; int>; h, R : int; var newLets : array<ExpressionPtr>;
+                              var groupDName : array<string>; var groupWidth : array<int>) : bool {
+    newLets |> reserve(length(groups) * R)
+    groupDName |> reserve(length(groups))
+    groupWidth |> reserve(length(groups))
+    var laneBase = 0
+    for (gid in range(length(groups))) {
+        let w = groups[gid]
+        var roleVecName : array<string>
+        roleVecName |> reserve(R)
+        for (r in range(R)) {
+            roleVecName |> push("_pk{h}_{gid}_{r}")
+        }
+        var ok = true
+        for (r in range(R)) {
+            var col : array<ExpressionPtr>
+            col |> reserve(w)
+            for (li in range(w)) {
+                col |> push(laneInit[laneBase + li][r])
+            }
+            var v = vectorize(col, nameToRole, roleVecName, blk.at)
+            unsafe {
+                delete col
+            }
+            if (v == null) {
+                ok = false
+                break
+            }
+            newLets |> push(make_vec_let(roleVecName[r], v))
+        }
+        groupDName |> push(roleVecName[R - 1])
+        groupWidth |> push(w)
+        delete roleVecName
+        laneBase += w
+        if (!ok) return false
+    }
+    return true
+}
+
+// Rebuild the body around the packed range: preamble, packed lets, the `op(init, hmin/hmax(...))`
+// reduce (which preserves the original reduction's value set), tail. `blk.list` is a dasvector, so
+// the surviving original statements move across into a fresh block.
+def private splice_packed_body(var func : FunctionPtr; var blk : ExprBlock?; groups : array<int>;
+                               groupDName : array<string>; groupWidth : array<int>; op : string;
+                               initIdx, lastLinkIdx, n : int; var newLets : array<ExpressionPtr>;
+                               finalAcc : string) {
+    var acc = clone_expression((blk.list[initIdx] as ExprLet).variables[0].init)
+    for (gid in range(length(groups))) {
+        var hm = hreduce(groupDName[gid], groupWidth[gid], op, blk.at)
+        var call = new ExprCall(at = blk.at, name := op)
+        call.arguments |> push(acc)
+        call.arguments |> push(hm)
+        acc = call
+    }
+    var finalStmt = qmacro_expr(${ var $i(finalAcc) = $e(acc); })
+    var newBody = new ExprBlock(at = blk.at)
+    for (i in range(initIdx)) {
+        newBody.list |> emplace(blk.list[i])
+    }
+    for (s in newLets) {
+        newBody.list |> emplace(s)
+    }
+    newBody.list |> emplace(finalStmt)
+    for (i in range(lastLinkIdx + 1, n)) {
+        newBody.list |> emplace(blk.list[i])
+    }
+    func.body = newBody
+}
+
+// Try to re-roll the chain headed at link `h`; true when it rewrote the body.
+def private try_pack_chain_at(var func : FunctionPtr; var blk : ExprBlock?; links : array<LinkInfo>;
+                              var accRefToIdx : table<string; int>; isDef : table<string>;
+                              var ub : FlatUsesBuilder?; h, n : int) : bool {
+    if (!links[h].ok || key_exists(isDef, links[h].accRef)) return false   // not a chain head
+    // head accumulator must be a const-init let, used only by this head link
+    let initIdx = find_chain_init(blk, links[h].accRef, h)
+    if (initIdx < 0 ||
+            (key_exists(ub.nameUses, hash(links[h].accRef)) &&
+             length(ub.nameUses[hash(links[h].accRef)]) != 1)) return false   // init absent or escapes
+    let op = links[h].op
+    var chainIdx : array<int>
+    var dNames : array<string>
+    chainIdx |> reserve(n)
+    dNames |> reserve(n)
+    follow_chain(links, accRefToIdx, ub, h, chainIdx, dNames)
+    let M = length(chainIdx)
+    let lastLinkIdx = chainIdx[M - 1]
+    // R = lane-lets between each pair of consecutive links (and after the init); must be uniform
+    let R = chainIdx[0] - initIdx - 1
+    if (M < 3 || R < 1) {
+        delete chainIdx
+        delete dNames
+        return false
+    }
+    var bail = false
+    for (k in range(1, M)) {
+        if (chainIdx[k] - chainIdx[k - 1] - 1 != R) {
+            bail = true
+            break
+        }
+    }
+    var laneInit : array<array<ExpressionPtr>>
+    var laneNames : array<array<string>>
+    var laneOwnHash : array<table<uint64>>   // per-lane owned name-hashes (independence check)
+    var nameToRole : table<string; int>
+    var roleHash : table<uint64>             // all lane-local name-hashes (the role-name set)
+    if (!bail) {
+        bail = !collect_lane_lets(blk, chainIdx, dNames, initIdx, R, M,
+            laneInit, laneNames, laneOwnHash, nameToRole, roleHash)
+    }
+    if (!bail) {
+        bail = !lanes_independent(links, links[h].accRef, chainIdx, laneInit, roleHash, laneOwnHash, M, R)
+    }
+    if (bail) {
+        delete chainIdx; delete dNames; delete laneNames; delete laneOwnHash; delete nameToRole; delete roleHash
+        unsafe {
+            delete laneInit
+        }
+        return false
+    }
+    var groups <- plan_groups(M)
+    var newLets : array<ExpressionPtr>
+    var groupDName : array<string>
+    var groupWidth : array<int>
+    let packed = build_packed_lets(blk, groups, laneInit, nameToRole, h, R, newLets, groupDName, groupWidth)
+    if (packed) {
+        splice_packed_body(func, blk, groups, groupDName, groupWidth, op, initIdx, lastLinkIdx, n,
+            newLets, "{links[lastLinkIdx].defName}")
+    }
+    delete chainIdx; delete dNames; delete laneNames
+    delete laneOwnHash; delete nameToRole; delete roleHash; delete groups
+    delete groupDName; delete groupWidth
+    unsafe {
+        delete laneInit
+        delete newLets
+    }
+    return packed
+}
+
 def public pack_map_reduce(var func : FunctionPtr; no_fast_math : bool = false) : bool {
     //! Map-reduce loop re-roll: pack an unrolled min/max reduction's N isomorphic scalar lanes into
     //! width-W vector ops + a horizontal reduce. Returns true if it rewrote a chain. Run PRE-fold;
@@ -294,205 +538,9 @@ def public pack_map_reduce(var func : FunctionPtr; no_fast_math : bool = false) 
     }
     var did = false
     for (h in range(n)) {
-        if (did) break
-        if (!links[h].ok || key_exists(isDef, links[h].accRef)) continue   // not a chain head
-        // head accumulator must be a const-init let, used only by this head link
-        var initIdx = -1
-        for (j in range(h)) {
-            if (!(blk.list[j] is ExprLet)) continue
-            let lc = blk.list[j] as ExprLet
-            if (length(lc.variables) == 1 && "{lc.variables[0].name}" == links[h].accRef &&
-                    lc.variables[0].init != null && is_all_const(lc.variables[0].init)) {
-                initIdx = j
-                break
-            }
-        }
-        if (initIdx < 0 ||
-                (key_exists(ub.nameUses, hash(links[h].accRef)) &&
-                 length(ub.nameUses[hash(links[h].accRef)]) != 1)) continue   // init absent or escapes
-        // follow the chain; each intermediate accumulator must be single-use (its successor link)
-        let op = links[h].op
-        var chainIdx : array<int>
-        var dNames : array<string>
-        chainIdx |> reserve(n)
-        dNames |> reserve(n)
-        var cur = h
-        var bail = false
-        while (true) {
-            chainIdx |> push(cur)
-            dNames |> push(links[cur].dName)
-            let dn = links[cur].defName
-            // stop: no successor link consumes dn (chain end), or dn escapes (multi-use accumulator)
-            if (!key_exists(accRefToIdx, dn) ||
-                    !key_exists(ub.nameUses, hash(dn)) || length(ub.nameUses[hash(dn)]) != 1) break
-            let nx = accRefToIdx[dn]
-            if (nx <= cur || !links[nx].ok || links[nx].op != op) break
-            cur = nx
-        }
-        let M = length(chainIdx)
-        let lastLinkIdx = chainIdx[M - 1]
-        // R = lane-lets between each pair of consecutive links (and after the init); must be uniform
-        let R = chainIdx[0] - initIdx - 1
-        if (M < 3 || R < 1) {
-            delete chainIdx
-            delete dNames
-            continue
-        }
-        for (k in range(1, M)) {
-            if (chainIdx[k] - chainIdx[k - 1] - 1 != R) {
-                bail = true
-                break
-            }
-        }
-        // collect per-lane let inits (role order) + own-name sets; last let must define d_k
-        var laneInit : array<array<ExpressionPtr>>
-        var laneNames : array<array<string>>
-        var laneOwnHash : array<table<uint64>>   // per-lane owned name-hashes (independence check)
-        var nameToRole : table<string; int>
-        var roleHash : table<uint64>             // all lane-local name-hashes (the role-name set)
-        laneInit |> reserve(M)
-        laneNames |> reserve(M)
-        laneOwnHash |> reserve(M)
-        if (!bail) {
-            for (k in range(M)) {
-                let prev = k == 0 ? initIdx : chainIdx[k - 1]
-                var inits : array<ExpressionPtr>
-                var names : array<string>
-                var own : table<uint64>
-                inits |> reserve(R)
-                names |> reserve(R)
-                for (idx in range(prev + 1, chainIdx[k])) {
-                    if (!(blk.list[idx] is ExprLet) || length((blk.list[idx] as ExprLet).variables) != 1) {
-                        bail = true
-                        break
-                    }
-                    var lc = blk.list[idx] as ExprLet
-                    inits |> push(lc.variables[0].init)
-                    let nm = "{lc.variables[0].name}"
-                    names |> push(nm)
-                    own |> insert(hash(nm))
-                    nameToRole |> insert(nm, length(names) - 1)
-                    roleHash |> insert(hash(nm))
-                }
-                if (!bail && (empty(names) || names[length(names) - 1] != dNames[k])) {
-                    bail = true
-                }
-                laneInit |> emplace(inits)
-                laneNames |> emplace(names)
-                laneOwnHash |> emplace(own)
-                if (bail) break
-            }
-        }
-        // independence: no lane let may read a spine accumulator or another lane's temp
-        if (!bail) {
-            var spineHash : table<uint64>
-            spineHash |> insert(hash(links[h].accRef))
-            for (ci in chainIdx) {
-                spineHash |> insert(hash(links[ci].defName))
-            }
-            for (k in range(M)) {
-                if (bail) break
-                for (r in range(R)) {
-                    var refs <- collect_var_hashes(laneInit[k][r])
-                    for (rh in keys(refs)) {
-                        if (key_exists(spineHash, rh) ||
-                                (key_exists(roleHash, rh) && !key_exists(laneOwnHash[k], rh))) {
-                            bail = true
-                        }
-                    }
-                    delete refs
-                    if (bail) break
-                }
-            }
-            delete spineHash
-        }
-        if (bail) {
-            delete chainIdx; delete dNames; delete laneNames; delete laneOwnHash; delete nameToRole; delete roleHash
-            unsafe {
-                delete laneInit
-            }
-            continue
-        }
-        // build the packed lets + per-group d-vector names
-        var groups <- plan_groups(M)
-        var newLets : array<ExpressionPtr>
-        var groupDName : array<string>
-        var groupWidth : array<int>
-        newLets |> reserve(length(groups) * R)
-        groupDName |> reserve(length(groups))
-        groupWidth |> reserve(length(groups))
-        var laneBase = 0
-        for (gid in range(length(groups))) {
-            let w = groups[gid]
-            var roleVecName : array<string>
-            roleVecName |> reserve(R)
-            for (r in range(R)) {
-                roleVecName |> push("_pk{h}_{gid}_{r}")
-            }
-            for (r in range(R)) {
-                var col : array<ExpressionPtr>
-                col |> reserve(w)
-                for (li in range(w)) {
-                    col |> push(laneInit[laneBase + li][r])
-                }
-                var v = vectorize(col, nameToRole, roleVecName, blk.at)
-                unsafe {
-                    delete col
-                }
-                if (v == null) {
-                    bail = true
-                    break
-                }
-                newLets |> push(make_vec_let(roleVecName[r], v))
-            }
-            groupDName |> push(roleVecName[R - 1])
-            groupWidth |> push(w)
-            delete roleVecName
-            laneBase += w
-            if (bail) break
-        }
-        if (bail) {
-            delete chainIdx; delete dNames; delete laneNames
-            delete laneOwnHash; delete nameToRole; delete roleHash; delete groups
-            delete groupDName; delete groupWidth
-            unsafe {
-                delete laneInit
-                delete newLets
-            }
-            continue
-        }
-        // reduce: op(init, op(g0, op(g1, ...))) — preserves the original reduction's value set
-        var acc = clone_expression((blk.list[initIdx] as ExprLet).variables[0].init)
-        for (gid in range(length(groups))) {
-            var hm = hreduce(groupDName[gid], groupWidth[gid], op, blk.at)
-            var call = new ExprCall(at = blk.at, name := op)
-            call.arguments |> push(acc)
-            call.arguments |> push(hm)
-            acc = call
-        }
-        let finalAcc = "{links[lastLinkIdx].defName}"
-        var finalStmt = qmacro_expr(${ var $i(finalAcc) = $e(acc); })
-        // splice: list is a dasvector — rebuild a fresh block (preamble drop-init, packed lets,
-        // final reduce, tail), moving the surviving original statements across.
-        var newBody = new ExprBlock(at = blk.at)
-        for (i in range(initIdx)) {   // nolint:PERF018 — preamble is a [0,initIdx) sub-range
-            newBody.list |> emplace(blk.list[i])
-        }
-        for (s in newLets) {
-            newBody.list |> emplace(s)
-        }
-        newBody.list |> emplace(finalStmt)
-        for (i in range(lastLinkIdx + 1, n)) {   // nolint:PERF018 — tail is a (lastLinkIdx,n) sub-range
-            newBody.list |> emplace(blk.list[i])
-        }
-        func.body = newBody
-        did = true
-        delete chainIdx; delete dNames; delete laneNames
-        delete laneOwnHash; delete nameToRole; delete roleHash; delete groups
-        delete groupDName; delete groupWidth
-        unsafe {
-            delete laneInit
-            delete newLets
+        if (try_pack_chain_at(func, blk, links, accRefToIdx, isDef, ub, h, n)) {
+            did = true
+            break
         }
     }
     unsafe {

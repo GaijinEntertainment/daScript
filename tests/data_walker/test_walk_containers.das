@@ -16,7 +16,7 @@ require dw_common
 // ============================================================
 
 [test]
-def test_walk_array(t : T?) {
+def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("array of ints") @(t : T?) {
         var walker = new LogWalker()
         var arr = [10, 20, 30]
@@ -71,9 +71,7 @@ def test_walk_array(t : T?) {
     }
     t |> run("array of structs") @(t : T?) {
         var walker = new LogWalker()
-        var arr : array<SimpleStruct>
-        arr |> push(SimpleStruct(x = 1, y = 1.0))
-        arr |> push(SimpleStruct(x = 2, y = 2.0))
+        var arr <- [SimpleStruct(x = 1, y = 1.0), SimpleStruct(x = 2, y = 2.0)]
         make_data_walker(walker) $(adapter) {
             unsafe {
                 adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
@@ -100,9 +98,7 @@ def test_walk_array(t : T?) {
     }
     t |> run("array of tuples") @(t : T?) {
         var walker = new LogWalker()
-        var arr : array<tuple<int; string>>
-        arr |> push((1, "one"))
-        arr |> push((2, "two"))
+        var arr <- [(1, "one"), (2, "two")]
         make_data_walker(walker) $(adapter) {
             unsafe {
                 adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
@@ -215,10 +211,7 @@ def test_walk_table(t : T?) {
     }
     t |> run("table with 3 entries") @(t : T?) {
         var walker = new LogWalker()
-        var tab : table<string; int>
-        tab |> insert("a", 1)
-        tab |> insert("b", 2)
-        tab |> insert("c", 3)
+        var tab <- {"a" => 1, "b" => 2, "c" => 3}
         make_data_walker(walker) $(adapter) {
             unsafe {
                 adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))

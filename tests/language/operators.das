@@ -256,7 +256,7 @@ def test_raw_operators(t : T?) {
         t |> equal(2.0, ws![1])
         ws![1] = 55.0                                // raw write reaches the real element
         t |> equal(55.0, ws![1])
-        ws![1] += 1.0                                // raw compound write too
+        ws![1] += 1.0                                // nolint:PERF013 - raw compound write is the tested construct
         t |> equal(56.0, ws![1])
     }
     t |> run("!?? reaches builtin pointer coalescing") @(t : T?) {

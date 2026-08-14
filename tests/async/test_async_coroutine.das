@@ -16,7 +16,7 @@ require strings
 var g_coroutine_steps : int = 0
 
 [coroutine]
-def simple_coroutine(n : int) {
+def simple_coroutine(n : int) {   // nolint:STYLE038 length is the [coroutine] expansion, not the source body
     for (i in range(n)) {
         g_coroutine_steps ++
         co_continue()
@@ -60,22 +60,14 @@ def counting_async() : int {
 [test]
 def test_both_in_same_file(t : T?) {
     t |> run("coroutine yields direct values") @(t : T?) {
-        var vals : array<int>
-        for (v in counting_co()) {
-            vals |> push(v)
-        }
+        let vals <- [for (v in counting_co()); v]
         t |> equal(length(vals), 3)
         t |> equal(vals[0], 1)
         t |> equal(vals[1], 2)
         t |> equal(vals[2], 3)
     }
     t |> run("async yields variant-wrapped values") @(t : T?) {
-        var vals : array<int>
-        for (v in counting_async()) {
-            if (v is res) {
-                vals |> push(v as res)
-            }
-        }
+        let vals <- [for (v in counting_async()); v as res; where v is res]
         t |> equal(length(vals), 3)
         t |> equal(vals[0], 10)
         t |> equal(vals[1], 20)
@@ -171,7 +163,8 @@ def mix_co_b() {
 def test_cr_run_all_coroutines(t : T?) {
     t |> run("cr_run_all with multiple coroutines") @(t : T?) {
         g_mix_log |> clear()
-        var tasks : Coroutines
+        // stays the emplace form: a bracket literal of moved-in ITERATOR elements arrives dead under AOT
+        var tasks : Coroutines    // nolint:STYLE012 - the suggested literal form miscompiles under AOT for iterator elements
         tasks |> emplace <| mix_co_a()
         tasks |> emplace <| mix_co_b()
         cr_run_all(tasks)

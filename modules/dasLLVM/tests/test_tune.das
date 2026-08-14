@@ -21,8 +21,8 @@ struct private Tuner {}
 
 def private reference(a, b : array<float>) : float {
     var s = 0f
-    for (i in range(length(a))) {
-        s += a[i] * b[i]
+    for (av, bv in a, b) {
+        s += av * bv
     }
     return s
 }

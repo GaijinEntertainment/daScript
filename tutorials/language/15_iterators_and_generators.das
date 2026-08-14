@@ -30,7 +30,7 @@ def each(r : NumberRange) : iterator<int> {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Built-in iterators recap ===
     // We've used these in earlier tutorials. Quick recap:

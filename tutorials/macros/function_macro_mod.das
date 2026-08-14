@@ -22,7 +22,6 @@ module function_macro_mod public
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/strings_boost
 require daslib/macro_boost
 
 require strings public
@@ -64,7 +63,7 @@ class LogCallsMacro : AstFunctionAnnotation {
 
         // Step 1: Build an ExprStringBuilder for "funcname(arg1, arg2, ...)\n"
         var call_sb = new ExprStringBuilder(at = func.at)
-        call_sb.elements |> emplace_new <| qmacro($v("{string(func.name)}("))
+        call_sb.elements |> emplace_new <| qmacro($v("{func.name}("))
         for (i, arg in count(), func.arguments) {
             if (i > 0) {
                 call_sb.elements |> emplace_new <| quote(", ")
@@ -221,7 +220,7 @@ class NoPrintMacro : AstFunctionAnnotation {
 
         // Step 3: Check the result
         if (astVisitor.found_print) {
-            errors := "function {string(func.name)} must not call builtin print (at line {int(astVisitor.print_at.line)})"
+            errors := "function {func.name} must not call builtin print (at line {int(astVisitor.print_at.line)})"
             unsafe { delete astVisitor; }
             return false
         }

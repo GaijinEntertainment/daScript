@@ -334,7 +334,7 @@ struct ContextSpec {
     code : int = 50501      // GlslExport/spirv error() surface as 50501; macro_error as 50503
 }
 
-def context_specs : array<ContextSpec> {
+def context_specs : array<ContextSpec> {  // nolint:STYLE038 — flat spec table, one entry per fail-closed case
     return <- [
         ContextSpec(name = "_fc_lattice_ubo", rail = "spirv", needle = "field 'h': type tHalf4 is not supported",
             body = build_string() $(var w) {

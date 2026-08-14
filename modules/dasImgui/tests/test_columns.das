@@ -48,9 +48,9 @@ def test_columns(t : T?) {
             let c1_x = c1?["x"] ?? 0.0f
             let c2_x = c2?["x"] ?? 0.0f
             t |> success(c0_x < c1_x,
-                         "columns ordered L→R: C0.left ({c0_x}) < C1.left ({c1_x})")
+                         "columns ordered L->R: C0.left ({c0_x}) < C1.left ({c1_x})")
             t |> success(c1_x < c2_x,
-                         "columns ordered L→R: C1.left ({c1_x}) < C2.left ({c2_x})")
+                         "columns ordered L->R: C1.left ({c1_x}) < C2.left ({c2_x})")
 
             // AFTER_BTN flows below the columns block (not inside any column).
             let after = find_widget(snap0, "COLS_WIN/AFTER_BTN")?["bbox"]

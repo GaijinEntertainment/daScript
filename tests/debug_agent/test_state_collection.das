@@ -21,7 +21,7 @@ class CollectorAgent : DapiDebugAgent {
 
 var collector_ready : bool = false
 
-def setup_collector(ctx : Context) {
+def setup_collector(_ctx : Context) {
     install_new_debug_agent(new CollectorAgent(), "collector")
     collector_ready = true
 }

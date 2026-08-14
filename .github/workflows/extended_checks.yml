@@ -347,8 +347,11 @@ jobs:
           exit 0
         fi
         echo "linting: ${CHANGED[*]}"
-        $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet
-        $BIN/das-lint.exe "${CHANGED[@]}" --quiet
+        # LINT019 (stale nolint) is OFF here: a changed-set ledger cannot see consumers
+        # outside the PR, and >=16 files parallelize into per-file ledgers - both produce
+        # false stales. The nightly whole-tree -j 1 pass owns staleness.
+        $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet --disable LINT019
+        $BIN/das-lint.exe "${CHANGED[@]}" --quiet --disable LINT019
 
     - name: "Run ast-verify on changed .das files"
       if: matrix.target == 'linux'

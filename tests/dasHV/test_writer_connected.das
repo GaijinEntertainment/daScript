@@ -54,11 +54,11 @@ def test_writer_connected(t : T?) {
         }
         t |> run("held writer: connected at open, disconnected after the client goes away") @(t : T?) {
             // The stream never ends, so the 1s read timeout fires and the client closes the socket.
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.GET
                 req.url := "{base_url}/hold"
                 set_timeout(req, 1)
-                request(req) <| $(var resp) {}   // timeout: resp is null or partial — irrelevant
+                request(req) $(var resp) {}   // timeout: resp is null or partial — irrelevant
             }
             var st = ""
             for (_attempt in range(100)) {   // up to ~10s for the server loop to see the EOF

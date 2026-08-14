@@ -45,7 +45,7 @@ def public vec_cmp_words : array<uint> {
 def test_vec_compare(t : T?) {
     t |> run("whole-vector ==/!= reduce via OpAll/OpAny to a scalar bool; spirv-val clean") <| @(t : T?) {
         var words <- clone_to_move(vec_cmp_spv)
-        t |> success(length(words) > 0, "vector-compare shader lowers")
+        t |> success(!empty(words), "vector-compare shader lowers")
         t |> success(has_op(words, SpvOp.All), "== reduces with OpAll")
         t |> success(has_op(words, SpvOp.Any), "!= reduces with OpAny")
         let r = validate_spirv(words)

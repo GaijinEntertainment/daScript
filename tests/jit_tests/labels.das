@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 var g_label = -1
 
 def test_label(a : int) {

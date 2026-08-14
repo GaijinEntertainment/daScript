@@ -36,7 +36,7 @@ struct Doc {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     with_sqlite(":memory:") $(db) {
         db |> apply_recommended_pragmas()
         db |> create_table(type<Doc>)

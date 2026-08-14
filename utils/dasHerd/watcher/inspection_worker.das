@@ -455,7 +455,7 @@ def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
                             full_new.line_marks |> push(TextSourceLineMark(
                                 line_index = line, kind = TextSourceLineMarkKind.added))
                         }
-                        view_document <- full_new
+                        view_document <- full_new  // nolint:PERF030 - fresh empty decl above; the fill is conditional
                         // Same cap for the markdown render pass, which parses
                         // and lays out the whole document up front.
                         if (highlight_language == "markdown") {
@@ -468,9 +468,9 @@ def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
                                 var prepared_markdown_view = MarkdownViewState()
                                 let _ = markdown_tree_sitter_prepare(prepared_markdown,
                                     prepared_markdown_view, job.generation)
-                                markdown_document <- prepared_markdown
-                                markdown_view <- prepared_markdown_view
-                                changed_ranges <- prepare_changed_source_ranges(
+                                markdown_document <- prepared_markdown  // nolint:PERF030 - fresh empty decl above; the fill is conditional
+                                markdown_view <- prepared_markdown_view  // nolint:PERF030 - fresh empty decl above; the fill is conditional
+                                changed_ranges <- prepare_changed_source_ranges(  // nolint:PERF030 - fresh empty decl above; the fill is conditional
                                     view_source, prepared_patch.new_changed_lines)
                             }
                         }
@@ -497,15 +497,15 @@ def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
                             if (image_ok) {
                                 preview_width = image.width
                                 preview_height = image.height
-                                preview_pixels <- image.bytes
+                                preview_pixels <- image.bytes  // nolint:PERF030 - fresh empty decl above; the fill is conditional
                             } else {
                                 preview_error = image_error
                             }
                         }
                     }
-                    parsed <- prepared_patch
-                    old_document <- prepared_old
-                    new_document <- prepared_new
+                    parsed <- prepared_patch  // nolint:PERF030 - fresh empty decl above; the fill is conditional
+                    old_document <- prepared_old  // nolint:PERF030 - fresh empty decl above; the fill is conditional
+                    new_document <- prepared_new  // nolint:PERF030 - fresh empty decl above; the fill is conditional
                 }
             }
             let elapsed_usec = int64(get_time_usec(started_at))

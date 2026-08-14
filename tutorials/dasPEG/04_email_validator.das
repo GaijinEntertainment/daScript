@@ -66,7 +66,7 @@ def parse_email(input : string; blk : block<(val : Email; err : array<ParsingErr
 // ──────────────────────────────────────────────────────────────────────────
 
 def check_email(input : string) {
-    parse_email(input) $(val; err) {
+    parse_email(input) $(val; _err) {
         if (val.user != "" && val.domain != "") {
             print("  {input} -> user=\"{val.user}\", domain=\"{val.domain}\"\n")
         } else {

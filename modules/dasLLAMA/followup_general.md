@@ -290,3 +290,10 @@
     The offline plan cannot see the cap (followup_vulkan item 19) and `vk_moe_would_accept`
     answers only format/geometry — a would-accept probe that consults device caps would let
     schedulers plan without a live ensure_ round-trip.
+
+21. **`harness/tq4_probe.das` helpers have no tests.** `rotate_row` / `unrotate_row` /
+    `row_dot` were rewritten to zip loops in the lint sweep (PR #3733) with no coverage
+    before or after - feed each a known row, check the bytes. Note the zip form stops at
+    the shorter operand where the old indexed form panicked on mismatched lengths;
+    current callers pass equal lengths, so the test should pin the equal-length results,
+    not the mismatch behavior.

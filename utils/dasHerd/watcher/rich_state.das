@@ -556,6 +556,7 @@ def settings_load() {
     if (fexist(settings_path())) {
         var inscope loaded = HerdUiSettings()
         if (sscan_json(fread(settings_path()), loaded) && loaded.version == 1) {
+            delete g_ui_settings
             g_ui_settings <- loaded
         }
     } elif (fexist(layout_choice_path())) {
@@ -747,7 +748,7 @@ def reset_terminal(columns : int = 100; rows : int = 30) {
     let was_focused = g_terminal_view.focused
     g_terminal_view = ImGuiTerminalState()
     g_terminal_view.focused = was_focused
-    g_terminal_cache = ImGuiTerminalCache()
+    g_terminal_cache = ImGuiTerminalCache()  // nolint:PERF030 - its only heap field is disposed three lines above; the check cannot see that release
 }
 
 def feed_terminal_frame(message : string#; byte_count : int) {

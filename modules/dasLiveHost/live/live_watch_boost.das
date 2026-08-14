@@ -18,7 +18,7 @@ require daslib/debugger
 require daslib/json
 require daslib/json_boost
 require live_host
-require live/live_watch
+require live/live_watch  // nolint:STYLE030 - macro-only dependency; its [_macro] installing() forks the watcher agent these commands report on
 require live/live_commands
 
 // --- Structs ---
@@ -40,7 +40,7 @@ struct WatchStatusResult {
 // --- Commands ---
 
 [live_command(description="Show watched files with stat info (mtime, size)")]
-def cmd_watch_status(input : JsonValue?) : JsonValue? {
+def cmd_watch_status(_input : JsonValue?) : JsonValue? {
     let count = get_watched_file_count()
     var files : array<WatchFileInfo>
     for (i in range(count)) {
@@ -63,13 +63,13 @@ def cmd_watch_status(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Signal files changed (bypass watcher, trigger reload)")]
-def cmd_watch_signal(input : JsonValue?) : JsonValue? {
+def cmd_watch_signal(_input : JsonValue?) : JsonValue? {
     signal_files_changed()
     return JV("signaled")
 }
 
 [live_command(description="Touch first watched file to trigger watcher reload")]
-def cmd_watch_touch(input : JsonValue?) : JsonValue? {
+def cmd_watch_touch(_input : JsonValue?) : JsonValue? {
     let count = get_watched_file_count()
     if (count <= 0) return JV("no watched files")
     let f = get_watched_file(0)

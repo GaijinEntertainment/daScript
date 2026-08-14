@@ -115,6 +115,16 @@ def parse_input_file(filename : string) {
     return <- (aot_files, aot_lib_files, ctx_files)
 }
 
+// aot / aotlib / ctx work lists, either from an -in_file manifest or from the argv triplets
+def collect_inputs(args : array<string>) {
+    let input_file = find_argument_or(args, "-in_file", "")
+    if (!input_file.empty()) return <- parse_input_file(input_file)
+    var aot_files <- get_list_of_files(args, "-aot")
+    var aotlib_files <- get_list_of_files(args, "-aotlib")
+    var ctx_files <- get_list_of_files(args, "-ctx")
+    return <- (aot_files, aotlib_files, ctx_files)
+}
+
 def find_bool(args : array<string>; key : string) {
     let idx = find_index(args, key)
     return idx >= 0 && idx + 1 < length(args)
@@ -149,21 +159,7 @@ def main() {
     let force_overwrite = find_bool(args, "-force-overwrite");
     let quiet = find_bool(args, "-quiet");
 
-    var aot_files = array<tuple<string; string>>()
-    var aotlib_files = array<tuple<string; string>>()
-    var ctx_files = array<tuple<string; string>>()
-
-    let input_file = find_argument_or(args, "-in_file", "")
-    if (!input_file.empty()) {
-        var (a1, a2, a3) <- parse_input_file(input_file)
-        aot_files <- a1
-        aotlib_files <- a2
-        ctx_files <- a3
-    } else {
-        aot_files = get_list_of_files(args, "-aot")
-        aotlib_files = get_list_of_files(args, "-aotlib")
-        ctx_files = get_list_of_files(args, "-ctx")
-    }
+    var (aot_files, aotlib_files, ctx_files) <- collect_inputs(args)
     var result = true
     using() $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)

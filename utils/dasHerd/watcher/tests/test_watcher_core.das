@@ -110,7 +110,7 @@ def test_watcher_structured_drain(t : T?) {
 }
 
 [test]
-def test_watcher_process_lifecycle(t : T?) {
+def test_watcher_process_lifecycle(t : T?) {  // nolint:STYLE038 — one linear end-to-end lifecycle script; each phase asserts on state the previous one left
     if (get_platform_name() != "windows") return
     t |> run("persistent core logs output, times out hangs, and arbitrates control") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_watcher_test_")
@@ -262,13 +262,11 @@ def test_watcher_process_lifecycle(t : T?) {
             comparison = "working", role = "risk", file_path = "src/render.das")
         second_bundle_target.ranges |> push(WatcherFocusRange(
             start_byte = 4, end_byte = 12, caption = "bug was here"))
-        var bundle = WatcherReviewBundle(id = "bundle-debug",
+        var bundle <- WatcherReviewBundle(id = "bundle-debug",
             title = "Cross-repository debug fix", kind = "debug", status = "ready",
-            summary = "Two repositories participate in one review unit")
-        bundle.participants |> emplace(first_participant)
-        bundle.participants |> emplace(second_participant)
-        bundle.focus.targets |> emplace(first_bundle_target)
-        bundle.focus.targets |> emplace(second_bundle_target)
+            summary = "Two repositories participate in one review unit",
+            participants <- [ <- first_participant, <- second_participant])
+        bundle.focus.targets <- [ <- first_bundle_target, <- second_bundle_target]
         let bundle_result = watcher_bundle_sync(WatcherBundleSyncRequest(
             session_id = quick.session_id, bundle := bundle))
         t |> success(bundle_result.ok, bundle_result.error)

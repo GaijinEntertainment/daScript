@@ -99,9 +99,7 @@ def test_distinct_operators_and_overloads(t : T?) {
 [test]
 def test_distinct_containers(t : T?) {
     t |> run("array of distinct") @(t : T?) {
-        var arr : array<Id>
-        arr |> push(Id(1))
-        arr |> push(Id(2))
+        let arr <- [Id(1), Id(2)]
         t |> equal(*arr[1], 2)
         t |> success(arr[0] == Id(1))
     }

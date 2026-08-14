@@ -21,7 +21,6 @@ module when_macro_mod public
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/strings_boost
 require daslib/macro_boost
 
 // ============================================================================

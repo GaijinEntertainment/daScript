@@ -11,33 +11,28 @@ module openai_vision shared public
 require openai/openai_chat public
 
 def private vision_text_part(text : string) : JsonValue? {
-    var tab : table<string; JsonValue?>
-    tab["type"] = JV("text")
-    tab["text"] = JV(text)
+    var tab <- { "type" => JV("text"), "text" => JV(text) }
     return JV(tab)
 }
 
 def private vision_image_part(image_url : string) : JsonValue? {
     var inner : table<string; JsonValue?>
     inner["url"] = JV(image_url)
-    var tab : table<string; JsonValue?>
-    tab["type"] = JV("image_url")
-    tab["image_url"] = JV(inner)
+    var tab <- { "type" => JV("image_url"), "image_url" => JV(inner) }
     return JV(tab)
 }
 
 def vision_request_body(model, text, image_url : string; max_tokens : int = 300) : string {
     //! Builds the JSON body for a one-shot vision request (a user turn with text + one image).
     var content <- [vision_text_part(text), vision_image_part(image_url)]
-    var msg : table<string; JsonValue?>
-    msg["role"] = JV("user")
-    msg["content"] = JV(content)
+    var msg <- { "role" => JV("user"), "content" => JV(content) }
     var msgs : array<JsonValue?>
     msgs |> push(JV(msg))
-    var body_tree : table<string; JsonValue?>
-    body_tree["model"] = JV(model)
-    body_tree["messages"] = JV(msgs)
-    body_tree["max_tokens"] = JV(max_tokens)
+    var body_tree <- {
+        "model" => JV(model),
+        "messages" => JV(msgs),
+        "max_tokens" => JV(max_tokens)
+    }
     return write_json(JV(body_tree))
 }
 

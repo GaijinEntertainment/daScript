@@ -18,7 +18,7 @@ def benchmark_context_check(b : B?) {
     for (i in 0 .. 10) {
         a.push(i % 2 == 0)
     }
-    b |> run("for_each", 10) <| $() {
+    b |> run("for_each", 10) {
         var count = 0
         for (e in a) {
             if (e) {

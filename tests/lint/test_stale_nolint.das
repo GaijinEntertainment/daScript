@@ -31,7 +31,9 @@ def test_stale_nolint(t : T?) {
     t |> run("stale directive reported, live one consumed") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
         var output = ""
-        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures"], output)
+        // --lint-excluded-paths keeps this test pinned to the SCANNER regardless of
+        // whatever the repo [paths] policy excludes at the time
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "LINT019") >= 0, "LINT019 fires on the fixture: {output}")
         t |> success(find(output, "PERF006 suppresses nothing") >= 0,
             "the stale PERF006 directive is named: {output}")
@@ -52,7 +54,32 @@ def test_stale_nolint(t : T?) {
     t |> run("disabling LINT019 silences the scan") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
         var output = ""
-        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--disable", "LINT019"], output)
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths", "--disable", "LINT019"], output)
         t |> success(find(output, "LINT019") < 0, "no LINT019 under --disable: {output}")
+    }
+    t |> run("generic-body directive consumed by a later-sorted consumer (end-scan)") @(t : T?) {
+        // serial mode scans staleness AFTER all compiles: the consumer sorts after the
+        // generic, so a per-file scan would falsely report both directives stale
+        let gen = "{root}/tests/lint/stale_fixtures/_fixture_stale_gen.das"
+        let consumer = "{root}/tests/lint/stale_fixtures/_fixture_stale_gen_consumer.das"
+        var output = ""
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", gen, consumer, "--lint-fixtures", "--lint-excluded-paths"], output)
+        t |> success(find(output, "LINT019") < 0, "consumed directives are not stale: {output}")
+        t |> success(find(output, "PERF006") < 0 && find(output, "PERF022") < 0,
+            "the directives suppress their rules: {output}")
+    }
+    t |> run("lint-skip-file directive skips the whole file") @(t : T?) {
+        let fixture = "{root}/tests/lint/stale_fixtures/_fixture_lint_skip.das"
+        var output = ""
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
+        t |> success(find(output, "lint-skip-file") >= 0, "skip reason printed: {output}")
+        t |> success(find(output, "LINT010") < 0, "the deliberate finding is not reported: {output}")
+    }
+    t |> run("lint-skip-file outside the header is prose, not a directive") @(t : T?) {
+        let fixture = "{root}/tests/lint/stale_fixtures/_fixture_lint_skip_deep.das"
+        var output = ""
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
+        t |> success(find(output, "lint-skip-file") < 0, "the deep occurrence is not honored: {output}")
+        t |> success(find(output, "PASS") >= 0, "the file lints normally: {output}")
     }
 }

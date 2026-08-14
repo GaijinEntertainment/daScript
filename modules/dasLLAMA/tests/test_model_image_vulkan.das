@@ -21,10 +21,7 @@ require _model_tier
 def test_vulkan_dry_bake(tst : T?) {
     tst |> run("SmolLM2 q8: dry bake collects a role-stamped plan and the image round-trips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!family_on(t, "llama")) return
-            if (!arm_on(t, "vulkan")) {
-                return
-            }
+            if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
             if (!jit_enabled()) {
                 t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
                 return
@@ -37,11 +34,11 @@ def test_vulkan_dry_bake(tst : T?) {
             apply_box_profile_runtime()
             let probed = dlim_config_current("q8")
             if (!probed.vulkan_on) {
-                t |> skip("vulkan tier not armed (DASLLAMA_GPU) — run via run.das --suite image-vulkan")
+                t |> skip("vulkan tier not armed (DASLLAMA_GPU) - run via run.das --suite image-vulkan")
                 return
             }
             if (!moe_gpu_dry_bake_arm(probed.vulkan)) {
-                t |> skip("dry bake declined to arm — see the log")
+                t |> skip("dry bake declined to arm - see the log")
                 return
             }
             vulkan_bake_begin()
@@ -81,10 +78,7 @@ def test_vulkan_dry_bake(tst : T?) {
 def test_vulkan_inline_bake(tst : T?) {
     tst |> run("SmolLM2 q8: a cold cached load bakes the vulkan flavor beside a PLANAR image") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!family_on(t, "llama")) return
-            if (!arm_on(t, "vulkan")) {
-                return
-            }
+            if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
             if (!jit_enabled()) {
                 t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
                 return
@@ -96,11 +90,11 @@ def test_vulkan_inline_bake(tst : T?) {
             apply_box_profile_runtime()
             let probed = dlim_config_current("q8")
             if (!probed.vulkan_on) {
-                t |> skip("vulkan tier not armed (DASLLAMA_GPU) — run via run.das --suite image-vulkan")
+                t |> skip("vulkan tier not armed (DASLLAMA_GPU) - run via run.das --suite image-vulkan")
                 return
             }
             if (!moe_gpu_dry_bake_arm(probed.vulkan)) {
-                t |> skip("dry bake declined to arm — see the log")
+                t |> skip("dry bake declined to arm - see the log")
                 return
             }
             // the INLINE bake: load_model_cached mints both flavors off one cold load. The
@@ -113,7 +107,7 @@ def test_vulkan_inline_bake(tst : T?) {
             remove(img_p)
             var a = Model()
             with_job_que() {
-                a <- load_model_cached(path, QuantMode.q8)
+                a <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030 'a' is a fresh Model(); the move must sit inside with_job_que
             }
             t |> success(a.image_map != null, "the cold cached load serves an image")
             t |> success(stat(img_v).is_valid, "the vulkan flavor was baked")

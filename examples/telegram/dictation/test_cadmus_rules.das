@@ -5,7 +5,7 @@ require cadmus_rules
 require strings
 
 [test]
-def test_cadmus_routing_and_dates(t : T?) {
+def test_cadmus_routing_and_dates(t : T?) {   // nolint:STYLE038 - flat list of 13 `t |> run` cases
     t |> run("commands require a real command boundary") @(t : T?) {
         t |> equal(is_cadmus_command("/summary", "summary"), true)
         t |> equal(is_cadmus_command("/summary@cadmus_bot yesterday", "summary"), true)

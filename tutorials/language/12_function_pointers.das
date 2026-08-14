@@ -50,7 +50,7 @@ def transform_array(arr : array<int>; f : function<(x : int) : int>) {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Getting function pointers ===
 

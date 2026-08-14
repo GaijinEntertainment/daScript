@@ -102,14 +102,8 @@ def mj_comp(x, y, z : float) : float3 {
 
 // ----- differential driver -----
 
-var GRID : array<float>
-var IGRID : array<int>
-
-[init]
-def fill_grid {
-    GRID <- [-100.0, -3.5, -1.0, -0.0, 0.0, 1.0, 2.5, 7.0, 100.0]
-    IGRID <- [-100, -7, -1, 0, 1, 3, 42, 1000]
-}
+var GRID <- [-100.0, -3.5, -1.0, -0.0, 0.0, 1.0, 2.5, 7.0, 100.0]
+var IGRID <- [-100, -7, -1, 0, 1, 3, 42, 1000]
 
 // A host may build the runtime with -ffast-math (dagor does), which lets a/b become
 // a*(1/b) and flushes denormals - so the vector path and the scalar reference stop being

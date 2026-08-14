@@ -1,7 +1,6 @@
 options gen2
 require cbind/cbind_boost
 require daslib/safe_addr
-require daslib/strings
 
 [export]
 def main {

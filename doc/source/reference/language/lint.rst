@@ -105,6 +105,8 @@ Options:
 - ``--style-only`` — only run style lint
 - ``--enable CODE[,CODE...]`` — force-enable specific rules (bypasses ``.lint_config`` defaults)
 - ``--disable CODE[,CODE...]`` — disable specific rules; on overlap with ``--enable``, ``--disable`` wins
+- ``--lint-fixtures`` — also lint fixture-named files (underscore-led names containing ``fixture``)
+- ``--lint-excluded-paths`` — report findings the ``.lint_config`` ``[paths]`` exclude policy would drop
 
 Examples::
 
@@ -137,6 +139,15 @@ Add a ``// nolint:CODE`` comment on the same line as the flagged expression::
 The suppression is exact: ``// nolint:PERF003`` only suppresses PERF003, not other
 rules. An optional explanation after the code is recommended but not required.
 
+A file whose *subject* conflicts with the lint pipeline's compile policies can opt
+out entirely with a ``// lint-skip-file: <reason>`` comment in the file header (the
+first 16 lines — deeper occurrences are treated as prose, so quoting the directive
+in a doc comment cannot silently unlint a file). Canonical user:
+``tests/language/static_if.das``, which tests the infer-time
+folding the pipeline's ``no_infer_time_folding`` policy disables — it cannot even
+compile under lint. The runner reports the file as skipped with the reason, so
+coverage accounting still sees it.
+
 ---------------------------
 Repo-level ``.lint_config``
 ---------------------------
@@ -167,6 +178,22 @@ Defaults (applied before the file is read):
 The file is optional. When missing, unreadable, or syntactically
 malformed the defaults stand — bad TOML is a silent no-op, not a
 compile error. Non-boolean entries under ``[rules]`` are ignored.
+
+A ``[paths]`` table declares repo-root-relative globs whose findings are
+dropped at REPORT time::
+
+    [paths]
+    exclude = ["tests/interfaces/test_interfaces.das"]
+
+Excluded files still compile through the lint pipeline — their compiles
+instantiate generics and consume ``nolint`` directives, so cross-file
+findings they expose in non-excluded files stay visible; only findings
+*in* the matching files are hidden, and the summary counts what the
+policy hid. The intended use is a shrinking debt ratchet: narrow or
+remove entries as paths reach zero. ``--lint-excluded-paths`` on the
+standalone runner shows the hidden findings; the MCP ``lint`` tool
+always shows raw findings (the same deliberate split as
+``--lint-fixtures``).
 
 CLI ``--enable`` on the standalone runner bypasses the defaults (the
 explicit whitelist wins), so ``daslang utils/lint/main.das -- --enable
@@ -736,7 +763,12 @@ LINT019 — stale ``nolint`` directive
 A ``// nolint:CODE`` directive that suppressed no diagnostic during the run is dead
 weight: it buries the next real finding on that line and does not survive the code
 moving. The lint runner records every suppression the passes consume and reports the
-leftovers after all passes complete.
+leftovers after all passes complete. In the standalone runner's serial mode
+(``-j 1``) the stale scan runs once at the END of the run over every file, so a
+directive in a generic body is credited by ANY compile in the run that instantiates
+it — including files that sort after it. Parallel workers still scan per file
+(each worker sees only its own consumption), so serial mode is the authoritative
+staleness determination.
 
 Two escape hatches for directives that are live only outside the current compile:
 add ``LINT019`` to the code list (``// nolint:PERF020,LINT019``) when the rule fires
@@ -1365,6 +1397,15 @@ fresh-slot inserts where nothing leaks. Compiler temps, the ``return <- r``
 lowering, and generated moves are excluded — in particular the early-out
 relocation that splits ``var inscope x <- init`` into a hoisted declaration
 plus a generated move (the target is fresh and the ``finally`` releases it).
+
+The release credit: a ``delete`` of the variable — or of a field chain rooted at
+it, the hand-rolled-teardown shape — before the move silences the warning, as
+does the lowered form of any of those (``_::finalize``, ``builtin`finalize```,
+``builtin`finalize_dim``` for fixed arrays, or a call named ``finalize``).
+Credit is per function and per site: it does not cross into or out of deferred
+bodies (a lambda's ``delete`` runs later and never credits; an inline block
+argument's counts, though the block may never run — the rule errs silent), and
+a conditional fill is best folded into the declaration as ``var a <- c ? x : y``.
 
 .. das-doc: fragment
 .. code-block:: das

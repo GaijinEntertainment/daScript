@@ -63,25 +63,11 @@ def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : boo
     if (e is ExprRef2Value) return resolve_lanes((e as ExprRef2Value).subexpr, out)
     let d = float_vec_dim(expr_bt(e))
     if (d == 0) return false
-    if (e is ExprConstFloat2) {
-        let v = (e as ExprConstFloat2).value
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.x)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.y)))
-        return true
-    }
-    if (e is ExprConstFloat3) {
-        let v = (e as ExprConstFloat3).value
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.x)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.y)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.z)))
-        return true
-    }
-    if (e is ExprConstFloat4) {
-        let v = (e as ExprConstFloat4).value
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.x)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.y)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.z)))
-        out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = v.w)))
+    let L = const_lanes(e)
+    if (L.kind == CK_FLOAT && L.dim >= 2) {   // float2/3/4 literal — one scalar literal per lane
+        for (k in range(L.dim)) {
+            out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = L.f[k])))   // nolint:PERF006 -- ≤4 lanes
+        }
         return true
     }
     if (e is ExprSwizzle) {
@@ -103,42 +89,46 @@ def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : boo
         return ok && length(sw.fields) == d
     }
     var c = float_ctor_of(e)
-    if (c != null) {
-        // splat: the one scalar arg fills every lane (emitters clone the duplicate references)
-        if (length(c.arguments) == 1 && expr_bt(c.arguments[0]) == Type.tFloat) {
-            for (_i in range(d)) {
-                out |> push(LaneSrc(lane = -1, e = c.arguments[0]))   // nolint:PERF006 -- ≤4 lanes
-            }
-            return true
-        }
-        var total = 0
-        for (i in range(length(c.arguments))) {
-            var a = c.arguments[i]
-            let abt = expr_bt(a)
-            if (abt == Type.tFloat) {
-                var bk = ""
-                var base : ExpressionPtr
-                var comp = ""
-                if (component_read_of(a, bk, base, comp)) {
-                    out |> push(LaneSrc(lane = lane_index(comp), e = base))
-                } else {
-                    out |> push(LaneSrc(lane = -1, e = a))
-                }
-                total ++
-            } elif (float_vec_dim(abt) > 0) {
-                if (!resolve_lanes(a, out)) return false
-                total += float_vec_dim(abt)
-            } else {
-                return false
-            }
-        }
-        return total == d
-    }
+    if (c != null) return resolve_ctor_lanes(c, d, out)
     // opaque float vector — contributes its own lanes
     for (i in range(d)) {
         out |> push(LaneSrc(lane = i, e = e))   // nolint:PERF006 -- ≤4 lanes
     }
     return true
+}
+
+// The float-ctor arm of resolve_lanes: a splat fills every lane, a scalar argument contributes
+// itself (or the component it reads), a vector argument recurses. False when the args don't cover d.
+def private resolve_ctor_lanes(var c : ExprCall?; d : int; var out : array<LaneSrc>) : bool {
+    // splat: the one scalar arg fills every lane (emitters clone the duplicate references)
+    if (length(c.arguments) == 1 && expr_bt(c.arguments[0]) == Type.tFloat) {
+        for (_i in range(d)) {
+            out |> push(LaneSrc(lane = -1, e = c.arguments[0]))   // nolint:PERF006 -- ≤4 lanes
+        }
+        return true
+    }
+    var total = 0
+    for (i in range(length(c.arguments))) {
+        var a = c.arguments[i]
+        let abt = expr_bt(a)
+        if (abt == Type.tFloat) {
+            var bk = ""
+            var base : ExpressionPtr
+            var comp = ""
+            if (component_read_of(a, bk, base, comp)) {
+                out |> push(LaneSrc(lane = lane_index(comp), e = base))
+            } else {
+                out |> push(LaneSrc(lane = -1, e = a))
+            }
+            total ++
+        } elif (float_vec_dim(abt) > 0) {
+            if (!resolve_lanes(a, out)) return false
+            total += float_vec_dim(abt)
+        } else {
+            return false
+        }
+    }
+    return total == d
 }
 
 let private SWF_NONE = 0
@@ -169,15 +159,12 @@ def private swizzle_sel_runs(sel : array<LaneSrc>; var runs : array<int2>) {
     }
 }
 
-// Decide which rewrite a swizzle's resolved selection admits and fill `sel` for the builder.
-// Shared by the fold arm and the residual oracle — ONE gate, so a survivor is always a fold miss.
-def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneSrc>) : int {
-    if (that == null || that.fieldFlags.write) return SWF_NONE
-    let nOut = length(that.fields)
-    if (nOut < 1 || nOut > 4 || !swizzle_decomposable(that.value)) return SWF_NONE
+// Resolve the swizzled value's lanes and project the mask into `sel`; false when a field falls
+// outside the resolved lanes. `nLanes` reports the resolved width.
+def private resolve_selection(var that : ExprSwizzle?; var sel : array<LaneSrc>; var nLanes : int&) : bool {
     var lanes : array<LaneSrc>
     var ok = resolve_lanes(that.value, lanes)
-    let nLanes = length(lanes)
+    nLanes = length(lanes)
     if (ok) {
         for (f in that.fields) {
             if (int(f) >= nLanes) {
@@ -187,62 +174,48 @@ def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneS
     }
     if (ok) {
         for (f in that.fields) {
-            sel |> push(lanes[int(f)])   // nolint:PERF006 -- ≤4 lanes
+            sel |> push(lanes[int(f)])
         }
     }
     unsafe {
         delete lanes
     }
-    if (!ok) return SWF_NONE
-    var nScalar = 0
+    return ok
+}
+
+// Every lane resolved to the same (describe-equal) source expression.
+def private sel_all_same_source(sel : array<LaneSrc>) : bool {
+    let k0 = describe(sel[0].e)
     for (s in sel) {
-        if (s.lane < 0) {
-            nScalar ++
+        if (describe(s.e) != k0) return false
+    }
+    return true
+}
+
+// Single-base arm: the base itself when the selection is its full in-order width, else one
+// re-masked swizzle.
+def private single_base_kind(sel : array<LaneSrc>; nOut : int) : int {
+    var ident = nOut == float_vec_dim(expr_bt(sel[0].e))
+    for (i in range(nOut)) {
+        if (sel[i].lane != i) {
+            ident = false
         }
     }
-    // single-base arms: every lane a component of one (describe-equal) base
-    if (nScalar == 0) {
-        let k0 = describe(sel[0].e)
-        var same = true
-        for (s in sel) {
-            if (describe(s.e) != k0) {
-                same = false
-            }
-        }
-        if (same) {
-            var ident = nOut == float_vec_dim(expr_bt(sel[0].e))
-            for (i in range(nOut)) {
-                if (sel[i].lane != i) {
-                    ident = false
-                }
-            }
-            return ident ? SWF_BASE : SWF_SWIZZLE
-        }
+    return ident ? SWF_BASE : SWF_SWIZZLE
+}
+
+// The mask reads the whole value in order — the swizzle node itself is redundant.
+def private is_identity_selection(that : ExprSwizzle?; nOut, nLanes : int) : bool {
+    if (nOut != nLanes) return false
+    for (i in range(nOut)) {
+        if (int(that.fields[i]) != i) return false
     }
-    if (nOut == 1) return SWF_SCALAR    // the single component-lane case returned above
-    // identity selection over the whole value — just drop the swizzle node
-    var ident = nOut == nLanes
-    if (ident) {
-        for (i in range(nOut)) {
-            if (int(that.fields[i]) != i) {
-                ident = false
-            }
-        }
-    }
-    if (ident) return SWF_VALUE
-    // every lane the same non-const scalar — splat (all-const packs to a literal via SWF_CTOR)
-    if (nScalar == nOut) {
-        let k0 = describe(sel[0].e)
-        var same = true
-        for (s in sel) {
-            if (describe(s.e) != k0) {
-                same = false
-            }
-        }
-        var cv = 0.0
-        if (same && !scalar_float_const(sel[0].e, cv)) return SWF_SPLAT
-    }
-    // ctor re-pack: only whole in-order bases ride free (a partial run would pay fresh extracts)
+    return true
+}
+
+// Ctor re-pack arm: only whole in-order bases ride free (a partial run would pay fresh extracts),
+// and rebuilding the value's own arg list is churn rather than a fold (e.g. `float2(a, a).yx`).
+def private ctor_repack_kind(var that : ExprSwizzle?; sel : array<LaneSrc>; nOut, nLanes : int) : int {
     if (nOut > nLanes) return SWF_NONE
     var runs : array<int2>
     swizzle_sel_runs(sel, runs)
@@ -260,7 +233,6 @@ def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneS
             }
         }
     }
-    // rebuilding the value's own arg list is churn, not a fold (e.g. `float2(a, a).yx`)
     if (!bad) {
         var vc = float_ctor_of(r2v_unwrap(that.value))
         if (vc != null && length(vc.arguments) == length(runs)) {
@@ -275,6 +247,30 @@ def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneS
     }
     delete runs
     return bad ? SWF_NONE : SWF_CTOR
+}
+
+// Decide which rewrite a swizzle's resolved selection admits and fill `sel` for the builder.
+// Shared by the fold arm and the residual oracle — ONE gate, so a survivor is always a fold miss.
+def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneSrc>) : int {
+    if (that == null || that.fieldFlags.write) return SWF_NONE
+    let nOut = length(that.fields)
+    if (nOut < 1 || nOut > 4 || !swizzle_decomposable(that.value)) return SWF_NONE
+    var nLanes = 0
+    if (!resolve_selection(that, sel, nLanes)) return SWF_NONE
+    var nScalar = 0
+    for (s in sel) {
+        if (s.lane < 0) {
+            nScalar ++
+        }
+    }
+    // every lane a component of one base
+    if (nScalar == 0 && sel_all_same_source(sel)) return single_base_kind(sel, nOut)
+    if (nOut == 1) return SWF_SCALAR    // the single component-lane case returned above
+    if (is_identity_selection(that, nOut, nLanes)) return SWF_VALUE
+    // every lane the same non-const scalar — splat (all-const packs to a literal via SWF_CTOR)
+    var cv = 0.0
+    if (nScalar == nOut && sel_all_same_source(sel) && !scalar_float_const(sel[0].e, cv)) return SWF_SPLAT
+    return ctor_repack_kind(that, sel, nOut, nLanes)
 }
 
 // Oracle mirror for the swizzle fold arm (FoldResidualVisitor in flatten.das).

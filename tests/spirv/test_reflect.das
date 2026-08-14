@@ -132,10 +132,8 @@ def test_reflect_malformed(t : T?) {
 [test]
 def test_reflect_roundtrip(t : T?) {
     t |> run("reflect: encode/decode round-trips a hand-built reflection") <| @(t : T?) {
-        var src : SpirvReflection
-        src.stage = SpirvStageFlags.vertex | SpirvStageFlags.fragment
-        src.entry_point := "main"
-        src.local_size = int3(1, 1, 1)
+        var src = SpirvReflection(stage = SpirvStageFlags.vertex | SpirvStageFlags.fragment,
+            entry_point = "main", local_size = int3(1, 1, 1))
         src.bindings |> push(SpirvDescriptorBinding(set = 1, binding = 2,
             kind = SpirvDescriptorKind.combined_image_sampler, count = 3, stages = SpirvStageFlags.fragment))
         src.push_constants |> push(SpirvPushConstantRange(offset = 0, size = 64, stages = SpirvStageFlags.vertex))

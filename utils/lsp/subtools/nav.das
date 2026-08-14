@@ -271,7 +271,7 @@ def private field_value_struct(expr : Expression const?) : Structure const? {
     return value_type != null ? value_type.structType : null
 }
 
-def private resolve_definition(hit : CursorHit) : Definition {
+def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE037,STYLE038 — exact-type `is` ladder, one arm per Expression class
     let expr = hit.expr
     if (expr is ExprVar) {
         let v = expr as ExprVar
@@ -508,7 +508,7 @@ def private to_void(p : auto(TT) const?) : void? {
     return unsafe(reinterpret<void?>(p))
 }
 
-def private identify_target(hit : CursorHit) : RefTarget {
+def private identify_target(hit : CursorHit) : RefTarget { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
     let expr = hit.expr
     if (expr is ExprCall) {
         let c = expr as ExprCall
@@ -1255,7 +1255,7 @@ def private push_impl_location(var out : array<NavLocation>; var seen : table<st
 }
 
 // class method -> its overrides in derived classes; class/struct -> derived types
-def private run_implementation(file : string; line0, char16 : int; project : string) : LocationsResult {
+def private run_implementation(file : string; line0, char16 : int; project : string) : LocationsResult { // nolint:STYLE038 — one compile_nav closure: method-override pass, then derived-type pass over the same program
     var res = LocationsResult(ok = true)
     var line, col : int
     request_cursor(file, line0, char16, line, col)
@@ -1345,7 +1345,7 @@ def private run_implementation(file : string; line0, char16 : int; project : str
 // ===== dispatch =====
 
 [export]
-def main() : int {
+def main() : int { // nolint:STYLE037 — flat argv dispatch, one arm per LSP op
     let raw <- get_command_line_arguments()
     var user <- lsp_user_args(raw)
     let overlay_path = lsp_extract_overlay(user)

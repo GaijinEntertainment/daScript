@@ -7,16 +7,16 @@ require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
-require live/opengl_live // nolint:STYLE030 — side-effect registration for live-reload
+require live/opengl_live
 require live/live_commands
 require live/live_api
-require live/live_watch_boost // nolint:STYLE030 — side-effect registration for live-reload
+require live/live_watch_boost
 require live/live_vars
-require live/audio_live // nolint:STYLE030 — side-effect registration for live-reload
+require live/audio_live
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live // nolint:STYLE030 — side-effect registration for live-reload
+require strudel/strudel_live
 require daslib/math_boost
 require daslib/json_boost
 require daslib/strings_boost
@@ -150,6 +150,13 @@ var wave_music_active = false
 var death_music_active = false
 
 def init_audio_samples() {
+    // release whatever a previous run left in the @live buffers before regenerating
+    delete snd_shoot
+    delete snd_asteroid_hit
+    delete snd_ship_hit
+    delete snd_wave_start
+    delete snd_game_over
+
     snd_shoot <- gen_sine_sweep(1400.0, 700.0, 0.06, 0.2)
 
     snd_asteroid_hit <- gen_noise_burst(0.09, 0.1)
@@ -892,7 +899,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulation, render, HUD
     if (!live_begin_frame()) {
         return
     }

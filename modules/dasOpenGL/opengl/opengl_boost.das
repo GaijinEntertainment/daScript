@@ -231,7 +231,7 @@ def std140_flush(program : uint; blockName : string; bindingPoint : int) {
     glBufferData(GL_UNIFORM_BUFFER, g_std140_staging[key], GL_DYNAMIC_DRAW)
     let blockIndex = glGetUniformBlockIndex(program, blockName)
     if (blockIndex != GL_INVALID_INDEX) {
-        let nbytes = int64(length(g_std140_staging[key]))
+        let nbytes = long_length(g_std140_staging[key])
         glUniformBlockBinding(program, blockIndex, uint(bindingPoint))
         glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, int64(0), nbytes)
     }

@@ -265,14 +265,12 @@ class XmlAdapter : SourceAdapter {
         let tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType))
         var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "xjoin", at)
         if (pieces == null) return null
-        var allStmts : array<Expression?>
-        allStmts |> push_from(pieces.preludeStmts)
+        var allStmts := pieces.preludeStmts
         allStmts |> push <| qmacro_expr() {
             var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
         }
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }

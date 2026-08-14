@@ -167,9 +167,7 @@ def test_walk_edge_values(t : T?) {
 def test_deeply_nested(t : T?) {
     t |> run("nested struct in array") @(t : T?) {
         var walker = new LogWalker()
-        var root = TreeNode(value = 1)
-        root.children |> emplace(TreeNode(value = 2))
-        root.children |> emplace(TreeNode(value = 3))
+        var root <- TreeNode(value = 1, children <- [TreeNode(value = 2), TreeNode(value = 3)])
         root.children[0].children |> emplace(TreeNode(value = 4))
         make_data_walker(walker) $(adapter) {
             unsafe {

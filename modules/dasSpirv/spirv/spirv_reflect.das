@@ -113,12 +113,10 @@ def private kind_from_int(k : int) : SpirvDescriptorKind {
     return SpirvDescriptorKind.uniform_buffer
 }
 
-// Rebuild the named bitfield from the wire uint. The ctor is a whole-value cast (uint shares the
-// bitfield's underlying repr) — needed, not redundant, so the LINT005 "same type" flag is a false
-// positive here. (The bit-by-bit `s.vertex = bool` form is lint-clean but the AOT C++ emitter lowers
-// it to an ambiguous __bit_set(Bitfield, uint, bool) -> C2666; the cast form AOT-compiles cleanly.)
+// Whole-value cast, not bit-by-bit `s.vertex = bool`: the AOT C++ emitter lowers the latter
+// to an ambiguous __bit_set(Bitfield, uint, bool) -> C2666; the cast form AOT-compiles cleanly.
 def private stage_flags_from_uint(raw : uint) : SpirvStageFlags {
-    return SpirvStageFlags(raw)     // nolint:LINT005
+    return SpirvStageFlags(raw)
 }
 
 //! Decode the producer's word stream into a typed reflection. A malformed stream (empty, wrong magic,

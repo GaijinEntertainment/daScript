@@ -19,7 +19,7 @@ require daslib/templates
 require daslib/enum_trait
 require daslib/json_boost
 require daslib/static_let
-require strings   // nolint:STYLE030 — unescape() is used inside the XML(struct) apply block, invisible to the require-usage scan
+require strings
 
 // ============ Iteration helpers ============
 
@@ -63,11 +63,8 @@ def for_each(node_set : xpath_node_set?; blk : block<(xn : xpath_node) : void>) 
 
 [unsafe_outside_of_for]
 def each(node_set : xpath_node_set?) : iterator<xpath_node> {
-    //! Returns a lazy iterator over all ``xpath_node`` entries in an
-    //! ``xpath_node_set``. Intended for use in ``for`` loops.
-    //! Because the iterator is named ``each``, the call can be omitted:
-    //!
-    //!   ``for (xn in node_set) { ... }``
+    //! Returns a lazy iterator over all ``xpath_node`` entries in an ``xpath_node_set``.
+    //! Named ``each``, so the call may be omitted: ``for (xn in node_set) { ... }``.
     return <- generator<xpath_node> {
         let n = node_set.size
         for (i in range(n)) {
@@ -79,10 +76,8 @@ def each(node_set : xpath_node_set?) : iterator<xpath_node> {
 
 [unsafe_outside_of_for]
 def each_child(node : xml_node) : iterator<xml_node> {
-    //! Returns a lazy iterator over all child elements of *node*.
-    //! Intended for use in ``for`` loops:
-    //!
-    //!   ``for (ch in each_child(node)) { ... }``
+    //! Returns a lazy iterator over all child elements of *node*:
+    //! ``for (ch in each_child(node)) { ... }``.
     return <- generator<xml_node> {
         var ch = node.first_child
         while (ch.ok) {
@@ -96,10 +91,8 @@ def each_child(node : xml_node) : iterator<xml_node> {
 
 [unsafe_outside_of_for]
 def each_child(node : xml_node; name : string) : iterator<xml_node> {
-    //! Returns a lazy iterator over child elements of *node* whose tag
-    //! matches *name*. Intended for use in ``for`` loops:
-    //!
-    //!   ``for (ch in each_child(node, "item")) { ... }``
+    //! Returns a lazy iterator over child elements of *node* whose tag matches *name*:
+    //! ``for (ch in each_child(node, "item")) { ... }``.
     return <- generator<xml_node> {
         var ch = child(node, name)
         while (ch.ok) {
@@ -113,10 +106,8 @@ def each_child(node : xml_node; name : string) : iterator<xml_node> {
 
 [unsafe_outside_of_for]
 def each_attribute(node : xml_node) : iterator<xml_attribute> {
-    //! Returns a lazy iterator over all attributes of *node*.
-    //! Intended for use in ``for`` loops:
-    //!
-    //!   ``for (a in each_attribute(node)) { ... }``
+    //! Returns a lazy iterator over all attributes of *node*:
+    //! ``for (a in each_attribute(node)) { ... }``.
     return <- generator<xml_attribute> {
         var a = node.first_attribute
         while (a.ok) {
@@ -155,11 +146,8 @@ def for_each_child_reverse(node : xml_node; name : string; blk : block<(child : 
 
 [unsafe_outside_of_for]
 def each_child_reverse(node : xml_node) : iterator<xml_node> {
-    //! Returns a lazy iterator over all child nodes of *node* (text and comments
-    //! included, not only elements) in **reverse** document order. Intended for
-    //! use in ``for`` loops:
-    //!
-    //!   ``for (ch in each_child_reverse(node)) { ... }``
+    //! Returns a lazy iterator over all child nodes of *node* — text and comments included, not
+    //! only elements — in **reverse** document order: ``for (ch in each_child_reverse(node)) { ... }``.
     return <- generator<xml_node> {
         var ch = node.last_child
         while (ch.ok) {
@@ -173,10 +161,8 @@ def each_child_reverse(node : xml_node) : iterator<xml_node> {
 
 [unsafe_outside_of_for]
 def each_child_reverse(node : xml_node; name : string) : iterator<xml_node> {
-    //! Returns a lazy iterator over child elements of *node* whose tag matches
-    //! *name*, in reverse document order. Intended for use in ``for`` loops:
-    //!
-    //!   ``for (ch in each_child_reverse(node, "item")) { ... }``
+    //! Returns a lazy iterator over child elements of *node* whose tag matches *name*, in reverse
+    //! document order: ``for (ch in each_child_reverse(node, "item")) { ... }``.
     return <- generator<xml_node> {
         var ch = node.last_child
         while (ch.ok && ch.name != name) {   // seek back to the last name-matching child
@@ -215,20 +201,16 @@ def build_xml_row(node : xml_node; var row) {
 }
 
 def read_xml_field(node : xml_node; name : string; defv : auto(TT)) : TT {
-    //! Reads one same-named attribute of *node* into a *TT*-typed value — the field-pruned
-    //! counterpart to ``build_xml_row``, emitted by linq_fold's fused XML lane. A missing
-    //! attribute keeps *defv*, so pass the struct field's declared default to match
-    //! ``build_xml_row`` semantics. Same supported field types as ``build_xml_row``.
+    //! Reads one same-named attribute of *node* into a *TT*-typed value — the field-pruned counterpart
+    //! to ``build_xml_row`` (same supported types), emitted by linq_fold's fused XML lane. A missing
+    //! attribute keeps *defv*, so pass the struct field's declared default to match ``build_xml_row``.
     return read_xml_attr(node[name], defv)
 }
 
 def peek_xml_field(node : xml_node; name : string; defv : auto(TT)) {
-    //! Like ``read_xml_field``, but a ``string`` attribute is returned as a borrowed temp ``string#`` —
-    //! a non-owning view into the document (no ``clone_string``). The ``#`` makes the borrow type-enforced:
-    //! reading / comparing the view compiles, but storing it (``push``, global assign, returning it out)
-    //! is rejected, forcing an explicit ``clone_string`` — so a view can't silently dangle past the
-    //! document's RAII scope. Scalar fields read by value, identical to ``read_xml_field``. linq_fold's
-    //! materialize-under-guard path emits this for where-gate predicate fields.
+    //! Like ``read_xml_field`` (linq_fold's materialize-under-guard path emits it for where-gate fields),
+    //! but a ``string`` attribute comes back as a borrowed temp ``string#`` — a non-owning view into the
+    //! document, whose ``#`` rejects storing it, so it cannot dangle past the document's RAII scope.
     static_if (typeinfo is_string(defv)) {
         unsafe {
             return reinterpret<string#>(as_string(node[name], defv))   // borrowed view; return-of-temp needs unsafe
@@ -240,16 +222,10 @@ def peek_xml_field(node : xml_node; name : string; defv : auto(TT)) {
 
 [unsafe_outside_of_for]
 def from_xml_node(node : xml_node; t : type<auto(TT)>) : iterator<TT -const> {
-    //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading
-    //! same-named attributes (see ``build_xml_row``). Non-element children (text/PCDATA/comments
-    //! in mixed content) are skipped. Yields owned values, so rows collected via ``to_array`` or a
-    //! comprehension stay valid past the document's RAII block.
-    //! Intended for ``for`` loops and LINQ chains:
-    //!
-    //!   ``for (car in from_xml_node(root, type<Car>)) { ... }``
-    // -const on the element: type<auto(TT)> binds TT const, so a bare iterator<TT> makes the
-    // consumer's loop var a const struct — which the AOT C++ emitter can't default-initialize.
-    return <- generator<TT -const> {
+    //! Lazily walks the child *elements* of *node*, materializing each into a *TT* by reading same-named
+    //! attributes (see ``build_xml_row``); non-element children (text/PCDATA/comments) are skipped. Yields
+    //! owned values, so rows stay valid past the RAII block: ``for (car in from_xml_node(root, type<Car>))``.
+    return <- generator<TT -const> {   // -const: a bare iterator<TT> binds TT const, and the AOT C++ emitter can't default-init a const loop var
         var ch = node.first_child
         while (ch.ok) {
             let next = ch.next_sibling   // capture before yield (user may mutate)
@@ -315,12 +291,8 @@ def with_doc(blk : block<(doc : xml_document?) : void>) {
 // ============ Quick accessors ============
 
 def operator [] (node : xml_node; attr_name : string) : xml_attribute {
-    //! Returns the attribute named *attr_name*. Combine with ``is``/``as``
-    //! operators for typed access:
-    //!
-    //!   ``node["price"] as float``
-    //!
-    //!   ``if (node["discount"] is float) { ... }``
+    //! Returns the attribute named *attr_name*. Combine with ``is``/``as`` for typed access:
+    //! ``node["price"] as float``, or ``if (node["discount"] is float) { ... }``.
     return attribute(node, attr_name)
 }
 
@@ -408,20 +380,16 @@ def add_attr(var node : xml_node; name : string; value : bool) : xml_attribute {
 // ============ Builder EDSL ============
 
 def tag(var node : xml_node; name : string; blk : block<(var child : xml_node) : void>) : xml_node {
-    //! Appends a child element with *name*, invokes *blk* with it, and
-    //! returns the new child. Use with pipe+block for nested XML:
-    //!
-    //!   ``node |> tag("book") $(var book) { book |> tag("title", "...") }``
+    //! Appends a child element with *name*, invokes *blk* with it, and returns the new child:
+    //! ``node |> tag("book") $(var book) { book |> tag("title", "...") }``.
     var ch = append_child(node, name)
     invoke(blk, ch)
     return ch
 }
 
 def tag(var node : xml_node; name : string; text_content : string) : xml_node {
-    //! Appends a child element with *name* and text content. Returns
-    //! the new child. Use for leaf elements:
-    //!
-    //!   ``node |> tag("title", "The C Programming Language")``
+    //! Appends a leaf child element with *name* and text content, and returns it:
+    //! ``node |> tag("title", "The C Programming Language")``.
     let ch = append_child(node, name)
     set(ch.text, text_content)
     return ch
@@ -760,7 +728,7 @@ def from_XML(node : xml_node; ent : uint64; defV : uint64 = 0ul) : uint64 {
 }
 
 [unused_argument(anything)]
-def from_XML(node : xml_node; anything : auto(TT)) {
+def from_XML(node : xml_node; anything : auto(TT)) {  // nolint:STYLE038 - static_if dispatch ladder, one arm per type kind
     //! Deserializes an XML node tree into a native value.
     //! Struct fields become child elements; arrays become sequences of
     //! child elements. Missing elements yield default values.
@@ -886,7 +854,7 @@ def from_XML(node : xml_node; anything : table<auto(KT)>) {
     var ret : table<KT>
     var ch = node.first_child
     while (ch.ok) {
-        var next_ch = ch.next_sibling
+        let next_ch = ch.next_sibling
         ret |> insert(_::from_XML(ch, type<KT -&>))
         ch = next_ch
     }
@@ -915,15 +883,10 @@ def XML_table(var node : xml_node; value : table<auto(KT)>) {
 // --- XML: serialize native value → xml_node children ---
 
 [unused_argument(value)]
-def XML(var node : xml_node; value : auto(TT)) {
-    //! Serializes a native value into XML child elements of *node*.
-    //! Structs/tuples: each field becomes a child element (via ``apply``).
-    //! Variants: stores ``_variant`` attribute with the active index.
-    //! Tables (key-value): each entry becomes an ``entry`` child with ``_key`` / ``_val`` sub-elements.
-    //! Tables (key-only): each key becomes an ``item`` child.
-    //! Arrays/dim: each element becomes an ``item`` child.
-    //! Enumerations: stored as string name. Bitfields: stored as integer value.
-    //! Primitives: sets the text content of *node*.
+def XML(var node : xml_node; value : auto(TT)) {  // nolint:STYLE038 - static_if dispatch ladder, one arm per type kind
+    //! Serializes a native value into XML children of *node*. Struct/tuple/variant: a named child per field (via
+    //! ``apply``), variants adding a ``_variant`` index attribute. Table: an ``entry`` child per pair (``_key``/``_val``),
+    //! or ``item`` per key-only key. Array/dim: ``item`` per element. Enum: name; bitfield: integer; primitive: node text.
     static_if (typeinfo is_dim(value)) {
         for (item in value) {
             var ch = append_child(node, "item")

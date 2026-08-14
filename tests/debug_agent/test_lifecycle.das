@@ -12,7 +12,7 @@ class LifecycleAgent : DapiDebugAgent {
 
 var lifecycle_agent_installed : bool = false
 
-def setup_lifecycle_agent(ctx : Context) {
+def setup_lifecycle_agent(_ctx : Context) {
     install_new_debug_agent(new LifecycleAgent(), "lifecycle")
     lifecycle_agent_installed = true
 }

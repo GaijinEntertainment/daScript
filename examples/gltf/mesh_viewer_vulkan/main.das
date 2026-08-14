@@ -243,7 +243,7 @@ def build_composite {
     g_quad_vert <- create_shader_module(harness_device(), viewer_quad_vs_spv)
     g_quad_frag <- create_shader_module(harness_device(), viewer_quad_fs_spv)
     var reflections <- [decode_reflection(viewer_quad_vs_spv_reflect), decode_reflection(viewer_quad_fs_spv_reflect)]
-    g_quad_layouts <- build_descriptor_set_layouts(harness_device(), reflections)
+    g_quad_layouts <- build_descriptor_set_layouts(harness_device(), reflections)   // nolint:PERF030 - module global, first and only write (build_composite runs once from init)
     g_quad_pipe_layout <- build_pipeline_layout(harness_device(), g_quad_layouts, reflections)
     delete reflections
     let sz = harness_size()

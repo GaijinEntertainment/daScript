@@ -36,9 +36,7 @@ def mathb {
 }
 
 def private mathb_words : array<uint> {
-    var w : array<uint>
-    w |> push_from(mathb_spv)
-    return <- w
+    return clone_to_move(mathb_spv)
 }
 
 def private has_ext(words : array<uint>; op : GLSLstd450) : bool {

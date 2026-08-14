@@ -40,7 +40,7 @@ def test_macos_chords(t : T?) {
                          "feature app runs with ConfigMacOSXBehaviors forced on")
             t |> equal(state?["primary_chord"] ?? 0,
                        int(ImGuiKey.K) | COMMAND_MOD_CTRL,
-                       "primary binding matches on the logical Ctrl bit — ImGui's input swap owns the Cmd mapping")
+                       "primary binding matches on the logical Ctrl bit - ImGui's input swap owns the Cmd mapping")
             t |> equal(state?["secondary_chord"] ?? 0,
                        int(ImGuiKey.J) | COMMAND_MOD_SUPER,
                        "secondary binding matches on the logical Super bit")

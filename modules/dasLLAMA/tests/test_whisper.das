@@ -295,7 +295,7 @@ def test_qwen3a_tower(t : T?) {
         let path = path_join(samples_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, path)) return
         let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
+        if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
@@ -338,7 +338,7 @@ def test_parakeet_oracle(t : T?) {
         let path = path_join(whisper_models_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
         if (!model_available(t, path)) return
         let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
+        if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
@@ -361,8 +361,8 @@ def test_parakeet_oracle(t : T?) {
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v2 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 33, "token count")
-            t |> equal(segs[0].tokens[0], 123, "tok[0] '▁And'")
-            t |> equal(segs[0].tokens[1], 96, "tok[1] '▁so'")
+            t |> equal(segs[0].tokens[0], 123, "tok[0] '_And' (leading SentencePiece space marker)")
+            t |> equal(segs[0].tokens[1], 96, "tok[1] '_so' (leading SentencePiece space marker)")
             t |> equal(segs[0].tokens[31], 353, "tok[31] 'ry'")
             t |> equal(segs[0].tokens[32], 841, "tok[32] '.'")
             t |> success(segs[0].text == "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.", "text")
@@ -400,7 +400,7 @@ def test_parakeet_v3_oracle(t : T?) {
         let path = path_join(whisper_models_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         if (!model_available(t, path)) return
         let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
+        if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
@@ -423,8 +423,8 @@ def test_parakeet_v3_oracle(t : T?) {
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 38, "token count")
-            t |> equal(segs[0].tokens[0], 1976, "tok[0] '▁And'")
-            t |> equal(segs[0].tokens[1], 547, "tok[1] '▁so'")
+            t |> equal(segs[0].tokens[0], 1976, "tok[0] '_And' (leading SentencePiece space marker)")
+            t |> equal(segs[0].tokens[1], 547, "tok[1] '_so' (leading SentencePiece space marker)")
             t |> equal(segs[0].tokens[36], 7893, "tok[36] 'y'")
             t |> equal(segs[0].tokens[37], 7883, "tok[37] '.'")
             t |> success(segs[0].text == "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.", "text")
@@ -443,7 +443,7 @@ def test_whisper_transcribe_oracle(t : T?) {
         let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
         let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
+        if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
@@ -520,7 +520,7 @@ def test_whisper_q8_gate(t : T?) {
         let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
         let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
+        if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
@@ -595,7 +595,7 @@ def test_canary_qwen_oracle(t : T?) {
             return
         }
         if (!parity_full_mode()) {   // ~6.7 GB two-file (decoder GGUF + f32 encoder bin) — large-tier
-            t |> skip("canary-qwen is large-tier — set DASLLAMA_PARITY_FULL=1 to run")
+            t |> skip("canary-qwen is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
         }
         let dec = path_join(samples_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
@@ -723,7 +723,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
             return
         }
         if (!parity_full_mode()) {   // ~34 GB (Q8 thinker + bf16 mmproj) — large-tier
-            t |> skip("Qwen3-Omni-30B is large-tier — set DASLLAMA_PARITY_FULL=1 to run")
+            t |> skip("Qwen3-Omni-30B is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
         }
         let dec = path_join(samples_dir(), "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf")

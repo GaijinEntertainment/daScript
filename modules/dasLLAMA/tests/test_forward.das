@@ -4,7 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
-require dasllama/dasllama_tokenizer
+require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)

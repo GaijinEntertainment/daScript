@@ -108,7 +108,7 @@ class Control {
 }
 
 [test]
-def test_control_gpu_vs_cpu(t : T?) {
+def test_control_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("control flow: GPU == CPU-reference") <| @(t : T?) {
         var oracle = new Control()
         oracle.a |> resize(N)

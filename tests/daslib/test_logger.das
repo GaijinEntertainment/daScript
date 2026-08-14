@@ -62,7 +62,7 @@ def field_num(t : T?; rec : JsonValue?; key : string) : double {
 // Reset module state. The library has no `reset()` API on purpose (production
 // callers want sticky config); these tests need a clean slate, so we drive
 // the public setters manually.
-def reset(t : T?) {
+def reset() {
     logger_close()
     logger_set_path("")
     logger_set_min_level(LOG_INFO)
@@ -73,7 +73,7 @@ def reset(t : T?) {
 [test]
 def test_basic_write(t : T?) {
     t |> run("info writes one JSON Lines record with ts/level/cat/msg") @(t : T?) {
-        reset(t)
+        reset()
         let p = temp_log_path()
         logger_set_path(p)
         logger_info("test.basic", "hello world")
@@ -96,7 +96,7 @@ def test_basic_write(t : T?) {
 [test]
 def test_level_filter(t : T?) {
     t |> run("min_level drops records below threshold") @(t : T?) {
-        reset(t)
+        reset()
         let p = temp_log_path()
         logger_set_path(p)
         logger_set_min_level(LOG_WARNING)
@@ -117,7 +117,7 @@ def test_level_filter(t : T?) {
 [test]
 def test_category_prefix_override(t : T?) {
     t |> run("dotted prefix category override applies to descendants") @(t : T?) {
-        reset(t)
+        reset()
         let p = temp_log_path()
         logger_set_path(p)
         logger_set_min_level(LOG_WARNING)
@@ -139,7 +139,7 @@ def test_category_prefix_override(t : T?) {
 [test]
 def test_msg_escaping(t : T?) {
     t |> run("msg with quotes / newlines / tabs is JSON-escaped and round-trips") @(t : T?) {
-        reset(t)
+        reset()
         let p = temp_log_path()
         logger_set_path(p)
         logger_info("test.esc", "she said \"hi\"\nnewline\there")
@@ -156,7 +156,7 @@ def test_msg_escaping(t : T?) {
 [test]
 def test_fields_serialization(t : T?) {
     t |> run("fields object is embedded as a nested JSON object") @(t : T?) {
-        reset(t)
+        reset()
         let p = temp_log_path()
         logger_set_path(p)
         logger_info("test.fields", "with extras", JV({"count" => JV(42), "name" => JV("foo")}))
@@ -179,17 +179,13 @@ def test_fields_serialization(t : T?) {
 [test]
 def test_no_open_silent_when_fallback_disabled(t : T?) {
     t |> run("never writes anywhere if path unset and stderr fallback off") @(t : T?) {
-        reset(t)
+        reset()
         // No set_path. Fallback off. info() should be a silent no-op.
         logger_info("test.noop", "should-not-appear")
         t |> success(true)
     }
 }
 
-// NOTE: `logger_install_hook()` is not unit-tested here because the global
-// debug agent it registers stays alive for the process and intercepts
-// dastest's own report-print() too — even after we clear path + fallback
-// (the fail-open guard appears to be observed in the wrong context). The
-// hook is exercised end-to-end via the MCP server (where `logger_init` is
-// the canonical entry point); add a dedicated integration harness if hook
-// coverage in dastest is needed.
+// `logger_install_hook()` is not unit-tested here: the global debug agent it registers
+// outlives the test and swallows dastest's own report print. It is covered end-to-end
+// through the MCP server, whose entry point is `logger_init`.

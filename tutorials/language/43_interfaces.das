@@ -49,7 +49,7 @@ def demo_basic_interface() {
     var g = new FriendlyGreeter()
 
     // Direct getter call (original pattern)
-    let greet_alice = g->get`IGreeter()->greet("Alice")
+    let greet_alice = g->get`IGreeter()->greet("Alice")     // nolint:STYLE036 - compiler-inserted const-adaptation cast, not source
     print("  getter:  {greet_alice}\n")
 
     // `as` — returns the interface proxy
@@ -234,7 +234,7 @@ class ILogger {
     def abstract log_name : string
     // Default implementation — not required to override
     def format(message : string) : string {
-        return "[{self->log_name()}] {message}"
+        return "[{self.log_name()}] {message}"
     }
 }
 

@@ -1601,13 +1601,16 @@ namespace das {
             blk->list.push_back(srci);
             // let pvar0 = reinterpret_cast<void?>(addr(it0))
             auto vit0 = new ExprVar(expr->at, srcVarName);
+            vit0->generated = true;
             auto adri = new ExprRef2Ptr(expr->at, vit0);
+            adri->generated = true;     // lowering artifact, not user source (STYLE034 guard)
             adri->alwaysSafe = true;
             auto pvoid = new TypeDecl(Type::tPointer);
             pvoid->at = expr->at;
             pvoid->firstType = new TypeDecl(Type::tVoid);
             pvoid->firstType->at = expr->at;
             auto rein = new ExprCast(expr->at, adri, pvoid);
+            rein->generated = true;
             rein->reinterpret = true;
             rein->alwaysSafe = true;
             auto veqt = new ExprLet();

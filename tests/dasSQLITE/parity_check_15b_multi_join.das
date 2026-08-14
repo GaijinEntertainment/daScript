@@ -86,7 +86,7 @@ def fixture_items() : array<Item> {
     ]
 }
 
-def sort_by_user_sku(var rows : array<auto(R)>) : array<R> {
+def sort_by_user_sku(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.UserName != b.UserName) {
             return a.UserName < b.UserName
@@ -96,7 +96,6 @@ def sort_by_user_sku(var rows : array<auto(R)>) : array<R> {
         }
         return a.Sku < b.Sku
     }
-    return <- rows
 }
 
 [test]
@@ -131,9 +130,9 @@ def parity_three_table_join(t : T?) {
                                   $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
                                   $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty)))
 
-        m1 <- sort_by_user_sku(m1)
-        m2 <- sort_by_user_sku(m2)
-        m3 <- sort_by_user_sku(m3)
+        sort_by_user_sku(m1)
+        sort_by_user_sku(m2)
+        sort_by_user_sku(m3)
 
         t |> equal(length(m1), 4, "3-table inner: 4 rows (Alice's 2 orders × items, Bob's 1 order × 1 item)")
         t |> equal(length(m1), length(m2), "3-table: M1 length ≡ M2")
@@ -246,9 +245,9 @@ def parity_three_table_join_with_outer_where(t : T?) {
                                   $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
                          |> _where(_.Sku == "BOOK"))
 
-        m1 <- sort_by_user_sku(m1)
-        m2 <- sort_by_user_sku(m2)
-        m3 <- sort_by_user_sku(m3)
+        sort_by_user_sku(m1)
+        sort_by_user_sku(m2)
+        sort_by_user_sku(m3)
 
         // Fixture has 2 BOOK items: Item 100 (Order 10, Alice, total 100) and
         // Item 102 (Order 11, Alice, total 250). Item 101 is PEN, 103 is PAPER.
@@ -303,9 +302,9 @@ def parity_three_table_join_with_outer_where_int(t : T?) {
                                   $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
                          |> _where(_.Qty >= 2 && _.UserName == "Alice"))
 
-        m1 <- sort_by_user_sku(m1)
-        m2 <- sort_by_user_sku(m2)
-        m3 <- sort_by_user_sku(m3)
+        sort_by_user_sku(m1)
+        sort_by_user_sku(m2)
+        sort_by_user_sku(m3)
 
         // Alice's items with Qty >= 2: Item 100 (BOOK, Qty 2), Item 101 (PEN, Qty 5). Two rows.
         t |> equal(length(m1), 2, "3-table + WHERE Qty>=2 AND UserName=Alice: 2 rows")

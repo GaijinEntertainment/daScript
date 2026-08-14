@@ -21,21 +21,21 @@ passes the wrapper:
 
    // Module scope: ImGui keeps the pointer for the NEXT Begin(), so the
    // wrapper must outlive the SetNextWindowSizeConstraints call.
-   var private ASPECT_CN : ImGuiSizeConstraints
+   let private ASPECT_RATIO = 16.0f / 9.0f
 
-   let aspect_ratio = 16.0f / 9.0f
-   ASPECT_CN <- ImGuiSizeConstraints(@ capture(= aspect_ratio)
-                                      (var data : ImGuiSizeCallbackData) : void {
-       data.DesiredSize = float2(data.DesiredSize.x,
-                                 data.DesiredSize.x / aspect_ratio)
-   })
+   var private ASPECT_CN : ImGuiSizeConstraints <- ImGuiSizeConstraints(
+       @ capture(= ASPECT_RATIO) (var data : ImGuiSizeCallbackData) : void {
+           data.DesiredSize = float2(data.DesiredSize.x,
+                                     data.DesiredSize.x / ASPECT_RATIO)
+       })
+
    SetNextWindowSizeConstraints(float2(0.0f, 0.0f), float2(FLT_MAX, FLT_MAX),
                                 ASPECT_CN)
 
-Seed the wrapper once (``init``) and pass the same struct on every frame —
-the lambda carries its own capture state. A stack local will not do: auto-fit
-invokes the callback from inside ``Begin()``, after the enclosing function has
-already returned.
+Seed the wrapper at its module-scope declaration and pass the same struct on
+every frame — the lambda carries its own capture state. A stack local will not
+do: auto-fit invokes the callback from inside ``Begin()``, after the enclosing
+function has already returned.
 
 The 2-arg ``SetNextWindowSizeConstraints(min, max)`` form stays on the
 boost-surface allow-list — only require this module when you need the

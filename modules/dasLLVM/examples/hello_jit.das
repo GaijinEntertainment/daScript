@@ -1,5 +1,4 @@
 options gen2
-require jit
 require llvm/daslib/llvm_macro // This require will jit all functions
 
 [jit]

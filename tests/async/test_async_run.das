@@ -54,7 +54,8 @@ def test_async_run(t : T?) {
 def test_async_run_all(t : T?) {
     t |> run("async_run_all drives multiple tasks") @(t : T?) {
         g_log |> clear()
-        var tasks : array<iterator<bool>>
+        // stays the emplace form: a bracket literal of moved-in ITERATOR elements arrives dead under AOT
+        var tasks : array<iterator<bool>>    // nolint:STYLE012 - the suggested literal form miscompiles under AOT for iterator elements
         tasks |> emplace <| logging_task("x", 2)
         tasks |> emplace <| logging_task("y", 3)
         async_run_all(tasks)

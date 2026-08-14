@@ -12,16 +12,6 @@ require strings
 
 //! Subprocess form of `lint`. Argv: <file> <project>.
 
-def has_expect_directive(file : string) : bool {
-    let text = fread(file)
-    return false if (empty(text))
-    let lines <- text |> split("\n")
-    for (line in lines) {
-        let trimmed = line |> strip
-        return true if (trimmed |> starts_with("expect "))
-    }
-    return false
-}
 
 // LINT019 (stale nolint) mirrors the CLI runner: it reads the consumption record the
 // three passes leave behind, so it must run AFTER them, and only on a clean compile.
@@ -40,7 +30,8 @@ def stale_nolint_strings(file : string; disabled_codes, enabled_codes : table<st
 
 def lint_single(file : string; project : string;
                 disabled_codes, enabled_codes : table<string>) : string {
-    return make_tool_result("SKIP {file} (intentional compile errors via `expect`)") if (has_expect_directive(file))
+    let content_skip = lint_file_skip_reason(file)
+    return make_tool_result("SKIP {file} {content_skip}") if (!empty(content_skip))
     return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
         if (!empty(issues)) {
@@ -127,9 +118,10 @@ def run_lint(file : string; project : string = "") : string {
     var total_skipped = 0
     let output = build_string() $(var w) {
         for (f in files) {
-            if (has_expect_directive(f)) {
+            let content_skip = lint_file_skip_reason(f)
+            if (!empty(content_skip)) {
                 total_skipped++
-                w |> write("SKIP {f} (intentional compile errors via `expect`)\n")
+                w |> write("SKIP {f} {content_skip}\n")
                 continue
             }
             let result = lint_file(f, project, disabled_codes, enabled_codes)

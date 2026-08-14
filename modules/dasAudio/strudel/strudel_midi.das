@@ -109,7 +109,7 @@ def read_vlq(data : array<uint8>; var cursor : int&) : int {
 
 // ─── Track Parser ───
 
-def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {  // nolint:STYLE037 - one arm per MIDI event kind
+def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {  // nolint:STYLE037,STYLE038 - one arm per MIDI event kind; the arms share cursor, absTick and runningStatus
     //! Parse a single MTrk chunk starting at cursor, returning the track with all events.
     var track : MidiTrack
     // expect "MTrk"

@@ -1,8 +1,6 @@
 options gen2
 options _no_linq_perf_warn = true
 
-require math
-require strings
 require daslib/linq
 require daslib/linq_boost
 require daslib/linq_fold
@@ -22,7 +20,7 @@ struct Theme6SilencedRow {
 
 def populate(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, Theme6SilencedRow(val = i))
     }
 }

@@ -183,7 +183,7 @@ def private describe_count(expr : Expression?; needle : string) : int {
 }
 
 // Structural ExprFor counter — robust against describe() formatting changes (Copilot review #2).
-def private count_expr_for(expr : Expression?) : int {
+def private count_expr_for(expr : Expression?) : int { // nolint:STYLE037 exact-type `is` ladder over AST node classes
     if (expr == null) return 0
     var n = 0
     if (expr is ExprFor) {

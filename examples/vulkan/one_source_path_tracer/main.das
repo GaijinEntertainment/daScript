@@ -36,7 +36,6 @@ require daslib/jobque_boost
 require daslib/clargs
 require live/live_gc
 require math
-require strings
 
 require pt_shaders
 
@@ -98,7 +97,7 @@ def cpu_band(var pacc : array<float3>?; var ppix : array<uint8>?; var pepoch : i
         }
         for (x in range(TRACE_W)) {
             let i = y * TRACE_W + x
-            let c = pt_tonemap(unsafe((*pacc)[i]) * inv)
+            let c = pt_tonemap((*pacc)[i] * inv)
             unsafe {
                 (*ppix)[i * 4 + 0] = uint8(int(clamp(c.x, 0.0, 1.0) * 255.0 + 0.5))
                 (*ppix)[i * 4 + 1] = uint8(int(clamp(c.y, 0.0, 1.0) * 255.0 + 0.5))
@@ -288,9 +287,7 @@ def build_quad_pipeline(device : Device; render_pass : RenderPass; layout : Pipe
     blend_att.colorWriteMask.a = true
     var blend = VkPipelineColorBlendStateCreateInfo()
     blend.attachmentCount = 1u
-    var dyn_states : array<VkDynamicState>
-    dyn_states |> push(VkDynamicState.VIEWPORT)
-    dyn_states |> push(VkDynamicState.SCISSOR)
+    var dyn_states <- [VkDynamicState.VIEWPORT, VkDynamicState.SCISSOR]
     var dynstate = VkPipelineDynamicStateCreateInfo()
     dynstate.dynamicStateCount = 2u
 
@@ -338,7 +335,7 @@ var g_sampler : Sampler
 var g_quad : EngineStack
 
 [export]
-def init() {
+def init() {   // nolint:STYLE038 - linear engine-stack build: one flat create-info fill per backend (compute, hardware RT, present quad)
     var args_r <- parse_args(type<Args>)
     if (args_r |> is_err) {
         print("error: {args_r |> unwrap_err}\n\n")
@@ -418,11 +415,9 @@ def init() {
 
     // ----- hardware RT engine stack (only when the device has the pipeline) -----
     if (g_rt_ok) {
-        var bverts : array<float3>
-        for (pv in pt_verts) {
-            bverts |> push(pv.xyz)
-        }
+        var bverts <- [for (pv in pt_verts); pv.xyz]
         var bidx : array<uint>
+        bidx |> reserve(length(pt_tris) * 3)
         for (tr in pt_tris) {
             bidx |> push(tr.x)
             bidx |> push(tr.y)
@@ -504,7 +499,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {   // nolint:STYLE038 - one linear frame: record, dispatch, blit, then the ImGui panel, in the order the frame happens
     if (!harness_begin_frame()) {
         return
     }

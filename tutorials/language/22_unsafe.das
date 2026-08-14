@@ -14,7 +14,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === addr() — get pointer to variable ===
     // addr() creates a pointer (T?) to a local variable.

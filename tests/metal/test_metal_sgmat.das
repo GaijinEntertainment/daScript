@@ -49,7 +49,7 @@ class SgMatGpu {
 }
 
 [test]
-def test_sgmat_gpu_vs_cpu(t : T?) {
+def test_sgmat_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("simdgroup_matrix single tile: GPU == CPU replay, bit-exact") <| @(t : T?) {
         var oracle = new SgMatGpu()
         oracle.fa |> resize(8 * 16)

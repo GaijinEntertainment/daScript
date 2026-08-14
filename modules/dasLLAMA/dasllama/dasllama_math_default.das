@@ -195,7 +195,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
         // instrumented path: raw parallel_for + per-worker start capture (see pf_prof_report)
         unsafe {
             var wsp0 = addr<int64?>(g_pf_ws[0])
-            for (k in range(int(d))) {
+            for (k in range64(d)) {
                 wsp0[k] = 0l
             }
         }
@@ -220,7 +220,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
         let wall = (ref_time_ticks() - pf0) / 1000l
         var fs = 1l << 62l
         var ls = 0l
-        for (k in range(int(d))) {
+        for (k in range64(d)) {
             let v = g_pf_ws[k]
             if (v != 0l) {
                 fs = min(fs, v)

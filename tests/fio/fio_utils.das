@@ -39,7 +39,7 @@ def test_fexist(t : T?) {
 def test_fread_path(t : T?) {
     t |> run("read file by path") @(t : T?) {
         let tmp = "{get_das_root()}/_test_fread_path.tmp"
-        fopen(tmp, "wb") <| $(f) {
+        fopen(tmp, "wb") $(f) {
             fwrite(f, "hello world")
         }
         let content = fread(tmp)

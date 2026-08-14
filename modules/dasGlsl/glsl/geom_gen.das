@@ -91,12 +91,12 @@ def gen_sphere(sectorCount, stackCount : int; cubeUV : bool) {
         k2 = k1 + sectorCount + 1
         for (_j in range(sectorCount)) {
             if (i != 0) {
-                frag.indices |> push(k1)
+                frag.indices |> push(k1)  // nolint:STYLE012 — appends one triangle per sector to the running index buffer
                 frag.indices |> push(k2)
                 frag.indices |> push(k1 + 1)
             }
             if (i != (stackCount - 1)) {
-                frag.indices |> push(k1 + 1)
+                frag.indices |> push(k1 + 1)  // nolint:STYLE012 — appends one triangle per sector to the running index buffer
                 frag.indices |> push(k2)
                 frag.indices |> push(k2 + 1)
             }
@@ -191,7 +191,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
         let k1 = i
         let k2 = i + sectorCount + 2
         // triangle 1
-        frag.indices |> push(k1)
+        frag.indices |> push(k1)  // nolint:STYLE012 — appends two triangles per sector to the running index buffer
         frag.indices |> push(k2)
         frag.indices |> push(k1 + 1)
         // triangle 2
@@ -204,7 +204,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     let kc1 = sectorCount + 1 + tbOfs
     for (i in range(sectorCount)) {
         let k = i + tbOfs
-        frag.indices |> push(kc1)
+        frag.indices |> push(kc1)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
         frag.indices |> push(k)
         frag.indices |> push(k + 1)
     }
@@ -212,7 +212,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     let kc2 = ((sectorCount + 2) + sectorCount + 1) + tbOfs
     for (i in range(sectorCount)) {
         let k = (sectorCount + 2) + i + tbOfs
-        frag.indices |> push(kc2)
+        frag.indices |> push(kc2)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
         frag.indices |> push(k + 1)
         frag.indices |> push(k)
     }
@@ -266,7 +266,7 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
 
     // side triangles
     for (i in range(sectorCount)) {
-        frag.indices |> push(i)
+        frag.indices |> push(i)  // nolint:STYLE012 — appends one side triangle per sector to the running index buffer
         frag.indices |> push(tip)
         frag.indices |> push(i + 1)
     }
@@ -274,7 +274,7 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
     // base triangles
     for (i in range(sectorCount)) {
         let k = base + i
-        frag.indices |> push(center)
+        frag.indices |> push(center)  // nolint:STYLE012 — appends one base triangle per sector to the running index buffer
         frag.indices |> push(k + 1)
         frag.indices |> push(k)
     }
@@ -295,33 +295,31 @@ def gen_prism(plt : GenDirection) {
     let n_left = normalize(float3(-1.0, 0.0, 1.0))
     let n_right = normalize(float3(1.0, 0.0, 1.0))
 
-    // front cap (y = -1)
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_front, uv = float2(0.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_front, uv = float2(0.5, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_front, uv = float2(1.0, 1.0)))
-
-    // back cap (y = 1)
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_back, uv = float2(0.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_back, uv = float2(1.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_back, uv = float2(0.5, 0.0)))
-
-    // bottom rectangle
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_bottom, uv = float2(0.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_bottom, uv = float2(1.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_bottom, uv = float2(1.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_bottom, uv = float2(0.0, 1.0)))
-
-    // left slope rectangle
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_left, uv = float2(0.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_left, uv = float2(1.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_left, uv = float2(1.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_left, uv = float2(0.0, 1.0)))
-
-    // right slope rectangle
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_right, uv = float2(0.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_right, uv = float2(1.0, 0.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_right, uv = float2(1.0, 1.0)))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_right, uv = float2(0.0, 1.0)))
+    frag.vertices <- [
+        // front cap (y = -1)
+        GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_front, uv = float2(0.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_front, uv = float2(0.5, 0.0)),
+        GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_front, uv = float2(1.0, 1.0)),
+        // back cap (y = 1)
+        GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_back, uv = float2(0.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_back, uv = float2(1.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_back, uv = float2(0.5, 0.0)),
+        // bottom rectangle
+        GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_bottom, uv = float2(0.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_bottom, uv = float2(1.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_bottom, uv = float2(1.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_bottom, uv = float2(0.0, 1.0)),
+        // left slope rectangle
+        GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_left, uv = float2(0.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_left, uv = float2(1.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_left, uv = float2(1.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_left, uv = float2(0.0, 1.0)),
+        // right slope rectangle
+        GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_right, uv = float2(0.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_right, uv = float2(1.0, 0.0)),
+        GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_right, uv = float2(1.0, 1.0)),
+        GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_right, uv = float2(0.0, 1.0))
+    ]
 
     frag.indices <- array<int>(
         0, 2, 1,
@@ -493,11 +491,11 @@ def load_obj_mesh(fname : string; canfail : bool = true) {
                 }
                 let li = length(i012)
                 if (li == 3) {
-                    frag.indices |> push(i012[0])
+                    frag.indices |> push(i012[0])  // nolint:STYLE012 — appends one face's triangles to the running index buffer
                     frag.indices |> push(i012[1])
                     frag.indices |> push(i012[2])
                 } elif (li == 4) {
-                    frag.indices |> push(i012[0])
+                    frag.indices |> push(i012[0])  // nolint:STYLE012 — appends one face's triangles to the running index buffer
                     frag.indices |> push(i012[1])
                     frag.indices |> push(i012[2])
                     frag.indices |> push(i012[0])

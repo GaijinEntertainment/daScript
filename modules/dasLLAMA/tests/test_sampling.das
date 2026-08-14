@@ -150,9 +150,7 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
     t |> run("frequency penalty scales with occurrence count") @(t : T?) {
         var s = mk_sampler(8)
         let params = SamplingParams(frequency_penalty = 0.3)
-        s.recent |> push(3l)
-        s.recent |> push(3l)
-        s.recent |> push(3l)
+        s.recent <- [3l, 3l, 3l]
         // 3 occurrences: 2.0 - 3 * 0.3 = 1.1 < 1.5 => argmax moves to 7
         set_logits(s, [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.5])
         t |> equal(sample(s, params), 7l)
@@ -175,9 +173,7 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
     }
     t |> run("repetition penalty applies once per unique token (llama.cpp semantics)") @(t : T?) {
         var s = mk_sampler(8)
-        s.recent |> push(3l)
-        s.recent |> push(3l)
-        s.recent |> push(3l)
+        s.recent <- [3l, 3l, 3l]
         // once: 3.0 / 1.5 = 2.0 > 1.5 => argmax stays on 3; per-occurrence (the old behavior)
         // would give 3.0 / 1.5^3 = 0.89 and move to 7
         set_logits(s, [0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.5])
@@ -191,6 +187,7 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
         for (pass_idx in range(2)) {
             var s = mk_sampler(16)
             set_seed(s, 777)
+            s.recent |> reserve(32)
             for (_i in range(32)) {
                 for (i in range(16)) {
                     s.logits[i] = float(i % 5)

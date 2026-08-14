@@ -89,33 +89,25 @@ def rms_of(b : array<float>) : float {
 }
 
 // ===== synth target: render the hand-coded recipe (48 kHz) resampled to 44.1 kHz =====
+def synth_raw(name : string) : array<float> {
+    if (name == "kick") return <- render_bd(0.6, 0.9)
+    if (name == "sd") return <- render_sd(0.5, 0.9)
+    if (name == "hh") return <- render_hh(0.2, 0.9)
+    if (name == "oh") return <- render_oh(0.6, 0.9)
+    if (name == "cp") return <- render_cp(0.5, 0.9)
+    if (name == "tom_low") return <- render_tom(0.6, 0.9, 80.0)
+    if (name == "tom_high") return <- render_tom(0.5, 0.9, 175.0)
+    if (name == "ride") return <- render_ride(1.2, 0.9)
+    if (name == "crash") return <- render_crash(1.0, 0.9)
+    if (name == "rimshot") return <- render_rimshot(0.25, 0.9)
+    if (name == "cowbell") return <- render_cowbell(0.5, 0.9)
+    if (name == "tambourine") return <- render_tambourine(0.6, 0.9)
+    var unknown : array<float>
+    return <- unknown
+}
+
 def synth_target(name : string) : array<float> {
-    var raw : array<float>
-    if (name == "kick") {
-        raw <- render_bd(0.6, 0.9)
-    } elif (name == "sd") {
-        raw <- render_sd(0.5, 0.9)
-    } elif (name == "hh") {
-        raw <- render_hh(0.2, 0.9)
-    } elif (name == "oh") {
-        raw <- render_oh(0.6, 0.9)
-    } elif (name == "cp") {
-        raw <- render_cp(0.5, 0.9)
-    } elif (name == "tom_low") {
-        raw <- render_tom(0.6, 0.9, 80.0)
-    } elif (name == "tom_high") {
-        raw <- render_tom(0.5, 0.9, 175.0)
-    } elif (name == "ride") {
-        raw <- render_ride(1.2, 0.9)
-    } elif (name == "crash") {
-        raw <- render_crash(1.0, 0.9)
-    } elif (name == "rimshot") {
-        raw <- render_rimshot(0.25, 0.9)
-    } elif (name == "cowbell") {
-        raw <- render_cowbell(0.5, 0.9)
-    } elif (name == "tambourine") {
-        raw <- render_tambourine(0.6, 0.9)
-    }
+    var raw <- synth_raw(name)
     var out <- load_to_mono44k(raw, SYNTH_SR, 1)
     delete raw
     return <- out
@@ -349,6 +341,7 @@ def do_synth(name : string; iters : int) {
         to_log(LOG_ERROR, "{name}: no structure\n")
         return
     }
+    delete g_ref   // do_synth runs once per drum; the previous target buffer is still live
     g_ref <- synth_target(name)
     if (empty(g_ref)) {
         to_log(LOG_ERROR, "{name}: synth target render failed\n")

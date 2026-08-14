@@ -6,7 +6,7 @@ require dasllama/dasllama_tune
 // Part 2 (final assembly): one source of truth, reconstituted into the real symbol.
 def template sample_dot_template(a, b : array<float>) : float {
     var s = 0f
-    for [tune = 1] (i in range(length(a))) {
+    for [tune = 1] (i in range(length(a))) {   // nolint:PERF029 - the tuned kernel: perm hints stamp this index loop, zipping would change what is measured
         s += a[i] * b[i]
     }
     return s
@@ -27,8 +27,8 @@ def sample_dot_u4(a, b : array<float>) : float {}
 
 def private reference(a, b : array<float>) : float {
     var s = 0f
-    for (i in range(length(a))) {
-        s += a[i] * b[i]
+    for (av, bv in a, b) {
+        s += av * bv
     }
     return s
 }

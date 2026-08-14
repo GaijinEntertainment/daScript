@@ -5,7 +5,6 @@ options no_unused_function_arguments = false
 
 require strudel/strudel_midi
 require strudel/strudel_midi_player
-require strudel/strudel_synth
 require dastest/testing_boost
 require math
 
@@ -28,12 +27,12 @@ def push_midi_header(var d : array<uint8>; fmt, nTracks, tpqn : uint) {
     B(d, 0u, 0u, 0u, 6u)
     B(d, 0u, fmt)
     B(d, 0u, nTracks)
-    B(d, uint(tpqn >> 8u), tpqn & 0xFFu)
+    B(d, tpqn >> 8u, tpqn & 0xFFu)
 }
 
 def push_track_header(var d : array<uint8>; size : uint) {
     B(d, 0x4Du, 0x54u, 0x72u, 0x6Bu)  // "MTrk"
-    B(d, uint(size >> 24u) & 0xFFu, uint(size >> 16u) & 0xFFu, uint(size >> 8u) & 0xFFu, size & 0xFFu)
+    B(d, (size >> 24u) & 0xFFu, (size >> 16u) & 0xFFu, (size >> 8u) & 0xFFu, size & 0xFFu)
 }
 
 // ─── Control Change Tests ───

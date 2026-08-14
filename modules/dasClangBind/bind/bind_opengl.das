@@ -48,6 +48,7 @@ def main {
         fprint(fdf, "require dasbind public\n\n")
         let output_const_name = "{get_das_root()}/modules/dasOpenGL/opengl/opengl_const.das"
         fopen(output_const_name, "wb") $(dcf) {
+            fprint(dcf, "options gen2\n")
             let pfn = "glcorearb.h"
             let pfp = "{get_das_root()}/modules/dasOpenGL/opengl/OpenGL/"
             var glbind = new OpenGLBind(pfn, pfp)

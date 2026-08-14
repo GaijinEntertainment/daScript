@@ -120,11 +120,9 @@ def test_patch_context_injection(t : T?) {
     }
     t |> run("a window between two hunks lands between them") <| @(tt : T?) {
         let two = "diff --git a/a.das b/a.das\n--- a/a.das\n+++ b/a.das\n@@ -2,2 +2,2 @@\n-old one\n+new one\n keep\n@@ -20 +20 @@\n-old two\n+new two\n"
-        var inscope lines : array<string>
-        for (index in range(1, 23)) {
-            lines |> push(index == 2 ? "new one"
-                : (index == 3 ? "keep" : (index == 20 ? "new two" : "line {index}")))
-        }
+        var inscope lines <- [for (index in range(1, 23));
+            index == 2 ? "new one"
+                : (index == 3 ? "keep" : (index == 20 ? "new two" : "line {index}"))]
         let big_source = join(lines, "\n")
         var inscope parsed <- git_parse_unified_patch(two)
         tt |> equal(parsed.error, "")

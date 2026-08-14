@@ -182,7 +182,7 @@ struct Line {
 // Line parser — parses statement structure, preserves expression text
 // ══════════════════════════════════════════════════════════════════════════
 
-def parse_line(input : string; blk : block<(val : Line; err : array<ParsingError>) : void>) {
+def parse_line(input : string; blk : block<(val : Line; err : array<ParsingError>) : void>) { // nolint:STYLE038 - flat PEG grammar declaration; the rules are the BASIC line syntax, one per production
     parse(input) {
         var basic_line : Line
 
@@ -335,7 +335,7 @@ def print_num(n : double) {
     }
 }
 
-def exec_stmt(var state : BasicState; stmt : Stmt; var pc : int&) : bool {
+def exec_stmt(var state : BasicState; stmt : Stmt; var pc : int&) : bool { // nolint:STYLE037,STYLE038 - exact-type `is` ladder over the Stmt variant, one arm per BASIC statement
     if (stmt is print_str) {
         print("{stmt as print_str}\n")
     } elif (stmt is print_expr) {

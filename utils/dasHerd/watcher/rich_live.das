@@ -622,7 +622,7 @@ def herder_changelist_select(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage|discard, paths (empty = derive from the current selection; discard ALWAYS derives, split by class). Discard is unrecoverable — this rail IS the explicit second confirmation. Outcome rides herder_worktree_operation_state.")]
-def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE037
+def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE037,STYLE038 — one arm per changelist action, each with its own guards and reply shape
     if (g_client == null || !g_client.connected) {
         return JV((ok = false, error = "watcher is not connected"))
     }
@@ -688,9 +688,9 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
                 changelist_selection_actions(repository, worktree,
                     stage_paths, unstage_paths)
                 if (args.action == "stage") {
-                    paths <- stage_paths
+                    paths <- stage_paths  // nolint:PERF030 - the id/path guards admit at most one filling iteration
                 } else {
-                    paths <- unstage_paths
+                    paths <- unstage_paths  // nolint:PERF030 - the id/path guards admit at most one filling iteration
                 }
             }
         }

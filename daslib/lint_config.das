@@ -109,11 +109,13 @@ def public seed_default_disabled(var disabled_codes : table<string>) : void {
 // Process-wide cache of the parsed .lint_config split into "off" and "on" directives. `[lint_macro]` apply() fires once per module in the require chain — without caching the repo's `.lint_config` is re-read+parsed N times per compilation. The file is repo policy and doesn't change mid-compilation, so we parse once and reuse.
 var private _cache_off : table<string>
 var private _cache_on  : table<string>
+var private _cache_path_excludes : array<string>
 var private _cache_loaded = false
 
 def private ensure_cache_loaded() : void {
     if (_cache_loaded) return
     _cache_loaded = true
+    load_path_excludes_from_path(resolved_config_path(), _cache_path_excludes)
     let body = fread(resolved_config_path())
     if (empty(body)) return
     var error : string
@@ -133,6 +135,54 @@ def private ensure_cache_loaded() : void {
             if (!key_exists(_cache_off, code)) _cache_off |> insert(code)
         }
     }
+}
+
+//! Parses the ``[paths] exclude`` glob array from `path` (TOML) into `excludes`.
+//! Public so tests can exercise the parser hermetically; non-string entries are ignored.
+def public load_path_excludes_from_path(path : string; var excludes : array<string>) : void {
+    let body = fread(path)
+    if (empty(body)) return
+    var error : string
+    var root : JsonValue? = read_toml(body, error)
+    if (root == null || !(root.value is _object)) return
+    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
+    if (!key_exists(root_obj, "paths")) return
+    var paths_obj : JsonValue? = root_obj["paths"]
+    if (paths_obj == null || !(paths_obj.value is _object)) return
+    var paths & = unsafe(paths_obj.value as _object)   // table [] requires mutable binding
+    if (!key_exists(paths, "exclude")) return
+    var excl_jv : JsonValue? = paths["exclude"]
+    if (excl_jv == null || !(excl_jv.value is _array)) return
+    for (pat_jv in excl_jv.value as _array) {
+        if (pat_jv != null && pat_jv.value is _string) {
+            let pat = pat_jv.value as _string
+            if (!empty(pat)) excludes |> push("{pat}")
+        }
+    }
+}
+
+//! True when `file` matches any glob in `excludes`. Patterns are repo-root-relative
+//! (``tests/**``); `file` may be absolute or relative, either separator.
+def public matches_path_excludes(file : string; excludes : array<string>) : bool {
+    return false if (empty(excludes))
+    let gen = to_generic_path(file)
+    var rel = gen
+    let root = to_generic_path(get_das_root())
+    if (!empty(root) && starts_with(gen, root + "/")) {
+        rel = slice(gen, length(root) + 1)
+    }
+    for (pat in excludes) {
+        if (match_glob(pat, rel) || match_glob(pat, gen)) return true
+    }
+    return false
+}
+
+//! True when `file` falls under a ``[paths] exclude`` glob in the repo ``.lint_config``.
+//! Excluded files still compile through lint — only report-time findings drop
+//! (the filter lives in ``utils/lint/main.das``; escape hatch ``--lint-excluded-paths``).
+def public is_lint_path_excluded(file : string) : bool {
+    ensure_cache_loaded()
+    return matches_path_excludes(file, _cache_path_excludes)
 }
 
 //! True when the repo ``.lint_config`` carries an explicit ``CODE = true`` directive. Rules with
@@ -219,6 +269,29 @@ def public is_user_authored_body(fn : Function?) : bool {
 //! the lint CLI over them, so the runner skips them (re-enabled via ``--lint-fixtures``).
 def public is_lint_fixture_name(base : string) : bool {
     return starts_with(base, "_") && find(base, "fixture") >= 0
+}
+
+// The `// lint-skip-file` directive is honored in the first lines only, so prose
+// QUOTING it deeper in a file (a doc comment, a commented-out example) cannot
+// silently unlint the file.
+let public LINT_SKIP_HEADER_LINES = 16
+
+//! Content-based skip probe shared by the CLI runner and the MCP lint tool: ``expect <code>``
+//! files declare intentional compile errors (dastest), and a header ``// lint-skip-file: <reason>``
+//! opts a policy-conflicted file out entirely. Returns the skip reason, or "" to lint the file.
+def public lint_file_skip_reason(file : string) : string {
+    let text = fread(file)
+    return "" if (empty(text))
+    for (line, ln in split(text, "\n"), count()) {
+        let trimmed = line |> strip
+        return "(intentional compile errors via `expect`)" if (trimmed |> starts_with("expect "))
+        if (ln < LINT_SKIP_HEADER_LINES && trimmed |> starts_with("// lint-skip-file")) {
+            let colon = find(trimmed, ":")
+            let reason = colon >= 0 ? strip(slice(trimmed, colon + 1)) : ""
+            return empty(reason) ? "(lint-skip-file directive)" : "(lint-skip-file: {reason})"
+        }
+    }
+    return ""
 }
 
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).

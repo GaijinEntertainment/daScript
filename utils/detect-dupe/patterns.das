@@ -60,8 +60,8 @@ def try_visitor(name : string; var hit : PatternHit) : bool {
             || method |> starts_with("visit")
             || method |> starts_with("before")
             || method |> starts_with("after")) {
-        hit.name := "visitor"
-        hit.note := "{method}"
+        hit.name = "visitor"
+        hit.note = "{method}"
         return true
     }
     return false
@@ -81,8 +81,8 @@ def try_dispatch(canonical : string; var hit : PatternHit) : bool {
     for (i in range(1, length(stmts))) {
         if (stmts[i] != stmts[0]) return false
     }
-    hit.name := "dispatch"
-    hit.note := "{length(stmts)}x repeated"
+    hit.name = "dispatch"
+    hit.note = "{length(stmts)}x repeated"
     return true
 }
 
@@ -109,8 +109,8 @@ def try_test_wrapper(name : string; canonical : string; var hit : PatternHit) : 
         }
     }
     if (addr_count == 0) return false
-    hit.name := "test_wrapper"
-    hit.note := "single t |> run(...) body"
+    hit.name = "test_wrapper"
+    hit.note = "single t |> run(...) body"
     return true
 }
 
@@ -147,8 +147,8 @@ def try_emit(canonical : string; var hit : PatternHit) : bool {
         return false
     }
     if (emit_count == 0) return false
-    hit.name := "emit"
-    hit.note := "{emit_count} trivial-call stmt(s)"
+    hit.name = "emit"
+    hit.note = "{emit_count} trivial-call stmt(s)"
     return true
 }
 

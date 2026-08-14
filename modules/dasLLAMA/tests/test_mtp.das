@@ -121,7 +121,7 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
         delete s1
         delete want
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]   // nolint:PERF030 — released on the line above
+        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
@@ -304,7 +304,7 @@ def test_mtp_invariance_glm(t : T?) {
             t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts)")
             // a 100%-accept run would leave the reject branch untouched and the arm would prove
             // nothing about it — so require that at least one draft was actually rejected
-            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected — reject branch covered")
+            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected - reject branch covered")
         }
         delete tr
     }

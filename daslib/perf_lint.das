@@ -890,6 +890,8 @@ class PerfLintVisitor : AstVisitor {
         // PERF024: reset per-function candidate set.
         perf024_candidates |> clear
         perf024_skip_iptr = 0ul
+        // PERF030: release credit is per-function - another function's delete may run later or never
+        perf030_released |> clear
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
@@ -913,6 +915,7 @@ class PerfLintVisitor : AstVisitor {
         perf023_splice_depth = 0
         perf024_candidates |> clear
         perf024_skip_iptr = 0ul
+        perf030_released |> clear
         current_function = null
         in_template = false
         return <- fn
@@ -2052,6 +2055,13 @@ class PerfLintVisitor : AstVisitor {
         if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
             perf023_splice_depth++
         }
+        // PERF030 release credit: the lowered delete family; deferred bodies run later so they never credit, inline block args count though they may not run - erring silent
+        if (in_deferred == 0 && length(expr.arguments) == 1
+                && (expr.name == "_::finalize" || expr.func.name == "finalize"
+                    || expr.func.name |> starts_with("builtin`finalize`")
+                    || expr.func.name |> starts_with("builtin`finalize_dim`"))) {
+            perf030_mark_released(expr.arguments[0])
+        }
         // Loop/while-aware rules below skip closure bodies (they run later, not in the loop)
         if (in_closure > 0) return
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
@@ -2065,9 +2075,6 @@ class PerfLintVisitor : AstVisitor {
         // PERF005: length(string) in while condition — start tracking
         if (in_while_cond && expr.func.name == "length" && expr.func._module.name == "strings") {
             in_length_while_call++
-        }
-        if (!empty(expr.arguments) && expr.func.name |> starts_with("builtin`finalize`")) {
-            perf030_mark_released(expr.arguments[0])
         }
     }
 
@@ -2204,13 +2211,20 @@ class PerfLintVisitor : AstVisitor {
             perf030_released |> erase(released)
             return
         }
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration (a `cond ? a : b` init covers conditional fills); or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
     def perf030_mark_released(sub : ExpressionPtr) : void {
         var e = sub
         if (e is ExprRef2Value) {
             e = (e as ExprRef2Value.subexpr)
+        }
+        // peel field chains to the root var: `delete a.xs` (hand-rolled or optimizer-inlined teardown) counts as managing a's heap - erring silent
+        while (e != null && e is ExprField) {
+            e = (e as ExprField).value
+            if (e is ExprRef2Value) {
+                e = (e as ExprRef2Value.subexpr)
+            }
         }
         if (e == null || !(e is ExprVar)) return
         var v = (e as ExprVar).variable
@@ -2220,7 +2234,10 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprDelete(var expr : ExprDelete?) : void {
-        perf030_mark_released(expr.subexpr)
+        // same contract as the lowered-finalize path: a deferred body runs later, so its delete must not credit the move site
+        if (in_deferred == 0) {
+            perf030_mark_released(expr.subexpr)
+        }
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {

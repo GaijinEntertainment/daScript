@@ -10,7 +10,6 @@ require stbimage/stbimage_ttf public
 require stbtruetype
 require daslib/safe_addr
 require daslib/math_boost
-require strings
 
 var @in @location v_position : float2
 var @in @location v_texcoord : float2
@@ -47,12 +46,12 @@ def public upload_font_texture(var font : Font) {
     //! Sets ``font.tex`` to the GL texture handle.
     //! Does nothing if the texture is already uploaded.
     if (font.tex != 0ul) return
-    assert(int(font.bitmap.width) > 0, "font bitmap is not valid")
+    assert(font.bitmap.width > 0, "font bitmap is not valid")
     var tex = 0u
     glGenTextures(1, safe_addr(tex))
     glBindTexture(GL_TEXTURE_2D, tex)
     unsafe {
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), int(font.bitmap.width), int(font.bitmap.height),
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), font.bitmap.width, font.bitmap.height,
             0, GL_RED, GL_UNSIGNED_BYTE, addr(font.bitmap.bytes[0]))
     }
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
@@ -82,8 +81,8 @@ def public create_quads(font : Font; text : string; at : float2 = float2(0.)) {
     var y = at.y
     let first = font.char_range.x
     let num_chars = font.char_range.y
-    let bw = int(font.bitmap.width)
-    let bh = int(font.bitmap.height)
+    let bw = font.bitmap.width
+    let bh = font.bitmap.height
     for (ch in text) {
         let idx = ch - first
         if (idx >= 0 && idx < num_chars) {

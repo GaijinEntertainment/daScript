@@ -4,20 +4,11 @@ options strict_smart_pointers = false
 options stack = 4_194_304
 
 require llvm/daslib/llvm_boost
-require llvm/daslib/llvm_dll_utils
-require llvm/daslib/llvm_exe
-require llvm/daslib/llvm_jit
-require llvm/daslib/llvm_jit_common
-require llvm/daslib/llvm_jit_intrin
-require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_jit_run
 
 require daslib/ast_boost
-require daslib/strings_boost
 require daslib/defer
 
-require daslib/fio
-require daslib/clargs
 require jit
 
 module llvm_macro shared private

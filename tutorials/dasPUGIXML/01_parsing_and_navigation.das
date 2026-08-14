@@ -299,7 +299,7 @@ def reading_books() {
 
             // Count authors
             var author_count = 0
-            book |> for_each_child("author") $(a) {
+            book |> for_each_child("author") $(_author) {
                 author_count++
             }
 

@@ -20,11 +20,9 @@ struct WithEnum {
 [test]
 def test_xml_serialize_enum(t : T?) {
     t |> run("serialize struct with enum field") <| @(t : T?) {
-        var s : WithEnum
-        s.name = "sky"
-        s.color = Color.blue
+        let s = WithEnum(name = "sky", color = Color.blue)
         let xml_str = to_XML(s, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(as_string(child(root, "color").text, ""), "blue")
@@ -36,7 +34,7 @@ def test_xml_serialize_enum(t : T?) {
 def test_from_xml_enum(t : T?) {
     t |> run("deserialize struct with enum field") <| @(t : T?) {
         let xml_str = "<item><name>sky</name><color>green</color></item>"
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let r = from_XML(doc.document_element, type<WithEnum>)
             t |> equal(r.name, "sky")
@@ -48,11 +46,9 @@ def test_from_xml_enum(t : T?) {
 [test]
 def test_roundtrip_enum(t : T?) {
     t |> run("roundtrip struct with enum") <| @(t : T?) {
-        var original : WithEnum
-        original.name = "grass"
-        original.color = Color.green
+        let original = WithEnum(name = "grass", color = Color.green)
         let xml_str = to_XML(original, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<WithEnum>)
             t |> equal(restored.name, "grass")
@@ -68,7 +64,7 @@ def test_roundtrip_enum_default(t : T?) {
         original.name = "fire"
         // color defaults to Color.red (first value = 0)
         let xml_str = to_XML(original, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<WithEnum>)
             t |> equal(restored.color, Color.red)

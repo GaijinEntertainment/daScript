@@ -6,7 +6,7 @@ require dastest/testing_boost public
 // float/int/uint 2/3/4 vectors.
 
 def test_vec2_ops(tt : T?; a : auto(vec2) -const -&) {
-    let x : auto(numT) = a[0]
+    let _x : auto(numT) = a[0]
     var mut_a_mul = a
     var mut_a_div = a
     let c = numT(2)
@@ -17,7 +17,7 @@ def test_vec2_ops(tt : T?; a : auto(vec2) -const -&) {
 }
 
 def test_vec3_ops(tt : T?; a : auto(vec3) -const -&) {
-    let x : auto(numT) = a[0]
+    let _x : auto(numT) = a[0]
     var mut_a_mul = a
     var mut_a_div = a
     let c = numT(2)
@@ -28,7 +28,7 @@ def test_vec3_ops(tt : T?; a : auto(vec3) -const -&) {
 }
 
 def test_vec4_ops(tt : T?; a : auto(vec4) -const -&) {
-    let x : auto(numT) = a[0]
+    let _x : auto(numT) = a[0]
     var mut_a_mul = a
     var mut_a_div = a
     let c = numT(2)

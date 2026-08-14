@@ -36,7 +36,7 @@ module style_lint shared private
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
 //!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro or an [init], or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro, or an [init]/[finalize]/[before_reload]/[after_reload]/[live_command] function, or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
 //!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign). Cloneable elements only (a copyable-but-not-cloneable element such as a lambda stays silent — ':=' would not compile)
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
@@ -2322,15 +2322,19 @@ class StyleLintVisitor : AstVisitor {
         return module_has_comment_reader(mod)
     }
 
-    def st029_module_has_init(mod : Module?) : bool {
-        // Modules with an [init] function run side effects on load even with no visible reference, so they are never "unused".
+    def st029_module_has_lifecycle_hook(mod : Module?) : bool {
+        // a module required only for its lifecycle hooks has no referenced symbol - never "unused"
         var found = false
         for_each_function(mod, "") $(fn) {
             if (found) return
             for (a in fn.annotations) {
-                if (a != null && a.annotation != null && a.annotation.name == "init") {
-                    found = true
-                    break
+                if (a != null && a.annotation != null) {
+                    let an = "{a.annotation.name}"
+                    if (an == "init" || an == "finalize" || an == "before_reload"
+                            || an == "after_reload" || an == "live_command") {
+                        found = true
+                        break
+                    }
                 }
             }
         }
@@ -2381,7 +2385,7 @@ class StyleLintVisitor : AstVisitor {
             if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
                 || key_exists(used_modules, mname)
                 || st029_module_provides_macro(mod)
-                || st029_module_has_init(mod)
+                || st029_module_has_lifecycle_hook(mod)
                 || st030_exports_unresolved_name(mod)) return
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
@@ -2796,7 +2800,9 @@ class StyleLintVisitor : AstVisitor {
             style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at)
         }
         // ===== STYLE036 — type contract that cannot act on a resolved cast type =====
-        if (!expr.genFlags.generated && expr.castType != null) {
+        if (!expr.genFlags.generated && expr.castType != null
+                // a generic instance's source target was auto/alias - the contract already acted at substitution
+                && (current_function == null || current_function.fromGeneric == null)) {
             let inert = style036_inert_contract(expr.castType)
             if (!empty(inert)) {
                 let tail = inert == "-const" ? "; drop it, along with any 'const' it was meant to cancel" : "; drop it"

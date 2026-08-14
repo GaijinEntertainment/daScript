@@ -38,7 +38,7 @@ struct MixedAnnotations {
 def test_xml_rename_serialize(t : T?) {
     t |> run("rename annotation changes element name in XML") <| @(t : T?) {
         let s = RenamedFields(_type = "widget", _class = 3, value = 1.5)
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "item")
             XML(root, s)
@@ -57,7 +57,7 @@ def test_xml_rename_serialize(t : T?) {
 def test_xml_rename_deserialize(t : T?) {
     t |> run("rename annotation reads from renamed element") <| @(t : T?) {
         let xml_str = "<item><type>button</type><class>5</class><value>2.0</value></item>"
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let result = from_XML(doc.document_element, type<RenamedFields>)
             t |> equal(result._type, "button")
@@ -72,7 +72,7 @@ def test_xml_rename_roundtrip(t : T?) {
     t |> run("rename annotation roundtrips correctly") <| @(t : T?) {
         let original = RenamedFields(_type = "dialog", _class = 7, value = 3.14)
         let xml_str = to_XML(original, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<RenamedFields>)
             t |> equal(restored._type, original._type)
@@ -86,7 +86,7 @@ def test_xml_rename_roundtrip(t : T?) {
 def test_xml_enum_as_int_serialize(t : T?) {
     t |> run("enum_as_int writes integer value") <| @(t : T?) {
         let s = EnumIntFields(normal = Priority.high, as_int = Priority.medium)
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "item")
             XML(root, s)
@@ -102,7 +102,7 @@ def test_xml_enum_as_int_serialize(t : T?) {
 def test_xml_enum_as_int_zero(t : T?) {
     t |> run("enum_as_int zero value") <| @(t : T?) {
         let s = EnumIntFields(normal = Priority.low, as_int = Priority.low)
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "item")
             XML(root, s)
@@ -116,7 +116,7 @@ def test_xml_enum_as_int_zero(t : T?) {
 def test_xml_mixed_annotations_serialize(t : T?) {
     t |> run("mixed annotations: rename + enum_as_int") <| @(t : T?) {
         let s = MixedAnnotations(name = "test", pri = Priority.high, score = 42)
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "item")
             XML(root, s)
@@ -138,7 +138,7 @@ def test_xml_mixed_annotations_roundtrip(t : T?) {
         let original = MixedAnnotations(name = "config", pri = Priority.medium, score = 99)
         let xml_str = to_XML(original, "item")
         // Verify the XML uses renamed elements
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> success(child(root, "display_name").ok)
@@ -157,7 +157,7 @@ def test_xml_annotation_defaults(t : T?) {
     t |> run("fields without annotations still work") <| @(t : T?) {
         let p = Point(x = 1.0, y = 2.0)
         let xml_str = to_XML(p, "point")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let restored = from_XML(doc.document_element, type<Point>)
             t |> equal(restored.x, 1.0)

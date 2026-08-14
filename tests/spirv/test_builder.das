@@ -13,7 +13,7 @@ require spirv/spirv_dis
 require spirv/spirv_grammar
 
 [test]
-def test_builder_dedup_and_validate(t : T?) {
+def test_builder_dedup_and_validate(t : T?) { // nolint:STYLE038 - linear hand-built SPIR-V module
     t |> run("builder: dedup + hand-built square validates") <| @(t : T?) {
         var m = make_module()
 
@@ -55,9 +55,7 @@ def test_builder_dedup_and_validate(t : T?) {
         let id_main = alloc_id(m)
         emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Shader))
         emit(m, SEC_MEMMODEL, SpvOp.MemoryModel, uint(SpvAddressingModel.Logical), uint(SpvMemoryModel.GLSL450))
-        var ep : array<uint>
-        ep |> push(uint(SpvExecutionModel.GLCompute))
-        ep |> push(id_main)
+        var ep <- [uint(SpvExecutionModel.GLCompute), id_main]
         var sw <- string_words("main")
         ep |> push_from(sw)
         delete sw

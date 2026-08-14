@@ -39,10 +39,10 @@ def cosine(a, b : array<float>) : float {
     var dot = 0.0
     var na = 0.0
     var nb = 0.0
-    for (i in range(length(a))) {
-        dot += a[i] * b[i]
-        na += a[i] * a[i]
-        nb += b[i] * b[i]
+    for (x, y in a, b) {
+        dot += x * y
+        na += x * x
+        nb += y * y
     }
     return dot / (sqrt(na) * sqrt(nb))
 }

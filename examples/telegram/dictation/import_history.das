@@ -221,7 +221,7 @@ def private read_complete_page(path : string; var html : string&; var error : st
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE037,STYLE038 - flat CLI-argument validation followed by one linear import pipeline
     var parsed_args <- parse_args(type<ImportHistoryArgs>)
     if (parsed_args |> is_err) {
         print("error: {parsed_args |> unwrap_err}\n\n")

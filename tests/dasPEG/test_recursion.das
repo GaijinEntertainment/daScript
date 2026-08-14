@@ -62,42 +62,42 @@ def parse_deep(input : string; blk : block<(val : int; err : array<ParsingError>
 
 [test]
 def test_one_level(t : T?) {
-    parse_nested_parens("()") $(val; err) {
+    parse_nested_parens("()") $(val; _err) {
         t |> equal(1, val)
     }
 }
 
 [test]
 def test_two_levels(t : T?) {
-    parse_nested_parens("(())") $(val; err) {
+    parse_nested_parens("(())") $(val; _err) {
         t |> equal(2, val)
     }
 }
 
 [test]
 def test_three_levels(t : T?) {
-    parse_nested_parens("((()))") $(val; err) {
+    parse_nested_parens("((()))") $(val; _err) {
         t |> equal(3, val)
     }
 }
 
 [test]
 def test_mutual_number(t : T?) {
-    parse_mutual("42") $(val; err) {
+    parse_mutual("42") $(val; _err) {
         t |> equal(42, val)
     }
 }
 
 [test]
 def test_mutual_parens(t : T?) {
-    parse_mutual("(42)") $(val; err) {
+    parse_mutual("(42)") $(val; _err) {
         t |> equal(42, val)
     }
 }
 
 [test]
 def test_mutual_nested(t : T?) {
-    parse_mutual("((42))") $(val; err) {
+    parse_mutual("((42))") $(val; _err) {
         t |> equal(42, val)
     }
 }
@@ -114,7 +114,7 @@ def test_deep_nesting(t : T?) {
             writer |> write(")")
         }
     }
-    parse_deep(input) $(val; err) {
+    parse_deep(input) $(val; _err) {
         t |> equal(42 + depth, val)
     }
 }

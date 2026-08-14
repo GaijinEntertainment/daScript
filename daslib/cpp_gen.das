@@ -941,7 +941,7 @@ def getDefinePrefix(xname : string) {
 
 var gen_fn_callback : lambda<(fn : ClangFunc) : void> //! Optional callback invoked for each generated function binding.
 
-def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
+def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {   // nolint:STYLE037,STYLE038 - flat emitter - one write per addExtern section, one arm per default-value shape
     //! Generates C++ binding code for a single function or method.
     var bind_enchantation = ""
     var cpp_enchantation = ""

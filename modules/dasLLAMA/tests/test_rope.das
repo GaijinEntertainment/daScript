@@ -100,8 +100,8 @@ def test_rope_gen_ff_ones(t : T?) {
         build_rope_tabs(c1, s1, 10000.0, 0.7, 1.0, ones, true, 5l, 3l, 16l)
         build_rope_tabs(c2, s2, 10000.0, 0.7, 1.0, none, true, 5l, 3l, 16l)
         var same = true
-        for (i in range(length(c1))) {
-            same &&= c1[i] == c2[i] && s1[i] == s2[i]
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
         }
         t |> success(same, "ff of ones must divide away exactly")
         delete ones
@@ -153,8 +153,8 @@ def test_rope_gen_rows_twin(t : T?) {
         build_rope_tabs_rows(c1, s1, 500000.0, 0.5, 0.8, ff, true, pos, 1l, 16l)
         build_rope_tabs(c2, s2, 500000.0, 0.5, 0.8, ff, true, 1234l, 1l, 16l)
         var same = true
-        for (i in range(length(c1))) {
-            same &&= c1[i] == c2[i] && s1[i] == s2[i]
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
         }
         t |> success(same, "the rows twin must match the table at the same position")
         delete ff
@@ -177,8 +177,8 @@ def test_rope_gen_mscale(t : T?) {
         build_rope_tabs(c1, s1, 10000.0, 1.3, 1.0, ff, true, 9l, 2l, 8l)
         build_rope_tabs(c2, s2, 10000.0, 1.3, 2.0, ff, true, 9l, 2l, 8l)
         var same = true
-        for (i in range(length(c1))) {
-            same &&= c2[i] == 2.0 * c1[i] && s2[i] == 2.0 * s1[i]
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= cb == 2.0 * ca && sb == 2.0 * sa
         }
         t |> success(same, "x2 by mscale must be exact")
         delete ff

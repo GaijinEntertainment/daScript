@@ -57,11 +57,10 @@ def fixture_array() : array<User> {
     ]
 }
 
-def sort_by_city(var rows : array<auto(R)>) : array<R> {
+def sort_by_city(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         return a.City < b.City
     }
-    return <- rows
 }
 
 [test]
@@ -84,9 +83,9 @@ def parity_group_select_where(t : T?) {
                        |> _select((City = _._0, N = _._1 |> length))
                        |> _where(_.N > 1))
 
-        m1 <- sort_by_city(m1)
-        m2 <- sort_by_city(m2)
-        m3 <- sort_by_city(m3)
+        sort_by_city(m1)
+        sort_by_city(m2)
+        sort_by_city(m3)
 
         t |> equal(length(m1), length(m2), "select|where: M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "select|where: M2 length ≡ M3")
@@ -123,9 +122,9 @@ def parity_group_select_avg_where(t : T?) {
                                    AvgSalary = _._1 |> select($(u : User) => u.Salary) |> average))
                        |> _where(_.AvgSalary > 95.0lf))
 
-        m1 <- sort_by_city(m1)
-        m2 <- sort_by_city(m2)
-        m3 <- sort_by_city(m3)
+        sort_by_city(m1)
+        sort_by_city(m2)
+        sort_by_city(m3)
 
         t |> equal(length(m1), length(m2), "select|where(avg): M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "select|where(avg): M2 length ≡ M3")
@@ -161,9 +160,9 @@ def parity_group_having_select_where(t : T?) {
                        |> _select((City = _._0, N = _._1 |> length))
                        |> _where(_.N > 2))
 
-        m1 <- sort_by_city(m1)
-        m2 <- sort_by_city(m2)
-        m3 <- sort_by_city(m3)
+        sort_by_city(m1)
+        sort_by_city(m2)
+        sort_by_city(m3)
 
         t |> equal(length(m1), length(m2), "having|select|where: M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "having|select|where: M2 length ≡ M3")

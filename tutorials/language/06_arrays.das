@@ -13,7 +13,7 @@
 options gen2
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === Fixed-size arrays ===
     // Fixed arrays are value types — they live on the stack and can be copied.
@@ -114,8 +114,7 @@ def main {
 
     var prefix <- [1, 2, 3]
     var suffix <- [4, 5]
-    var combined : array<int>
-    combined |> push_from(prefix)
+    var combined := prefix      // := clones the source array (tutorial 17 covers copy/move/clone)
     combined |> push_from(suffix)
     print("combined: ")
     for (c in combined) {

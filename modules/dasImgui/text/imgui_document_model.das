@@ -314,8 +314,9 @@ def public text_range_after_edit(source : TextSourceRange const; edit : TextEdit
 }
 
 def public rich_document_projection_dispose(var projection : RichDocumentProjection) {
-    delete projection.controls
-    projection = RichDocumentProjection()
+    var fresh = RichDocumentProjection()
+    swap(projection, fresh)
+    delete fresh
 }
 
 def public rich_plain_document(source : string) : RichDocument {
@@ -349,8 +350,9 @@ def public rich_plain_document(source : string) : RichDocument {
 }
 
 def public rich_document_dispose(var document : RichDocument) {
-    delete document.nodes
-    document = RichDocument()
+    var fresh = RichDocument()
+    swap(document, fresh)
+    delete fresh
 }
 
 def public rich_document_control(projection : RichDocumentProjection const;

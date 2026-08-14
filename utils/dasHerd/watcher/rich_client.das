@@ -791,7 +791,7 @@ def init() {
 }
 
 [export]
-def update() { // nolint:STYLE037
+def update() { // nolint:STYLE037,STYLE038 — linear per-frame flow: pump the transport, then one bookkeeping pass per observable
     // The native frame gate returns false while the window is minimized.
     // Keep the transport alive outside that gate so heartbeats, controller
     // renewal, and queued PTY output continue until the window is restored.

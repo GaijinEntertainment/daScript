@@ -61,14 +61,13 @@ def fixture_orders() : array<Order> {
     ]
 }
 
-def sort_by_pair(var rows : array<auto(R)>) : array<R> {
+def sort_by_pair(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.UserName != b.UserName) {
             return a.UserName < b.UserName
         }
         return a.OrderTotal < b.OrderTotal
     }
-    return <- rows
 }
 
 [test]
@@ -91,9 +90,9 @@ def parity_inner_join_basic(t : T?) {
                                   $(u : User, o : Order) => u.Id == o.UserId,
                                   $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total)))
 
-        m1 <- sort_by_pair(m1)
-        m2 <- sort_by_pair(m2)
-        m3 <- sort_by_pair(m3)
+        sort_by_pair(m1)
+        sort_by_pair(m2)
+        sort_by_pair(m3)
 
         t |> equal(length(m1), 3, "inner join row count: 3 (Carol absent)")
         t |> equal(length(m1), length(m2), "join: M1 length ≡ M2")
@@ -107,14 +106,13 @@ def parity_inner_join_basic(t : T?) {
     }
 }
 
-def sort_by_pair_with_active(var rows : array<auto(R)>) : array<R> {
+def sort_by_pair_with_active(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.UserName != b.UserName) {
             return a.UserName < b.UserName
         }
         return a.OrderTotal < b.OrderTotal
     }
-    return <- rows
 }
 
 [test]
@@ -141,9 +139,9 @@ def parity_left_filter_join(t : T?) {
                                   $(u : User, o : Order) => u.Id == o.UserId,
                                   $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, IsActive = u.Active)))
 
-        m1 <- sort_by_pair_with_active(m1)
-        m2 <- sort_by_pair_with_active(m2)
-        m3 <- sort_by_pair_with_active(m3)
+        sort_by_pair_with_active(m1)
+        sort_by_pair_with_active(m2)
+        sort_by_pair_with_active(m3)
 
         t |> equal(length(m1), length(m2), "where|join: M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "where|join: M2 length ≡ M3")
@@ -158,24 +156,22 @@ def parity_left_filter_join(t : T?) {
     }
 }
 
-def sort_by_pair_with_orderid(var rows : array<auto(R)>) : array<R> {
+def sort_by_pair_with_orderid(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.UserName != b.UserName) {
             return a.UserName < b.UserName
         }
         return a.OrderId < b.OrderId
     }
-    return <- rows
 }
 
-def sort_by_buyer_orderid(var rows : array<auto(R)>) : array<R> {
+def sort_by_buyer_orderid(var rows : array<auto(R)>) {
     rows |> sort() $(a, b) {
         if (a.Buyer != b.Buyer) {
             return a.Buyer < b.Buyer
         }
         return a.OrderId < b.OrderId
     }
-    return <- rows
 }
 
 [test]
@@ -312,9 +308,9 @@ def parity_join_with_outer_where(t : T?) {
                                   $(u : User, o : Order) => (Buyer = u.Name, Spend = o.Total, OrderId = o.Id, Win = u.Active))
                          |> _where(_.Spend > 75))
 
-        m1 <- sort_by_buyer_orderid(m1)
-        m2 <- sort_by_buyer_orderid(m2)
-        m3 <- sort_by_buyer_orderid(m3)
+        sort_by_buyer_orderid(m1)
+        sort_by_buyer_orderid(m2)
+        sort_by_buyer_orderid(m3)
 
         // Alice: orders 100, 250 → both > 75. Bob: 50 → dropped. Expect 2 rows.
         t |> equal(length(m1), 2, "join + outer WHERE Spend>75: 2 rows (Alice ×2, Bob's 50 dropped)")
@@ -352,9 +348,9 @@ def parity_right_filter_join(t : T?) {
                                   $(u : User, o : Order) => u.Id == o.UserId,
                                   $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, OrderId = o.Id)))
 
-        m1 <- sort_by_pair_with_orderid(m1)
-        m2 <- sort_by_pair_with_orderid(m2)
-        m3 <- sort_by_pair_with_orderid(m3)
+        sort_by_pair_with_orderid(m1)
+        sort_by_pair_with_orderid(m2)
+        sort_by_pair_with_orderid(m3)
 
         t |> equal(length(m1), 2, "right-filter join row count: 2 (Bob's 50 dropped)")
         t |> equal(length(m1), length(m2), "right-filter: M1 length ≡ M2")

@@ -15,7 +15,7 @@ options gen2
 require daslib/jsonrpc
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     // ──────────────────────────────────────────────────────────────────────────
     // Section 1 — Building a request
     // ──────────────────────────────────────────────────────────────────────────

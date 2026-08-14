@@ -27,8 +27,9 @@ def init() {
     glfwMakeContextCurrent(window)
     // create ttf internals, load font with oversampling=2 for GPU rendering
     create_ttf_objects()
-    font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [oversampling = 2])
+    font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [oversampling = 2])   // nolint:PERF030 - module global, first write (init runs once)
     if (!!empty(font.bitmap.bytes)) {
+        delete font
         font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])
     }
     if (!!empty(font.bitmap.bytes)) {
@@ -36,7 +37,7 @@ def init() {
     }
     upload_font_texture(font)
     // create vertex arrays with quads, which render particular text
-    hw_text <- font |> create_quads("Hello, world")
+    hw_text <- font |> create_quads("Hello, world")   // nolint:PERF030 - module global, first and only write (init runs once)
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide
     let dim = quads_dim(hw_text)
     model = quads_view(hw_text, float2(3. / (dim.vmax.x - dim.vmin.x)))

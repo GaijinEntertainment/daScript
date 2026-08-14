@@ -266,10 +266,10 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 var js = read_json(string(resp.body), perr)
                 t |> success(js != null, "stats parses")
                 if (js != null) {
-                    let peak = int64(js?["peak_active"] ?? 0l)
-                    let steps = int64(js?["decode_steps"] ?? 0l)
-                    let gen = int64(js?["gen_tokens"] ?? 0l)
-                    let fin = int64(js?["finished"] ?? 0l)
+                    let peak = js?["peak_active"] ?? 0l
+                    let steps = js?["decode_steps"] ?? 0l
+                    let gen = js?["gen_tokens"] ?? 0l
+                    let fin = js?["finished"] ?? 0l
                     t |> success(peak >= 2l, "peak_active >= 2 — the streams were concurrent (got {peak})")
                     t |> success(steps > 0l, "decode steps counted ({steps})")
                     t |> success(gen > 0l, "generated tokens counted ({gen})")
@@ -285,7 +285,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
             // timeout fires deterministically while the server is still generating the 900-token
             // budget (a 135M model is nowhere near 900 tok/s); the serve loop's
             // is_writer_connected poll then evicts the stream and reaps its session.
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.POST
                 req.url := "{base_url}/v1/chat/completions"
                 req.body := "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Tell me a very long story.\"}],\"max_tokens\":900}"
@@ -300,7 +300,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                         var perr = ""
                         var js = read_json(string(resp.body), perr)
                         if (js != null) {
-                            evicted = int64(js?["evicted"] ?? 0l)
+                            evicted = js?["evicted"] ?? 0l
                             unsafe {
                                 delete js
                             }
@@ -358,8 +358,8 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 var js = read_json(string(resp.body), perr)
                 t |> success(js != null, "stats parses")
                 if (js != null) {
-                    let cached = int64(js?["cached_tokens"] ?? 0l)
-                    let pages = int64(js?["prefix_pages"] ?? 0l)
+                    let cached = js?["cached_tokens"] ?? 0l
+                    let pages = js?["prefix_pages"] ?? 0l
                     t |> success(cached >= 64l, "the warm run attached at least one full page ({cached} tokens)")
                     t |> success(pages > 0l, "the prefix cache retains pages ({pages})")
                     unsafe {
@@ -390,7 +390,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                             var perr = ""
                             var js = read_json(string(resp.body), perr)
                             if (js != null) {
-                                active = int64(js?["active"] ?? 0l)
+                                active = js?["active"] ?? 0l
                                 unsafe {
                                     delete js
                                 }

@@ -17,7 +17,6 @@
 options gen2
 
 require daslib/soa
-require math
 
 // ============================================================
 // Section 1: What is SOA?

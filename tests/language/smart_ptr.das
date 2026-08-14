@@ -47,7 +47,7 @@ def ref_count_test(t : T?) {
     t |> equal(smart_ptr_use_count(sptr), 1u)
     var ptr = get_ptr(sptr)
     var pptr : TestObjectSmart?
-    pptr = get_ptr(sptr)
+    pptr = get_ptr(sptr)                    // nolint:STYLE011 - assignment (not init) from get_ptr is the tested construct
     t |> equal(sptr, ptr)
     t |> equal(get_const_ptr(sptr), ptr)
     var inscope qptr : smart_ptr<TestObjectSmart>

@@ -37,7 +37,7 @@ def agent_read_counter(var result : int?) {
     }
 }
 
-def setup_invoke_agent(ctx : Context) {
+def setup_invoke_agent(_ctx : Context) {
     install_new_debug_agent(new DapiDebugAgent(), "invoke_test")
 }
 
@@ -106,7 +106,7 @@ def test_invoke_multiple_calls(t : T?) {
         unsafe {
             invoke_in_context(get_debug_agent_context("invoke_test"), "agent_reset")
         }
-        for (i in range(10)) {
+        for (_i in range(10)) {
             unsafe {
                 invoke_in_context(get_debug_agent_context("invoke_test"), "agent_inc")
             }

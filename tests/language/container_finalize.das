@@ -101,7 +101,7 @@ def test_banner_releases_owned_heap(t : T?) {
     t |> run("erase_if") @(t : T?) {
         var inscope arr <- make_bags(4)
         let before = heap_bytes_allocated()
-        arr |> erase_if() <| $(b : Bag) {
+        arr |> erase_if() $(b : Bag) {
             return b.xs[0] >= 20
         }
         let after = heap_bytes_allocated()
@@ -214,9 +214,7 @@ def test_pointer_carveout(t : T?) {
     t |> run("borrowed array pointers survive erase and clear") @(t : T?) {
         var p1 = new Holder(v = 41)
         var p2 = new Holder(v = 42)
-        var arr : array<Holder?>
-        arr |> push(p1)
-        arr |> push(p2)
+        var arr <- [p1, p2]
         arr |> erase(0)
         t |> equal(p1.v, 41)
         arr |> clear()
@@ -235,9 +233,7 @@ def test_pointer_carveout(t : T?) {
     t |> run("borrowed table value pointers survive erase and clear") @(t : T?) {
         var q1 = new Holder(v = 51)
         var q2 = new Holder(v = 52)
-        var tab : table<string; Holder?>
-        tab["a"] = q1
-        tab["b"] = q2
+        var tab <- {"a" => q1, "b" => q2}
         tab |> erase("a")
         t |> equal(q1.v, 51)
         tab |> clear()

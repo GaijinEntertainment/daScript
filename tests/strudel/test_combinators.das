@@ -139,9 +139,7 @@ def test_weighted_fastcat(t : T?) {
     var p1 <- atom("sd")
     pats |> emplace <| p0
     pats |> emplace <| p1
-    var weights : array<float>
-    weights |> push(3.0)
-    weights |> push(1.0)
+    var weights <- [3.0, 1.0]
     let pat <- weighted_fastcat(pats, weights)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 2)

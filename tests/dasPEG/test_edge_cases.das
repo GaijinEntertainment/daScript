@@ -63,12 +63,12 @@ def parse_ts_test(input : string; blk : block<(val : bool; err : array<ParsingEr
 [test]
 def test_empty_input(t : T?) {
     t |> run("empty input matches EOF") @(t : T?) {
-        parse_eof_only("") $(val; err) {
+        parse_eof_only("") $(val; _err) {
             t |> equal(true, val)
         }
     }
     t |> run("empty input fails word parser") @(t : T?) {
-        parse_word("") $(val; err) {
+        parse_word("") $(val; _err) {
             t |> equal("", val)
         }
     }
@@ -76,7 +76,7 @@ def test_empty_input(t : T?) {
 
 [test]
 def test_single_character(t : T?) {
-    parse_word("a") $(val; err) {
+    parse_word("a") $(val; _err) {
         t |> equal("a", val)
     }
 }
@@ -88,14 +88,14 @@ def test_long_input(t : T?) {
             writer |> write("a")
         }
     }
-    parse_word(long_word) $(val; err) {
+    parse_word(long_word) $(val; _err) {
         t |> equal(long_word, val)
     }
 }
 
 [test]
 def test_whitespace_only(t : T?) {
-    parse_word("   ") $(val; err) {
+    parse_word("   ") $(val; _err) {
         t |> equal("", val, "whitespace-only should fail word parser")
     }
 }
@@ -103,12 +103,12 @@ def test_whitespace_only(t : T?) {
 [test]
 def test_ws_newline(t : T?) {
     t |> run("WS accepts newlines") @(t : T?) {
-        parse_ws_test("a\nb") $(val; err) {
+        parse_ws_test("a\nb") $(val; _err) {
             t |> equal(true, val)
         }
     }
     t |> run("WS accepts mixed whitespace") @(t : T?) {
-        parse_ws_test("a \t\n b") $(val; err) {
+        parse_ws_test("a \t\n b") $(val; _err) {
             t |> equal(true, val)
         }
     }
@@ -117,17 +117,17 @@ def test_ws_newline(t : T?) {
 [test]
 def test_ts_no_newline(t : T?) {
     t |> run("TS accepts space") @(t : T?) {
-        parse_ts_test("a b") $(val; err) {
+        parse_ts_test("a b") $(val; _err) {
             t |> equal(true, val)
         }
     }
     t |> run("TS accepts tab") @(t : T?) {
-        parse_ts_test("a\tb") $(val; err) {
+        parse_ts_test("a\tb") $(val; _err) {
             t |> equal(true, val)
         }
     }
     t |> run("TS rejects newline") @(t : T?) {
-        parse_ts_test("a\nb") $(val; err) {
+        parse_ts_test("a\nb") $(val; _err) {
             t |> equal(false, val, "TS should not accept newlines")
         }
     }
@@ -135,14 +135,14 @@ def test_ts_no_newline(t : T?) {
 
 [test]
 def test_large_number(t : T?) {
-    parse_number("999999") $(val; err) {
+    parse_number("999999") $(val; _err) {
         t |> equal(999999, val)
     }
 }
 
 [test]
 def test_zero(t : T?) {
-    parse_number("0") $(val; err) {
+    parse_number("0") $(val; _err) {
         t |> equal(0, val)
     }
 }

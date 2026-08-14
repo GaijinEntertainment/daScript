@@ -59,8 +59,8 @@ def multiset_equal(var a, b : array<string>) : bool {
     if (length(a) != length(b)) { return false }
     sort(a)
     sort(b)
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) { return false }
+    for (sa, sb in a, b) {
+        if (sa != sb) { return false }
     }
     return true
 }

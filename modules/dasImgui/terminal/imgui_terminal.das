@@ -521,7 +521,7 @@ def private refresh_terminal_cache(terminal : Terminal const; scroll_offset : in
     return true
 }
 
-def public imgui_terminal(id : string; var terminal : Terminal; // nolint:STYLE037
+def public imgui_terminal(id : string; var terminal : Terminal; // nolint:STYLE037,STYLE038 - linear ImGui draw pass, phases share ~15 locals
                           var state : ImGuiTerminalState;
                           var cache : ImGuiTerminalCache;
                           style : ImGuiTerminalStyle = ImGuiTerminalStyle()) : ImGuiTerminalResult {

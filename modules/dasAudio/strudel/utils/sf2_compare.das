@@ -35,11 +35,8 @@ let RMS_THRESHOLD = 0.25        // 25% RMS error (allows quick-release timing di
 let PEAK_THRESHOLD = 1.0        // peak error not a useful threshold (phase-dependent)
 let ENV_CORR_THRESHOLD = 0.95   // 95% envelope correlation
 
-[export]
-def main() {
+def private parse_args(var sf2_path : string&; var ref_dir : string&) : bool {
     let args <- get_command_line_arguments()
-    var sf2_path = ""
-    var ref_dir = ""
     for (arg in args) {
         if (ends_with(arg, ".sf2") || ends_with(arg, ".SF2")) {
             sf2_path = arg
@@ -47,18 +44,11 @@ def main() {
             ref_dir = arg
         }
     }
-    if (empty(sf2_path) || empty(ref_dir)) {
-        print("Usage: daslang.exe sf2_compare.das -- path/to/soundfont.sf2 path/to/ref_dir\n")
-        return
-    }
+    return !empty(sf2_path) && !empty(ref_dir)
+}
 
-    var sf2 = sf2_load(sf2_path)
-    if (sf2 == null) {
-        print("Failed to load SF2: {sf2_path}\n")
-        return
-    }
-
-    var cases <- [
+def private sf2_test_cases() : array<TestCase> {
+    return <- [
         // Piano
         TestCase(preset = 0, bank = 0, name = "piano", key = 36, velocity = 127, duration = 2.0),
         TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 127, duration = 2.0),
@@ -79,7 +69,55 @@ def main() {
         TestCase(preset = 128, bank = 128, name = "drums", key = 38, velocity = 127, duration = 1.0),
         TestCase(preset = 128, bank = 128, name = "drums", key = 42, velocity = 127, duration = 1.0)
     ]
+}
 
+// Renders one case, prints its row, and reports the metrics. A skipped case comes
+// back with `rms_error` negative — the same marker `print_row` uses.
+def private compare_case(sf2 : SF2File; tc : TestCase; ref_dir : string) : CompareResult {
+    let skipped = CompareResult(name = tc.name, preset = tc.preset, key = tc.key,
+        velocity = tc.velocity, rms_error = -1.0, peak_error = -1.0, env_corr = -1.0, passed = false)
+    let ref_path = "{ref_dir}/ref_{tc.name}_p{tc.preset}_k{tc.key}_v{tc.velocity}.wav"
+    var ref_data : array<float>
+    var ref_rate = 0
+    var ref_channels = 0
+    if (!read_wav(ref_path, ref_data, ref_rate, ref_channels)) {
+        print_row(tc.name, tc.preset, tc.key, tc.velocity, -1.0, -1.0, -1.0, "SKIP(ref)")
+        return skipped
+    }
+
+    var das_data : array<float>
+    render_note(sf2, tc.bank, tc.preset, tc.key, tc.velocity, tc.duration, ref_rate, das_data)
+    if (empty(das_data)) {
+        print_row(tc.name, tc.preset, tc.key, tc.velocity, -1.0, -1.0, -1.0, "SKIP(voice)")
+        return skipped
+    }
+
+    let n = min(length(ref_data), length(das_data))
+    let rms_err = compute_rms_error(ref_data, das_data, n)
+    let peak_err = compute_peak_error(ref_data, das_data, n)
+    let env_corr = compute_envelope_correlation(ref_data, das_data, n, ref_rate)
+    let passed = rms_err < RMS_THRESHOLD && peak_err < PEAK_THRESHOLD && env_corr > ENV_CORR_THRESHOLD
+    print_row(tc.name, tc.preset, tc.key, tc.velocity, rms_err, peak_err, env_corr, passed ? "PASS" : "FAIL")
+    return CompareResult(name = tc.name, preset = tc.preset, key = tc.key, velocity = tc.velocity,
+        rms_error = rms_err, peak_error = peak_err, env_corr = env_corr, passed = passed)
+}
+
+[export]
+def main() {
+    var sf2_path = ""
+    var ref_dir = ""
+    if (!parse_args(sf2_path, ref_dir)) {
+        print("Usage: daslang.exe sf2_compare.das -- path/to/soundfont.sf2 path/to/ref_dir\n")
+        return
+    }
+
+    var sf2 = sf2_load(sf2_path)
+    if (sf2 == null) {
+        print("Failed to load SF2: {sf2_path}\n")
+        return
+    }
+
+    var cases <- sf2_test_cases()
     var results : array<CompareResult>
     var total_pass = 0
     var total_fail = 0
@@ -88,54 +126,14 @@ def main() {
     print("------------------------------------------------------------------------\n")
 
     for (tc in cases) {
-        let ref_name = "ref_{tc.name}_p{tc.preset}_k{tc.key}_v{tc.velocity}.wav"
-        let ref_path = "{ref_dir}/{ref_name}"
-
-        // load reference WAV
-        var ref_data : array<float>
-        var ref_rate = 0
-        var ref_channels = 0
-        if (!read_wav(ref_path, ref_data, ref_rate, ref_channels)) {
-            print_row(tc.name, tc.preset, tc.key, tc.velocity, -1.0, -1.0, -1.0, "SKIP(ref)")
-            continue
-        }
-
-        // render with our SF2 renderer
-        var das_data : array<float>
-        render_note(*sf2, tc.bank, tc.preset, tc.key, tc.velocity, tc.duration, ref_rate, das_data)
-        if (empty(das_data)) {
-            print_row(tc.name, tc.preset, tc.key, tc.velocity, -1.0, -1.0, -1.0, "SKIP(voice)")
-            continue
-        }
-
-        // ensure same length
-        let n = min(length(ref_data), length(das_data))
-
-        // compute metrics
-        let rms_err = compute_rms_error(ref_data, das_data, n)
-        let peak_err = compute_peak_error(ref_data, das_data, n)
-        let env_corr = compute_envelope_correlation(ref_data, das_data, n, ref_rate)
-
-        let passed = rms_err < RMS_THRESHOLD && peak_err < PEAK_THRESHOLD && env_corr > ENV_CORR_THRESHOLD
-        let tag = passed ? "PASS" : "FAIL"
-        if (passed) {
+        let r = compare_case(*sf2, tc, ref_dir)
+        continue if (r.rms_error < 0.0)
+        if (r.passed) {
             total_pass ++
         } else {
             total_fail ++
         }
-
-        print_row(tc.name, tc.preset, tc.key, tc.velocity, rms_err, peak_err, env_corr, tag)
-
-        results |> push(CompareResult(
-            name = tc.name,
-            preset = tc.preset,
-            key = tc.key,
-            velocity = tc.velocity,
-            rms_error = rms_err,
-            peak_error = peak_err,
-            env_corr = env_corr,
-            passed = passed
-        ))
+        results |> push(r)
     }
 
     print("------------------------------------------------------------------------\n")
@@ -181,9 +179,9 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
         if (sf2_create_c_voice(sf2, z.x, z.y, pzone, preset.global_zone, key, velocity, 0, cc_defaults, cv, atten_state)) {
             let excl = sf2_get_exclusive_class(sf2, z.x, z.y, pzone, preset.global_zone)
             if (excl > 0) {
-                for (i in range(length(voices))) {
-                    if (excl_classes[i] == excl && voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(voices[i])); }
+                for (v, ec in voices, excl_classes) {
+                    if (ec == excl && v.finished == 0) {
+                        unsafe { ma_sf2_voice_end_quick(addr(v)); }
                     }
                 }
             }

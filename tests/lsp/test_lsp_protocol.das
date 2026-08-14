@@ -239,7 +239,7 @@ def private uri_for_compare(uri : string) : string {
 // ===== the test =====
 
 [test]
-def test_lsp_protocol(t : T?) {
+def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
     let python = find_python()
     if (empty(python)) {
         to_log(LOG_WARNING, "lsp: no python3/python on PATH — skipping LSP protocol test\n")

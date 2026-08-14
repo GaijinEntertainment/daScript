@@ -216,7 +216,7 @@ def test_websockets(t : T?) {  // nolint:STYLE038 - one connect/exchange/assert 
             var client = new LegacyTextWsClient()
             client->init("{ws_url}/ws")
             var elapsed = 0
-            while (length(client.received) < 1 && elapsed < 3000) {
+            while (empty(client.received) && elapsed < 3000) {
                 client->process_event_que()
                 sleep(1u)
                 elapsed++
@@ -330,11 +330,11 @@ def test_websockets(t : T?) {  // nolint:STYLE038 - one connect/exchange/assert 
             wait_messages(client, 1)
 
             // Then make HTTP requests
-            GET("{http_url}/ping") <| $(resp) {
+            GET("{http_url}/ping") $(resp) {
                 t |> equal(resp.body, "pong")
             }
 
-            GET("{http_url}/ws-clients") <| $(resp) {
+            GET("{http_url}/ws-clients") $(resp) {
                 // At least 1 WS client connected
                 let count = to_int(string(resp.body))
                 t |> success(count >= 1, "at least 1 WS client reported via HTTP")

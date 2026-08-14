@@ -169,11 +169,11 @@ def test_repack_q8q8_identity(t : T?) {
             repack_q8q8_grp(addr(w[0]), addr(s[0]), n, d, 1l)
         }
         var same = true
-        for (i in range(length(w))) {
-            same &&= w[i] == w0[i]
+        for (a, b in w, w0) {
+            same &&= a == b
         }
-        for (i in range(length(s))) {
-            same &&= s[i] == s0[i]
+        for (a, b in s, s0) {
+            same &&= a == b
         }
         t |> success(same, "mr=1 must leave both planes byte-identical")
         delete w0
@@ -284,11 +284,11 @@ def test_repack_mx4(t : T?) {
             repack_mx4_grp(addr(np[0]), addr(ep[0]), n, d, 1l)
         }
         var same = true
-        for (i in range(length(np))) {
-            same &&= np[i] == n0[i]
+        for (a, b in np, n0) {
+            same &&= a == b
         }
-        for (i in range(length(ep))) {
-            same &&= ep[i] == e0[i]
+        for (a, b in ep, e0) {
+            same &&= a == b
         }
         t |> success(same, "mr=1 must leave both planes byte-identical")
         delete n0
@@ -352,11 +352,11 @@ def test_repack_q51(t : T?) {
             repack_q51_grp(addr(q[0]), addr(s[0]), n, d, 1l)
         }
         var same = true
-        for (i in range(length(q))) {
-            same &&= q[i] == q0[i]
+        for (a, b in q, q0) {
+            same &&= a == b
         }
-        for (i in range(length(s))) {
-            same &&= s[i] == s0[i]
+        for (a, b in s, s0) {
+            same &&= a == b
         }
         t |> success(same, "grp1 must be the disk order byte-for-byte")
         delete q0

@@ -115,7 +115,7 @@ def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool {
 }
 
 [test]
-def test_subgroup_ops(t : T?) {
+def test_subgroup_ops(t : T?) { // nolint:STYLE038 - flat list of opcode/capability assertions
     t |> run("subgroup ops lower to OpGroupNonUniform* with the right opcode, group operation and caps") <| @(t : T?) {
         var words <- clone_to_move(sg_all_ops_spv)
 

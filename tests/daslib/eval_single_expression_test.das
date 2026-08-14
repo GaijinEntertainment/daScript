@@ -4,7 +4,6 @@ options no_aot
 require dastest/testing_boost public
 require daslib/ast_boost
 require daslib/rtti
-require strings
 require math
 
 def fixture_path() : string {
@@ -81,11 +80,8 @@ def test_eval_literal_with_context(t : T?) {
     }
 }
 
-// Regression: `PI` is a `addConstant`-style global with index=-2 (folded away at
-// compile time, no runtime slot). Struct-field-default ASTs preserve the unfolded
-// ExprVar(PI) reference. Before the SimulateVisitor::visit(ExprVar) fallback,
-// re-simulating this generated a SimNode_GetSharedMnh whose mangled-name lookup
-// missed -> undefined deref -> access violation.
+// Regression: `PI` folds away (index=-2, no runtime slot) yet struct-field-default ASTs
+// keep the unfolded ExprVar(PI); re-simulating it used to deref a missing shared-global slot.
 [test]
 def test_eval_folded_away_constexpr_var_no_context(t : T?) {
     t |> run("ExprVar(folded constexpr global) no longer crashes (2-arg overload)") <| @(t2 : T?) {

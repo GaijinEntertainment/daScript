@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-require strings
 
 require rule_private_docs
 require rule_collapse_blank_lines

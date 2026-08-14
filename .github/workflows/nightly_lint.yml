@@ -1,0 +1,98 @@
+name: nightly whole-tree lint
+
+# Whole-tree nightly: catches what a changed-set lane cannot — new rules on
+# unchanged files, generic bodies only a consumer instantiates, generated files,
+# default flips. The tree is at zero findings by policy, so ANY finding is red.
+#
+# Two passes:
+#   1. fast parallel rule pass with LINT019 (stale-nolint) disabled — worker
+#      processes fragment the nolint-consumption ledger, which makes staleness
+#      unreliable in parallel mode;
+#   2. single-process (-j 1) full pass — the only scope where "this directive
+#      consumed nothing" is a true statement, because every consumer's
+#      instantiations feed one ledger.
+#
+# The summary's "skipped" count is coverage: a silent shrink is a regression
+# (dasLLVM, dasSMT/z3, macOS-only files surface there, not as reds).
+
+on:
+  schedule:
+    # 03:30 UTC — staggered after build.yml 02:00, daspkg-index 02:30, imgui 03:00.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SCCACHE_GHA_ENABLED: "false"
+    steps:
+      - name: "SCM Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install system dependencies"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglfw3-dev \
+            libfreetype6-dev \
+            mesa-common-dev \
+            xorg-dev
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: "Build daslang + shared modules"
+        # Broadest module set this runner can build — every module missing here
+        # moves its .das files from "linted" to the skipped count, so never
+        # shrink this list without saying why here.
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=OFF \
+            -DDAS_PUGIXML_DISABLED=OFF \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target \
+            daslang \
+            dasModuleLiveHost dasModuleGlfw dasModuleHV dasModuleClipboard \
+            dasModulePUGIXML dasModuleStbImage dasModuleSQLITE \
+            dasModuleAudio dasModuleMinfft dasModuleTerminal \
+            dasModuleTreeSitter dasModuleUnitTest \
+            dasModuleImgui imguiApp imguiAppHeadless
+          sccache --show-stats
+
+      - name: "Fast rule pass (parallel, LINT019 off)"
+        run: |
+          set -eux
+          ./bin/daslang utils/lint/main.das -- \
+            daslib utils modules tutorials examples tests \
+            -q --silent -j 0 --disable LINT019
+
+      - name: "Stale-nolint pass (single process)"
+        # -j 1 is load-bearing: the nolint-consumption ledger is per-process.
+        run: |
+          set -eux
+          ./bin/daslang utils/lint/main.das -- \
+            daslib utils modules tutorials examples tests \
+            -q --silent -j 1

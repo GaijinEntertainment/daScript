@@ -24,7 +24,7 @@ def section1() {
 
 def section2() {
     print("\n--- Section 2: for ((k,v) in tab) with the macro ---\n")
-    var tab <- { "one" => 1, "two" => 2, "three" => 3 } // nolint:LINT003
+    var tab <- { "one" => 1, "two" => 2, "three" => 3 }
     for ((k, v) in tab) {
         print("  {k} => {v}\n")
     }
@@ -34,7 +34,7 @@ def section2() {
 
 def section3() {
     print("\n--- Section 3: mixed sources ---\n")
-    var tab <- { "apple" => 10, "banana" => 20, "cherry" => 30 } // nolint:LINT003
+    var tab <- { "apple" => 10, "banana" => 20, "cherry" => 30 }
     for ((k, v), idx in tab, range(100)) {
         print("  [{idx}] {k} => {v}\n")
     }

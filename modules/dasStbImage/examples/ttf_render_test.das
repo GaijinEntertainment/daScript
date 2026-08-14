@@ -9,7 +9,6 @@ options no_unused_function_arguments = false
 
 require stbimage/stbimage_ttf
 require stbimage/stbimage_boost
-require daslib/fio
 
 def get_script_dir() : string {
     return "{get_das_root()}/modules/dasStbImage/examples"
@@ -30,7 +29,7 @@ def main() {
     let img_h = 200
     var img = make_image(img_w, img_h, 4)
     // fill with dark gray background (RGBA packed as uint)
-    let bg = uint(32u) | (uint(32u) << 8u) | (uint(40u) << 16u) | (uint(255u) << 24u)
+    let bg = 32u | (32u << 8u) | (40u << 16u) | (255u << 24u)
     img.fill_rect(0, 0, img_w, img_h, bg)
     // render several lines of text
     let texts = fixed_array("Hello, daslang! 0123456789",

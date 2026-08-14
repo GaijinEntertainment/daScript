@@ -26,7 +26,7 @@ require tutorial_helpers   // our own module (tutorial_helpers.das)
 require math               // sin, cos, sqrt, etc.
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
 
     // === File layout ===
 

@@ -6,7 +6,6 @@ module clipboard shared
 
 require clipboard_core public
 require daslib/utf8_utils
-require strings
 
 //! Platform-neutral system clipboard access.
 //!
@@ -93,7 +92,7 @@ def public clipboard_validate_content(content : ClipboardContent const) : Clipbo
         let row_bytes = int64(content.image.width) * 4l
         let data_bytes = int64(content.image.stride) * int64(content.image.height)
         if (int64(content.image.stride) < row_bytes
-                || data_bytes != int64(length(content.image.rgba8))) {
+                || data_bytes != long_length(content.image.rgba8)) {
             return ClipboardStatus.invalid_image
         }
     }
@@ -102,7 +101,7 @@ def public clipboard_validate_content(content : ClipboardContent const) : Clipbo
 
 def public clipboard_dispose_content(var content : ClipboardContent) {
     delete content.image.rgba8
-    content = ClipboardContent()
+    content = ClipboardContent()  // nolint:PERF030 - the only owned field is deleted above; strings are borrowed, so a whole-struct delete would double-free
 }
 
 def public clipboard_clone_content(content : ClipboardContent const) : ClipboardContent {
@@ -147,7 +146,7 @@ def public clipboard_memory_read(memory : ClipboardMemory const;
                                  var content : ClipboardContent) : ClipboardStatus {
     clipboard_dispose_content(content)
     if (!memory.has_content) return ClipboardStatus.no_content
-    content <- clipboard_clone_content(memory.content)
+    content <- clipboard_clone_content(memory.content)  // nolint:PERF030 - released by clipboard_dispose_content above; the rule tracks only direct delete
     return ClipboardStatus.ok
 }
 
@@ -159,7 +158,7 @@ def public clipboard_memory_clear(var memory : ClipboardMemory) {
 
 def public clipboard_memory_dispose(var memory : ClipboardMemory) {
     clipboard_dispose_content(memory.content)
-    memory = ClipboardMemory()
+    memory = ClipboardMemory()  // nolint:PERF030 - its only owned field is released by clipboard_dispose_content above
 }
 
 def public clipboard_capabilities() : ClipboardCapabilities {

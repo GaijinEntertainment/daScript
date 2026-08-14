@@ -84,6 +84,21 @@ def build_note_sequence(notes : float[]; note_dur, volume : float; rising : bool
 }
 
 def init_audio_samples() {
+    // release whatever a previous run left in the @live buffers before regenerating
+    delete snd_shoot
+    delete snd_enemy_explode
+    delete snd_player_hit
+    delete snd_refuel
+    delete snd_bridge_destroy
+    delete snd_section_clear
+    delete snd_low_fuel_beep
+    delete snd_game_over
+    delete snd_bonus_fuel
+    delete snd_bonus_multishot
+    delete snd_bonus_life
+    delete snd_bonus_fastshot
+    delete snd_engine_loop
+
     // shoot: short upward chirp
     snd_shoot <- gen_sine_sweep(1200.0, 2200.0, 0.055, 0.18)
 
@@ -205,27 +220,31 @@ def music_cmd(cmd : string) {
             strudel_fade_track(g_music_tracks[name], 0.0, fade_time)
         }
     } elif (action == "rich") {
-        // Rich tracks built directly here on the strudel thread so they can
-        // use the full Pattern API (chunk/sometimesby/jux/etc.).
-        if (name == "0") {
-            build_section0_rich()
-        } elif (name == "1") {
-            build_section1_rich()
-        } elif (name == "2") {
-            build_section2_rich()
-        } elif (name == "3") {
-            build_section3_rich()
-        } elif (name == "4") {
-            build_section4_rich()
-        } elif (name == "menu") {
-            build_menu_rich()
-        } elif (name == "tension") {
-            build_tension_rich()
-        } elif (name == "gameover") {
-            build_game_over_rich()
-        } elif (name == "win") {
-            build_win_rich()
-        }
+        build_rich_track(name)
+    }
+}
+
+// Rich tracks are built on the strudel thread so they can use the full
+// Pattern API (chunk/sometimesby/jux/etc.).
+def build_rich_track(name : string) {
+    if (name == "0") {
+        build_section0_rich()
+    } elif (name == "1") {
+        build_section1_rich()
+    } elif (name == "2") {
+        build_section2_rich()
+    } elif (name == "3") {
+        build_section3_rich()
+    } elif (name == "4") {
+        build_section4_rich()
+    } elif (name == "menu") {
+        build_menu_rich()
+    } elif (name == "tension") {
+        build_tension_rich()
+    } elif (name == "gameover") {
+        build_game_over_rich()
+    } elif (name == "win") {
+        build_win_rich()
     }
 }
 

@@ -188,13 +188,13 @@ def test_sql_json_descent_query_nested_path(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Account>)
         var p1 : InnerProfile
-        p1.Addr.City := "NY"
-        p1.Addr.Zip := "10001"
-        p1.Bio := "alice in NY"
+        p1.Addr.City = "NY"
+        p1.Addr.Zip = "10001"
+        p1.Bio = "alice in NY"
         var p2 : InnerProfile
-        p2.Addr.City := "SF"
-        p2.Addr.Zip := "94102"
-        p2.Bio := "bob in SF"
+        p2.Addr.City = "SF"
+        p2.Addr.Zip = "94102"
+        p2.Bio = "bob in SF"
         db |> insert(Account(Id = 1, Profile <- p1))
         db |> insert(Account(Id = 2, Profile <- p2))
 
@@ -293,13 +293,13 @@ def test_projection_descent_nested_struct_path_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Account>)
         var p1 : InnerProfile
-        p1.Addr.City := "NY"
-        p1.Addr.Zip := "10001"
-        p1.Bio := "alice in NY"
+        p1.Addr.City = "NY"
+        p1.Addr.Zip = "10001"
+        p1.Bio = "alice in NY"
         var p2 : InnerProfile
-        p2.Addr.City := "SF"
-        p2.Addr.Zip := "94102"
-        p2.Bio := "bob in SF"
+        p2.Addr.City = "SF"
+        p2.Addr.Zip = "94102"
+        p2.Bio = "bob in SF"
         db |> insert(Account(Id = 1, Profile <- p1))
         db |> insert(Account(Id = 2, Profile <- p2))
 

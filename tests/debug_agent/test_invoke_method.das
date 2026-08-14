@@ -27,7 +27,7 @@ class MethodAgent : DapiDebugAgent {
 
 var method_agent_ready : bool = false
 
-def setup_method_agent(ctx : Context) {
+def setup_method_agent(_ctx : Context) {
     install_new_debug_agent(new MethodAgent(), "method_test")
     method_agent_ready = true
 }

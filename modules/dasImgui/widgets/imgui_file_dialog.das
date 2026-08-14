@@ -211,10 +211,10 @@ def private scan_dir() {
     g_fd.entries |> clear()
     let ext = active_ext()
     let dirs_only = g_fd.mode == FileDialogMode.pick_dir
-    // Split the active filter's pattern list ONCE here, not per file in matches_ext; guard empty ext (split("", ";") yields [""] not [], which would break the "all files" case).
-    var pats : array<string>
-    if (!empty(ext)) {
-        pats <- split(ext, ";")
+    // Split the active filter's pattern list ONCE here, not per file in matches_ext; split("", ";") yields [""] not [], which would break the "all files" case, so an empty filter clears it.
+    var pats <- split(ext, ";")
+    if (empty(ext)) {
+        pats |> clear()
     }
     dir(g_fd.cur_dir) $(nm) {
         if (nm == "." || nm == "..") {

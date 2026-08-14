@@ -133,10 +133,7 @@ def test_transport_rejections(t : T?) {
             }
         }
         t |> run("oversized body is 413") @(tt : T?) {
-            var big = ""
-            for (_i in range(65)) {
-                big += "y"
-            }
+            let big = repeat("y", 65)
             POST("{base_url}/api/samples", big) $(resp) {
                 tt |> equal(int(resp.status_code), 413)
             }

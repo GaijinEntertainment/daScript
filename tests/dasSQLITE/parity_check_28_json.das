@@ -60,19 +60,18 @@ def users_eq(a : array<User>; b : array<User>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!user_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!user_eq(ea, eb)) {
             return false
         }
     }
     return true
 }
 
-def sort_by_id(var users : array<User>) : array<User> {
+def sort_by_id(var users : array<User>) {
     users |> sort() $(a, b) {
         return a.Id < b.Id
     }
-    return <- users
 }
 
 [test]
@@ -86,9 +85,9 @@ def parity_json_where_descend(t : T?) {
         var m2 <- (db |> select_from(type<User>) |> _where(_.Prefs.theme == "dark"))
         var m3 <- (arr |> _where(_.Prefs.theme == "dark"))
 
-        m1 <- sort_by_id(m1)
-        m2 <- sort_by_id(m2)
-        m3 <- sort_by_id(m3)
+        sort_by_id(m1)
+        sort_by_id(m2)
+        sort_by_id(m3)
 
         t |> equal(length(m1), 2, "json where: 2 dark users")
         t |> success(users_eq(m1, m2), "json where: M1 ≡ M2")
@@ -202,8 +201,8 @@ def accounts_eq(a : array<Account>; b : array<Account>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!account_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!account_eq(ea, eb)) {
             return false
         }
     }
@@ -225,11 +224,10 @@ def fixture_accounts_array() : array<Account> {
     ]
 }
 
-def sort_accounts_by_id(var rows : array<Account>) : array<Account> {
+def sort_accounts_by_id(var rows : array<Account>) {
     rows |> sort() $(a, b) {
         return a.Id < b.Id
     }
-    return <- rows
 }
 
 [test]
@@ -244,9 +242,9 @@ def parity_json_nested_path(t : T?) {
         var m2 <- (db |> select_from(type<Account>) |> _where(_.Profile.Addr.City == "SF"))
         var m3 <- (arr |> _where(_.Profile.Addr.City == "SF"))
 
-        m1 <- sort_accounts_by_id(m1)
-        m2 <- sort_accounts_by_id(m2)
-        m3 <- sort_accounts_by_id(m3)
+        sort_accounts_by_id(m1)
+        sort_accounts_by_id(m2)
+        sort_accounts_by_id(m3)
 
         t |> equal(length(m1), 2, "nested json path: 2 SF accounts")
         t |> success(accounts_eq(m1, m2), "nested json path: M1 ≡ M2")

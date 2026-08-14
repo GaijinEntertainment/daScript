@@ -4,12 +4,12 @@ require dastest/testing_boost public
 require daslib/defer
 
 def defer_check(var x : int&) {
-    defer() <| $() {
+    defer() {
         // 2nd
         assert(x == 2)
         x *= 2
     }
-    defer() <| $() {
+    defer() {
         // 1st
         assert(x == 3)
         x--
@@ -18,10 +18,10 @@ def defer_check(var x : int&) {
 }
 
 def defer_check_del(var a : array<int>) : int {
-    a <- [for (x in range(10)); x * x]
+    a <- [for (x in range(10)); x * x]   // nolint:PERF030 - the parameter arrives empty; this is the fixture the defer-delete test needs
     var inscope tmp <- a
-    a <- tmp
-    defer() <| $() {
+    a <- tmp                             // nolint:PERF030 - a was just emptied by the move into tmp; the round trip is the tested construct
+    defer() {
         delete a
     }
     return length(a)
@@ -32,7 +32,7 @@ def defer_check_short_pipe() {
     var x = 1
     {
         x++
-        defer <| $() {
+        defer <| $() {      // nolint:STYLE002 - the short pipe spelling is what this arm covers
             x--
         }
     }

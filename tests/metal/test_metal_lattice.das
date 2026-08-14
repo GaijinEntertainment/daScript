@@ -105,7 +105,7 @@ class PackedVec3 {
 }
 
 [test]
-def test_halfarith_gpu_vs_cpu(t : T?) {
+def test_halfarith_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("fp16 arithmetic [fastmath=false]: GPU == CPU-reference bit-exact") <| @(t : T?) {
         var oracle = new HalfArith()
         oracle.ha |> resize(N)
@@ -194,7 +194,7 @@ def test_halfarith_gpu_vs_cpu(t : T?) {
 }
 
 [test]
-def test_latconv_gpu_vs_cpu(t : T?) {
+def test_latconv_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("int-lattice converts + saturation + fp16 converts: GPU == CPU-reference") <| @(t : T?) {
         var oracle = new LatticeConvert()
         oracle.bi |> resize(N)

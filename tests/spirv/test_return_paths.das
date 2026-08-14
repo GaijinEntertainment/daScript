@@ -43,7 +43,7 @@ def rp {
 def test_return_paths(t : T?) {
     t |> run("if/else with both branches returning: merge closes with OpUnreachable; spirv-val clean") <| @(t : T?) {
         var words <- clone_to_move(rp_spv)
-        t |> success(length(words) > 0, "shader with both-return if/else bodies lowers")
+        t |> success(!empty(words), "shader with both-return if/else bodies lowers")
         t |> success(has_op(words, SpvOp.Unreachable), "unreachable merge block closed with OpUnreachable")
         let r = validate_spirv(words)
         if (r.ran) {

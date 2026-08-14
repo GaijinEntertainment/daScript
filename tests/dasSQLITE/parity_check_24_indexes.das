@@ -56,8 +56,8 @@ def users_eq(a : array<User>; b : array<User>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!user_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!user_eq(ea, eb)) {
             return false
         }
     }

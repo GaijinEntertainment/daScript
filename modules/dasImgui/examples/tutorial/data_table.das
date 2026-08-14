@@ -57,7 +57,14 @@ struct private Row {
     value : string
 }
 
-var private ROWS : array<Row>
+var private ROWS <- [
+    Row(name = "alpha", kind = "int", value = "42"),
+    Row(name = "beta", kind = "float", value = "3.14"),
+    Row(name = "gamma", kind = "string", value = "hello"),
+    Row(name = "delta", kind = "bool", value = "true"),
+    Row(name = "epsilon", kind = "int", value = "-7"),
+    Row(name = "zeta", kind = "float", value = "0.001")
+]
 
 // Stable column identifiers passed to table_setup_column(.., user_id=...).
 // The sort comparator dispatches on user_id (not column_index) so the
@@ -65,18 +72,6 @@ var private ROWS : array<Row>
 let private COL_NAME = 0x0001u
 let private COL_KIND = 0x0002u
 let private COL_VAL  = 0x0003u
-
-[init]
-def seed_rows() {
-    ROWS <- [
-        Row(name = "alpha", kind = "int", value = "42"),
-        Row(name = "beta", kind = "float", value = "3.14"),
-        Row(name = "gamma", kind = "string", value = "hello"),
-        Row(name = "delta", kind = "bool", value = "true"),
-        Row(name = "epsilon", kind = "int", value = "-7"),
-        Row(name = "zeta", kind = "float", value = "0.001")
-    ]
-}
 
 def private compare_rows(spec : TableSortSpec; a : Row; b : Row) : int {
     // Returns -1 / 0 / 1 for a-vs-b along the column the spec names.

@@ -137,19 +137,19 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
 def test_static_file_serving(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("serves HTML file") @(t : T?) {
-            GET("{base_url}/static/index.html") <| $(resp) {
+            GET("{base_url}/static/index.html") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "<h1>Test</h1>") >= 0, "body contains HTML")
             }
         }
         t |> run("serves JSON file with correct content-type") @(t : T?) {
-            GET("{base_url}/static/data.json") <| $(resp) {
+            GET("{base_url}/static/data.json") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "key") >= 0, "body contains JSON data")
             }
         }
         t |> run("returns 404 for missing static file") @(t : T?) {
-            GET("{base_url}/static/nonexistent.txt") <| $(resp) {
+            GET("{base_url}/static/nonexistent.txt") $(resp) {
                 t |> success(int(resp.status_code) != int(http_status.OK), "non-200 for missing file")
             }
         }
@@ -160,12 +160,12 @@ def test_static_file_serving(t : T?) {
 def test_cors(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("CORS headers present on response") @(t : T?) {
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.OPTIONS
                 req.url := "{base_url}/cached"
                 set_header(req, "Origin", "http://example.com")
                 set_header(req, "Access-Control-Request-Method", "GET")
-                request(req) <| $(resp) {
+                request(req) $(resp) {
                     let cors_origin = get_header(resp, "Access-Control-Allow-Origin")
                     t |> success(!empty(cors_origin), "Access-Control-Allow-Origin present")
                 }
@@ -178,11 +178,11 @@ def test_cors(t : T?) {
 def test_redirect(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("REDIRECT returns 301 with Location header") @(t : T?) {
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.GET
                 req.url := "{base_url}/old-path"
                 allow_redirect(req, false)
-                request(req) <| $(resp) {
+                request(req) $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.MOVED_PERMANENTLY))
                     let location = get_header(resp, "Location")
                     t |> success(!empty(location), "Location header present")
@@ -190,7 +190,7 @@ def test_redirect(t : T?) {
             }
         }
         t |> run("redirect followed arrives at destination") @(t : T?) {
-            GET("{base_url}/old-path") <| $(resp) {
+            GET("{base_url}/old-path") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> equal(resp.body, "arrived at new-path")
             }
@@ -202,7 +202,7 @@ def test_redirect(t : T?) {
 def test_custom_headers_caching(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("custom Cache-Control and ETag headers") @(t : T?) {
-            GET("{base_url}/cached") <| $(resp) {
+            GET("{base_url}/cached") $(resp) {
                 let cc = get_header(resp, "Cache-Control")
                 t |> equal(cc, "max-age=3600")
                 let etag = get_header(resp, "ETag")
@@ -218,7 +218,7 @@ def test_custom_headers_caching(t : T?) {
 def test_binary_data(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("DATA returns binary with octet-stream content-type") @(t : T?) {
-            GET("{base_url}/binary") <| $(resp) {
+            GET("{base_url}/binary") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> equal(resp.content_length, 12)
                 let ct = get_header(resp, "Content-Type")
@@ -232,7 +232,7 @@ def test_binary_data(t : T?) {
 def test_custom_content_type(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("HTML response with text/html content-type") @(t : T?) {
-            GET("{base_url}/html") <| $(resp) {
+            GET("{base_url}/html") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 let ct = get_header(resp, "Content-Type")
                 t |> success(find(ct, "text/html") >= 0, "Content-Type is text/html")
@@ -246,7 +246,7 @@ def test_custom_content_type(t : T?) {
 def test_status_404(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("404 error with JSON body") @(t : T?) {
-            GET("{base_url}/not-found") <| $(resp) {
+            GET("{base_url}/not-found") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NOT_FOUND))
                 let ct = get_header(resp, "Content-Type")
                 t |> success(find(ct, "application/json") >= 0, "Content-Type is JSON")
@@ -260,7 +260,7 @@ def test_status_404(t : T?) {
 def test_status_201_created(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("201 Created with Location header") @(t : T?) {
-            POST("{base_url}/items", "new item") <| $(resp) {
+            POST("{base_url}/items", "new item") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.CREATED))
                 let location = get_header(resp, "Location")
                 t |> equal(location, "/items/42")
@@ -273,7 +273,7 @@ def test_status_201_created(t : T?) {
 def test_status_204_no_content(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("204 No Content") @(t : T?) {
-            POST("{base_url}/ack", "done") <| $(resp) {
+            POST("{base_url}/ack", "done") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NO_CONTENT))
             }
         }
@@ -284,7 +284,7 @@ def test_status_204_no_content(t : T?) {
 def test_buffered_oversize_refused(t : T?) {
     with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("a buffered SERVE_FILE past the write-buf budget answers 500, never a truncated 200") @(t : T?) {
-            GET("{base_url}/bigfile") <| $(resp) {
+            GET("{base_url}/bigfile") $(resp) {
                 t |> equal(int(resp.status_code), 500)
                 t |> success(find(string(resp.body), "STREAM route") >= 0, "the refusal names the writer rail")
             }

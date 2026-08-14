@@ -26,7 +26,7 @@ def test_repack_slot_is_context_proof(t : T?) {
     t |> run("gen repack slot: pool-lane bytes == main-thread bytes") @(t : T?) {
         select_matmul_backend_for_load()
         if (!kernel_backend_needs_repack(active_kernel_backend())) {
-            t |> success(true, "active backend has no repack — nothing to prove on this box")
+            t |> success(true, "active backend has no repack - nothing to prove on this box")
             return
         }
         let n = 64l    // k-elems per row (multiple of 32)
@@ -65,15 +65,15 @@ def test_repack_slot_is_context_proof(t : T?) {
         }
 
         var diff = 0
-        for (i in range(length(q_main))) {
-            if (q_main[i] != q_lane[i]) {
+        for (a, b in q_main, q_lane) {
+            if (a != b) {
                 diff++
             }
         }
         t |> equal(diff, 0)
         var sdiff = 0
-        for (i in range(length(s_main))) {
-            if (s_main[i] != s_lane[i]) {
+        for (a, b in s_main, s_lane) {
+            if (a != b) {
                 sdiff++
             }
         }

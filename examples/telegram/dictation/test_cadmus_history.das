@@ -32,7 +32,7 @@ def private test_message(chat_id, message_id, sender_id, date : int64; text : st
 }
 
 [test]
-def test_history_migrations_linq_and_fts(t : T?) {
+def test_history_migrations_linq_and_fts(t : T?) {   // nolint:STYLE038 - flat list of 18 `t |> run` cases against one migrated database
     let path = test_db_path()
     remove(path)
     ensure_cadmus_database(path)

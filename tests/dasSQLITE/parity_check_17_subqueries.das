@@ -72,8 +72,8 @@ def users_equal(a : array<User>; b : array<User>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i].Id != b[i].Id || a[i].Name != b[i].Name || a[i].Active != b[i].Active) {
+    for (ea, eb in a, b) {
+        if (ea.Id != eb.Id || ea.Name != eb.Name || ea.Active != eb.Active) {
             return false
         }
     }

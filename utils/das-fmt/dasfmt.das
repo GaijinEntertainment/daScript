@@ -113,6 +113,73 @@ def private get_arg(args : array<string>; name : string; def_val : int = 0) : in
 }
 
 
+def private drop_excluded_files(args : array<string>; var files : array<string>) {
+    var excludeMasks : array<string>
+    collect_input_paths(args, "--exclude-mask", excludeMasks)
+    var idx = length(files) - 1
+    while (idx >= 0) {
+        let path = files[idx]
+        for (excludePath in excludeMasks) {
+            if (path |> find(excludePath) >= 0) {
+                log::info("Excluding file '{path}' mask '{excludePath}'")
+                files |> erase(idx)
+                break
+            }
+        }
+        idx--
+    }
+}
+
+
+def private format_one_file(file : string; verify, verbose : bool; var verified : bool&) {
+    // Runs on a job thread: formats `file` in place, or (under --verify) reports
+    // it as unformatted and clears `verified`.
+    var before : string
+    var after : string
+    var open = false
+    fopen(file, "rb") $(fr) {
+        if (fr != null) {
+            fmap(fr) $(data) {
+                open = true
+                before = string(data)
+                after = format_source(data)
+            }
+        }
+    }
+    let diff_result = collect_diff(before, after)
+    let changed = diff_result.differ
+    if (!open) {
+        log::info("-- {file}")
+        log::error("Unable to open '{file}'")
+    } elif (verify) {
+        if (changed) {
+            log::error("Unformatted file '{file}'")
+            log::info(diff_result.log)
+            verified = false
+        }
+    } elif (!changed) {
+        log::info("-- {file}")
+    } else {
+        var write = false
+        fopen(file, "wb") $(fw) {
+            if (fw != null) {
+                fwrite(fw, after)
+                write = true
+            }
+        }
+        if (write) {
+            log::info("++ {file}")
+            if (verbose) {
+                log::info(diff_result.log)
+            }
+        } else {
+            log::info("-- {file}")
+            log::error("Unable to open '{file}' for writing")
+        }
+    }
+}
+
+
 [export]
 def main() {
     var args <- get_command_line_arguments()
@@ -148,20 +215,7 @@ def main() {
     }
     delete seen
 
-    var excludeMasks : array<string>
-    collect_input_paths(args, "--exclude-mask", excludeMasks)
-    var idx = length(files) - 1
-    while (idx >= 0) {
-        let path = files[idx]
-        for (excludePath in excludeMasks) {
-            if (path |> find(excludePath) >= 0) {
-                log::info("Excluding file '{path}' mask '{excludePath}'")
-                files |> erase(idx)
-                break
-            }
-        }
-        idx--
-    }
+    drop_excluded_files(args, files)
 
     let filesNum = length(files)
     var verified = true
@@ -176,49 +230,7 @@ def main() {
                     unsafe {
                         new_job <| @ capture(& verified, := args) {
                             log::init_log(args)
-                            var before : string
-                            var after : string
-                            var open = false
-                            fopen(file, "rb") $(fr) {
-                                if (fr != null) {
-                                    fmap(fr) $(data) {
-                                        open = true
-                                        before = string(data)
-                                        after = format_source(data)
-                                    }
-                                }
-                            }
-                            let diff_result = collect_diff(before, after)
-                            let changed = diff_result.differ
-                            if (!open) {
-                                log::info("-- {file}")
-                                log::error("Unable to open '{file}'")
-                            } elif (verify) {
-                                if (changed) {
-                                    log::error("Unformatted file '{file}'")
-                                    log::info(diff_result.log)
-                                    verified = false
-                                }
-                            } elif (!changed) {
-                                log::info("-- {file}")
-                            } else {
-                                var write = false
-                                fopen(file, "wb") $(fw) {
-                                    if (fw != null) {
-                                        fwrite(fw, after)
-                                        write = true
-                                    }
-                                }
-                                if (write) {
-                                    log::info("++ {file}")
-                                    if (verbose) {
-                                        log::info(diff_result.log)
-                                    }
-                                } else {
-                                    log::info("-- {file}")
-                                    log::error("Unable to open '{file}' for writing")
-                                }
-                            }
+                            format_one_file(file, verify, verbose, verified)
                             status |> notify_and_release
                         }
                     }

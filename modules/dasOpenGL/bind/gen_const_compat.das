@@ -29,7 +29,8 @@ def main {
         let name = slice(rest, 0, q2)
         if (starts_with(name, "GL_")) { defined[name] = true }
     }
-    // 2. emit extras from opengl_const.das (format: `let GL_X = uint(0xNu)` / `int(N)`)
+    // 2. emit extras from opengl_const.das (format: `let GL_X = 0xNu` / `N` bare literals,
+    //    or `TYPE(VALUE)` when the emitter kept a genuine cast)
     let out = "{root}/modules/dasOpenGL/src/dasOpenGL.const.desktop_extras.inc"
     var count = 0
     fopen(out, "wb") $(f) {
@@ -37,13 +38,42 @@ def main {
         fprint(f, "// desktop GL constants absent from GLES3, for boost-layer compile compat on web\n")
         for (line in split(fread("{root}/modules/dasOpenGL/opengl/opengl_const.das"), "\n")) {
             if (!starts_with(line, "let GL_")) { continue }
-            let toks <- nonempty(split_by_chars(line, " =()"))
-            if (length(toks) < 4) { continue }       // let NAME TYPE VALUE
+            let toks <- nonempty(split_by_chars(strip(line), " =()"))
+            if (length(toks) < 3) { continue }
+            // exactly `let NAME VALUE` or `let NAME TYPE VALUE` - anything longer (a trailing
+            // comment, an expression) would silently mistype the constant, so fail loudly
+            if (length(toks) > 4) {
+                panic("gen_const_compat: unexpected token shape in `{line}`")
+            }
             let name = toks[1]
-            let dtype = toks[2]
-            let value = toks[3]
+            var ctype = ""
+            var value = ""
+            if (length(toks) == 4) {                 // let NAME TYPE VALUE
+                value = toks[3]
+                if (toks[2] == "int") {
+                    ctype = "int32_t"
+                } elif (toks[2] == "uint") {
+                    ctype = "uint32_t"
+                } elif (toks[2] == "int64") {
+                    ctype = "int64_t"
+                } elif (toks[2] == "uint64") {
+                    ctype = "uint64_t"
+                } else {
+                    panic("gen_const_compat: unknown cast type `{toks[2]}` in `{line}`")
+                }
+            } else {                                 // let NAME VALUE (bare literal)
+                value = toks[2]
+                if (ends_with(value, "ul")) {        // uint64 literal - never truncate to 32 bits
+                    ctype = "uint64_t"
+                } elif (ends_with(value, "u")) {
+                    ctype = "uint32_t"
+                } elif (ends_with(value, "l")) {
+                    ctype = "int64_t"
+                } else {
+                    ctype = "int32_t"
+                }
+            }
             if (defined?[name] ?? false) { continue }
-            let ctype = dtype == "int" ? "int32_t" : "uint32_t"
             fprint(f, "addConstant<{ctype}>(*this,\"{name}\",{ctype}({value}));\n")
             count ++
         }

@@ -80,8 +80,8 @@ class CookieFormServer : HvWebServer {
         GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let session = get_cookie(req, "session")
             let prefs = get_cookie(req, "prefs")
-            let s = !empty(session) ? string(session) : "not found"
-            let p = !empty(prefs) ? string(prefs) : "not found"
+            let s = !empty(session) ? session : "not found"
+            let p = !empty(prefs) ? prefs : "not found"
             let payload = (session = s, prefs = p)
             return resp |> JSON(write_json(JV(payload)))
         }
@@ -118,8 +118,8 @@ class CookieFormServer : HvWebServer {
             var save_status = 0
             save_status = save_form_file(req, "attachment", upload_dir)
 
-            let t = !empty(title) ? string(title) : ""
-            let d = !empty(description) ? string(description) : ""
+            let t = !empty(title) ? title : ""
+            let d = !empty(description) ? description : ""
             let payload = (title = t, description = d, save_status = save_status, field_count = length(fields))
             return resp |> JSON(write_json(JV(payload)))
         }
@@ -128,8 +128,8 @@ class CookieFormServer : HvWebServer {
         POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
-            let u = !empty(username) ? string(username) : ""
-            let pw = !empty(password) ? string(password) : ""
+            let u = !empty(username) ? username : ""
+            let pw = !empty(password) ? password : ""
             // Build JSON manually to avoid named-tuple collision with Section 1b
             // (both would be tuple<string;string>, so JV would reuse field names)
             resp.body := "\{\"username\":\"{u}\",\"password\":\"{pw}\"\}"

@@ -10,9 +10,9 @@ def rightPolicyCeili(a : float) : int {
 }
 
 [test]
-def test_math_misc(t : T?) {
+def test_math_misc(t : T?) { // nolint:STYLE038 one flat assertion per math entry point under test
     t |> success(uint32_hash(1U) != 1U)
-    var seed : uint = 1U
+    let seed : uint = 1U
     let position : int = 1
     t |> equal(min(float2(0.5, -1.), float2(-1., 0.5)), float2(-1., -1.))
     t |> equal(min(float4(0.5, -1., 0.5, -1.), float4(-1., 0.5, -1., 0.5)), float4(-1, -1, -1, -1))

@@ -45,7 +45,7 @@ class LatticeMutator : DapiDataWalker {
 // ============================================================
 
 [test]
-def test_walk_lattice_leaves(t : T?) {
+def test_walk_lattice_leaves(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("half family") @(t : T?) {
         var walker = new LogWalker()
         var f16 = float16(1.5)

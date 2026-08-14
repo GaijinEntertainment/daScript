@@ -145,7 +145,7 @@ def public collect_labels(expr : ExpressionPtr) {
 }
 
 [macro_function]
-def public has_sideeffects(expr : Expression?) : bool {
+def public has_sideeffects(expr : Expression?) : bool {  // nolint:STYLE037,STYLE038 - exact-type `is` ladder over Expression node classes; one arm per node kind, nothing to factor
     //! Conservative side-effect detection. Returns true when the expression has — or might have — side effects. Returns false ONLY when provably pure (no function calls, no heap allocation, no container mutation).
     if (expr == null || expr.flags.noSideEffects
             || expr is ExprVar

@@ -46,7 +46,7 @@ require imgui_app
 require glfw/glfw_boost
 require opengl/opengl
 require live/glfw_live
-require live/opengl_live // nolint:STYLE030 — loads the APNG recorder (record_* live commands + the [before_update] record_tick) by side effect; no direct symbol use
+require live/opengl_live
 
 // Live-host + boost-runtime stack — re-exported public.
 // ?dashv: live_api is the HTTP live-reload server (pulls dashv/libhv, which is not

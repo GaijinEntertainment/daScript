@@ -117,10 +117,7 @@ def test_reimport_repoints_and_demotes(t : T?) {
             tt |> equal(row[0].Listed, 1)   // importer listed the user-origin row
             write_manifest(dir, "\{ \"examples\": [ \{ \"name\": \"Multi (multi-file)\", \"slug\": \"multi\", \"files\": [\"examples/multi_a.das\", \"examples/multi_b.das\"] \} ] \}")
             tt |> equal(import_curated(db, dir, 2700l), 1)
-            var titles : array<string>
-            for (l in listed_samples(db)) {
-                titles |> push(l.title)
-            }
+            let titles <- [for (l in listed_samples(db)); l.title]
             tt |> success(find_index(titles, "Hello world") < 0, "user-origin curated listing demoted")
             tt |> equal(get_source(db, user_put.hash), "print(\"user-first\")")   // permalink survives
             // restore the fixture state the next subtest expects
@@ -135,10 +132,7 @@ def test_reimport_repoints_and_demotes(t : T?) {
             tt |> equal(import_curated(db, dir, 4000l), 1)
             let listed <- listed_samples(db)
             tt |> equal(length(listed), 2)   // hello + the user promotion
-            var titles : array<string>
-            for (l in listed) {
-                titles |> push(l.title)
-            }
+            let titles <- [for (l in listed); l.title]
             tt |> success(find_index(titles, "Mine") >= 0, "user promotion still listed")
             tt |> success(find_index(titles, "Multi (multi-file)") < 0, "vanished entry demoted")
         }

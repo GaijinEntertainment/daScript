@@ -206,7 +206,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     let r = from_JV(js, type<EmbResp>)
                     t |> success(length(r.data) == 1, "one embedding returned")
                     if (length(r.data) == 1) {
-                        t |> success(length(r.data[0].embedding) > 0, "embedding is non-empty")
+                        t |> success(!empty(r.data[0].embedding), "embedding is non-empty")
                         t |> success(abs(l2(r.data[0].embedding) - 1.0) < 1.0e-4, "embedding is L2-normalized")
                     }
                     unsafe {

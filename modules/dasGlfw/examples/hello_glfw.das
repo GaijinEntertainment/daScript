@@ -1,7 +1,6 @@
 options gen2
 require glfw/glfw_boost
 require daslib/defer
-require daslib/math_boost
 require daslib/safe_addr
 
 [export]

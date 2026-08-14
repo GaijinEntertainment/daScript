@@ -59,8 +59,8 @@ def strings_eq(a : array<string>; b : array<string>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (ea, eb in a, b) {
+        if (ea != eb) {
             return false
         }
     }

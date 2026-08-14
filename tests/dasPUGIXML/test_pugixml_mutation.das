@@ -6,7 +6,6 @@ options strict_smart_pointers = true
 
 require pugixml/PUGIXML_boost
 require math
-require strings
 require dastest/testing_boost public
 
 // ============ Node mutation ============
@@ -14,7 +13,7 @@ require dastest/testing_boost public
 [test]
 def test_set_name(t : T?) {
     t |> run("set_name renames a node") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "old")
             t |> equal(root.name, "old")
             set_name(root, "new_name")
@@ -26,7 +25,7 @@ def test_set_name(t : T?) {
 [test]
 def test_set_value(t : T?) {
     t |> run("set_value changes node value") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "root")
             var pi = append_child(root, xml_node_type.node_pi)
@@ -40,7 +39,7 @@ def test_set_value(t : T?) {
 [test]
 def test_prepend_child(t : T?) {
     t |> run("prepend_child inserts at beginning") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "second")
             prepend_child(root, "first")
@@ -53,9 +52,9 @@ def test_prepend_child(t : T?) {
 [test]
 def test_insert_child_after(t : T?) {
     t |> run("insert_child_after places node correctly") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
-            var a_node = append_child(root, "a")
+            let a_node = append_child(root, "a")
             append_child(root, "c")
             insert_child_after(root, "b", a_node)
             // Order should be: a, b, c
@@ -69,10 +68,10 @@ def test_insert_child_after(t : T?) {
 [test]
 def test_insert_child_before(t : T?) {
     t |> run("insert_child_before places node correctly") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "a")
-            var c_node = append_child(root, "c")
+            let c_node = append_child(root, "c")
             insert_child_before(root, "b", c_node)
             // Order should be: a, b, c
             t |> equal(root.first_child.next_sibling.name, "b")
@@ -83,14 +82,14 @@ def test_insert_child_before(t : T?) {
 [test]
 def test_remove_child(t : T?) {
     t |> run("remove_child removes a node object") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "keep")
-            var rm = append_child(root, "remove_me")
+            let rm = append_child(root, "remove_me")
             append_child(root, "also_keep")
             remove_child(root, rm)
             var count = 0
-            for_each_child(root) <| $(ch) {
+            for_each_child(root) $(ch) {
                 count++
                 t |> success(ch.name != "remove_me")
             }
@@ -102,14 +101,14 @@ def test_remove_child(t : T?) {
 [test]
 def test_remove_child_by_name(t : T?) {
     t |> run("remove_child by name removes first match") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "a")
             append_child(root, "b")
             append_child(root, "c")
             remove_child(root, "b")
             var names : array<string>
-            for_each_child(root) <| $(ch) {
+            for_each_child(root) $(ch) {
                 names |> push(ch.name)
             }
             t |> equal(length(names), 2)
@@ -122,7 +121,7 @@ def test_remove_child_by_name(t : T?) {
 [test]
 def test_remove_children(t : T?) {
     t |> run("remove_children clears all children") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "a")
             append_child(root, "b")
@@ -138,7 +137,7 @@ def test_remove_children(t : T?) {
 [test]
 def test_prepend_attribute(t : T?) {
     t |> run("prepend_attribute inserts at beginning") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var a2 = append_attribute(root, "second")
             set_value(a2, "2")
@@ -153,7 +152,7 @@ def test_prepend_attribute(t : T?) {
 [test]
 def test_insert_attribute_after(t : T?) {
     t |> run("insert_attribute_after places attribute correctly") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var a = append_attribute(root, "a")
             set_value(a, "1")
@@ -169,7 +168,7 @@ def test_insert_attribute_after(t : T?) {
 [test]
 def test_insert_attribute_before(t : T?) {
     t |> run("insert_attribute_before places attribute correctly") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var a = append_attribute(root, "a")
             set_value(a, "1")
@@ -185,7 +184,7 @@ def test_insert_attribute_before(t : T?) {
 [test]
 def test_remove_attribute(t : T?) {
     t |> run("remove_attribute removes attribute object") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             add_attr(root, "keep", "yes")
             var rm = append_attribute(root, "remove_me")
@@ -200,7 +199,7 @@ def test_remove_attribute(t : T?) {
 [test]
 def test_remove_attribute_by_name(t : T?) {
     t |> run("remove_attribute by name") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             add_attr(root, "a", "1")
             add_attr(root, "b", "2")
@@ -216,7 +215,7 @@ def test_remove_attribute_by_name(t : T?) {
 [test]
 def test_remove_attributes(t : T?) {
     t |> run("remove_attributes clears all attributes") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             add_attr(root, "a", "1")
             add_attr(root, "b", "2")
@@ -229,7 +228,7 @@ def test_remove_attributes(t : T?) {
 [test]
 def test_attribute_set_name(t : T?) {
     t |> run("set_name renames an attribute") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var a = append_attribute(root, "old_name")
             set_value(a, "val")
@@ -243,7 +242,7 @@ def test_attribute_set_name(t : T?) {
 [test]
 def test_attribute_set_value_types(t : T?) {
     t |> run("set_value works for all types") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var ai = append_attribute(root, "i")
             set_value(ai, 42)
@@ -269,7 +268,7 @@ def test_attribute_set_value_types(t : T?) {
 [test]
 def test_text_set_string(t : T?) {
     t |> run("text set(string) changes text content") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, "hello")
             t |> equal(root.text as string, "hello")
@@ -282,7 +281,7 @@ def test_text_set_string(t : T?) {
 [test]
 def test_text_set_int(t : T?) {
     t |> run("text set(int) stores numeric text") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, 42)
             t |> equal(root.text as int, 42)
@@ -293,7 +292,7 @@ def test_text_set_int(t : T?) {
 [test]
 def test_text_set_float(t : T?) {
     t |> run("text set(float) stores float text") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, 3.14)
             t |> success(abs(root.text as float -3.14) < 0.01)
@@ -304,7 +303,7 @@ def test_text_set_float(t : T?) {
 [test]
 def test_text_set_double(t : T?) {
     t |> run("text set(double) stores double text") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, 2.718281828lf)
             t |> success(abs(root.text as double - 2.718281828lf) < 0.0001lf)
@@ -315,7 +314,7 @@ def test_text_set_double(t : T?) {
 [test]
 def test_text_set_uint(t : T?) {
     t |> run("text set(uint) stores unsigned text") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, 999u)
             t |> equal(root.text as uint, 999u)
@@ -326,7 +325,7 @@ def test_text_set_uint(t : T?) {
 [test]
 def test_text_set_bool(t : T?) {
     t |> run("text set(bool) stores boolean text") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, true)
             t |> equal(root.text as bool, true)
@@ -341,14 +340,14 @@ def test_text_set_bool(t : T?) {
 [test]
 def test_append_copy_node(t : T?) {
     t |> run("append_copy duplicates a node") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "root")
             var src = append_child(root, "source")
             add_attr(src, "id", "1")
             add_child(src, "inner", "data")
             var root2 = append_child(dnode, "root2")
-            var copy = append_copy(root2, src)
+            let copy = append_copy(root2, src)
             t |> equal(copy.name, "source")
             t |> equal(node_attr(copy, "id"), "1")
             t |> equal(node_text(copy, "inner"), "data")
@@ -361,10 +360,10 @@ def test_append_copy_node(t : T?) {
 [test]
 def test_prepend_copy_node(t : T?) {
     t |> run("prepend_copy duplicates at beginning") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "existing")
-            var src = append_child(root, "source")
+            let src = append_child(root, "source")
             var target = append_child(doc as xml_node, "target")
             append_child(target, "before")
             prepend_copy(target, src)
@@ -376,7 +375,7 @@ def test_prepend_copy_node(t : T?) {
 [test]
 def test_append_copy_attr(t : T?) {
     t |> run("append_copy duplicates an attribute") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             add_attr(root, "src_attr", "value")
             var target = append_child(root, "target")
@@ -390,7 +389,7 @@ def test_append_copy_attr(t : T?) {
 [test]
 def test_append_move_node(t : T?) {
     t |> run("append_move moves node to new parent") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var src = append_child(root, "moveable")
             add_child(src, "data", "test")
@@ -400,7 +399,7 @@ def test_append_move_node(t : T?) {
             t |> success(child(target, "moveable").ok)
             // Should no longer be a direct child of root (but root still has "target")
             var direct_children : array<string>
-            for_each_child(root) <| $(ch) {
+            for_each_child(root) $(ch) {
                 direct_children |> push(ch.name)
             }
             t |> success(!direct_children |> has("moveable"))
@@ -413,7 +412,7 @@ def test_append_move_node(t : T?) {
 [test]
 def test_append_child_by_type(t : T?) {
     t |> run("append_child with node type creates typed node") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             var comment = append_child(root, xml_node_type.node_comment)
             set_value(comment, "this is a comment")
@@ -426,7 +425,7 @@ def test_append_child_by_type(t : T?) {
 [test]
 def test_prepend_child_by_type(t : T?) {
     t |> run("prepend_child with node type") <| @(t : T?) {
-        with_doc() <| $(doc) {
+        with_doc() $(doc) {
             var root = append_child(doc as xml_node, "root")
             append_child(root, "element")
             var cdata = prepend_child(root, xml_node_type.node_cdata)

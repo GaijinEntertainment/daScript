@@ -106,7 +106,7 @@ def private check_iso(t : T?; name : string; var words : array<uint>) {
 }
 
 [test]
-def test_golden_disassembly(t : T?) {
+def test_golden_disassembly(t : T?) { // nolint:STYLE038 - flat list of golden fixtures
     t |> run("emitter disassembly == frozen golden (all fixtures)") <| @(t : T?) {
         check(t, "square", square_words())
         check(t, "uarith", uarith_words())

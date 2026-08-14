@@ -20,15 +20,15 @@ require ../common/parallel_workers.das
 
 def make_record(name : string; canonical : string; line : int; want_sigs : bool) : FuncRecord {
     var rec = FuncRecord()
-    rec.ref.name := name
-    rec.ref.file := "test.das"
+    rec.ref.name = name
+    rec.ref.file = "test.das"
     rec.ref.line = line
     // Default to a 5-line synthetic body. Tests that care about the
     // exact span override .ref.end_line directly. Required to satisfy
     // is_well_formed's `end_line >= line` check on the import path.
     rec.ref.end_line = line + 5
     rec.ref.is_lambda = false
-    rec.canonical := canonical
+    rec.canonical = canonical
     derive_sig_and_count(rec, want_sigs, 0)
     return <- rec
 }
@@ -168,8 +168,8 @@ def test_minhash_deterministic(t : T?) {
     let sig_a <- minhash_signature(toks_a)
     let sig_b <- minhash_signature(toks_b)
     var all_match = true
-    for (i in range(length(sig_a))) {
-        if (sig_a[i] != sig_b[i]) {
+    for (a, b in sig_a, sig_b) {
+        if (a != b) {
             all_match = false
         }
     }
@@ -315,19 +315,19 @@ def test_sort_pairs_by_similarity(t : T?) {
     var pairs : array<FuzzyPair>
     var p1 : FuzzyPair
     p1.similarity = 0.75f
-    p1.a.name := "low_a"
-    p1.a.file := "f"
+    p1.a.name = "low_a"
+    p1.a.file = "f"
     p1.a.line = 1
-    p1.b.name := "low_b"
-    p1.b.file := "f"
+    p1.b.name = "low_b"
+    p1.b.file = "f"
     p1.b.line = 2
     var p2 : FuzzyPair
     p2.similarity = 0.95f
-    p2.a.name := "hi_a"
-    p2.a.file := "f"
+    p2.a.name = "hi_a"
+    p2.a.file = "f"
     p2.a.line = 3
-    p2.b.name := "hi_b"
-    p2.b.file := "f"
+    p2.b.name = "hi_b"
+    p2.b.file = "f"
     p2.b.line = 4
     pairs |> emplace(p1)
     pairs |> emplace(p2)
@@ -833,7 +833,7 @@ def test_merge_envelope_files_missing_shard(t : T?) {
 [test]
 def test_derive_sig_and_count_no_sigs(t : T?) {
     var rec = FuncRecord()
-    rec.canonical := "FN A B C D E ENDFN"
+    rec.canonical = "FN A B C D E ENDFN"
     derive_sig_and_count(rec, false, 0)
     t |> equal(rec.token_count, 7)
     t |> equal(length(rec.sig), 0)
@@ -843,7 +843,7 @@ def test_derive_sig_and_count_no_sigs(t : T?) {
 [test]
 def test_derive_sig_and_count_with_sigs(t : T?) {
     var rec = FuncRecord()
-    rec.canonical := "FN A B C D E F G H I J K ENDFN"
+    rec.canonical = "FN A B C D E F G H I J K ENDFN"
     derive_sig_and_count(rec, true, 0)
     t |> equal(length(rec.sig), 64)
 }
@@ -852,7 +852,7 @@ def test_derive_sig_and_count_with_sigs(t : T?) {
 [test]
 def test_derive_sig_and_count_below_floor(t : T?) {
     var rec = FuncRecord()
-    rec.canonical := "FN A B ENDFN"  // 4 tokens, below floor=100
+    rec.canonical = "FN A B ENDFN"  // 4 tokens, below floor=100
     derive_sig_and_count(rec, true, 100)
     t |> equal(length(rec.sig), 0)
     t |> equal(rec.token_count, 4)
@@ -1051,9 +1051,9 @@ def test_pipeline_export_import_clusters_match(t : T?) {
     sort_clusters(c_compiled)
     sort_clusters(c_imported)
     t |> equal(length(c_compiled), length(c_imported))
-    for (i in range(length(c_compiled))) {
-        t |> equal(c_compiled[i].canonical_sample, c_imported[i].canonical_sample)
-        t |> equal(length(c_compiled[i].members), length(c_imported[i].members))
+    for (cc, ci in c_compiled, c_imported) {
+        t |> equal(cc.canonical_sample, ci.canonical_sample)
+        t |> equal(length(cc.members), length(ci.members))
     }
 
     var p_compiled <- fuzzy_pairs(records_compiled, 0.7f, 0)
@@ -1061,11 +1061,11 @@ def test_pipeline_export_import_clusters_match(t : T?) {
     sort_pairs(p_compiled)
     sort_pairs(p_imported)
     t |> equal(length(p_compiled), length(p_imported))
-    for (i in range(length(p_compiled))) {
-        let diff = fabs_f(p_compiled[i].similarity - p_imported[i].similarity)
-        t |> success(diff < 1.0e-5f, "similarity matches: {p_compiled[i].similarity} vs {p_imported[i].similarity}")
-        t |> equal(p_compiled[i].canonical_a, p_imported[i].canonical_a)
-        t |> equal(p_compiled[i].canonical_b, p_imported[i].canonical_b)
+    for (pc, pi in p_compiled, p_imported) {
+        let diff = fabs_f(pc.similarity - pi.similarity)
+        t |> success(diff < 1.0e-5f, "similarity matches: {pc.similarity} vs {pi.similarity}")
+        t |> equal(pc.canonical_a, pi.canonical_a)
+        t |> equal(pc.canonical_b, pi.canonical_b)
     }
     remove(path)
 }
@@ -1210,9 +1210,9 @@ def test_drop_records_under_files(t : T?) {
         <- make_record("a", "FN A ENDFN", 1, false),
         <- make_record("b", "FN B ENDFN", 2, false),
         <- make_record("c", "FN C ENDFN", 3, false)]
-    records[0].ref.file := "src/keep.das"
-    records[1].ref.file := "src/drop.das"
-    records[2].ref.file := "src/drop.das"
+    records[0].ref.file = "src/keep.das"
+    records[1].ref.file = "src/drop.das"
+    records[2].ref.file = "src/drop.das"
 
     var against : table<string; void?>
     against |> insert("src/drop.das", null)

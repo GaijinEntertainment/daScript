@@ -188,7 +188,7 @@ def public git_parsed_patch_dispose(var patch : GitParsedPatch) {
     delete patch.old_changed_lines
     delete patch.new_changed_lines
     delete patch.new_deleted_anchors
-    patch = GitParsedPatch()   // nolint:PERF030 - every field was just deleted; nothing left to release
+    patch = GitParsedPatch()   // every field was just deleted; nothing left to release
 }
 
 def public trim_cr(value : string) : string {

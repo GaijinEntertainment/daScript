@@ -314,7 +314,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             }
             delete cov
             if (served == 0) {
-                feint("no vulkan dispatches — arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
+                feint("no vulkan dispatches - arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
                 return
             }
             let famfilter = g_env_test.test_family

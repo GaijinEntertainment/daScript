@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_unicode
+require strings
 
 [test]
 def test_unicode(t : T?) {
@@ -32,14 +33,15 @@ def test_unicode(t : T?) {
     }
     // UTF-8 codec round-trips, including a multi-byte codepoint.
     t |> run("utf8 round-trip") @(t : T?) {
-        let cpts <- utf8_to_cpts("Äpfel")
+        let cpts <- utf8_to_cpts("Äpfel")   // nolint:STYLE039 the multi-byte codepoint IS the fixture
         t |> success(length(cpts) == 5)
         t |> success(cpts[0] == 196)         // Ä
         t |> success(cpts[1] == 112)         // p
-        var rebuilt = ""
-        for (c in cpts) {
-            rebuilt += cpt_to_utf8(c)
+        let rebuilt = build_string() $(var w) {
+            for (c in cpts) {
+                w |> write(cpt_to_utf8(c))
+            }
         }
-        t |> success(rebuilt == "Äpfel")
+        t |> success(rebuilt == "Äpfel")   // nolint:STYLE039 the multi-byte codepoint IS the fixture
     }
 }

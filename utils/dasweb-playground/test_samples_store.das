@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require samples_store
 require daslib/result
 require daslib/sql_linq
+require strings
 
 def private test_policy : StorePolicy {
     return StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
@@ -146,10 +147,7 @@ def test_rejections(t : T?) {
             tt |> equal(put_sample(db, "", "10.0.0.1", test_policy(), 1000l).status, PutStatus.empty_source)
         }
         t |> run("over the size cap") @(tt : T?) {
-            var big = ""
-            for (_i in range(65)) {
-                big += "x"
-            }
+            let big = repeat("x", 65)
             tt |> equal(put_sample(db, big, "10.0.0.1", test_policy(), 1000l).status, PutStatus.too_large)
         }
         t |> run("rejected puts store nothing") @(tt : T?) {
@@ -243,9 +241,7 @@ def test_utf8_validation(t : T?) {
         t |> success(is_valid_utf8(""), "empty")
     }
     t |> run("invalid sequences") @(t : T?) {
-        var bad : array<uint8>
-        bad |> push(uint8(0xC3))
-        bad |> push(uint8(0x28))            // 2-byte lead + non-continuation
+        var bad <- [uint8(0xC3), uint8(0x28)]   // 2-byte lead + non-continuation
         t |> success(!is_valid_utf8(bad), "truncated two-byte")
         bad |> clear()
         bad |> push(uint8(0x80))            // bare continuation

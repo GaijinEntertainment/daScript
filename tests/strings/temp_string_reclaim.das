@@ -94,14 +94,8 @@ def test_temp_string_reclaim_correctness(t : T?) {
     }
 
     t |> run("capturing consumers keep their strings") @@(t) {
-        var tab : table<string; int>
-        for (i in range(100)) {
-            tab |> insert(string(i), i)
-        }
-        var arr : array<string>
-        for (i in range(100)) {
-            arr |> push(string(1000000 + i))
-        }
+        let tab <- {for (i in range(100)); string(i) => i}
+        let arr <- [for (i in range(100)); string(1000000 + i)]
         var churn = 0
         for (i in range(1000)) {
             churn += length(string(8888000 + i))
@@ -247,6 +241,7 @@ def test_temp_string_reclaim_let_local(t : T?) {
 
     t |> run("escaping let-local is not wrapped") @@(t) {
         var arr : array<string>
+        arr |> reserve(100)
         for (i in range(100)) {
             let s = string(3000000 + i)
             arr |> push(s)

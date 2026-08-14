@@ -652,7 +652,7 @@ def test_write_toml_exact(t : T?) {
 
 [test]
 def test_write_toml_round_trip(t : T?) {
-    t |> run("write ∘ read is stable across value classes") @@(t : T?) {
+    t |> run("write then read is stable across value classes") @@(t : T?) {
         let src = "i = 9007199254740993\nf = 4.0\npi = 3.141592653589793\nneg = -3\non = true\ns = \"a\\tb \\\"q\\\" \\u0001\"\narr = [\"a\", 3, 4.5, \{ nested = true }]\nempty_arr = []\ndate = 2024-01-15T10:00:00Z\n[tab.sub]\n\"weird key\" = \"x\"\n[[jobs]]\nsub = \{ a = 1, b = [1, 2] }\n"
         var v = expect_ok(t, "wt_rt", src)
         var err : string

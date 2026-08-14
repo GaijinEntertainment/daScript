@@ -82,10 +82,8 @@ def test_clone_array(t : T?) {
 
 [sideeffects]
 def test_clone_table(t : T?) {
-    var x, y : table<int; string>
-    for (ii in range(3)) {
-        x |> insert(ii, string(ii))
-    }
+    var x <- {for (ii in range(3)); ii => string(ii)}
+    var y : table<int; string>
     y := x
     for (ii in range(3)) {
         x |> insert(ii, string(ii + 1))
@@ -123,8 +121,8 @@ def clone(var res : CFoo; src : CFoo) {
 def test_clone_tuple_constness_dispatch(t : T?) {
     let tup1 = (10, CFoo(a = 1))
     var tup2 = (20, CFoo(a = 2))
-    var c1 := tup1
-    var c2 := tup2
+    let c1 := tup1
+    let c2 := tup2
     t |> equal(c1._0, 10)
     t |> equal(c1._1.a, 1)
     t |> equal(c1._1.via, 1)

@@ -74,8 +74,8 @@ def comments_eq(a : array<Comment>; b : array<Comment>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!comment_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!comment_eq(ea, eb)) {
             return false
         }
     }

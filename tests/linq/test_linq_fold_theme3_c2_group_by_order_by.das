@@ -95,9 +95,9 @@ def test_c2c_parity_handwritten(t : T?) {
             |> to_array())
         let hand <- c2c_handwritten(items)
         tt |> equal(length(spliced), length(hand))
-        for (i in range(length(spliced))) {
-            tt |> equal(spliced[i].B, hand[i].B)
-            tt |> equal(spliced[i].C, hand[i].C)
+        for (s, h in spliced, hand) {
+            tt |> equal(s.B, h.B)
+            tt |> equal(s.C, h.C)
         }
     }
 }

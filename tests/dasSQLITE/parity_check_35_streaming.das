@@ -62,8 +62,8 @@ def logs_eq(a : array<LogEntry>; b : array<LogEntry>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!log_eq(a[i], b[i])) {
+    for (ea, eb in a, b) {
+        if (!log_eq(ea, eb)) {
             return false
         }
     }

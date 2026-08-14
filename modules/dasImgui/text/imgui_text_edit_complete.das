@@ -46,9 +46,9 @@ let public TEXT_EDIT_LIST_DELAY = 0.35f
 let public TEXT_EDIT_LIST_ROWS = 8
 
 def public text_edit_complete_dispose(var comp : TextEditCompletion) {
-    delete comp.items
-    delete comp.item_tiers
-    comp = TextEditCompletion()
+    var fresh = TextEditCompletion()
+    swap(comp, fresh)
+    delete fresh
 }
 
 def private ident_byte(b : int) : bool {

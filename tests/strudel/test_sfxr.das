@@ -108,8 +108,8 @@ def test_deterministic_render(t : T?) {
     t |> equal(length(a), length(b))
     var same = length(a) == length(b)
     if (same) {
-        for (i in range(length(a))) {
-            if (a[i] != b[i]) {
+        for (ea, eb in a, b) {
+            if (ea != eb) {
                 same = false
                 break
             }

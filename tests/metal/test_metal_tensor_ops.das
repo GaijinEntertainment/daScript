@@ -152,7 +152,7 @@ def private fill_oracle(var o : TmmKernels?) {
 }
 
 [test]
-def test_tensor_ops(t : T?) {
+def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source assertions
     t |> run("tmm2d lowering: generated helpers + MPP preamble") @(t : T?) {
         t |> success(find(tmm_bf16_msl, "__das_tmm2d_bf_8_16_2") >= 0, "bf helper generated")
         t |> success(find(tmm_q8_msl, "__das_tmm2d_q8_8_16_2") >= 0, "q8 helper generated")

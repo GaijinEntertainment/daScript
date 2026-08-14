@@ -10,7 +10,7 @@ require dw_common
 
 
 [test]
-def test_walk_vectors(t : T?) {
+def test_walk_vectors(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("int2") @(t : T?) {
         var walker = new LogWalker()
         var v = int2(10, 20)

@@ -2,7 +2,6 @@ options gen2
 
 module process shared private
 
-require strings
 require daslib/fio
 require daslib/strings_boost
 require rules

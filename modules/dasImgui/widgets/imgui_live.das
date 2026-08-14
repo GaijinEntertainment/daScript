@@ -103,7 +103,7 @@ def public live_imgui_init(window : GLFWwindow?) : ImGuiContext? {
     ImGui_ImplGlfw_InitForOpenGL(window, true)
     // pure-das GL renderer instead of the C++ ImGui_ImplOpenGL3_Init(glsl_version)
     imgui_gl_set_backend_flags()
-    live_imgui_gl <- imgui_gl_create()
+    live_imgui_gl <- imgui_gl_create()   // nolint:PERF030 - the early return above means this runs once on the zeroed global; imgui_gl_create needs the live GL context, so it cannot move to the declaration
     // Give the window a defined cursor from the instant it appears — the backend's per-frame
     // UpdateMouseCursor only takes over from frame 1, and macOS won't refresh an inherited cursor until
     // the mouse moves. Per-widget SetMouseCursor and the backend's resize/hand cursors still apply from frame 1.

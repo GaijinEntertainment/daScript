@@ -236,8 +236,8 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             ref_ffn(offs1, offs3, offs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 2l, refv)
             var c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "decode arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "decode GEMV arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "decode GEMV arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
             // batch arm: 40 rows (>= the 32-row tile, deliberately unpadded), 2 regions
             fill_acts(xq, xs, 40l)
@@ -249,8 +249,8 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             ref_ffn(boffs1, boffs3, boffs2, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 40l, refv)
             c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "batch arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "prefill batch arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "prefill batch arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
             // combined arm: same batch fixture, the routed weighted-sum reduce on the device —
             // an npos=10 x k=4 grid over the 40 bucket rows via a bijective inv map, judged
@@ -279,8 +279,8 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             }
             var cc = compare_gout(comb, combref)
             t |> success(cc.maxref > 0.0, "combined arm produced non-trivial outputs")
-            t |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
-                "combined arm within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar, maxref {cc.maxref})")
+            t |> success(cc.maxdiff <= REL_TOL * cc.maxref,
+                "combined arm within tolerance (maxdiff {cc.maxdiff} vs {REL_TOL * cc.maxref} bar, maxref {cc.maxref})")
 
             // two-chunk combined arm: 8200 rows overflow the 8192-row chunk cap, so the combine
             // accumulates across two dispatches AND region B straddles the chunk boundary; a
@@ -313,8 +313,8 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             }
             cc = compare_gout(comb, combref)
             t |> success(cc.maxref > 0.0, "two-chunk combined arm produced non-trivial outputs")
-            t |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
-                "two-chunk combined arm within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar, maxref {cc.maxref})")
+            t |> success(cc.maxdiff <= REL_TOL * cc.maxref,
+                "two-chunk combined arm within tolerance (maxdiff {cc.maxdiff} vs {REL_TOL * cc.maxref} bar, maxref {cc.maxref})")
             delete cw
             delete cinv
             delete comb
@@ -394,8 +394,8 @@ def test_vulkan_moe_ffn_streamed(t : T?) {
                 ref_ffn(roffs1, roffs3, roffs2, 2, wq1[g], ws1[g], wq3[g], ws3[g], wq2[g], ws2[g], xq, xs, 40l, refv)
                 let c = compare_gout(gout, refv)
                 t |> success(c.maxref > 0.0, "streamed group {g} produced non-trivial outputs")
-                t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                    "streamed group {g} within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+                t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                    "streamed group {g} within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
                 delete offs1
                 delete offs3
                 delete offs2
@@ -506,8 +506,8 @@ def test_vulkan_moe_heat_cache(t : T?) {
             matmul_moe_gpu_ffn_join(gout)
             var c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "hit dispatch produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "async hit dispatch within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "async hit dispatch within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
             // flip the pinned set to {1}: evicts both slots, uploads expert 1 into a freed one
             var ids2 <- [1l]
             moe_gpu_heat_advise(HLAYER, HWOFF, HWOFF + HSTRIDE, HWOFF + 2l * HSTRIDE, 0, 0, 0, N, NFE, ids2, 1l)
@@ -526,8 +526,8 @@ def test_vulkan_moe_heat_cache(t : T?) {
             gout |> resize(int(N))
             matmul_moe_gpu_ffn_join(gout)
             c = compare_gout(gout, refv)
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "post-eviction hit dispatch within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "post-eviction hit dispatch within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
             delete ids
             delete ids2
             delete idx
@@ -843,8 +843,8 @@ def test_vulkan_moe_ffn_kq(t : T?) {
                 ref_ffn_kq(offs1, offs3, refoffs2, 2, w1, w3, w2, xq, xs, 2l, refv)
                 var c = compare_gout(gout, refv)
                 t |> success(c.maxref > 0.0, "kq decode arm produced non-trivial outputs")
-                t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                    "kq decode arm (down k{dfmt == 3 ? 6 : 5}) within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+                t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                    "kq decode arm (down k{dfmt == 3 ? 6 : 5}) within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
                 // batch arm (the kq tile): 40 rows (>= the 32-row tile, unpadded), 2 regions
                 fill_acts_kq(xq, xs, 40l)
@@ -857,8 +857,8 @@ def test_vulkan_moe_ffn_kq(t : T?) {
                 ref_ffn_kq(boffs1, boffs3, refboffs2, 2, w1, w3, w2, xq, xs, 40l, refv)
                 c = compare_gout(gout, refv)
                 t |> success(c.maxref > 0.0, "kq batch-rows arm produced non-trivial outputs")
-                t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                    "kq batch-rows arm (down k{dfmt == 3 ? 6 : 5}) within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+                t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                    "kq batch-rows arm (down k{dfmt == 3 ? 6 : 5}) within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
                 delete wq2
                 delete ws2
                 delete w2
@@ -906,8 +906,8 @@ def test_vulkan_moe_ffn_kq(t : T?) {
                 }
                 let cc = compare_gout(ylog, yref)
                 t |> success(cc.maxref > 0.0, "cls arm pass {cpass} produced non-trivial outputs")
-                t |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
-                    "cls GEMV arm pass {cpass} within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar, maxref {cc.maxref})")
+                t |> success(cc.maxdiff <= REL_TOL * cc.maxref,
+                    "cls GEMV arm pass {cpass} within tolerance (maxdiff {cc.maxdiff} vs {REL_TOL * cc.maxref} bar, maxref {cc.maxref})")
                 delete yref
             }
             delete wqc
@@ -989,8 +989,8 @@ def test_vulkan_moe_ffn_q40(t : T?) {
             ref_ffn_kq(refoffs1, refoffs3, refoffs2, 2, w1, w3, w2, xq, xs, 2l, refv)
             var c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "q40 decode arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "q40 decode arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "q40 decode arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
             // batch arm (the q40 tile): 40 rows (>= the 32-row tile, unpadded), 2 regions
             fill_acts_kq(xq, xs, 40l)
@@ -1005,8 +1005,8 @@ def test_vulkan_moe_ffn_q40(t : T?) {
             ref_ffn_kq(rboffs1, rboffs3, rboffs2, 2, w1, w3, w2, xq, xs, 40l, refv)
             c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "q40 batch arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "q40 batch arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "q40 batch arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
             delete wq1
             delete ws1
@@ -1119,8 +1119,8 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
             ref_ffn_kq(refoffs1, refoffs3, refoffs2, 2, w1, w3, w2, xq, xs, 2l, refv, 32)
             var c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "mixed decode arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "mixed k4/k4/q8 decode arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "mixed k4/k4/q8 decode arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
 
             // batch arm: 40 rows (>= the 32-row tile, unpadded) — vk_moe_ffn_batch carries its own
             // xunit split and chunk sizing, so the decode arm above does NOT cover it
@@ -1136,8 +1136,8 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
             ref_ffn_kq(rboffs1, rboffs3, rboffs2, 2, w1, w3, w2, xq, xs, 40l, refv, 32)
             c = compare_gout(gout, refv)
             t |> success(c.maxref > 0.0, "mixed batch arm produced non-trivial outputs")
-            t |> success(c.maxdiff <= float(REL_TOL) * c.maxref,
-                "mixed k4/k4/q8 batch arm within tolerance (maxdiff {c.maxdiff} vs {float(REL_TOL) * c.maxref} bar, maxref {c.maxref})")
+            t |> success(c.maxdiff <= REL_TOL * c.maxref,
+                "mixed k4/k4/q8 batch arm within tolerance (maxdiff {c.maxdiff} vs {REL_TOL * c.maxref} bar, maxref {c.maxref})")
             delete wq1
             delete ws1
             delete wq3
@@ -1198,8 +1198,8 @@ def test_vulkan_dense_gemm(t : T?) {
                 }
             }
             let c1 = compare_gout(y, refy)
-            t |> success(c1.maxdiff <= float(REL_TOL) * c1.maxref,
-                "dense q8 arm within tolerance (maxdiff {c1.maxdiff} vs {float(REL_TOL) * c1.maxref} bar, maxref {c1.maxref})")
+            t |> success(c1.maxdiff <= REL_TOL * c1.maxref,
+                "dense q8 arm within tolerance (maxdiff {c1.maxdiff} vs {REL_TOL * c1.maxref} bar, maxref {c1.maxref})")
             // k4 arm: [DD x KN] plane, Q8_K acts through the same one-region rail
             var kwqb : array<uint8>
             var kwsb : array<uint8>
@@ -1233,8 +1233,8 @@ def test_vulkan_dense_gemm(t : T?) {
                 }
             }
             let c2 = compare_gout(ky, krefy)
-            t |> success(c2.maxdiff <= float(REL_TOL) * c2.maxref,
-                "dense k4 arm within tolerance (maxdiff {c2.maxdiff} vs {float(REL_TOL) * c2.maxref} bar, maxref {c2.maxref})")
+            t |> success(c2.maxdiff <= REL_TOL * c2.maxref,
+                "dense k4 arm within tolerance (maxdiff {c2.maxdiff} vs {REL_TOL * c2.maxref} bar, maxref {c2.maxref})")
             // drop arm: roll back a fresh upload (the partial-triple path), then prove the
             // registry survived — the earlier q8 stack still serves, and the dropped offset
             // re-uploads and serves (buffer free + budget refund didn't corrupt anything)
@@ -1252,7 +1252,7 @@ def test_vulkan_dense_gemm(t : T?) {
             y |> resize(int(DNR * DD))
             matmul_gpu_dense(y, DWOFF, xq, xs, N, DD, DNR, 0)
             let c3 = compare_gout(y, refy)
-            t |> success(c3.maxdiff <= float(REL_TOL) * c3.maxref,
+            t |> success(c3.maxdiff <= REL_TOL * c3.maxref,
                 "q8 stack still serves after a later stack dropped (maxdiff {c3.maxdiff})")
             t |> success(moe_gpu_upload_stack(wqb3, wsb3, DROP_WOFF, N, DD, 0), "dropped offset re-uploads")
             var y3 : array<float>
@@ -1274,7 +1274,7 @@ def test_vulkan_dense_gemm(t : T?) {
                 }
             }
             let c4 = compare_gout(y3, refy3)
-            t |> success(c4.maxdiff <= float(REL_TOL) * c4.maxref,
+            t |> success(c4.maxdiff <= REL_TOL * c4.maxref,
                 "re-uploaded stack serves after drop (maxdiff {c4.maxdiff})")
             delete wq3
             delete ws3
@@ -1605,7 +1605,7 @@ def test_vulkan_deltanet(t : T?) {
                 return
             }
             if (!g_gpu.dn_shared_ok) {
-                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
+                feint("dn/attention chains declined on this device (shared-memory cap) - skipping\n")
                 return
             }
             pack_upload(wz, wsz, wqb, wsb)
@@ -1683,11 +1683,11 @@ def test_vulkan_deltanet(t : T?) {
                 ref_dn_core(qkvy, zy, bts, gts, tapsv, wnormv, av, dtv, rstate, hist, npos, wo, wso, refy, refconv)
                 let cy = compare_gout(y, refy)
                 t |> success(cy.maxref > 0.0, "npos={npos}: chain produced non-trivial outputs")
-                t |> success(cy.maxdiff <= float(DN_REL_TOL) * cy.maxref,
-                    "npos={npos}: out rows within tolerance (maxdiff {cy.maxdiff} vs {float(DN_REL_TOL) * cy.maxref} bar, maxref {cy.maxref})")
+                t |> success(cy.maxdiff <= DN_REL_TOL * cy.maxref,
+                    "npos={npos}: out rows within tolerance (maxdiff {cy.maxdiff} vs {DN_REL_TOL * cy.maxref} bar, maxref {cy.maxref})")
                 let cs = compare_gout(gstate, rstate)
-                t |> success(cs.maxdiff <= float(DN_REL_TOL) * cs.maxref,
-                    "npos={npos}: final state within tolerance (maxdiff {cs.maxdiff} vs {float(DN_REL_TOL) * cs.maxref} bar, maxref {cs.maxref})")
+                t |> success(cs.maxdiff <= DN_REL_TOL * cs.maxref,
+                    "npos={npos}: final state within tolerance (maxdiff {cs.maxdiff} vs {DN_REL_TOL * cs.maxref} bar, maxref {cs.maxref})")
                 var reft : array<float>
                 reft |> resize(int(DNTAPS * DNCD))
                 for (k in range64(DNTAPS)) {
@@ -1696,8 +1696,8 @@ def test_vulkan_deltanet(t : T?) {
                     }
                 }
                 let ct = compare_gout(tail, reft)
-                t |> success(ct.maxdiff <= float(REL_TOL) * ct.maxref,
-                    "npos={npos}: conv-tail rows within tolerance (maxdiff {ct.maxdiff} vs {float(REL_TOL) * ct.maxref} bar)")
+                t |> success(ct.maxdiff <= REL_TOL * ct.maxref,
+                    "npos={npos}: conv-tail rows within tolerance (maxdiff {ct.maxdiff} vs {REL_TOL * ct.maxref} bar)")
                 delete xq
                 delete xs
                 delete bts
@@ -1765,7 +1765,7 @@ def test_vulkan_deltanet_step(t : T?) {
                 return
             }
             if (!g_gpu.dn_shared_ok) {
-                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
+                feint("dn/attention chains declined on this device (shared-memory cap) - skipping\n")
                 return
             }
             pack_upload(wz, wsz, wqb, wsb)
@@ -1908,11 +1908,11 @@ def test_vulkan_deltanet_step(t : T?) {
                         moe_gpu_dn_flush(0l, addr(gstate[0]), addr(gring[0]))
                     }
                     let cs4 = compare_gout(gstate, rstate4)
-                    t |> success(cs4.maxdiff <= float(DN_REL_TOL) * cs4.maxref,
-                        "flushed state at token 4 within tolerance (maxdiff {cs4.maxdiff} vs {float(DN_REL_TOL) * cs4.maxref} bar)")
+                    t |> success(cs4.maxdiff <= DN_REL_TOL * cs4.maxref,
+                        "flushed state at token 4 within tolerance (maxdiff {cs4.maxdiff} vs {DN_REL_TOL * cs4.maxref} bar)")
                     let cr4 = compare_gout(gring, reft4)
-                    t |> success(cr4.maxdiff <= float(REL_TOL) * cr4.maxref,
-                        "flushed conv ring at token 4 within tolerance (maxdiff {cr4.maxdiff} vs {float(REL_TOL) * cr4.maxref} bar)")
+                    t |> success(cr4.maxdiff <= REL_TOL * cr4.maxref,
+                        "flushed conv ring at token 4 within tolerance (maxdiff {cr4.maxdiff} vs {REL_TOL * cr4.maxref} bar)")
                 }
             }
             unsafe {
@@ -1920,14 +1920,14 @@ def test_vulkan_deltanet_step(t : T?) {
             }
             let cy = compare_gout(y, refy)
             t |> success(cy.maxref > 0.0, "step chain produced non-trivial outputs")
-            t |> success(cy.maxdiff <= float(DN_REL_TOL) * cy.maxref,
-                "step out rows across the flush within tolerance (maxdiff {cy.maxdiff} vs {float(DN_REL_TOL) * cy.maxref} bar, maxref {cy.maxref})")
+            t |> success(cy.maxdiff <= DN_REL_TOL * cy.maxref,
+                "step out rows across the flush within tolerance (maxdiff {cy.maxdiff} vs {DN_REL_TOL * cy.maxref} bar, maxref {cy.maxref})")
             let cs = compare_gout(gstate, rstate)
-            t |> success(cs.maxdiff <= float(DN_REL_TOL) * cs.maxref,
-                "final state within tolerance (maxdiff {cs.maxdiff} vs {float(DN_REL_TOL) * cs.maxref} bar)")
+            t |> success(cs.maxdiff <= DN_REL_TOL * cs.maxref,
+                "final state within tolerance (maxdiff {cs.maxdiff} vs {DN_REL_TOL * cs.maxref} bar)")
             let cr = compare_gout(gring, reft)
-            t |> success(cr.maxdiff <= float(REL_TOL) * cr.maxref,
-                "final conv ring within tolerance (maxdiff {cr.maxdiff} vs {float(REL_TOL) * cr.maxref} bar)")
+            t |> success(cr.maxdiff <= REL_TOL * cr.maxref,
+                "final conv ring within tolerance (maxdiff {cr.maxdiff} vs {REL_TOL * cr.maxref} bar)")
             reset_moe_gpu_dn_layers()
             delete wqkv
             delete wsqkv
@@ -2118,7 +2118,7 @@ def test_vulkan_attention(t : T?) {
                 return
             }
             if (!g_gpu.dn_shared_ok) {
-                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
+                feint("dn/attention chains declined on this device (shared-memory cap) - skipping\n")
                 return
             }
             pack_upload(wqp, wsqp, wqb, wsb)
@@ -2186,7 +2186,7 @@ def test_vulkan_attention(t : T?) {
                         addr<float const?>(rmsq[0]), addr<float const?>(rmsk[0]),
                         addr<float const?>(cosr[0]), addr<float const?>(sinr[0]),
                         npos, ATD, ATQD, ATKVD, ATHS, rot, ATNH, ATNH / ATNKV,
-                        1.0 / sqrt(float(ATHS)), float(AT_EPS), arm.gated, true)
+                        1.0 / sqrt(float(ATHS)), AT_EPS, arm.gated, true)
                 }
                 // the CPU mirror: GEMMs, prep, attention, requant, wo
                 var qgy : array<float>
@@ -2267,14 +2267,14 @@ def test_vulkan_attention(t : T?) {
                 let tag = "npos={npos} rot={rot} gated={arm.gated} o4={arm.o4}"
                 let cy = compare_gout(y, refy)
                 t |> success(cy.maxref > 0.0, "{tag}: chain produced non-trivial outputs")
-                t |> success(cy.maxdiff <= float(AT_REL_TOL) * cy.maxref,
-                    "{tag}: out rows within tolerance (maxdiff {cy.maxdiff} vs {float(AT_REL_TOL) * cy.maxref} bar, maxref {cy.maxref})")
+                t |> success(cy.maxdiff <= AT_REL_TOL * cy.maxref,
+                    "{tag}: out rows within tolerance (maxdiff {cy.maxdiff} vs {AT_REL_TOL * cy.maxref} bar, maxref {cy.maxref})")
                 let ck = compare_gout(kout, kp)
-                t |> success(ck.maxdiff <= float(AT_REL_TOL) * ck.maxref,
-                    "{tag}: roped k rows within tolerance (maxdiff {ck.maxdiff} vs {float(AT_REL_TOL) * ck.maxref} bar)")
+                t |> success(ck.maxdiff <= AT_REL_TOL * ck.maxref,
+                    "{tag}: roped k rows within tolerance (maxdiff {ck.maxdiff} vs {AT_REL_TOL * ck.maxref} bar)")
                 let cv = compare_gout(vout, vy)
-                t |> success(cv.maxdiff <= float(AT_REL_TOL) * cv.maxref,
-                    "{tag}: v rows within tolerance (maxdiff {cv.maxdiff} vs {float(AT_REL_TOL) * cv.maxref} bar)")
+                t |> success(cv.maxdiff <= AT_REL_TOL * cv.maxref,
+                    "{tag}: v rows within tolerance (maxdiff {cv.maxdiff} vs {AT_REL_TOL * cv.maxref} bar)")
                 delete xq
                 delete xs
                 delete cosr
@@ -2390,9 +2390,9 @@ def test_vulkan_rope_kv_store(t : T?) {
                 let ck = compare_gout(krow, rk)
                 let cv = compare_gout(vrow, rv)
                 let tag = neox ? "NEOX" : "NORM"
-                t |> success(cq.maxdiff <= float(REL_TOL) * cq.maxref + 1e-6,
+                t |> success(cq.maxdiff <= REL_TOL * cq.maxref + 1e-6,
                     "rope_kv {tag} q roped (maxdiff {cq.maxdiff})")
-                t |> success(ck.maxdiff <= float(REL_TOL) * ck.maxref + 1e-6,
+                t |> success(ck.maxdiff <= REL_TOL * ck.maxref + 1e-6,
                     "rope_kv {tag} K stored roped (maxdiff {ck.maxdiff})")
                 t |> success(cv.maxdiff <= 1e-6,
                     "rope_kv {tag} V stored raw (maxdiff {cv.maxdiff})")
@@ -2501,13 +2501,13 @@ def test_vulkan_decode_attn(t : T?) {
                     for (p in range(int(CNT))) {
                         acc += sc[p] * cpuV[p * int(KVD) + kvh * int(HS) + d]
                     }
-                    refo[h * int(HS) + d] = float(acc / den)
+                    refo[h * int(HS) + d] = acc / den
                 }
                 delete sc
             }
             let ca = compare_gout(out, refo)
-            t |> success(ca.maxdiff <= float(REL_TOL) * ca.maxref + 1e-5,
-                "decode attention within tolerance (maxdiff {ca.maxdiff} vs {float(REL_TOL) * ca.maxref} bar, maxref {ca.maxref})")
+            t |> success(ca.maxdiff <= REL_TOL * ca.maxref + 1e-5,
+                "decode attention within tolerance (maxdiff {ca.maxdiff} vs {REL_TOL * ca.maxref} bar, maxref {ca.maxref})")
             delete cpuK
             delete cpuV
             delete q
@@ -2572,8 +2572,8 @@ def test_vulkan_arena_gemm(t : T?) {
                     }
                 }
                 let cg = compare_gout(y, refy)
-                t |> success(cg.maxdiff <= float(REL_TOL) * cg.maxref,
-                    "arena GEMM arm {arm} within tolerance (maxdiff {cg.maxdiff} vs {float(REL_TOL) * cg.maxref} bar)")
+                t |> success(cg.maxdiff <= REL_TOL * cg.maxref,
+                    "arena GEMM arm {arm} within tolerance (maxdiff {cg.maxdiff} vs {REL_TOL * cg.maxref} bar)")
                 delete y
                 delete refy
             }
@@ -2684,8 +2684,8 @@ def test_vulkan_arena_ffn(t : T?) {
                 refy[o] = acc
             }
             let cf = compare_gout(y, refy)
-            t |> success(cf.maxdiff <= float(REL_TOL) * cf.maxref,
-                "arena FFN within tolerance (maxdiff {cf.maxdiff} vs {float(REL_TOL) * cf.maxref} bar, maxref {cf.maxref})")
+            t |> success(cf.maxdiff <= REL_TOL * cf.maxref,
+                "arena FFN within tolerance (maxdiff {cf.maxdiff} vs {REL_TOL * cf.maxref} bar, maxref {cf.maxref})")
             delete wq1
             delete ws1
             delete wq3
@@ -2755,12 +2755,12 @@ def test_vulkan_add_rms(t : T?) {
                 }
                 vk_add_rms(x, a, w, y, AD, EPS, ASCALE, add_on)
                 let cy = compare_gout(y, refy)
-                t |> success(cy.maxdiff <= float(REL_TOL) * cy.maxref,
-                    "add_rms arm {arm} y within tolerance (maxdiff {cy.maxdiff} vs {float(REL_TOL) * cy.maxref} bar)")
+                t |> success(cy.maxdiff <= REL_TOL * cy.maxref,
+                    "add_rms arm {arm} y within tolerance (maxdiff {cy.maxdiff} vs {REL_TOL * cy.maxref} bar)")
                 // x IS the residual stream — the kernel must have updated it in place
                 let cx = compare_gout(x, vv)
-                t |> success(cx.maxdiff <= float(REL_TOL) * cx.maxref,
-                    "add_rms arm {arm} residual updated in place (maxdiff {cx.maxdiff} vs {float(REL_TOL) * cx.maxref} bar)")
+                t |> success(cx.maxdiff <= REL_TOL * cx.maxref,
+                    "add_rms arm {arm} residual updated in place (maxdiff {cx.maxdiff} vs {REL_TOL * cx.maxref} bar)")
                 delete x
                 delete a
                 delete w
@@ -2831,8 +2831,8 @@ def test_vulkan_arena(t : T?) {
                     refy[c] = float(acc)
                 }
                 let cc = compare_gout(y, refy)
-                tt |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
-                    "arena tensor {arm} within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar, maxref {cc.maxref})")
+                tt |> success(cc.maxdiff <= REL_TOL * cc.maxref,
+                    "arena tensor {arm} within tolerance (maxdiff {cc.maxdiff} vs {REL_TOL * cc.maxref} bar, maxref {cc.maxref})")
                 delete y
                 delete refy
             }
@@ -2903,8 +2903,8 @@ def test_vulkan_drop_model(t : T?) {
                     }
                 }
                 let cs = compare_gout(y, refy)
-                t |> success(cs.maxdiff <= float(REL_TOL) * cs.maxref,
-                    "cycle {cycle} stack serves its own content (maxdiff {cs.maxdiff} vs {float(REL_TOL) * cs.maxref} bar)")
+                t |> success(cs.maxdiff <= REL_TOL * cs.maxref,
+                    "cycle {cycle} stack serves its own content (maxdiff {cs.maxdiff} vs {REL_TOL * cs.maxref} bar)")
                 // arena rail: reserve (fresh after a drop) -> place -> GEMV -> parity
                 t |> success(vk_arena_reserve(0, ARENA_BLOCKS / 2l), "cycle {cycle} arena reserve")
                 var awq : array<int8>
@@ -2935,8 +2935,8 @@ def test_vulkan_drop_model(t : T?) {
                     aref[c] = float(acc)
                 }
                 let ca = compare_gout(ay, aref)
-                t |> success(ca.maxdiff <= float(REL_TOL) * ca.maxref,
-                    "cycle {cycle} arena serves its own content (maxdiff {ca.maxdiff} vs {float(REL_TOL) * ca.maxref} bar)")
+                t |> success(ca.maxdiff <= REL_TOL * ca.maxref,
+                    "cycle {cycle} arena serves its own content (maxdiff {ca.maxdiff} vs {REL_TOL * ca.maxref} bar)")
                 // the whole-model drop: every stack (this file's earlier tests included), the
                 // arena, and all lazy dispatch state die; cycle 1 re-runs the ladder from bare
                 moe_gpu_drop_model_state()
@@ -2983,6 +2983,7 @@ def test_vulkan_arena_slabs(t : T?) {
                     return
                 }
                 var blks : array<int64>
+                blks |> reserve(3)
                 for (arm in range64(3l)) {
                     var wq : array<int8>
                     var ws : array<float>
@@ -3025,8 +3026,8 @@ def test_vulkan_arena_slabs(t : T?) {
                         refy[c] = float(acc)
                     }
                     let cc = compare_gout(y, refy)
-                    tt |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
-                        "slab tensor {arm} within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar)")
+                    tt |> success(cc.maxdiff <= REL_TOL * cc.maxref,
+                        "slab tensor {arm} within tolerance (maxdiff {cc.maxdiff} vs {REL_TOL * cc.maxref} bar)")
                     delete wq
                     delete ws
                     delete y

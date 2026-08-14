@@ -96,9 +96,7 @@ def test_chat_gemma(t : T?) {
         var m <- load_capped(path)
         var raw <- load_tokenizer_gguf(path)
         // old gemma_chat.das: BOS=2, SOT=106, "user\n{sys}\n\n{usr}", EOT=107, "\n", SOT, "model\n"
-        var want : array<int64>
-        want |> push(2l)
-        want |> push(106l)
+        var want <- [2l, 106l]
         want |> push_from(encode(raw, "user\n{SYS}\n\n{USR}", false, false))
         want |> push(107l)
         want |> push_from(encode(raw, "\n", false, false))
@@ -182,9 +180,8 @@ def test_chat_llama3(t : T?) {
         let eh = special_id(raw, "<|end_header_id|>")
         let eot = special_id(raw, "<|eot_id|>")
         // old llama3_chat.das: BOS, header(system), "\n\n{sys}", eot, header(user), "\n\n{usr}", eot, header(assistant), "\n\n"
-        var want : array<int64>
-        want |> push(raw.bos_id)
-        want |> push(sh); want |> push_from(bpe_encode(raw, "system")); want |> push(eh)
+        var want <- [raw.bos_id, sh]
+        want |> push_from(bpe_encode(raw, "system")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n{SYS}"))
         want |> push(eot)
         want |> push(sh); want |> push_from(bpe_encode(raw, "user")); want |> push(eh)
@@ -380,8 +377,7 @@ def test_chat_think_suppress(t : T?) {
         set_thinking(c2, false)
         add_user(c2, USR)
         let got2 <- render_turn(m, c2)
-        var want2 : array<int64>
-        want2 |> push_from(want)
+        var want2 := want
         want2 |> push(tho)
         want2 |> push_from(bpe_encode(raw, "\n\n"))
         want2 |> push(thc)
@@ -453,9 +449,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         set_thinking(c, false)
         add_user(c, USR)
         let got <- render_turn(m, c)
-        var want : array<int64>
-        want |> push(bos_id(m))
-        want |> push(trn)
+        var want <- [bos_id(m), trn]
         want |> push_from(encode(m, "user\n{USR}", false, false))
         want |> push(trc)
         want |> push_from(encode(m, "\n", false, false))
@@ -473,9 +467,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         set_thinking(c2, true)
         add_user(c2, USR)
         let got2 <- render_turn(m, c2)
-        var want2 : array<int64>
-        want2 |> push(bos_id(m))
-        want2 |> push(trn)
+        var want2 <- [bos_id(m), trn]
         want2 |> push_from(encode(m, "system\n", false, false))
         want2 |> push(thk)
         want2 |> push(trc)
@@ -494,9 +486,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         set_thinking(c3, true)
         add_user(c3, USR)
         let got3 <- render_turn(m, c3)
-        var want3 : array<int64>
-        want3 |> push(bos_id(m))
-        want3 |> push(trn)
+        var want3 <- [bos_id(m), trn]
         want3 |> push_from(encode(m, "system\n", false, false))
         want3 |> push(thk)
         want3 |> push_from(encode(m, SYS, false, false))
@@ -644,9 +634,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         set_tools(c, tools)
         add_user(c, USR)
         let got <- render_turn(m, c)
-        var want : array<int64>
-        want |> push(bos_id(m))
-        want |> push(trn)
+        var want <- [bos_id(m), trn]
         want |> push_from(encode(m, "system\n", false, false))
         want |> push(tlo)
         want |> push_from(encode(m, "declaration:get_weather\{description:", false, false))
@@ -688,9 +676,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         calls |> push("\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}")
         var toks : array<int64>
         render_assistant_calls(m, c2, "", calls, toks)
-        var want2 : array<int64>
-        want2 |> push(bos_id(m))
-        want2 |> push(trn)
+        var want2 <- [bos_id(m), trn]
         want2 |> push_from(encode(m, "user\n{USR}", false, false))
         want2 |> push(trc)
         want2 |> push_from(encode(m, "\n", false, false))
@@ -870,7 +856,7 @@ def test_chat_strip_think(t : T?) {
     t |> run("leading think block is stripped from history content") @(t : T?) {
         t |> equal(strip_think("<think>\nreasoning here\n</think>\n\nThe answer is 42."), "The answer is 42.")
         t |> equal(strip_think("  \n<think>r</think>answer"), "answer")   // leading whitespace before the block is fine
-        t |> equal(strip_think("<think>never closed — budget ran out"), "")
+        t |> equal(strip_think("<think>never closed — budget ran out"), "")  // nolint:STYLE039 - the em-dash IS the test input: multibyte content inside an unclosed think block
     }
     t |> run("replies without a leading think block pass through") @(t : T?) {
         t |> equal(strip_think("The answer is 42."), "The answer is 42.")
@@ -950,8 +936,8 @@ def test_chat_render_seam(t : T?) {
             // eval the rendered stream on a fresh session: byte-equal caches ⟺ identical tokens
             var s <- create_session(m)
             eval(m, s, toks)
-            t |> success(same(a.session.key_cache, s.key_cache), "key cache byte-equal: rendered ≡ evaled")
-            t |> success(same(a.session.value_cache, s.value_cache), "value cache byte-equal: rendered ≡ evaled")
+            t |> success(same(a.session.key_cache, s.key_cache), "key cache byte-equal: rendered == evaled")
+            t |> success(same(a.session.value_cache, s.value_cache), "value cache byte-equal: rendered == evaled")
             set_prefill_attn_mode(saved_mode)
             delete s
             delete b
@@ -994,7 +980,7 @@ def test_chat_audio_markers(t : T?) {
         let ba = special_id(m, "[BEGIN_AUDIO]")
         t |> success(ba >= 0l, "[BEGIN_AUDIO] resolves in the vocab")
         t |> equal(head[length(head) - 1], ba, "head closes with the opening audio marker")
-        t |> success(length(tail) > 0 && tail[0] != ba, "no closing marker — the tail starts with text")
+        t |> success(!empty(tail) && tail[0] != ba, "no closing marker - the tail starts with text")
         delete c
         delete m
     }

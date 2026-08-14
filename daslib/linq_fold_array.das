@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
+options _cyclomatic_complexity = 62     // driven by emit_zip (277 lines), the per-shape emitter
+options _function_length = 278
 
 module linq_fold_array shared public
 
@@ -188,7 +190,7 @@ class ZipAdapter : SourceAdapter {
         let itAName = shape.itAName
         let itBName = shape.itBName
         return <- qmacro_block() {
-            for ($i(itAName), $i(itBName) in $i(srcAName), $i(srcBName)) { // nolint:LINT002 parallel-for must bind both vars; emit_zip body reads them only when needsItBind
+            for ($i(itAName), $i(itBName) in $i(srcAName), $i(srcBName)) {
                 $e(body)
             }
         }
@@ -480,7 +482,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     if (lane == LinqLane.ACCUMULATOR && !isCounter) {
         if (projection == null) return null
         var preCondStmts : array<Expression?>
-        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+        preCondStmts |> push <| qmacro_expr() {
             let $i(itName) = ($i(itAName), $i(itBName))
         }
         var intermediateBinds : array<Expression?>
@@ -490,7 +492,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     }
     if (lane == LinqLane.EARLY_EXIT) {
         var preCondStmts : array<Expression?>
-        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+        preCondStmts |> push <| qmacro_expr() {
             let $i(itName) = ($i(itAName), $i(itBName))
         }
         var intermediateBinds : array<Expression?>
@@ -535,7 +537,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         if (needsItBind) {
             var preStmts : array<Expression?>
             preStmts |> reserve(2)
-            preStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+            preStmts |> push <| qmacro_expr() {
                 let $i(itName) = ($i(itAName), $i(itBName))
             }
             preStmts |> push(loopBody)
@@ -564,7 +566,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var perElementPush = stmts_to_expr(pushStmts)
     var preCondStmts : array<Expression?>
     if (needsItBindLocal) {
-        preCondStmts |> push <| qmacro_expr() {     // nolint:STYLE012
+        preCondStmts |> push <| qmacro_expr() {
             let $i(itName) = ($i(itAName), $i(itBName))
         }
     }

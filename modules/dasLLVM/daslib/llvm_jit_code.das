@@ -18,10 +18,9 @@ struct public LlvmCodeCtx {
     jit : JitCtx
     //! the das function being generated: signature, argument types, annotations (read-only)
     fn : Function const?
-    //! the LLVM function to fill. ABI is already built: one typed parameter per das argument
-    //! (in order), then the context pointer, then — for by-memory results — the CMRES pointer.
-    //! The generator appends basic blocks and must terminate them; it must not touch `impl`
-    //! if it declines.
+    //! the LLVM function to fill; the ABI is already built — one typed parameter per das argument
+    //! in order, then the context pointer, then the CMRES pointer for by-memory results. A generator
+    //! must append and terminate its basic blocks, and must not touch `impl` if it declines.
     impl : LLVMOpaqueValue?
     impl_type : LLVMOpaqueType?
     //! the [llvm_code(...)] declaration; generator parameters live in `.arguments`

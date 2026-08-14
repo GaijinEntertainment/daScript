@@ -2093,10 +2093,7 @@ def private TextInputFilteredSection() {
             ImGuiInputTextFlags.CallbackCharFilter,
             @(var data : ImGuiInputTextCallbackData) : int {
                 let c = int(data.EventChar)
-                if (c == int('i')) return 0
-                if (c == int('m')) return 0
-                if (c == int('g')) return 0
-                if (c == int('u')) return 0
+                if (c == 'i' || c == 'm' || c == 'g' || c == 'u') return 0
                 return 1
             })
     }

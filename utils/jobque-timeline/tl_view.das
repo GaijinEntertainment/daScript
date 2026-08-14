@@ -259,6 +259,240 @@ def private rebuild_overview(doc : TraceDoc; var cache : RenderCache) {
     cache.ov_generation = doc.generation
 }
 
+// Per-frame canvas geometry, shared by the input, pick and draw phases.
+struct private Geom {
+    p : float2             // canvas origin, screen px
+    bb : float4            // canvas bounds
+    plot_x0, plot_w : float
+    lanes_y0, row_h : float
+    nlanes : int
+    span : double
+    px_per_us : double
+}
+
+// Wheel zoom-at-cursor, shift+drag range selection, plain drag pan, overview scrub,
+// double-click reset, Escape clear — the only phase that moves the view.
+def private handle_input(doc : TraceDoc; var ui : ViewUI; g : Geom;
+                         hovered, held : bool; mx, my : float; m_t : double) {
+    let io & = unsafe(GetIO())
+    if (hovered && io.MouseWheel != 0.0f) {
+        let factor = exp(-io.MouseWheel * 0.16f)
+        var nw = (ui.t1 - ui.t0) * double(factor)
+        nw = clamp(nw, 8.0lf, g.span * 2.0lf)
+        let frac = clamp(double(mx - g.plot_x0) / double(g.plot_w), 0.0lf, 1.0lf)
+        ui.t0 = m_t - nw * frac
+        ui.t1 = ui.t0 + nw
+        clamp_view(ui, g.span)
+        ui.interacted = true
+    }
+    if (hovered && io.KeyShift && IsMouseClicked(ImGuiMouseButton.Left) && my >= g.lanes_y0) {
+        ui.sel_dragging = true
+        ui.sel_active = true
+        ui.sel_anchor = m_t
+        ui.sel_t0 = m_t
+        ui.sel_t1 = m_t
+    }
+    if (ui.sel_dragging) {
+        if (held) {
+            ui.sel_t0 = min(ui.sel_anchor, m_t)
+            ui.sel_t1 = max(ui.sel_anchor, m_t)
+        } else {
+            ui.sel_dragging = false
+        }
+    } elif (held && io.MouseDelta.x != 0.0f && !io.KeyShift) {
+        if (my >= g.lanes_y0) {
+            let dt = double(io.MouseDelta.x) / g.px_per_us
+            ui.t0 -= dt
+            ui.t1 -= dt
+        }
+        clamp_view(ui, g.span)
+        ui.interacted = true
+    }
+    if (held && my < g.p.y + OV_H) {
+        // overview scrub: center the view at the clicked time
+        let frac = clamp(double(mx - g.plot_x0) / double(g.plot_w), 0.0lf, 1.0lf)
+        let c = g.span * frac
+        let vw = ui.t1 - ui.t0
+        ui.t0 = c - vw * 0.5lf
+        ui.t1 = ui.t0 + vw
+        clamp_view(ui, g.span)
+        ui.interacted = true
+    }
+    if (hovered && IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
+        view_full(ui, doc)
+        ui.interacted = true
+    }
+    if (hovered && IsKeyPressed(ImGuiKey.Escape)) {
+        ui.sel_active = false
+        ui.sel_dragging = false
+    }
+}
+
+// Hover pick on the lane under the cursor; a chunk event wins over anything else it overlaps.
+def private pick_hover(doc : TraceDoc; var ui : ViewUI; g : Geom; hovered : bool; my : float; m_t : double) {
+    ui.hover_lane = -1
+    ui.hover_idx = -1
+    if (!hovered || my < g.lanes_y0) return
+    let hl = int((my - g.lanes_y0) / g.row_h)
+    if (hl < 0 || hl >= g.nlanes) return
+    let tol = 4.0lf / g.px_per_us
+    var best = -1
+    var bestChunk = false
+    let lane & = unsafe(doc.lanes[hl])
+    var i = lane_lower_bound(lane, m_t - max(lane.max_dur, tol))
+    while (i < length(lane.ev)) {
+        let e & = unsafe(lane.ev[i])
+        if (e.t0 > m_t + tol) {
+            break
+        }
+        if (m_t >= e.t0 - tol && m_t <= e.t0 + max(double(e.dur), tol)) {
+            let isChunk = ev_kind(e.meta) == EV_CHUNK
+            if (best < 0 || (isChunk && !bestChunk)) {
+                best = i
+                bestChunk = isChunk
+            }
+        }
+        i++
+    }
+    ui.hover_lane = hl
+    ui.hover_idx = best
+}
+
+def private refresh_caches(doc : TraceDoc; ui : ViewUI; var cache : RenderCache; g : Geom) {
+    if (cache.generation != doc.generation || cache.t0 != ui.t0 || cache.t1 != ui.t1 || cache.plot_w != g.plot_w) {
+        delete cache.runs
+        cache.t0 = ui.t0
+        cache.t1 = ui.t1
+        cache.plot_w = g.plot_w
+        cache.generation = doc.generation
+        cache.bucket_mode = count_visible(doc, ui.t0, ui.t1) > EVENT_PATH_MAX
+        if (cache.bucket_mode) {
+            rebuild_bucket_runs(doc, cache, g.span, g.px_per_us)
+        } else {
+            rebuild_event_runs(doc, cache, g.px_per_us)
+        }
+    }
+    if (cache.ov_generation != doc.generation) {
+        rebuild_overview(doc, cache)
+    }
+}
+
+// overview strip (cached normalized runs, lane-folded rows) + viewport rect
+def private draw_overview(var dl : ImDrawList?; cache : RenderCache; ui : ViewUI; g : Geom) {
+    let ov_y0 = g.p.y + 2.0f
+    let ov_y1 = g.p.y + OV_H - 2.0f
+    let ov_row = (ov_y1 - ov_y0) / float(max(cache.ov_rows, 1))
+    for (r in cache.ov_runs) {
+        let oy0 = ov_y0 + float(int(r.lane)) * ov_row
+        dl |> add_rect_filled(float2(g.plot_x0 + r.x0 * g.plot_w, oy0),
+            float2(max(g.plot_x0 + r.x1 * g.plot_w, g.plot_x0 + r.x0 * g.plot_w + 0.5f), oy0 + ov_row),
+            col32(r.col, 150))
+    }
+    let vx0 = clamp(g.plot_x0 + float(ui.t0 / g.span) * g.plot_w, g.plot_x0, g.plot_x0 + g.plot_w)
+    let vx1 = clamp(g.plot_x0 + float(ui.t1 / g.span) * g.plot_w, g.plot_x0, g.plot_x0 + g.plot_w)
+    dl |> add_rect_filled(float2(vx0, ov_y0), float2(max(vx1, vx0 + 2.0f), ov_y1), col32(0xE8EAEDu, 36))
+    dl |> add_line(float2(vx0, ov_y0), float2(vx0, ov_y1), col32(0xE8EAEDu, 160), 1.0)
+    dl |> add_line(float2(vx1, ov_y0), float2(vx1, ov_y1), col32(0xE8EAEDu, 160), 1.0)
+}
+
+// time grid: 1-2-5 ladder targeting ~90px
+def private draw_time_grid(var dl : ImDrawList?; ui : ViewUI; g : Geom) {
+    let target_us = 90.0lf / g.px_per_us
+    var step = 1.0lf
+    while (step < target_us) {
+        if (step * 2.0lf >= target_us) {
+            step *= 2.0lf
+            break
+        }
+        if (step * 5.0lf >= target_us) {
+            step *= 5.0lf
+            break
+        }
+        step *= 10.0lf
+    }
+    var gt = floor(ui.t0 / step) * step
+    while (gt <= ui.t1) {
+        let gx = g.plot_x0 + float((gt - ui.t0) * g.px_per_us)
+        if (gx >= g.plot_x0) {
+            dl |> add_line(float2(gx, g.lanes_y0), float2(gx, g.bb.w), col32(0x2A2F36u, 255), 1.0)
+            dl |> add_text(float2(gx + 3.0f, g.p.y + OV_H), col32(0x8A9099u, 255), fmt_us(gt))
+        }
+        gt += step
+    }
+}
+
+// marker (unit) row — its own band below the time labels
+def private draw_markers(var dl : ImDrawList?; doc : TraceDoc; ui : ViewUI; g : Geom) {
+    let un_y = g.p.y + OV_H + GRID_H
+    for (mk in doc.marker_kinds) {
+        for (i in range(length(mk.ts))) {
+            let t = mk.ts[i]
+            if (t < ui.t0 || t > ui.t1) {
+                continue
+            }
+            let x = g.plot_x0 + float((t - ui.t0) * g.px_per_us)
+            dl |> add_line(float2(x, un_y), float2(x, g.bb.w), col32(0xE8EAEDu, 70), 1.0)
+            dl |> add_text(float2(x + 2.0f, un_y), col32(0xC9CDD2u, 255), "{mk.name} {mk.args[i]}")
+        }
+    }
+}
+
+def private draw_lane_labels(var dl : ImDrawList?; doc : TraceDoc; g : Geom) {
+    for (li in range(g.nlanes)) {
+        let y0 = g.lanes_y0 + float(li) * g.row_h
+        dl |> add_line(float2(g.p.x, y0), float2(g.bb.z, y0), col32(0x20242Au, 255), 1.0)
+        if (g.row_h >= 9.0f) {
+            dl |> add_text(float2(g.p.x + 4.0f, y0 + max((g.row_h - 14.0f) * 0.5f, 0.0f)), col32(0x8A9099u, 255), doc.lanes[li].name)
+        }
+    }
+}
+
+def private draw_runs(var dl : ImDrawList?; cache : RenderCache; g : Geom) {
+    for (r in cache.runs) {
+        let y0 = g.lanes_y0 + float(int(r.lane)) * g.row_h
+        let y1 = y0 + g.row_h - 1.0f
+        let rx0 = g.plot_x0 + r.x0
+        let rx1 = g.plot_x0 + r.x1
+        if (int(r.kind) == 1) {
+            let cy = (y0 + y1) * 0.5f
+            dl |> add_rect_filled(float2(rx0, cy - g.row_h * 0.16f), float2(rx1, cy + g.row_h * 0.16f), col32(r.col, 255))
+        } elif (int(r.kind) == 3) {
+            dl |> add_rect_filled(float2(rx0, y0 + g.row_h * 0.3f), float2(rx1, y1 - g.row_h * 0.3f), col32(r.col, 120))
+        } else {
+            dl |> add_rect_filled(float2(rx0, y0 + 1.0f), float2(rx1, y1), col32(r.col, 255))
+        }
+    }
+}
+
+def private draw_selection(var dl : ImDrawList?; ui : ViewUI; g : Geom) {
+    if (!ui.sel_active) return
+    let sx0 = g.plot_x0 + float((ui.sel_t0 - ui.t0) * g.px_per_us)
+    let sx1 = g.plot_x0 + float((ui.sel_t1 - ui.t0) * g.px_per_us)
+    dl |> add_rect_filled(float2(sx0, g.lanes_y0), float2(max(sx1, sx0 + 1.0f), g.bb.w), col32(0xE8EAEDu, 22))
+    dl |> add_line(float2(sx0, g.lanes_y0), float2(sx0, g.bb.w), col32(0xE8EAEDu, 180), 1.0)
+    dl |> add_line(float2(sx1, g.lanes_y0), float2(sx1, g.bb.w), col32(0xE8EAEDu, 180), 1.0)
+}
+
+def private draw_hover_outline(var dl : ImDrawList?; doc : TraceDoc; ui : ViewUI; g : Geom) {
+    if (ui.hover_lane < 0 || ui.hover_idx < 0) return
+    let e & = unsafe(doc.lanes[ui.hover_lane].ev[ui.hover_idx])
+    let y0 = g.lanes_y0 + float(ui.hover_lane) * g.row_h
+    let x0 = g.plot_x0 + float((e.t0 - ui.t0) * g.px_per_us)
+    let x1 = max(x0 + 1.0f, g.plot_x0 + float((e.t0 + double(e.dur) - ui.t0) * g.px_per_us))
+    dl |> add_rect(float2(x0 - 1.0f, y0), float2(x1 + 1.0f, y0 + g.row_h - 1.0f), col32(0xE8EAEDu, 255), 0.0, ImDrawFlags.None, 1.0)
+}
+
+def private draw_hover_tooltip(doc : TraceDoc; ui : ViewUI) {
+    if (ui.hover_lane < 0 || ui.hover_idx < 0) return
+    let e & = unsafe(doc.lanes[ui.hover_lane].ev[ui.hover_idx])
+    let cat & = unsafe(doc.cats[ev_cat(e.meta)])
+    tooltip(TL_TIP) {
+        text("{kind_name(ev_kind(e.meta))} — {cat.name}")
+        text("stage {ev_stage(e.meta)}/{ev_nstages(e.meta)}  chunk {e.arg}  chain {e.chain}")
+        text("t {fmt_us(e.t0)}  dur {fmt_us(double(e.dur))}")
+    }
+}
+
 //! Draw one file's timeline canvas filling the current window's remaining space.
 //! Handles wheel zoom-at-cursor, drag pan, shift+drag selection, double-click reset,
 //! overview scrub, hover pick. Replays cached draw runs when the view is unchanged.
@@ -280,232 +514,38 @@ def public draw_timeline(doc : TraceDoc; var ui : ViewUI; var cache : RenderCach
     var held = false
     ButtonBehavior(bb, GetID(id), hovered, held, ImGuiButtonFlags.MouseButtonLeft)
 
-    let span = max(doc.span, 8.0lf)
     let nlanes = max(length(doc.lanes), 1)
-    let lanes_y0 = p.y + HDR_H
-    let row_h = max((h - HDR_H) / float(nlanes), 3.0f)
-    let plot_x0 = p.x + GUT
     let plot_w = max(w - GUT, 10.0f)
-    var px_per_us = double(plot_w) / (ui.t1 - ui.t0)
+    var g = Geom(p = p, bb = bb,
+                 plot_x0 = p.x + GUT, plot_w = plot_w,
+                 lanes_y0 = p.y + HDR_H,
+                 row_h = max((h - HDR_H) / float(nlanes), 3.0f),
+                 nlanes = nlanes,
+                 span = max(doc.span, 8.0lf),
+                 px_per_us = double(plot_w) / (ui.t1 - ui.t0))
 
-    // ---- input ----
     let io & = unsafe(GetIO())
     let mx = io.MousePos.x
     let my = io.MousePos.y
-    let m_t = ui.t0 + double(mx - plot_x0) / px_per_us
-    if (hovered && io.MouseWheel != 0.0f) {
-        let factor = exp(-io.MouseWheel * 0.16f)
-        var nw = (ui.t1 - ui.t0) * double(factor)
-        nw = clamp(nw, 8.0lf, span * 2.0lf)
-        let frac = clamp(double(mx - plot_x0) / double(plot_w), 0.0lf, 1.0lf)
-        ui.t0 = m_t - nw * frac
-        ui.t1 = ui.t0 + nw
-        clamp_view(ui, span)
-        ui.interacted = true
-    }
-    // shift+drag = range selection; plain drag = pan
-    if (hovered && io.KeyShift && IsMouseClicked(ImGuiMouseButton.Left) && my >= lanes_y0) {
-        ui.sel_dragging = true
-        ui.sel_active = true
-        ui.sel_anchor = m_t
-        ui.sel_t0 = m_t
-        ui.sel_t1 = m_t
-    }
-    if (ui.sel_dragging) {
-        if (held) {
-            ui.sel_t0 = min(ui.sel_anchor, m_t)
-            ui.sel_t1 = max(ui.sel_anchor, m_t)
-        } else {
-            ui.sel_dragging = false
-        }
-    } elif (held && io.MouseDelta.x != 0.0f && !io.KeyShift) {
-        if (my >= lanes_y0) {
-            let dt = double(io.MouseDelta.x) / px_per_us
-            ui.t0 -= dt
-            ui.t1 -= dt
-        }
-        clamp_view(ui, span)
-        ui.interacted = true
-    }
-    if (held && my < p.y + OV_H) {
-        // overview scrub: center the view at the clicked time
-        let frac = clamp(double(mx - plot_x0) / double(plot_w), 0.0lf, 1.0lf)
-        let c = span * frac
-        let vw = ui.t1 - ui.t0
-        ui.t0 = c - vw * 0.5lf
-        ui.t1 = ui.t0 + vw
-        clamp_view(ui, span)
-        ui.interacted = true
-    }
-    if (hovered && IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
-        view_full(ui, doc)
-        ui.interacted = true
-    }
-    if (hovered && IsKeyPressed(ImGuiKey.Escape)) {
-        ui.sel_active = false
-        ui.sel_dragging = false
-    }
-    px_per_us = double(plot_w) / (ui.t1 - ui.t0)
+    let m_t = ui.t0 + double(mx - g.plot_x0) / g.px_per_us
+    handle_input(doc, ui, g, hovered, held, mx, my, m_t)
+    g.px_per_us = double(g.plot_w) / (ui.t1 - ui.t0)
 
-    // ---- hover pick (chunk-preferred) ----
-    ui.hover_lane = -1
-    ui.hover_idx = -1
-    if (hovered && my >= lanes_y0) {
-        let hl = int((my - lanes_y0) / row_h)
-        if (hl >= 0 && hl < nlanes) {
-            let tol = 4.0lf / px_per_us
-            var best = -1
-            var bestChunk = false
-            let lane & = unsafe(doc.lanes[hl])
-            var i = lane_lower_bound(lane, m_t - max(lane.max_dur, tol))
-            while (i < length(lane.ev)) {
-                let e & = unsafe(lane.ev[i])
-                if (e.t0 > m_t + tol) {
-                    break
-                }
-                if (m_t >= e.t0 - tol && m_t <= e.t0 + max(double(e.dur), tol)) {
-                    let isChunk = ev_kind(e.meta) == EV_CHUNK
-                    if (best < 0 || (isChunk && !bestChunk)) {
-                        best = i
-                        bestChunk = isChunk
-                    }
-                }
-                i++
-            }
-            ui.hover_lane = hl
-            ui.hover_idx = best
-        }
-    }
+    pick_hover(doc, ui, g, hovered, my, m_t)
+    refresh_caches(doc, ui, cache, g)
 
-    // ---- run caches ----
-    if (cache.generation != doc.generation || cache.t0 != ui.t0 || cache.t1 != ui.t1 || cache.plot_w != plot_w) {
-        delete cache.runs
-        cache.t0 = ui.t0
-        cache.t1 = ui.t1
-        cache.plot_w = plot_w
-        cache.generation = doc.generation
-        cache.bucket_mode = count_visible(doc, ui.t0, ui.t1) > EVENT_PATH_MAX
-        if (cache.bucket_mode) {
-            rebuild_bucket_runs(doc, cache, span, px_per_us)
-        } else {
-            rebuild_event_runs(doc, cache, px_per_us)
-        }
-    }
-    if (cache.ov_generation != doc.generation) {
-        rebuild_overview(doc, cache)
-    }
-
-    // ---- draw ----
     with_window_drawlist() $(var dl) {
         dl |> add_rect_filled(float2(bb.x, bb.y), float2(bb.z, bb.w), col32(SURFACE, 255))
         with_drawlist_clip_rect(dl, float2(bb.x, bb.y), float2(bb.z, bb.w), true) $ {
-            // overview strip (cached normalized runs, lane-folded rows) + viewport rect
-            let ov_y0 = p.y + 2.0f
-            let ov_y1 = p.y + OV_H - 2.0f
-            let ov_row = (ov_y1 - ov_y0) / float(max(cache.ov_rows, 1))
-            for (r in cache.ov_runs) {
-                let oy0 = ov_y0 + float(int(r.lane)) * ov_row
-                dl |> add_rect_filled(float2(plot_x0 + r.x0 * plot_w, oy0),
-                    float2(max(plot_x0 + r.x1 * plot_w, plot_x0 + r.x0 * plot_w + 0.5f), oy0 + ov_row),
-                    col32(r.col, 150))
-            }
-            let vx0 = clamp(plot_x0 + float(ui.t0 / span) * plot_w, plot_x0, plot_x0 + plot_w)
-            let vx1 = clamp(plot_x0 + float(ui.t1 / span) * plot_w, plot_x0, plot_x0 + plot_w)
-            dl |> add_rect_filled(float2(vx0, ov_y0), float2(max(vx1, vx0 + 2.0f), ov_y1), col32(0xE8EAEDu, 36))
-            dl |> add_line(float2(vx0, ov_y0), float2(vx0, ov_y1), col32(0xE8EAEDu, 160), 1.0)
-            dl |> add_line(float2(vx1, ov_y0), float2(vx1, ov_y1), col32(0xE8EAEDu, 160), 1.0)
-
-            // time grid: 1-2-5 ladder targeting ~90px
-            let target_us = 90.0lf / px_per_us
-            var step = 1.0lf
-            while (step < target_us) {
-                if (step * 2.0lf >= target_us) {
-                    step *= 2.0lf
-                    break
-                }
-                if (step * 5.0lf >= target_us) {
-                    step *= 5.0lf
-                    break
-                }
-                step *= 10.0lf
-            }
-            var gt = floor(ui.t0 / step) * step
-            while (gt <= ui.t1) {
-                let gx = plot_x0 + float((gt - ui.t0) * px_per_us)
-                if (gx >= plot_x0) {
-                    dl |> add_line(float2(gx, lanes_y0), float2(gx, bb.w), col32(0x2A2F36u, 255), 1.0)
-                    dl |> add_text(float2(gx + 3.0f, p.y + OV_H), col32(0x8A9099u, 255), fmt_us(gt))
-                }
-                gt += step
-            }
-
-            // marker (unit) row — its own band below the time labels
-            let un_y = p.y + OV_H + GRID_H
-            for (mk in doc.marker_kinds) {
-                for (i in range(length(mk.ts))) {
-                    let t = mk.ts[i]
-                    if (t < ui.t0 || t > ui.t1) {
-                        continue
-                    }
-                    let x = plot_x0 + float((t - ui.t0) * px_per_us)
-                    dl |> add_line(float2(x, un_y), float2(x, bb.w), col32(0xE8EAEDu, 70), 1.0)
-                    dl |> add_text(float2(x + 2.0f, un_y), col32(0xC9CDD2u, 255), "{mk.name} {mk.args[i]}")
-                }
-            }
-
-            // lane separators + labels
-            for (li in range(nlanes)) {
-                let y0 = lanes_y0 + float(li) * row_h
-                dl |> add_line(float2(p.x, y0), float2(bb.z, y0), col32(0x20242Au, 255), 1.0)
-                if (row_h >= 9.0f) {
-                    dl |> add_text(float2(p.x + 4.0f, y0 + max((row_h - 14.0f) * 0.5f, 0.0f)), col32(0x8A9099u, 255), doc.lanes[li].name)
-                }
-            }
-
-            // cached event/bucket runs
-            for (r in cache.runs) {
-                let y0 = lanes_y0 + float(int(r.lane)) * row_h
-                let y1 = y0 + row_h - 1.0f
-                let rx0 = plot_x0 + r.x0
-                let rx1 = plot_x0 + r.x1
-                if (int(r.kind) == 1) {
-                    let cy = (y0 + y1) * 0.5f
-                    dl |> add_rect_filled(float2(rx0, cy - row_h * 0.16f), float2(rx1, cy + row_h * 0.16f), col32(r.col, 255))
-                } elif (int(r.kind) == 3) {
-                    dl |> add_rect_filled(float2(rx0, y0 + row_h * 0.3f), float2(rx1, y1 - row_h * 0.3f), col32(r.col, 120))
-                } else {
-                    dl |> add_rect_filled(float2(rx0, y0 + 1.0f), float2(rx1, y1), col32(r.col, 255))
-                }
-            }
-
-            // selection overlay
-            if (ui.sel_active) {
-                let sx0 = plot_x0 + float((ui.sel_t0 - ui.t0) * px_per_us)
-                let sx1 = plot_x0 + float((ui.sel_t1 - ui.t0) * px_per_us)
-                dl |> add_rect_filled(float2(sx0, lanes_y0), float2(max(sx1, sx0 + 1.0f), bb.w), col32(0xE8EAEDu, 22))
-                dl |> add_line(float2(sx0, lanes_y0), float2(sx0, bb.w), col32(0xE8EAEDu, 180), 1.0)
-                dl |> add_line(float2(sx1, lanes_y0), float2(sx1, bb.w), col32(0xE8EAEDu, 180), 1.0)
-            }
-
-            // hover outline
-            if (ui.hover_lane >= 0 && ui.hover_idx >= 0) {
-                let e & = unsafe(doc.lanes[ui.hover_lane].ev[ui.hover_idx])
-                let y0 = lanes_y0 + float(ui.hover_lane) * row_h
-                let x0 = plot_x0 + float((e.t0 - ui.t0) * px_per_us)
-                let x1 = max(x0 + 1.0f, plot_x0 + float((e.t0 + double(e.dur) - ui.t0) * px_per_us))
-                dl |> add_rect(float2(x0 - 1.0f, y0), float2(x1 + 1.0f, y0 + row_h - 1.0f), col32(0xE8EAEDu, 255), 0.0, ImDrawFlags.None, 1.0)
-            }
+            draw_overview(dl, cache, ui, g)
+            draw_time_grid(dl, ui, g)
+            draw_markers(dl, doc, ui, g)
+            draw_lane_labels(dl, doc, g)
+            draw_runs(dl, cache, g)
+            draw_selection(dl, ui, g)
+            draw_hover_outline(dl, doc, ui, g)
         }
     }
 
-    // hover tooltip
-    if (ui.hover_lane >= 0 && ui.hover_idx >= 0) {
-        let e & = unsafe(doc.lanes[ui.hover_lane].ev[ui.hover_idx])
-        let cat & = unsafe(doc.cats[ev_cat(e.meta)])
-        tooltip(TL_TIP) {
-            text("{kind_name(ev_kind(e.meta))} — {cat.name}")
-            text("stage {ev_stage(e.meta)}/{ev_nstages(e.meta)}  chunk {e.arg}  chain {e.chain}")
-            text("t {fmt_us(e.t0)}  dur {fmt_us(double(e.dur))}")
-        }
-    }
+    draw_hover_tooltip(doc, ui)
 }

@@ -20,11 +20,11 @@ def test_xml_serialize_table_string_int(t : T?) {
             tab["beta"] = 20
         }
         let xml_str = to_XML(tab, "scores")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
-            var ch = doc.document_element.first_child
+            let ch = doc.document_element.first_child
             t |> success(ch.ok)
-            t |> equal(string(ch.name), "entry")
+            t |> equal(ch.name, "entry")
         }
     }
 }
@@ -39,7 +39,7 @@ def test_xml_serialize_struct_with_table(t : T?) {
             s.scores["bob"] = 200
         }
         let xml_str = to_XML(s, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             let title_ch = child(root, "title")
@@ -52,7 +52,7 @@ def test_xml_serialize_struct_with_table(t : T?) {
 def test_from_xml_table_string_int(t : T?) {
     t |> run("deserialize table<string;int> from XML") <| @(t : T?) {
         let xml_str = "<scores><entry><_key>x</_key><_val>42</_val></entry><entry><_key>y</_key><_val>99</_val></entry></scores>"
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             var tab <- from_XML(doc.document_element, type<table<string; int>>)
             t |> equal(length(tab), 2)
@@ -68,7 +68,7 @@ def test_from_xml_table_string_int(t : T?) {
 def test_from_xml_table_string_string(t : T?) {
     t |> run("deserialize table<string;string> from XML") <| @(t : T?) {
         let xml_str = "<m><entry><_key>name</_key><_val>Alice</_val></entry></m>"
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             var tab <- from_XML(doc.document_element, type<table<string; string>>)
             t |> equal(length(tab), 1)
@@ -89,7 +89,7 @@ def test_roundtrip_table_string_int(t : T?) {
             original["c"] = 3
         }
         let xml_str = to_XML(original, "tab")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             var restored <- from_XML(doc.document_element, type<table<string; int>>)
             t |> equal(length(restored), 3)
@@ -112,7 +112,7 @@ def test_roundtrip_struct_with_table(t : T?) {
             original.scores["p2"] = 75
         }
         let xml_str = to_XML(original, "item")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             var restored <- from_XML(doc.document_element, type<WithTable>)
             t |> equal(restored.title, "test")
@@ -128,11 +128,11 @@ def test_roundtrip_struct_with_table(t : T?) {
 [test]
 def test_roundtrip_table_empty(t : T?) {
     t |> run("roundtrip empty table") <| @(t : T?) {
-        var original : table<string; int>
+        let original : table<string; int>
         let xml_str = to_XML(original, "tab")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
-            var restored <- from_XML(doc.document_element, type<table<string; int>>)
+            let restored <- from_XML(doc.document_element, type<table<string; int>>)
             t |> equal(length(restored), 0)
         }
     }
@@ -143,16 +143,14 @@ def test_roundtrip_table_empty(t : T?) {
 [test]
 def test_xml_serialize_set(t : T?) {
     t |> run("serialize table<string> (set) to XML") <| @(t : T?) {
-        var s : table<string>
-        s |> insert("apple")
-        s |> insert("banana")
+        let s : table<string> <- {"apple", "banana"}
         let xml_str = to_XML(s, "fruits")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             var count = 0
-            for_each_child(root) <| $(ch) {
-                t |> equal(string(ch.name), "item")
+            for_each_child(root) $(ch) {
+                t |> equal(ch.name, "item")
                 count++
             }
             t |> equal(count, 2)
@@ -164,9 +162,9 @@ def test_xml_serialize_set(t : T?) {
 def test_from_xml_set(t : T?) {
     t |> run("deserialize table<int> (set) from XML") <| @(t : T?) {
         let xml_str = "<s><item>10</item><item>20</item><item>30</item></s>"
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
-            var s <- from_XML(doc.document_element, type<table<int>>)
+            let s <- from_XML(doc.document_element, type<table<int>>)
             t |> equal(length(s), 3)
             t |> success(s |> key_exists(10))
             t |> success(s |> key_exists(20))
@@ -178,14 +176,11 @@ def test_from_xml_set(t : T?) {
 [test]
 def test_roundtrip_set(t : T?) {
     t |> run("roundtrip table<string> (set)") <| @(t : T?) {
-        var original : table<string>
-        original |> insert("x")
-        original |> insert("y")
-        original |> insert("z")
+        let original : table<string> <- {"x", "y", "z"}
         let xml_str = to_XML(original, "set")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
-            var restored <- from_XML(doc.document_element, type<table<string>>)
+            let restored <- from_XML(doc.document_element, type<table<string>>)
             t |> equal(length(restored), 3)
             t |> success(restored |> key_exists("x"))
             t |> success(restored |> key_exists("y"))
@@ -197,11 +192,11 @@ def test_roundtrip_set(t : T?) {
 [test]
 def test_roundtrip_set_empty(t : T?) {
     t |> run("roundtrip empty set") <| @(t : T?) {
-        var original : table<int>
+        let original : table<int>
         let xml_str = to_XML(original, "set")
-        parse_xml(xml_str) <| $(doc, ok) {
+        parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
-            var restored <- from_XML(doc.document_element, type<table<int>>)
+            let restored <- from_XML(doc.document_element, type<table<int>>)
             t |> equal(length(restored), 0)
         }
     }

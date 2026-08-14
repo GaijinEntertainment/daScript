@@ -69,7 +69,7 @@ def stdio_reader_main(ch : Channel?) {
     while (!feof(sin)) {
         let msg = build_string() $(var w) {
             while (!feof(sin)) {
-                let chunk = fgets(sin) // nolint:PERF003
+                let chunk = fgets(sin)
                 let len = length(chunk)
                 if (len == 0) break
                 if (character_at(chunk, len - 1) == '\n') { // nolint:PERF003
@@ -127,7 +127,7 @@ class LiveApiStdioAgent : DapiDebugAgent {
     }
 }
 
-def debug_agent(ctx : Context) {
+def debug_agent(_ctx : Context) {
     assert(this_context().category.debug_context)
     install_new_debug_agent(new LiveApiStdioAgent(), "live_api_stdio")
 }

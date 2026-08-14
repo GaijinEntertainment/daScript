@@ -158,7 +158,7 @@ def migration_006(db : SqlRunner) {
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     // =================================================================
     // PART 2 — App startup with with_latest_sqlite
     // =================================================================

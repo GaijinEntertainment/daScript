@@ -58,7 +58,7 @@ class MathCalls {
 }
 
 [test]
-def test_math_gpu_vs_cpu(t : T?) {
+def test_math_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU comparison body
     t |> run("math builtins: GPU ~= CPU-reference (precise math)") <| @(t : T?) {
         var oracle = new MathCalls()
         oracle.a |> resize(N)

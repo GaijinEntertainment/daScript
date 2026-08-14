@@ -12,10 +12,7 @@ require strings
 [test]
 def test_image_request_serialization(t : T?) {
     t |> run("image request includes prompt, omits unset optionals") @(t : T?) {
-        var req : ImageRequest
-        req.prompt = "a red cube"
-        req.model = "dall-e-3"
-        req.size = "1024x1024"
+        let req = ImageRequest(prompt = "a red cube", model = "dall-e-3", size = "1024x1024")
         let js = sprint_json(req, false)
         t |> success(find(js, "\"prompt\":\"a red cube\"") >= 0, "prompt present")
         t |> success(find(js, "\"model\":\"dall-e-3\"") >= 0, "model present")
@@ -27,9 +24,9 @@ def test_image_request_serialization(t : T?) {
 [test]
 def test_image_response_decode(t : T?) {
     t |> run("image response round-trips through sprint_json/sscan_json") @(t : T?) {
-        var resp : ImageResponse
-        resp.created = 1700000000
-        resp.data <- [ImageData(url = "https://example.com/img.png", revised_prompt = "a bright red cube")]
+        let resp = ImageResponse(
+            created = 1700000000,
+            data <- [ImageData(url = "https://example.com/img.png", revised_prompt = "a bright red cube")])
         let js = sprint_json(resp, false)
         var back : ImageResponse
         t |> success(sscan_json(js, back), "decode ok")

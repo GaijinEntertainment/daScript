@@ -9,7 +9,7 @@ require daslib/fio
 def private rw_pattern(i : int) : uint8 => uint8((i * 11 + 5) % 256)
 
 [test]
-def test_fmap_rw(t : T?) {
+def test_fmap_rw(t : T?) { // nolint:STYLE038 - flat list of independent mapping arms
     t |> run("writes through the mapping persist to the file") @(t : T?) {
         var terr : string
         let tmp = temp_directory(terr)   // portable (no /tmp on Windows); cwd as a last resort

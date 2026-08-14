@@ -30,7 +30,7 @@ struct Person {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     print("=== Tutorial 28: LINQ ===\n\n")
 
     // === Overview ===
@@ -242,8 +242,8 @@ def main {
 
     print("\n--- 8. Set operations ---\n")
 
-    var a = [1, 2, 2, 3, 3, 3] // nolint:LINT003
-    var b = [2, 3, 4, 5] // nolint:LINT003
+    var a = [1, 2, 2, 3, 3, 3]
+    var b = [2, 3, 4, 5]
 
     let dist = distinct(a)
     print("distinct: {dist}\n")
@@ -330,10 +330,7 @@ def main {
     // _group_by_lazy: buckets keyed by `x % 3` (lazy/IGrouping shape).
     // Bucket iteration order isn't guaranteed, so we read sizes by key.
     var by_mod3 <- stream._group_by_lazy(_ % 3)
-    var bucket_size : table<int; int>
-    for (g in by_mod3) {
-        bucket_size[g._0] = g._1 |> length
-    }
+    var bucket_size <- {for (g in by_mod3); g._0 => length(g._1)}
     print("  bucket 0: {bucket_size[0]} elements\n")
     print("  bucket 1: {bucket_size[1]} elements\n")
     print("  bucket 2: {bucket_size[2]} elements\n")

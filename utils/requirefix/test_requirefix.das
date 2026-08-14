@@ -3,7 +3,6 @@ options gen2
 require dastest/testing_boost public
 require requirefix
 require daslib/fio
-require strings
 
 def testdata_path(name : string) : string {
     return "utils/requirefix/testdata/{name}"
@@ -16,7 +15,7 @@ def run_analysis(target : string) : ModuleAnalysisResult {
             return get_full_file_name(filename)
         },
         read_file_fn <- @(filename : string) : string {
-            let f = fopen(filename, "r")
+            let f = fopen(filename, "rb")     // text mode + fread breaks on CRLF checkouts
             if (f == null) return ""
             let s = fread(f)
             fclose(f)
@@ -57,7 +56,7 @@ def find_module_is_public(var result : ModuleAnalysisResult; name : string) : bo
 [test]
 def test_unused_require(t : T?) {
     t |> run("unused_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_unused_1.das"))
+        var result = run_analysis(testdata_path("_fixture_unused_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math"), "unused")
         t |> equal(length(find_module_refs(result, "math")), 0)
@@ -86,7 +85,7 @@ def test_public_require(t : T?) {
 [test]
 def test_mixed_requires(t : T?) {
     t |> run("mixed_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_mixed_1.das"))
+        var result = run_analysis(testdata_path("_fixture_mixed_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math"), "unused")
         t |> equal(find_module_tag(result, "strings"), "used:referenced")

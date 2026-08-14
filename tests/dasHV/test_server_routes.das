@@ -64,7 +64,7 @@ class RouteTestServer : HvWebServer {
         // Query parameters
         GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var result = "query:"
-            each_param(req) <| $(key, value : string) {
+            each_param(req) $(key, value : string) {
                 result = "{result} {key}={value}"
             }
             return resp |> TEXT_PLAIN(result)
@@ -91,7 +91,7 @@ class RouteTestServer : HvWebServer {
 def test_get_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("GET route returns text") @(t : T?) {
-            GET("{base_url}/hello") <| $(resp) {
+            GET("{base_url}/hello") $(resp) {
                 t |> equal(resp.body, "Hello, world!")
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
@@ -103,7 +103,7 @@ def test_get_route(t : T?) {
 def test_post_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("POST route echoes body") @(t : T?) {
-            POST("{base_url}/echo", "hello server") <| $(resp) {
+            POST("{base_url}/echo", "hello server") $(resp) {
                 t |> equal(resp.body, "hello server")
             }
         }
@@ -114,7 +114,7 @@ def test_post_route(t : T?) {
 def test_put_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PUT route receives body") @(t : T?) {
-            PUT("{base_url}/resource", "updated") <| $(resp) {
+            PUT("{base_url}/resource", "updated") $(resp) {
                 t |> equal(resp.body, "PUT:updated")
             }
         }
@@ -125,7 +125,7 @@ def test_put_route(t : T?) {
 def test_patch_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PATCH route receives body") @(t : T?) {
-            PATCH("{base_url}/resource", "partial") <| $(resp) {
+            PATCH("{base_url}/resource", "partial") $(resp) {
                 t |> equal(resp.body, "PATCH:partial")
             }
         }
@@ -136,10 +136,10 @@ def test_patch_route(t : T?) {
 def test_delete_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("DELETE route works") @(t : T?) {
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.DELETE
                 req.url := "{base_url}/resource"
-                request(req) <| $(resp) {
+                request(req) $(resp) {
                     t |> equal(resp.body, "deleted")
                 }
             }
@@ -151,10 +151,10 @@ def test_delete_route(t : T?) {
 def test_head_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("HEAD route sets headers, no body") @(t : T?) {
-            with_http_request() <| $(var req) {
+            with_http_request() $(var req) {
                 req.method = http_method.HEAD
                 req.url := "{base_url}/resource"
-                request(req) <| $(resp) {
+                request(req) $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
                     let exists = get_header(resp, "X-Resource-Exists")
                     t |> equal(exists, "true")
@@ -168,12 +168,12 @@ def test_head_route(t : T?) {
 def test_any_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("ANY route handles GET") @(t : T?) {
-            GET("{base_url}/any-method") <| $(resp) {
+            GET("{base_url}/any-method") $(resp) {
                 t |> success(find(string(resp.body), "method:") >= 0, "body contains method info")
             }
         }
         t |> run("ANY route handles POST") @(t : T?) {
-            POST("{base_url}/any-method", "") <| $(resp) {
+            POST("{base_url}/any-method", "") $(resp) {
                 t |> success(find(string(resp.body), "method:") >= 0, "body contains method info")
             }
         }
@@ -184,12 +184,12 @@ def test_any_route(t : T?) {
 def test_path_params(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("single path param") @(t : T?) {
-            GET("{base_url}/users/42") <| $(resp) {
+            GET("{base_url}/users/42") $(resp) {
                 t |> equal(resp.body, "user:42")
             }
         }
         t |> run("multiple path params") @(t : T?) {
-            GET("{base_url}/users/7/posts/99") <| $(resp) {
+            GET("{base_url}/users/7/posts/99") $(resp) {
                 t |> equal(resp.body, "user=7,post=99")
             }
         }
@@ -200,7 +200,7 @@ def test_path_params(t : T?) {
 def test_query_params_server(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("query params accessible via each_param") @(t : T?) {
-            GET("{base_url}/search?q=daslang&page=1") <| $(resp) {
+            GET("{base_url}/search?q=daslang&page=1") $(resp) {
                 let body = string(resp.body)
                 t |> success(find(body, "q=daslang") >= 0, "query contains q=daslang")
                 t |> success(find(body, "page=1") >= 0, "query contains page=1")
@@ -213,7 +213,7 @@ def test_query_params_server(t : T?) {
 def test_response_headers_server(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("set_header on response") @(t : T?) {
-            GET("{base_url}/headers") <| $(resp) {
+            GET("{base_url}/headers") $(resp) {
                 let custom = get_header(resp, "X-Custom")
                 t |> equal(custom, "test-value")
                 let reqid = get_header(resp, "X-Request-Id")
@@ -227,7 +227,7 @@ def test_response_headers_server(t : T?) {
 def test_json_response_server(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("JSON response with correct content-type") @(t : T?) {
-            GET("{base_url}/api/status") <| $(resp) {
+            GET("{base_url}/api/status") $(resp) {
                 let ct = get_header(resp, "Content-Type")
                 t |> success(find(ct, "application/json") >= 0, "Content-Type is JSON")
                 // Parse the body
@@ -274,17 +274,17 @@ class WildcardPriorityServer : HvWebServer {
 def test_wildcard_priority(t : T?) {
     with_test_server(type<WildcardPriorityServer>, PORT_WILDCARD_PRIORITY) $(base_url) {
         t |> run("literal GET /status outranks ANY *") @(t : T?) {
-            GET("{base_url}/status") <| $(resp) {
+            GET("{base_url}/status") $(resp) {
                 t |> equal(resp.body, "specific")
             }
         }
         t |> run("ANY * catches unknown GET paths") @(t : T?) {
-            GET("{base_url}/unknown") <| $(resp) {
+            GET("{base_url}/unknown") $(resp) {
                 t |> equal(resp.body, "catchall")
             }
         }
         t |> run("ANY * catches unknown POST paths") @(t : T?) {
-            POST("{base_url}/unknown", "") <| $(resp) {
+            POST("{base_url}/unknown", "") $(resp) {
                 t |> equal(resp.body, "catchall")
             }
         }

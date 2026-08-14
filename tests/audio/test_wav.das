@@ -21,7 +21,7 @@ def private push_le(var a : array<uint8>; v, nbytes : int) {
 def private push_tag(var a : array<uint8>; s : string) {
     peek_data(s) $(bytes) {
         for (b in bytes) {
-            a |> push(b)   // nolint: PERF022 — peek_data yields a temp (const#); push_from rejects it
+            a |> push(b)   // push_from rejects the peek_data temp (const#)
         }
     }
 }

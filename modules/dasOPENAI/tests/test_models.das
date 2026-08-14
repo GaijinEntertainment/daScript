@@ -13,11 +13,7 @@ require daslib/fio
 [test]
 def test_model_decode(t : T?) {
     t |> run("model entry round-trips through sprint_json/sscan_json") @(t : T?) {
-        var m : Model
-        m.id = "gpt-test"
-        m._object = "model"
-        m.created = 1700000000
-        m.owned_by = "openai"
+        let m = Model(id = "gpt-test", _object = "model", created = 1700000000, owned_by = "openai")
         let js = sprint_json(m, false)
         t |> success(find(js, "\"object\":\"model\"") >= 0, "renamed object key emitted")
         var back : Model

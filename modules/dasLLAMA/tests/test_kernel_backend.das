@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64+jit
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — registers "arm64-gen"/"x64-gen" (the repack tier) when dasLLVM is mounted
+require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack
@@ -118,7 +118,7 @@ def test_batch_backend_pin(t : T?) {
             }
         }
         if (!tested_reject) {
-            to_log(LOG_WARNING, "test_batch_backend_pin: no repack donor (arm64-gen/x64-gen) registered on this build — layout-guard path not exercised\n")
+            to_log(LOG_WARNING, "test_batch_backend_pin: no repack donor (arm64-gen/x64-gen) registered on this build - layout-guard path not exercised\n")
         }
         // a row-major donor takes the batch slots and survives re-activation
         var tested_accept = false
@@ -132,7 +132,7 @@ def test_batch_backend_pin(t : T?) {
             }
         }
         if (!tested_accept) {
-            to_log(LOG_WARNING, "test_batch_backend_pin: no row-major donor (arm64-sdot; x64 has none — its row-major default is portable) registered on this build — batch-pin override/survival not exercised\n")
+            to_log(LOG_WARNING, "test_batch_backend_pin: no row-major donor (arm64-sdot; x64 has none - its row-major default is portable) registered on this build - batch-pin override/survival not exercised\n")
         }
         // clearing the pin restores whole-backend slots on the next activation
         select_batch_backend("")

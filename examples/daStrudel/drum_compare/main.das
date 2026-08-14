@@ -15,7 +15,7 @@ require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_ttf
 require live/glfw_live
-require live/opengl_live  // nolint:STYLE030 — side-effect require: registers the screenshot/record live commands
+require live/opengl_live
 require live/live_commands
 require live/live_api
 require live_host
@@ -143,9 +143,9 @@ def render_sf2_drum(sf2 : SF2File; key, velocity : int; duration : float) : arra
         if (sf2_create_c_voice(sf2, z.x, z.y, pzone, preset.global_zone, key, velocity, 0, cc_defaults, cv, atten_state)) {
             let excl = sf2_get_exclusive_class(sf2, z.x, z.y, pzone, preset.global_zone)
             if (excl > 0) {
-                for (i in range(length(voices))) {
-                    if (excl_classes[i] == excl && voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(voices[i])); }
+                for (v, ec in voices, excl_classes) {
+                    if (ec == excl && v.finished == 0) {
+                        unsafe { ma_sf2_voice_end_quick(addr(v)); }
                     }
                 }
             }
@@ -321,35 +321,26 @@ def analyze_synth_drums() {
 
 // ─── Synth drum rendering ───
 
+def render_synth_mono(name : string) : array<float> {
+    if (name == "bd") return <- render_bd(0.5, 1.0)
+    if (name == "sd") return <- render_sd(0.5, 1.0)
+    if (name == "hh") return <- render_hh(0.5, 1.0)
+    if (name == "oh") return <- render_oh(0.6, 1.0)
+    if (name == "cp") return <- render_cp(0.5, 1.0)
+    if (name == "tom_low") return <- render_tom(0.5, 1.0, 80.0)
+    if (name == "tom_high") return <- render_tom(0.4, 1.0, 175.0)
+    if (name == "ride") return <- render_ride(1.5, 1.0)
+    if (name == "crash") return <- render_crash(1.5, 1.0)
+    if (name == "rimshot") return <- render_rimshot(0.15, 1.0)
+    if (name == "cowbell") return <- render_cowbell(0.25, 1.0)
+    if (name == "tambourine") return <- render_tambourine(0.4, 1.0)
+    var silence : array<float>
+    silence |> resize(int(0.05 * float(SAMPLE_RATE)))
+    return <- silence
+}
+
 def render_synth_drum(name : string) : array<float> {
-    var mono : array<float>
-    if (name == "bd") {
-        mono <- render_bd(0.5, 1.0)
-    } elif (name == "sd") {
-        mono <- render_sd(0.5, 1.0)
-    } elif (name == "hh") {
-        mono <- render_hh(0.5, 1.0)
-    } elif (name == "oh") {
-        mono <- render_oh(0.6, 1.0)
-    } elif (name == "cp") {
-        mono <- render_cp(0.5, 1.0)
-    } elif (name == "tom_low") {
-        mono <- render_tom(0.5, 1.0, 80.0)
-    } elif (name == "tom_high") {
-        mono <- render_tom(0.4, 1.0, 175.0)
-    } elif (name == "ride") {
-        mono <- render_ride(1.5, 1.0)
-    } elif (name == "crash") {
-        mono <- render_crash(1.5, 1.0)
-    } elif (name == "rimshot") {
-        mono <- render_rimshot(0.15, 1.0)
-    } elif (name == "cowbell") {
-        mono <- render_cowbell(0.25, 1.0)
-    } elif (name == "tambourine") {
-        mono <- render_tambourine(0.4, 1.0)
-    } else {
-        mono |> resize(int(0.05 * float(SAMPLE_RATE)))
-    }
+    var mono <- render_synth_mono(name)
     return <- mono_to_stereo(mono)
 }
 
@@ -454,8 +445,10 @@ def create_gl_objects() {
     bind_vertex_buffer(null, type<Vertex>)
     glGenBuffers(1, safe_addr(g_ebo))
     create_ttf_objects()
+    delete g_font
     g_font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])
     if (!!empty(g_font.bitmap.bytes)) {
+        delete g_font
         g_font <- load_ttf("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf", [pixel_height = 18.0, oversampling = 2])
     }
     if (!empty(g_font.bitmap.bytes)) {

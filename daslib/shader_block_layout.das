@@ -184,7 +184,7 @@ def public block_array_element_stride(bt : Type; rules : BlockLayoutRules) : int
 
 //! Compute the std140 layout of one interface block. Pure: takes a Structure?, fills `fields` with per-field offsets / sizes / matrix and composite flags, returns the block total size and max member alignment. Used by build_block_struct (SPIR-V type emit), the OpenGL UBO pack binder, and dasVulkan's mapped-memory binder. Rejects bool and non-numeric fields fail-closed (no physical std140 layout). `sname` is only used in error messages. `fields` is cleared at entry so reuse across calls and partial-failure returns can't bleed. Supported field shapes (PR-G complete):
 [macro_function]
-def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>; rules : BlockLayoutRules = BlockLayoutRules.std140) : tuple<ok : bool; size : int; align : int> {
+def public compute_block_layout(sname : string; st : Structure?; var fields : array<BlockField>; var errors : array<string>; rules : BlockLayoutRules = BlockLayoutRules.std140) : tuple<ok : bool; size : int; align : int> {  // nolint:STYLE038 - one arm per field shape, each advancing the shared offset/alignment cursor and fail-closing the whole layout
     fields |> clear
     if (st == null || empty(st.fields)) {
         errors |> push("interface block '{sname}' must be a struct with at least one field")

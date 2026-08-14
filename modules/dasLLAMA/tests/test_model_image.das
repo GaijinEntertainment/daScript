@@ -464,10 +464,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
 [test]
 def test_model_image_roundtrip(t : T?) {
     t |> run("SmolLM2-135M q8: gguf load vs mapped image, token-for-token") @(t : T?) {
-        if (!family_on(t, "llama")) return
-        if (!arm_on(t, "smol")) {
-            return
-        }
+        if (!family_on(t, "llama") || !arm_on(t, "smol")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -667,10 +664,7 @@ def test_metal_flavor_derive(tst : T?) {
 [test]
 def test_voxtral_mini_image(t : T?) {
     t |> run("voxtral-mini q8: the >2 GiB-plane image round trip") @(t : T?) {
-        if (!family_on(t, "voxtral")) return
-        if (!arm_on(t, "voxtral")) {
-            return
-        }
+        if (!family_on(t, "voxtral") || !arm_on(t, "voxtral")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -688,13 +682,10 @@ def test_voxtral_mini_image(t : T?) {
 [test]
 def test_gemma4_image_roundtrip(t : T?) {
     t |> run("gemma-4-E2B q8: arch-configure fallbacks must not clobber mapped config") @(t : T?) {
-        if (!family_on(t, "gemma")) return
         // gemma4's configure sets gguf-overridable fallbacks (sliding_window, swa_pattern);
         // re-running it on an image load stomped the serialized overrides (caught 2026-07-16:
         // token drift on the mapped E2B while every llama-arch carrier round-tripped clean)
-        if (!arm_on(t, "gemma")) {
-            return
-        }
+        if (!family_on(t, "gemma") || !arm_on(t, "gemma")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -710,10 +701,7 @@ def test_gemma4_image_roundtrip(t : T?) {
 [test]
 def test_tower_image_roundtrip(t : T?) {
     t |> run("ultravox-1b tower: mapped image planes are element-exact vs gguf") @(t : T?) {
-        if (!family_on(t, "ultravox")) return
-        if (!arm_on(t, "tower")) {
-            return
-        }
+        if (!family_on(t, "ultravox") || !arm_on(t, "tower")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -804,10 +792,7 @@ def private whisper_transcribe_text(path : string; samples : array<float>; cache
 [test]
 def test_whisper_image_roundtrip(t : T?) {
     t |> run("whisper tiny: gguf load vs mapped image, transcript-exact") @(t : T?) {
-        if (!family_on(t, "whisper")) return
-        if (!arm_on(t, "whisper")) {
-            return
-        }
+        if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -883,8 +868,7 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
 [test]
 def test_parakeet_image_roundtrip(t : T?) {
     t |> run("parakeet v3: bin load vs mapped image, transcript-exact") @(t : T?) {
-        if (!family_on(t, "parakeet")) return
-        if (!arm_on(t, "parakeet")) return
+        if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -920,8 +904,7 @@ def test_parakeet_image_roundtrip(t : T?) {
 [test]
 def test_qwen3a_tower_image_roundtrip(t : T?) {
     t |> run("qwen3a 0.6B tower: mapped image planes are element-exact vs gguf") @(t : T?) {
-        if (!family_on(t, "qwen3a")) return
-        if (!arm_on(t, "qwen3a")) return
+        if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -970,8 +953,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
 [test]
 def test_canary_encoder_image_roundtrip(t : T?) {
     t |> run("canary encoder: mapped image planes are element-exact vs bin") @(t : T?) {
-        if (!family_on(t, "canary")) return
-        if (!arm_on(t, "canary")) return
+        if (!family_on(t, "canary") || !arm_on(t, "canary")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -1005,8 +987,7 @@ def test_canary_encoder_image_roundtrip(t : T?) {
 [test]
 def test_canary_encoder_q8_image_roundtrip(t : T?) {
     t |> run("canary encoder q8: mapped image planes are element-exact vs bin transcode") @(t : T?) {
-        if (!family_on(t, "canary")) return
-        if (!arm_on(t, "canary")) return
+        if (!family_on(t, "canary") || !arm_on(t, "canary")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -1049,8 +1030,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
 [test]
 def test_gemma4a_encoder_image_roundtrip(t : T?) {
     t |> run("gemma4a encoder q8: mapped image planes are element-exact vs gguf transcode") @(t : T?) {
-        if (!family_on(t, "gemma4a")) return
-        if (!arm_on(t, "gemma4a")) return
+        if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -1099,16 +1079,14 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
 [test]
 def test_gemma4a_transcribe_q8_ab(t : T?) {
     t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, same text") @(t : T?) {
-        if (!family_on(t, "gemma4a")) return
-        if (!arm_on(t, "gemma4a")) return
+        if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        if (!model_available(t, dec_path)) return
-        if (!model_available(t, mmp_path)) return
+        if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
@@ -1147,8 +1125,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
 [test]
 def test_qwen3a_tower_q8_ab(t : T?) {
     t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
-        if (!family_on(t, "qwen3a")) return
-        if (!arm_on(t, "qwen3a")) return
+        if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -1201,16 +1178,14 @@ def test_qwen3a_tower_q8_ab(t : T?) {
 [test]
 def test_qwen3a_transcribe_q8_ab(t : T?) {
     t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, same text") @(t : T?) {
-        if (!family_on(t, "qwen3a")) return
-        if (!arm_on(t, "qwen3a")) return
+        if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        if (!model_available(t, dec_path)) return
-        if (!model_available(t, mmp_path)) return
+        if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
@@ -1250,8 +1225,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
 [test]
 def test_fp32_decoder_image_roundtrip(t : T?) {
     t |> run("canary decoder fp32: gguf load vs mapped image, token-for-token") @(t : T?) {
-        if (!family_on(t, "canary")) return
-        if (!arm_on(t, "canary-dec")) return
+        if (!family_on(t, "canary") || !arm_on(t, "canary-dec")) return
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return

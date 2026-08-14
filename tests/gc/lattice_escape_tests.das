@@ -153,7 +153,7 @@ def test_param_alias_no_double_free(t : T?) {   // [NEW] param-alias result is n
 // captured into a GLOBAL lambda -> escapes via the global -> must NOT be freed
 def capture_into_global_lambda(i : int) {
     var p = new Node(x = i, y = i * 2)
-    g_lam <- @() : int { return p.x + p.y }
+    g_lam <- @() : int { return p.x + p.y }   // nolint:PERF030 - dropping the old lambda into the GC is the escape path under test
 }
 
 // captured into a LOCAL lambda, invoked and deleted in the same scope
@@ -397,7 +397,7 @@ def test_unsafe_local_not_freed(t : T?) {
 def capture_alias_into_global(i : int) {
     var p = new Node(x = i, y = i * 2)
     var q = p
-    g_lam <- @() : int { return q.x + q.y }
+    g_lam <- @() : int { return q.x + q.y } // nolint:PERF030 - the escape path IS the tested shape
 }
 
 // a block aliases a fresh local and leaks the alias to a global from inside the block
@@ -413,7 +413,7 @@ def block_aliases_escape(i : int) {
 def lambda_in_block(i : int) {
     var p = new Node(x = i, y = i * 2)
     run() {
-        g_lam <- @() : int { return p.x }
+        g_lam <- @() : int { return p.x }   // nolint:PERF030 - dropping the old lambda into the GC is the escape path under test
     }
 }
 

@@ -23,7 +23,7 @@ def dispatch_method(method, params_json : string) : string {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the lesson
     // ──────────────────────────────────────────────────────────────────────────
     // Section 1 — Single request through dispatch_line
     // ──────────────────────────────────────────────────────────────────────────

@@ -112,7 +112,8 @@ def test_polymorphic_area(t : T?) {
 [test]
 def test_array_of_base_pointers(t : T?) {
     t |> run("array push derived into base array") @(t : T?) {
-        var arr : array<Shape?>
+        // stays the push form: the AOT emitter mistypes array<Base?>(new Derived(), ...) - C2440 in the generated C++
+        var arr : array<Shape?>     // nolint:STYLE012 - the suggested ctor form miscompiles under AOT for polymorphic elements
         arr |> push(new Circle())
         arr |> push(new Rectangle())
         arr |> push(new Square(2.0))
@@ -127,14 +128,14 @@ def test_array_of_base_pointers(t : T?) {
 def test_copy_derived_to_base(t : T?) {
     t |> run("copy assign derived to base pointer") @(t : T?) {
         var s : Shape?
-        s = new Circle()
+        s = new Circle()    // nolint:STYLE011 - copy-assign to a base pointer is what this arm covers
         t |> equal(s != null, true)
         t |> equal(s->area() > 3.14, true)
     }
     t |> run("move assign derived to base pointer") @(t : T?) {
         var c : Circle? = new Circle()
         var s : Shape?
-        s <- c
+        s <- c              // nolint:STYLE011 - move-assign to a base pointer is what this arm covers
         t |> equal(s != null, true)
         t |> equal(c == null, true)
     }
@@ -192,7 +193,7 @@ def test_pass_derived_to_function(t : T?) {
 def test_return_derived_as_base(t : T?) {
     t |> run("return derived pointer as base") @(t : T?) {
         var s : Shape? = new Circle()
-        var a = s->area()
+        let a = s->area()
         t |> equal(a > 3.14, true)
     }
 }

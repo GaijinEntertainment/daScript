@@ -88,7 +88,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         if (!empty(errors)) {
             error = errors |> join("\n")
         } else {
-            args <- res
+            args <- res  // nolint:PERF030 - target is the fresh empty decl above; the fill is inside a callback, so it cannot fold into the declaration
         }
     }
     if (empty(args)) return (result = error, ok = false)
@@ -259,7 +259,7 @@ class SpoofInstanceReader : AstReaderMacro {
                 prog |> macro_error(info, all_errors)
                 failed = true
             } else {
-                iargs <- res
+                iargs <- res  // nolint:PERF030 - target is the fresh empty decl above; the fill is inside a callback, so it cannot fold into the declaration
             }
         }
         return "" if (failed)
