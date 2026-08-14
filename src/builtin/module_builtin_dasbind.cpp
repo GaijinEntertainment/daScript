@@ -10,6 +10,7 @@
 #include "daScript/simulate/aot_builtin_dasbind.h"
 
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/env_cfg.h"
 
 #include <mutex>
 
@@ -163,6 +164,31 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         bool late = false;
     };
 
+    // DAS_DLL_PATH: extra directories to look in, for any host - not only the CLI, which also
+    // takes -dll-path. Parsed once; ';'-separated on Windows, ':' elsewhere.
+    static const vector<string> & dasDllSearchPathsFromEnv () {
+        static vector<string> paths = [] {
+            vector<string> res;
+            if ( auto env = das_getenv("DAS_DLL_PATH") ) {
+#if defined(_WIN32)
+                const char sep = ';';
+#else
+                const char sep = ':';
+#endif
+                string all(env);
+                size_t pos = 0;
+                while ( pos <= all.length() ) {
+                    auto next = all.find(sep, pos);
+                    if ( next==string::npos ) next = all.length();
+                    if ( next > pos ) res.push_back(all.substr(pos, next-pos));
+                    pos = next + 1;
+                }
+            }
+            return res;
+        }();
+        return paths;
+    }
+
     static void * bindDynamicLibrary ( const string & library ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
         auto it = g_dasBindLib.find(library);
@@ -184,6 +210,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                             libhandle = loadDynamicLibrary(((*daScriptEnvironment::bound)->g_Program->policies.jit_path_to_shared_lib + "/" + library).c_str());
                         }
                         */
+                    }
+                    if ( !libhandle ) {
+                        for ( auto & root : dasDllSearchPathsFromEnv() ) {
+                            libhandle = loadDynamicLibrary((root + "/" + library).c_str());
+                            if ( libhandle ) break;
+                        }
                     }
                     if ( !libhandle ) {
                         libhandle = loadDynamicLibrary((getDasRoot() + "/lib/" + library).c_str());

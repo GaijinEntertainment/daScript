@@ -38,18 +38,6 @@ bitfield TabOperation {
 }
 
 
-// Get-or-add das_aot_get_func_by_mnh and build a call resolving `mnh` against `ctx_arg` to the host's
-// SimFunction* (void*). Shared by the aot-object register path and the globinit ctor.
-def public build_aot_get_func_by_mnh(b : LLVMBuilderRef; types : PrimitiveTypes?; mnh : uint64; ctx_arg : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-    let gfType = LLVMFunctionType(types.LLVMVoidPtrType(),
-        fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
-    var gfFn = LLVMGetNamedFunction(g_mod, "das_aot_get_func_by_mnh")
-    if (gfFn == null) {
-        gfFn = LLVMAddFunctionWithType(g_mod, "das_aot_get_func_by_mnh", gfType)
-    }
-    var gf_args = array<LLVMValueRef>(types.ConstI64(mnh), ctx_arg)
-    return LLVMBuildCall2(b, gfType, gfFn, gf_args, "")
-}
 
 
 class public CollectExternVisitor : AstVisitor {

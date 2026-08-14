@@ -4192,6 +4192,5 @@ namespace das
                 }
             }
         }
-        if ( isLlvmAot ) runLlvmAotGlobInits(context);
     }
 }
