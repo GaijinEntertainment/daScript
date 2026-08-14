@@ -188,13 +188,18 @@ invariant — a transposed patch grid is only visible per-token).
 - **D. Non-causal**: flag + CPU arm + guard; toy-config unit test proving span output
   differs from causal and matches a reference computed in-test (branch-test rule).
 - **E. Splice**: chat arm + eval → tier-2 parity; `ask.das --image`; tier-3 captions.
-- **F. Server**: data-URI arm + server test.
-- **G. Embedder planes**: measure first — the whole embedder is 2 GEMMs (~245 ms bf16 CPU
-  at 130 tok, dasprof datum); q8 planes only if the ledger says they pay, else keep f32 and
-  record why. dlim caching of the planes + IMAGE_VERSION 9 either way; tier-1/2 recheck at
-  the chosen dtype's tolerances.
-- **H. Docs**: README/ARCHITECTURE touch, ENVIRONMENT.md regen, PERF_LEDGER tower timings,
-  findings section here.
+- **F. Server**: SCOPE DECISION, not a slice — the plan assumed the work was decoding a
+  data URI. It is not: `/v1/chat/completions` renders through `create_chat_renderer` to
+  TOKEN IDS (`array<int64>`) and the scheduler admits streams by ids; soft-token rows have
+  no path through admission, the prefix cache, or batch stepping. Options: (a) an
+  embedding-span rail through the scheduler (real work in the batching core), (b) a
+  non-scheduled path for image requests (bypasses batching, one at a time), (c) v1 ships
+  library + `ask --image` and server images land in v2. Needs a call before anyone starts.
+- **G. Embedder planes** (DONE 2026-08-14): measured 54 ms @ 130 tok, 118 ms @ 280 (the
+  ceiling), 29 ms load — BOTH follow-ups declined with evidence, no q8 lane and no dlim
+  rail, so IMAGE_VERSION stays at 8. `PERF_LEDGER.md` carries the entry and what reopens it.
+- **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
+  PERF_LEDGER entry, this findings section, predictions scored.
 
 ## Predictions
 
@@ -208,19 +213,59 @@ Originals (registered pre-recon, against the wrong architecture — the honest s
    ~245 ms bf16 CPU at 130 tok.
 6. Cats called cats — STANDS.
 
-Revised (registered at slice A, before any das implementation):
-- R1. Tier-0 bit-exact on the first honest attempt; if not, the bug is in the LETTERBOX
-  seam (content-size ceil, centering floor, pad color) or the u8 truncate — not the
-  geometry rounding, which the dumps already table-drive.
-- R2. f32 embedder vs oracle: maxdiff < 1e-4, cosine > 0.99999 — two GEMMs of bf16
-  weights, no attention; the only float-order freedom is GEMM accumulation order. (Their
-  CPU run accumulates bf16×f32; ours will run f32 planes — weight-rounding, not order,
-  dominates.)
-- R3. Slice G measurement says f32 planes are ALREADY fast enough (< 300 ms at 280 tok on
-  M1) and q8 planes get skipped with a ledger entry.
-- R4. Biggest debug sink moves DECODER-side: the non-causal span arm + splice bookkeeping
-  (slice D/E), not the embedder. The embedder lands tier-1-green within one session.
-- R5. Cats get called cats (greedy, contains-check after the thinking preamble).
+Revised (registered at slice A, before any das implementation) — SCORED:
+- R1. Tier-0 bit-exact on the first honest attempt; if not, the bug is the LETTERBOX seam or
+  the u8 truncate, not the geometry rounding. **HALF.** Nine of ten preproc gates went
+  bit-exact immediately and the geometry was right, but the miss was neither named cause: it
+  was FMA contraction in the reference's lerp (finding 3). "Not the geometry" held; "the
+  letterbox seam" did not.
+- R2. f32 embedder vs oracle: maxdiff < 1e-4 — the only float freedom is accumulation order.
+  **CORRECT, with a caveat that mattered more than the number**: 2e-5 measured, but only
+  after finding 2 — against the bf16 oracle it read 3e-2, and the reasoning behind the
+  prediction ("weight-rounding, not order, dominates") is exactly what pointed at the
+  reference's activation rounding.
+- R3. Slice G says f32 planes are already fast enough (< 300 ms at 280 tok on M1) and q8
+  gets skipped with a ledger entry. **CORRECT** — 118 ms at 280 tokens, 54 ms at 130; q8
+  declined, and the dlim rail declined too (29 ms load). Ledger entry written.
+- R4. Biggest debug sink moves DECODER-side (slice D/E), not the embedder; the embedder
+  lands tier-1-green within one session. **CORRECT on the embedder** (one session, no
+  transposed-grid bug — the non-square gate caught nothing because nothing was wrong), but
+  the decoder side did not fight either: the span landed green first try. The real sink was
+  the ORACLE (findings 2 and 3) — neither implementation.
+- R5. Cats get called cats. **CORRECT**, first honest attempt, both through `ask --image`
+  and the tier-3 cell.
+
+The pattern across R1–R5: every prediction about OUR code was right or nearly right, and
+every surprise came from the reference (fmadd contraction, bf16 activation rounding, atan2
+portability). Next arc's version of this list should carry at least one prediction about the
+oracle's arithmetic, not only about the port.
+
+## Findings (what the arc actually taught)
+
+1. **The family map was inverted.** Both original premises were wrong in the same direction:
+   the 12B pairs with `gemma4uv` (a linear embedder), and the E2B mmproj on disk is the real
+   `gemma4v` ViT, not MobileNet. The lesson is procedural — the plan named a projector from
+   the mtmd graph file whose name matched the family, without reading the loader case that
+   maps GGUF → graph. Slice A's first act should be dumping the actual mmproj's meta, which
+   is what corrected it.
+2. **The oracle needed its own correctness fix.** ggml's bf16 `mul_mat` rounds ACTIVATIONS to
+   bf16 per dot, so encode dumps from the bf16 mmproj carry ~0.4% relative noise that has
+   nothing to do with either implementation. Tier-1 read 3e-2 against them and 2e-5 against
+   an f32-widened twin (`mint_f32_mmproj.py`; widening is exact, the engine still loads the
+   bf16 file). A parity gate is only as honest as the reference's own arithmetic.
+3. **The bilinear needed double accumulation** — not for precision, but for DETERMINISM
+   against a reference clang compiled with fmadd contraction. Unfused f32 sat one ulp above a
+   truncation boundary on 2 of 112896 pixels. Accumulating in double is single-rounded like
+   the fmadd and stable across interp/JIT/AOT.
+4. **`roundi` rounds ties AWAY**, matching `std::round` — `trunc(x + copysign(0.5, x))` on
+   every platform (probe-verified). The plan assumed half-even and spelled out a workaround;
+   the workaround was the bug risk, not the fix. Only 120×960 distinguishes the two.
+5. **Fixture generators must be exact-valued.** The oracle's rainbow fixture runs `atan2f`;
+   the das test regenerates fixtures from the same formula, so libm divergence would show up
+   as a parity red. Shaped exact fixtures (a checkerboard at a non-square canvas) cover
+   orientation better anyway — identical patches make each token a pure fingerprint of its
+   position embedding.
+6. **The server is a scope decision, not a slice** — see the ledger below.
 
 ## Out of scope — v2+ ledger
 

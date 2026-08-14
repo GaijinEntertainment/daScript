@@ -12,6 +12,20 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **gemma4uv vision embedder: f32 planes stay, no quantized lane and no dlim rail (measured
+  2026-08-14, M1, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
+  projection, 3840×3840 output projection) over f32 planes widened from the bf16 mmproj at
+  load. Measured, 5 reps, cv ≈ 0: **54 ms at 130 soft tokens** (a 640×480 photo) and **118 ms
+  at 280** — the token ceiling the geometry can produce, so 118 ms is the worst case any image
+  can cost. Load is **29–37 ms** for the 190 MB blob. Both planned follow-ups are therefore
+  DECLINED with evidence rather than deferred: a q8 plane pair would trade accuracy for ~2× on
+  a path that is already 1.4% of the 8.7 s time-to-first-token an image turn pays end to end,
+  and a `.dlim` rail (serializer, plane binding, image tags, an image-suite arm, an
+  IMAGE_VERSION bump) would save 30 ms next to the 4.5 s the decoder's own image already
+  streams. **What would reopen it:** a family whose vision side is a real ViT (the E-series
+  `gemma4v` tower — 16 attention blocks, not two GEMMs), or batch image serving, where the
+  per-image cost stops hiding behind a single prefill.
+
 - **CPU attention: promote it from the loop-crown tier to the EMITTED tier (named 2026-08-05,
   the E2B deep-clip fade probes; corrected same day after a double-check).** Attention is NOT
   kernel-less: flash prefill (the default mode) tiles with online softmax and rides the

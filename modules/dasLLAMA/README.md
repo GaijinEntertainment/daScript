@@ -41,6 +41,10 @@ bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 # audio chat (omni models: decoder GGUF + audio mmproj)
 bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
+# ask about an image (gemma-4 dense: decoder GGUF + vision mmproj)
+bin/daslang -jit utils/dasllama-server/ask.das -- --model <decoder.gguf> --mmproj <mmproj.gguf> \
+    --image <picture.jpg|png|...> --prompt "describe this image"
+
 # speech-to-text: whisper / parakeet / canary ggml bins, or qwen3-asr GGUF pairs
 bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.gguf mmproj.gguf> <audio-file>
 
@@ -59,6 +63,9 @@ bin/daslang -jit examples/dasLLAMA/dictate.das -- <asr-model.bin>
   sharing), gpt-oss-20b.
 - **Audio-in chat (omni)**: Qwen2-Audio, Qwen2.5-Omni, Qwen3-Omni-30B-A3B, Ultravox v0.5,
   Voxtral-Mini-3B, Gemma-4 E-series audio.
+- **Image-in chat**: Gemma-4 dense (12B/31B/26B-A4B) via its vision mmproj — dynamic
+  resolution, one image per turn, CPU. Library API (`create_chat(model, embedder)` +
+  `add_user_image`) and `ask --image`; the OpenAI server's image route is not wired yet.
 - **Speech-to-text**: the whole Whisper family (tiny → large-v3-turbo, stock whisper.cpp bins),
   Parakeet-TDT 0.6b v2/v3, Qwen3-ASR 0.6B/1.7B, Canary-Qwen 2.5B.
 - **Voice activity detection**: Silero-VAD v6 (weights checked in — works with zero setup).

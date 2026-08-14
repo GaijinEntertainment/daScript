@@ -299,6 +299,17 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   sideways between families.
 - **`dasllama_vad.das`** — Silero-VAD weights and per-stream state.
 
+### 1.7b Vision
+
+- **`dasllama_vision.das`** — the image preprocessing rail: dynamic-resolution geometry, the
+  letterbox resize (aspect-preserving bilinear onto a centered black canvas), u8→f32 normalize,
+  and the `DASLLAMA_VISION_DUMP` PPM writer. The only preprocessing home.
+- **`dasllama_vision_io.das`** — image decode to RGB8, from a file or a byte blob. The only file
+  that talks to stbimage; optional, like `dasllama_audio_io` — the facade takes decoded pixels.
+- **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
+  im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
+  projector family, following the audio tower pattern; shared pieces move up, never sideways.
+
 ### 1.8 Instrumentation and support
 
 - **`dasllama_parity.das`** — CPU-reference caches for the parity instruments. Test-facing, but
