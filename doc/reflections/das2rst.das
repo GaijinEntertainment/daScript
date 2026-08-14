@@ -1337,6 +1337,7 @@ def document_module_lint_config(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled|lint_config_forces_on)$%%),
         group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source)$%%),
+        group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)

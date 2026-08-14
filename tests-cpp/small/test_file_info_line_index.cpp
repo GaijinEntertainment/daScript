@@ -151,8 +151,8 @@ TEST_CASE("rtti_is_nolint_suppressed truth table") {
         CHECK_FALSE(suppressed(8, "LINT001"));
     }
 
-    SUBCASE("directive can appear anywhere after `//`") {
-        CHECK(suppressed(9, "PERF018"));
+    SUBCASE("mid-comment prose is not a directive: nolint: must open the comment's first token") {
+        CHECK_FALSE(suppressed(9, "PERF018"));
         CHECK_FALSE(suppressed(9, "free"));
         CHECK_FALSE(suppressed(9, "prose"));
     }

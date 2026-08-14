@@ -134,8 +134,8 @@ the implementation.
 
 ## Shape
 
-**A flag set-then-returned is a return in disguise** *(lintable — specced for the
-style lint)*. A bool initialized false, set on failure paths, then immediately
+**A flag set-then-returned is a return in disguise** *(lintable — STYLE041)*.
+A bool initialized false, set on failure paths, then immediately
 consumed by a single `if (flag) return/error` — collapse to a direct return at each
 set site. The flag form often keeps looping after the answer is known and reports
 repeatedly. When the set site is inside a callback or visitor that cannot return

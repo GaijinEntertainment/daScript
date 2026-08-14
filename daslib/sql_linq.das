@@ -1572,16 +1572,11 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     // Mirror the top-level emit_sql_macro_body path: a nested `_distinct_by(K)` chain (set by analyze_chain via the wrapped chain-op branch) needs the bare-aggregate inner-subquery wrap built BEFORE build_sql_string runs — otherwise the subquery silently drops the dedup (same silent-drop bug chunk N+1 fixed at the top level).
     if (!maybe_finalize_distinct_by_passthrough(subQ, prog, at)) return false
     // Whole-row entries in a grouped projection (`_._1 |> first()`) expand to N source columns in the inner SQL but apply_passthrough_projection / outer SELECT expect 1 aliased column per record name. Reject when this projection shape is being wrapped as an inner subquery; user must keep `_group_by |> _select(...first())` at the outermost level (no `_where` / `_take` after it that would trigger divert).
-    var anyRowEntry = false
     for (b in subQ.groupedSelectIsRow) {
         if (b) {
-            anyRowEntry = true
-            break
+            macro_error(prog, at, "_sql: `_group_by |> _select((K=_._0, R=_._1 |> first()))` cannot be wrapped as an inner subquery - the whole-row entry expands to multiple unaliased columns that the outer query can't reference by name. Restructure so the chain that triggers wrap (e.g. `_where`) runs before `_group_by`, or split into separate `_sql` calls.")
+            return false
         }
-    }
-    if (anyRowEntry) {
-        macro_error(prog, at, "_sql: `_group_by |> _select((K=_._0, R=_._1 |> first()))` cannot be wrapped as an inner subquery - the whole-row entry expands to multiple unaliased columns that the outer query can't reference by name. Restructure so the chain that triggers wrap (e.g. `_where`) runs before `_group_by`, or split into separate `_sql` calls.")
-        return false
     }
     // nolint:STYLE015 force_aliases=true: outer references inner cols by alias. Without AS, SQLite
     // names the column as the raw expr (e.g. `COUNT(*)`); outer can't bind `_.alias` → `"alias"`.

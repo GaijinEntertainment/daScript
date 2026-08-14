@@ -2767,6 +2767,36 @@ disables the rule for the module — the right escape for a legitimately dense
 file such as a code emitter or a ported kernel. Suppress a single deliberate
 keep with ``// nolint:STYLE038`` on the ``def`` line.
 
+STYLE039 — non-ASCII byte in a string literal
+==============================================
+
+Emitted strings and error messages flow into logs and consoles that are not
+UTF-8 aware, where an em-dash or a multiplication sign turns into mojibake.
+The rule reports the first byte at or above ``0x80`` in a string literal —
+interpolation chunks included — unless the source spells it with ASCII escapes
+(``"\xEF\xBB\xBF"`` is already log-safe). Lambda, local-function, and generator
+bodies are checked like any other user code.
+
+.. code-block:: das
+
+    // Bad — typography in an emitted string
+    def report_bad() : string {
+        return "shader failed — see log"     // STYLE039 (em-dash)
+    }
+
+    // Good — plain ASCII
+    def report_good() : string {
+        return "shader failed - see log"
+    }
+
+The gate is tri-state: a module-local ``options _ascii_strings`` wins in either
+direction; else ``STYLE039 = true`` in ``.lint_config`` turns it on everywhere;
+else the default — on only for sources under ``daslib/`` or ``modules/``, the
+shipped-library trees whose strings reach every consumer's logs. Suppress an
+intended character (box drawing, localized text, a unicode demo) with
+``// nolint:STYLE039`` on the line, or ``options _ascii_strings = false`` for a
+whole intentionally non-ASCII module.
+
 STYLE040 — duplicated statement region a helper could absorb
 =============================================================
 
@@ -2829,6 +2859,50 @@ modules in this tree. Tune the thresholds per module with ``options _dupe_min_no
 (default 20 AST nodes) and ``options _dupe_min_statements = N`` (default 2);
 ``0`` on either leaves the default in place. Suppress a deliberate repetition
 with ``// nolint:STYLE040``.
+
+STYLE041 — a bool flag set-then-returned is a return value in disguise
+=======================================================================
+
+A ``var flag = false`` set ``true`` on some paths, then consumed by a single
+``if (flag) return X`` right after the statement that set it, is a return
+value with extra steps — and the loop often keeps running after the answer is
+known. Return directly at each set site and drop the flag.
+
+.. code-block:: das
+
+    // Bad — the flag carries the answer to the next statement
+    def first_bad(xs : array<int>) : int {
+        var found = false                    // STYLE041 (reported here)
+        for (x in xs) {
+            if (x < 0) {
+                found = true
+                break
+            }
+        }
+        if (found) return -1
+        return 0
+    }
+
+    // Good — return the answer where it is known
+    def first_good(xs : array<int>) : int {
+        for (x in xs) {
+            if (x < 0) return -1
+        }
+        return 0
+    }
+
+Extra reads are allowed only as ``if (flag) break`` / ``continue`` plumbing
+inside the setting statement — those die with the flag. Everything else is
+exempt by design, and the check fails closed: a set inside a ``$(...)``
+callback (the walk-abort idiom — a flag is the only way to get a value out of
+a block-callback walk; guard the callback's first line on it instead), negative
+polarity (``if (!found)`` search-miss, whose fix is extraction), a set that is
+not the last action on its path, a consuming statement that does not
+immediately follow the setter, a return payload not provably identical at the
+set site, and any reference the analysis cannot classify — a capture, a
+``flag && other`` read, an argument pass — all keep the rule silent.
+Init-``true`` separator flags never match. Suppress a deliberate keep with
+``// nolint:STYLE041`` on the declaration line.
 
 -----
 Tests

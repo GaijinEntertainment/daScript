@@ -23,6 +23,21 @@ def has_expect_directive(file : string) : bool {
     return false
 }
 
+// LINT019 (stale nolint) mirrors the CLI runner: it reads the consumption record the
+// three passes leave behind, so it must run AFTER them, and only on a clean compile.
+def stale_nolint_strings(file : string; disabled_codes, enabled_codes : table<string>;
+                         var issues : array<string>) : int {
+    let src = fread(file)
+    return 0 if (empty(src))
+    var stale : array<LintIssue>
+    let count = stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
+    issues |> reserve(length(issues) + length(stale))
+    for (i in stale) {
+        issues |> push("{i.message} at {i.file}:{i.line}:{i.column}")
+    }
+    return count
+}
+
 def lint_single(file : string; project : string;
                 disabled_codes, enabled_codes : table<string>) : string {
     return make_tool_result("SKIP {file} (intentional compile errors via `expect`)") if (has_expect_directive(file))
@@ -40,6 +55,7 @@ def lint_single(file : string; project : string;
         let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
         count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
         all_issues |> push_from(style_issues)
+        count += stale_nolint_strings(file, disabled_codes, enabled_codes, all_issues)
         return "{compile_warnings}No lint issues." if (count == 0)
         return build_string() $(var w) {
             if (!empty(compile_warnings)) {
@@ -86,6 +102,7 @@ def lint_file(file : string; project : string;
                     let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
                     result.count += style_lint_collect(program, style_issues, disabled_codes, enabled_codes, hygiene)
                     result.errors |> push_from(style_issues)
+                    result.count += stale_nolint_strings(file, disabled_codes, enabled_codes, result.errors)
                 }
             }
         }

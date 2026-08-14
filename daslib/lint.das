@@ -1204,9 +1204,90 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
     return count
 }
 
-//! LINT019 - stale nolint detection: reports every ``// nolint:CODE`` in `source` whose code
-//! suppressed nothing this process (run-disabled codes are skipped - their rules cannot prove
-//! themselves). Call AFTER all lint passes ran; a partial run under-consumes and would lie.
+def private is_nolint_space(b : uint8) : bool {
+    return int(b) == ' ' || int(b) == '\t'
+}
+
+// quote-aware comment locator: a `//` inside a string/char literal (escapes honored) does not open a comment
+def private nolint_comment_start(d : array<uint8> const# implicit) : int {
+    let n = length(d)
+    var p = 0
+    while (p < n) {
+        let c = int(d[p])
+        if (c == '"' || c == '\'') {
+            p++
+            while (p < n && int(d[p]) != c) {
+                p += (int(d[p]) == '\\' && p + 1 < n) ? 2 : 1
+            }
+            p++
+        } elif (c == '/' && p + 1 < n && int(d[p + 1]) == '/') {
+            return p
+        } else {
+            p++
+        }
+    }
+    return -1
+}
+
+// one line's directive walk; recognition mirrors the C-side rtti_is_nolint_suppressed (module_builtin_rtti.cpp) - change them in lockstep
+def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string; line_no : int;
+                            disabled_codes, enabled_codes : table<string>;
+                            var stale_codes : array<string>; var self_suppressed : bool&) : void {
+    let n = length(bytes)
+    var p = nolint_comment_start(bytes)
+    return if (p < 0)
+    p += 2
+    while (p < n && (int(bytes[p]) == '/' || int(bytes[p]) == '!')) {
+        p++     // `//!` docs, `///` piles
+    }
+    while (p < n && is_nolint_space(bytes[p])) {
+        p++
+    }
+    // positional gate: the comment's first token must open a directive
+    return if (find(bytes, "nolint:", p) != p)
+    // whitespace-split tokens; each `nolint:`-led token opens a comma-list
+    while (p < n) {
+        while (p < n && is_nolint_space(bytes[p])) {
+            p++
+        }
+        break if (p >= n)
+        if (find(bytes, "nolint:", p) == p) {
+            p += length("nolint:")
+            while (p < n) {     // comma-list of codes
+                while (p < n && is_nolint_space(bytes[p])) {
+                    p++
+                }
+                let tok_start = p
+                while (p < n && int(bytes[p]) != ',' && !is_nolint_space(bytes[p])) {
+                    p++
+                }
+                break if (p == tok_start)
+                let code = slice(bytes, tok_start, p)
+                if (code == "LINT019") {
+                    self_suppressed = true
+                } elif (is_rule_code(code)
+                        && !key_exists(disabled_codes, code)
+                        && (empty(enabled_codes) || key_exists(enabled_codes, code))
+                        && !was_nolint_consumed(fname, line_no, code)) {
+                    stale_codes |> push(code)
+                }
+                while (p < n && is_nolint_space(bytes[p])) {
+                    p++
+                }
+                break if (p >= n || int(bytes[p]) != ',')
+                p++
+            }
+        } else {
+            while (p < n && !is_nolint_space(bytes[p])) {
+                p++
+            }
+        }
+    }
+}
+
+//! LINT019 - stale nolint detection: reports every leading ``// nolint:CODE`` directive in
+//! `source` (recognition rule: stale_scan_line) whose code suppressed nothing this process.
+//! Call AFTER all lint passes ran; a partial run under-consumes and would lie.
 def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_codes : table<string>; var issues : array<LintIssue>) : int {
     return 0 if (key_exists(disabled_codes, "LINT019")
                     || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT019")))
@@ -1218,42 +1299,12 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
         line_no++
         // a CRLF checkout leaves \r glued to the last token - strip it
         let line = raw_line |> ends_with("\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
-        let cpos = find(line, "//")
-        continue if (cpos < 0)
+        continue if (find(line, "nolint:") < 0)
         stale_codes |> clear()
         var self_suppressed = false
         peek_data(line) $(bytes) {
-            let n = length(bytes)
-            var at = find(bytes, "nolint:", cpos)
-            while (at >= 0) {
-                // comma-list parse, mirroring the C-side scanner in rtti_is_nolint_suppressed
-                var p = at + length("nolint:")
-                while (p < n) {
-                    while (p < n && (int(bytes[p]) == ' ' || int(bytes[p]) == '\t')) {
-                        p++
-                    }
-                    let tok_start = p
-                    while (p < n && int(bytes[p]) != ',' && int(bytes[p]) != ' ' && int(bytes[p]) != '\t') {
-                        p++
-                    }
-                    break if (p == tok_start)
-                    let code = slice(bytes, tok_start, p)
-                    if (code == "LINT019") {
-                        self_suppressed = true
-                    } elif (is_rule_code(code)
-                            && !key_exists(disabled_codes, code)
-                            && (empty(enabled_codes) || key_exists(enabled_codes, code))
-                            && !was_nolint_consumed(fname, line_no, code)) {
-                        stale_codes |> push(code)
-                    }
-                    while (p < n && (int(bytes[p]) == ' ' || int(bytes[p]) == '\t')) {
-                        p++
-                    }
-                    break if (p >= n || int(bytes[p]) != ',')
-                    p++
-                }
-                at = find(bytes, "nolint:", p)
-            }
+            stale_scan_line(bytes, fname, line_no, disabled_codes, enabled_codes,
+                stale_codes, self_suppressed)
         }
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))
@@ -1268,8 +1319,8 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
     return count
 }
 
-// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is prose
-// (docs quoting the syntax) or a typo the C-side scanner would never match anyway
+// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is a stray
+// token after a genuine directive, or a typo the C-side scanner would never match anyway
 def private is_rule_code(code : string) : bool {
     var prefix_len = 0
     if (code |> starts_with("LINT") || code |> starts_with("PERF")) {
