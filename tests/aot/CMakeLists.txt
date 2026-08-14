@@ -326,6 +326,11 @@ list(FILTER AOT_LANGUAGE_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
 # Exclude module files (they are compiled via DAS_AOT_LIB below)
 list(FILTER AOT_LANGUAGE_FILES EXCLUDE REGEX "/_")
 
+# JIT-vs-AOT primitive benchmarks ride the language suite so test_aot_subset can run
+# them with real AOT stubs (`--bench` lane); they require nothing beyond testing_boost.
+FILE(GLOB AOT_JIT_BENCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "benchmarks/core/jit_aot/*.das")
+list(APPEND AOT_LANGUAGE_FILES ${AOT_JIT_BENCH_FILES})
+
 # Minimal daslib closure for test_aot_subset: ONLY the daslib modules whose
 # runtime functions tests/language actually calls (50101 otherwise). This is
 # NOT the all-daslib coverage lib above — keep it minimal; a new tests/language
