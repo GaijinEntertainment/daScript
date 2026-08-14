@@ -133,3 +133,50 @@ def test_rule_true_for_unset_code_is_noop(t : T?) {
         t |> equal(length(d), 0)
     }
 }
+
+[test]
+def test_path_excludes_parse(t : T?) {
+    t |> run("[paths] exclude array parses; non-strings ignored") @@(t : T?) {
+        write_fixture("[paths]\nexclude = [\"tests/**\", 42, \"benchmarks/*.das\", \"\"]\n[rules]\nSTYLE100 = false\n")
+        var ex : array<string>
+        load_path_excludes_from_path(fixture_path(), ex)
+        t |> equal(length(ex), 2)
+        t |> equal(ex[0], "tests/**")
+        t |> equal(ex[1], "benchmarks/*.das")
+    }
+    t |> run("missing [paths] section yields no excludes") @@(t : T?) {
+        write_fixture("[rules]\nSTYLE100 = false\n")
+        var ex : array<string>
+        load_path_excludes_from_path(fixture_path(), ex)
+        t |> equal(length(ex), 0)
+    }
+    t |> run("missing file / malformed TOML yield no excludes") @@(t : T?) {
+        var ex : array<string>
+        load_path_excludes_from_path("/no/such/lint_config_path_xyz", ex)
+        t |> equal(length(ex), 0)
+        write_fixture("[paths\nexclude = [\"tests/**\"]\n")       // unclosed header
+        load_path_excludes_from_path(fixture_path(), ex)
+        t |> equal(length(ex), 0)
+    }
+}
+
+[test]
+def test_path_excludes_match(t : T?) {
+    t |> run("root-relative ** glob matches nested paths, either spelling") @@(t : T?) {
+        let ex <- ["tests/**"]
+        t |> success(matches_path_excludes("tests/lint/foo.das", ex))
+        t |> success(matches_path_excludes("{get_das_root()}/tests/lint/foo.das", ex))
+        t |> success(matches_path_excludes("tests\\lint\\foo.das", ex))
+        t |> success(!matches_path_excludes("utils/tests_helper.das", ex))
+        t |> success(!matches_path_excludes("daslib/lint.das", ex))
+    }
+    t |> run("single * does not cross a separator") @@(t : T?) {
+        let ex <- ["tests/*.das"]
+        t |> success(matches_path_excludes("tests/a.das", ex))
+        t |> success(!matches_path_excludes("tests/sub/a.das", ex))
+    }
+    t |> run("empty exclude list matches nothing") @@(t : T?) {
+        let ex : array<string>
+        t |> success(!matches_path_excludes("tests/a.das", ex))
+    }
+}

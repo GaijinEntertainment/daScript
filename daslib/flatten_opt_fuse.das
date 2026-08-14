@@ -206,10 +206,9 @@ def private vectorize_side(var that : ExprCall?; d : int; takeLeft : bool; var n
     return SIDE_GATHER
 }
 
-def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : ExpressionPtr {
-    let d = ctor_dim_by_name(that)
-    if (d < 2 || !is_float_vec(expr_bt(that))) return null
-    // re-vectorize same-op lanes: `floatN(v.x + c1, v.y + c2, …) → v + floatN(c1,c2,…)` (exact)
+// Re-vectorize same-op lanes: `floatN(v.x + c1, v.y + c2, …) → v + floatN(c1,c2,…)` (exact). Null
+// unless every lane carries the same operator AND a side resolves to a component pattern.
+def private ctor_fuse_same_op(var that : ExprCall?; d : int) : ExpressionPtr {
     var sameOp = ""
     if (that.arguments[0] is ExprOp2) {
         let op0 = "{(that.arguments[0] as ExprOp2).op}"
@@ -223,73 +222,75 @@ def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : Expre
             }
         }
     }
-    if (sameOp != "") {
-        var aN : ExpressionPtr
-        var bN : ExpressionPtr
-        let ka = vectorize_side(that, d, true, aN)
-        let kb = vectorize_side(that, d, false, bN)
-        // profitability bar: a component pattern on a side (EQUAL/GATHER pairs are node-neutral)
-        if (ka == SIDE_COMPONENT || kb == SIDE_COMPONENT) {
-            // a lone EQUAL scalar broadcasts natively under * and /; + and - need a splat ctor
-            if (ka == SIDE_EQUAL && (sameOp == "+" || sameOp == "-")) {
-                aN = make_float_splat(d, that.at, aN)
-            }
-            if (kb == SIDE_EQUAL && (sameOp == "+" || sameOp == "-")) {
-                bN = make_float_splat(d, that.at, bN)
-            }
-            return new ExprOp2(at = that.at, op := sameOp, left = aN, right = bN)
-        }
+    if (sameOp == "") return null
+    var aN : ExpressionPtr
+    var bN : ExpressionPtr
+    let ka = vectorize_side(that, d, true, aN)
+    let kb = vectorize_side(that, d, false, bN)
+    // profitability bar: a component pattern on a side (EQUAL/GATHER pairs are node-neutral)
+    if (ka != SIDE_COMPONENT && kb != SIDE_COMPONENT) return null
+    // a lone EQUAL scalar broadcasts natively under * and /; + and - need a splat ctor
+    if (ka == SIDE_EQUAL && (sameOp == "+" || sameOp == "-")) {
+        aN = make_float_splat(d, that.at, aN)
     }
-    // shared factor / divisor, keyed on lane 0's candidates (describe equality across lanes)
-    if (that.arguments[0] is ExprOp2) {
-        var l0 = that.arguments[0] as ExprOp2
-        if (l0.op == "*" || l0.op == "/") {
-            for (ci in range(l0.op == "*" ? 2 : 1)) {
-                var cand = (l0.op == "/" || ci == 1) ? l0.right : l0.left
-                if (expr_bt(cand) != Type.tFloat) {
-                    continue
-                }
-                let key = describe(cand)
-                var rests : array<ExpressionPtr>
-                var allMatch = true
-                for (i in range(d)) {
-                    var ok = false
-                    if (that.arguments[i] is ExprOp2) {
-                        var li = that.arguments[i] as ExprOp2
-                        if (li.op == l0.op) {
-                            if (li.op == "*" && describe(li.left) == key && expr_bt(li.left) == Type.tFloat) {
-                                rests |> push(clone_expression(li.right))
-                                ok = true
-                            } elif (describe(li.right) == key && expr_bt(li.right) == Type.tFloat) {
-                                rests |> push(clone_expression(li.left))
-                                ok = true
-                            }
-                        }
+    if (kb == SIDE_EQUAL && (sameOp == "+" || sameOp == "-")) {
+        bN = make_float_splat(d, that.at, bN)
+    }
+    return new ExprOp2(at = that.at, op := sameOp, left = aN, right = bN)
+}
+
+// Shared factor / divisor across every lane (`floatN(a*s, b*s, …) → floatN(a,b,…) * s`), keyed on
+// lane 0's candidates by describe equality. Null when no candidate matches all lanes.
+def private ctor_fuse_shared_factor(var that : ExprCall?; d : int) : ExpressionPtr {
+    if (!(that.arguments[0] is ExprOp2)) return null
+    var l0 = that.arguments[0] as ExprOp2
+    if (l0.op != "*" && l0.op != "/") return null
+    for (ci in range(l0.op == "*" ? 2 : 1)) {
+        var cand = (l0.op == "/" || ci == 1) ? l0.right : l0.left
+        if (expr_bt(cand) != Type.tFloat) {
+            continue
+        }
+        let key = describe(cand)
+        var rests : array<ExpressionPtr>
+        var allMatch = true
+        for (i in range(d)) {
+            var ok = false
+            if (that.arguments[i] is ExprOp2) {
+                var li = that.arguments[i] as ExprOp2
+                if (li.op == l0.op) {
+                    if (li.op == "*" && describe(li.left) == key && expr_bt(li.left) == Type.tFloat) {
+                        rests |> push(clone_expression(li.right))
+                        ok = true
+                    } elif (describe(li.right) == key && expr_bt(li.right) == Type.tFloat) {
+                        rests |> push(clone_expression(li.left))
+                        ok = true
                     }
-                    if (!ok) {
-                        allMatch = false
-                        break
-                    }
                 }
-                if (allMatch) {
-                    var nc = make_float_ctor(d, that.at, rests)
-                    var sc = clone_expression(cand)
-                    unsafe {
-                        delete rests
-                    }
-                    return new ExprOp2(at = that.at, op := l0.op, left = nc, right = sc)
-                }
-                unsafe {
-                    delete rests
-                }
+            }
+            if (!ok) {
+                allMatch = false
+                break
             }
         }
+        if (allMatch) {
+            var nc = make_float_ctor(d, that.at, rests)
+            var sc = clone_expression(cand)
+            unsafe {
+                delete rests
+            }
+            return new ExprOp2(at = that.at, op := l0.op, left = nc, right = sc)
+        }
+        unsafe {
+            delete rests
+        }
     }
-    // majority const factor with compensation (fast-math): most frequent lane factor C ≠ 0,1 wins
-    if (no_fast_math) return null
-    var laneC : array<float>
-    var laneV : array<float>
-    var laneE : array<ExpressionPtr>
+    return null
+}
+
+// Split each lane into (const factor, remaining expr): an all-const lane lands in `laneV` with a
+// null `laneE`, any other lane in `laneC`/`laneE` (factor 1 when it carries no const factor).
+def private lane_const_factors(var that : ExprCall?; d : int; var laneC, laneV : array<float>;
+                               var laneE : array<ExpressionPtr>) {
     for (i in range(d)) {
         var cv = 0.0
         if (scalar_float_const(that.arguments[i], cv)) {
@@ -316,7 +317,10 @@ def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : Expre
         laneV |> push(0.0)
         laneE |> push(ei)
     }
-    var bestC = 0.0
+}
+
+// The most frequent lane factor C ∉ {0, 1} (into `bestC`), and how many lanes carry it.
+def private majority_factor(laneC : array<float>; laneE : array<ExpressionPtr>; d : int; var bestC : float&) : int {
     var bestN = 0
     for (i in range(d)) {
         if (laneE[i] == null || laneC[i] == 1.0 || laneC[i] == 0.0) {
@@ -333,14 +337,18 @@ def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : Expre
             bestC = laneC[i]
         }
     }
-    if (bestN < 2) {
-        delete laneC
-        delete laneV
-        unsafe {
-            delete laneE
-        }
-        return null
-    }
+    return bestN
+}
+
+// Majority const factor with compensation (fast-math): hoist the most frequent lane factor out of
+// the ctor, compensating the other lanes — only when that leaves fewer multiply nodes than it costs.
+def private ctor_fuse_majority_const(var that : ExprCall?; d : int) : ExpressionPtr {
+    var laneC : array<float>
+    var laneV : array<float>
+    var laneE : array<ExpressionPtr>
+    lane_const_factors(that, d, laneC, laneV, laneE)
+    var bestC = 0.0
+    let bestN = majority_factor(laneC, laneE, d, bestC)
     var before = 0
     var after = 1
     for (i in range(d)) {
@@ -351,33 +359,42 @@ def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : Expre
             after ++
         }
     }
-    if (after >= before) {
-        delete laneC
-        delete laneV
+    var res : ExpressionPtr = null
+    if (bestN >= 2 && after < before) {
+        var lanes : array<ExpressionPtr>
+        for (i in range(d)) {
+            if (laneE[i] == null) {
+                lanes |> push(new ExprConstFloat(at = that.at, value = laneV[i] / bestC))
+            } elif (laneC[i] == bestC) {
+                lanes |> push(clone_expression(laneE[i]))
+            } else {
+                var comp : ExpressionPtr = new ExprConstFloat(at = that.at, value = laneC[i] / bestC)
+                lanes |> push(new ExprOp2(at = that.at, op := "*", left = clone_expression(laneE[i]), right = comp))
+            }
+        }
+        var nc = make_float_ctor(d, that.at, lanes)
+        res = new ExprOp2(at = that.at, op := "*", left = nc, right = new ExprConstFloat(at = that.at, value = bestC))
         unsafe {
-            delete laneE
-        }
-        return null
-    }
-    var lanes : array<ExpressionPtr>
-    for (i in range(d)) {
-        if (laneE[i] == null) {
-            lanes |> push(new ExprConstFloat(at = that.at, value = laneV[i] / bestC))
-        } elif (laneC[i] == bestC) {
-            lanes |> push(clone_expression(laneE[i]))
-        } else {
-            var comp : ExpressionPtr = new ExprConstFloat(at = that.at, value = laneC[i] / bestC)
-            lanes |> push(new ExprOp2(at = that.at, op := "*", left = clone_expression(laneE[i]), right = comp))
+            delete lanes
         }
     }
-    var nc = make_float_ctor(d, that.at, lanes)
     delete laneC
     delete laneV
     unsafe {
-        delete lanes
         delete laneE
     }
-    return new ExprOp2(at = that.at, op := "*", left = nc, right = new ExprConstFloat(at = that.at, value = bestC))
+    return res
+}
+
+def private ctor_fuse_rewrite(var that : ExprCall?; no_fast_math : bool) : ExpressionPtr {
+    let d = ctor_dim_by_name(that)
+    if (d < 2 || !is_float_vec(expr_bt(that))) return null
+    var r = ctor_fuse_same_op(that, d)
+    if (r != null) return r
+    r = ctor_fuse_shared_factor(that, d)
+    if (r != null) return r
+    if (no_fast_math) return null
+    return ctor_fuse_majority_const(that, d)
 }
 
 struct private DotGroup {
@@ -418,16 +435,16 @@ def private dot_term_lane(var e : ExpressionPtr; var baseKey : string&; var base
 def private dot_chain_groups(var terms : array<ReTerm>; var groups : table<string; DotGroup>;
                              var tKey : array<string>) : bool {
     tKey |> resize(length(terms))
-    for (i in range(length(terms))) {
+    for (t, key in terms, tKey) {
         var baseKey = ""
         var base : ExpressionPtr
         var lane = 0
         var w = 0.0
-        if (!dot_term_lane(terms[i].e, baseKey, base, lane, w)) {
+        if (!dot_term_lane(t.e, baseKey, base, lane, w)) {
             continue
         }
-        tKey[i] = baseKey
-        if (terms[i].neg) {
+        key = baseKey
+        if (t.neg) {
             w = -w
         }
         if (!key_exists(groups, baseKey)) {
@@ -475,15 +492,14 @@ def private dot_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>) 
     }
     var emitted : table<string>
     var newTerms : array<ReTerm>
-    for (i in range(length(terms))) {
-        let k = tKey[i]
+    for (t, k in terms, tKey) {
         if (k == "") {
-            newTerms |> push(terms[i])
+            newTerms |> push(t)
             continue
         }
         var g = groups?[k] ?? default<DotGroup>
         if (g.nterms < 2) {
-            newTerms |> push(terms[i])
+            newTerms |> push(t)
             continue
         }
         if (key_exists(emitted, k)) {
@@ -727,13 +743,11 @@ def private make_hadd_arg(var lanes : array<ExpressionPtr>; w : int; at : LineIn
 }
 
 // Pack the independent-scalar reduce lanes of a maximal `+`/`-` chain (see reduce_lane) into width [minWidth..4] groups via plan_groups; null when no group reaches minWidth. The dot fold above only reaches lanes of ONE vector (`v.x + v.y + …`); unrelated scalars (plasma's `v1 + v2 + v3 + v4`) have no shared base, so a combine + reduce is the collapse. Each group emits `hadd(floatN(s))` when all its weights are 1, else `dot(floatN(s), floatN(weights))` (a const-weighted sum like an fBm octave chain).
-def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>; minWidth : int; mod : Module?) : ExpressionPtr {
-    // collect reduce lanes (scalar + const weight) in source order; a weighted lane emits `dot`, so it is only a candidate when dot is callable — else it stays for the mad walk (never break a shader)
-    let dotCallable = fuse_callable(mod, "dot", 2)
-    var cand : array<int>
-    var laneScalar : array<ExpressionPtr>
-    var laneWeight : array<float>
-    var laneStripped : array<bool>
+// Reduce lanes (scalar + const weight) in source order; a weighted lane emits `dot`, so it is only a
+// candidate when dot is callable — else it stays for the mad walk (never break a shader).
+def private collect_reduce_lanes(var terms : array<ReTerm>; dotCallable : bool; var cand : array<int>;
+                                 var laneScalar : array<ExpressionPtr>; var laneWeight : array<float>;
+                                 var laneStripped : array<bool>) {
     for (i in range(length(terms))) {
         var s : ExpressionPtr
         var w = 1.0
@@ -748,6 +762,61 @@ def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>;
             laneStripped |> push(stripped)
         }
     }
+}
+
+// One group's fused call: `dot(floatN(scalars), floatN(weights))` when any lane carries a weight,
+// else `hadd(floatN(leaves))` (make_hadd_arg producer-vectorizes a shared elementwise unary).
+def private make_reduce_group_call(var terms : array<ReTerm>; cand : array<int>;
+                                   laneScalar : array<ExpressionPtr>; laneWeight : array<float>;
+                                   laneStripped : array<bool>; o, w : int; at : LineInfo;
+                                   mod : Module?) : ExpressionPtr {
+    var weighted = false
+    for (li in range(w)) {
+        if (laneStripped[o + li] || laneWeight[o + li] != 1.0) {
+            weighted = true
+        }
+    }
+    if (weighted) {
+        // dot(floatN(scalars), const floatN(weights)) — clone scalars (the `*const` wrappers drop)
+        var scalars : array<ExpressionPtr>
+        var weights : array<ExpressionPtr>
+        scalars |> reserve(w)
+        weights |> reserve(w)
+        for (li in range(w)) {
+            scalars |> push(clone_expression(laneScalar[o + li]))
+            weights |> push(new ExprConstFloat(at = at, value = laneWeight[o + li]))
+        }
+        var vecArg = make_float_ctor(w, at, scalars)
+        var mask = make_float_ctor(w, at, weights)
+        var dcll = new ExprCall(at = at, name := "dot")
+        emplace(dcll.arguments, vecArg)
+        emplace(dcll.arguments, mask)
+        unsafe {
+            delete scalars
+            delete weights
+        }
+        return dcll
+    }
+    var lanes : array<ExpressionPtr>
+    lanes |> reserve(w)
+    for (li in range(w)) {
+        lanes |> push(terms[cand[o + li]].e)   // reuse the leaf node (each used once)
+    }
+    var ctor = make_hadd_arg(lanes, w, at, mod)
+    var hcll = new ExprCall(at = at, name := "hadd")
+    emplace(hcll.arguments, ctor)
+    unsafe {
+        delete lanes
+    }
+    return hcll
+}
+
+def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>; minWidth : int; mod : Module?) : ExpressionPtr {
+    var cand : array<int>
+    var laneScalar : array<ExpressionPtr>
+    var laneWeight : array<float>
+    var laneStripped : array<bool>
+    collect_reduce_lanes(terms, fuse_callable(mod, "dot", 2), cand, laneScalar, laneWeight, laneStripped)
     var groups <- plan_groups(length(cand), minWidth)
     var covered = 0
     for (w in groups) {
@@ -783,49 +852,8 @@ def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>;
         if (key_exists(dropped, i)) continue
         if (key_exists(headGroup, i)) {
             let gi = headGroup[i]
-            let w = groups[gi]
-            let o = groupOff[gi]
-            var weighted = false
-            for (li in range(w)) {
-                if (laneStripped[o + li] || laneWeight[o + li] != 1.0) {
-                    weighted = true
-                }
-            }
-            var cll : ExpressionPtr
-            if (weighted) {
-                // dot(floatN(scalars), const floatN(weights)) — clone scalars (the `*const` wrappers drop)
-                var scalars : array<ExpressionPtr>
-                var weights : array<ExpressionPtr>
-                scalars |> reserve(w)
-                weights |> reserve(w)
-                for (li in range(w)) {
-                    scalars |> push(clone_expression(laneScalar[o + li]))
-                    weights |> push(new ExprConstFloat(at = that.at, value = laneWeight[o + li]))
-                }
-                var vecArg = make_float_ctor(w, that.at, scalars)
-                var mask = make_float_ctor(w, that.at, weights)
-                var dcll = new ExprCall(at = that.at, name := "dot")
-                emplace(dcll.arguments, vecArg)
-                emplace(dcll.arguments, mask)
-                cll = dcll
-                unsafe {
-                    delete scalars
-                    delete weights
-                }
-            } else {
-                var lanes : array<ExpressionPtr>
-                lanes |> reserve(w)
-                for (li in range(w)) {
-                    lanes |> push(terms[cand[o + li]].e)   // reuse the leaf node (each used once)
-                }
-                var ctor = make_hadd_arg(lanes, w, that.at, mod)   // producer-vectorizes a shared unary
-                var hcll = new ExprCall(at = that.at, name := "hadd")
-                emplace(hcll.arguments, ctor)
-                cll = hcll
-                unsafe {
-                    delete lanes
-                }
-            }
+            var cll = make_reduce_group_call(terms, cand, laneScalar, laneWeight, laneStripped,
+                groupOff[gi], groups[gi], that.at, mod)
             newTerms |> push(ReTerm(neg = false, e = cll))
         } else {
             newTerms |> push(terms[i])

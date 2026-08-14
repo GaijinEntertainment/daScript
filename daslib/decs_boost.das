@@ -303,6 +303,63 @@ enum private DecsQueryType {
     find_query
 }
 
+// The per-entity body of a query: component lookups (indexed for an eid query, iterated otherwise)
+// followed by the user block. `kaboom` collects the [decs_template] binds the caller rewrites into
+// field access. Null when a component lookup fails.
+def private build_query_body(qt : DecsQueryType; qblk : ExprBlock?; arch_name : string; var kaboom : array<tuple<string; string; string>>) : ExpressionPtr {
+    if (qt == DecsQueryType.eid_query) {
+        var qlbody = new ExprBlock(at = qblk.at)
+        for (a in qblk.arguments) {
+            let detp = a |> is_decs_template
+            if (detp is yes) {
+                kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
+                for (f in a._type.structType.fields) {
+                    if (!append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
+                }
+            } else {
+                if (!append_index_lookup(arch_name, qlbody, a, "", "")) return null
+            }
+        }
+        for (l in qblk.list) {
+            qlbody.list |> push(clone_expression(l))
+        }
+        for (fl in qblk.finalList) {
+            qlbody.finalList |> push(clone_expression(fl))
+        }
+        convert_block_to_loop(qlbody, true, false, false)
+        return qlbody
+    }
+    // for s1, s2 ...
+    var qloop = new ExprFor(at = qblk.at, visibility = qblk.at)
+    qloop.allowIteratorOptimization = true
+    qloop.canShadow = true
+    for (a in qblk.arguments) {
+        let detp = a |> is_decs_template
+        if (detp is yes) {
+            kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
+            for (f in a._type.structType.fields) {
+                if (!append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
+            }
+        } else {
+            if (!append_iterator(arch_name, qloop, a, "", "")) return null
+        }
+    }
+    var qlbody = new ExprBlock(at = qblk.at)
+    for (l in qblk.list) {
+        qlbody.list |> push(clone_expression(l))
+    }
+    for (fl in qblk.finalList) {
+        qlbody.finalList |> push(clone_expression(fl))
+    }
+    if (qt == DecsQueryType.query) {
+        convert_block_to_loop(qlbody, false, true, false)
+    } else {
+        convert_block_to_loop(qlbody, false, true, true)
+    }
+    qloop.body = qlbody
+    return qloop
+}
+
 [call_macro(name="query")]
 class DecsQueryMacro : AstCallMacro {
     //! This macro implements `query` functionality. There are 2 types of queries:
@@ -347,59 +404,8 @@ class DecsQueryMacro : AstCallMacro {
             return <- $v(req)
         }
         var kaboom : array<tuple<string; string; string>>
-        var qtop : ExpressionPtr
-        if (qt == DecsQueryType.eid_query) {
-            var qlbody = new ExprBlock(at = qblk.at)
-            for (a in qblk.arguments) {
-                let detp = a |> is_decs_template
-                if (detp is yes) {
-                    kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
-                    for (f in a._type.structType.fields) {
-                        if (!append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
-                    }
-                } else {
-                    if (!append_index_lookup(arch_name, qlbody, a, "", "")) return null
-                }
-            }
-            for (l in qblk.list) {
-                qlbody.list |> push(clone_expression(l))
-            }
-            for (fl in qblk.finalList) {
-                qlbody.finalList |> push(clone_expression(fl))
-            }
-            convert_block_to_loop(qlbody, true, false, false)
-            qtop = qlbody
-        } else {
-            // for s1, s2 ...
-            var qloop = new ExprFor(at = qblk.at, visibility = qblk.at)
-            qloop.allowIteratorOptimization = true
-            qloop.canShadow = true
-            for (a in qblk.arguments) {
-                let detp = a |> is_decs_template
-                if (detp is yes) {
-                    kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
-                    for (f in a._type.structType.fields) {
-                        if (!append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
-                    }
-                } else {
-                    if (!append_iterator(arch_name, qloop, a, "", "")) return null
-                }
-            }
-            var qlbody = new ExprBlock(at = qblk.at)
-            for (l in qblk.list) {
-                qlbody.list |> push(clone_expression(l))
-            }
-            for (fl in qblk.finalList) {
-                qlbody.finalList |> push(clone_expression(fl))
-            }
-            if (qt == DecsQueryType.query) {
-                convert_block_to_loop(qlbody, false, true, false)
-            } else {
-                convert_block_to_loop(qlbody, false, true, true)
-            }
-            qloop.body = qlbody
-            qtop = qloop
-        }
+        var qtop = build_query_body(qt, qblk, arch_name, kaboom)
+        if (qtop == null) return null
         apply_template(qtop) $(rules) {
             for (kb in kaboom) {
                 rules |> kaboomVarField(kb._0, kb._1, kb._2)

@@ -31,7 +31,9 @@ def test_stale_nolint(t : T?) {
     t |> run("stale directive reported, live one consumed") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
         var output = ""
-        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures"], output)
+        // --lint-excluded-paths: the fixture lives under tests/**, which the repo
+        // [paths] policy excludes; this test pins the SCANNER, not the policy
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "LINT019") >= 0, "LINT019 fires on the fixture: {output}")
         t |> success(find(output, "PERF006 suppresses nothing") >= 0,
             "the stale PERF006 directive is named: {output}")
@@ -52,7 +54,7 @@ def test_stale_nolint(t : T?) {
     t |> run("disabling LINT019 silences the scan") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
         var output = ""
-        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--disable", "LINT019"], output)
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths", "--disable", "LINT019"], output)
         t |> success(find(output, "LINT019") < 0, "no LINT019 under --disable: {output}")
     }
 }

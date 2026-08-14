@@ -19,6 +19,71 @@ require daslib/defer
 require daslib/rtti public
 require daslib/debugger public
 
+// The agent-side entry point: a pinvoke-able wrapper that verifies it runs INSIDE the named
+// debug-agent context, then calls the clone that carries the original body.
+def private emit_agent_entry(var func : FunctionPtr; contextName, ctxCloneFnName, ctxFnName, resName : string) {
+  var ctxFnArguments : array<VariablePtr>
+  var ctxFnBlockList : array<ExpressionPtr>
+  var callInCtxArguments : array<ExpressionPtr>
+  for (arg in func.arguments) {
+    ctxFnArguments |> emplace_new <| clone_variable(arg)
+    callInCtxArguments |> push(qmacro($i(arg.name)))
+  }
+  if (!func.result.isVoid) {
+    var resType = clone_type(func.result)
+    resType.flags.constant = false
+    ctxFnArguments |> emplace_new <| qmacro_variable(resName, type<$t(resType)?>)
+    ctxFnBlockList |> push(qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments)); }))
+  } else {
+    ctxFnBlockList |> push(qmacro($c(ctxCloneFnName)($a(callInCtxArguments))))
+  }
+  var ctxFn = qmacro_function(ctxFnName) $($a(ctxFnArguments)) : void {
+    unsafe {
+      verify(has_debug_agent_context($v(contextName)), "debug agent is not installed")
+      verify(addr(get_debug_agent_context($v(contextName))) == addr(this_context()), "agent context mismatch")
+      $b(ctxFnBlockList)
+    }
+  }
+  ctxFn.moreFlags.pinvoke = true
+  compiling_module() |> add_function(ctxFn)
+}
+
+// Moves the original body into the clone the agent entry calls, and replaces the caller-side body
+// with the pinvoke that hops into the agent context.
+def private rewrite_to_pinvoke(var func : FunctionPtr; contextName, ctxCloneFnName, ctxFnName, resName : string) {
+  var fn = clone_function(func)
+  fn.name := ctxCloneFnName
+  fn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction | FunctionFlags.exports
+  func.body := null
+  var funcBlocklist : array<ExpressionPtr>
+  if (!func.result.isVoid) {
+    funcBlocklist |> push(qmacro_expr(${let $i(resName) : $t(func.result); }))
+  }
+  var pinvokeArguments : array<ExpressionPtr>
+  for (arg in func.arguments) {
+    if (arg._type.isRef && !arg._type.isRefType) {
+      pinvokeArguments |> push(qmacro(unsafe(addr($i(arg.name)))))
+    } else {
+      pinvokeArguments |> push(qmacro($i(arg.name)))
+    }
+  }
+  if (!func.result.isVoid) {
+    pinvokeArguments |> push(qmacro(unsafe(addr($i(resName)))))
+  }
+  funcBlocklist |> push(qmacro(unsafe(invoke_in_context(get_debug_agent_context($v(contextName)), @@$c(ctxFnName), $a(pinvokeArguments)))))
+  if (!func.result.isVoid) {
+    funcBlocklist |> push(qmacro_expr(${return $i(resName); }))
+  }
+  func.body = qmacro_block() {
+      unsafe {
+        verify(has_debug_agent_context($v(contextName)), "debug agent is not installed")
+        verify(addr(get_debug_agent_context($v(contextName))) != addr(this_context()), "agent context mismatch")
+        $b(funcBlocklist)
+      }
+  }
+  compiling_module() |> add_function(fn)
+}
+
 [function_macro(name="apply_in_context")]
 class AppendCondAnnotation : AstFunctionAnnotation {
   //! [apply_in_context] function annotation.
@@ -65,62 +130,8 @@ class AppendCondAnnotation : AstFunctionAnnotation {
     let resName = "__res__"
     let ctxCloneFnName = "CONTEXT_CLONE`{func.name}"
     let ctxFnName = "CONTEXT`{func.name}"
-    var ctxFnArguments : array<VariablePtr>
-    var ctxFnBlockList : array<ExpressionPtr>
-    var callInCtxArguments : array<ExpressionPtr>
-    for (arg in func.arguments) {
-      ctxFnArguments |> emplace_new <| clone_variable(arg)
-      callInCtxArguments |> push(qmacro($i(arg.name)))
-    }
-    if (!func.result.isVoid) {
-      var resType = clone_type(func.result)
-      resType.flags.constant = false
-      ctxFnArguments |> emplace_new <| qmacro_variable(resName, type<$t(resType)?>)
-      ctxFnBlockList |> push(qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments)); }))
-    } else {
-      ctxFnBlockList |> push(qmacro($c(ctxCloneFnName)($a(callInCtxArguments))))
-    }
-    var ctxFn = qmacro_function(ctxFnName) $($a(ctxFnArguments)) : void {
-      unsafe {
-        verify(has_debug_agent_context($v(contextName)), "debug agent is not installed")
-        verify(addr(get_debug_agent_context($v(contextName))) == addr(this_context()), "agent context mismatch")
-        $b(ctxFnBlockList)
-      }
-    }
-    ctxFn.moreFlags.pinvoke = true
-    compiling_module() |> add_function(ctxFn)
-
-    var fn = clone_function(func)
-    fn.name := ctxCloneFnName
-    fn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction | FunctionFlags.exports
-    func.body := null
-    var funcBlocklist : array<ExpressionPtr>
-    if (!func.result.isVoid) {
-      funcBlocklist |> push(qmacro_expr(${let $i(resName) : $t(func.result); }))
-    }
-    var pinvokeArguments : array<ExpressionPtr>
-    for (arg in func.arguments) {
-      if (arg._type.isRef && !arg._type.isRefType) {
-        pinvokeArguments |> push(qmacro(unsafe(addr($i(arg.name)))))
-      } else {
-        pinvokeArguments |> push(qmacro($i(arg.name)))
-      }
-    }
-    if (!func.result.isVoid) {
-      pinvokeArguments |> push(qmacro(unsafe(addr($i(resName)))))
-    }
-    funcBlocklist |> push(qmacro(unsafe(invoke_in_context(get_debug_agent_context($v(contextName)), @@$c(ctxFnName), $a(pinvokeArguments)))))
-    if (!func.result.isVoid) {
-      funcBlocklist |> push(qmacro_expr(${return $i(resName); }))
-    }
-    func.body = qmacro_block() {
-        unsafe {
-          verify(has_debug_agent_context($v(contextName)), "debug agent is not installed")
-          verify(addr(get_debug_agent_context($v(contextName))) != addr(this_context()), "agent context mismatch")
-          $b(funcBlocklist)
-        }
-    }
-    compiling_module() |> add_function(fn)
+    emit_agent_entry(func, contextName, ctxCloneFnName, ctxFnName, resName)
+    rewrite_to_pinvoke(func, contextName, ctxCloneFnName, ctxFnName, resName)
     return true
   }
 }

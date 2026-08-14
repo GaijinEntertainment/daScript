@@ -24,6 +24,60 @@ require daslib/flatten_opt_swizzle
 let private DEG_TO_RAD = 0.017453292f
 let private RAD_TO_DEG = 57.295776f
 
+// Multiplicative identities over the scalar + vector (float/int/uint) family; null when none
+// applies. Every hit is a rewrite, so a non-null result always means the tree changed.
+def private fold_mul_identities(var that : ExprOp2?; noFastMath : bool) : ExpressionPtr {
+    if (is_one_const_op(that.right) && same_base_type(that, that.left)) return that.left
+    if (is_one_const_op(that.left) && same_base_type(that, that.right)) return that.right
+    if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) return negate(that.left)
+    if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) return negate(that.right)
+    // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
+    if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (!noFastMath || !is_float_valued(that))) {
+        var z = zero_const_of(that._type, that.at)
+        if (z != null) return z
+    }
+    if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (!noFastMath || !is_float_valued(that))) {
+        var z = zero_const_of(that._type, that.at)
+        if (z != null) return z
+    }
+    return fold_mul_lane_forms(that, noFastMath)
+}
+
+// The width-changing half of the `*` arm: const-vector lane kill and the splat collapse.
+def private fold_mul_lane_forms(var that : ExprOp2?; noFastMath : bool) : ExpressionPtr {
+    // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
+    if (!noFastMath || !is_float_valued(that)) {
+        if (ctor_lane_kill(that.left, that.right) || ctor_lane_kill(that.right, that.left)) return that
+    }
+    // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
+    var spm = splat_scalar_arg(that.right)
+    if (spm != null && is_float_vec(expr_bt(that.left))) {
+        that.right = spm
+        return that
+    }
+    spm = splat_scalar_arg(that.left)
+    if (spm != null && is_float_vec(expr_bt(that.right))) {
+        that.left = spm
+        return that
+    }
+    return null
+}
+
+// Short-circuit `&&` / `||` identities: `false && x` never evaluates x, so dropping x is safe;
+// `x && false` DOES evaluate x, so that drop is gated on purity. Null when none applies.
+def private fold_bool_identities(var that : ExprOp2?) : ExpressionPtr {
+    if (that.op == "&&") {
+        if (is_bool_val(that.left, true)) return that.right                                     // true && x → x
+        if (is_bool_val(that.right, true) || is_bool_val(that.left, false)) return that.left    // x && true → x; false && x → false
+        if (is_bool_val(that.right, false) && !has_sideeffects(that.left)) return that.right    // x && false → false
+    } elif (that.op == "||") {
+        if (is_bool_val(that.left, false)) return that.right                                    // false || x → x
+        if (is_bool_val(that.right, false) || is_bool_val(that.left, true)) return that.left    // x || false → x; true || x → true
+        if (is_bool_val(that.right, true) && !has_sideeffects(that.left)) return that.right     // x || true → true
+    }
+    return null
+}
+
 class private FoldVisitor : AstVisitor {
     changed : bool
     noFastMath : bool
@@ -37,38 +91,10 @@ class private FoldVisitor : AstVisitor {
         // Algebraic identities over the scalar + vector (float/int/uint) family, under fast-math.
         match (that.op) {
             if ("*") {
-                if (is_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return that.left }
-                if (is_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return that.right }
-                if (is_neg_one_const_op(that.right) && same_base_type(that, that.left)) { changed = true; return negate(that.left) }
-                if (is_neg_one_const_op(that.left) && same_base_type(that, that.right)) { changed = true; return negate(that.right) }
-                // `*0` changes inf/NaN propagation — float forms are fast-math only (int exact)
-                if (is_zero_const_op(that.right) && !has_sideeffects(that.left) && (!noFastMath || !is_float_valued(that))) {
-                    var z = zero_const_of(that._type, that.at)
-                    if (z != null) { changed = true; return z }
-                }
-                if (is_zero_const_op(that.left) && !has_sideeffects(that.right) && (!noFastMath || !is_float_valued(that))) {
-                    var z = zero_const_of(that._type, that.at)
-                    if (z != null) { changed = true; return z }
-                }
-                // ctor-lane kill: a zero lane of a const vector factor zeroes the matching lane of a full-arity ctor factor IN PLACE — the lane compute dies (DSE) without distributing the multiply. Same inf/NaN class as scalar `*0` → float forms are fast-math only.
-                if (!noFastMath || !is_float_valued(that)) {
-                    if (ctor_lane_kill(that.left, that.right) || ctor_lane_kill(that.right, that.left)) {
-                        changed = true
-                        return that
-                    }
-                }
-                // splat collapse: `v * floatN(s) → v * s` (either side) — das vec×scalar is native, the splat ctor node disappears. Bit-exact (same per-lane product), so never gated.
-                var spm = splat_scalar_arg(that.right)
-                if (spm != null && is_float_vec(expr_bt(that.left))) {
+                var mul = fold_mul_identities(that, noFastMath)
+                if (mul != null) {
                     changed = true
-                    that.right = spm
-                    return that
-                }
-                spm = splat_scalar_arg(that.left)
-                if (spm != null && is_float_vec(expr_bt(that.right))) {
-                    changed = true
-                    that.left = spm
-                    return that
+                    return mul
                 }
             }
             if ("+") {
@@ -108,19 +134,12 @@ class private FoldVisitor : AstVisitor {
                     return that
                 }
             }
-            if ("&&") {
-                // Short-circuit `&&`: `false && x` never evaluates x, so dropping x is safe; `x && false` DOES evaluate x, so that drop is gated on purity.
-                if (is_bool_val(that.left, true)) { changed = true; return that.right }
-                if (is_bool_val(that.right, true)) { changed = true; return that.left }
-                if (is_bool_val(that.left, false)) { changed = true; return that.left }
-                if (is_bool_val(that.right, false) && !has_sideeffects(that.left)) { changed = true; return that.right }
-            }
-            if ("||") {
-                // Mirror of `&&`: `true || x` never evaluates x; `x || true` does.
-                if (is_bool_val(that.left, false)) { changed = true; return that.right }
-                if (is_bool_val(that.right, false)) { changed = true; return that.left }
-                if (is_bool_val(that.left, true)) { changed = true; return that.left }
-                if (is_bool_val(that.right, true) && !has_sideeffects(that.left)) { changed = true; return that.right }
+            if ("&&" || "||") {
+                var bl = fold_bool_identities(that)
+                if (bl != null) {
+                    changed = true
+                    return bl
+                }
             }
         }
         return that
@@ -584,7 +603,7 @@ def private select_let_name(s : ExpressionPtr) : string {
 // Safe to evaluate UNCONDITIONALLY? A stripped link's true arm runs even when the guard is false,
 // so it must not fault or have side effects. Conservative: whitelist known-pure nodes and recurse;
 // anything else (index OOB, null deref, integer div-by-zero, unknown) is unsafe — just not fused.
-def private select_arm_eval_safe(e : ExpressionPtr) : bool {
+def private select_arm_eval_safe(e : ExpressionPtr) : bool {   // nolint:STYLE037 — one arm per whitelisted pure node class; the ladder IS the whitelist
     if (e == null || e is ExprVar || e |> is_expr_const()) return true   // null / var read / literal is pure
     if (e is ExprOp1) return select_arm_eval_safe((e as ExprOp1).subexpr)
     if (e is ExprOp2) {

@@ -241,7 +241,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                     for (hb in hex_str) {
                                         codepoint = codepoint << uint(4)
                                         let c = int(hb)
-                                        if (c >= '0' && c <= '9') {
+                                        if (is_number(c)) {
                                             codepoint += uint(c - '0')
                                         } elif (c >= 'a' && c <= 'f') {
                                             codepoint += uint(c - 'a' + 10)
@@ -250,23 +250,21 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                         }
                                     }
                                     // encode codepoint as UTF-8
-                                    if (codepoint <= uint(0x7F)) {
+                                    if (codepoint <= 0x7F) {
                                         push(str, uint8(codepoint))
-                                    } elif (codepoint <= uint(0x7FF)) {
-                                        push(str, uint8(uint(0xC0) | (codepoint >> uint(6))))
-                                        push(str, uint8(uint(0x80) | (codepoint & uint(0x3F))))
-                                    } elif (codepoint <= uint(0xFFFF)) {
-                                        push(str, uint8(uint(0xE0) | (codepoint >> uint(12))))
-                                        push(str, uint8(uint(0x80) | ((codepoint >> uint(6)) & uint(0x3F))))
-                                        push(str, uint8(uint(0x80) | (codepoint & uint(0x3F))))
+                                    } elif (codepoint <= 0x7FF) {
+                                        push(str, uint8(0xC0 | (codepoint >> uint(6)))) // nolint:STYLE012 UTF-8 continuation bytes append to the accumulating token buffer
+                                        push(str, uint8(0x80 | (codepoint & 0x3F)))
+                                    } elif (codepoint <= 0xFFFF) {
+                                        push(str, uint8(0xE0 | (codepoint >> uint(12)))) // nolint:STYLE012 UTF-8 continuation bytes append to the accumulating token buffer
+                                        push(str, uint8(0x80 | ((codepoint >> uint(6)) & 0x3F)))
+                                        push(str, uint8(0x80 | (codepoint & 0x3F)))
                                     }
                                 } else {
                                     // invalid hex sequence, preserve as-is
-                                    push(str, uint8('\\'))
+                                    push(str, uint8('\\')) // nolint:STYLE012 the unparsed escape appends to the accumulating token buffer
                                     push(str, uint8('u'))
-                                    for (b in hex_str) {
-                                        push(str, b) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
-                                    }
+                                    str |> push_from(hex_str) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
                                     if (!valid_hex) {
                                         push(str, uint8(ahead))
                                     }

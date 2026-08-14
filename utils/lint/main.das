@@ -24,6 +24,7 @@ struct LintResult {
     failed : bool
     compile_errors : string
     skip_reason : string
+    excluded : int      // findings dropped by the .lint_config [paths] exclude policy
 }
 
 [CommandLineArgs]
@@ -40,6 +41,9 @@ struct Config {
 
     @clarg_doc = "Lint fixture-named files too (underscore-led names containing 'fixture'; for tests exercising this tool)"
     lint_fixtures : bool
+
+    @clarg_doc = "Report findings in paths the .lint_config [paths] exclude policy would drop"
+    lint_excluded_paths : bool
 
     @clarg_doc = "Only run paranoid lint (skip perf and style)"
     paranoid_only : bool
@@ -223,7 +227,7 @@ def normalize_rule_list(raw : array<string>; var dest : table<string>) : string 
     return ""
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures : bool;
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
               disabled_codes, enabled_codes : table<string>) : LintResult {
     var result = LintResult(file = file)
     if (has_expect_directive(file)) {
@@ -288,7 +292,29 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
             result.issues |> push_from(stale)
         }
     }
+    if (!lint_excluded_paths) {
+        apply_path_excludes(result)
+    }
     return <- result
+}
+
+// .lint_config [paths] excludes filter findings at REPORT time only - the compile
+// still ran (generic instantiation + nolint consumption stay whole-tree honest)
+def apply_path_excludes(var result : LintResult) {
+    return if (empty(result.issues))
+    var kept : array<LintIssue>
+    for (issue in result.issues) {
+        if (is_lint_path_excluded(empty(issue.file) ? result.file : issue.file)) {
+            result.excluded ++
+        } else {
+            kept |> push(issue)
+        }
+    }
+    if (result.excluded > 0) {
+        delete result.issues
+        result.issues <- kept
+        result.count = length(result.issues)
+    }
 }
 
 // Print a single LintResult in the user-facing format. Shared by serial
@@ -331,10 +357,10 @@ def read_paths_from(path : string; var out : array<string>) : bool {
 // Worker entry: lint every file in `paths`, emit one JSON-wrapped
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
-def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures : bool;
+def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
                disabled_codes, enabled_codes : table<string>) {
     for (f in paths) {
-        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, disabled_codes, enabled_codes)
+        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
     }
 }
@@ -355,6 +381,9 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     }
     if (cfg.lint_fixtures) {
         argv |> push("--lint-fixtures")
+    }
+    if (cfg.lint_excluded_paths) {
+        argv |> push("--lint-excluded-paths")
     }
     if (cfg.paranoid_only) {
         argv |> push("--paranoid-only")
@@ -530,7 +559,8 @@ def collect_input_files(var files : array<string>&) : int {
     return -1
 }
 
-def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&) : void {
+def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&; var excluded : int&) : void {
+    excluded += result.excluded
     if (!empty(result.skip_reason)) {
         skipped++
     } elif (result.failed) {
@@ -541,13 +571,11 @@ def tally_result(result : LintResult; var issues : int&; var errors : int&; var 
 }
 
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
-def print_summary(files_count, total_issues, total_errors, total_skipped : int) : int {
+def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int) : int {
     print("\n--- Summary ---\n")
-    if (total_skipped > 0) {
-        print("{files_count} files, {total_issues} issue(s), {total_errors} error(s), {total_skipped} skipped\n")
-    } else {
-        print("{files_count} files, {total_issues} issue(s), {total_errors} error(s)\n")
-    }
+    let skip_part = total_skipped > 0 ? ", {total_skipped} skipped" : ""
+    let excl_part = total_excluded > 0 ? ", {total_excluded} excluded by path policy" : ""
+    print("{files_count} files, {total_issues} issue(s), {total_errors} error(s){skip_part}{excl_part}\n")
     if (total_errors > 0) {
         return 1
     } elif (total_issues > 0) {
@@ -590,7 +618,7 @@ def main() : int {
             print("error: cannot read paths-from file: {cfg.paths_from}\n")
             return 1
         }
-        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, disabled_codes, enabled_codes)
+        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes)
         return 0
     }
 
@@ -602,6 +630,7 @@ def main() : int {
     var total_issues = 0
     var total_errors = 0
     var total_skipped = 0
+    var total_excluded = 0
 
     if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
         var results <- run_parallel_lint(files, cfg)
@@ -609,7 +638,7 @@ def main() : int {
         sort(results, $(a, b : LintResult) => a.file < b.file)
         for (result in results) {
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped)
+            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
         }
     } else {
         if (!cfg.quiet) {
@@ -619,11 +648,11 @@ def main() : int {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, disabled_codes, enabled_codes)
+            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes)
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped)
+            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
         }
     }
 
-    return print_summary(length(files), total_issues, total_errors, total_skipped)
+    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded)
 }

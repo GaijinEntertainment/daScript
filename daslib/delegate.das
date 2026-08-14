@@ -178,7 +178,7 @@ struct template public DelegateVoid {
 // ── typemacro ──────────────────────────────────────────────────────────
 
 [typemacro_function]
-def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDeclPtr) : TypeDeclPtr {
+def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDeclPtr) : TypeDeclPtr {  // nolint:STYLE038 - DelegateReturn/DelegateVoid splice wrapperLambda, invokeArgs, retType, discardCall, lastCall and voidCall by name out of THIS scope; moving the builders into helpers breaks reification
     //! Type macro that generates a delegate struct from a function or lambda type.
 
     // ── validate input ─────────────────────────────────────────────────

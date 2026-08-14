@@ -43,7 +43,7 @@ def public guard_unhandled_node(e : ExpressionPtr) : void {
 
 // Replace each child slot of `e` in place with `fn(child)`; a known leaf is left alone, and an
 // UNRECOGNIZED node trips guard_unhandled_node (a real optimizer gap — see above).
-def public rewrite_children(var e : ExpressionPtr; fn : block<(var c : ExpressionPtr) : ExpressionPtr>) : void {
+def public rewrite_children(var e : ExpressionPtr; fn : block<(var c : ExpressionPtr) : ExpressionPtr>) : void {   // nolint:STYLE037 — one arm per walkable node class; the ladder IS the child enumeration
     if (e is ExprOp1) {
         var o = e as ExprOp1
         o.subexpr = invoke(fn, o.subexpr)
@@ -103,7 +103,7 @@ def public rewrite_children(var e : ExpressionPtr; fn : block<(var c : Expressio
 }
 
 // OR over `e`'s children (short-circuit); vacuous false on a leaf / unknown node.
-def public fold_children_or(e : ExpressionPtr; pred : block<(c : ExpressionPtr) : bool>) : bool {
+def public fold_children_or(e : ExpressionPtr; pred : block<(c : ExpressionPtr) : bool>) : bool {   // nolint:STYLE037 — one arm per walkable node class, mirroring rewrite_children
     if (e is ExprOp1) {
         return invoke(pred, (e as ExprOp1).subexpr)
     } elif (e is ExprOp2) {
@@ -222,7 +222,7 @@ struct public ConstLanes {
 }
 
 //! Extract a 32-bit-grid numeric const (float/int/uint scalar or 2/3/4 vector) into typed lanes; kind = CK_NONE otherwise.
-def public const_lanes(e : ExpressionPtr) : ConstLanes {
+def public const_lanes(e : ExpressionPtr) : ConstLanes {   // nolint:STYLE037 — one arm per (element, width) const class; the table IS the extractor
     var r : ConstLanes
     if (e == null) return r
     if (e is ExprConstFloat)  { r.kind = CK_FLOAT; r.dim = 1; r.f = float4((e as ExprConstFloat).value, 0.0, 0.0, 0.0); return r }
@@ -264,7 +264,7 @@ def public make_const_lanes(L : ConstLanes; at : LineInfo) : ExpressionPtr {
 // A scalar zero/default literal (int 0, float 0.0, bool false, …). A `var x = <this>` init is
 // redundant with daslang's zero-init of a bare `var x : T`, so it can be dropped. Non-scalar
 // inits (vector/struct ctors) are not literals here and left alone.
-def public is_zero_const(e : ExpressionPtr) : bool {
+def public is_zero_const(e : ExpressionPtr) : bool {   // nolint:STYLE037 — one arm per scalar const class
     if (e == null) return false
     if (e is ExprConstInt) return (e as ExprConstInt).value == 0
     if (e is ExprConstInt8) return (e as ExprConstInt8).value == int8(0)
@@ -384,7 +384,7 @@ def public negate(var e : ExpressionPtr) : ExpressionPtr {
 // A fresh zero literal of `t` (the RESULT type of `X * 0`; also the lowering's materialized
 // implicit zero-init on bare decls), over the numeric scalar + vector family; null otherwise.
 // Keying on the result type lets both `v * 0.0` and `v * float3(0)` fold width-matched.
-def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {   // nolint:STYLE037 — one match arm per numeric baseType
     if (t == null) return null
     match (t.baseType) {
         if (Type.tInt) { return new ExprConstInt(at = at, value = 0) }

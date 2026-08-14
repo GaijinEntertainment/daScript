@@ -417,15 +417,15 @@ def private invoke_apply(var expr : ExprCallMacro?; argT : TypeDeclPtr; hasExtra
     if (argT.baseType == Type.tStructure) {
         callName = "apply`struct`{argT.structType.name}`{expr.at.line}"
         nfields = argT.structType.fields |> length
-        names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at, hasExtraArg)
+        names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at, hasExtraArg)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     } elif (argT.baseType == Type.tTuple) {
         callName = "apply`tuple`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
         nfields = length(argT.argTypes)
-        names <- generateApplyVisitTuple(expr.arguments[0]._type, callName, expr.at)
+        names <- generateApplyVisitTuple(expr.arguments[0]._type, callName, expr.at)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     } else {  // variant
         callName = "apply`variant`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
         nfields = length(argT.argTypes)
-        names <- generateApplyVisitVariant(expr.arguments[0]._type, callName, expr.at)
+        names <- generateApplyVisitVariant(expr.arguments[0]._type, callName, expr.at)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     }
     var calls : array<ExpressionPtr>
     for_each_subrange(nfields) $(frange) {

@@ -50,6 +50,71 @@ def private is_lvalue_chain(e : ExpressionPtr) : bool {
     return false
 }
 
+// For each container arg, pre-bind the subexpr to a local ref so every downstream lock / invoke / unlock references the SAME materialised value. Without this, splicing $e(subexpr) three times (lock + invoke + unlock) would re-evaluate the subexpr three times - fine for an ExprVar, fatal for a literal or call (three different temp arrays -> unlock hits stale memory).
+def private emit_with_sequence(var call : ExprCallMacro?; containerCount : int; var rewrittenBlock : ExprMakeBlock?) : ExpressionPtr {
+    var preStmts : array<ExpressionPtr>
+    var lockStmts : array<ExpressionPtr>
+    var unlockStmts : array<ExpressionPtr>
+    var argRefs : array<ExpressionPtr>
+    preStmts |> reserve(containerCount * 2)
+    lockStmts |> reserve(containerCount)
+    unlockStmts |> reserve(containerCount)
+    argRefs |> reserve(containerCount)
+    for (i in range(containerCount)) {
+        let ai = call.arguments[i] as ExprAt
+        let ki = container_kind(ai)
+        // Hygienic names — make_unique_private_name guarantees no collision with user-visible identifiers at this call site.
+        let cName = make_unique_private_name("__with_c_{i}", call.at)
+        preStmts |> push <| qmacro_expr() {
+            var $i(cName) & = unsafe($e(ai.subexpr))
+        }
+        if (ki == "array") {
+            lockStmts |> push <| qmacro_expr() {
+                __builtin_array_lock_mutable($i(cName))
+            }
+            unlockStmts |> push <| qmacro_expr() {
+                __builtin_array_unlock_mutable($i(cName))
+            }
+            argRefs |> push <| qmacro($i(cName)[$e(ai.index)])
+        } else {  // table
+            let trefName = make_unique_private_name("__with_tref_{i}", call.at)
+            preStmts |> push <| qmacro_expr() {
+                var $i(trefName) & = unsafe($i(cName)[$e(ai.index)])
+            }
+            lockStmts |> push <| qmacro_expr() {
+                __builtin_table_lock_mutable($i(cName))
+            }
+            unlockStmts |> push <| qmacro_expr() {
+                __builtin_table_unlock_mutable($i(cName))
+            }
+            argRefs |> push <| qmacro($i(trefName))
+        }
+    }
+    // Reverse unlock order so cleanup mirrors acquisition.
+    let unlockN = length(unlockStmts)
+    var unlocksReversed <- [for (i in range(unlockN)); unlockStmts[unlockN - 1 - i]]
+    // Build the invoke statement via ExprInvoke (the dedicated AST node for lambda/block calls — ExprCall("invoke") doesn't unify the block's auto-typed params against the actual refs).
+    var invokeCall = new ExprInvoke(at = call.at, name := "invoke")
+    invokeCall.arguments |> emplace_new(rewrittenBlock)
+    for (r in argRefs) {
+        invokeCall.arguments |> emplace_new(r)
+    }
+    // Assemble the block: pre-resolves, locks, invoke, then unlocks (reversed). No ``finally`` — daslang panic is fatal, not a C++ exception; if the invoke panics the process is exiting anyway and skipped unlocks don't matter.
+    var blk = new ExprBlock(at = call.at,
+        returnType = new TypeDecl(at = call.at, baseType = Type.tVoid))
+    for (s in preStmts) {
+        blk.list |> emplace_new(s)
+    }
+    for (s in lockStmts) {
+        blk.list |> emplace_new(s)
+    }
+    blk.list |> emplace_new(invokeCall)
+    for (s in unlocksReversed) {
+        blk.list |> emplace_new(s)
+    }
+    return <- blk
+}
+
 [call_macro(name="with_")]
 class private WithMacro : AstCallMacro {
     //! Implements the ``with_`` call macro. Each container arg must be an ``ExprAt`` (``arr[i]`` / ``tab[k]``); at most one table-keyed arg per call. Emits a pre-bind / lock / invoke / unlock sequence inline per container, with block-param types pinned to ``T &`` (element ref) so workhorse and struct elements mutate uniformly.
@@ -126,67 +191,6 @@ class private WithMacro : AstCallMacro {
                 arg._type.flags.removeConstant = true
             }
         }
-        // ── Inline-emission ──────────────────────────────────────────── For each container arg, pre-bind the subexpr to a local ref so every downstream lock / invoke / unlock references the SAME materialised value. Without this, splicing $e(subexpr) three times (lock + invoke + unlock) would re-evaluate the subexpr three times — fine for an ExprVar, fatal for a literal or call (three different temp arrays → unlock hits stale memory).
-        var preStmts : array<ExpressionPtr>
-        var lockStmts : array<ExpressionPtr>
-        var unlockStmts : array<ExpressionPtr>
-        var argRefs : array<ExpressionPtr>
-        preStmts |> reserve(containerCount * 2)
-        lockStmts |> reserve(containerCount)
-        unlockStmts |> reserve(containerCount)
-        argRefs |> reserve(containerCount)
-        for (i in range(containerCount)) {
-            let ai = call.arguments[i] as ExprAt
-            let ki = container_kind(ai)
-            // Hygienic names — make_unique_private_name guarantees no collision with user-visible identifiers at this call site.
-            let cName = make_unique_private_name("__with_c_{i}", call.at)
-            preStmts |> push <| qmacro_expr() {
-                var $i(cName) & = unsafe($e(ai.subexpr))
-            }
-            if (ki == "array") {
-                lockStmts |> push <| qmacro_expr() {
-                    __builtin_array_lock_mutable($i(cName))
-                }
-                unlockStmts |> push <| qmacro_expr() {
-                    __builtin_array_unlock_mutable($i(cName))
-                }
-                argRefs |> push <| qmacro($i(cName)[$e(ai.index)])
-            } else {  // table
-                let trefName = make_unique_private_name("__with_tref_{i}", call.at)
-                preStmts |> push <| qmacro_expr() {
-                    var $i(trefName) & = unsafe($i(cName)[$e(ai.index)])
-                }
-                lockStmts |> push <| qmacro_expr() {
-                    __builtin_table_lock_mutable($i(cName))
-                }
-                unlockStmts |> push <| qmacro_expr() {
-                    __builtin_table_unlock_mutable($i(cName))
-                }
-                argRefs |> push <| qmacro($i(trefName))
-            }
-        }
-        // Reverse unlock order so cleanup mirrors acquisition.
-        let unlockN = length(unlockStmts)
-        var unlocksReversed <- [for (i in range(unlockN)); unlockStmts[unlockN - 1 - i]]
-        // Build the invoke statement via ExprInvoke (the dedicated AST node for lambda/block calls — ExprCall("invoke") doesn't unify the block's auto-typed params against the actual refs).
-        var invokeCall = new ExprInvoke(at = call.at, name := "invoke")
-        invokeCall.arguments |> emplace_new(rewrittenBlock)
-        for (r in argRefs) {
-            invokeCall.arguments |> emplace_new(r)
-        }
-        // Assemble the block: pre-resolves, locks, invoke, then unlocks (reversed). No ``finally`` — daslang panic is fatal, not a C++ exception; if the invoke panics the process is exiting anyway and skipped unlocks don't matter.
-        var blk = new ExprBlock(at = call.at,
-            returnType = new TypeDecl(at = call.at, baseType = Type.tVoid))
-        for (s in preStmts) {
-            blk.list |> emplace_new(s)
-        }
-        for (s in lockStmts) {
-            blk.list |> emplace_new(s)
-        }
-        blk.list |> emplace_new(invokeCall)
-        for (s in unlocksReversed) {
-            blk.list |> emplace_new(s)
-        }
-        return <- blk
+        return <- emit_with_sequence(call, containerCount, rewrittenBlock)
     }
 }
