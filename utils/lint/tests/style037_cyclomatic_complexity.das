@@ -10,7 +10,7 @@ options _cyclomatic_complexity = 5      // keep fixture functions small
 //
 // NOT counted: '&&' / '||', '??', '?.', '?[', '?as', 'static_if', and
 // macro-generated control flow. Lambda/generator bodies lower to generated
-// carrier functions; other rules reach them (user_authored_body), but the
+// carrier functions; other rules reach them (is_user_authored_body), but the
 // metric rules keep carriers unmetered - a `_lambda_...` name means nothing
 // to the reader. Block arguments are metered as closures.
 //

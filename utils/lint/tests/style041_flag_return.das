@@ -6,11 +6,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // `if (flag) return X` right after the statement that set it - the flag is a
 // return value with extra steps, and the loop often keeps running after the
 // answer is known. Return directly at each set site and drop the flag.
-//
-// Exempt by design: walk-abort callbacks (a `$(...)` block is the only way to
-// get a value out of a block-callback walk), negative polarity (`if (!found)`
-// search-miss), non-terminal sets, init-true separator flags, payloads not
-// provably stable at the set site, and any unclassified extra reference.
+// Each good case below names the exemption it pins.
 
 expect 31209:3
 
@@ -173,7 +169,7 @@ def neg_combined_read(xs : array<int>; verbose : bool) : int {
     return 0
 }
 
-// a reference after the consume - phase C's reference-count check catches it
+// a reference after the consume - the reference-count check catches it
 def neg_read_after(xs : array<int>) : int {
     var bad = false
     for (x in xs) {

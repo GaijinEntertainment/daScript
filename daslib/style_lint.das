@@ -63,6 +63,9 @@ let MAX_VARIADIC_PUSH_ARITY = 4  // builtin push_from/push_clone_from fixed-arit
 // STYLE037 default ceiling — override per module with `options _cyclomatic_complexity = N`; 0 disables.
 let STYLE037_DEFAULT_MAX = 20
 
+// STYLE041 report-argument recursion cap — report args nest shallowly; deeper is unknown shape, fail closed.
+let ST041_MAX_ARG_DEPTH = 8
+
 // STYLE038 default ceiling (physical lines, def line through closing brace) — override per module
 // with `options _function_length = N`; 0 disables. 80 ≈ p97 of the tree's function-length distribution.
 let STYLE038_DEFAULT_MAX_LINES = 80
@@ -97,6 +100,7 @@ struct St041Candidate {
     //! Armed candidate awaiting the visitFunction reference-count cross-check.
     expected : int
     seen : int
+    poisoned : bool     // a capture reached the flag - the candidate can never fire
     msg : string
 }
 
@@ -163,7 +167,7 @@ class StyleLintVisitor : AstVisitor {
 
     def style_warning(text : string; at : LineInfo) : void {
         // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
-        if (!user_authored_body(current_function) || is_suppressed(text, at)) return
+        if (!is_user_authored_body(current_function) || is_suppressed(text, at)) return
         let key = location_key(at) ^ hash(extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
@@ -553,7 +557,7 @@ class StyleLintVisitor : AstVisitor {
             for (cap in expr._capture) {
                 for (vk, cv in keys(st041_candidates), values(st041_candidates)) {
                     if (vk != null && vk.name == cap.name) {
-                        cv.seen += 1000
+                        cv.poisoned = true
                     }
                 }
             }
@@ -1234,7 +1238,7 @@ class StyleLintVisitor : AstVisitor {
             st041_scan_stmt(ab.list[p], ab, p, top, false, v, st)
             return if (st.rejected)
         }
-        // ab.finalList deliberately not scanned - finally refs stay unclassified; phase C rejects
+        // ab.finalList deliberately not scanned - finally refs stay unclassified, so the reference count rejects
     }
 
     def st041_is_flag_read(e : Expression? const; v : VariablePtr) : bool {
@@ -1284,7 +1288,7 @@ class StyleLintVisitor : AstVisitor {
             let stmt = body.list[p]
             return false if (!(stmt is ExprCall))
             for (a in (stmt as ExprCall).arguments) {
-                return false if (!st041_dup_ok(a, 0))
+                return false if (!st041_arg_repeatable(a, 0))
             }
         }
         moved_body = m > 1
@@ -1316,9 +1320,9 @@ class StyleLintVisitor : AstVisitor {
         return st041_is_const_literal(e)
     }
 
-    def st041_dup_ok(e0 : Expression? const; depth : int) : bool {
-        // report-arg whitelist: constants, entry-scope names, chains over those; unknown fails closed
-        return false if (depth > 8)
+    def st041_arg_repeatable(e0 : Expression? const; depth : int) : bool {
+        // safe to re-evaluate at each set site: constants, entry-scope names, chains over those; unknown fails closed
+        return false if (depth > ST041_MAX_ARG_DEPTH)
         let e = peel_ref2value_const(e0)
         if (e == null) return false
         // infer appends fake context/lineinfo arguments to builtin calls - duplicable by construction
@@ -1328,16 +1332,16 @@ class StyleLintVisitor : AstVisitor {
             return ev.varFlags.argument || (ev.variable != null && ev.variable.flags.global)
         }
         return true if (st041_is_const_literal(e))
-        if (e is ExprField) return st041_dup_ok((e as ExprField).value, depth + 1)
+        if (e is ExprField) return st041_arg_repeatable((e as ExprField).value, depth + 1)
         if (e is ExprStringBuilder) {
             for (el in (e as ExprStringBuilder).elements) {
-                return false if (!st041_dup_ok(el, depth + 1))
+                return false if (!st041_arg_repeatable(el, depth + 1))
             }
             return true
         }
         if (e is ExprCall) {
             for (a in (e as ExprCall).arguments) {
-                return false if (!st041_dup_ok(a, depth + 1))
+                return false if (!st041_arg_repeatable(a, depth + 1))
             }
             return true
         }
@@ -1347,7 +1351,7 @@ class StyleLintVisitor : AstVisitor {
     def st041_flush() : void {
         for (vk, cv in keys(st041_candidates), values(st041_candidates)) {
             // fires only when every reference in the function is one the analysis classified
-            if (vk != null && cv.seen == cv.expected) {
+            if (vk != null && !cv.poisoned && cv.seen == cv.expected) {
                 style_warning(cv.msg, vk.at)
             }
         }

@@ -2,8 +2,7 @@ options gen2
 
 // Fixture for test_nolint_suppression.das (hardening half) - LINT003-eligible `var`
 // declarations paired with directive spellings the hardened scanner must and must
-// not honor. The first three are NOT directives (string literal, URL, mid-comment
-// prose); the rest are, in spellings that stress quote and escape handling.
+// not honor; the variable names say which is which.
 
 [export]
 def fixture_function() : int {

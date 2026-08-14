@@ -209,7 +209,7 @@ def public is_core_library_source(prog : ProgramPtr) : bool {
 //! True when `fn` is user-authored from lint's point of view: not generated, or a generated
 //! CARRIER whose body is verbatim user AST - a lambda, a `@@` local function, or a generator.
 //! The style/perf emit gates use this instead of `flags.generated`, so lambda bodies get linted.
-def public user_authored_body(fn : Function?) : bool {
+def public is_user_authored_body(fn : Function?) : bool {
     return true if (fn == null || !fn.flags.generated)
     return fn.flags._lambda || fn.flags._generator || fn.moreFlags2.localFunction
 }

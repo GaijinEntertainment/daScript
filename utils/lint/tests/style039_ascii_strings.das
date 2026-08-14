@@ -27,7 +27,7 @@ def bad_interpolated(n : int) : string {
 }
 
 // lambda/local-function/generator bodies lower into generated carrier functions,
-// but the bodies are user-typed code - the rule must reach them (user_authored_body)
+// but the bodies are user-typed code - the rule must reach them (is_user_authored_body)
 
 def bad_in_lambda() : string {
     var l = @(s : string) : string {

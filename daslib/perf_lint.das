@@ -507,7 +507,7 @@ class PerfLintVisitor : AstVisitor {
     def perf_warning(text : string; at : LineInfo) : void {
         // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
         if (in_template
-            || !user_authored_body(current_function)
+            || !is_user_authored_body(current_function)
             || is_suppressed(text, at)) return
         // one report per (rule, location), regardless of generic instantiations
         let key = location_key(at) ^ hash(extract_lint_code(text))

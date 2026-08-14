@@ -96,7 +96,7 @@ def bad_table_eq(t : table<string; int>) : bool {
 
 // --- Bad: inside a lambda body ---
 // lambdas lower into generated carrier functions, but the body is user-typed
-// code - the rule must reach it (user_authored_body)
+// code - the rule must reach it (is_user_authored_body)
 
 def bad_in_lambda(s : string) : bool {
     var l = @(x : string) : bool {

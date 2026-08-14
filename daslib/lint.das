@@ -1208,7 +1208,7 @@ def private is_nolint_space(b : uint8) : bool {
     return int(b) == ' ' || int(b) == '\t'
 }
 
-// quote-aware comment locator: a `//` inside a string/char literal (escapes honored) does not open a comment; mirrors the C-side rtti_is_nolint_suppressed - change in lockstep
+// quote-aware comment locator: a `//` inside a string/char literal (escapes honored) does not open a comment
 def private nolint_comment_start(d : array<uint8> const# implicit) : int {
     let n = length(d)
     var p = 0
@@ -1285,9 +1285,9 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
     }
 }
 
-//! LINT019 - stale nolint detection: reports every ``// nolint:CODE`` in `source` whose code
-//! suppressed nothing this process (run-disabled codes are skipped - their rules cannot prove
-//! themselves). Call AFTER all lint passes ran; a partial run under-consumes and would lie.
+//! LINT019 - stale nolint detection: reports every leading ``// nolint:CODE`` directive in
+//! `source` (recognition rule: stale_scan_line) whose code suppressed nothing this process.
+//! Call AFTER all lint passes ran; a partial run under-consumes and would lie.
 def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_codes : table<string>; var issues : array<LintIssue>) : int {
     return 0 if (key_exists(disabled_codes, "LINT019")
                     || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT019")))
@@ -1319,8 +1319,8 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
     return count
 }
 
-// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is prose
-// (docs quoting the syntax) or a typo the C-side scanner would never match anyway
+// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is a stray
+// token after a genuine directive, or a typo the C-side scanner would never match anyway
 def private is_rule_code(code : string) : bool {
     var prefix_len = 0
     if (code |> starts_with("LINT") || code |> starts_with("PERF")) {
