@@ -3795,6 +3795,19 @@ class public LlvmJitVisitor : AstVisitor {
         return is_workhorse_table_key(tabT.firstType.baseType)
     }
 
+    // `for (x in each(container))` hides an array or fixed array behind a Sequence, costing the
+    // generic iterator protocol over a source this backend walks inline. Unwrap to the argument
+    // so it lowers as `for (x in container)`; the each() call is then skipped, never evaluated.
+    def inline_each_source(expr : ExpressionPtr) : ExpressionPtr {
+        if (!(expr is ExprCall)) return expr
+        var cf = expr as ExprCall
+        if (cf.func == null || length(cf.arguments) != 1
+                || !starts_with(cf.func.name, "builtin`each`")) return expr
+        assume srcT = cf.arguments[0]._type
+        if (srcT == null || !(srcT.isGoodArrayType || srcT.baseType == Type.tFixedArray)) return expr
+        return cf.arguments[0]
+    }
+
     def build_table_lock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, tab_ptr, types.LLVMVoidPtrType(), ""),
@@ -3884,7 +3897,7 @@ class public LlvmJitVisitor : AstVisitor {
             forBodyToExpr[expr.body as ExprBlock] = expr
         }
         for (ssrc in expr.sources) {
-            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc)) {
+            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc) || inline_each_source(ssrc) != ssrc) {
                 skipCall |> insert(ssrc as ExprCall)
             }
         }
@@ -3921,7 +3934,11 @@ class public LlvmJitVisitor : AstVisitor {
         LOOP_START:
         */
         var lblk = loop_stack |> back()
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
+            if (ssrc != ssource) {
+                visit(ssrc, adapter)    // the each() call is skipped, its argument still needs a value
+            }
             if (ssrc._type.isRange) {// range()->first()
                 var srange = getE(ssrc)
                 var sfrom = LLVMBuildExtractElement(g_builder, srange, types.ConstI32(0ul), "range_from_{svar.name}")
@@ -4095,7 +4112,8 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildBr(g_builder, lblk.loop_continue)                           // LOOP CONTINUE
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_continue)
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
             if (ssrc._type.isRange) {// range()->next()
                 let isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
                 var svar_v = LLVMBuildLoad2(g_builder, isRange64 ? types.t_int64 : types.t_int32, getV(svar), "")
@@ -4191,7 +4209,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (i in range(len)) {
             let ri = len - i - 1
             let svar & = unsafe(expr.iteratorVariables[ri])
-            let ssrc & = unsafe(expr.sources[ri])
+            let ssrc = inline_each_source(expr.sources[ri])
             if (ssrc._type.isGoodArrayType) {
                 build_array_unlock(getE(ssrc), ssrc.at)
             } elif (ssrc._type.isIterator) {
