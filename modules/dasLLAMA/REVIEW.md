@@ -302,6 +302,12 @@ Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 
 - `dasllama_gemma4uv.das` — the gemma4uv embedder: mmproj load, im2col, the norm/GEMM/pos-table
   forward. One file per vision projector family, the audio tower pattern.
 
+**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
+tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
+decides the question for a whole file (gemma-4's shipped "BF16" mmproj is F32 for the patch
+embedder and BF16 only for the projection). A plane split that follows the FILE rather than a
+runtime knob takes ONE image tag, with the meta flags describing the layout.
+
 **A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
 as red**, and every image a test feeds an embedder is either a procedural fixture the test builds
 or previewable via the `DASLLAMA_VISION_DUMP` knob — a red never requires adding instrumentation

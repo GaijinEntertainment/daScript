@@ -232,11 +232,31 @@ invariant — a transposed patch grid is only visible per-token).
   it is documented BIT-FOR-BIT identical to the fp32 expand at half the weight read — tier-1
   gates do not move by an ulp. `bf16blob : array<uint16>` is already a Model plane (PLE) and
   already counted into the image, so bf16 planes already ride this rail. And the mmproj is
-  ITSELF bf16 on disk: bf16 planes are the file's own bytes, so there is no conversion at
-  mint and none at load, and the blob halves 190 MB → 95 MB. Today's f32 blob widens data
-  for no reason.
+  ITSELF bf16 on disk, so bf16 planes are the file's own bytes with no conversion at mint or load.
+  **DONE 2026-08-14 — and the bf16 premise was HALF WRONG, which the arm caught.** Gemma-4's
+  shipped "BF16" mmproj is MIXED: `v.patch_embd.weight` (6912x3840, 26.5M params) is **F32** on
+  disk and only `mm.input_projection.weight` (3840x3840, 14.7M) is BF16. A "both GEMMs or neither"
+  rule therefore fell back to all-fp32 and bought nothing; the honest rule is **per-GEMM, following
+  each tensor's on-disk type** — a BF16 tensor becomes the file's own halfwords, an F32 tensor
+  stays fp32 because rounding it down would be a real precision loss (bf16 carries 8 mantissa bits;
+  ~0.2% relative, two orders over the 2e-4 tier-1 gate). Measured: the prepared image is
+  **200 MB -> 170 MB (-15%)**, exactly the projection's halfwords, and maps in **0 ms**. Tier-1 did
+  not move by an ulp (2.098e-05 on all six fixtures, before and after) — the bit-for-bit claim held.
+  The plane split is a property of the FILE, not a knob, so there is ONE image tag (`gemma4uv`) and
+  the two `*_bf16` meta flags describe the layout completely.
 - **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
   PERF_LEDGER entry, this findings section, predictions scored.
+- **K. The bug-fix round — everything the arc surfaced, with a test each.** An arc that walks
+  a new path through a live product finds defects that were already there; this slice is where
+  they get fixed instead of ledgered. Standing entries:
+  (1) **`dasllama-server` with default flags panics and EXITS on the first real prompt on a
+  Metal-capable Mac** — `main.das` resolves `MetalMode.off` and never declares CPU intent, so the
+  Metal-build CPU-prefill guard fires and takes the process with it (verified live: SmolLM2,
+  190-token prompt, `JOB EXCEPTION`). `--gpu metal` works. The guard is deliberate (catch the
+  silent CPU sink), but fatal-in-a-server is the wrong shape.
+  (2) **`test_program_roots.das` accepts a bare `set_metal_mode(` as declaring prefill intent** —
+  the detector cannot see the argument, so it passes while the program dies. It is the drift
+  detector for exactly this failure, so a hole in it is a defect in the detector.
 - **J. The image turn joins the profiling app — and NO separate benches, ever.** Model-level
   image timing (ttft, prefill, decode; CPU and Metal arms) becomes a cell in the documented
   rig (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,

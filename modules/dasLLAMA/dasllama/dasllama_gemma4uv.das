@@ -4,7 +4,13 @@ options _comment_hygiene = true
 module dasllama_gemma4uv shared public
 
 require daslib/fio
+require strings
+require daslib/apply
+require daslib/archive
 require dasllama/dasllama_gguf
+require dasllama/dasllama_common   // apply_box_profile_runtime for the embedder-image identity
+require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
+require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete an embedder
 require dasllama/dasllama_audio
 require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + normalize ahead of the encoder
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
@@ -27,13 +33,21 @@ struct Gemma4uvEmbedder {
     patch_dim : int64    // patch² × 3 — the im2col row (6912)
     pos_entries : int64  // pos-table rows per axis (1120)
     rms_eps : float      // meta layer_norm_epsilon — the weightless rms before the projection
-    blob : array<float>
+    // Per-GEMM plane choice, following each SOURCE tensor's on-disk type — gemma-4's shipped
+    // "BF16" mmproj is MIXED (F32 patch embedder, BF16 projection). A BF16 tensor becomes the
+    // file's own halfwords in wblob; an F32 one stays in blob, since rounding it down would lose.
+    patch_bf16 : bool
+    proj_bf16 : bool
+    blob : PlaneF = PlaneF()
+    wblob : PlaneU16 = PlaneU16()
     patch_w : int64; patch_b : int64
     ln1_w : int64; ln1_b : int64     // v.patch_norm.1 — over raw im2col rows (patch_dim wide)
     ln2_w : int64; ln2_b : int64     // v.patch_norm.2 — after the patch linear
     ln3_w : int64; ln3_b : int64     // v.patch_norm.3 — after the pos adds
     pos_w : int64                    // [2][pos_entries][n_embd]: x table then y table
     proj_w : int64
+    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_bytes : uint64
 }
 
 //! Per-encode scratch, caller-owned like the audio EncoderState.
@@ -43,8 +57,76 @@ struct Gemma4uvState {
     x2 : array<float>    // [npos × n_embd]
 }
 
+// the embedder owns exactly one thing — its image backing. Every plane borrows.
 def finalize(var t : Gemma4uvEmbedder) {
-    delete t.blob
+    if (t.image_map != null) {
+        image_backing_release(t.image_map, t.image_bytes)
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+// the tripwire: serialize_image_meta(Gemma4uvEmbedder) covers 18 fields; image_map + image_bytes
+// are deliberate skips (the two planes are sections, not meta).
+let private GEMMA4UV_META_FIELDS = 18 + 2
+
+// every meta-carried Gemma4uvEmbedder field, explicitly, both directions (see dasllama_image)
+def private serialize_image_meta(var arch : Archive; var t : Gemma4uvEmbedder) {
+    verify(count_meta_fields(t) == GEMMA4UV_META_FIELDS)   // grew Gemma4uvEmbedder? extend this list
+    arch |> serialize_raw(t.n_embd)
+    arch |> serialize_raw(t.proj_dim)
+    arch |> serialize_raw(t.patch)
+    arch |> serialize_raw(t.patch_dim)
+    arch |> serialize_raw(t.pos_entries)
+    arch |> serialize_raw(t.rms_eps)
+    arch |> serialize_raw(t.patch_bf16)
+    arch |> serialize_raw(t.proj_bf16)
+    arch |> serialize_raw(t.patch_w)
+    arch |> serialize_raw(t.patch_b)
+    arch |> serialize_raw(t.ln1_w)
+    arch |> serialize_raw(t.ln1_b)
+    arch |> serialize_raw(t.ln2_w)
+    arch |> serialize_raw(t.ln2_b)
+    arch |> serialize_raw(t.ln3_w)
+    arch |> serialize_raw(t.ln3_b)
+    arch |> serialize_raw(t.pos_w)
+    arch |> serialize_raw(t.proj_w)
+}
+
+[unused_argument(t)]
+def private image_post_load(var t : Gemma4uvEmbedder) {}   // no derived state — offsets ARE the meta
+
+//! The mint-side carrier: `e` holds every scalar the meta blob carries, the arrays beside it hold
+//! the plane bytes until the writer has them (section names must match the served plane fields —
+//! bind-by-name). Public so a suite can check a served embedder against a non-image-backed read.
+struct Gemma4uvStaging {
+    e : Gemma4uvEmbedder = Gemma4uvEmbedder()
+    blob : array<float>
+    wblob : array<uint16>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : Gemma4uvStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : Gemma4uvStaging) {
+    delete st.blob
+    delete st.wblob
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : Gemma4uvStaging) {}
+
+// ONE tag: the plane split follows the source file's tensor types, not a knob, and a different
+// mmproj already keys a different image path — so there is no second flavor of the same source
+// to separate. The meta's two bf16 flags describe the layout completely.
+let private GEMMA4UV_TAG = "gemma4uv"
+
+[init]
+def private register_gemma4uv_image_tags {
+    register_image_family_tag(GEMMA4UV_TAG)
 }
 
 def finalize(var s : Gemma4uvState) {
@@ -71,10 +153,11 @@ def private uv_expect(m : GGUFMeta; name : string; want : int64) {
     }
 }
 
-//! Load the eleven-tensor gemma4uv embedder from an mmproj gguf into one fp32 blob.
-//! Panics on any other projector — the E-series `gemma4v` ViT is a v2 leg.
-def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
-    var t = Gemma4uvEmbedder()
+//! Read the eleven-tensor gemma4uv embedder off an mmproj gguf into owned staging arrays — the
+//! mint side of the image rail, and the only path that touches the source file. The two GEMM
+//! weights go to `wblob` verbatim when the file holds them as BF16, to `blob` when it holds fp32.
+def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
+    var st = Gemma4uvStaging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
@@ -89,18 +172,18 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
         if (gguf_has(m, "clip.vision.projector.scale_factor")) {
             merge = gguf_int(m, bytes, "clip.vision.projector.scale_factor")
         }
-        t.patch = gguf_int(m, bytes, "clip.vision.patch_size") * merge
-        t.patch_dim = t.patch * t.patch * 3l
-        t.n_embd = gguf_int(m, bytes, "clip.vision.embedding_length")
-        t.proj_dim = gguf_int(m, bytes, "clip.vision.projection_dim")
-        t.rms_eps = gguf_f32(m, bytes, "clip.vision.attention.layer_norm_epsilon")
+        st.e.patch = gguf_int(m, bytes, "clip.vision.patch_size") * merge
+        st.e.patch_dim = st.e.patch * st.e.patch * 3l
+        st.e.n_embd = gguf_int(m, bytes, "clip.vision.embedding_length")
+        st.e.proj_dim = gguf_int(m, bytes, "clip.vision.projection_dim")
+        st.e.rms_eps = gguf_f32(m, bytes, "clip.vision.attention.layer_norm_epsilon")
         let pos_ti = gguf_find_tensor(m, "v.position_embd.weight")
         if (pos_ti < 0) {
             panic("dasLLAMA gemma4uv: mmproj is missing tensor 'v.position_embd.weight'")
         }
-        t.pos_entries = m.tensors[pos_ti].n_elem / (2l * t.n_embd)
-        let d = t.n_embd
-        let pd = t.patch_dim
+        st.e.pos_entries = m.tensors[pos_ti].n_elem / (2l * st.e.n_embd)
+        let d = st.e.n_embd
+        let pd = st.e.patch_dim
         uv_expect(m, "v.patch_embd.weight", pd * d)
         uv_expect(m, "v.patch_embd.bias", d)
         uv_expect(m, "v.patch_norm.1.weight", pd)
@@ -109,32 +192,100 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
         uv_expect(m, "v.patch_norm.2.bias", d)
         uv_expect(m, "v.patch_norm.3.weight", d)
         uv_expect(m, "v.patch_norm.3.bias", d)
-        uv_expect(m, "mm.input_projection.weight", d * t.proj_dim)
+        uv_expect(m, "mm.input_projection.weight", d * st.e.proj_dim)
+        st.e.patch_bf16 = gguf_tensor_type(m, "v.patch_embd.weight") == GGML_TYPE_BF16
+        st.e.proj_bf16 = gguf_tensor_type(m, "mm.input_projection.weight") == GGML_TYPE_BF16
         var off = 0l
-        t.patch_w = off; off += pd * d
-        t.patch_b = off; off += d
-        t.ln1_w = off; off += pd
-        t.ln1_b = off; off += pd
-        t.ln2_w = off; off += d
-        t.ln2_b = off; off += d
-        t.ln3_w = off; off += d
-        t.ln3_b = off; off += d
-        t.pos_w = off; off += 2l * t.pos_entries * d
-        t.proj_w = off; off += d * t.proj_dim
-        t.blob |> resize(off)
-        gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", t.blob, t.patch_w, pd * d)
-        gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", t.blob, t.patch_b, d)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.weight", t.blob, t.ln1_w, pd)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.bias", t.blob, t.ln1_b, pd)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.2.weight", t.blob, t.ln2_w, d)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.2.bias", t.blob, t.ln2_b, d)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.weight", t.blob, t.ln3_w, d)
-        gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.bias", t.blob, t.ln3_b, d)
-        gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", t.blob, t.pos_w, 2l * t.pos_entries * d)
-        gguf_read_tensor_f32(m, bytes, "mm.input_projection.weight", t.blob, t.proj_w, d * t.proj_dim)
+        var woff = 0l
+        st.e.patch_w = uv_gemm_off(st.e.patch_bf16, off, woff, pd * d)
+        st.e.patch_b = off; off += d
+        st.e.ln1_w = off; off += pd
+        st.e.ln1_b = off; off += pd
+        st.e.ln2_w = off; off += d
+        st.e.ln2_b = off; off += d
+        st.e.ln3_w = off; off += d
+        st.e.ln3_b = off; off += d
+        st.e.pos_w = off; off += 2l * st.e.pos_entries * d
+        st.e.proj_w = uv_gemm_off(st.e.proj_bf16, off, woff, d * st.e.proj_dim)
+        st.blob |> resize(off)
+        st.wblob |> resize(woff)
+        uv_read_gemm(m, bytes, "v.patch_embd.weight", st, st.e.patch_bf16, st.e.patch_w, pd * d)
+        gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.e.patch_b, d)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.weight", st.blob, st.e.ln1_w, pd)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.bias", st.blob, st.e.ln1_b, pd)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.2.weight", st.blob, st.e.ln2_w, d)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.2.bias", st.blob, st.e.ln2_b, d)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.weight", st.blob, st.e.ln3_w, d)
+        gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.bias", st.blob, st.e.ln3_b, d)
+        gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.e.pos_w, 2l * st.e.pos_entries * d)
+        uv_read_gemm(m, bytes, "mm.input_projection.weight", st, st.e.proj_bf16, st.e.proj_w, d * st.e.proj_dim)
     }
     fclose(f)
-    return <- t
+    return <- st
+}
+
+// GEMM offsets ride the halfword cursor on a bf16 load, the fp32 cursor otherwise — the field then
+// indexes whichever plane the mm route reads
+def private uv_gemm_off(bf16 : bool; var o : int64&; var wo : int64&; size : int64) : int64 {
+    if (bf16) {
+        let at = wo
+        wo += size
+        return at
+    }
+    let at = o
+    o += size
+    return at
+}
+
+// GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
+// reads it like any plain tensor
+def private uv_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4uvStaging;
+                         bf16 : bool; woff, n_elem : int64) {
+    if (bf16) {
+        gguf_transcode_bf16(m, b, name, st.wblob, woff, n_elem)
+    } else {
+        gguf_read_tensor_f32(m, b, name, st.blob, woff, n_elem)
+    }
+}
+
+//! Load the eleven-tensor gemma4uv embedder, image-backed: a prepared `.dlim` maps and every plane
+//! borrows it, so there is no allocation and no processing at load; missing or stale, one is minted
+//! from the source mmproj first. Panics on any other projector (the E-series `gemma4v` is a v2 leg).
+def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
+    let tag = GEMMA4UV_TAG
+    if (path |> ends_with(".dlim")) {
+        // named directly — no mmproj to regenerate from, so a wrong identity panics
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = Gemma4uvEmbedder()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared gemma4uv-embedder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
+        return <- t
+    }
+    if (g_env_engine.image) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = Gemma4uvEmbedder()
+        if (load_image(img, t, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
+            return <- t
+        }
+        delete t
+        var inscope st <- stage_gemma4uv_embedder(path)
+        var built = Gemma4uvEmbedder()
+        cache_via_image_staged(st, built, img, tag)
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        return <- built
+    }
+    // no persisted image: mint one in memory and serve THAT — a served embedder is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_gemma4uv_embedder(path)
+    var built = Gemma4uvEmbedder()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
 // im2col in ggml's [C][KH][KW] row order over the PLANAR view of the interleaved planes;
@@ -185,6 +336,18 @@ def private uv_rms_rows(var x : array<float>; d, npos : int64; eps : float) {
     }
 }
 
+// One GEMM, on whichever plane this embedder's offsets index. Both arms are the same arithmetic:
+// dot_bf16's widen is an exact high-half shift, so the bf16 arm reads half the bytes for the
+// identical result.
+def private uv_gemm(var y : array<float>; t : Gemma4uvEmbedder; bf16 : bool; woff : int64;
+                    x : array<float>; n, d, npos : int64) {
+    if (bf16) {
+        mm_bf16_b(y, t.wblob, woff, x, n, d, npos)
+    } else {
+        mm_blob_b(y, t.blob, woff, x, n, d, npos)
+    }
+}
+
 //! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into
 //! `out` = [npos × proj_dim] soft tokens. Returns npos = (w/48)×(h/48).
 [hot_path]
@@ -200,13 +363,13 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     uv_ensure(s.x2, npos * d)
     // patch_norm.1 over raw rows, then the patch linear + bias
     layernorm_batch(s.x0, s.x0, t.blob, t.ln1_w, t.ln1_b, t.patch_dim, npos, GEMMA4UV_LN_EPS)
-    mm_blob_b(s.x1, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
+    uv_gemm(s.x1, t, t.patch_bf16, t.patch_w, s.x0, t.patch_dim, d, npos)
     add_bias_rows(s.x1, t.blob, t.patch_b, d, npos)
     layernorm_batch(s.x2, s.x1, t.blob, t.ln2_w, t.ln2_b, d, npos, GEMMA4UV_LN_EPS)
     // learned position lookups: x table first, then y, then pos_norm
     unsafe {
         var xp = addr(s.x2[0])
-        let tbl = addr<float const?>(t.blob[0]) + t.pos_w
+        let tbl = plane_at(t.blob, t.pos_w)
         for (pi in range64(0l, npos)) {
             var row = xp + pi * d
             let ex = tbl + (pi % n_cols) * d
@@ -220,7 +383,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     // Gemma4UnifiedMultimodalEmbedder: weightless rms(meta eps) → square projection
     uv_rms_rows(s.x1, d, npos, t.rms_eps)
     uv_ensure(out, npos * t.proj_dim)
-    mm_blob_b(out, t.blob, t.proj_w, s.x1, d, t.proj_dim, npos)
+    uv_gemm(out, t, t.proj_bf16, t.proj_w, s.x1, d, t.proj_dim, npos)
     return npos
 }
 

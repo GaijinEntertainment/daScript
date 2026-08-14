@@ -964,6 +964,17 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
+//! `mm_blob_b`'s BF16-weight twin — the tower form of `matmul_bf16_batch`. Bit-for-bit the fp32
+//! expand at half the weight read, so a tower can hold its GEMMs in bf16 with no parity move.
+def mm_bf16_b(var y : array<float>; blob : array<uint16>; woff : int64; x : array<float>; n, d, npos : int64) {
+    matmul_bf16_batch(y, blob, woff, x, n, d, npos)
+}
+
+//! Borrowed-plane form — the BF16 weights live in a prepared image.
+def mm_bf16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<float>; n, d, npos : int64) {
+    matmul_bf16_batch(y, blob, woff, x, n, d, npos)
+}
+
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
 //! Repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
