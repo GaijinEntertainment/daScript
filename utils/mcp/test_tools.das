@@ -1542,6 +1542,19 @@ def test_lint_issues(t : T?) {
 }
 
 [test]
+def test_lint_stale_nolint(t : T?) {
+    t |> run("stale nolint reported via LINT019") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_lint(fixture_path("_fixture_stale_nolint.das")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "LINT019") >= 0, "should report the stale directive")
+        t |> success(find(text, "PERF006") >= 0, "should name the stale code")
+    }
+}
+
+[test]
 def test_lint_clean(t : T?) {
     t |> run("clean file has no lint issues") <| @(t : T?) {
         var text : string
