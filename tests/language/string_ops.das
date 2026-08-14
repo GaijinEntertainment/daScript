@@ -120,7 +120,11 @@ multi line string"
         t |> equal(fmt(":.2f", 1.234), "1.23")
         var failed = false
         try {
-            let ft = "blah"
+            // the invalid format must reach RUNTIME fmt: a const-foldable format string moves
+            // the throw into the compiler's const-folder, where the longjmp-out-of-catch panic
+            // path leaks the exception object - CI's LeakSanitizer fails the AOT generator on it
+            var ft : string
+            ft = "blah"     // nolint:STYLE011 - init-at-decl (or let) makes the bad format foldable
             let x = fmt(ft, 13)
             assert(x == "13")
         } recover {
