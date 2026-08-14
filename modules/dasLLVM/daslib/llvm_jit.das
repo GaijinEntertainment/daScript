@@ -1743,6 +1743,13 @@ class public LlvmJitVisitor : AstVisitor {
                     params |> push(cmresPtr, 0)
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
+                } elif (is_array_push_back(expr)) {
+                    var arr_ptr = getE(expr.arguments[0])
+                    var arrTy = type_to_llvm_type(expr.arguments[0]._type)
+                    var ccall = build_array_push_back_fast(arr_ptr, arrTy) {
+                        return build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
+                    }
+                    setE(expr, ccall)
                 } else {
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
                     setE(expr, ccall)
@@ -3679,6 +3686,38 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMPositionBuilderAtEnd(g_builder, dead_block)
         }
         return expr
+    }
+
+    // The AST node carries the trailing context and line-info arguments, so arity is a lower bound.
+    def is_array_push_back(expr : ExprCallFunc?) {
+        if (expr.func == null || length(expr.arguments) < 2
+                || expr.func._module.name != "$" || expr.func.name != "__builtin_array_push_back") return false
+        assume argT = expr.arguments[0]._type
+        return argT != null && argT.isGoodArrayType
+    }
+
+    // AOT inlines array_grow: its common case is a lock check, a capacity compare and a size store,
+    // and only the GROW case needs the helper — keeping the call for everything else leaves growth
+    // policy and the locked throw in one place. size < capacity <= INT64_MAX covers its guard.
+    def build_array_push_back_fast(arr_ptr : LLVMOpaqueValue?; arrTy : LLVMOpaqueType?; slow : block<() : LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+        var hdr = LLVMBuildLoad2(g_builder, arrTy, arr_ptr, "push.hdr")
+        var size = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.SIZE), "push.size")
+        var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.CAPACITY), "push.cap")
+        var lock = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.LOCK), "push.lock")
+        var unlocked = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, lock,
+            LLVMConstInt(LLVMTypeOf(lock), 0ul, 0), "push.unlocked")
+        var fits = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, size, cap, "push.fits")
+        var fast = LLVMBuildAnd(g_builder, unlocked, fits, "push.fast")
+        var res = build_select(fast, types.t_int64) {
+            var sizePtr = LLVMBuildStructGEP2(g_builder, arrTy, arr_ptr, uint(JIT_ARRAY.SIZE), "push.sizep")
+            var next = LLVMBuildAdd(g_builder, size, LLVMConstInt(LLVMTypeOf(size), 1ul, 0), "push.next")
+            LLVMBuildStore(g_builder, next, sizePtr)
+            return size
+        }
+        lpipe() {
+            return invoke(slow)
+        }
+        return res
     }
 
 // ExprFor
