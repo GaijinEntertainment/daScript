@@ -65,6 +65,7 @@ namespace das {
         bool savedFoldingForEnum = true;        // preVisitEnumerationValue / visitEnumerationValue save-restore
         bool savedFoldingForStaticIf = true;    // preVisit(ExprIfThenElse) / visit(ExprIfThenElse) save-restore (block hooks skipped for static_if)
         bool savedFoldingForStaticAssert = true; // preVisit(ExprStaticAssert) / visit(ExprStaticAssert) save-restore
+        bool foldingForcedForDim = false;       // preVisit(TypeDecl) / visit(TypeDecl) force-restore, for an array dimension
         bool disableAot = false;
         bool noHeapArrayLiterals = false;       // options no_heap_array_literals: disable building gen2 [..]/{..} literals directly on the heap
         bool multiContext = false;
@@ -310,6 +311,7 @@ namespace das {
 
     protected:
         // type
+        virtual void preVisit(TypeDecl *type) override;
         virtual TypeDeclPtr visit(TypeDecl *type) override;
 
         string saveAliasName;
@@ -545,8 +547,6 @@ namespace das {
         virtual ExpressionPtr visit(ExprContinue *expr) override;
         // ExprIfThenElse
         bool isConstExprFunc(Function *fun) const;
-        ExpressionPtr getConstExpr(Expression *expr);
-        das_set<Variable *> constExprFolding;   // globals whose init is mid-fold in getConstExpr — breaks init cycles (A = B + 1; B = A + 1)
         virtual bool canVisitIfSubexpr(ExprIfThenElse *expr) override;
         virtual void preVisit(ExprIfThenElse *expr) override;
         virtual ExpressionPtr visit(ExprIfThenElse *expr) override;

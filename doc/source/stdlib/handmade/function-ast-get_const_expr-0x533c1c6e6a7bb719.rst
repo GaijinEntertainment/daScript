@@ -1,0 +1,1 @@
+Returns what the compiler makes of `expression` as a constant -- folding arithmetic and constant constructor calls even where the compilation policy leaves folding off -- or null when it is not a constant. Reading a constant this way records no fold against it, so lint still sees the globals it read as unused.

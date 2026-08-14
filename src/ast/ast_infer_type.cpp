@@ -107,6 +107,7 @@ namespace das {
     InferTypes::InferTypes(const ProgramPtr &prog, TextWriter *logs_) : FoldingVisitor(prog), logs(logs_) {
         debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
         enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding", !prog->policies.no_infer_time_folding);
+        demandFoldConstInit = !enableInferTimeFolding;
         disableAot = prog->options.getBoolOption("no_aot", false);
         noHeapArrayLiterals = prog->options.getBoolOption("no_heap_array_literals", false);
         multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
@@ -129,10 +130,27 @@ namespace das {
         logInscopePod = prog->options.getBoolOption("log_inscope_pod", prog->policies.log_inscope_pod);
         thisModule = prog->thisModule.get();
     }
+    void InferTypes::preVisit(TypeDecl *type) {
+        Visitor::preVisit(type);
+        // A dimension has to fold before the type resolves at all, so folding is
+        // forced here even where policy disabled it. TypeDecl::visit preVisits a
+        // nested dimension without a matching visit, so the first forcing node
+        // records the restore and the enclosing type site's visit() performs it.
+        if (!enableInferTimeFolding && !foldingForcedForDim &&
+            type->baseType == Type::tFixedArray &&
+            type->fixedDim == TypeDecl::dimConst && type->fixedDimExpr) {
+            foldingForcedForDim = true;
+            enableInferTimeFolding = true;
+        }
+    }
     TypeDeclPtr InferTypes::visit(TypeDecl *type) {
         TypeDeclPtr newType = type;
         if (inferTypeExpr(newType)) {
             reportAstChanged();
+        }
+        if (foldingForcedForDim) {
+            foldingForcedForDim = false;
+            enableInferTimeFolding = false;
         }
         return newType;
     }
