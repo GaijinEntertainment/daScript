@@ -19,7 +19,7 @@ def affected_review_md(root : string; changed : array<string>) : array<string> {
             break if (key_exists(seen, d))   // a seen dir's ancestors are seen too
             seen |> insert(d)
             let rel = d == "." ? "REVIEW.md" : "{d}/REVIEW.md"
-            if (fexist("{root}/{rel}")) {
+            if (fexist(path_join(root, rel))) {
                 found |> push(rel)
             }
             let up = dir_name(d)
