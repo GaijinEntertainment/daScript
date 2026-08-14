@@ -73,6 +73,22 @@ total 1 leaked Feature objects
 - **created at** — daScript source location
 - **owner=#4** — Feature is inside JobStatus #4
 
+**A dump that follows an `EXCEPTION:` line is a consequence, not the leak.**
+A panic is fatal to the process, so every reference live at that moment is
+reported as leaked whatever the panic was. Chase the exception, not the
+refcounts.
+
+**`synch primitive deleted while being used (ref=N)` on a `with_channel` line
+is that scope closing on a worker that has not released yet** — N is the count
+it still holds, and the worker then touches a destroyed mutex, so the panic is
+followed by a fatal from libc. Taking the worker's payload is not that release:
+a worker pushes and releases after, which wakes the consumer between the two,
+so a consumer that stops at the payload (`pop_with_timeout_clone`, `try_pop`)
+must `join()` the channel before its scope ends. A consumer that stops on the
+count instead — `for_each_clone`, whose final `pop` blocks until the count
+reaches zero — is already fenced, as is a worker that releases the channel
+before signalling a separate wait group.
+
 ## Step 2: Trace a Specific Object
 
 Once you know the leaking ID, use `--track-job-status` to get every addRef/releaseRef with source locations:

@@ -376,9 +376,7 @@ def emit_progress_from_file() {
 // Run an external command, streaming progress when the current call set one up.
 // A worker runs the blocking capture; the main thread polls the progress file
 // every PROGRESS_POLL_MS, emitting a tick each interval, then takes the worker's
-// result. Popping that single result is the whole teardown — the worker's
-// notify_and_release already balanced its channel ref, so an extra release here
-// would under-count and abort the run.
+// result and joins it before the channel scope closes.
 def run_with_progress(argv : array<string>; timeout_sec : float; var output : string&) : int {
     if (empty(current_progress_file) || empty(current_progress_token)) {
         return run_and_capture(argv, output, timeout_sec)
@@ -408,6 +406,10 @@ def run_with_progress(argv : array<string>; timeout_sec : float; var output : st
                 emit_progress_from_file()
             }
         }
+        // The worker releases its channel reference after the push, so the pop
+        // that takes the result can return while that reference is still out —
+        // and a scope closing on a channel in use panics the process mid-call.
+        ch |> join()
     }
     output = captured
     remove(current_progress_file, err)
