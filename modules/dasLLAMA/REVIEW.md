@@ -291,6 +291,17 @@ Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 
   resize, normalize. The only preproc home.
 - `dasllama_vision_io.das` — image decode to RGB8 and the debug PNG dump. The only file that talks
   to stbimage.
+- `dasllama_gemma4uv.das` — the gemma4uv embedder: mmproj load, im2col, the norm/GEMM/pos-table
+  forward. One file per vision projector family, the audio tower pattern.
+
+**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
+as red**, and every image a test feeds an embedder is either a procedural fixture the test builds
+or previewable via the `DASLLAMA_VISION_DUMP` knob — a red never requires adding instrumentation
+before a human can see what the model saw.
+
+**A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
+from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
+and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
 
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode

@@ -127,6 +127,9 @@ grows past the `max_unreserved_size` guard that must not panic.
 `test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
 `gemma4-vision-oracle/`), plus the stbimage decode/dump round-trips in a per-process temp dir.
+`test_gemma4uv.das` — the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
+(f32-mmproj-minted — the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
+mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
 
 ## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 
