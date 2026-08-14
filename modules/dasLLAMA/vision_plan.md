@@ -388,13 +388,36 @@ oracle's arithmetic, not only about the port.
   mm_input_proj with **ClippableLinear** (input/output_min/max scalars on all seven GEMM
   weights per block, clamps before AND after each GEMM). Same markers, geometry, limits,
   and non-causal decode as gemma4uv — the whole v1 rail except the embedder is reused.
-  **The prize (verified 2026-08-14 by tensor dump): that one mmproj carries BOTH towers** —
-  `v.blk.*` (the ViT above) and `a.blk.*` (the `gemma4a` Conformer) — and the audio half is
-  ALREADY DONE (`dasllama_gemma4a.das`, `AsrKind.gemma4a`, oracle-verified). So this leg is
-  the vision half of a file whose audio half ships today, and finishing it makes E2B/E4B the
-  first model dasLLAMA serves as text + image + audio at once. Note the size classes disagree
-  about what "gemma-4 vision" means: 12B = `gemma4uv`, 11 tensors of linear projection;
-  E-series = a real 16-block ViT. Two encoders, one family name — not a config flag.
+  **The prize (verified 2026-08-14 by full tensor dump of the on-disk E2B mmproj): that one
+  file carries BOTH towers, complete.** 1411 tensors —
+  **audio** 751 tensors / 305 M params / **12 blocks** (macaron FFN pair, conv module
+  pw1+dw(k=5)+pw2 with its norms, attn q/k/v/out + `attn_k_rel` + `per_dim_scale`, pre/post
+  norms) plus the front end (`a.conv1d.{0,1}` subsample + norms → `a.input_projection` →
+  `a.pre_encode.out`); **vision** 658 tensors / 167 M params / **16 blocks** (attn q/k/v/out,
+  64-wide q/k norms, ffn gate/up/down, ln1/ln2, post-norms) plus `v.patch_embd` [16×16×3×768]
+  and `v.position_embd` [768×10240×2]; **projections** `mm.input_projection` 768→1536 and
+  `mm.a.input_projection` 1536→1536. Here metadata and tensors AGREE (`has_vision_encoder=1`,
+  `has_audio_encoder=1`, projector types `gemma4v`/`gemma4a`, block counts 16/12, 128 mel
+  bins) — unlike the 12B, where only the metadata claims audio.
+  The audio half is **ALREADY DONE** (`dasllama_gemma4a.das`, `AsrKind.gemma4a`,
+  oracle-verified), so this leg is the vision half of a file whose audio half ships today —
+  and finishing it makes **E2B** the first model dasLLAMA serves as text + image + audio at
+  once. ⚠ **E4B is NOT verified and NOT interchangeable**: no E4B mmproj is on this box, and
+  the E2B one cannot substitute — it projects to 1536 while the E4B decoder is 2560 wide, the
+  exact mismatch `load_asr_model` panics on. Upstream `ggml-org/gemma-4-E4B-it-GGUF` does list
+  `mmproj-gemma-4-E4B-it-{BF16,Q8_0}.gguf` (992 MB / 560 MB), so it is a download, not a gap —
+  but claim E4B only after dumping the downloaded file. Note also that the size classes
+  disagree about what "gemma-4 vision" means: 12B = `gemma4uv`, 11 tensors of linear
+  projection; E-series = a real 16-block ViT. Two encoders, one family name — not a config
+  flag.
+  **On "the E-series is small" — it is not, and the name is why it reads that way.** The `E`
+  is *effective* parameters: the per-layer-embedding table is a lookup, not compute, so it is
+  excluded from the label. Measured on this box: E2B decoder = 4.65 B params total, of which
+  `per_layer_token_embd` [8960×262144] = 2.35 B ⟹ ~2.3 B compute-carrying ("E2B"); E4B = 7.52 B
+  total, PLE [10752×262144] = 2.82 B ⟹ ~4.7 B ("E4B"). So E4B is a **7.5 B-parameter file**.
+  The towers are not carved out of that budget either — the mmproj is a separate ~990 MB.
+  For scale, the audio tower (12 blocks × d_model 1024, FFN 4096) is larger than Whisper-small's
+  encoder (12 × 768): a serious ASR front end, not a token one.
 - **qwen3vl / Omni**: IMROPE decoder (int3 positions + sections — text-only (p,p,p) MUST
   bit-match today's qwen35 output; write that regression test FIRST), deepstack, dynamic-res
   ViT with window attention. The Omni-30B mmproj is already on disk.
