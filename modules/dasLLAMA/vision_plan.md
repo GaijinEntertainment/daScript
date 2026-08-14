@@ -188,16 +188,31 @@ invariant — a transposed patch grid is only visible per-token).
 - **D. Non-causal**: flag + CPU arm + guard; toy-config unit test proving span output
   differs from causal and matches a reference computed in-test (branch-test rule).
 - **E. Splice**: chat arm + eval → tier-2 parity; `ask.das --image`; tier-3 captions.
-- **F. Server**: SCOPE DECISION, not a slice — the plan assumed the work was decoding a
-  data URI. It is not: `/v1/chat/completions` renders through `create_chat_renderer` to
-  TOKEN IDS (`array<int64>`) and the scheduler admits streams by ids; soft-token rows have
-  no path through admission, the prefix cache, or batch stepping. Options: (a) an
-  embedding-span rail through the scheduler (real work in the batching core), (b) a
-  non-scheduled path for image requests (bypasses batching, one at a time), (c) v1 ships
-  library + `ask --image` and server images land in v2. Needs a call before anyone starts.
-- **G. Embedder planes** (DONE 2026-08-14): measured 54 ms @ 130 tok, 118 ms @ 280 (the
-  ceiling), 29 ms load — BOTH follow-ups declined with evidence, no q8 lane and no dlim
-  rail, so IMAGE_VERSION stays at 8. `PERF_LEDGER.md` carries the entry and what reopens it.
+- **F. Server + demo page** (SETTLED 2026-08-14, decision below): `/v1/chat/completions`
+  renders through `create_chat_renderer` to TOKEN IDS and the scheduler admits streams by
+  ids, so soft-token rows have no path through admission, the prefix cache, or batch
+  stepping — the work is a prefill path, not a data-URI decode. **v1 takes the serialized
+  path**: the chat route branches when a message carries an image, that request gets its own
+  session and prefills outside the batch (the ASR precedent's execution shape — media work
+  beside the scheduler with its own slot accounting — not its routing shape, since images
+  arrive on the chat endpoint, not a door of their own). The server's page ships in the SAME
+  piece: file picker + paste → data URI → the content-parts array the API already takes. A
+  route nobody can try is a feature nobody sees, and the page half is small next to the
+  route half.
+- **G. Embedder planes** (measured 2026-08-14; dlim rail STILL OWED): 54 ms @ 130 tok,
+  118 ms @ 280 (the geometry's ceiling), 29 ms load. No quantized lane — that call is about
+  accuracy on a 118 ms path, and it stands. **The dlim rail is NOT declined**: the first
+  reading applied a milliseconds test to an architecture question. The rail is how every
+  other model artifact loads — mapped planes, no allocation and no processing at load — and
+  `dasllama_audio.das` states the doctrine outright ("a served tower is always image-backed,
+  so there is no second, array-owning shape of this struct to maintain"). Today's
+  `blob : array<float>` IS that second shape. The reasons that matter are RSS (mapped pages
+  are shared and evictable; a 190 MB owned widening is not) and zero load-time work, not the
+  30 ms. Scope: `serialize_image_meta`, plane binding (`PlaneF`), image tags, the
+  `stage_*`/`mint_*` pair, `IMAGE_VERSION` → 9, an image-suite arm — the gemma4a file almost
+  line for line. **Open first: the plane FORMAT.** f32 is a single slow path, not a serving
+  format; bf16 (converted in-tile) is the likely long-term answer and profiling decides.
+  The image format pins the plane layout, so settle the format before writing the serializer.
 - **H. Docs** (DONE): README/ARCHITECTURE touch, ENVIRONMENT.md regen (slice B/E),
   PERF_LEDGER entry, this findings section, predictions scored.
 
@@ -265,7 +280,15 @@ oracle's arithmetic, not only about the port.
    as a parity red. Shaped exact fixtures (a checkerboard at a non-square canvas) cover
    orientation better anyway — identical patches make each token a pure fingerprint of its
    position embedding.
-6. **The server is a scope decision, not a slice** — see the ledger below.
+6. **A slice can turn out to be a scope decision.** "Server: accept a data URI" was one line
+   in the plan and a prefill-path question in reality. What made it decidable was naming the
+   three obstacles separately (types, mask, cache identity) instead of one lump — each has a
+   different cost, and only the mask one is deep.
+7. **The product's shape decides the ceiling, not the benchmark's.** dasllama-server is a
+   LOCAL server: a few users, agent tools and local apps, with its page doubling as the test
+   harness and the showcase. There is no concurrent-image load to batch, so the serialized
+   image path is not a stopgap on the way to a batched rail — it is very likely the final
+   answer. The batched rail stays ledgered behind a trigger this product may never pull.
 
 ## Out of scope — v2+ ledger
 
@@ -286,6 +309,14 @@ oracle's arithmetic, not only about the port.
 - **gemma-4-12B audio** (`gemma4ua`): the 12B mmproj carries an audio twin of the uv
   embedder (`mm.a.input_projection` 640→3840) — the same unified pattern, mel frames
   embedded straight into the decoder. A cheap leg once vision lands.
+- **Batched image serving** — the full rail: a prompt-segment type (tokens | embedding rows
+  + mask), per-sequence-per-range masks through batch stepping, and a cache policy for rows
+  that have no token id. TRIGGER: genuinely concurrent image requests. dasllama-server is
+  local-first (a few users, agent tools, local apps), so that trigger may never fire — do not
+  build this speculatively. Worth knowing if it ever does: llama.cpp toggles causality
+  CONTEXT-GLOBALLY around a media chunk (`llama_set_causal_attn(false)`), which cannot be
+  right for a mixed batch — so upstream serializes media prefill too, and this rail would put
+  dasLLAMA ahead of the reference rather than level with it.
 - **Metal/Vulkan**: uniform-bound non-causal prefill kernels (then delete the readiness
   guard); Metal embedder is likely pointless (2 GEMMs, ~245 ms CPU).
 - Multi-image turns, remote URL fetch, video.
