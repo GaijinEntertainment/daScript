@@ -1410,6 +1410,24 @@ namespace das {
         return src->rtti_isCallLikeExpr() || src->rtti_isMakeLocal();
     }
 
+    // *reinterpret<TT?>(pvar) - the same const-laundering write the C++ iterator performs
+    // through the void? it is handed, so the for-loop variable stays const for the body
+    ExpressionPtr makeCounterRef ( const LineInfo & at, const string & pVarName, const TypeDeclPtr & elemType ) {
+        auto ptrT = new TypeDecl(Type::tPointer);
+        ptrT->at = at;
+        ptrT->firstType = new TypeDecl(*elemType);
+        ptrT->firstType->at = at;
+        ptrT->firstType->constant = false;
+        ptrT->firstType->explicitConst = false;
+        ptrT->firstType->ref = false;
+        auto cast = new ExprCast(at, new ExprVar(at, pVarName), ptrT);
+        cast->reinterpret = true;
+        cast->alwaysSafe = true;
+        auto deref = new ExprPtr2Ref(at, cast);
+        deref->alwaysSafe = true;
+        return deref;
+    }
+
     ExpressionPtr replaceGeneratorFor ( ExprFor * expr, const FunctionPtr & func ) {
         auto begin_loop_label = func->totalGenLabel ++;
         auto mid_loop_label = func->totalGenLabel ++;
@@ -1525,6 +1543,10 @@ namespace das {
             const string & srcVarName = expr->iterators[si];
             const auto & src = expr->sources[si];
             const auto & iterv = expr->iteratorVariables[si];
+            // a range source needs no iterator: the counter and the bound are plain values in
+            // the capture frame. each() + first/next/close would cost a heap iterator and a
+            // virtual call per element, in every backend.
+            const bool plainRange = src->type->isRange();
             // if its a temp ref type, we need to create a temp variable
             ExprLet * tempLet = nullptr;
             if ( srcNeedTempVar(src, src->type) ) {
@@ -1555,8 +1577,8 @@ namespace das {
             svar->name = srcName;
             svar->type = new TypeDecl(Type::autoinfer);
             svar->type->at = svar->at;
-            svar->init_via_move = true;
-            if ( src->type->isGoodIteratorType() ) {
+            svar->init_via_move = !plainRange;   // a range is a value; there is nothing to move from
+            if ( src->type->isGoodIteratorType() || plainRange ) {
                 svar->init = src->clone();
             } else {
                 auto ceach = new ExprCall(expr->at, "each");
@@ -1622,6 +1644,16 @@ namespace das {
             vvar->init = rein;
             veqt->variables.push_back(vvar);
             blk->list.push_back(veqt);
+            if ( plainRange ) {
+                // *pvar0 = src0.x; loop = (it0 < src0.y) && loop -- RangeIterator::first, inline
+                blk->list.push_back(new ExprCopy(expr->at, makeCounterRef(expr->at, pVarName, iterv->type),
+                    new ExprField(expr->at, new ExprVar(expr->at, srcName), "x")));
+                auto rlt = new ExprOp2(expr->at, "<", new ExprVar(expr->at, srcVarName),
+                    new ExprField(expr->at, new ExprVar(expr->at, srcName), "y"));
+                blk->list.push_back(new ExprCopy(expr->at, new ExprVar(expr->at, loopVar),
+                    new ExprOp2(expr->at, "&&", rlt, new ExprVar(expr->at, loopVar))));
+                continue;
+            }
             // loop = _builtin_iterator_first(it0,pvar0) && loop
             // first() on the LEFT so it runs for EVERY source even when an earlier one came up
             // empty (matches SimNode_ForWithIterator) — end_loop closes all sources, and closing
@@ -1664,6 +1696,7 @@ namespace das {
                 rblk->isCollapseable = true;
                 // close iterators before returning (mirrors normal end_loop path)
                 for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
+                    if ( expr->sources[si]->type->isRange() ) continue;  // no iterator to close
                     auto cbif = new ExprCall(expr->at, "_builtin_iterator_close");
                     cbif->generated = true;
                     cbif->arguments.push_back(new ExprVar(expr->at, srcNames[si]));
@@ -1691,6 +1724,17 @@ namespace das {
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
+            if ( expr->sources[si]->type->isRange() ) {
+                // *pvar0 = it0 + 1; loop &&= it0 != src0.y -- RangeIterator::next, inline
+                const auto & iterv = expr->iteratorVariables[si];
+                blk->list.push_back(new ExprCopy(expr->at, makeCounterRef(expr->at, pVarName, iterv->type),
+                    new ExprOp2(expr->at, "+", new ExprVar(expr->at, expr->iterators[si]),
+                        new ExprConstInt(expr->at, 1))));
+                auto rne = new ExprOp2(expr->at, "!=", new ExprVar(expr->at, expr->iterators[si]),
+                    new ExprField(expr->at, new ExprVar(expr->at, srcName), "y"));
+                blk->list.push_back(new ExprOp2(expr->at, "&&=", new ExprVar(expr->at, loopVar), rne));
+                continue;
+            }
             auto cbif = new ExprCall(expr->at, "_builtin_iterator_next");
             cbif->generated = true;
             cbif->arguments.push_back(new ExprVar(expr->at, srcName));
@@ -1706,6 +1750,7 @@ namespace das {
         blk->list.push_back(ell);
         // loop &= _builtin_iterator_close(it0,pvar0)
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
+            if ( expr->sources[si]->type->isRange() ) continue;  // no iterator to close
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             auto cbif = new ExprCall(expr->at, "_builtin_iterator_close");
