@@ -16,7 +16,12 @@ def pass_through(s : string) : string {
 def spell_the_syntax() : string {
     // docs quoting the syntax: see http://daslang.io/nolint:PERF008 for details
     // the marker nolint:PERF008 in mid-comment prose is not a directive either
-    return "// nolint:PERF008"
+    return "// nolint:PERF008 quoted"
+}
+
+//! nolint:PERF010
+def doc_comment_directive(s : string) : string {
+    return s
 }
 
 [export]
@@ -24,4 +29,5 @@ def main {
     let _a = check_empty("x")
     let _b = pass_through("y")
     let _c = spell_the_syntax()
+    let _d = doc_comment_directive("z")
 }

@@ -1556,6 +1556,13 @@ def test_lint_stale_nolint(t : T?) {
         t |> success(find(text, "LINT019") >= 0, "should report the stale directive")
         t |> success(find(text, "PERF006") >= 0, "should name the stale code")
     }
+    t |> run("stale nolint reported in the multi-file path too") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_lint("{fixture_path("_fixture_stale_nolint.das")},{fixture_path("_fixture_valid.das")}"), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(find(text, "LINT019") >= 0, "batch path runs the stale scan too")
+    }
 }
 
 [test]

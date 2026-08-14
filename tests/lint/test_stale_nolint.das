@@ -39,6 +39,15 @@ def test_stale_nolint(t : T?) {
             "the consumed PERF017 directive is NOT reported: {output}")
         t |> success(find(output, "PERF008") < 0,
             "string-literal / URL / mid-comment spellings are not directives: {output}")
+        t |> success(find(output, "PERF010 suppresses nothing") >= 0,
+            "a `//!` doc-comment directive is still recognized (and stale here): {output}")
+    }
+    t |> run("widened fixture naming is skipped without --lint-fixtures") @(t : T?) {
+        let fixture = "{root}/tests/lint/stale_fixtures/_widened_fixture.das"
+        var output = ""
+        run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture], output)
+        t |> success(find(output, "(lint rule fixture)") >= 0, "skip reason printed: {output}")
+        t |> success(find(output, "LINT003") < 0, "the deliberate finding is not reported: {output}")
     }
     t |> run("disabling LINT019 silences the scan") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
