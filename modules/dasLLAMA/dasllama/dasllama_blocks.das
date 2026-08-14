@@ -755,11 +755,12 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     prof_add("at_resid", ts_resid)
 }
 
-// npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's
-// own K/V device-side), tq4 excluded (the basis change lives in the CPU path), npos within the
-// chain's context capacity
+// npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's own
+// K/V device-side), tq4 excluded (basis change is CPU-side). A non-causal image span always
+// declines: the GPU chains encode the causal mask — the guard survives lifting start_pos == 0.
 def attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int64) : bool {
-    return (npos >= 32l && npos <= 4096l && start_pos == 0l && moe_gpu_attn_on_gpu(l)
+    return (npos >= 32l && npos <= 4096l && start_pos == 0l && s.attn_uniform_end == 0l
+        && moe_gpu_attn_on_gpu(l)
         && s.kv_dtype_k != KVDtype.tq4 && s.kv_dtype_v != KVDtype.tq4)
 }
 
@@ -1497,7 +1498,8 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64) {
+def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
+                         non_causal : bool = false) {
     if (npos <= 0l) {
         return
     }
@@ -1520,7 +1522,11 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         ple_pre_prefill_pad(t, s, npos)
         prof_add("ple", ts_ple)
     }
+    // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): every query of THIS
+    // call attends [swa_lo(q), start_pos + npos) — set for exactly this body, cleared after
+    s.attn_uniform_end = non_causal ? start_pos + npos : 0l
     forward_prefill_body(t, s, npos, start_pos)
+    s.attn_uniform_end = 0l
 }
 
 //! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the
@@ -1537,12 +1543,13 @@ def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at
 }
 
 //! ``eval_``'s embedding-input twin: prefill ``npos`` embedding rows at the session cursor and
-//! advance it. Leaves ``s.logits`` = the last position's logits.
-def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64) {
+//! advance it. Leaves ``s.logits`` = the last position's logits. ``non_causal`` marks the rows
+//! as a non-causal image span (gemma vision) — see forward_prefill_embd.
+def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; non_causal : bool = false) {
     if (npos <= 0l) {
         return
     }
-    forward_prefill_embd(t, s, embd, npos, s.n_past)
+    forward_prefill_embd(t, s, embd, npos, s.n_past, non_causal)
     s.n_past += npos
 }
 

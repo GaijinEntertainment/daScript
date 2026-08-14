@@ -130,6 +130,9 @@ bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
 `test_gemma4uv.das` — the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
 (f32-mmproj-minted — the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
 mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
+`test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
+perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
+agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
 
 ## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
 
