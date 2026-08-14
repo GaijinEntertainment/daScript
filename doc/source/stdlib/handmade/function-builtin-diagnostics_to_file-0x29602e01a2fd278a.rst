@@ -1,0 +1,1 @@
+Sends the runtime's own diagnostics -- a leak dump, a fatal, what it reports about itself -- to `path`, appending to it, and returns false without changing where they go when the file cannot be opened. A panic report does not travel this way: it is level-tagged output, which the logger hook takes.

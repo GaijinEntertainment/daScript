@@ -2,6 +2,8 @@
 #include "daScript/misc/string_writer.h"
 #include "misc/include_fmt.h"
 
+#include <stdarg.h>
+
 namespace das {
     DAS_API StringWriterTag HEX;
     DAS_API StringWriterTag DEC;
@@ -183,13 +185,60 @@ namespace das {
 
     // TextPrinter
 
+    static void textPrinterToStdout ( const char * text ) {
+        printf("%s", text);
+        fflush(stdout);
+    }
+
+    static void textPrinterToStderrSink ( const char * text ) {
+        fprintf(stderr, "%s", text);
+        fflush(stderr);
+    }
+
+    static FILE * g_textPrinterFile = nullptr;
+
+    static void textPrinterToFileSink ( const char * text ) {
+        fprintf(g_textPrinterFile, "%s", text);
+        fflush(g_textPrinterFile);
+    }
+
+    static TextPrinterSink g_textPrinterSink = &textPrinterToStdout;
+
+    void setTextPrinterSink ( TextPrinterSink sink ) {
+        auto newSink = sink ? sink : &textPrinterToStdout;
+        // the file is closed exactly when it stops BEING the sink, on the same
+        // contract the sink itself rests on: nothing prints while it is being set,
+        // which is the one moment closing it is safe.  A handle left open holds the
+        // file against deletion on Windows, where fopen does not share delete
+        if ( newSink!=&textPrinterToFileSink && g_textPrinterFile ) {
+            fclose(g_textPrinterFile);
+            g_textPrinterFile = nullptr;
+        }
+        g_textPrinterSink = newSink;
+    }
+
+    void textPrinterToStderr() {
+        setTextPrinterSink(&textPrinterToStderrSink);
+    }
+
+    bool textPrinterToFile ( const char * path ) {
+        FILE * f = fopen(path, "ab");
+        if ( !f ) return false;
+        FILE * was = g_textPrinterFile;
+        g_textPrinterFile = f;
+        // the sink does not change kind here, so setting it closes nothing: the
+        // file it replaces is closed right after, on the same being-set contract
+        setTextPrinterSink(&textPrinterToFileSink);
+        if ( was ) fclose(was);
+        return true;
+    }
+
     void TextPrinter::output() {
         lock_guard<mutex> guard(pmut);
         uint64_t newPos = tellp();
         if (newPos != pos) {
             string st(data() + pos, size_t(newPos - pos));
-            printf("%s", st.c_str());
-            fflush(stdout);
+            g_textPrinterSink(st.c_str());
             pos = newPos;
         }
     }
@@ -216,4 +265,18 @@ namespace das {
             pos = newPos = 0;
         }
     }
+}
+
+// The sink directly, not a TextPrinter: this fires from the allocator and the
+// smart-pointer guard, so it may not allocate, and it may not take the
+// printer's lock -- the fatal it is reporting can be a crash that already
+// holds it.
+void das_fatal_log ( const char * format, ... ) {
+    char buf[2048];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+    buf[sizeof(buf) - 1] = 0;
+    das::g_textPrinterSink(buf);
 }

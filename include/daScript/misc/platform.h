@@ -304,8 +304,12 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 void DAS_API os_debug_break();
 void DAS_API print_current_stack_trace();
 
+// Lands wherever setTextPrinterSink points, so a fatal report follows every
+// other diagnostic off a stdout that carries a protocol.
+void DAS_API das_fatal_log ( const char * format, ... );
+
 #ifndef DAS_FATAL_LOG
-#define DAS_FATAL_LOG(...)   do { printf(__VA_ARGS__); fflush(stdout); } while(0)
+#define DAS_FATAL_LOG(...)   das_fatal_log(__VA_ARGS__)
 #endif
 
 #ifndef DAS_FATAL_ERROR

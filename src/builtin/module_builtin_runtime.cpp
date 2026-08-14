@@ -1818,6 +1818,20 @@ namespace das
         context->to_out(at, level, text);
     }
 
+    void diagnosticsToStderr() {
+        // For a program whose stdout is a protocol rather than its own output:
+        // a leak dump or a fatal landing there is read as a frame, and the
+        // reader is gone before anyone sees the text.
+        textPrinterToStderr();
+    }
+
+    bool diagnosticsToFile ( const char * path ) {
+        // The same, for a program whose stderr nobody keeps: a launcher that
+        // records neither stream leaves the death rattle nowhere at all, so it
+        // goes to a file the program names and its owner reads.
+        return path ? textPrinterToFile(path) : false;
+    }
+
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
         if ( daScriptEnvironment::getBound()->g_compilerLog ) {
             if ( text ) {
@@ -2788,6 +2802,10 @@ namespace das
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});
+        addExtern<DAS_BIND_FUN(diagnosticsToStderr)>(*this, lib, "diagnostics_to_stderr",
+            SideEffects::modifyExternal, "diagnosticsToStderr");
+        addExtern<DAS_BIND_FUN(diagnosticsToFile)>(*this, lib, "diagnostics_to_file",
+            SideEffects::modifyExternal, "diagnosticsToFile")->args({"path"});
         addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
             SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels

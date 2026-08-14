@@ -193,7 +193,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_building_documentation|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
-        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
+        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|diagnostics_to_stderr|diagnostics_to_file|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|hash_combine64|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
@@ -1356,7 +1356,7 @@ def document_module_logger(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Setup", mod, %regex~.*(logger_init|logger_init_tee|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
         group_by_regex("Level filters", mod, %regex~.*(logger_set_min_level|logger_get_min_level|logger_set_category_level|logger_clear_category_levels)$%%),
-        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_flush|logger_close)$%%),
+        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_flush|logger_close|logger_capture_diagnostics)$%%),
         group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
         group_by_regex("Stdout hook", mod, %regex~.*(logger_install_hook)$%%)
     )

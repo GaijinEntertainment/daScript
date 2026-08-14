@@ -1,0 +1,1 @@
+Sends the runtime's own diagnostics -- a leak dump, a fatal, what it reports about itself -- to standard error, for a program whose standard output carries a protocol rather than its own output. A panic report does not travel this way: it is level-tagged output, which the logger hook takes.
