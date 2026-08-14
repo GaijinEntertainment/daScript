@@ -756,7 +756,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
     //! Marks ``def fn(old : S; var dst : T) : void`` for auto-derived field-by-field translation.
     //! Same-name-same-type / ``T → Option<T>`` / ``INT↔STRING↔FLOAT`` cast / ``@sql_renamed_from`` are
     //! filled in; an explicit ``dst.X = …`` (or ``<-``/``:=``) on the LHS suppresses the auto-fill for X.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE037,STYLE038 - one arm per auto-fill field mapping rule
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - one arm per auto-fill field mapping rule
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[struct_convert]: not supported on generic functions"
@@ -805,9 +805,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
         // for (f in fields) is the supported iteration form.
         var auto_exprs : array<ExpressionPtr>
         auto_exprs |> reserve(length(tgt_st.fields))
-        var failed = false
         for (t_field in tgt_st.fields) {
-            if (failed) break
             let tname = string(t_field.name)
             if (key_exists(overrides, tname)) continue
             // Honor @sql_renamed_from on T's field — read from old's <OldName> instead of <tname>.
@@ -828,7 +826,6 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
                 }))
                 break
             }
-            if (failed) break
             if (!s_found) {
                 // Field absent from S — use T's default initializer or none() for Option<T>.
                 if (t_field.init != null) {
@@ -843,11 +840,10 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
                     }))
                 } else {
                     errors := "[struct_convert] '{func.name}': new field '{tname}' has no default initializer and is not Option<T>. Provide a default like `{tname} : {describe(t_type)} = ...` on the struct, or write `{new_param_name}.{tname} = ...` in the body."
-                    failed = true
+                    return false
                 }
             }
         }
-        if (failed) return false
 
         // Emit the per-(S,T) helper carrying the auto-derived assignments.
         let helper_name = "_struct_convert_helper`{func.name}"
