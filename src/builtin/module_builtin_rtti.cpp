@@ -1675,37 +1675,63 @@ namespace das {
     //   // nolint:CODE                          -> suppresses CODE
     //   // nolint:CODE1,CODE2,...               -> comma-separated list
     //   // nolint:CODE1 nolint:CODE2            -> repeated directives, space-separated
-    //   // free-form prose nolint:CODE more     -> directive anywhere after the `//`
-    // After the `//`, we walk the rest of the line looking for `nolint:` occurrences
-    // and parse a comma-list of codes after each one. Any match wins.
+    //   // nolint:CODE free-form reason         -> reason text after the directive
+    // The `//` must sit outside string/char literals, and `nolint:` must open the
+    // comment's FIRST token (after an optional `!`/`/` opener run) - a `nolint:` in
+    // mid-comment prose or a URL is not a directive. Further `nolint:`-led tokens
+    // then each open a comma-list of codes. daslib/lint.das's stale_nolint_collect
+    // (LINT019) mirrors this scan exactly - change them in lockstep.
+    // Known holes, accepted: a line inside a multi-line string literal, and nested
+    // string literals inside an interpolation `{...}`, confuse the per-line quote
+    // state; both fail toward the finding staying visible, never toward suppression.
     bool rtti_is_nolint_suppressed ( FileInfo * info, uint32_t line, const char * code, Context * /*context*/, LineInfoArg * /*at*/ ) {
         if ( !info || !code || !*code ) return false;
         const char * begin = nullptr;
         uint32_t len = 0;
         if ( !info->getLine(line, begin, len) ) return false;
         const char * end = begin + len;
-        // locate "//"
+        // locate "//", skipping string and char literals (backslash escapes honored)
         const char * p = begin;
-        while ( p + 1 < end && !(p[0] == '/' && p[1] == '/') ) p++;
+        while ( p < end ) {
+            char c = *p;
+            if ( c == '"' || c == '\'' ) {
+                p++;
+                while ( p < end && *p != c ) p += (*p == '\\' && p + 1 < end) ? 2 : 1;
+                if ( p < end ) p++;
+            } else if ( c == '/' && p + 1 < end && p[1] == '/' ) {
+                break;
+            } else {
+                p++;
+            }
+        }
         if ( p + 1 >= end ) return false;
         p += 2;
+        while ( p < end && (*p == '/' || *p == '!') ) p++;    // `//!` docs, `///` piles
+        while ( p < end && (*p == ' ' || *p == '\t') ) p++;
         static const char NOLINT[] = "nolint:";
         constexpr uint32_t NOLINT_LEN = sizeof(NOLINT) - 1;
         const uint32_t codeLen = uint32_t(strlen(code));
-        // walk the rest of the line; each `nolint:` opens a comma-list of codes.
-        while ( p + NOLINT_LEN <= end ) {
-            if ( memcmp(p, NOLINT, NOLINT_LEN) != 0 ) { p++; continue; }
-            p += NOLINT_LEN;
-            // comma-list parse
-            while ( p < end ) {
-                while ( p < end && (*p == ' ' || *p == '\t') ) p++;
-                const char * tokStart = p;
-                while ( p < end && *p != ',' && *p != ' ' && *p != '\t' ) p++;
-                uint32_t tokLen = uint32_t(p - tokStart);
-                if ( tokLen == codeLen && memcmp(tokStart, code, codeLen) == 0 ) return true;
-                while ( p < end && (*p == ' ' || *p == '\t') ) p++;
-                if ( p < end && *p == ',' ) { p++; continue; }
-                break;
+        // positional gate: the comment's first token must open a directive
+        if ( !(p + NOLINT_LEN <= end && memcmp(p, NOLINT, NOLINT_LEN) == 0) ) return false;
+        // whitespace-split tokens; each `nolint:`-led token opens a comma-list of codes
+        while ( p < end ) {
+            while ( p < end && (*p == ' ' || *p == '\t') ) p++;
+            if ( p >= end ) break;
+            if ( p + NOLINT_LEN <= end && memcmp(p, NOLINT, NOLINT_LEN) == 0 ) {
+                p += NOLINT_LEN;
+                // comma-list parse
+                while ( p < end ) {
+                    while ( p < end && (*p == ' ' || *p == '\t') ) p++;
+                    const char * tokStart = p;
+                    while ( p < end && *p != ',' && *p != ' ' && *p != '\t' ) p++;
+                    uint32_t tokLen = uint32_t(p - tokStart);
+                    if ( tokLen == codeLen && memcmp(tokStart, code, codeLen) == 0 ) return true;
+                    while ( p < end && (*p == ' ' || *p == '\t') ) p++;
+                    if ( p < end && *p == ',' ) { p++; continue; }
+                    break;
+                }
+            } else {
+                while ( p < end && *p != ' ' && *p != '\t' ) p++;
             }
         }
         return false;

@@ -37,6 +37,8 @@ def test_stale_nolint(t : T?) {
             "the stale PERF006 directive is named: {output}")
         t |> success(find(output, "PERF017 suppresses nothing") < 0,
             "the consumed PERF017 directive is NOT reported: {output}")
+        t |> success(find(output, "PERF008") < 0,
+            "string-literal / URL / mid-comment spellings are not directives: {output}")
     }
     t |> run("disabling LINT019 silences the scan") @(t : T?) {
         let fixture = "{root}/tests/lint/stale_fixtures/_fixture_stale_nolint.das"
