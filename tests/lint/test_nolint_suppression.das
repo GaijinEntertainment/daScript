@@ -6,7 +6,7 @@ require daslib/lint
 require strings
 
 def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_nolint_lint003_fixture.das"
+    return "{get_das_root()}/tests/lint/_fixture_nolint_lint003.das"
 }
 
 def compile_and_collect(t : T?; blk : block<(issues : array<string>; count : int) : void>) {
@@ -32,7 +32,7 @@ def compile_and_collect(t : T?; blk : block<(issues : array<string>; count : int
 
 [test]
 def test_nolint_lint003_suppression(t : T?) {
-    t |> run("// nolint:LINT003 suppresses the matched variable") @@(t : T?) {
+    t |> run("nolint:LINT003 suppresses the matched variable") @@(t : T?) {
         compile_and_collect(t) $(issues; count) {
             // Three `var` declarations are LINT003-eligible; two carry
             // `// nolint:LINT003`, so exactly one should remain.
