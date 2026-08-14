@@ -333,7 +333,12 @@ oracle's arithmetic, not only about the port.
    `gemma4v` ViT, not MobileNet. The lesson is procedural — the plan named a projector from
    the mtmd graph file whose name matched the family, without reading the loader case that
    maps GGUF → graph. Slice A's first act should be dumping the actual mmproj's meta, which
-   is what corrected it.
+   is what corrected it. **Sharpened after the arc closed: dump the TENSOR LIST, not the
+   metadata.** The 12B mmproj declares `clip.has_audio_encoder` and the whole `clip.audio.*`
+   block while containing zero audio-tower tensors — the converter writes those keys
+   unconditionally, so metadata states what the checkpoint COULD have, and only the tensor
+   list states what the file HAS. That difference is what mis-scoped the `gemma4ua` bullet in
+   the v2 ledger below.
 2. **The oracle needed its own correctness fix.** ggml's bf16 `mul_mat` rounds ACTIVATIONS to
    bf16 per dot, so encode dumps from the bf16 mmproj carry ~0.4% relative noise that has
    nothing to do with either implementation. Tier-1 read 3e-2 against them and 2e-5 against
@@ -383,12 +388,27 @@ oracle's arithmetic, not only about the port.
   mm_input_proj with **ClippableLinear** (input/output_min/max scalars on all seven GEMM
   weights per block, clamps before AND after each GEMM). Same markers, geometry, limits,
   and non-causal decode as gemma4uv — the whole v1 rail except the embedder is reused.
+  **The prize (verified 2026-08-14 by tensor dump): that one mmproj carries BOTH towers** —
+  `v.blk.*` (the ViT above) and `a.blk.*` (the `gemma4a` Conformer) — and the audio half is
+  ALREADY DONE (`dasllama_gemma4a.das`, `AsrKind.gemma4a`, oracle-verified). So this leg is
+  the vision half of a file whose audio half ships today, and finishing it makes E2B/E4B the
+  first model dasLLAMA serves as text + image + audio at once. Note the size classes disagree
+  about what "gemma-4 vision" means: 12B = `gemma4uv`, 11 tensors of linear projection;
+  E-series = a real 16-block ViT. Two encoders, one family name — not a config flag.
 - **qwen3vl / Omni**: IMROPE decoder (int3 positions + sections — text-only (p,p,p) MUST
   bit-match today's qwen35 output; write that regression test FIRST), deepstack, dynamic-res
   ViT with window attention. The Omni-30B mmproj is already on disk.
-- **gemma-4-12B audio** (`gemma4ua`): the 12B mmproj carries an audio twin of the uv
-  embedder (`mm.a.input_projection` 640→3840) — the same unified pattern, mel frames
-  embedded straight into the decoder. A cheap leg once vision lands.
+- **gemma-4-12B audio** (`gemma4ua`) — **BLOCKED, not cheap. Corrected 2026-08-14 by dumping
+  the file.** The 12B mmproj is 11 tensors, and `mm.a.input_projection.weight` is the only
+  audio one: a projection head with **nothing upstream to project**. There is not one
+  `a.blk.*` tensor — no Conformer, no subsample stack, no mel front end. (`clip.audio.*`
+  metadata keys ARE present, and `clip.has_audio_encoder` with them; the converter writes
+  those unconditionally, so **the metadata is not evidence of a tower — the tensor list is.**)
+  So the earlier reading of this bullet — "an audio twin of the uv embedder, the same unified
+  pattern, mel frames embedded straight into the decoder" — was inferred from that lone
+  projection tensor and is wrong: a 640→3840 matrix does not make an encoder. Nothing on disk
+  supplies a 12B audio tower, and no amount of das lands this leg until one exists upstream.
+  Recheck by tensor dump, not by metadata, if a new 12B mmproj ever ships.
 - **Batched image serving** — the full rail: a prompt-segment type (tokens | embedding rows
   + mask), per-sequence-per-range masks through batch stepping, and a cache policy for rows
   that have no token id. TRIGGER: genuinely concurrent image requests. dasllama-server is
