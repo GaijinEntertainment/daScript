@@ -4,10 +4,12 @@
 [paths]
 # Findings in these paths are dropped at report time (files still COMPILE through lint,
 # so their instantiations keep the generic-exposure and nolint-consumption ledgers whole).
-# This is a RATCHET: as tests/ subtrees reach zero findings, narrow or remove entries.
+# This is a RATCHET: narrow or remove entries as they reach zero findings.
 # The CLI escape --lint-excluded-paths shows what the policy is hiding; the MCP lint
 # tool always shows raw findings (same deliberate split as --lint-fixtures).
-exclude = ["tests/**"]
+# test_interfaces.das: 14x STYLE036 from the un-stamped const-adaptation cast infer
+# inserts on interface accessor calls - drops when the C++ genFlags fix lands.
+exclude = ["tests/interfaces/test_interfaces.das"]
 
 [rules]
 # PERF031 (slice/chop on a loop-invariant string in a loop) is ON here as everywhere -

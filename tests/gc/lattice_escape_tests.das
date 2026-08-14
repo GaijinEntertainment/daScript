@@ -397,7 +397,7 @@ def test_unsafe_local_not_freed(t : T?) {
 def capture_alias_into_global(i : int) {
     var p = new Node(x = i, y = i * 2)
     var q = p
-    g_lam <- @() : int { return q.x + q.y }
+    g_lam <- @() : int { return q.x + q.y } // nolint:PERF030 - the escape path IS the tested shape
 }
 
 // a block aliases a fresh local and leaks the alias to a global from inside the block

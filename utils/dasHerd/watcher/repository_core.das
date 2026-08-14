@@ -1177,8 +1177,8 @@ def private operation_start(kind, repository_id, worktree_path : string;
         worktree_path = worktree_path, state = "running", step = "starting",
         step_count = length(steps), revision = g_operation.revision + 1l)
     operation_clear_steps()
-    g_operation_steps <- steps
-    g_operation_recoveries <- recoveries
+    g_operation_steps <- steps // nolint:PERF030 - operation_clear_steps() above releases both globals; the check cannot credit a helper call
+    g_operation_recoveries <- recoveries // nolint:PERF030 - released by operation_clear_steps() above
     operation_launch_step()
     return ""
 }
