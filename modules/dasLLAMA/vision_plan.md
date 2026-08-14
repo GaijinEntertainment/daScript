@@ -399,6 +399,19 @@ oracle's arithmetic, not only about the port.
   dasLLAMA ahead of the reference rather than level with it.
 - **Metal/Vulkan**: uniform-bound non-causal prefill kernels (then delete the readiness
   guard); Metal embedder is likely pointless (2 GEMMs, ~245 ms CPU).
+  **Carry this into that leg — an unexplained sidecar rejection under `--gpu metal` (seen
+  2026-08-14, slice K, NOT investigated).** A `--gpu metal` server run refused
+  `utils/dasllama-server/main.tune.json`, logged `scope 'dasllama' is untuned on this box`,
+  snapshotted the sidecar to `.tune.json.bak` and re-tuned from scratch (~20 min); the CPU-tuned
+  `ask.tune.json` was accepted for the same scope moments earlier via `DAS_TUNE_MANIFEST`. Two
+  readings, and NEITHER was tested: (a) correct — a metal-armed run demands a different kernel
+  family set, so the CPU sidecar genuinely does not cover the scope, and only the MESSAGE is
+  wrong (it says untuned when it means "tuned for a different arming"); (b) a real
+  identity/staleness bug, in which case every metal serving run on a tuned box silently re-tunes.
+  What would settle it: dump the demanded key set on both arms and diff it against each
+  sidecar's coverage. Load-bearing for the Metal leg specifically, because that leg will be
+  measured under `--gpu metal` — and a run that quietly re-tuned is a run whose numbers came
+  off a fresh, unvalidated sidecar. **Do not measure the Metal arm until this is understood.**
 - Multi-image turns, remote URL fetch, video.
 - (Dead claim from the original plan, for the record: nothing in gemma-4 uses MobileNet —
   that's gemma3n's `gemma3nv`.)
