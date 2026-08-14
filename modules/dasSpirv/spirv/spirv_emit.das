@@ -1117,10 +1117,17 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // for those. Floats default to perspective-correct smooth interpolation; honour an explicit
         // @flat annotation when the user wants flat-shaded floats (low-poly stylised look, provoking-
         // vertex picks per primitive). Reflection bit not added — Flat is purely a SPIR-V decoration,
-        // it doesn't change the descriptor or pipeline layout. A @pervertex input is never Flat.
+        // it doesn't change the descriptor or pipeline layout. A @pervertex input is never Flat, and
+        // neither is either END of the pipe: a VERTEX @in is a vertex attribute the buffer feeds
+        // whole, a FRAGMENT @out is written straight to an attachment, and nothing interpolates
+        // either, so an interpolation decoration there is forbidden rather than mandated
+        // (VUID-StandaloneSpirv-Flat-06202 and -06201).
         let bt = v._type.baseType
         let is_int_kind = scalar_class(bt) >= 0 && scalar_class(bt) <= 1
-        let want_flat = (is_int_kind || (v.annotation |> find_arg("flat") is tBool)) && !is_pervertex
+        let no_interp = ((is_in && stage == ShaderStage.Vertex)
+            || (is_out && stage == ShaderStage.Fragment))
+        let want_flat = ((is_int_kind || (v.annotation |> find_arg("flat") is tBool))
+            && !is_pervertex && !no_interp)
         if (want_flat) {
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Flat))
         }
