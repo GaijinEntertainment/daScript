@@ -78,6 +78,10 @@ struct ModelSlot {
     vision : Gemma4uvEmbedder = Gemma4uvEmbedder()
     venc : Gemma4uvState = Gemma4uvState()
     vision_path : string
+    // this family's OWN thinking default (gemma-4: off, qwen3: on). Resolved once at add_model:
+    // a client that sends no enable_thinking gets it, and the page needs it to show the truth
+    // rather than guess — a page that guesses ON forces reasoning on a family that ships it off.
+    think_default : bool
 }
 
 var g_slots : array<ModelSlot>
@@ -183,6 +187,9 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     moe_gpu_model_marks_save(slot.gpu_marks)
     let was_gpu = was_resident || moe_gpu_marks_armed(slot.gpu_marks.marks)
     slot.backend_effective = was_resident ? "gpu:resident" : (was_gpu ? "gpu:rails" : "cpu")
+    var probe <- create_chat_renderer(slot.model, "", 1l)
+    slot.think_default = probe.enable_thinking   // create_chat_renderer_ seeds it from tmpl.think_default
+    delete probe
     g_slots |> emplace(slot)
     if (was_gpu) {
         g_gpu_owner = length(g_slots) - 1
@@ -2242,6 +2249,7 @@ struct private OaiSlotStats {
     weights_bytes : int64
     kv_bytes : int64
     vision : bool             // a gemma4uv arm is attached: this slot's chat route takes image_url parts
+    thinking_default : bool   // this family's own default when a request sends no enable_thinking
     last_used_s : float       // seconds since this slot last admitted a request (-1 = never)
     sw_count : int64          // P2 gpu-switch telemetry
     sw_avg_ms : float
@@ -2286,6 +2294,7 @@ struct private OaiStatsResponse {
     asr_done_jobs : int64
     asr_audio_s : float
     vision : bool             // the ACTIVE slot's vision arm (the page shows its attach button on this)
+    thinking_default : bool   // the ACTIVE slot's family thinking default (the page's checkbox seed)
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
@@ -2322,7 +2331,8 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         gpu_budget_bytes = !empty(tier.device) ? moe_gpu_weight_budget() : 0l,
         hardware = g_hardware_line,
         asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
-        vision = g_slots[g_active].vision.proj_dim > 0l)
+        vision = g_slots[g_active].vision.proj_dim > 0l,
+        thinking_default = g_slots[g_active].think_default)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -2331,6 +2341,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             holds_gpu = i == g_gpu_owner,
             backend = s.opts.backend, backend_effective = s.backend_effective,
             flavor = slot_flavor(s), vision = s.vision.proj_dim > 0l,
+            thinking_default = s.think_default,
             ctx = s.model.config.seq_len,
             active = n_active(s.sched), queued = n_queued(s.sched),
             admitted = s.sched.n_admitted, finished = s.sched.n_finished,

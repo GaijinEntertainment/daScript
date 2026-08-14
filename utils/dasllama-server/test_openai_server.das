@@ -298,11 +298,14 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
             }
-            // /v1/stats declares the arm so the page can show its attach button
+            // /v1/stats declares the arm so the page can show its attach button, and the family's
+            // OWN thinking default so the page's checkbox seeds from truth instead of guessing —
+            // a page that hardcodes "on" forces reasoning onto a family that ships it off
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null && !(js?["vision"] ?? true), "stats reports no vision arm for a text-only slot")
+                t |> success(js != null && js?["thinking_default"] != null, "stats declares the family thinking default")
                 if (js != null) {
                     unsafe {
                         delete js

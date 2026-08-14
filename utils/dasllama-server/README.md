@@ -224,7 +224,10 @@ between the two token spans of the rendered turn, as one non-causal span. v1 rul
   and `usage.prompt_tokens` counts the soft-token rows as positions.
 
 On the control page the chat panel grows an `▣ image` button (shown when `/v1/stats` reports a
-vision arm); paste and drag-and-drop work too.
+vision arm); paste and drag-and-drop work too. The panel defaults to `temperature 0` — it is a
+test harness as much as a demo, so a turn someone reports should reproduce — and its `thinking`
+box seeds from `/v1/stats`'s `thinking_default`, sending `enable_thinking` only once you touch it
+so each family's own default stands otherwise.
 
 ### Demo load
 

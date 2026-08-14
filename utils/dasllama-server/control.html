@@ -482,6 +482,11 @@ function apply(s) {
             " (" + (100 * s.mtp_accepted / s.mtp_drafted).toFixed(0) + "%)";
     }
     if (s.vision) $("b-img").style.display = "";
+    // seed the thinking box from the served family, once, and never over a user's choice
+    if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
+        $("kn-thinking").checked = s.thinking_default;
+        thinkSeeded = true;
+    }
     if (s.asr_workers > 0) {
         $("tile-asr").classList.remove("hide");
         $("t-asr").textContent = s.asr_ready + " · " + s.asr_active + " · " + s.asr_pending;
@@ -1019,7 +1024,9 @@ async function poll() {
 // on every send over the ordinary /v1/chat/completions SSE. <think> spans show inline in a
 // different font — this is a demo surface, not a working-tool replacement.
 const KNOBS = [
-    { k: "temperature", v: 0.7, step: 0.1 }, { k: "top_k", v: 40, step: 1 },
+    // greedy by default: this panel is a test harness as much as a demo, so a turn a user
+    // reports should reproduce, and a Q4 model's tail is where the loops live
+    { k: "temperature", v: 0, step: 0.1 }, { k: "top_k", v: 40, step: 1 },
     { k: "top_p", v: 0.9, step: 0.05 }, { k: "min_p", v: 0, step: 0.01 },
     { k: "presence_penalty", v: 0, step: 0.1 }, { k: "frequency_penalty", v: 0, step: 0.1 },
     { k: "max_tokens", v: 512, step: 32 },
@@ -1031,6 +1038,8 @@ let chatBusy = false;
 // what makes follow-up questions about the same picture work. History stays text: nothing
 // re-uploads an old turn's base64.
 let chatImage = null;   // { url: dataURI, name }
+let thinkTouched = false;   // until the user touches the box, the family's own default rules
+let thinkSeeded = false;
 
 {
     const box = $("knobs");
@@ -1046,12 +1055,16 @@ let chatImage = null;   // { url: dataURI, name }
         wrap.append(inp);
         box.append(wrap);
     }
+    // Thinking is TRI-STATE on the wire: an absent enable_thinking leaves the family's own
+    // default in force (gemma-4 ships it off, qwen3 on). The box seeds from /v1/stats and sends
+    // nothing until touched — a page that hardcoded `checked` forced reasoning onto families that
+    // ship without it, which is how a 12B ends up looping in a thought channel on first contact.
     const think = document.createElement("label");
     think.className = "knob";
     const cb = document.createElement("input");
     cb.type = "checkbox";
-    cb.checked = true;
     cb.id = "kn-thinking";
+    cb.addEventListener("change", () => { thinkTouched = true; });
     think.append(cb, document.createTextNode("thinking"));
     box.append(think);
 }
@@ -1170,7 +1183,9 @@ async function sendChat() {
         const v = Number($("kn-" + kn.k).value);
         if (Number.isFinite(v)) body[kn.k] = kn.k === "top_k" || kn.k === "max_tokens" ? Math.trunc(v) : v;
     }
-    body.enable_thinking = $("kn-thinking").checked;
+    if (thinkTouched) {   // untouched: send nothing, so the family's own default stands
+        body.enable_thinking = $("kn-thinking").checked;
+    }
     const el = addBubble("assistant");
     let acc = "";
     let accThink = "";
