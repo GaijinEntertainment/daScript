@@ -30,8 +30,8 @@ gate; a test that silently vanishes on one platform is a defect.
 image fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated;
 reference dumps live beside them in the oracle directory, each recording the exact `llama-mtmd-debug`
 / `llama-mtmd-cli` invocation that minted it, so regeneration is a command, not archaeology.
-Procedural fixtures and their distilled expectations live in-repo and run model-free; a model-gated
-vision test skips-as-PASS explicitly.
+
+**A procedural vision fixture and its distilled expectations live in-repo and run model-free.**
 
 **Every function whose signature or body changed — new, moved, extracted, or rewritten — ships a
 test for the bit itself** (a signature widening with an unchanged body counts: the new receivers are
@@ -85,13 +85,13 @@ exempt, as is the `--tok` cell in `benchmarks/lcpp_bench.das`, which dispatches 
 rig is a defect; the one sanctioned sub-model instrument is the kernel A/B lab. A tutorial's printed
 wall-clock is teaching output, feeding no board (`ARCHITECTURE.md` §2.5).
 
-**A new servable capability updates the profiling app in the same arc.** A modality, a family,
-or a serving path that a user can wait on gets its cell in the rigs `PROFILE.md` documents — not
-a bench beside it, and not a number quoted from a script that no longer exists. The cell is what
-makes the measurement reproducible by someone else and comparable to the next one: it states its
-quant mode, calls `tune_gate()`, and stamps box and engine provenance, so a number can never
-silently describe a format nobody serves or a kernel set nobody ships. A timing figure that
-reaches a doc, a ledger, or a PR without a cell behind it is a defect.
+**A new servable capability gets its cell in the rigs `PROFILE.md` documents, in the same arc.**
+A modality, a family, or a serving path a user can wait on counts — not a bench beside the rigs,
+and not a number quoted from a script that no longer exists.
+
+**A timing figure that reaches a doc, a ledger, or a PR without a cell behind it is a defect.**
+The cell states its quant mode and stamps box and engine provenance, so a number can never
+silently describe a format nobody serves or a kernel set nobody ships.
 
 **A kernel A/B lab under `benchmarks/` is a decision instrument, not a record rig.** It answers a
 kernel-join question by interleaved same-instrument A/B under a bit-exact cross-arm gate; hand-rolled
@@ -304,14 +304,16 @@ Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 
 
 **A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
 tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
-decides the question for a whole file (gemma-4's shipped "BF16" mmproj is F32 for the patch
-embedder and BF16 only for the projection). A plane split that follows the FILE rather than a
-runtime knob takes ONE image tag, with the meta flags describing the layout.
+decides the question for a whole file, because a shipped file mixes them (`ARCHITECTURE.md` §1.7b).
+A plane split that follows the FILE rather than a runtime knob takes ONE image tag, with the meta
+flags describing the layout.
 
 **A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
-as red**, and every image a test feeds an embedder is either a procedural fixture the test builds
-or previewable via the `DASLLAMA_VISION_DUMP` knob — a red never requires adding instrumentation
-before a human can see what the model saw.
+as red.**
+
+**Every image a test feeds an embedder is a procedural fixture the test builds, or previewable via
+the `DASLLAMA_VISION_DUMP` knob** — a red never requires adding instrumentation before a human can
+see what the model saw.
 
 **A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
 from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
@@ -325,8 +327,10 @@ renderer. A family whose template declares no marker pair has no arm for that me
 
 **A scheduler stream carrying media rows neither reads nor writes the prefix cache.** Cache keys
 are token ids and the KV past the splice does not follow from them, so a media stream skips
-`prefix_attach` at admit and `donate_stream` at reap. Its rows also eval as ONE prefill quantum:
-the non-causal flag is per call, so a chunk boundary inside the span would change the mask.
+`prefix_attach` at admit and `donate_stream` at reap.
+
+**A media stream's rows eval as ONE prefill quantum.** The non-causal flag is per call, so a chunk
+boundary inside the span would change the mask.
 
 **A media splice is expressed as two token spans plus a row block, everywhere it appears.** The
 engine's `render_turn_image_`, the scheduler's `(prompt, media_at, media)` triple and the server's

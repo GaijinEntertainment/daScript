@@ -309,6 +309,9 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
   im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
   projector family, following the audio tower pattern; shared pieces move up, never sideways.
+  A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
+  embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
+  follows its source tensor, per tensor, never a per-file verdict.
 
 ### 1.8 Instrumentation and support
 
