@@ -12,16 +12,6 @@ require _stackwalk_common
 // object while the user initializer runs; it must gate live at parks inside the ctor.
 // disable_auto_inline pins the wrapper as a real interpreted frame.
 
-def churn_strings(tag : string) : int {
-    var junk <- [for (i in range(200)); "junk/{tag}/segment_{i}/{i * 3}_tail"]
-    var total = 0
-    for (s in junk) {
-        total += length(s)
-    }
-    delete junk
-    return total
-}
-
 class Talker {
     msg : string
     churned : int

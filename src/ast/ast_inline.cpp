@@ -526,23 +526,19 @@ namespace das {
             }
         };
 
-        // stamps spliced material (manufactured temps + the cloned CALLEE subtree) with the
-        // host call-site location - ATTRIBUTION ONLY: stack traces and at-keyed macros read
-        // the splice as the call site. liveness is NOT gated by these ranges anymore - the
-        // GC / stackwalk locals gate runs on frame positions stamped at simulate over the
-        // final tree (see LocalVariableInfo::openPos), which encode manufactured code
-        // exactly. runs BEFORE InlineBodyRewriter so substituted caller expressions keep
-        // their own at.
+        // attribution only: stack traces and at-keyed macros read the splice as the call
+        // site; liveness gating uses frame positions (LocalVariableInfo::openPos). runs
+        // BEFORE InlineBodyRewriter so substituted caller expressions keep their own at
         class SpliceAtStamp : public Visitor {
         public:
-            SpliceAtStamp ( const LineInfo & callAt ) : at(callAt) {}
-            LineInfo at;
+            SpliceAtStamp ( const LineInfo & at ) : callAt(at) {}
+            LineInfo callAt;
             bool markGenerated = true;
         protected:
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             virtual void preVisitExpression ( Expression * expr ) override {
                 Visitor::preVisitExpression(expr);
-                expr->at = at;
+                expr->at = callAt;
                 // a spliced clone is compiler-inserted: the original body is linted at its
                 // definition, and at-keyed macros must not re-analyze the copy (the stamp
                 // makes it look host-authored, defeating their foreign-file heuristics).

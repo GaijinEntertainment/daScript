@@ -43,6 +43,14 @@ def w_outer(var w : CollectingWalker?) {    // carrier by transitivity, depth 3
     w_mid(w)
 }
 
+// single-statement void invoker of a block: fastcall, no frame - and no direct call
+// edge to a collector, so the static denial can't see it either. [never_inline] blocks
+// the SPLICE, not the fastcall - spliced away there would be no carrier to test
+[never_inline]
+def fc_wrap(b : block) {
+    invoke(b)
+}
+
 [test]
 def test_collect_chains_stay_walkable(t : T?) {
     t |> run("the control: a same-shape non-carrier wrapper is frameless (fastcall)") @(t : T?) {
@@ -68,5 +76,21 @@ def test_collect_chains_stay_walkable(t : T?) {
         unsafe {
             delete w
         }
+    }
+    t |> run("a collect through a frameless invoke carrier refuses") @(t : T?) {
+        // the invoke edge is outside the static fastcall denial, so fc_wrap has no frame;
+        // the walk above it is owner-mismatched, and the position owner check refuses
+        // instead of gating locals with fc_wrap's numbering
+        let live = "must_stay_{length("x")}"
+        var refused = false
+        try {
+            fc_wrap() {
+                unsafe(heap_collect(true, true))
+            }
+        } recover {
+            refused = true
+        }
+        t |> success(refused, "the collect must refuse under a frameless invoke carrier")
+        t |> equal(live, "must_stay_1")
     }
 }

@@ -9,7 +9,9 @@ require _stackwalk_common
 // the inliner's return rewrites move the statements after an early return into a
 // manufactured tail block; locals declared in that tail must still gate live at parks
 // inside it - in spliced bodies (ReturnStoreRewrite) and in the function's own frame
-// (ReturnCanonicalization mutates candidate bodies whether or not they ever splice)
+// (ReturnCanonicalization mutates candidate bodies whether or not they ever splice).
+// strings are runtime-built throughout: a const-foldable single-use let gets legally
+// forwarded past the park, and then there is nothing to walk
 
 [inline]
 def scan_then_walk(var w : CollectingWalker?; xs : array<int>; needle : int) : int {
@@ -24,9 +26,7 @@ def scan_then_walk(var w : CollectingWalker?; xs : array<int>; needle : int) : i
 }
 
 // no [inline]: small and loop-free grants the canonicalization pre-pass candidacy on
-// its own, and a plain function's address can be taken for the unspliced-call arm.
-// runtime-built strings throughout the file: a const-foldable single-use let gets
-// legally forwarded past the park by the optimizer, and then there is nothing to walk
+// its own, and a plain function's address can be taken for the unspliced-call arm
 def guard_then_walk(var w : CollectingWalker?; flag : bool) : int {
     if (flag) {
         return 0

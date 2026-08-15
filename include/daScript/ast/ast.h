@@ -1527,16 +1527,12 @@ namespace das
         AnnotationInfo * makeAnnotationList ( const AnnotationList & list, uint32_t & count );
         void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
-        void stampFramePositions ( ExpressionPtr body, uint32_t spaceHash );
+        void stampFramePositions ( ExpressionPtr body, uint32_t spaceId );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
-        // per-variable liveness intervals in frame positions, filled by stampFramePositions
-        // and read back by appendLocalVariables (see LocalVariableInfo::openPos)
-        das_hash_map<Variable *, pair<uint32_t,uint32_t>> varFramePos;
-        // space id of the function currently being simulated - block frames created inside
-        // it inherit this as their FuncInfo::spaceHash (their positions live in its space)
-        uint32_t currentSpaceId = 0;
+        das_hash_map<Variable *, FramePosInterval> varFramePos;    // filled by stampFramePositions, read by appendLocalVariables
+        uint32_t currentSpaceId = 0;    // owner of the function being simulated; block frames inherit it
     public:
         das_hash_map<string,StructInfo *>        smn2s;
         das_hash_map<string,TypeInfo *>          tmn2t;

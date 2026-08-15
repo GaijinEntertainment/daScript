@@ -9,24 +9,8 @@ require dastest/testing_boost public
 require _stackwalk_common
 
 // comprehension lowering manufactures a closure whose only local is the accumulator
-// array; it must gate live at parks inside the element expression - it is the only
-// root of everything accumulated so far. disable_auto_inline keeps the lowered
-// closure an invoked block rather than a splice.
-
-def walk_len(var w : CollectingWalker?; s : string) : int {
-    run_walk(w)
-    return length(s)
-}
-
-def churn_strings(tag : string) : int {
-    var junk <- [for (i in range(200)); "junk/{tag}/segment_{i}/{i * 3}_tail"]
-    var total = 0
-    for (s in junk) {
-        total += length(s)
-    }
-    delete junk
-    return total
-}
+// array - the only root of everything accumulated so far. disable_auto_inline keeps
+// the lowered closure an invoked block rather than a splice.
 
 def make_name(idx : int; var since : int&) : string {
     let nm = "root/dir_{idx / 5}/file_{idx % 5}.das"
@@ -61,8 +45,7 @@ def test_stackwalk_comprehension(t : T?) {  // nolint:STYLE038 - flat list of in
         }
     }
     t |> run("accumulated strings survive collects during the comprehension") @(t : T?) {
-        // the accumulator is the only root of everything built so far; per-instance block
-        // infos + owner-tagged positions keep it gated live through the whole loop
+        // per-instance block infos + owner-tagged positions keep it gated live through the loop
         var since = 0
         let names <- [for (i in range(60)); make_name(i, since)]
         var idx = 0

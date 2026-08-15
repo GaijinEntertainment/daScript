@@ -1046,10 +1046,10 @@ namespace debugger {
             if ( info && info->locals ) {
                 if ( walker->canWalkVariables() ) {
                     walker->onBeforeVariables();
-                    uint32_t framePos = lineFramePos(handoff, info->spaceHash);
+                    uint32_t framePos = lineFramePos(handoff, info->spaceId);
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
+                        bool inScope = isLiveAt(lv, framePos);
                         if ( !walker->canWalkOutOfScopeVariables() && !inScope ) {
                             continue;
                         }

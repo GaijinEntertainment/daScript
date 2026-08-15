@@ -24,21 +24,17 @@ namespace das {
         vector<tuple<VariablePtr,LineInfo,bool>> locals;
     };
 
-    // dense preorder position stamp over the FINAL tree: every expression's `at` copy gets
-    // its 1-based frame position in last_column, tagged via last_line == LINEINFO_FRAME_POS,
-    // so the sim nodes built from these ats carry positions into pp->line and the GC /
-    // stackwalk locals gate tests integer intervals instead of source ranges. lifetime is
-    // structural: a local opens after its own init subtree and closes with its scope -
-    // manufactured blocks, one-line scopes, and sibling arms all encode exactly
+    // numbers the FINAL tree in dense preorder; a local's interval opens after its own
+    // init subtree and closes with its scope
     class FramePositionStamp : public Visitor {
     public:
-        FramePositionStamp ( das_hash_map<Variable *, pair<uint32_t,uint32_t>> & vfp, uint32_t spaceH )
-            : intervals(vfp), space(LINEINFO_FRAME_POS_TAG | spaceH) {}
+        FramePositionStamp ( das_hash_map<Variable *, FramePosInterval> & vfp, uint32_t spaceId )
+            : intervals(vfp), taggedSpace(LINEINFO_FRAME_POS_TAG | spaceId) {}
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             pos ++;
-            expr->at.last_line = space;
+            expr->at.last_line = taggedSpace;
             expr->at.last_column = pos;
         }
         virtual void preVisit ( ExprBlock * block ) override {
@@ -46,7 +42,7 @@ namespace das {
             scopes.emplace_back();
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            for ( auto v : scopes.back() ) intervals[v].second = pos;
+            for ( auto v : scopes.back() ) intervals[v].close = pos;
             scopes.pop_back();
             return Visitor::visit(block);
         }
@@ -54,23 +50,23 @@ namespace das {
             Visitor::preVisitLet(let,var,last);
             // a no-init declaration opens right here; visitLetInit below moves the open
             // point past the init for initialized ones
-            intervals[var].first = pos;
+            intervals[var].open = pos;
             if ( !scopes.empty() ) scopes.back().push_back(var);
             bodyVars.push_back(var);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * let, const VariablePtr & var, Expression * that ) override {
-            intervals[var].first = pos;
+            intervals[var].open = pos;
             return Visitor::visitLetInit(let,var,that);
         }
         virtual void preVisitForBody ( ExprFor * expr, Expression * body ) override {
             Visitor::preVisitForBody(expr,body);
             for ( auto & var : expr->iteratorVariables ) {
-                intervals[var].first = pos;
+                intervals[var].open = pos;
                 bodyVars.push_back(var);
             }
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
-            for ( auto & var : expr->iteratorVariables ) intervals[var].second = pos;
+            for ( auto & var : expr->iteratorVariables ) intervals[var].close = pos;
             return Visitor::visit(expr);
         }
         virtual void preVisit ( ExprLabel * expr ) override {
@@ -78,10 +74,10 @@ namespace das {
             sawLabel = true;    // a goto can enter an interval past its open point
         }
     public:
-        das_hash_map<Variable *, pair<uint32_t,uint32_t>> & intervals;
+        das_hash_map<Variable *, FramePosInterval> & intervals;
         vector<vector<Variable *>> scopes;
         vector<Variable *> bodyVars;
-        uint32_t space = 0;
+        uint32_t taggedSpace = 0;
         uint32_t pos = 0;
         bool sawLabel = false;
     };
@@ -107,12 +103,14 @@ namespace das {
         }
     }
 
-    void DebugInfoHelper::stampFramePositions ( ExpressionPtr body, uint32_t spaceHash ) {
-        FramePositionStamp stamp(varFramePos, spaceHash);
+    void DebugInfoHelper::stampFramePositions ( ExpressionPtr body, uint32_t spaceId ) {
+        FramePositionStamp stamp(varFramePos, spaceId);
         body->visit(stamp);
         if ( stamp.sawLabel ) {
             // a labeled body (generator lowering) admits jumps into intervals - keep every
-            // local conservatively always-live rather than gating on entry order
+            // local conservatively always-live rather than gating on entry order. belt only:
+            // today's lowering erases generator lets into capture fields, so no test can
+            // reach this valve - it guards future label-emitting transforms
             for ( auto v : stamp.bodyVars ) varFramePos[v] = { 0u, ~0u };
         }
     }
@@ -136,10 +134,11 @@ namespace das {
             lvar->cmres = var->aliasCMRES;
             auto ivIt = varFramePos.find(var);
             if ( ivIt != varFramePos.end() ) {
-                lvar->openPos = ivIt->second.first;
-                lvar->closePos = ivIt->second.second;
+                lvar->openPos = ivIt->second.open;
+                lvar->closePos = ivIt->second.close;
             } else {
-                // untracked (no stamp ran over this body) - conservatively always live
+                // untracked - conservatively always live. no suite reaches this arm today
+                // (instrumented run: 0 hits); belt for producers the stamp never visited
                 lvar->openPos = 0;
                 lvar->closePos = ~0u;
             }
@@ -243,7 +242,7 @@ namespace das {
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->locals = nullptr;
         fni->localCount = 0;
-        fni->spaceHash = 0;
+        fni->spaceId = 0;
         fni->annotations = makeAnnotationList(fn.annotations, fni->annotation_count);
         fni->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         if ( !unique ) fmn2f[mangledName] = fni;

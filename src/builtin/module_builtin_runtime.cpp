@@ -1141,7 +1141,7 @@ namespace das
 
     int32_t builtin_frame_position ( Context *, LineInfoArg * info ) {
         // the call site's frame position (see LINEINFO_FRAME_POS_TAG); 0 when the program
-        // carries no positions (no gc/debugger) or the line is foreign
+        // carries no positions (no gc/debugger)
         return ( info && (info->last_line & LINEINFO_FRAME_POS_TAG) ) ? int32_t(info->last_column) : 0;
     }
 

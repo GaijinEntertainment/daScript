@@ -653,11 +653,10 @@ namespace das
                 }
                 if ( info->locals ) {
                     tp << "LOCALS:\n";
-                    uint32_t framePos = lineFramePos(handoff, info->spaceHash);
+                    uint32_t framePos = lineFramePos(handoff, info->spaceId);
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
-                        if ( !inScope ) continue;
+                        if ( !isLiveAt(lv, framePos) ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
                             addr = (char *)pp->cmres;
@@ -928,18 +927,14 @@ namespace das
     };
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
-        // refuse dishonest frames BEFORE marking - the error path must leave both heaps
-        // unmarked. a frame above a broken line handoff can't have its locals attributed:
-        // they fail the visibility gate and get swept while live. gated on persistent+gc
-        // so a direct C++ collectHeap on a non-GC context keeps its old silent no-op
-        // (the mark() bail-outs below); fastcall carriers were denied frames at compile
-        // time (needCallerStackFrame) - nothing to check for them here
+        // refuse unattributable frames BEFORE marking - the error path must leave both
+        // heaps unmarked. the check is owner-tagged positions (LINEINFO_FRAME_POS_TAG):
+        // a frameless carrier between two frames leaves its own position in the handoff,
+        // and the owner mismatch is exactly what this catches - the invoke edge the static
+        // fastcall denial can't see. gated on persistent+gc so a direct C++ collectHeap on
+        // a non-GC context keeps its old silent no-op (the mark() bail-outs below)
         if ( persistent && gcEnabled ) {
             char * scanSp = stack.ap();
-            // liveness is gated on OWNED frame positions (see LocalVariableInfo::openPos and
-            // LINEINFO_FRAME_POS_TAG): a handoff that is null, unstamped, embedder-crafted,
-            // or owned by a DIFFERENT function (a frameless fastcall carrier sits between -
-            // the invoke edge the static denial can't see) is unattributable
             const LineInfo * scanHandoff = at;
             while ( scanSp < stack.top() ) {
                 Prologue * pp = (Prologue *) scanSp;
@@ -949,11 +944,11 @@ namespace das
                     info = ( iblock & 1 ) ? ((Block *)(iblock & ~1))->info : pp->info;
                 }
                 if ( info && info->locals && info->localCount
-                        && !lineFramePos(scanHandoff, info->spaceHash) ) {
+                        && !lineFramePos(scanHandoff, info->spaceId) ) {
                     throw_error_at(at, "heap collection can't attribute locals of '%s' - "
                         "the frame was entered through a compiled (AOT/JIT) frame, a "
-                        "position-less line, or a frameless (fastcall) carrier",
-                        info->name ? info->name : "?");
+                        "position-less or embedder-crafted line, or a frameless (fastcall) "
+                        "carrier", info->name ? info->name : "?");
                 }
                 scanHandoff = info ? pp->line : nullptr;
                 scanSp += info ? info->stackSize : pp->stackSize;
@@ -1027,12 +1022,11 @@ namespace das
                     walker.prepare();
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
-                uint32_t framePos = lineFramePos(handoff, info->spaceHash);
+                uint32_t framePos = lineFramePos(handoff, info->spaceId);
                 if ( info->locals && framePos ) {
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
-                        if ( !inScope ) continue;
+                        if ( !isLiveAt(lv, framePos) ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
                             addr = (char *)pp->cmres;

@@ -63,7 +63,7 @@ def verify_files(t : T?; files : array<string>; tag : string) {
 }
 
 // arg 0's initializer collects (validate on) while arg 1's temp slot is still raw
-// stack garbage - the column ladder must keep that slot invisible to the walk
+// stack garbage - its position interval must keep that slot invisible to the walk
 def churn_and_collect_str(seed : int) : string {
     var junk <- [for (i in range(400)); "garbage_{seed}_{i}_padding_padding"]
     delete junk
@@ -92,8 +92,8 @@ def pick_first(a, _b : string) : string {
     return r
 }
 
-// inline-eligible callee whose own `for` hosts the collect - pins the stamped
-// ExprFor visibility (infer does not re-derive it, unlike let visibility)
+// inline-eligible callee whose own `for` hosts the collect - pins the iterator
+// variable's position interval through the splice
 def scan_with_collect(names : array<string>; var since : int&) : int {
     var total = 0
     for (nm in names) {

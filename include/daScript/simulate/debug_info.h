@@ -599,19 +599,17 @@ namespace das
     };
 
     // runtime call-site LineInfo copies are stamped: last_column = 1-based frame position,
-    // last_line = LINEINFO_FRAME_POS_TAG | hash31 of the OWNING function (whose body holds
-    // the call node; an honest range can never reach the tag bit). the owner makes a missing
-    // frame detectable: a frameless (fastcall) carrier between two frames leaves ITS position
-    // in the handoff, and the owner mismatch at the next frame down refuses the walk instead
-    // of gating locals with a foreign function's numbers. see LocalVariableInfo::openPos
+    // last_line = LINEINFO_FRAME_POS_TAG | owner id (31 bits) of the OWNING function (whose
+    // body holds the call node; an honest range can never reach the tag bit). the owner makes
+    // a missing frame detectable: a frameless (fastcall) carrier between two frames leaves
+    // ITS position in the handoff, and the owner mismatch at the next frame down refuses the
+    // walk instead of gating locals with a foreign function's numbers
     constexpr uint32_t LINEINFO_FRAME_POS_TAG = 0x80000000u;
 
-    // recover the frame position from a runtime line copy, iff it is stamped AND owned by
-    // the function whose locals are being gated; 0 = unattributable (null, embedder-crafted,
-    // unstamped, or a frameless-carrier handoff) - the locals gate skips or refuses
-    inline uint32_t lineFramePos ( const LineInfo * li, uint32_t spaceHash ) {
+    // position if the line is stamped and owned by spaceId, else 0 (skip or refuse)
+    inline uint32_t lineFramePos ( const LineInfo * li, uint32_t spaceId ) {
         if ( !li || !(li->last_line & LINEINFO_FRAME_POS_TAG) ) return 0u;
-        return ( (li->last_line & ~LINEINFO_FRAME_POS_TAG) == spaceHash ) ? li->last_column : 0u;
+        return ( (li->last_line & ~LINEINFO_FRAME_POS_TAG) == spaceId ) ? li->last_column : 0u;
     }
 
     // position-space owner id = function index + 1 (0 stays "no space"); indexes are
@@ -621,7 +619,7 @@ namespace das
     }
 
     struct LocalVariableInfo : TypeInfo {
-        LineInfo        visibility;
+        LineInfo        visibility;     // display only - liveness is gated by openPos/closePos
         const char *    name;
         uint32_t        stackTop;
         union {
@@ -630,12 +628,20 @@ namespace das
             };
             uint32_t    localFlags;
         };
-        // liveness interval in frame positions (dense preorder over the final AST, stamped
-        // at simulate): the local is live at a park iff openPos < pos <= closePos. source
-        // ranges can't encode manufactured or one-line scopes; positions can - `visibility`
-        // above stays for display only
+        // liveness interval in frame positions (dense preorder over the final tree,
+        // stamped at simulate); see isLiveAt below
         uint32_t        openPos;
         uint32_t        closePos;
+    };
+
+    // live at a park iff the position sits past the local's own init and inside its scope
+    inline bool isLiveAt ( const LocalVariableInfo * lv, uint32_t pos ) {
+        return pos > lv->openPos && pos <= lv->closePos;
+    }
+
+    struct FramePosInterval {
+        uint32_t open = 0;
+        uint32_t close = 0;
     };
 
     struct FuncInfo {
@@ -661,10 +667,9 @@ namespace das
         uint32_t                localCount;
         uint32_t                globalCount;
         uint32_t                annotation_count;
-        // position-space owner (see LINEINFO_FRAME_POS_TAG): frameSpaceId of the function
-        // whose numbering gates this frame's locals; a block frame carries its HOST's.
-        // 0 = no position space (builtins, AOT/JIT frames) - every gate check refuses
-        uint32_t                spaceHash;
+        // owner whose numbering gates this frame's locals; a block frame carries its
+        // host's; 0 = none (builtins, AOT/JIT frames) - every gate check refuses
+        uint32_t                spaceId;
         FuncInfo() = default;
         FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
                 TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags,
@@ -683,7 +688,7 @@ namespace das
             globalCount = 0;
             annotations = _annotations;
             annotation_count = _annotation_count;
-            spaceHash = 0;
+            spaceId = 0;
         }
     };
 

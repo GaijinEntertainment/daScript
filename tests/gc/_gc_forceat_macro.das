@@ -14,8 +14,7 @@ require _stackwalk_common
 [structure_macro(name = "gen_forced_walker")]
 class GenForcedWalker : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        // runtime-built string: a const-foldable single-use let gets legally forwarded
-        // past the park by the optimizer, and then there is nothing to walk
+        // the string is runtime-built so the let survives to the park (no const forwarding)
         var fn = qmacro_function("forced_walker") $(var w : CollectingWalker?) : int {
             let forced_precious = "FORCED_{length(w.frames)}"
             run_walk(w)

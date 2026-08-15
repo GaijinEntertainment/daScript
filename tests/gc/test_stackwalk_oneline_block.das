@@ -10,11 +10,6 @@ require _stackwalk_common
 // parser - no compiler transform involved; its locals must still gate live at parks
 // inside it
 
-def walk_len(var w : CollectingWalker?; s : string) : int {
-    run_walk(w)
-    return length(s)
-}
-
 [test]
 def test_stackwalk_oneline_block(t : T?) {
     t |> run("local of a one-line user block is live at a park inside it") @(t : T?) {

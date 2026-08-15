@@ -9,10 +9,9 @@ require _stackwalk_common
 // spliced sibling arms share the call-site line, and sibling scopes REUSE stack
 // offsets - a let from the arm that never ran must NOT gate live at a park in the
 // other arm (its slot holds the other arm's value: a type-confused walk), while the
-// running arm's own let must
+// running arm's own let must. strings are runtime-built: a const-foldable single-use
+// let gets legally forwarded past the park, and then there is nothing to walk
 
-// runtime-built strings: a const-foldable single-use let gets legally forwarded past
-// the park by the optimizer, and then there is nothing to walk
 [inline]
 def pick_arm(var w : CollectingWalker?; flag : bool) : int {
     if (flag) {

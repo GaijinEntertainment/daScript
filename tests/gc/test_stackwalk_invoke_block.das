@@ -10,11 +10,6 @@ require _stackwalk_common
 // scope wrapper holds the argument temps; a one-source-line invoke gives that wrapper
 // a degenerate range, and the temps must still gate live at parks inside the body
 
-def walk_len(var w : CollectingWalker?; s : string) : int {
-    run_walk(w)
-    return length(s)
-}
-
 [test]
 def test_stackwalk_invoke_block(t : T?) {
     t |> run("arg temp of a one-line invoked block is live at a body park") @(t : T?) {
