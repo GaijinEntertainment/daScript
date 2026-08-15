@@ -128,7 +128,13 @@ function AND every non-`perm=`-pinned `[tuned]` loop-hint kernel across
 the declaring + covered modules (dasLLAMA covers its math/quant modules, so
 first-start auto-tune sweeps loop hints too). The demand is AST-derived; a
 tuner that misses a demanded kernel re-tunes every start, and the startup
-warning **names the missing kernels**. The winners themselves live in the ONE
+warning **names the missing kernels**. `version_of=` (optional,
+`"module/CONST"`) pins the scope to a library version: the sidecar's
+provenance must record that int constant's current value (under the
+lowercased constant name; `version_key=` overrides), so bumping the constant
+on kernel work invalidates every box's winners. The pin rides the same
+completeness check everywhere it runs — the policy rail, `daspkg release
+--quick`'s inherit gate, resolver adoption. The winners themselves live in the ONE
 per-app file — every library's tuner **upserts its own keys** and preserves
 everyone else's (that upsert is the isolation contract; "is this scope tuned"
 is per-key completeness, not file existence). Reading winners needs no scope
@@ -254,6 +260,18 @@ identity is stale too — measurements are a property of the box — unless
 adopts a compatible sibling box's mint deliberately. The identity compare runs
 through `box_match_key`, which folds the volatile Windows `os_build` UBR, so a
 monthly cumulative update does not re-tune while a real OS-version change does.
+A scope declaring `version_of=` adds a third axis: a sidecar minted at another
+library version reads incomplete for that scope alone.
+
+Every "untuned" refusal **names its reason** — stale-vs-binary (both dates),
+foreign box (both identities), version mismatch (both values), missing entries
+(the kernel names) — via `tune_sidecar_verdict`; a bare "untuned" no longer
+leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
+points at a file that reads untuned, the compile prints one loud warning per
+scope instead of silently stamping fallbacks — an explicit manifest disables
+the policy rail, so nothing else would say so, and a measurement run believing
+its winners are live while stamping fallbacks is the exact hazard the sidecar
+model exists to prevent.
 
 Two seams let a supervisor or a network service participate:
 

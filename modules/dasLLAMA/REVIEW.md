@@ -341,7 +341,8 @@ and doc line that named the old value names the new one in the same diff.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel work
 adds, removes, or edits a compute-kernel body or variant set — CPU tiers, generated GEMM families, GPU
-kernel classes, KV-codec and convert kernels — or a tune family's registration.
+kernel classes, KV-codec and convert kernels — or a tune family's registration. A bump in a diff with
+no kernel work is a defect too: equal versions must keep meaning an equal kernel roster.
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can this
 value change between dispatches? If yes it is data and belongs in a uniform or a kargs struct; if no

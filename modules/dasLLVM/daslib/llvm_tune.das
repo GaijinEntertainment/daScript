@@ -314,6 +314,27 @@ def private sidecar_box(path : string; mkey : string) : string {
     return box
 }
 
+// provenance[key] of the sidecar at `path` as a string, "" when absent/unreadable; a numeric
+// value stringifies (tune_provenance_note writes strings, but a hand-edited file may carry a number)
+def private sidecar_prov_value(path : string; key : string) : string {
+    var r = ""
+    let text = fread(path)
+    if (!empty(text)) {
+        var err = ""
+        var doc = read_json(text, err)
+        if (doc != null) {
+            let v = doc?["provenance"]?[key]
+            if (v != null && v is _string) {
+                r = v as _string
+            } elif (v != null && v is _number) {
+                r = "{int(v as _number)}"
+            }
+            delete_json(doc)
+        }
+    }
+    return r
+}
+
     //! True when the sidecar predates the running binary OR carries a different box identity —
     //! the stale-file and cross-box-copy traps; stale reads as ABSENT everywhere. A
     //! `provenance.applied_box` naming this box overrides the identity check (resolver adoption).
@@ -748,6 +769,48 @@ struct private TuneScope {
     covers : string      // ';'-joined extra modules whose [tune]/[tuned] kernels belong to this scope
     manifestPath : string
     tunerPath : string   // resolved against the declaring file; "" = no tuner declared
+    versionKey : string      // provenance key the scope pins ("" = unpinned)
+    versionExpected : string // the code-side value version_of= resolved to at apply time
+}
+
+// `version_of = "module/CONST"` on a [tune_scope]: winners are valid only while the sidecar's
+// provenance records CONST's current (folded) value — the library bumps the const on kernel work.
+// Provenance key defaults to the lowercased const name (`version_key=` overrides); false = err says why.
+def private resolve_version_of(prog : Program?; spec, keyOverride : string;
+                               var vkey, vexp : string&; var err : string&) : bool {
+    let slash = find(spec, "/")
+    if (slash <= 0 || slash >= length(spec) - 1) {
+        err = "version_of=\"module/CONST\" - got \"{spec}\""
+        return false
+    }
+    let modName = slice(spec, 0, slash)
+    let constName = slice(spec, slash + 1)
+    var value = ""
+    var modFound = false
+    prog |> for_each_module() $(mod) {
+        if ("{mod.name}" == modName) {
+            modFound = true
+            mod |> for_each_global() $(gv) {
+                if ("{gv.name}" == constName) {
+                    let ci = gv.init ?as ExprConstInt
+                    if (ci != null) {
+                        value = "{ci.value}"
+                    }
+                }
+            }
+        }
+    }
+    if (!modFound) {
+        err = "version_of module '{modName}' is not in the compiling program"
+        return false
+    }
+    if (empty(value)) {
+        err = "version_of '{spec}' must name an int constant with a foldable initializer"
+        return false
+    }
+    vkey = empty(keyOverride) ? to_lower(constName) : keyOverride
+    vexp = value
+    return true
 }
 
 // declaring module name -> scope. [tune_policy] drives tuner runs off this bank; the [tune]
@@ -790,6 +853,9 @@ def private scope_fnames_joined(scope : TuneScope) : string {
             module_kernel_fnames(mod, fnames)
         }
     }
+    if (!empty(scope.versionKey)) {
+        fnames |> push("{TUNE_VERSION_TOKEN}{scope.versionKey}={scope.versionExpected}")
+    }
     let joined = join(fnames, ";")
     delete wanted
     delete fnames
@@ -827,6 +893,16 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
                     }
                     let cv = find_arg(ann.arguments, "covers")
                     if (cv is tString) { sc.covers = cv as tString }
+                    let vv = find_arg(ann.arguments, "version_of")
+                    if (vv is tString) {
+                        var keyOverride = ""
+                        let kov = find_arg(ann.arguments, "version_key")
+                        if (kov is tString) { keyOverride = kov as tString }
+                        var verr = ""
+                        // a bad spec already failed the library compile; a miss here just unpins
+                        resolve_version_of(prog, vv as tString, keyOverride,
+                            sc.versionKey, sc.versionExpected, verr)
+                    }
                     if (!empty(sc.scopeName) && !(seen |> key_exists(sc.scopeName))) {
                         seen |> insert(sc.scopeName)
                         found |> push(sc)
@@ -854,6 +930,9 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
                 module_kernel_fnames(mod, fnames)
             }
         }
+        if (!empty(sc.versionKey)) {
+            fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
+        }
         var fallbacks : array<string>
         for (fname in fnames) {
             for (st in compileStatus) {
@@ -877,6 +956,29 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
     return <- rows
 }
 
+// A scope's version pin travels INSIDE the ';'-joined demand list as one `@version:key=value`
+// token — every carrier of an fnames string (the guards, the scope-resolver contract, daspkg's
+// status walk) then enforces it with no signature change. '@' can never begin a function name.
+let TUNE_VERSION_TOKEN = "@version:"
+
+// the pin token holds: provenance[key] of the sidecar equals the recorded code-side value
+// (a malformed token never blocks — the [tune_scope] apply rejects those at declaration)
+def private version_token_satisfied(path : string; tok : string) : bool {
+    let kv = slice(tok, length(TUNE_VERSION_TOKEN))
+    let eq = find(kv, "=")
+    return true if (eq < 0)
+    return sidecar_prov_value(path, slice(kv, 0, eq)) == slice(kv, eq + 1)
+}
+
+// one demand-list entry against the sidecar: a kernel name wants a "kernels" entry, the
+// version token wants its provenance pin
+def private entry_satisfied(path : string; manifest : table<string; string>; fname : string) : bool {
+    if (fname |> starts_with(TUNE_VERSION_TOKEN)) {
+        return version_token_satisfied(path, fname)
+    }
+    return manifest |> key_exists(fname)
+}
+
 //! The demanded kernels in the ';'-joined `fnames` that LACK a sidecar entry — "" when
 //! complete. The loud half of the completeness check: a tuner that doesn't record a kernel
 //! it should re-tunes every start, and this names the drift so it's fixed in one glance.
@@ -885,7 +987,7 @@ def tune_sidecar_missing_entries(path : string; fnames : string) : string {
     var manifest <- read_manifest(path, found)
     var missing <- [for (fname in split(fnames, ";"));
         fname;
-        where !empty(fname) && !(found && manifest |> key_exists(fname))]
+        where !empty(fname) && !(found && entry_satisfied(path, manifest, fname))]
     delete manifest
     let r = join(missing, ";")
     delete missing
@@ -893,8 +995,8 @@ def tune_sidecar_missing_entries(path : string; fnames : string) : string {
 }
 
     //! Every kernel in the ';'-joined `fnames` has a `"kernels"` entry in the sidecar at `path`
-    //! (companions ride their main entry; "reference" counts). Missing/stale/unparsable means no
-    //! entries. This is the "is this scope tuned" predicate — file existence proves nothing.
+    //! (companions ride their main entry; "reference" counts; a `@version:` token checks its
+    //! provenance pin). Missing/stale/unparsable means no entries — file existence proves nothing.
 def tune_sidecar_entries_complete(path : string; fnames : string) : bool {
     var found = false
     var manifest <- read_manifest(path, found)
@@ -902,12 +1004,75 @@ def tune_sidecar_entries_complete(path : string; fnames : string) : bool {
     if (found) {
         for (fname in split(fnames, ";")) {
             if (!empty(fname)) {
-                complete &&= manifest |> key_exists(fname)
+                complete &&= entry_satisfied(path, manifest, fname)
             }
         }
     }
     delete manifest
     return complete
+}
+
+//! Why the sidecar at `path` does not satisfy the ';'-joined `fnames` demand: `complete` true
+//! means it does; otherwise `reason` is absent | stale-binary | foreign-box | unreadable |
+//! version | missing, and `detail` is the printable sentence the refusal lines carry.
+struct TuneSidecarVerdict {
+    complete : bool
+    reason : string
+    detail : string
+}
+
+    //! The named-reason form of `tune_sidecar_entries_complete` — same verdict plus WHY, so an
+    //! "untuned" refusal can say stale vs foreign vs missing instead of leaving the operator to
+    //! diff provenance by hand. Check order mirrors `tune_sidecar_stale`: mtime, then box.
+def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
+    if (empty(fnames)) {
+        return TuneSidecarVerdict(complete = true)
+    }
+    var sfs : FStat
+    if (empty(path) || !stat(path, sfs)) {
+        return TuneSidecarVerdict(reason = "absent", detail = "no sidecar at '{path}'")
+    }
+    var bfs : FStat
+    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
+        return TuneSidecarVerdict(reason = "stale-binary",
+            detail = "sidecar predates the running binary ({sfs.mtime} < {bfs.mtime}); a rebuild invalidates measured winners")
+    }
+    let theirs = sidecar_box(path, "{sfs.mtime}")
+    if (empty(theirs)) {
+        // unparsable json and provenance-less files land here — not a tune sidecar at all
+        return TuneSidecarVerdict(reason = "unreadable", detail = "sidecar carries no readable provenance")
+    }
+    if (box_match_key(theirs) != box_match_key(tune_box_identity())) {
+        return TuneSidecarVerdict(reason = "foreign-box",
+            detail = "sidecar was minted on '{theirs}', this box is '{tune_box_identity()}'")
+    }
+    var found = false
+    var inscope manifest <- read_manifest(path, found)
+    if (!found) {
+        return TuneSidecarVerdict(reason = "unreadable", detail = "sidecar exists but does not parse")
+    }
+    var inscope missing : array<string>
+    for (fname in split(fnames, ";")) {
+        continue if (empty(fname))
+        if (fname |> starts_with(TUNE_VERSION_TOKEN)) {
+            if (!version_token_satisfied(path, fname)) {
+                let kv = slice(fname, length(TUNE_VERSION_TOKEN))
+                let eq = find(kv, "=")
+                let key = slice(kv, 0, eq)
+                let got = sidecar_prov_value(path, key)
+                return TuneSidecarVerdict(reason = "version", detail = (empty(got)
+                    ? "sidecar records no {key} - minted before this pin; kernels have changed since"
+                    : "sidecar was minted at {key} {got}, the code is at {slice(kv, eq + 1)}; kernel work invalidates winners"))
+            }
+        } elif (!(manifest |> key_exists(fname))) {
+            missing |> push(fname)
+        }
+    }
+    if (!empty(missing)) {
+        let names = join(missing, ";")
+        return TuneSidecarVerdict(reason = "missing", detail = "missing entries: {names}")
+    }
+    return TuneSidecarVerdict(complete = true)
 }
 
 // ===== the perm grid =====
@@ -1382,10 +1547,26 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
         if (cv is tString) {
             covers = cv as tString
         }
+        var vkey = ""
+        var vexp = ""
+        let vv = find_arg(args, "version_of")
+        if (vv is tString) {
+            var keyOverride = ""
+            let kv = find_arg(args, "version_key")
+            if (kv is tString) {
+                keyOverride = kv as tString
+            }
+            var verr = ""
+            if (!resolve_version_of(get_ptr(compiling_program()), vv as tString, keyOverride, vkey, vexp, verr)) {
+                errors := "[tune_scope]: {verr}"
+                return false
+            }
+        }
         // overwrite, not error: shared-module macro state persists across compiles in one process
         g_scopes["{compiling_module().name}"] = TuneScope(scopeName = sname,
             modName = "{compiling_module().name}", covers = covers,
-            manifestPath = tune_manifest_path(), tunerPath = tuner)
+            manifestPath = tune_manifest_path(), tunerPath = tuner,
+            versionKey = vkey, versionExpected = vexp)
         return true
     }
 }
@@ -1688,9 +1869,9 @@ def private relay_line(line : string) {
 
 // The up-front promise. A tune is minutes of work that ends in a relaunch, so say both BEFORE
 // the wait — a user (or a supervisor) staring at a silent process cannot infer either.
-def private announce_tuning(scopeName : string; force, selfRestarts : bool) {
+def private announce_tuning(scopeName : string; force, selfRestarts : bool; detail : string) {
     if (tune_verbosity() == "silent") return
-    let why = force ? "re-tuning (--tune)" : "is untuned on this box"
+    let why = force ? "re-tuning (--tune)" : "is untuned on this box ({detail})"
     let tail = (selfRestarts
         ? "the process restarts itself when it is done"
         : "the process exits when it is done, and must be restarted to pick up the winners")
@@ -1743,7 +1924,8 @@ def public tune_suppress_mint(knob : string) {
     //! app's `main` and followed by `tune_auto_reexec()`. Tuning happens at RUNTIME because the
     //! winners are compile-time stamps. An empty or corrupt sidecar reads as untuned, so it self-heals.
 def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : string; force : bool; fnames : string) {
-    if (!force && tune_sidecar_entries_complete(manifestPath, fnames)) {
+    let v = tune_sidecar_verdict(manifestPath, fnames)
+    if (!force && v.complete) {
         return
     }
     if (!force && scope_resolved_externally(scopeName, manifestPath, fnames)) {
@@ -1752,16 +1934,17 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     }
     if (!force && !empty(g_mint_suppressed)) {
         if (tune_verbosity() != "silent") {
-            print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+            print("llvm_tune: scope '{scopeName}' is untuned ({v.detail}) - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
         }
         return
     }
-    announce_tuning(scopeName, force, true)
+    announce_tuning(scopeName, force, true, v.detail)
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
-    if (tune_sidecar_entries_complete(manifestPath, fnames)) {
+    let after = tune_sidecar_verdict(manifestPath, fnames)
+    if (after.complete) {
         g_tuned_scopes++
     } else {
-        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
+        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - {after.detail}\n")
     }
 }
 
@@ -1841,7 +2024,8 @@ def tune_interrupt_requested() : bool {
     //! the app's `main`: consults the scope resolver first, else runs the tuner; true = main
     //! returns immediately (winners are compile-time stamps), false = scope complete, carry on.
 def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : string; fnames : string) : bool {
-    if (tune_sidecar_entries_complete(manifestPath, fnames)) {
+    let v = tune_sidecar_verdict(manifestPath, fnames)
+    if (v.complete) {
         return false
     }
     if (scope_resolved_externally(scopeName, manifestPath, fnames)) {
@@ -1850,21 +2034,22 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     if (!empty(g_mint_suppressed)) {
         // false = carry on with fallback stamps, do not tune and do not stop main
         if (tune_verbosity() != "silent") {
-            print("llvm_tune: scope '{scopeName}' is untuned - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
+            print("llvm_tune: scope '{scopeName}' is untuned ({v.detail}) - mint SUPPRESSED ({g_mint_suppressed}); kernels run their fallback\n")
         }
         return false
     }
     if (empty(tunerPath)) {
-        print("llvm_tune: scope '{scopeName}' is untuned on this box\n")
+        print("llvm_tune: scope '{scopeName}' is untuned on this box ({v.detail})\n")
         print("llvm_tune: no tuner declared - produce {manifestPath} with the library's tuner, then restart\n")
         return true
     }
-    announce_tuning(scopeName, false, false)
+    announce_tuning(scopeName, false, false, v.detail)
     run_scope_tuner(TuneScope(scopeName = scopeName, manifestPath = manifestPath, tunerPath = tunerPath))
-    if (tune_sidecar_entries_complete(manifestPath, fnames)) {
+    let after = tune_sidecar_verdict(manifestPath, fnames)
+    if (after.complete) {
         print("llvm_tune: scope '{scopeName}' tuned -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
     } else {
-        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
+        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - {after.detail}\n")
     }
     return true
 }
@@ -1904,6 +2089,25 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
         }
     }
     return <- rows
+}
+
+// Fix-2 dedup: warn once per (scope, manifest) per process — infer passes re-run, and shared
+// macro-module state persists across compiles in one process
+var private g_manifest_warned : table<string>
+
+// DAS_TUNE_MANIFEST disables the policy rail (explicit manifest = manual) — but a pointed-at
+// file that reads untuned means every kernel silently stamps its fallback while the operator
+// believes the winners are live: the one measurement hazard worth a loud line
+def private warn_manifest_untuned() {
+    return if (empty(g_env_tune.tune_manifest) || tune_stamp_free_gate() || tune_mode() != "normal")
+    for (scope in values(g_scopes)) {
+        let key = "{scope.scopeName}|{scope.manifestPath}"
+        continue if (g_manifest_warned |> key_exists(key))
+        let v = tune_sidecar_verdict(scope.manifestPath, scope_fnames_joined(scope))
+        continue if (v.complete)
+        g_manifest_warned |> insert(key)
+        print("llvm_tune: WARNING DAS_TUNE_MANIFEST={g_env_tune.tune_manifest}: scope '{scope.scopeName}' reads untuned ({v.detail}); kernels run fallback stamps\n")
+    }
 }
 
     // AOT runs no policy; grid-mode children manage their own manifest (also the recursion guard);
@@ -1977,7 +2181,9 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             continue if (seen |> key_exists(scope.scopeName))
             seen |> insert(scope.scopeName)
             // per-scope KEY completeness, not file existence — the sidecar is shared
-            continue if (!force && tune_sidecar_entries_complete(scope.manifestPath, scope_fnames_joined(scope)))
+            let scopeFnames = scope_fnames_joined(scope)
+            let v = tune_sidecar_verdict(scope.manifestPath, scopeFnames)
+            continue if (!force && v.complete)
             if (!empty(envNote)) {
                 print(envNote)
                 envNote = ""
@@ -1990,9 +2196,9 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                     autoScopes |> push(scope)
                 }
             } elif (policy == "error") {
-                errors = "[tune_policy]: scope '{scope.scopeName}' is untuned on this box - run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
+                errors = "[tune_policy]: scope '{scope.scopeName}' is untuned on this box ({v.detail}) - run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
             } elif (policy == "warn") {
-                print("llvm_tune: WARNING scope '{scope.scopeName}' is untuned on this box (fallback stamps in effect)\nllvm_tune: run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)\n")
+                print("llvm_tune: WARNING scope '{scope.scopeName}' is untuned on this box ({v.detail}); fallback stamps in effect\nllvm_tune: run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)\n")
             } elif (policy == "restart") {
     // graceful guard, not exit(): a hard exit from an [init] skips environment shutdown
                 if (!(func.body is ExprBlock)) {
@@ -2002,7 +2208,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                     // autoinfer = undeclared result, void by convention for main
                     errors = "[tune_policy]: restart - {func.name} must return void or int"
                 } else {
-                    let fnames = scope_fnames_joined(scope)
+                    let fnames = scopeFnames
                     var guard : ExpressionPtr
                     if (func.result.baseType == Type.tInt) {
                         guard = qmacro_expr() {
@@ -2080,6 +2286,7 @@ class private TunePolicyAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (tune_policy_gated() && !exe_status_report()) {
+            warn_manifest_untuned()
             return true
         }
         var errs = ""
@@ -2120,8 +2327,11 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
 class private TuneDefaultPolicy : AstPassMacro {
     def override apply(prog : ProgramPtr; _mod : Module?) : bool {
     // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
-        return false if (is_in_completion() || !empty("{compiling_module().name}")
-            || empty(g_scopes) || (tune_policy_gated() && !exe_status_report()))
+        return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
+        if (tune_policy_gated() && !exe_status_report()) {
+            warn_manifest_untuned()
+            return false
+        }
         var main_fn = compiling_module() |> find_unique_function("main", false)
         return false if (main_fn == null)
         for (ann in main_fn.annotations) {

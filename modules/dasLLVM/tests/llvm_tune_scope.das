@@ -5,6 +5,8 @@ require daslib/module_path
 require daslib/strings_boost
 require daslib/fio
 require strings
+require daslib/json
+require daslib/json_boost
 
 // [tune_scope]/[tune_policy]/--tune/tune_status round-trip through child daslang processes
 // (the policy rail is compile-time). Two libraries each ship a scope + tuner; both write the
@@ -226,6 +228,56 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(l13 |> has("mint SUPPRESSED (TEST_SUPPRESS=1)"))
     t |> success(l13 |> has("RESULT 6"))
     t |> success(!fexist(supSidecar))
+
+    // 14. version_of= pin: the tuner stamps provenance.testver beside the winner, so the mint
+    //     satisfies the pin and the next start converges; a sidecar whose kernel keys are all
+    //     present but whose recorded version differs must refuse BY NAME
+    let verClient = "{get_this_module_dir()}/llvm_tune_scope_client_ver.das"
+    let verSidecar = "{get_this_module_dir()}/llvm_tune_scope_client_ver.tune.json"
+    remove(verSidecar)
+    var l14 : array<string>
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -jit \"{verClient}\"", l14), 0)
+    t |> success(l14 |> has("FAKE TUNER VER ->"))
+    t |> success(l14 |> has("RESULT 7"))
+    var l14b : array<string>
+    t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -jit \"{verClient}\"", l14b), 0)
+    t |> success(!(l14b |> has("FAKE TUNER")))   // pin satisfied by the mint — no re-tune loop
+    t |> success(l14b |> has("RESULT 7"))
+    // swap the recorded version: complete kernel keys, wrong provenance — refused, both values named
+    var verr = ""
+    var vdoc = read_json(fread(verSidecar), verr)
+    t |> success(vdoc != null, "ver sidecar parses: {verr}")
+    unsafe {
+        var vprov = vdoc?["provenance"]
+        if (vprov != null) {
+            update(vprov, "testver", JV("1"))
+        }
+    }
+    fwrite(verSidecar, write_json(vdoc))
+    delete_json(vdoc)
+    var l14c : array<string>
+    t |> success(spawn_child("{tune_env("error")}\"{bin}\" \"{verClient}\"", l14c) != 0)
+    t |> success(l14c |> has("minted at testver 1"))
+    t |> success(l14c |> has("the code is at 2"))
+
+    // 15. DAS_TUNE_MANIFEST pointing at a file that reads untuned: the policy rail is dead by
+    //     design, but ONE loud warning names the reason; the run proceeds on fallback stamps
+    let mfPath = "{get_this_module_dir()}/llvm_tune_scope_no_such.tune.json"
+    let mfEnv = (get_platform_name() == "windows" ?
+        "set DAS_TUNE_MODE=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_MANIFEST={mfPath}&& " :
+        "DAS_TUNE_MODE= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_MANIFEST={mfPath} ")
+    var l15 : array<string>
+    t |> equal(spawn_child("{mfEnv}\"{bin}\" \"{client}\"", l15), 0)
+    t |> success(l15 |> has("WARNING DAS_TUNE_MANIFEST"))
+    t |> success(l15 |> has("no sidecar at"))
+    t |> success(!(l15 |> has("FAKE TUNER")))
+    t |> success(l15 |> has("RESULT 5"))
+
+    remove(verSidecar)
+    delete l14
+    delete l14b
+    delete l14c
+    delete l15
 
     remove(sidecar)
     remove(autoSidecar)
