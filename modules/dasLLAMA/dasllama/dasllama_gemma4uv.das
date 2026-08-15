@@ -16,7 +16,8 @@ require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + norm
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
 require math
 
-//! The gemma4uv "unified" vision embedder (gemma-4 dense 12B/26B): eleven tensors, no
+//! The gemma4uv "unified" vision embedder (gemma-4 dense 12B/26B): TEN tensors read (the mmproj
+//! file's eleventh, mm.a.input_projection.weight, is the audio projection and never loads), no
 //! attention — im2col 48px superpatches → LN → linear+bias → LN → x/y pos-table adds → LN →
 //! weightless rms → square projection. The DECODER does the visual reasoning through the
 //! non-causal image span; this file only lifts pixels into embedding space
@@ -153,7 +154,7 @@ def private uv_expect(m : GGUFMeta; name : string; want : int64) {
     }
 }
 
-//! Read the eleven-tensor gemma4uv embedder off an mmproj gguf into owned staging arrays — the
+//! Read the embedder's ten tensors off an mmproj gguf into owned staging arrays — the
 //! mint side of the image rail, and the only path that touches the source file. The two GEMM
 //! weights go to `wblob` verbatim when the file holds them as BF16, to `blob` when it holds fp32.
 def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
@@ -180,6 +181,9 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         let pos_ti = gguf_find_tensor(m, "v.position_embd.weight")
         if (pos_ti < 0) {
             panic("dasLLAMA gemma4uv: mmproj is missing tensor 'v.position_embd.weight'")
+        }
+        if (st.e.n_embd <= 0l || m.tensors[pos_ti].n_elem % (2l * st.e.n_embd) != 0l) {
+            panic("dasLLAMA gemma4uv: 'v.position_embd.weight' has {m.tensors[pos_ti].n_elem} elements - not 2 x k x embedding_length ({st.e.n_embd}); a truncated row would silently misindex")
         }
         st.e.pos_entries = m.tensors[pos_ti].n_elem / (2l * st.e.n_embd)
         let d = st.e.n_embd
@@ -271,13 +275,16 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
         var t = Gemma4uvEmbedder()
         if (load_image(img, t, tag)) {
             to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
+            uv_check_planes(t, img)
             return <- t
         }
         delete t
         var inscope st <- stage_gemma4uv_embedder(path)
         var built = Gemma4uvEmbedder()
-        cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        if (cache_via_image_staged(st, built, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
+        }
+        uv_check_planes(built, img)
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served embedder is always
@@ -285,7 +292,16 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
     var inscope st <- stage_gemma4uv_embedder(path)
     var built = Gemma4uvEmbedder()
     cache_via_image_staged(st, built, "", tag)
+    uv_check_planes(built, path)
     return <- built
+}
+
+// the bind walk skips a missing section silently (a pure-fp32 image legitimately has no wblob),
+// so the flag=>plane invariant must be checked once the carrier is live, or the kernel derefs null
+def private uv_check_planes(t : Gemma4uvEmbedder; src : string) {
+    if ((t.patch_bf16 || t.proj_bf16) && empty(t.wblob)) {
+        panic("dasLLAMA gemma4uv: '{src}' declares bf16 planes but carries no wblob section - the image is corrupt or hand-edited")
+    }
 }
 
 // im2col in ggml's [C][KH][KW] row order over the PLANAR view of the interleaved planes;

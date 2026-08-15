@@ -217,13 +217,18 @@ def plane_release(var pl : PlaneI64) {
     pl.n = 0l
 }
 
-// A plane holds a raw pointer, which would make `delete` unsafe for every struct that contains
-// one, all the way up the carrier. Declaring the teardown says what it is: dropping a view.
+// Declaring the teardown says what it is — dropping a view — and nulls the borrowed pointer, so
+// a torn-down carrier cannot dangle. (It does NOT make containing structs safe to delete: a
+// struct holding any plane still takes an unsafe delete, finalize or no finalize.)
 def finalize(var pl : PlaneF) {
     plane_release(pl)
 }
 
 def finalize(var pl : PlaneI8) {
+    plane_release(pl)
+}
+
+def finalize(var pl : PlaneU16) {
     plane_release(pl)
 }
 

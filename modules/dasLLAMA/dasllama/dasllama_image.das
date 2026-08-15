@@ -1382,18 +1382,18 @@ def cache_via_image(var m; var out; img : string; tag : string = ""; quant : str
 //! cache_via_image for a carrier whose MINT form differs from its SERVED form: `st` carries owned
 //! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
 //! build that cannot produce an image panics rather than handing anything back.
-def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") {
-    cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
-                                                                                                   var w : ImgWriter; var sections : array<ImgSection>) {
+def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") : bool {
+    return cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
         return false
     }
 }
 
 //! cache_via_image_staged with the walk's plane hook exposed plus a pre-sized `extra` for the
 //! bytes the hook streams — the streamed mints serve their big planes straight from the source
-//! mapping instead of staging them (Phase 3 of the audio rail).
+//! mapping. True only when the FILE was written: only then may the caller reap its lane.
 def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag : string; quant : string;
-                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
+                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, plane)) {
@@ -1402,13 +1402,14 @@ def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag :
             if (!load_image(img, out, tag, quant)) {
                 panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
             }
-            return
+            return true
         }
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - building the image in memory instead\n")
     }
     if (!chunk_rail(st, out, "", extra, tag, quant, plane)) {
         panic("dasLLAMA: could not build the prepared image in memory - there is no other form to serve")
     }
+    return false
 }
 
 // cache_via_image with the walk's plane hook exposed — the metal flavor derives its blob plane

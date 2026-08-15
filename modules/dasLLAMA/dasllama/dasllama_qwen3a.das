@@ -168,8 +168,9 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
         }
         var inscope st <- stage_qwen3a_tower(path)
         var built = Qwen3aTower()
-        cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        if (cache_via_image_staged(st, built, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
+        }
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served tower is always

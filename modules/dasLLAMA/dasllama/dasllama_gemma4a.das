@@ -351,8 +351,9 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         }
         var inscope st <- stage_gemma4a_encoder(path)
         var built = Gemma4aEncoder()
-        cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        if (cache_via_image_staged(st, built, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
+        }
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served encoder is always
