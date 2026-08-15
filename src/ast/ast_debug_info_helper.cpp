@@ -24,6 +24,57 @@ namespace das {
         vector<tuple<VariablePtr,LineInfo,bool>> locals;
     };
 
+    // dense preorder position stamp over the FINAL tree: every expression's `at` copy gets
+    // its 1-based frame position in last_column, tagged via last_line == LINEINFO_FRAME_POS,
+    // so the sim nodes built from these ats carry positions into pp->line and the GC /
+    // stackwalk locals gate tests integer intervals instead of source ranges. lifetime is
+    // structural: a local opens after its own init subtree and closes with its scope -
+    // manufactured blocks, one-line scopes, and sibling arms all encode exactly
+    class FramePositionStamp : public Visitor {
+    public:
+        FramePositionStamp ( das_hash_map<Variable *, pair<uint32_t,uint32_t>> & vfp )
+            : intervals(vfp) {}
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            pos ++;
+            expr->at.last_line = LINEINFO_FRAME_POS;
+            expr->at.last_column = pos;
+        }
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            scopes.emplace_back();
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            for ( auto v : scopes.back() ) intervals[v].second = pos;
+            scopes.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let,var,last);
+            // a no-init declaration opens right here; visitLetInit below moves the open
+            // point past the init for initialized ones
+            intervals[var].first = pos;
+            if ( !scopes.empty() ) scopes.back().push_back(var);
+        }
+        virtual ExpressionPtr visitLetInit ( ExprLet * let, const VariablePtr & var, Expression * that ) override {
+            intervals[var].first = pos;
+            return Visitor::visitLetInit(let,var,that);
+        }
+        virtual void preVisitForBody ( ExprFor * expr, Expression * body ) override {
+            Visitor::preVisitForBody(expr,body);
+            for ( auto & var : expr->iteratorVariables ) intervals[var].first = pos;
+        }
+        virtual ExpressionPtr visit ( ExprFor * expr ) override {
+            for ( auto & var : expr->iteratorVariables ) intervals[var].second = pos;
+            return Visitor::visit(expr);
+        }
+    public:
+        das_hash_map<Variable *, pair<uint32_t,uint32_t>> & intervals;
+        vector<vector<Variable *>> scopes;
+        uint32_t pos = 0;
+    };
+
     void DebugInfoHelper::logMemInfo ( TextWriter & tw ) {
         tw << "DEBUG INFO IS:\n";
         tw << "\tStructInfo " << (int(smn2s.size() * sizeof(StructInfo))) << " = " << int(smn2s.size()) << " x " << int(sizeof(StructInfo)) << "\n";
@@ -45,6 +96,11 @@ namespace das {
         }
     }
 
+    void DebugInfoHelper::stampFramePositions ( ExpressionPtr body ) {
+        FramePositionStamp stamp(varFramePos);
+        body->visit(stamp);
+    }
+
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, ExpressionPtr body ) {
         CollectLocalVariables lv;
         body->visit(lv);
@@ -62,6 +118,15 @@ namespace das {
             lvar->visibility = get<1>(var_vis);
             lvar->localFlags = 0;
             lvar->cmres = var->aliasCMRES;
+            auto ivIt = varFramePos.find(var);
+            if ( ivIt != varFramePos.end() ) {
+                lvar->openPos = ivIt->second.first;
+                lvar->closePos = ivIt->second.second;
+            } else {
+                // untracked (no stamp ran over this body) - conservatively always live
+                lvar->openPos = 0;
+                lvar->closePos = ~0u;
+            }
             i ++ ;
         }
     }

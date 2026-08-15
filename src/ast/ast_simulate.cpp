@@ -3814,6 +3814,10 @@ namespace das
                         gfun.debugInfo->flags &= ~ (FuncInfo::flag_init | FuncInfo::flag_shutdown);
                     }
                     if ( debuggerOrGC ) {
+                        // stamp BEFORE building sim nodes and locals info: the sim `at`
+                        // copies inherit the frame positions, and the intervals feed the
+                        // locals gate (see LocalVariableInfo::openPos)
+                        helper.stampFramePositions(pfun->body);
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                         helper.appendGlobalVariables(gfun.debugInfo, pfun);
                     }

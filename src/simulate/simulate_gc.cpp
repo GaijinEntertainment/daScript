@@ -624,7 +624,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        const LineInfo * lineAt = at;
+        uint32_t framePos = lineFramePos(at);
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -655,7 +655,7 @@ namespace das
                     tp << "LOCALS:\n";
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                        bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
                         if ( !inScope ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
@@ -672,7 +672,7 @@ namespace das
                     }
                 }
             }
-            lineAt = info ? pp->line : nullptr;
+            framePos = info ? lineFramePos(pp->line) : 0u;
             sp += info ? info->stackSize : pp->stackSize;
         }
     }
@@ -935,9 +935,9 @@ namespace das
         // time (needCallerStackFrame) - nothing to check for them here
         if ( persistent && gcEnabled ) {
             char * scanSp = stack.ap();
-            // an EMPTY line is as unattributable as a null one (a generated call node
-            // with an unset at) - normalize both to null so the refusal sees them
-            const LineInfo * scanLineAt = ( at && !at->empty() ) ? at : nullptr;
+            // liveness is gated on frame POSITIONS (see LocalVariableInfo::openPos); a line
+            // with no stamped position - null, empty, or embedder-crafted - is unattributable
+            uint32_t scanPos = lineFramePos(at);
             while ( scanSp < stack.top() ) {
                 Prologue * pp = (Prologue *) scanSp;
                 FuncInfo * info = nullptr;
@@ -945,12 +945,12 @@ namespace das
                     intptr_t iblock = intptr_t(pp->block);
                     info = ( iblock & 1 ) ? ((Block *)(iblock & ~1))->info : pp->info;
                 }
-                if ( info && info->locals && info->localCount && !scanLineAt ) {
+                if ( info && info->locals && info->localCount && !scanPos ) {
                     throw_error_at(at, "heap collection can't attribute locals of '%s' - "
                         "the frame was entered through a compiled (AOT/JIT) frame or a "
-                        "null-line call", info->name ? info->name : "?");
+                        "position-less line", info->name ? info->name : "?");
                 }
-                scanLineAt = ( info && pp->line && !pp->line->empty() ) ? pp->line : nullptr;
+                scanPos = info ? lineFramePos(pp->line) : 0u;
                 scanSp += info ? info->stackSize : pp->stackSize;
             }
         }
@@ -999,7 +999,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        const LineInfo * lineAt = at;
+        uint32_t framePos = lineFramePos(at);
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -1015,16 +1015,16 @@ namespace das
                     info = pp->info;
                 }
             }
-            // dishonest frames (AOT/JIT, null-line entry) were refused by the pre-scan above
+            // dishonest frames (AOT/JIT, position-less entry) were refused by the pre-scan above
             if ( info ) {
                 for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.prepare();
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
-                if ( info->locals && lineAt ) {
+                if ( info->locals && framePos ) {
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = lineAt->inside(lv->visibility);
+                        bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
                         if ( !inScope ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
@@ -1039,7 +1039,7 @@ namespace das
                     }
                 }
             }
-            lineAt = info ? pp->line : nullptr;
+            framePos = info ? lineFramePos(pp->line) : 0u;
             sp += info ? info->stackSize : pp->stackSize;
         }
         while ( !walker.deferred.empty() ) {

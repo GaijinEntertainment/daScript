@@ -598,6 +598,16 @@ namespace das
         uint32_t            annotation_count;
     };
 
+    // marks a runtime LineInfo copy whose last_column carries the 1-based frame position
+    // (an honest range can never end on this line); see LocalVariableInfo::openPos
+    constexpr uint32_t LINEINFO_FRAME_POS = 0xFFFFFFFFu;
+
+    // recover the frame position from a runtime line copy; 0 = not a stamped position
+    // (a null, embedder-crafted, or unstamped line - the locals gate skips or refuses)
+    inline uint32_t lineFramePos ( const LineInfo * li ) {
+        return ( li && li->last_line == LINEINFO_FRAME_POS ) ? li->last_column : 0u;
+    }
+
     struct LocalVariableInfo : TypeInfo {
         LineInfo        visibility;
         const char *    name;
@@ -608,6 +618,12 @@ namespace das
             };
             uint32_t    localFlags;
         };
+        // liveness interval in frame positions (dense preorder over the final AST, stamped
+        // at simulate): the local is live at a park iff openPos < pos <= closePos. source
+        // ranges can't encode manufactured or one-line scopes; positions can - `visibility`
+        // above stays for display only
+        uint32_t        openPos;
+        uint32_t        closePos;
     };
 
     struct FuncInfo {
