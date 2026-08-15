@@ -146,6 +146,7 @@ namespace das {
     DAS_API int64_t builtin_fs_file_size ( const char * path, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_fs_equivalent ( const char * a, const char * b, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_fs_is_symlink ( const char * path, char * & error, Context * context, LineInfoArg * at );
+    DAS_API bool    builtin_fs_is_reparse_point ( const char * path, char * & error, Context * context, LineInfoArg * at );
     // file operations
     DAS_API bool    builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_fs_set_mtime ( const char * path, Time time, char * & error, Context * context, LineInfoArg * at );

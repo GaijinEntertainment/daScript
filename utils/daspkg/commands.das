@@ -356,6 +356,11 @@ def private git_clone(url, dir : string) : bool {
     return true
 }
 
+def private log_rename_locked_hint() {
+    if (get_platform_name() != "windows") return
+    to_log(LOG_ERROR, "  hint: a running process is holding the package's .shared_module - close daslang/daslang-live and retry\n")
+}
+
 def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = "") {
     var visiting : table<string; bool>
     return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
@@ -479,6 +484,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     }
     if (!rename(tmp_dir, target_dir)) {
         to_log(LOG_ERROR, "Error: failed to move {tmp_dir} to {target_dir}\n")
+        log_rename_locked_hint()
         return 1
     }
 
@@ -787,6 +793,7 @@ def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE0
         }
         if (!rename(pkg_dir, backup_dir)) {
             to_log(LOG_ERROR, "Error: failed to backup '{name}'\n")
+            log_rename_locked_hint()
             return 1
         }
     }
