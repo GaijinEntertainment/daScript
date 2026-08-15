@@ -1,0 +1,1 @@
+Returns the call site's frame position -- the value the garbage collector's locals gate reads from a stack frame's line handoff -- resolved at simulate time within the calling function's own numbering. Returns 0 when the program carries no positions (neither `options gc` nor a debugger is active).

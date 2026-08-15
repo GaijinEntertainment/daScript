@@ -30,7 +30,7 @@ def pick_arm(var w : CollectingWalker?; flag : bool) : int {
 def test_stackwalk_sibling_arms(t : T?) {
     t |> run("only the executing else-arm's let is live at its park") @(t : T?) {
         var w = new CollectingWalker()
-        let r = pick_arm(w, length(w.frames) > 0)
+        let r = pick_arm(w, !empty(w.frames))
         t |> equal(r, length("ARM_B_0"))
         t |> success(has_live_local(w, "arm_b_local"), "the executing arm's let must be live")
         t |> success(!has_live_local(w, "arm_a_local"), "the never-run arm's let must not be live")
@@ -40,7 +40,7 @@ def test_stackwalk_sibling_arms(t : T?) {
     }
     t |> run("only the executing then-arm's let is live at its park") @(t : T?) {
         var w = new CollectingWalker()
-        let r = pick_arm(w, length(w.frames) == 0)
+        let r = pick_arm(w, empty(w.frames))
         t |> equal(r, length("ARM_A_0"))
         t |> success(has_live_local(w, "arm_a_local"), "the executing arm's let must be live")
         t |> success(!has_live_local(w, "arm_b_local"), "the never-run arm's let must not be live")

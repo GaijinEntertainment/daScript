@@ -54,7 +54,7 @@ def test_stackwalk_tail_split(t : T?) {
         // a function-pointer call keeps a real frame; the body was still permanently
         // canonicalized by the pre-pass, so the hole lives in the un-spliced function
         let fp = @@guard_then_walk
-        let r = invoke(fp, w, length(w.frames) > 0)
+        let r = invoke(fp, w, !empty(w.frames))
         t |> equal(r, length("CANON_42"))
         t |> success(has_frame(w, "guard_then_walk"), "guard_then_walk keeps its frame")
         t |> success(has_live_local(w, "precious"), "precious must be live in the walk")

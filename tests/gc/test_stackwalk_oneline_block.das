@@ -20,8 +20,8 @@ def test_stackwalk_oneline_block(t : T?) {
     t |> run("local of a one-line user block is live at a park inside it") @(t : T?) {
         var w = new CollectingWalker()
         var r = 0
-        let cond = length(w.frames) == 0
-        if (cond) { var xlocal = "X_{length(w.locals)}"; r = walk_len(w, xlocal); }
+        let cond = empty(w.frames)
+        if (cond) { let xlocal = "X_{length(w.locals)}"; r = walk_len(w, xlocal); }
         t |> equal(r, length("X_0"))
         t |> success(has_live_local(w, "xlocal"), "xlocal must be live in the walk")
         unsafe {
