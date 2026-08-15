@@ -52,6 +52,21 @@ def run_walk(var w : CollectingWalker?) {
     }
 }
 
+def walk_len(var w : CollectingWalker?; s : string) : int {
+    run_walk(w)
+    return length(s)
+}
+
+def churn_strings(tag : string) : int {
+    var junk <- [for (i in range(200)); "junk/{tag}/segment_{i}/{i * 3}_tail"]
+    var total = 0
+    for (s in junk) {
+        total += length(s)
+    }
+    delete junk
+    return total
+}
+
 // substring match - inlined locals carry mangled names like _inl1_l_counter
 def has_frame(w : CollectingWalker?; needle : string) : bool {
     for (f in w.frames) {

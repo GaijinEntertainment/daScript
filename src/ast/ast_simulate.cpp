@@ -1373,8 +1373,11 @@ namespace das
         auto blk = static_cast<ExprBlock*>(expr->block);
         uint32_t argSp = blk->stackTop;
         auto bt = blk->makeBlockType();
-        auto info = context.thisHelper->makeInvokeableTypeDebugInfo(bt, blk->at);
-        if ( context.gcEnabled || context.debugger  ) {
+        auto debuggerOrGC = context.gcEnabled || context.debugger;
+        // unique: the info cache is keyed by block TYPE, and this info carries per-instance locals
+        auto info = context.thisHelper->makeInvokeableTypeDebugInfo(bt, blk->at, debuggerOrGC);
+        if ( debuggerOrGC ) {
+            info->spaceId = context.thisHelper->currentSpaceId;
             context.thisHelper->appendLocalVariables(info, (Expression *)expr);
         }
         setE(expr, context.code->makeNode<SimNode_MakeBlock>(at, getE(expr->block), argSp, expr->stackTop, info));
@@ -3814,6 +3817,12 @@ namespace das
                         gfun.debugInfo->flags &= ~ (FuncInfo::flag_init | FuncInfo::flag_shutdown);
                     }
                     if ( debuggerOrGC ) {
+                        // stamp BEFORE building sim nodes and locals info: the sim `at`
+                        // copies inherit the frame positions, and the intervals feed the
+                        // locals gate (see LocalVariableInfo::openPos)
+                        gfun.debugInfo->spaceId = frameSpaceId(pfun->index);
+                        helper.currentSpaceId = gfun.debugInfo->spaceId;
+                        helper.stampFramePositions(pfun->body, gfun.debugInfo->spaceId);
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                         helper.appendGlobalVariables(gfun.debugInfo, pfun);
                     }

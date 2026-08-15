@@ -126,24 +126,35 @@ To collect garbage, from the inside of the context:
         heap_collect(collect_string_heap, validate_after_collect)
     }
 
-The collector finds live values by walking the interpreter call stack, so every call
-between your program's entry point and ``heap_collect`` must be a regular interpreted
-call. The compiler guarantees the common case: every function that can reach
-``heap_collect`` through direct calls keeps a real stack frame (never fastcall), so
-collect wrappers — and wrappers of wrappers — just work. One residual is not covered:
+The collector finds live values by walking the interpreter call stack. A local is
+considered live by its **frame position interval**: at simulate time every potential
+park point gets a position in its function's numbering, each local records the
+interval in which it is initialized and in scope, and the walk compares integers.
+Positions are exact for compiler-manufactured code — inlined bodies, constructors,
+comprehensions, one-line blocks — where source line ranges are not, and each stamped
+position also names its **owning function**, so a frame gated with another function's
+numbers is detected rather than misread.
+
+Every call between your program's entry point and ``heap_collect`` must be a regular
+interpreted call. The compiler guarantees the common case: every function that can
+reach ``heap_collect`` through direct calls keeps a real stack frame (never
+fastcall), so collect wrappers — and wrappers of wrappers — just work. The residual —
 a collect reached only through a **block, lambda, or function pointer** that a
-single-statement (fastcall) wrapper invokes; keep such wrappers to two statements or
-collect outside the callback.
+frameless (fastcall) wrapper invokes — is caught by the position owner check and
+refused instead of walking wrong.
 
-Chains the collector cannot walk honestly are refused with a runtime error instead
-of collecting:
+Chains the collector cannot attribute are refused with a runtime error instead of
+collecting:
 
-* an interpreted frame reached **through a compiled (AOT/JIT) frame that broke the
-  line handoff**, or entered from C++ **without line info** (see below). An
-  all-compiled chain — a standalone compiled executable — is allowed and collects
-  from globals. Note that a compiled function entered from the interpreter carries
-  an interpreter-shaped frame the collector cannot distinguish; the gc test suites
-  therefore run interpreted-only.
+* an interpreted frame reached **through a compiled (AOT/JIT) frame**, entered from
+  C++ **without line info** (see below), or gated by a **foreign function's
+  positions** (a frameless carrier in the chain). An all-compiled chain — a
+  standalone compiled executable — is allowed and collects from globals. Note that a
+  compiled function entered from the interpreter carries an interpreter-shaped frame
+  the collector cannot distinguish; the gc test suites therefore run interpreted-only.
+
+The current position at any call site is readable as ``frame_position()`` — nonzero
+only when the program carries positions (``options gc`` or a debugger).
 
 To do the same from the C++ side:
 

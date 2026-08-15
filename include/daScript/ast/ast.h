@@ -1518,16 +1518,21 @@ namespace das
         VarInfo * makeVariableDebugInfo ( const Variable & var );
         VarInfo * makeVariableDebugInfo ( const Structure & st, const Structure::FieldDeclaration & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
-        FuncInfo * makeFunctionDebugInfo ( const Function & fn );
+        // unique=true builds a fresh, uncached info - block frames under gc/debugger carry
+        // per-instance locals and intervals, so same-typed blocks must not share one
+        FuncInfo * makeFunctionDebugInfo ( const Function & fn, bool unique = false );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
-        FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
+        FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at, bool unique = false );
         AnnotationArgumentInfo * makeAnnotationArguments ( const AnnotationArgumentList & list, uint32_t & count );
         AnnotationInfo * makeAnnotationList ( const AnnotationList & list, uint32_t & count );
         void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
+        void stampFramePositions ( ExpressionPtr body, uint32_t spaceId );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
+        das_hash_map<Variable *, FramePosInterval> varFramePos;    // filled by stampFramePositions, read by appendLocalVariables
+        uint32_t currentSpaceId = 0;    // owner of the function being simulated; block frames inherit it
     public:
         das_hash_map<string,StructInfo *>        smn2s;
         das_hash_map<string,TypeInfo *>          tmn2t;

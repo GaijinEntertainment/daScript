@@ -69,6 +69,7 @@ namespace das {
     DAS_API void string_heap_report ( Context * context, LineInfoArg * info );
     DAS_API bool is_intern_strings ( Context * context );
     DAS_API void heap_collect ( bool stringHeap, bool validate, Context * context, LineInfoArg * info );
+    DAS_API int32_t builtin_frame_position ( Context * context, LineInfoArg * info );
     DAS_API void heap_report ( Context * context, LineInfoArg * info );
     DAS_API void memory_report ( bool errorsOnly, Context * context, LineInfoArg * info );
     DAS_API uint64_t gc_thread_root_count();

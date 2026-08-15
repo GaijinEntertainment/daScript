@@ -624,7 +624,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        const LineInfo * lineAt = at;
+        const LineInfo * handoff = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -653,10 +653,10 @@ namespace das
                 }
                 if ( info->locals ) {
                     tp << "LOCALS:\n";
+                    uint32_t framePos = lineFramePos(handoff, info->spaceId);
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
-                        if ( !inScope ) continue;
+                        if ( !isLiveAt(lv, framePos) ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
                             addr = (char *)pp->cmres;
@@ -672,7 +672,7 @@ namespace das
                     }
                 }
             }
-            lineAt = info ? pp->line : nullptr;
+            handoff = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
         }
     }
@@ -927,17 +927,15 @@ namespace das
     };
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
-        // refuse dishonest frames BEFORE marking - the error path must leave both heaps
-        // unmarked. a frame above a broken line handoff can't have its locals attributed:
-        // they fail the visibility gate and get swept while live. gated on persistent+gc
-        // so a direct C++ collectHeap on a non-GC context keeps its old silent no-op
-        // (the mark() bail-outs below); fastcall carriers were denied frames at compile
-        // time (needCallerStackFrame) - nothing to check for them here
+        // refuse unattributable frames BEFORE marking - the error path must leave both
+        // heaps unmarked. the check is owner-tagged positions (LINEINFO_FRAME_POS_TAG):
+        // a frameless carrier between two frames leaves its own position in the handoff,
+        // and the owner mismatch is exactly what this catches - the invoke edge the static
+        // fastcall denial can't see. gated on persistent+gc so a direct C++ collectHeap on
+        // a non-GC context keeps its old silent no-op (the mark() bail-outs below)
         if ( persistent && gcEnabled ) {
             char * scanSp = stack.ap();
-            // an EMPTY line is as unattributable as a null one (a generated call node
-            // with an unset at) - normalize both to null so the refusal sees them
-            const LineInfo * scanLineAt = ( at && !at->empty() ) ? at : nullptr;
+            const LineInfo * scanHandoff = at;
             while ( scanSp < stack.top() ) {
                 Prologue * pp = (Prologue *) scanSp;
                 FuncInfo * info = nullptr;
@@ -945,12 +943,14 @@ namespace das
                     intptr_t iblock = intptr_t(pp->block);
                     info = ( iblock & 1 ) ? ((Block *)(iblock & ~1))->info : pp->info;
                 }
-                if ( info && info->locals && info->localCount && !scanLineAt ) {
+                if ( info && info->locals && info->localCount
+                        && !lineFramePos(scanHandoff, info->spaceId) ) {
                     throw_error_at(at, "heap collection can't attribute locals of '%s' - "
-                        "the frame was entered through a compiled (AOT/JIT) frame or a "
-                        "null-line call", info->name ? info->name : "?");
+                        "the frame was entered through a compiled (AOT/JIT) frame, a "
+                        "position-less or embedder-crafted line, or a frameless (fastcall) "
+                        "carrier", info->name ? info->name : "?");
                 }
-                scanLineAt = ( info && pp->line && !pp->line->empty() ) ? pp->line : nullptr;
+                scanHandoff = info ? pp->line : nullptr;
                 scanSp += info ? info->stackSize : pp->stackSize;
             }
         }
@@ -999,7 +999,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        const LineInfo * lineAt = at;
+        const LineInfo * handoff = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -1015,17 +1015,18 @@ namespace das
                     info = pp->info;
                 }
             }
-            // dishonest frames (AOT/JIT, null-line entry) were refused by the pre-scan above
+            // dishonest frames (AOT/JIT, position-less or foreign-space entry) were refused
+            // by the pre-scan above
             if ( info ) {
                 for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.prepare();
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
-                if ( info->locals && lineAt ) {
+                uint32_t framePos = lineFramePos(handoff, info->spaceId);
+                if ( info->locals && framePos ) {
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
-                        bool inScope = lineAt->inside(lv->visibility);
-                        if ( !inScope ) continue;
+                        if ( !isLiveAt(lv, framePos) ) continue;
                         char * addr = nullptr;
                         if ( lv->cmres ) {
                             addr = (char *)pp->cmres;
@@ -1039,7 +1040,7 @@ namespace das
                     }
                 }
             }
-            lineAt = info ? pp->line : nullptr;
+            handoff = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
         }
         while ( !walker.deferred.empty() ) {
