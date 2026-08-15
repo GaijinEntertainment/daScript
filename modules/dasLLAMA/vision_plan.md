@@ -278,9 +278,11 @@ invariant — a transposed patch grid is only visible per-token).
   is a coverage hole: the seeded-sampling equivalence arm ran a FLAT scheduler and the paged arm ran
   GREEDY, so paged-and-sampled — what the server does on every request with a temperature — had no
   gate. It has one now (cold and warm, both bit-exact vs `generate()`), and it passes.
-  Still open, unproven, reported not fixed: a `--gpu metal` run rejected a CPU-tuned sidecar and
-  re-tuned, logging "is untuned on this box" — plausibly correct (a metal arm wants different
-  winners) but the message does not say so.
+  The `--gpu metal` sidecar rejection was RESOLVED post-arc (followup #22, 2026-08-15): forensics
+  proved the refusal was the mtime staleness rail (the sidecar predated a rebuilt binary) and the
+  metal flag a pure confound — the demand set is arm-invariant (one compiled program; verified by
+  an identical stamp-line diff across arms). The defect was the message, and refusals now name
+  their reason; nothing blocks Metal-arm measurement beyond a fresh mint at bringup.
 - **J. The image turn joins the profiling app — and NO separate benches, ever (DONE 2026-08-14:
   `lcpp_bench --image`, three keys `img:enc` / `img:pp` / `img:tg`, `workload = "image-chat"`,
   documented in `PROFILE.md`; measured on the M1 Max at enc 53.8 ms, pp 63.5 tok/s, tg 14.3 tok/s).** Model-level
