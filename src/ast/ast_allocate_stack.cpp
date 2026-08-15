@@ -130,7 +130,7 @@ namespace das {
         // SimNode_MakeArrayHeap repoints abiCMRES at the heap block while constructing
         // elements, so a CMRES-aliased local read inside a heap-mode literal would resolve
         // into the (zeroed) heap buffer instead of the return slot. Track such reads and
-        // decline the elision for that variable â€” an extra move at return, always correct.
+        // decline the elision for that variable — an extra move at return, always correct.
         das_hash_set<Variable *> usedInHeapLiteral;
         int                     heapLiteralDepth = 0;
     protected:
@@ -431,7 +431,7 @@ namespace das {
             if ( expr->subexpr ) {
                 // only route a make-local return through CMRES when the function returns via
                 // CMRES; a register-returned (non-cmres) function has no result buffer, so
-                // writing the make-local through one segfaults â€” build a normal local instead.
+                // writing the make-local through one segfaults — build a normal local instead.
                 bool makeLocalCMRES = expr->returnInBlock || !func || func->copyOnReturn || func->moveOnReturn;
                 if ( expr->subexpr->rtti_isMakeLocal() && makeLocalCMRES ) {
                     uint32_t sz = sizeof(void *);
@@ -1347,10 +1347,10 @@ namespace das {
     void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
         // temp-string sites: builder marking + [temp_string_result] wrapping (must precede AllocateStack).
         // ALWAYS wrap, regardless of heap options: this pass mutates function bodies (shared-module
-        // ASTs included), so gating it on the driving program's options makes a function's tree â€” and
-        // its AOT hash â€” depend on who compiled it first (macro-context compiles run with
+        // ASTs included), so gating it on the driving program's options makes a function's tree — and
+        // its AOT hash — depend on who compiled it first (macro-context compiles run with
         // macro_context_persistent_heap and wrapped shared daslib functions that AOT stub generation
-        // left bare â†’ error 50101 on link). The heap modes are handled at runtime instead:
+        // left bare → error 50101 on link). The heap modes are handled at runtime instead:
         // freeTempString no-ops for interned heaps and when reclaim is disabled, and linear-heap
         // frees are safe bump-retreat no-ops.
         {
