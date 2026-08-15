@@ -99,3 +99,9 @@ its line here, with its tests, in the same change.**
 - `dasllama-deploy.sudoers` — the drop-in that scopes that privilege: NOPASSWD for exactly
   `/usr/local/sbin/dasllama-deploy.sh` and nothing else. A second command, a wildcard target,
   a bare `ALL`, or a shell is a defect.
+- `dasllama-ladder.toml` — the shipped default config: the on-box template whose keys mirror
+  `LadderArgs`; operator-edited after deploy.
+- `watchdog.json` — the watchdog deploy config (port, health and shutdown URLs);
+  operator-edited after deploy.
+- `_ladder_test_common.das` — shared test fixtures, required by the `[test]` files by bare
+  name (the leading `_` keeps dastest's walker away).
