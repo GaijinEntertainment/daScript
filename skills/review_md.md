@@ -23,8 +23,9 @@ A checklist that keeps its follow-up ledger somewhere non-obvious appends
 `` Planned work: `<ledger>`. `` to the same line. A checklist with routed companions — a
 shared concern file, subfolder checklists, a skill reviewing a construct family — carries
 their routing lines in or right after the opening, each keyed by KIND ("a `[test]` file,
-wherever the diff puts it, answers to `tests/REVIEW.md`"), because the folder walk finds
-only files named `REVIEW.md` — a companion is reachable solely through its routing line. An opening that deviates from this block —
+wherever the diff puts it, answers to the `tests/` subfolder's checklist"), because the
+folder walk finds only files named `REVIEW.md` — a companion is reachable solely through its
+routing line. An opening that deviates from this block —
 or a checklist that restates contract text instead of pointing — is a self-review finding,
 fixed like any other. An external repo that adopts `REVIEW.md` vendors a copy of
 `REVIEW_COMMON.md` at its root, so the pointer resolves there too.

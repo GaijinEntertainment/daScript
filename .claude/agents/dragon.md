@@ -110,8 +110,10 @@ architecture doc is only for definitions that do not compress.
   words.
 - **Child checklists are routed by KIND.** When subfolders carry their own REVIEW.md, the
   parent states it and keys the routing on what the file IS ("a `[test]` file, wherever the
-  diff puts it, answers to `tests/REVIEW.md`") — location-keyed discovery cannot catch a
-  misplaced file; kind-keyed routing can.
+  diff puts it, answers to the `tests/` subfolder's checklist") — location-keyed discovery
+  cannot catch a misplaced file; kind-keyed routing can.
+- **Paths resolve against the checklist's own folder; a path meaning anywhere else says so**
+  ("`tests/msl/` (repo root)"). A path a reader would resolve two ways is AMBIGUITY.
 - **A rule lives in the narrowest folder that contains its trigger.** A rule — or a run of
   rules — whose trigger touches only one subfolder moves to that subfolder's own REVIEW.md;
   creating that file is never an objection. The opposite direction is DEAD RULE: a trigger

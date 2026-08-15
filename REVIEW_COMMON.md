@@ -37,9 +37,9 @@ that handshake is the system working.
 **A rule lives in the checklist of the narrowest folder that contains its trigger.**
 Subfolder-scoped rules move to that subfolder's own `REVIEW.md` — creating it is never an
 objection; checklists are cheap, thousands can sit in a repository and few fire per PR. The
-parent routes strays by KIND ("a `[test]` file, wherever the diff puts it, answers to
-`tests/REVIEW.md`"). A rule whose trigger lies entirely outside the folder can never fire and
-is deleted — better absent than dead.
+parent routes strays by KIND ("a `[test]` file, wherever the diff puts it, answers to the
+`tests/` subfolder's checklist"). A rule whose trigger lies entirely outside the folder can
+never fire and is deleted — better absent than dead.
 
 **Form, and it is a hard limit:**
 
@@ -50,6 +50,8 @@ is deleted — better absent than dead.
   decouples into the flat list or is a separable concern that earns its own routed file.
 - **Rules are unnumbered and unnicknamed** — numbering invites citation. Anything that needs
   a stable reference lives in the checklist's architecture doc.
+- **A path in a rule resolves against the checklist's own folder.** A path meaning anywhere
+  else says so in two words — "`tests/msl/` (repo root)".
 - **Cite files by name; cite the folder's own architecture doc by section.**
   No file cites a rule in a checklist by number, position, or nickname — quote the rule's
   words instead. A quote states the reason the code is shaped this way and survives any

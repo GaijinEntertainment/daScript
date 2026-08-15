@@ -4,8 +4,9 @@
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
 **`tests/` and `performance/` carry their own checklists, and they govern by KIND, not
-location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to `tests/REVIEW.md`;
-an exchange, provenance-manifest, or measuring-rig change answers to `performance/REVIEW.md`.
+location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
+`tests/REVIEW.md`; an exchange, provenance-manifest, or measuring-rig change answers to its
+`performance/REVIEW.md`.
 Three kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. This file's rules bind the rest of the engine.
