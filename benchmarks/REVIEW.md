@@ -4,8 +4,8 @@
 doc: `modules/dasLLAMA/PROFILE.md` (the measurement rigs this folder feeds).
 
 **No new record-grade timing harness.** Model-level time is measured by the rigs `PROFILE.md`
-documents — `modules/dasLLAMA/performance/gen_profile.das` and `gen_bench_records.das`, both
-spawning `lcpp_bench.das` here. A new file that times a model and feeds a board, a one-off
+documents — `modules/dasLLAMA/performance/gen_profile.das` and its sibling
+`gen_bench_records.das`, both spawning `lcpp_bench.das` here. A new file that times a model and feeds a board, a one-off
 measurement script, or a revived rig is a defect; the one sanctioned sub-model instrument is
 the kernel A/B lab.
 

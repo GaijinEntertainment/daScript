@@ -112,8 +112,10 @@ architecture doc is only for definitions that do not compress.
   parent states it and keys the routing on what the file IS ("a `[test]` file, wherever the
   diff puts it, answers to the `tests/` subfolder's checklist") — location-keyed discovery
   cannot catch a misplaced file; kind-keyed routing can.
-- **Paths resolve against the checklist's own folder; a path meaning anywhere else says so**
-  ("`tests/msl/` (repo root)"). A path a reader would resolve two ways is AMBIGUITY.
+- **Paths resolve against the checklist's own folder; a repo-root path starts with a root
+  directory the folder does not contain (`modules/…`) or says "(repo root)".** Only a path a
+  reader would genuinely resolve two ways — a `tests/` beside the checklist and one at the
+  root — is AMBIGUITY; do not flag an unmistakable root path for a missing marker.
 - **A rule lives in the narrowest folder that contains its trigger.** A rule — or a run of
   rules — whose trigger touches only one subfolder moves to that subfolder's own REVIEW.md;
   creating that file is never an objection. The opposite direction is DEAD RULE: a trigger

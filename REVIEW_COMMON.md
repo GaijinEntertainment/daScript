@@ -50,8 +50,10 @@ never fire and is deleted — better absent than dead.
   decouples into the flat list or is a separable concern that earns its own routed file.
 - **Rules are unnumbered and unnicknamed** — numbering invites citation. Anything that needs
   a stable reference lives in the checklist's architecture doc.
-- **A path in a rule resolves against the checklist's own folder.** A path meaning anywhere
-  else says so in two words — "`tests/msl/` (repo root)".
+- **A path in a rule resolves against the checklist's own folder.** A path from the repo
+  root starts with a root directory the folder does not contain (`modules/…`, `daslib/…`) or
+  says "`(repo root)`"; when both readings exist — a `tests/` beside the checklist and one at
+  the root — the rule must say which.
 - **Cite files by name; cite the folder's own architecture doc by section.**
   No file cites a rule in a checklist by number, position, or nickname — quote the rule's
   words instead. A quote states the reason the code is shaped this way and survives any
