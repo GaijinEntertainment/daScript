@@ -81,7 +81,8 @@ refcounts.
 **`synch primitive deleted while being used (ref=N)` on a `with_channel` line
 is that scope closing on a worker that has not released yet** — N is the count
 it still holds, and the worker then touches a destroyed mutex, so the panic is
-followed by a fatal from libc. Taking the worker's payload is not that release:
+followed by a secondary crash — a libc mutex fatal on Linux, an access violation
+in the exit-time leak dump on Windows. Taking the worker's payload is not that release:
 a worker pushes and releases after, which wakes the consumer between the two,
 so a consumer that stops at the payload (`pop_with_timeout_clone`, `try_pop`)
 must `join()` the channel before its scope ends. A consumer that stops on the
