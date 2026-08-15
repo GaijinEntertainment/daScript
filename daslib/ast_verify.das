@@ -182,7 +182,9 @@ class private AstVerifyVisitor : AstVisitor {
 
     def report(at : LineInfo; msg : string) : void {
         error_count++
-        to_log(LOG_ERROR, "AST verify: {msg} at {describe(at)}\n")
+        // a detached synthetic tree has no location in it at all - do not trail an empty " at "
+        let loc = describe(at)
+        to_log(LOG_ERROR, empty(loc) ? "AST verify: {msg}\n" : "AST verify: {msg} at {loc}\n")
         compiling_program() |> macro_error(at, "AST verify: {msg}")
     }
 
@@ -911,17 +913,90 @@ def public verify_program(prog : ProgramPtr) : int {
     return total
 }
 
+// `node` set means it carries its own `at` and names itself, so the walk stores one pointer per
+// node; otherwise `at` and `phrase` are it. Not an Option<T> - LineInfo is no tuple element.
+struct private Anchor {
+    @do_not_delete node : Expression?
+    @safe_when_uninitialized at : LineInfo
+    phrase : string
+}
+
+// Runs for every node the walk touches - keep it a null test; `usable` does the rest, rarely.
+def private located(e : Expression?) : bool {
+    return e != null && e.at.fileInfo != null
+}
+
+def private usable(e : Expression?) : bool {
+    return located(e) && !is_cpp_binding_at(e.at)
+}
+
+// Runs only for a node that turns out to have no `at`, so a well formed tree pays nothing. The two
+// gates match AstPostInferVerifyVisitor: a location from a region that walk refuses to enter belongs
+// to a spelling that is not part of this instantiation, and need_at stamps what it is given.
+class private FirstLocatedVisitor : AstVisitor {
+    @do_not_delete found : Expression?
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        if (found == null && usable(expr)) {
+            found = expr
+        }
+    }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
+        return false
+    }
+    def override canVisitStructureFieldInit(st : StructurePtr) : bool {
+        return !st.flags.isTemplate
+    }
+}
+
+def private first_located_inside(var expr : ExpressionPtr) : Expression? {
+    var v = new FirstLocatedVisitor()
+    make_visitor(*v) $(adapter) {
+        visit(expr, adapter)
+    }
+    var found = v.found
+    unsafe {
+        delete v
+    }
+    return found
+}
+
 // ===== post-inference verification =====
 class private AstPostInferVerifyVisitor : AstVisitor {
     error_count : int = 0
     @do_not_delete current_fn : Function?
     closure_depth : int = 0
+    // the last located thing the walk passed - a node, or a site with no expression around it
+    @safe_when_uninitialized last_passed : Anchor
 
 
     def report(at : LineInfo; msg : string) : void {
         error_count++
-        to_log(LOG_ERROR, "AST verify (post-infer): {msg} at {describe(at)}\n")
-        compiling_program() |> macro_error(at, "AST verify (post-infer): {msg}")
+        var text = msg
+        var anchor = at
+        if (at.fileInfo == null) {
+            let guess = guess_at(null)
+            anchor = guess.at
+            if (!empty(guess.phrase)) {
+                text = "{msg}; {guess.phrase}"
+            }
+        }
+        let loc = describe(anchor)
+        to_log(LOG_ERROR, empty(loc)
+            ? "AST verify (post-infer): {text}\n"
+            : "AST verify (post-infer): {text} at {loc}\n")
+        compiling_program() |> macro_error(anchor, "AST verify (post-infer): {text}")
+    }
+
+    // Subtree first: a node begins where its subtree begins, which is the exact line for 91% of
+    // nodes against 8% for the function head. What the walk passed last covers a synthetic subtree.
+    def guess_at(var expr : ExpressionPtr) : Anchor {
+        var inside = expr != null ? first_located_inside(expr) : null
+        if (inside != null) {
+            return Anchor(at = inside.at, phrase = "first located node inside it is {inside.__rtti}")
+        }
+        let passed = usable(last_passed.node) ? last_passed.node : null
+        return Anchor(at = passed != null ? passed.at : last_passed.at,
+            phrase = passed != null ? "preceded by {passed.__rtti}" : last_passed.phrase)
     }
 
     // A template body is expanded per instantiation and a stub body (dasbind [extern]) is
@@ -933,6 +1008,8 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
         current_fn = fun
+        // walk state from the previously walked function is no vicinity for this one
+        last_passed = Anchor()
         need_at(fun.at, "function '{fun.name}'")
         need_slot(fun.result, "function '{fun.name}' result type", fun.at)
         if (fun.body == null) {
@@ -959,14 +1036,15 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         return !st.flags.isTemplate
     }
 
-    // Inference is done, so an operand with no type never got one, and lint / folding /
-    // codegen all dereference it unguarded.
+    // Inference is done, so an operand with no type never got one, and lint / folding / codegen all
+    // dereference it unguarded. An empty `what` names it after the node, only if it reports.
     def need_typed(var slot : ExpressionPtr; what : string; at : LineInfo) : void {
         // a statement is not a value - inference never gives it a type
         if (slot == null || slot._type != null || slot.genFlags.generated || is_stmt_node(slot)) {
             return
         }
-        report(at, "{what} ({slot.__rtti}) has no type after inference")
+        let named = empty(what) ? "{slot.__rtti}" : what
+        report(at, "{named} ({slot.__rtti}) has no type after inference")
         slot._type = new TypeDecl(at = at, baseType = Type.tInt)
     }
 
@@ -978,33 +1056,43 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         report(at, "{what} has an unresolved func after inference")
     }
 
-    // A node with no location makes every later diagnostic over it point at nothing. No
-    // kind is exempt: a value from a C++ binding gets the call site stamped by infer.
-    def need_at(var at : LineInfo&; what : string) : void {
+    // A node with no location makes every later diagnostic over it point at nothing. No kind is
+    // exempt: a value from a C++ binding gets the call site stamped by infer. The guess is stamped
+    // in, so the passes after this one have a place too.
+    def need_at(var at : LineInfo&; what : string; var expr : ExpressionPtr = null; track : bool = true) : void {
         if (at.fileInfo != null) {
+            if (track && !is_cpp_binding_at(at)) {
+                // a site has no node to name it, and clears the one the walk last stored
+                last_passed = Anchor(at = at, phrase = "closest location the walk passed is {what}")
+            }
             return
         }
-        // the node has no location, so the report is anchored to the enclosing function
         let ctx = current_fn != null ? " in '{current_fn.name}'" : ""
-        let anchor = current_fn != null && current_fn.at.fileInfo != null ? current_fn.at : at
-        report(anchor, "{what} has no source location (at is unset){ctx}")
-        if (current_fn != null && current_fn.at.fileInfo != null) {
-            at = current_fn.at
+        let guess = guess_at(expr)
+        let tail = empty(guess.phrase) ? guess.phrase : "; {guess.phrase}"
+        report(guess.at, "{what} has no source location (at is unset){ctx}{tail}")
+        if (guess.at.fileInfo != null) {
+            at = guess.at
         }
     }
 
-    // TypeDecl::visit preVisits firstType / secondType / argTypes, so one hook covers the tree
+    // TypeDecl::visit preVisits firstType / secondType / argTypes, so one hook covers the tree. Not
+    // tracked: a type's `at` is its declaration site, often another module, not this use.
     def need_type_at(var typ : TypeDeclPtr; what : string) : void {
         if (typ != null) {
-            need_at(typ.at, "{what} {describe(typ)}")
+            need_at(typ.at, "{what} {describe(typ)}", track = false)
         }
     }
 
+    // `expr` is never null - Expression::visit hands its own `this` to every hook. Stamping the
+    // guess is also what keeps ExprConst, pre-visited twice for one node, from reporting twice.
     def override preVisitExpression(var expr : ExpressionPtr) : void {
-        if (expr != null) {
-            need_at(expr.at, "{expr.__rtti}")
-            need_typed(expr, "{expr.__rtti}", expr.at)
+        if (located(expr)) {
+            last_passed.node = expr
+        } else {
+            need_at(expr.at, "{expr.__rtti}", expr)
         }
+        need_typed(expr, "", expr.at)
     }
 
     // Inference is done, so a null in a slot codegen dereferences is never filled in later.
