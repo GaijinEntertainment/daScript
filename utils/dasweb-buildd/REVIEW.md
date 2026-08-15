@@ -70,6 +70,9 @@ section** (The sandbox / The toolchain-bump protocol / Run).
 **A toolchain roll that moves the worktree rebuilds both the cross-compile host and the
 runtime archive.**
 
+**A `Containerfile` change lands with an image-tag bump in `run_build.sh` (`IMAGE=`), same
+commit.**
+
 **The wasm-archive step's build command and archive list mirror
 `modules/dasImgui/.das_package`, minus `liblibDasModuleClipboard.a`:** a change to either side
 lands with the other.
@@ -102,6 +105,5 @@ its line here, with its tests, in the same change.**
   build command line or a sandbox mount lives.
 - `roll_toolchain.sh` — the box-side toolchain-bump recipe; the only place a roll step lives.
 - `Containerfile` — the sandbox image: only what a system must provide the toolchain;
-  anything a read-only mount can supply belongs in `run_build.sh`. A change here lands with
-  an image-tag bump in `run_build.sh` (`IMAGE=`), same commit.
+  anything a read-only mount can supply belongs in `run_build.sh`.
 - `.das_package`, `watchdog.json`, `dasweb-buildd.toml` — packaging and deployment.

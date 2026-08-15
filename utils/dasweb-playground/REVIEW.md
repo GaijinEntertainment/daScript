@@ -56,6 +56,10 @@ data anywhere else, or a write landing directly in the served tree, is a defect.
 taken on the builder's word.** A build runs the user's own compile-time code, so accepting
 whatever set the builder sends would let a build put an extra file on this origin.
 
+**A handler does exactly three things — validate transport shape, make one store call, format
+the response.** SQL, hashing, and policy (size, rate, listing) live in `samples_store.das`,
+and HTTP never does — no `dashv` require there.
+
 **No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
 which would make stored samples and the operator surface cross-origin readable.
 
@@ -118,13 +122,10 @@ its line here, with its tests, in the same change.**
 - `playground_config.das` — the config schema (`ServerArgs`), the defaults/toml/CLI merge with
   per-key provenance, normalization of merged config values, the startup banner payload. No
   HTTP, no SQL, no filesystem beyond reading the config file.
-- `playground_server.das` — the `HvWebServer` class: the route table and handlers. A handler
-  validates transport-level shape, translates HTTP to one store call, and formats the response.
-  A SQL statement, a hash computation, or a policy decision (size, rate, listing) in this file
-  is a defect.
+- `playground_server.das` — the `HvWebServer` class: the route table and handlers. No SQL,
+  no hashing, no policy.
 - `samples_store.das` — the store: schema structs, migrations, store operations, content
-  hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP: a require
-  of `dashv` here is a defect.
+  hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP.
 - `build_queue.das` — the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
   the job state machine, mode selection from a job's source document, and queue policy (claim
   timeout, attempt ceiling). Zero HTTP and zero filesystem.
@@ -133,9 +134,9 @@ its line here, with its tests, in the same change.**
   stage-then-rename placement, serving-path resolution, and every path the cache assembles. The
   only build-side file that touches the filesystem; zero HTTP, zero SQL.
 - `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
-  reads, bundle assembly, calling the store. The only file besides the config loader that reads
-  the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.
-- `admin.das` — operator CLI (listing curation). Talks to the store the same way the
-  server does; a second implementation of a store operation here is a defect.
+  reads, bundle assembly, calling the store. The only file besides the config loader that
+  reads the filesystem; no store mutation that bypasses `samples_store` functions.
+- `admin.das` — operator CLI (listing curation). Talks to the store the same way the server
+  does; no second implementation of a store operation.
 - `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` —
   packaging, deployment, and the public route boundary.

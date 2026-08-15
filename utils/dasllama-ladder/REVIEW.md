@@ -19,17 +19,23 @@ the store, is a defect.
 creates; store tests run against `:memory:`.** A test writing into the repo tree is a defect.
 
 **Operator routes (`/admin/*`, `/shutdown`) never appear in `caddy.snippet` — or in any
-Caddyfile route reaching this service.** This is the SOLE boundary: Caddy proxies from the same
-box, so `is_loopback_peer` sees `127.0.0.1` for every proxied request and cannot distinguish an
-internet caller. A `handle /admin/*` (or a catch-all reaching the port) added to the deployed
-vhost is unauthenticated remote access to shutdown/import, and it is a defect no matter what the
-code gate says. The `is_loopback_peer` check is defense-in-depth for direct-to-port access only.
+Caddyfile route reaching this service, a catch-all included.** Caddy proxies from the same box,
+so `is_loopback_peer` sees `127.0.0.1` for every proxied request — the Caddyfile is the only
+real boundary.
+
+**`caddy.snippet` is the authoritative copy of the public route boundary: the deployed
+Caddyfile is edited to match it, never the reverse, and a route a public caller needs lands in
+it in the same change as its handler.**
 
 **Every route logs one `ladder.req` line through `log_request`, including refusals.** A
 response path that skips the log is a defect.
 
 **Every handler that consumes a request body checks `body_is_byte_faithful` before using the
 string view.** A body used without the NUL guard is a defect.
+
+**A handler does exactly four things — validate transport shape, gate the request (loopback,
+submit-open, attempt-limit), make one store call, format the response.** SQL, hashing, and
+store policy live in `ladder_store.das`, and HTTP never does — no `dashv` require there.
 
 **Public submissions default closed: `submit_open` is false in both `LadderArgs` and
 `LadderPolicy`, the `/api/submit/sidecar` and `/api/submit/records` handlers return 403 while it
@@ -44,9 +50,9 @@ large cap on any other route, or a read cap on a submit route, is a defect.
 cross-tree require is the engine-free `modules/dasLLAMA/performance/exchange_schema.das`**
 (`README.md` §3).
 
-**Every community document is validated by `exchange_schema` at submission grade before any
-row is written**, and `import_official_store` validates at shape grade. A write path that
-skips validation is a defect.
+**Every community document passes `validate_record_submission` / `validate_sidecar_submission`
+before any row is written; `import_official_store` validates with `validate_record_store` /
+`validate_sidecar` (shape only).** A write path that skips validation is a defect.
 
 **`Source` and `Verified` are written only from store code.** A submitter-supplied value
 reaching either column is a defect.
@@ -64,6 +70,13 @@ version in the same stream.
 **Sidecars are content-addressed: the row key is the sha256 of the stored document.** A
 sidecar row whose `Sha` is not the hash of its `Doc` is a defect.
 
+**A new operator-edited file the box runs from is added to `.das_package`'s `release()` in the
+same change.**
+
+**Every privileged (root) deploy action goes through `dasllama-deploy.sh`, and
+`dasllama-deploy.sudoers` grants NOPASSWD for exactly `/usr/local/sbin/dasllama-deploy.sh` and
+nothing else** — a second command, a wildcard target, a bare `ALL`, or a shell is a defect.
+
 **The unit `provision` writes runs the service sandboxed** (`ProtectSystem=strict`, emptied
 `CapabilityBoundingSet`, `ReadWritePaths` limited to the data dir and the release tree). A diff
 that changes where the service or watchdog writes at runtime — log path, working directory,
@@ -80,25 +93,19 @@ its line here, with its tests, in the same change.**
   per-key provenance, the startup banner payload. No HTTP, no SQL, no filesystem beyond
   reading the config file.
 - `ladder_server.das` — the `HvWebServer` class: route table and handlers — transport shape,
-  request gating (loopback, submit-open, attempt-limit), HTTP-to-one-store-call translation,
-  response formatting. No SQL, no hashing, no store policy — those live in `ladder_store.das`.
+  request gating, HTTP-to-one-store-call translation, response formatting. No SQL, no
+  hashing, no store policy.
 - `ladder_store.das` — the store: schema structs, migrations, content hashing, and every
-  policy decision (size caps, rate ceiling, source stamping, the sidecar lookup ladder). Zero
-  HTTP: a require of `dashv` here is a defect.
+  policy decision (size caps, rate ceiling, source stamping, the sidecar lookup ladder).
+  Zero HTTP.
 - `admin.das` — operator CLI: argv dispatch onto `ladder_store` calls. No store mutation that
   bypasses `ladder_store` functions.
-- `caddy.snippet` — the authoritative copy of the public route boundary; the deployed
-  Caddyfile is edited to match it, never the reverse. A route added to `ladder_server.das`
-  that a public caller needs lands here in the same change.
+- `caddy.snippet` — the public route boundary's authoritative copy.
 - `.das_package` — the daspkg release manifest: package/release names and the
-  `release_include*` set of operator files carried onto the box. A new operator-edited file
-  the box runs from is added to `release()` here in the same change.
+  `release_include*` set of operator files carried onto the box.
 - `dasllama-deploy.sh` — the box-side deploy tool (`provision`/`caddy`/`install`/
   `open-submit`/`close-submit`/`status`), installed root-owned as the one privileged surface.
-  A privileged (root) deploy action performed anywhere else is a defect.
-- `dasllama-deploy.sudoers` — the drop-in that scopes that privilege: NOPASSWD for exactly
-  `/usr/local/sbin/dasllama-deploy.sh` and nothing else. A second command, a wildcard target,
-  a bare `ALL`, or a shell is a defect.
+- `dasllama-deploy.sudoers` — the drop-in that scopes that privilege.
 - `dasllama-ladder.toml` — the shipped default config: the on-box template whose keys mirror
   `LadderArgs`; operator-edited after deploy.
 - `watchdog.json` — the watchdog deploy config (port, health and shutdown URLs);
