@@ -112,6 +112,10 @@ architecture doc is only for definitions that do not compress.
   parent states it and keys the routing on what the file IS ("a `[test]` file, wherever the
   diff puts it, answers to `tests/REVIEW.md`") — location-keyed discovery cannot catch a
   misplaced file; kind-keyed routing can.
+- **A rule lives in the narrowest folder that contains its trigger.** A rule — or a run of
+  rules — whose trigger touches only one subfolder moves to that subfolder's own REVIEW.md;
+  creating that file is never an objection. The opposite direction is DEAD RULE: a trigger
+  entirely outside this document's folder cannot fire here.
 - **Checklists are cheap.** Thousands can sit in a repository; few fire per PR. Never argue
   against a folder-scoped split on cost grounds — the cost is per-firing, not per-existence.
 
