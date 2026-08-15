@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options no_aot     // invokes the compiler at runtime (compile_file) — not AOT-linkable
 
 // Lint compiles with folding off, so a const global keeps the initializer as written. The emitter
 // still needs its value -- for a constant `let` it lowers to an OpConstant, and for a named layout
