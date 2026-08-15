@@ -31,8 +31,8 @@ Several libraries share one file:
 tuners UPSERT their own keys (`tune_manifest_set` preserves the rest); "is scope X tuned" =
 per-key completeness (`tune_sidecar_entries_complete`), never file existence.
 `tune_sidecar_verdict(path, fnames)` is its named-reason twin — same verdict plus WHY
-(absent / stale-binary / foreign-box / unreadable / version / missing, with a printable
-detail) — and every guard/policy "untuned" line carries that detail. A scope's `version_of=`
+(the `TuneSidecarReason` enum: absent / stale_binary / foreign_box / unreadable / version /
+missing, with a printable detail) — and every guard/policy "untuned" line carries that detail. A scope's `version_of=`
 pin travels INSIDE the joined fnames string as one `@version:key=value` token
 (`scope_fnames_joined` appends it), so every fnames carrier — the guards, the resolver
 contract, daspkg's status walk — enforces it with no signature change. When

@@ -51,6 +51,16 @@ def private has(lines : array<string>; needle : string) : bool {
     return false
 }
 
+def private count_hits(lines : array<string>; needle : string) : int {
+    var n = 0
+    for (ln in lines) {
+        if (find(ln, needle) >= 0) {
+            n++
+        }
+    }
+    return n
+}
+
 [test]
 def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered policy-flavor arms over shared child-spawn state; no arm stands alone
     let args <- get_command_line_arguments()  // locked view — do not delete
@@ -238,11 +248,14 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     var l14 : array<string>
     t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -jit \"{verClient}\"", l14), 0)
     t |> success(l14 |> has("FAKE TUNER VER ->"))
+    t |> success(l14 |> has("FAKE TUNER VER2 ->"))   // the version_key= scope tunes too
     t |> success(l14 |> has("RESULT 7"))
+    t |> success(l14 |> has("RESULT2 7"))
     var l14b : array<string>
     t |> equal(spawn_child("{tune_env("auto")}\"{bin}\" -jit \"{verClient}\"", l14b), 0)
-    t |> success(!(l14b |> has("FAKE TUNER")))   // pin satisfied by the mint — no re-tune loop
+    t |> success(!(l14b |> has("FAKE TUNER")))   // both pins satisfied by the mint — no re-tune loop
     t |> success(l14b |> has("RESULT 7"))
+    t |> success(l14b |> has("RESULT2 7"))
     // swap the recorded version: complete kernel keys, wrong provenance — refused, both values named
     var verr = ""
     var vdoc = read_json(fread(verSidecar), verr)
@@ -260,6 +273,36 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(l14c |> has("minted at testver 1"))
     t |> success(l14c |> has("the code is at 2"))
 
+    // 14d. tune_scopes_status carries the pin: the -exe release-deps JSON reports the
+    //      version-stale scope incomplete while its version_key= sibling stays complete —
+    //      the daspkg `--quick` inherit gate reads exactly this
+    let verJson = "{get_this_module_dir()}/llvm_tune_scope_ver_deps.json"
+    remove(verJson)
+    var l14d : array<string>
+    t |> equal(spawn_child("{tune_env("error")}\"{bin}\" -jit -exe --list-shared-modules \"{verJson}\" \"{verClient}\"", l14d), 0)
+    var derr = ""
+    var ddoc = read_json(fread(verJson), derr)
+    t |> success(ddoc != null, "release-deps json parses: {derr}")
+    var sawProbe = false
+    var sawProbe2 = false
+    let dscopes = ddoc?["tune_scopes"]
+    if (dscopes != null && dscopes is _array) {
+        for (e in dscopes as _array) {
+            let sname = e?["name"] ?? ""
+            if (sname == "llvm_tune_scope_verprobe") {
+                sawProbe = true
+                t |> equal(e?["complete"] ?? true, false)   // testver mismatch -> incomplete
+            } elif (sname == "llvm_tune_scope_verprobe2") {
+                sawProbe2 = true
+                t |> equal(e?["complete"] ?? false, true)   // tv2 pin satisfied -> complete
+            }
+        }
+    }
+    delete_json(ddoc)
+    t |> success(sawProbe, "verprobe row present in tune_scopes")
+    t |> success(sawProbe2, "verprobe2 row present in tune_scopes")
+    remove(verJson)
+
     // 15. DAS_TUNE_MANIFEST pointing at a file that reads untuned: the policy rail is dead by
     //     design, but ONE loud warning names the reason; the run proceeds on fallback stamps
     let mfPath = "{get_this_module_dir()}/llvm_tune_scope_no_such.tune.json"
@@ -268,20 +311,21 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
         "DAS_TUNE_MODE= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_MANIFEST={mfPath} ")
     var l15 : array<string>
     t |> equal(spawn_child("{mfEnv}\"{bin}\" \"{client}\"", l15), 0)
-    t |> success(l15 |> has("WARNING DAS_TUNE_MANIFEST"))
+    t |> equal(l15 |> count_hits("WARNING DAS_TUNE_MANIFEST"), 2)   // once per scope, deduped
     t |> success(l15 |> has("no sidecar at"))
     t |> success(!(l15 |> has("FAKE TUNER")))
     t |> success(l15 |> has("RESULT 5"))
     // same warning from the DEFAULT-policy seat (no [tune_policy] declared)
     var l15b : array<string>
     t |> equal(spawn_child("{mfEnv}\"{bin}\" \"{autoClient}\"", l15b), 0)
-    t |> success(l15b |> has("WARNING DAS_TUNE_MANIFEST"))
+    t |> equal(l15b |> count_hits("WARNING DAS_TUNE_MANIFEST"), 2)
     t |> success(!(l15b |> has("FAKE TUNER")))
 
     remove(verSidecar)
     delete l14
     delete l14b
     delete l14c
+    delete l14d
     delete l15
     delete l15b
 

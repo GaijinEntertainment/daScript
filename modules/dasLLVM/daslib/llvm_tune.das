@@ -314,8 +314,7 @@ def private sidecar_box(path : string; mkey : string) : string {
     return box
 }
 
-// provenance[key] of the sidecar at `path` as a string, "" when absent/unreadable; a numeric
-// value stringifies (tune_provenance_note writes strings, but a hand-edited file may carry a number)
+// a hand-edited sidecar may carry a number where tune_provenance_note writes strings — read both
 def private sidecar_prov_value(path : string; key : string) : string {
     var r = ""
     let text = fread(path)
@@ -328,6 +327,8 @@ def private sidecar_prov_value(path : string; key : string) : string {
                 r = v as _string
             } elif (v != null && v is _number) {
                 r = "{int(v as _number)}"
+            } elif (v != null && v is _longint) {
+                r = "{v as _longint}"   // the parser stores json integers in the _longint arm
             }
             delete_json(doc)
         }
@@ -414,10 +415,26 @@ def private load_sidecar_doc(path : string) : JsonValue? {
     return doc
 }
 
-// refresh "provenance" (base identity + any tune_provenance_note entries) and write back
+// refresh "provenance" (base identity + tune_provenance_note entries), PRESERVING other
+// processes' note entries — a save rebuilt from its own notes alone drops every other scope's
+// version stamp, and two pinned scopes then invalidate each other (the auto policy loops)
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
     var prov = JV((binary = running_binary(), platform = get_platform_name(),
         arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now()))
+    let old = doc?["provenance"]
+    if (old != null && old is _object) {
+        for (k, v in keys(old as _object), values(old as _object)) {
+            continue if (k == "binary" || k == "platform" || k == "arch" || k == "box" || k == "written"
+                || g_prov_notes |> key_exists(k))
+            if (v != null && v is _string) {
+                update(prov, k, JV(v as _string))
+            } elif (v != null && v is _number) {
+                update(prov, k, JV(v as _number))
+            } elif (v != null && v is _longint) {
+                update(prov, k, JV(v as _longint))
+            }
+        }
+    }
     for (k, v in keys(g_prov_notes), values(g_prov_notes)) {
         if (k != "binary" && k != "platform" && k != "arch" && k != "box") {
             update(prov, k, JV(v))
@@ -770,14 +787,14 @@ struct private TuneScope {
     manifestPath : string
     tunerPath : string   // resolved against the declaring file; "" = no tuner declared
     versionKey : string      // provenance key the scope pins ("" = unpinned)
-    versionExpected : string // the code-side value version_of= resolved to at apply time
+    versionExpected : string
 }
 
 // `version_of = "module/CONST"` on a [tune_scope]: winners are valid only while the sidecar's
 // provenance records CONST's current (folded) value — the library bumps the const on kernel work.
 // Provenance key defaults to the lowercased const name (`version_key=` overrides); false = err says why.
 def private resolve_version_of(prog : Program?; spec, keyOverride : string;
-                               var vkey, vexp : string&; var err : string&) : bool {
+                               var versionKey, versionExpected : string&; var err : string&) : bool {
     let slash = find(spec, "/")
     if (slash <= 0 || slash >= length(spec) - 1) {
         err = "version_of=\"module/CONST\" - got \"{spec}\""
@@ -808,8 +825,8 @@ def private resolve_version_of(prog : Program?; spec, keyOverride : string;
         err = "version_of '{spec}' must name an int constant with a foldable initializer"
         return false
     }
-    vkey = empty(keyOverride) ? to_lower(constName) : keyOverride
-    vexp = value
+    versionKey = empty(keyOverride) ? to_lower(constName) : keyOverride
+    versionExpected = value
     return true
 }
 
@@ -869,7 +886,7 @@ struct TuneScopeStatus {
     name : string       //!< [tune_scope] name
     manifest : string   //!< the app sidecar the winners live in
     tuner : string      //!< tuner harness path ("" = none declared)
-    complete : bool     //!< every [tune] kernel of this scope has a fresh sidecar entry
+    complete : bool     //!< every demanded kernel has a fresh sidecar entry and the version pin (if any) matched
     fallbacks : string  //!< ';'-joined fname=suffix stamps selected by this compile/host
 }
 
@@ -961,8 +978,7 @@ def tune_scopes_status(prog : Program?) : array<TuneScopeStatus> {
 // status walk) then enforces it with no signature change. '@' can never begin a function name.
 let TUNE_VERSION_TOKEN = "@version:"
 
-// the pin token holds: provenance[key] of the sidecar equals the recorded code-side value
-// (a malformed token never blocks — the [tune_scope] apply rejects those at declaration)
+// a malformed token never blocks — the [tune_scope] apply rejects those at declaration
 def private version_token_satisfied(path : string; tok : string) : bool {
     let kv = slice(tok, length(TUNE_VERSION_TOKEN))
     let eq = find(kv, "=")
@@ -970,8 +986,6 @@ def private version_token_satisfied(path : string; tok : string) : bool {
     return sidecar_prov_value(path, slice(kv, 0, eq)) == slice(kv, eq + 1)
 }
 
-// one demand-list entry against the sidecar: a kernel name wants a "kernels" entry, the
-// version token wants its provenance pin
 def private entry_satisfied(path : string; manifest : table<string; string>; fname : string) : bool {
     if (fname |> starts_with(TUNE_VERSION_TOKEN)) {
         return version_token_satisfied(path, fname)
@@ -979,9 +993,9 @@ def private entry_satisfied(path : string; manifest : table<string; string>; fna
     return manifest |> key_exists(fname)
 }
 
-//! The demanded kernels in the ';'-joined `fnames` that LACK a sidecar entry — "" when
-//! complete. The loud half of the completeness check: a tuner that doesn't record a kernel
-//! it should re-tunes every start, and this names the drift so it's fixed in one glance.
+//! The demand entries in the ';'-joined `fnames` lacking a sidecar entry — kernel names, plus
+//! an unsatisfied `@version:` pin token verbatim; "" when complete. The bare-list sibling of
+//! `tune_sidecar_verdict` for build orchestrators; the refusal messages print the verdict.
 def tune_sidecar_missing_entries(path : string; fnames : string) : string {
     var found = false
     var manifest <- read_manifest(path, found)
@@ -1012,12 +1026,23 @@ def tune_sidecar_entries_complete(path : string; fnames : string) : bool {
     return complete
 }
 
+//! The closed reason set `tune_sidecar_verdict` reports; `none` accompanies `complete`.
+enum TuneSidecarReason {
+    none
+    absent
+    stale_binary
+    foreign_box
+    unreadable
+    version
+    missing
+}
+
 //! Why the sidecar at `path` does not satisfy the ';'-joined `fnames` demand: `complete` true
-//! means it does; otherwise `reason` is absent | stale-binary | foreign-box | unreadable |
-//! version | missing, and `detail` is the printable sentence the refusal lines carry.
+//! means it does; otherwise `reason` says why and `detail` is the printable sentence the
+//! refusal lines carry.
 struct TuneSidecarVerdict {
     complete : bool
-    reason : string
+    reason : TuneSidecarReason
     detail : string
 }
 
@@ -1030,26 +1055,29 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     }
     var sfs : FStat
     if (empty(path) || !stat(path, sfs)) {
-        return TuneSidecarVerdict(reason = "absent", detail = "no sidecar at '{path}'")
+        return TuneSidecarVerdict(reason = TuneSidecarReason.absent, detail = "no sidecar at '{path}'")
     }
     var bfs : FStat
     if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
-        return TuneSidecarVerdict(reason = "stale-binary",
+        return TuneSidecarVerdict(reason = TuneSidecarReason.stale_binary,
             detail = "sidecar predates the running binary ({sfs.mtime} < {bfs.mtime}); a rebuild invalidates measured winners")
     }
     let theirs = sidecar_box(path, "{sfs.mtime}")
     if (empty(theirs)) {
         // unparsable json and provenance-less files land here — not a tune sidecar at all
-        return TuneSidecarVerdict(reason = "unreadable", detail = "sidecar carries no readable provenance")
+        return TuneSidecarVerdict(reason = TuneSidecarReason.unreadable,
+            detail = "sidecar does not read as a tune sidecar (no readable provenance)")
     }
     if (box_match_key(theirs) != box_match_key(tune_box_identity())) {
-        return TuneSidecarVerdict(reason = "foreign-box",
+        return TuneSidecarVerdict(reason = TuneSidecarReason.foreign_box,
             detail = "sidecar was minted on '{theirs}', this box is '{tune_box_identity()}'")
     }
     var found = false
     var inscope manifest <- read_manifest(path, found)
     if (!found) {
-        return TuneSidecarVerdict(reason = "unreadable", detail = "sidecar exists but does not parse")
+        // the race twin of the arm above: the file changed between the two reads
+        return TuneSidecarVerdict(reason = TuneSidecarReason.unreadable,
+            detail = "sidecar does not read as a tune sidecar (no readable provenance)")
     }
     var inscope missing : array<string>
     for (fname in split(fnames, ";")) {
@@ -1060,7 +1088,7 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
                 let eq = find(kv, "=")
                 let key = slice(kv, 0, eq)
                 let got = sidecar_prov_value(path, key)
-                return TuneSidecarVerdict(reason = "version", detail = (empty(got)
+                return TuneSidecarVerdict(reason = TuneSidecarReason.version, detail = (empty(got)
                     ? "sidecar records no {key} - minted before this pin; kernels have changed since"
                     : "sidecar was minted at {key} {got}, the code is at {slice(kv, eq + 1)}; kernel work invalidates winners"))
             }
@@ -1070,7 +1098,7 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     }
     if (!empty(missing)) {
         let names = join(missing, ";")
-        return TuneSidecarVerdict(reason = "missing", detail = "missing entries: {names}")
+        return TuneSidecarVerdict(reason = TuneSidecarReason.missing, detail = "missing entries: {names}")
     }
     return TuneSidecarVerdict(complete = true)
 }
@@ -1547,8 +1575,8 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
         if (cv is tString) {
             covers = cv as tString
         }
-        var vkey = ""
-        var vexp = ""
+        var versionKey = ""
+        var versionExpected = ""
         let vv = find_arg(args, "version_of")
         if (vv is tString) {
             var keyOverride = ""
@@ -1557,7 +1585,7 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
                 keyOverride = kv as tString
             }
             var verr = ""
-            if (!resolve_version_of(get_ptr(compiling_program()), vv as tString, keyOverride, vkey, vexp, verr)) {
+            if (!resolve_version_of(get_ptr(compiling_program()), vv as tString, keyOverride, versionKey, versionExpected, verr)) {
                 errors := "[tune_scope]: {verr}"
                 return false
             }
@@ -1566,7 +1594,7 @@ class private TuneScopeAnnotation : AstStructureAnnotation {
         g_scopes["{compiling_module().name}"] = TuneScope(scopeName = sname,
             modName = "{compiling_module().name}", covers = covers,
             manifestPath = tune_manifest_path(), tunerPath = tuner,
-            versionKey = vkey, versionExpected = vexp)
+            versionKey = versionKey, versionExpected = versionExpected)
         return true
     }
 }
@@ -2091,8 +2119,8 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
     return <- rows
 }
 
-// Fix-2 dedup: warn once per (scope, manifest) per process — infer passes re-run, and shared
-// macro-module state persists across compiles in one process
+// warn once per (scope, manifest) per process — infer passes re-run, and shared macro-module
+// state persists across compiles in one process
 var private g_manifest_warned : table<string>
 
 // DAS_TUNE_MANIFEST disables the policy rail (explicit manifest = manual) — but a pointed-at
@@ -2208,17 +2236,16 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
                     // autoinfer = undeclared result, void by convention for main
                     errors = "[tune_policy]: restart - {func.name} must return void or int"
                 } else {
-                    let fnames = scopeFnames
                     var guard : ExpressionPtr
                     if (func.result.baseType == Type.tInt) {
                         guard = qmacro_expr() {
-                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(fnames))) {
+                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames))) {
                                 return 3
                             }
                         }
                     } else {
                         guard = qmacro_expr() {
-                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(fnames))) {
+                            if (tune_restart_needed($v(scope.scopeName), $v(scope.manifestPath), $v(scope.tunerPath), $v(scopeFnames))) {
                                 return
                             }
                         }
@@ -2285,8 +2312,8 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
 class private TunePolicyAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
+        // the manifest warning is the default pass's job — it fires for every root, this apply's gate included
         if (tune_policy_gated() && !exe_status_report()) {
-            warn_manifest_untuned()
             return true
         }
         var errs = ""
@@ -2328,10 +2355,8 @@ class private TuneDefaultPolicy : AstPassMacro {
     def override apply(prog : ProgramPtr; _mod : Module?) : bool {
     // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
         return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
-        if (tune_policy_gated() && !exe_status_report()) {
-            warn_manifest_untuned()
-            return false
-        }
+        warn_manifest_untuned()   // self-gates on DAS_TUNE_MANIFEST; covers exe and declared-policy roots too
+        return false if (tune_policy_gated() && !exe_status_report())
         var main_fn = compiling_module() |> find_unique_function("main", false)
         return false if (main_fn == null)
         for (ann in main_fn.annotations) {
