@@ -3,61 +3,40 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `DEBUGGING.md` (§ Roadmap).
 
-## Pipeline timing
+- **Work added to or moved within the JIT pipeline — `run_jit`, `run_split_codegen`
+  (`llvm_jit_run.das`), or an artifact emitter (`llvm_jit_common.das`) — runs inside a timed
+  phase of the `LLVM JIT time:` breakdown** (phase inventory: `ARCHITECTURE.md` §1). Option
+  resolution before the first timer and log lines are not pipeline work.
 
-**A diff that adds or moves work inside `run_jit` or `run_split_codegen` (`llvm_jit_run.das`)
-or the artifact emitters (`write_dll` / `write_exe` / `write_wasm` / `emit_object_only` /
-`link_dll_from_objects` in `llvm_jit_common.das`) keeps that work inside a timed phase of the
-`LLVM JIT time:` breakdown** — new work landing between phases or after the last timer is a
-defect; the phase inventory the breakdown must match is `ARCHITECTURE.md` §1 (§1.1 carries
-the split-mode mapping). Out of scope: a path that runs no pipeline phase and prints no
-breakdown (an early return, an empty function set), `run_jit`'s pre-timer option/policy
-resolution prologue, and a diagnostic log line.
+- **A diff that breaks one timed phase into finer steps gives each step its own number in
+  the log;** a parent label may keep printing the sum only while its steps print too.
 
-**A phase split stays split in the log.** When a diff extracts a timed phase into finer
-steps, each resulting step reports its own number under a `LLVM JIT time:` label; a parent
-entry may keep covering the sum only if the finer steps also print (`ARCHITECTURE.md` §1.1).
-Leaving an aggregate label silently absorbing the finer steps of a split it just performed
-is a defect; new work added inside an existing phase reports its own number when the phase's
-doc names it as a separate step, and rides the aggregate otherwise.
+- **New work inside an existing phase prints its own number when `ARCHITECTURE.md` §1 names
+  it as a step;** otherwise it rides the phase's number.
 
-## Codegen identity
+- **A change under `modules/dasLLVM/daslib/` to IR generation, target-machine setup,
+  `[llvm_code]` generators, or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`**
+  (`llvm_jit_run.das`) — the cache self-invalidates on program changes, not emitter changes.
 
-**A change under `modules/dasLLVM/daslib/` to IR generation, target-machine setup, `[llvm_code]`
-generators, or the jit call ABI bumps `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das`). The JIT
-cache key folds each function's compiled-code hash, so it self-invalidates when the program
-changes; it cannot see changes to the emitter (`ARCHITECTURE.md` §2, §2.1).
+- **A new environment or config input to the cache key folds inside `jit_env_salt`
+  (`llvm_jit_run.das`), never directly into either key** — salt feeds both keys, and a config
+  folded into one but not the other links stale objects. Inputs that vary per function set
+  (AOT hashes) are key material, not salt.
 
-**A new environment or config cache-key input folds inside `jit_env_salt`** (`llvm_jit_run.das`),
-never directly into `jit_dll_basename` or the partition-key chain in `run_split_codegen` — the
-helper is shared by both keys, and a config component folded into one key but not the other
-lets a config change link stale cached partition objects. Per-function-set inputs (AOT hashes,
-name folds, the hint folds) fold into each key directly; they are not salt.
+- **A diff introducing an override knob — an env variable or setting that changes what a run
+  compiles, tunes, or emits — adds it to `ARCHITECTURE.md` §3's inventory in the same change.**
 
-## Overrides
+- **An override announces itself where it takes effect:** at least one logged line names the
+  knob. Set-but-inert stays silent; an exposure-only diff defers the announce to its
+  consumer, same change. A knob added, or given a new effect, without its announce is a
+  defect.
 
-**A diff introducing an override knob adds it to `ARCHITECTURE.md` §3's inventory in the same
-change.** The knobs this governs are the ones matching §3's definition — an escape that changes
-what a run compiles, tunes, or emits beyond its defaults, under `llvm_jit_run.das` /
-`llvm_jit_common.das` / `llvm_tune.das`.
+- **No raw environment access outside `llvm_env.das` — declare a knob there instead.**
+  `get_env_variable` / `has_env_variable` / literal-name `env_config_*` anywhere else in the
+  module is a defect —
+  including the non-literal spelling `get_env_variable(expr)`, the case only review catches;
+  `tests/llvm_env_registry.das` enforces the rest.
 
-**An override announces itself where it changes the outcome** — at the point one takes effect, at
-least one printed or logged line names the knob. Set-but-inert stays silent and per-scope repeats
-are fine; a diff that only exposes the override bit (a `*_overridden` query) discharges this when
-the announce lands at the consumer in the same change. A diff that adds such a knob, or gives one
-a new effect, without its announce is a defect.
-
-**No raw environment access outside `llvm_env.das`.** An environment knob is an `[EnvConfig]`
-field there, read as a `g_env_jit` / `g_env_tune` field (both load once at context init;
-in-process overrides go through the tune setters, which also arm children); ambient names go
-through `env_value_of` / `env_is_set` with an `ambient_rows` entry backing every literal name,
-and a `set_env_variable` names only a declared knob. `get_env_variable` / `has_env_variable` /
-literal-name `env_config_*` anywhere else in the module is a defect — the ban covers the
-non-literal spelling `get_env_variable(expr)` too, which only review catches;
-`tests/llvm_env_registry.das` (run per-PR by the extended checks) enforces the literal-name
-forms.
-
-**`ENVIRONMENT.md` is generated by `harness/gen_env_doc.das`.** Hand-editing it is a defect; a
-change to `llvm_env.das` or to the shared `daslib/env_registry.das` at the repo root re-runs the
-generator and commits the result when it differs, and `tests/llvm_env_registry.das` fails on
-drift.
+- **`ENVIRONMENT.md` is generated (`harness/gen_env_doc.das`); hand-editing it is a defect.**
+  A change to `llvm_env.das` or the repo-root `daslib/env_registry.das` re-runs the generator
+  and commits the diff; `tests/llvm_env_registry.das` fails on drift.

@@ -3,8 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `CLAUDE.md`.
 
-## Tests
-
 **Tests go under `modules/dasImgui/tests`.** Every dasImgui test file in the diff is under it;
 `tests/dasImgui` is not a home.
 

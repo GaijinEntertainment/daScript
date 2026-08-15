@@ -3,8 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-## Tests
-
 **Run the unit suite on every change:** `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg.das` — fast, no network, interpreted. A daspkg change without a green
 unit run is a defect.
@@ -20,8 +18,6 @@ directory), and no per-PR CI runs these suites.
 
 **A new command or flag lands with its test cell, its `print_usage` line, and its README table
 row in the same change.**
-
-## Behavior
 
 **A release always mints the tune sidecar.** A bundle that ships an exe without a sidecar
 beside it is a defect.
