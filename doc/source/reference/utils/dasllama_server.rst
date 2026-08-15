@@ -67,7 +67,7 @@ Run under ``-jit`` --- interpreted inference is far too slow for model work::
    * - ``--image-mmproj``
      -
      - ---
-     - vision mmproj GGUF (gemma 3 family) --- the chat route then accepts
+     - vision mmproj GGUF (gemma-4 family) --- the chat route then accepts
        ``image_url`` content parts
    * - ``--ctx``
      -
