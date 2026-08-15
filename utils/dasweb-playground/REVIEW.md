@@ -3,14 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasweb_backend.md`.
 
-## Tests
-
 **Every route, every store operation, and every config or limit behavior has a dastest test in
-this directory.** A behavior that ships without its test is a defect. Exempt: `main.das` and
-`admin.das` argv/dispatch glue — their behaviors live in the modules they call, which are the
-tested surface.
-
-**Every bug fix lands with the regression test that fails without it, in the same change.**
+this directory** — `main.das` and `admin.das` stay argv/dispatch glue over tested modules, so
+they need none of their own.
 
 **`[test]` files live in this directory and require siblings by bare name** — never under the
 global `tests/` tree, and never registered in any `CMakeLists.txt`.
@@ -22,58 +17,6 @@ proven only through HTTP, or an HTTP behavior proven only against the store, is 
 
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
 creates.** A test writing into the repo tree is a defect.
-
----
-
-## Placement — one file, one rule
-
-Every file states what it holds. Code that belongs to a file and is written anywhere else is a
-defect, and this section is the whole test.
-
-**A new file ships with its rule here and its tests, in the same change.**
-
-- `main.das` — the launcher: argv parsing into globals, logger init, the exported
-  `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
-  no SQL, no hashing, no merge logic.
-- `playground_config.das` — the config schema (`ServerArgs`), the defaults/toml/CLI merge with
-  per-key provenance, normalization of merged config values, and the startup banner payload. No
-  HTTP, no SQL, no filesystem beyond reading the config file.
-- `playground_server.das` — the `HvWebServer` class: the route table and handlers. A handler
-  validates transport-level shape, translates HTTP to one store call, and formats the response.
-  A SQL statement, a hash computation, or a policy decision (size, rate, listing) in this file
-  is a defect.
-- `samples_store.das` — the store: schema structs, migrations, store operations, content
-  hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP: a require
-  of `dashv` here is a defect.
-- `build_queue.das` — the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
-  the job state machine, mode selection from a job's source document, and queue policy (claim
-  timeout, attempt ceiling). Zero HTTP and zero filesystem.
-- `build_artifacts.das` — the artifact cache: blobs layout, toolchain/hash/filename validation
-  (including which suffixes are documents, for the origin gate), integrity verification,
-  stage-then-rename placement, serving-path resolution, and every path the cache assembles. The
-  only build-side file that touches the filesystem; zero HTTP, zero SQL.
-- `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
-  reads, bundle assembly, calling the store. The only file besides the config loader that reads
-  the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.
-- `admin.das` — the operator CLI (listing curation). Talks to the store the same way the
-  server does; a second implementation of a store operation here is a defect.
-- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` —
-  packaging, deployment, and the public route boundary. A behavior change hidden in these files
-  without a note in `README.md` (Run section) is a defect.
-
-**A file an operator edits on the box is preserved across upgrades**: shipped
-`release_include_if_missing` and carried forward by `deploy.sh`. Shipping one with plain
-`release_include`, or adding one `deploy.sh` does not carry, is a defect.
-
-**Checked-in config holds development values.** The config file is discovered automatically
-beside the module, so a production path in it makes an in-repo run open the live database.
-
-**Migrations are append-only.** A diff that edits a shipped `[sql_migration]` body is a defect;
-schema change means a new version.
-
----
-
-## Security
 
 **The server binds loopback only** — `set_bind_host("127.0.0.1")` between `init` and `start`.
 A diff that removes, reorders past `start`, or conditionalizes the bind is a defect.
@@ -113,6 +56,10 @@ data anywhere else, or a write landing directly in the served tree, is a defect.
 taken on the builder's word.** A build runs the user's own compile-time code, so accepting
 whatever set the builder sends would let a build put an extra file on this origin.
 
+**A handler does exactly three things — validate transport shape, make one store call, format
+the response.** SQL, hashing, and policy (size, rate, listing) live in `samples_store.das`,
+and HTTP never does — no `dashv` require there.
+
 **No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
 which would make stored samples and the operator surface cross-origin readable.
 
@@ -125,9 +72,8 @@ under its configured directory before it is read.** `path_join` discards the bas
 side is absolute, so an unchecked manifest path reads any file the service user can — and the
 importer publishes what it reads.
 
-**No `unsafe` in any route handler.** An `unsafe` elsewhere carries a reason comment on the line
-of the unsafe operation itself — the `unsafe(...)` expression, or the operation line inside an
-`unsafe { }` block; one without the comment is a defect.
+**No `unsafe` in any route handler.** An `unsafe` elsewhere carries a reason comment on the
+unsafe operation's own line; one without it is a defect.
 
 **`POST /shutdown` and every admin operation stay unrouted in `caddy.snippet`.** Forwarding one
 there, or adding an admin endpoint to the public route set, is a defect.
@@ -135,23 +81,15 @@ there, or adding an admin endpoint to the public route set, is a defect.
 **Secrets (tokens, credentials) never appear in a log line, a response body, or an error
 message.** The config banner logs key names and provenance, never values marked secret.
 
----
-
-## Logging
-
-**Every request emits one structured line: method, path, status, duration, client ip, bytes.**
-A route without it is a defect. Exempt: `GET /healthz` — the watchdog polls it every few
-seconds and logging it would bury the signal.
+**Every request but `GET /healthz` emits one structured line: method, path, status, duration,
+client ip, bytes.** A route without it is a defect; the watchdog polls `/healthz` every few
+seconds, and logging it would bury the signal.
 
 **Every store mutation and every job/state transition emits a structured line.** A failure path
 that can trigger without leaving a log line is a defect.
 
 **Startup logs the full effective config with per-key provenance before the first request is
 served.**
-
----
-
-## Lifecycle and memory
 
 **Lifecycle-owned state is module-global; no collectable value lives in a `main`-loop local
 across `maybe_collect_gc()`.**
@@ -160,3 +98,45 @@ across `maybe_collect_gc()`.**
 used on another is a defect.
 
 **Route callbacks are retained with `push`, never `emplace`.**
+
+**A behavior change in a box-side file — `.das_package`, `watchdog.json`,
+`dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` — lands with its note in the
+`README.md` Run section.**
+
+**A file an operator edits on the box is preserved across upgrades**: shipped
+`release_include_if_missing` and carried forward by `deploy.sh`. Shipping one with plain
+`release_include`, or adding one `deploy.sh` does not carry, is a defect.
+
+**Checked-in config holds development values.** The config file is discovered automatically
+beside the module, so a production path in it makes an in-repo run open the live database.
+
+**Migrations are append-only.** A diff that edits a shipped `[sql_migration]` body is a defect;
+schema change means a new version.
+
+**Placement — one file, one line: a diff keeps each file inside its line, and a new file adds
+its line here, with its tests, in the same change.**
+
+- `main.das` — launcher: argv parsing into globals, logger init, the exported
+  `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
+  no SQL, no hashing, no merge logic.
+- `playground_config.das` — the config schema (`ServerArgs`), the defaults/toml/CLI merge with
+  per-key provenance, normalization of merged config values, the startup banner payload. No
+  HTTP, no SQL, no filesystem beyond reading the config file.
+- `playground_server.das` — the `HvWebServer` class: the route table and handlers. No SQL,
+  no hashing, no policy.
+- `samples_store.das` — the store: schema structs, migrations, store operations, content
+  hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP.
+- `build_queue.das` — the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
+  the job state machine, mode selection from a job's source document, and queue policy (claim
+  timeout, attempt ceiling). Zero HTTP and zero filesystem.
+- `build_artifacts.das` — the artifact cache: blobs layout, toolchain/hash/filename validation
+  (including which suffixes are documents, for the origin gate), integrity verification,
+  stage-then-rename placement, serving-path resolution, and every path the cache assembles. The
+  only build-side file that touches the filesystem; zero HTTP, zero SQL.
+- `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
+  reads, bundle assembly, calling the store. The only file besides the config loader that
+  reads the filesystem; no store mutation that bypasses `samples_store` functions.
+- `admin.das` — operator CLI (listing curation). Talks to the store the same way the server
+  does; no second implementation of a store operation.
+- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` —
+  packaging, deployment, and the public route boundary.
