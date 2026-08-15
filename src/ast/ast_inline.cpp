@@ -578,6 +578,10 @@ namespace das {
             virtual void preVisitExpression ( Expression * expr ) override {
                 Visitor::preVisitExpression(expr);
                 expr->at = expr->rtti_isBlock() ? wideAt(col) : pointAt(col);
+                // a spliced clone is compiler-inserted: the original body is linted at its
+                // definition, and at-keyed macros must not re-analyze the copy (the stamp
+                // makes it look host-authored, defeating their foreign-file heuristics)
+                expr->generated = true;
             }
             virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
                 Visitor::preVisitLet(let, var, last);
