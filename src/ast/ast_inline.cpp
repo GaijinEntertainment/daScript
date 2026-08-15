@@ -573,6 +573,7 @@ namespace das {
             LineInfo base;
             uint32_t col = 0;
             uint32_t cap = 0;
+            bool markGenerated = true;
         protected:
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             virtual void preVisitExpression ( Expression * expr ) override {
@@ -580,8 +581,11 @@ namespace das {
                 expr->at = expr->rtti_isBlock() ? wideAt(col) : pointAt(col);
                 // a spliced clone is compiler-inserted: the original body is linted at its
                 // definition, and at-keyed macros must not re-analyze the copy (the stamp
-                // makes it look host-authored, defeating their foreign-file heuristics)
-                expr->generated = true;
+                // makes it look host-authored, defeating their foreign-file heuristics).
+                // temp INITS are exempt - they are caller-authored argument/prefix
+                // expressions merely relocated, and marking them would hide lint findings
+                // on user code; their at still joins the ladder (uninitialized-temp gating)
+                if ( markGenerated ) expr->generated = true;
             }
             virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
                 Visitor::preVisitLet(let, var, last);
@@ -2594,7 +2598,11 @@ namespace das {
                 } else {
                     tl = makeTemp(callLike->at, tname, pe, false, false, pe->type && !pe->type->canCopy());
                 }
-                if ( calleeFn ) tl->visit(stamp);
+                if ( calleeFn ) {
+                    stamp.markGenerated = false;    // caller-authored init, only relocated
+                    tl->visit(stamp);
+                    stamp.markGenerated = true;
+                }
                 splice.push_back(tl);
                 ReplaceNode rn(pe, new ExprVar(peAt, tname));
                 auto & slot = site.anchor.block->list[anchorIndex];
@@ -2607,7 +2615,9 @@ namespace das {
             InlineBodyRewriter rewriter(plan.paramSub, rename, callLike->at, calleeFn != nullptr);
             ExpressionPtr callReplacement = nullptr;
             if ( calleeFn ) {
+                stamp.markGenerated = false;    // caller-authored arg inits, only relocated
                 for ( auto & t : temps ) t->visit(stamp);   // arg temps ladder after the prefix temps
+                stamp.markGenerated = true;
             }
             if ( exprBody ) {
                 auto ret = static_cast<ExprReturn *>(in.body->list.back());
