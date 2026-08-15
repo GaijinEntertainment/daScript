@@ -33,11 +33,12 @@ test loads first.
 **A suite loads decoders with `load_model_`, never the image rail** (towers and embedders load
 through their family loaders). Image-rail coverage belongs to the image suites alone.
 
-**Every new or changed piece of functionality ships its test in the same change — feed the
-function, check the bytes; "the model still runs" is not that test.** The folder's sharpenings
-of `REVIEW_COMMON.md`'s constitutional rule: a signature widening with an unchanged body counts
-(the new receivers are the new bit); a platform-fixed predicate's observable is the argv it
-gates or the mode it selects; a moved registration's observable is reachability.
+**Every new or changed piece of functionality — a function or a registration, its signature,
+body, or wiring — ships its test in the same change: feed the function, check the bytes; "the
+model still runs" is not that test.** The folder's sharpenings of `REVIEW_COMMON.md`'s
+constitutional rule: a signature widening with an unchanged body counts (the new receivers are
+the new bit); a platform-fixed predicate's observable is the argv it gates or the mode it
+selects; a moved or edited registration's observable is reachability.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.

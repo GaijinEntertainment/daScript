@@ -11,8 +11,12 @@ K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.
 or media change `REVIEW_VISION.md`. This file's rules bind the rest of the engine.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel
-work adds, removes, or edits a compute-kernel body or variant set — CPU tiers, generated GEMM
-families, GPU kernel classes, KV-codec and convert kernels — or a tune family's registration.
+work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
+body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]`
+metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work. A bump with neither the
+kernel roster nor sidecar interchangeability changed is a defect — equal versions mean an equal
+kernel roster and an interchangeable sidecar set (the exchange keys validity on version and
+box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
 this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
