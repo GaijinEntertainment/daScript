@@ -94,9 +94,10 @@ architecture doc is only for definitions that do not compress.
 - **Placement last.** At most one placement block, closing the file, in the fixed form: one
   bold criterion ("Placement — one file, one line: a diff keeps each file inside its line, and
   a new file adds its line here, with its tests, in the same change.") over a list whose
-  grammar is `` `file` `` — role: owns-list. No never-list. You check ONLY existence,
-  position, and that its lines carry no smuggled rules (a rule inside the inventory is
-  WRONG DOCUMENT: it moves to the flat list). Everything else about placement belongs to the
+  grammar is `` `file` `` — role: owns-list, optionally a bare never-phrase ("Zero network",
+  "No SQL, no hashing"). A clause with its own defect-verdict or same-change obligation is a
+  smuggled rule — WRONG DOCUMENT, it moves to the flat list. You check ONLY existence,
+  position, and smuggling. Everything else about placement belongs to the
   placement-auditor agent — do not audit line content.
 - **One rule, one short paragraph, blank line between rules, bold criterion first.**
 - **No numbering, no ordinal labels.** Anything needing a stable reference lives in the

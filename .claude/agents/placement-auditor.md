@@ -13,9 +13,9 @@ The fixed form you verify:
 
 - The block is the LAST thing in the document, introduced by one bold criterion
   ("Placement — one file, one line: …").
-- Each line's grammar: `` `file` `` — role: owns-list. Optional never-list as a plain
-  sentence. No rule may hide inside a line (a "…is a defect" clause about behavior rather
-  than location is a smuggled rule — report it; it belongs in the flat list above).
+- Each line's grammar: `` `file` `` — role: owns-list, optionally a bare never-phrase ("Zero
+  network", "No SQL, no hashing"). A clause with its own defect-verdict or same-change
+  obligation is a smuggled rule — report it; it belongs in the flat list above.
 
 Then the map-vs-territory checks, each with evidence:
 
