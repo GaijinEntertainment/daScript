@@ -93,7 +93,8 @@ def models_provenance() : array<ProvEntry> {   // nolint:STYLE038 — flat prove
             url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/mmproj-gemma-4-12B-it-BF16.gguf",
             bytes = 175115616l, sha256 = "9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d"),
         ProvEntry(name = "coco-val2017-000000039769.jpg", root = "llm",
-            url = "http://images.cocodataset.org/val2017/000000039769.jpg",
+            // path-style S3 spelling: the images.cocodataset.org website endpoint is http-only
+            url = "https://s3.amazonaws.com/images.cocodataset.org/val2017/000000039769.jpg",
             bytes = 173131l, sha256 = "dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e"),
         ProvEntry(name = "gemma-4-E4B-it-Q8_0.gguf", root = "llm",
             url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
