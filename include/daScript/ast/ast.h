@@ -1004,6 +1004,7 @@ namespace das
                 bool    localFunction : 1;           // @@{} local function body - generated, but the block is verbatim user code
                 bool    tempStringResult : 1;        // [temp_string_result] - result is always a fresh string allocation (or null), never a passthrough of an input, never retained by the callee
                 bool    mayQueueTempString : 1;      // executing the BODY may hit a temp-string queue site (builder or wrappable call, transitively) - a caller must not hold a parked temp across a call to this
+                bool    needCallerStackFrame : 1;    // may reach a collect point - its caller must keep a real stack frame, so carriers are denied fastcall (closure: ast_unused.cpp)
             };
             uint32_t moreFlags2 = 0;
         };

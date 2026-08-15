@@ -126,11 +126,38 @@ To collect garbage, from the inside of the context:
         heap_collect(collect_string_heap, validate_after_collect)
     }
 
+The collector finds live values by walking the interpreter call stack, so every call
+between your program's entry point and ``heap_collect`` must be a regular interpreted
+call. The compiler guarantees the common case: every function that can reach
+``heap_collect`` through direct calls keeps a real stack frame (never fastcall), so
+collect wrappers — and wrappers of wrappers — just work. One residual is not covered:
+a collect reached only through a **block, lambda, or function pointer** that a
+single-statement (fastcall) wrapper invokes; keep such wrappers to two statements or
+collect outside the callback.
+
+Chains the collector cannot walk honestly are refused with a runtime error instead
+of collecting:
+
+* an interpreted frame reached **through a compiled (AOT/JIT) frame that broke the
+  line handoff**, or entered from C++ **without line info** (see below). An
+  all-compiled chain — a standalone compiled executable — is allowed and collects
+  from globals. Note that a compiled function entered from the interpreter carries
+  an interpreter-shaped frame the collector cannot distinguish; the gc test suites
+  therefore run interpreted-only.
+
 To do the same from the C++ side:
 
 .. code-block:: cpp
 
-    context->collectHeap(dummy_line_info_ptr, collect_string_heap, validate_after_collect);
+    context->collectHeap(line_info_ptr, collect_string_heap, validate_after_collect);
+
+Passing ``nullptr`` for the line info is allowed only when no daslang frames are on the
+context's stack (for example between updates, or on a macro context). When C++ code
+re-enters daslang below live frames, use an entry point that takes a line —
+``context->callOrFastcall(fn, args, line)`` or ``das_invoke_function<...>::invoke(ctx,
+at, fn)`` — and pass a real ``at``: a collect below a null-line re-entry is refused,
+because the locals of the frames above it can no longer be attributed. (``Context::eval``
+and ``evalWithCatch`` carry no line parameter and are only safe as stack-root entries.)
 
 .. seealso::
 

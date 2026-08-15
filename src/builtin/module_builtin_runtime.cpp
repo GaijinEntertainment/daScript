@@ -2471,6 +2471,8 @@ namespace das
                 SideEffects::modifyExternal, "heap_collect")
                     ->args({"string_heap","validate","context","at"});
         hcol->unsafeOperation = true;
+        // the collector walks caller frames and a fastcall caller has none - this is the seed
+        hcol->needCallerStackFrame = true;
         hcol->arguments[0]->init = new ExprConstBool(true);
         hcol->arguments[1]->init = new ExprConstBool(false);
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",

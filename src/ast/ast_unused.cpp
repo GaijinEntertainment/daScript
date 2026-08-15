@@ -580,6 +580,19 @@ namespace das {
                 }
                 if ( mayQueue ) fnc->mayQueueTempString = true;
             }
+            // need-caller-stack-frame: bottom-up like the two rules above, same cycle
+            // under-report. invoke edges are NOT closed over: a collect reached only
+            // through a block/lambda invoked from a fastcall body is the residual
+            // documented in contexts.rst
+            if ( !fnc->needCallerStackFrame ) {
+                for ( auto & depF : fnc->useFunctions ) {
+                    if ( depF == fnc ) continue;
+                    if ( depF->needCallerStackFrame ) {
+                        fnc->needCallerStackFrame = true;
+                        break;
+                    }
+                }
+            }
             fnc->sideEffectFlags |= flags;
             return flags;
         }

@@ -526,6 +526,75 @@ namespace das {
             }
         };
 
+        // stamps spliced material (manufactured temps + the cloned CALLEE subtree) with the
+        // host call-site location: the GC / stackwalk / debugger locals gate compares the
+        // parked line against local visibility ranges, and both must be host-function lines
+        // or the frame's locals silently drop out of the walk. the COLUMN LADDER restores
+        // the ordering protection line order gives user code - only already-initialized
+        // locals pass the gate. `f(a, b)` at 7:3:
+        //   let _inl0_arg_a = <a>    // subtree stamped @7:3, visible from 7:4
+        //   let _inl0_arg_b = <b>    // subtree stamped @7:4, visible from 7:5
+        //   <spliced body>           // stamped @7:5+ - sees both temps
+        // blocks get a one-line-wide range - LineInfo::inside excludes last_line, so a
+        // single-line range would hide every spliced local (infer re-derives let visibility
+        // from the enclosing scope's at); multi-var lets share one column, the joint window
+        // user-code multi-var lets have. (KNOWN RESIDUAL: the counter advances in visit
+        // order, so a let in an EARLIER conditional arm stays gate-visible at parks in a
+        // LATER sibling arm where it never initialized - and sibling scopes REUSE stack
+        // offsets, so the slot may hold an unrelated live value walked as the wrong type.
+        // inside() can't encode same-line column intervals.)
+        // one instance covers a whole site in EXECUTION order (prefix temps, arg temps,
+        // body) so the counter threads through; it runs BEFORE InlineBodyRewriter so
+        // substituted caller expressions keep their own at.
+        class SpliceAtStamp : public Visitor {
+        public:
+            // the ladder is CAPPED at the call's own last column: a host let opens its
+            // visibility at its declaration END, so an uncapped ladder could run past it
+            // and gate the host's still-uninitialized slot visible; the cap also keeps a
+            // nested round's ladder (base = an already-stamped point) from re-walking the
+            // outer round's columns
+            SpliceAtStamp ( const LineInfo & callAt ) : base(callAt), col(callAt.column) {
+                cap = callAt.last_column > callAt.column ? callAt.last_column - 1 : callAt.column;
+            }
+            LineInfo pointAt ( uint32_t c ) const {
+                LineInfo p = base;
+                p.column = c;
+                p.last_column = c;
+                p.last_line = p.line;
+                return p;
+            }
+            LineInfo wideAt ( uint32_t c ) const {
+                LineInfo w = pointAt(c);
+                w.last_line = w.line + 1;
+                w.last_column = 0;
+                return w;
+            }
+            uint32_t bump ( uint32_t c ) const { return c < cap ? c + 1 : cap; }
+            LineInfo base;
+            uint32_t col = 0;
+            uint32_t cap = 0;
+        protected:
+            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+            virtual void preVisitExpression ( Expression * expr ) override {
+                Visitor::preVisitExpression(expr);
+                expr->at = expr->rtti_isBlock() ? wideAt(col) : pointAt(col);
+            }
+            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+                Visitor::preVisitLet(let, var, last);
+                let->atInit = pointAt(bump(col));    // visibility opens after the init, which parks at col
+                var->at = pointAt(col);
+            }
+            virtual ExpressionPtr visit ( ExprLet * let ) override {
+                col = bump(col);                     // later statements park past this let's visibility start
+                return Visitor::visit(let);
+            }
+            virtual void preVisit ( ExprFor * expr ) override {
+                Visitor::preVisit(expr);
+                expr->visibility = wideAt(col);     // not re-derived by infer, unlike let visibility
+                for ( auto & var : expr->iteratorVariables ) var->at = pointAt(col);
+            }
+        };
+
         // replace one specific node (by identity) inside a statement
         class ReplaceNode : public Visitor {
         public:
@@ -1123,6 +1192,7 @@ namespace das {
             var->init_via_clone = viaClone;
             auto let = new ExprLet();
             let->at = at;
+            // visibility stays closed until the init ran
             let->atInit = init ? init->at : at;
             let->variables.push_back(var);
             return let;
@@ -2244,7 +2314,12 @@ namespace das {
             auto ret = static_cast<ExprReturn *>(in.body->list.back());
             ExpressionPtr callReplacement = nullptr;
             if ( ret->subexpr ) {
-                callReplacement = ret->subexpr->clone()->visit(rewriter);
+                auto cloned = ret->subexpr->clone();
+                if ( subj.fn ) {    // callee-origin lines; a literal's body is already caller code
+                    SpliceAtStamp stamp(callLike->at);
+                    cloned = cloned->visit(stamp);
+                }
+                callReplacement = cloned->visit(rewriter);
             }
             if ( site.stmt==callLike ) {
                 auto & list = site.anchor.block->list;
@@ -2498,18 +2573,26 @@ namespace das {
                 }
             }
             vector<ExpressionPtr> splice;
+            // stamping is gated on calleeFn throughout - an invoke-block literal is
+            // caller code with honest lines already
+            SpliceAtStamp stamp(callLike->at);
             int preIdx = 0;
             for ( auto pe : prefix ) {
                 string tname = INLINE_TEMP_PREFIX + to_string(inlineId) + "_pre" + to_string(preIdx++);
+                auto peAt = pe->at;                 // the host-side read keeps the real position
+                ExprLet * tl = nullptr;
                 // non-const throughout: a const temp read would stop matching var pointer params downstream
                 if ( pe->type && pe->type->ref ) {
                     // lvalue: bind a reference - identity survives, writes land in the original place
                     pe->alwaysSafe = true;          // generated binding to real storage
-                    splice.push_back(makeTemp(pe->at, tname, pe, pe->type->constant, true, false));
+                    // callLike->at, not pe->at: the temp must be in scope at the splice's park point
+                    tl = makeTemp(callLike->at, tname, pe, pe->type->constant, true, false);
                 } else {
-                    splice.push_back(makeTemp(pe->at, tname, pe, false, false, pe->type && !pe->type->canCopy()));
+                    tl = makeTemp(callLike->at, tname, pe, false, false, pe->type && !pe->type->canCopy());
                 }
-                ReplaceNode rn(pe, new ExprVar(pe->at, tname));
+                if ( calleeFn ) tl->visit(stamp);
+                splice.push_back(tl);
+                ReplaceNode rn(pe, new ExprVar(peAt, tname));
                 auto & slot = site.anchor.block->list[anchorIndex];
                 slot = slot->visit(rn);
                 if ( !rn.done ) {
@@ -2519,14 +2602,20 @@ namespace das {
             }
             InlineBodyRewriter rewriter(plan.paramSub, rename, callLike->at, calleeFn != nullptr);
             ExpressionPtr callReplacement = nullptr;
+            if ( calleeFn ) {
+                for ( auto & t : temps ) t->visit(stamp);   // arg temps ladder after the prefix temps
+            }
             if ( exprBody ) {
                 auto ret = static_cast<ExprReturn *>(in.body->list.back());
                 if ( ret->subexpr ) {
-                    callReplacement = ret->subexpr->clone()->visit(rewriter);
+                    auto cloned = ret->subexpr->clone();
+                    if ( calleeFn ) cloned = cloned->visit(stamp);
+                    callReplacement = cloned->visit(rewriter);
                 }
                 for ( auto & t : temps ) splice.push_back(t);
             } else {
                 auto bodyClone = static_cast<ExprBlock *>(in.body->clone());
+                if ( calleeFn ) bodyClone->visit(stamp);
                 if ( site.kind==SiteKind::InvokeBlock ) {
                     // parameters became substitutions, the result becomes the result temp - a plain scope block remains
                     bodyClone->arguments.clear();
@@ -2540,7 +2629,15 @@ namespace das {
                 }
                 ReturnStoreRewrite rsr(in.result ? INLINE_TEMP_PREFIX + to_string(inlineId) + "_res" : string(),
                     INLINE_TEMP_PREFIX + to_string(inlineId) + "_ret");
-                if ( in.result ) splice.push_back(makeUninitDecl(callLike->at, rsr.resName, in.result));
+                // _res goes FIRST: a no-init decl zero-fills its slot, so the walk reads
+                // zeros until a return-store writes it - no ladder column needed. callee
+                // splices park at/after the call site, so visibility can open there; a
+                // LITERAL's body may park earlier - keep whole-function
+                if ( in.result ) {
+                    auto resLet = makeUninitDecl(callLike->at, rsr.resName, in.result);
+                    if ( calleeFn ) resLet->atInit = stamp.pointAt(callLike->at.column);
+                    splice.insert(splice.begin(), resLet);
+                }
                 rsr.apply(bodyClone);
                 if ( in.result ) {
                     callReplacement = new ExprVar(callLike->at, rsr.resName);
@@ -2560,7 +2657,8 @@ namespace das {
                         host = static_cast<ExprBlock *>(spliced);
                     } else {
                         host = new ExprBlock();
-                        host->at = callLike->at;
+                        // manufactured scope needs the same one-line-wide range spliced blocks get
+                        host->at = calleeFn ? stamp.wideAt(callLike->at.column) : callLike->at;
                         host->list.push_back(spliced);
                     }
                     auto scopeWrap = new ExprWith(callLike->at);
@@ -2571,7 +2669,8 @@ namespace das {
                 }
                 if ( !temps.empty() || rsr.flagUsed ) {
                     auto scope = new ExprBlock();
-                    scope->at = callLike->at;
+                    // same one-line-wide range as above - the arg temps live HERE
+                    scope->at = calleeFn ? stamp.wideAt(callLike->at.column) : callLike->at;
                     for ( auto & t : temps ) scope->list.push_back(t);
                     if ( rsr.flagUsed ) {
                         scope->list.push_back(makeTemp(callLike->at, rsr.flagName,
@@ -2824,7 +2923,8 @@ namespace das {
             return false;
         }
         bool mustEnabled = !options.getBoolOption("disable_inline", policies.disable_inline);
-        bool autoEnabled = getOptimize()
+        // the debugger needs true frames and true lines - same reason it disables fastcall
+        bool autoEnabled = getOptimize() && !getDebugger()
             && !options.getBoolOption("disable_auto_inline", policies.disable_auto_inline);
         // under `options no_aliasing` call-result aliasing is an ERROR; splicing calls away
         // would change which programs compile - diagnostics must not depend on a perf knob

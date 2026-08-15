@@ -706,6 +706,7 @@ def main() : int {
             print("Linting {length(files)} file(s)...\n\n")
         }
         var stale_eligible : array<string>
+        var since_collect = 0
         for (file in files) {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
@@ -716,7 +717,7 @@ def main() : int {
             }
             print_result(result, cfg.quiet, cfg.silent)
             tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
-            // NO maybe_collect here: a collect in THIS loop corrupts live strings (worker mode collects identically and survives) - serial stays grow-only until the runtime cause is fixed
+            maybe_collect(since_collect)
         }
         if (run_paranoid && run_perf && run_style) {
             stale_scan_at_end(stale_eligible, cfg, disabled_codes, enabled_codes,

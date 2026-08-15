@@ -927,6 +927,33 @@ namespace das
     };
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
+        // refuse dishonest frames BEFORE marking - the error path must leave both heaps
+        // unmarked. a frame above a broken line handoff can't have its locals attributed:
+        // they fail the visibility gate and get swept while live. gated on persistent+gc
+        // so a direct C++ collectHeap on a non-GC context keeps its old silent no-op
+        // (the mark() bail-outs below); fastcall carriers were denied frames at compile
+        // time (needCallerStackFrame) - nothing to check for them here
+        if ( persistent && gcEnabled ) {
+            char * scanSp = stack.ap();
+            // an EMPTY line is as unattributable as a null one (a generated call node
+            // with an unset at) - normalize both to null so the refusal sees them
+            const LineInfo * scanLineAt = ( at && !at->empty() ) ? at : nullptr;
+            while ( scanSp < stack.top() ) {
+                Prologue * pp = (Prologue *) scanSp;
+                FuncInfo * info = nullptr;
+                if ( pp->info ) {
+                    intptr_t iblock = intptr_t(pp->block);
+                    info = ( iblock & 1 ) ? ((Block *)(iblock & ~1))->info : pp->info;
+                }
+                if ( info && info->locals && info->localCount && !scanLineAt ) {
+                    throw_error_at(at, "heap collection can't attribute locals of '%s' - "
+                        "the frame was entered through a compiled (AOT/JIT) frame or a "
+                        "null-line call", info->name ? info->name : "?");
+                }
+                scanLineAt = ( info && pp->line && !pp->line->empty() ) ? pp->line : nullptr;
+                scanSp += info ? info->stackSize : pp->stackSize;
+            }
+        }
         GcGuard guard(this);
         // clean up, so that all small allocations are marked as 'free'
         stringDisposeQue = nullptr;
@@ -988,6 +1015,7 @@ namespace das
                     info = pp->info;
                 }
             }
+            // dishonest frames (AOT/JIT, null-line entry) were refused by the pre-scan above
             if ( info ) {
                 for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.prepare();
