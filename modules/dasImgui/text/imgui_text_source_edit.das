@@ -235,7 +235,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.list_items
     delete ed.diagnostics
     delete ed.snippet_stops
-    ed = TextEditState() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
+    ed = TextEditState()
 }
 
 def public text_edit_load(var ed : TextEditState; source : string) {

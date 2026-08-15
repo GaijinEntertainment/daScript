@@ -1232,7 +1232,7 @@ def public terminal_snapshot_dispose(var snapshot : TerminalSnapshot) {
     delete snapshot.alternate.cells
     delete snapshot.alternate.scrollback
     delete snapshot.unknown_sequences
-    snapshot = default<TerminalSnapshot>  // nolint:PERF030 - heap fields deleted above; this zeroes the shell
+    snapshot = default<TerminalSnapshot>
 }
 
 def public terminal_drain_replies_bytes(var terminal : Terminal;
@@ -1770,5 +1770,5 @@ def public terminal_viewport_snapshot_dispose(var snapshot : TerminalViewportSna
     delete snapshot.buffer.cells
     delete snapshot.buffer.scrollback
     delete snapshot.text_runs
-    snapshot = default<TerminalViewportSnapshot>  // nolint:PERF030 - heap fields deleted above; this zeroes the shell
+    snapshot = default<TerminalViewportSnapshot>
 }
