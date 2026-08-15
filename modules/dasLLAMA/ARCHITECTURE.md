@@ -129,7 +129,10 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
   merges over vocab pieces, `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** — the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
-  share no state; a third merge algorithm gets a fourth file.
+  share no state; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
+  live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
+  gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
+  metadata defaults are the third and last.
 - **`dasllama_pretok.das`** — the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine — the two change for different reasons (new model family

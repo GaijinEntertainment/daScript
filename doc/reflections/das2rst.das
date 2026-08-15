@@ -323,10 +323,11 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|caps)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
-        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_batch|sample|set_seed|stats)$%%),
+        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_batch|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
-        group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_assistant|render_turn|render_assistant|render_close|respond|set_thinking)$%%),
+        group_by_regex("Vision", mod, %regex~(encode_image)$%%),
+        group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_assistant|render_turn|render_turn_image|render_assistant|render_close|respond|set_thinking)$%%),
         group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids)$%%)
     )
@@ -367,6 +368,12 @@ def document_module_dasllama(_root : string) {
             "One parsed tool call: the function ``name``, its ``args`` normalized to JSON object text, and the wire ``id`` where the family carries one (mistral; empty elsewhere).")
         dasllama_type_stanza(f, "struct-dasllama_audio-AudioTower", "AudioTower",
             "A loaded audio encoder: Whisper-family encoder weights plus the model-specific projector tail, as produced by ``load_audio_tower`` from an mmproj GGUF. Pass it to ``create_chat`` to enable ``add_user_audio`` turns.")
+        dasllama_type_stanza(f, "struct-dasllama_vision-VisionImage", "VisionImage",
+            "A decoded RGB8 image: ``width``, ``height``, and the pixel bytes in ``rgb``. Produced by ``load_image_rgb`` (the optional ``dasllama_vision_io`` companion) or built directly; ``add_user_image`` / ``encode_image`` letterbox and normalize it to the model's geometry.")
+        dasllama_type_stanza(f, "struct-dasllama_gemma4uv-Gemma4uvEmbedder", "Gemma4uvEmbedder",
+            "A loaded gemma vision embedder: the mmproj GGUF's projection weights plus the family's geometry, as produced by ``load_gemma4uv_embedder``. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``proj_dim`` must match the decoder's embedding width (checked at create).")
+        dasllama_type_stanza(f, "struct-dasllama_gemma4uv-Gemma4uvState", "Gemma4uvState",
+            "Caller-owned scratch for the embedder forward: the im2col and GEMM buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
     }
     document("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
 }

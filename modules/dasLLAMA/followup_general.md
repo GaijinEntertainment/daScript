@@ -313,3 +313,14 @@
     uniform bound, the three declines and the blob refusals are deleted, and the kernel
     coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail —
     pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
+
+24. **Stream the over-line audio-carrier mints (the 1 GiB staging rule, 2026-08-14).**
+    `REVIEW.md` caps `cache_via_image_staged` at a 1 GiB source file; six carriers on the
+    fleet stage over it today — mmproj-omni-3b-f32 (5.0 GB), canary-qwen-2.5b-encoder-f32
+    (3.1 GB), mmproj-ultravox-1b-f32 (2.6 GB), voxtral-mini-mmproj-f32 (2.5 GB),
+    qwen2audio-mmproj-f32 (2.4 GB), mmproj-Qwen3-Omni-30B bf16 (2.1 GB) — each paying a
+    staged peak of roughly source + built image. Done = the audio-family mints size the
+    image up front and write planes as produced (the decoder rail's shape), the staged
+    entry points refuse a source over the line, and the mint-form-differs conversions
+    restructure into per-plane producers. The vision carriers stay staged (gemma-4 12B
+    mmproj 0.2 GB, E2B 0.9 GB).

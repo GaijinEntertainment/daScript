@@ -12,9 +12,9 @@ diagnostic-text-only change reaches none. The suites `run.das` lists (decode, pr
 kernels, image, image-vulkan, coverage) run only through it, `--arm`-scoped; it refuses `--full`, and
 dastest run directly on one is a defect. Every other test, vulkan included, runs under dastest.
 
-**Every test RUN runs under `-jit`.** Never the interpreter, never AOT. A CI compile-guard lane may
-invoke a model-gated suite interpreted — every cell must skip explicitly there, and it counts as a
-compile check, not a run.
+**Every test RUN runs under `-jit`.** Never the interpreter, never AOT. A CI lane that wants only
+the compile guard passes dastest's `--compile-only` — compiles everything, runs nothing; a
+model-gated suite invoked interpreted, with skips standing in for the guard, is a defect.
 
 **dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, except a test whose SUBJECT lives
 beside it under `utils/` (the serving legs and the exchange client, which require their sibling by
@@ -25,8 +25,9 @@ appears in any `CMakeLists.txt`.
 gate; a test that silently vanishes on one platform is a defect.
 
 **A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
-gate, not the iteration loop; under `tests/` the spelling is `model_available` (`_model_tier.das`),
-a serving leg may open-code the gate. Check what a test loads first.
+gate, not the iteration loop. Under `tests/` the spelling is `model_available` (`_model_tier.das`);
+a serving leg, which cannot require `tests/` fixtures, open-codes the same gate. Check what a test
+loads first.
 
 **A real image fixture or mmproj a vision test loads has its `performance/fetch_models.das`
 entry.** The oracle-dump provenance convention beside them is `ARCHITECTURE.md` §1.7b.
@@ -121,24 +122,49 @@ does not.
 
 ---
 
-## Placement — one file, one rule
+## Placement
 
-Every file states what it holds, and code that belongs to a file and is written anywhere else is a
-defect. A rule names its own file's contents, and where two files share a seam it may name the other
-side to make the boundary decidable. `ARCHITECTURE.md` §1 carries the boundaries and the carve-outs.
+Placement truth — what each file holds, the seams, the carve-outs — lives in `ARCHITECTURE.md` §1
+and nowhere else. A file inventory restated here is a defect of this checklist; the rules below
+check only what the diff itself shows.
 
-**A new file under `dasllama/` ships with its rule here, its `ARCHITECTURE.md` §1 charter, and its
-tests, in the same change.** A new file under `tests/` registers in `tests/CLAUDE.md` instead: its
-suite's arm documentation and `tests/run.das` when it joins one, else the model-free/no-arm note.
+**A diff that adds a file, moves code between files, or changes what a file owns lands the
+`ARCHITECTURE.md` §1 edit that keeps the charters true, in the same change.** A new file under
+`dasllama/` also ships its tests; a new file under `tests/` registers in `tests/CLAUDE.md` instead —
+its suite's arm documentation and `tests/run.das` when it joins one, else the model-free/no-arm
+note.
+
+**What goes to what file — the routing rules.** Keyed by what the hunk IS, not where it sits; each
+names the one legal home, and that kind of code anywhere else is a defect:
+
+- A tensor format conversion lands in `dasllama_convert.das`.
+- A disk-order → compute-order transform: kernel-layout in `dasllama_repack.das`, load-scope in
+  `dasllama_layout.das`.
+- A KV-cache store, read, score dot, or V-accumulate lands in `dasllama_kv_codec.das`, its format
+  family kept whole.
+- A pre-tokenizer split lands in `dasllama_pretok.das`; a merge algorithm in its backend file
+  (`dasllama_spm.das` / `dasllama_bpe.das`).
+- A kernel body never lands in `dasllama_math.das` or a lens/dispatch macro file.
+- A family quirk lands in the family file; a piece two families need moves UP into the shared
+  file, never sideways into a sibling.
+- Tool wire text — building or parsing — is produced only in `dasllama_tools.das`.
+- Nothing outside `dasllama_audio_io.das` calls the audio decode library; nothing outside
+  `dasllama_vision_io.das` calls stbimage.
+- Platform-specific code never lands in `dasllama_common.das`; a new shared concern gets its own
+  file, not more of common.
+- Engine, HTTP, or writer logic never lands in `dasllama_scheduler.das`.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
-`dasllama/dasllama_transformer`), never from the engine file that defines it.** A symbol it does not
-re-export may be required directly; engine internals, in-module tests, harnesses and benchmarks may
-too. A split that spreads facade-reachable requires instead of fixing the re-export is a defect.
+`dasllama/dasllama_transformer`), never from the engine file that defines it.** Engine internals,
+in-module tests, harnesses and benchmarks require engine files directly. A split that spreads
+facade-reachable requires instead of fixing the re-export is a defect.
 
 **An `[init]`-only side-effect require lives in `dasllama_transformer.das`** — arch registrations, GPU
 tiers, every module requiring the engine back; it sits in `dasllama_common.das` only if engine code
 needs it. Moving one restates every comment and `ARCHITECTURE.md` line naming its old home.
+
+**An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An architecture
+that changes a forward loop, or tests a family name on a shared path, is a defect.
 
 **`dasllama_env.das` — every environment knob's single home.** All `[EnvConfig]` area structs and
 their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
@@ -150,6 +176,11 @@ struct whose knobs do not appear in `ENVIRONMENT.md` is a defect.
 
 **A new module file is registered in `.das_module` in the same change.** The install rule is a
 directory glob; the `ADD_MODULE_DAS` list in `CMakeLists.txt` is a subset, touched only on join.
+
+**`ENVIRONMENT.md` and `dasllama_unicode.das`'s RANGES/WS tables are generated; hand-editing either
+is a defect.** `ENVIRONMENT.md` regenerates via `harness/gen_env_doc.das` in the same change as
+whatever moved its inputs (`tests/test_env_registry.das` fails on drift); the unicode tables
+retranscode from llama.cpp's unicode-data.cpp.
 
 **`performance/exchange_schema.das` is the single validator for exchange submissions — record stores
 and tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require added
@@ -166,106 +197,12 @@ revision pin, canonical bytes + sha256, or a conversion recipe (`ARCHITECTURE.md
 referenced anywhere without its entry is a defect. `--fetch` downloads only: a convert, a bench,
 or a tune-state write added to it is a defect.
 
-### Engine
+---
 
-- `dasllama.das` — the public API surface and its re-exports.
-- `dasllama_version.das` — the `DASLLAMA_VERSION` release counter, and nothing else.
-- `dasllama_common.das` — engine types, forward loops, override registries, runtime knobs. No NEW
-  platform-specific code or platform-guarded require, and no load walk.
-- `dasllama_load.das` — the GGUF load walk: metadata to `Config`, plane layout, format detection, the
-  eager and streamed conversion ladders, and the load entry points.
-- `dasllama_transformer.das` — block composition, and the require umbrella: the `[init]`-only
-  side-effect requires that cannot sit in `dasllama_common.das`.
-- `dasllama_blocks.das` — the std/dense/MoE block kernels and the default block sets, reached only
-  through the `ArchBlocks` pointers. A block kernel called by name from another engine file is a
-  defect.
-- `dasllama_moe.das` — MoE routing and expert dispatch, reached only through `moe_ffn_core`.
-- `dasllama_attn_prefill.das` — prefill attention. `prefill_attention` is the only entry; a caller of
-  a head kernel below it is a defect.
-- `dasllama_batch.das` — the batched decode step.
-- `dasllama_sampling.das` — sampling and the generation drivers; the engine never calls back in.
-- `dasllama_ple.das` — gemma-4 per-layer embeddings and MoE FFN, reached only through its hooks.
-- `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity formatter.
-- `dasllama_chat.das` — turn assembly and reply-stream splitting.
-- `dasllama_tools.das` — tool wire text, both directions: building definitions and results, parsing
-  calls out of replies. A literal lives with its job: what a tool call looks like on the wire is
-  tools'; where turns begin and end is chat's.
-- `dasllama_scheduler.das` — the continuous-batching serving layer OVER the facade, requiring only
-  `dasllama/dasllama`: admission, batched decode, bounded prefill chunks, prefix-page donation,
-  `SchedEvent` results. Engine or HTTP/writer logic here is a defect.
-- `dasllama_par.das` — the parallel-for macro.
-- `dasllama_prefix.das` — the prefix cache for evaluated token history.
-- `dasllama_parity.das` — CPU reference caches for parity instruments.
-- `dasllama_env.das` — the environment-knob registry; `ENVIRONMENT.md` generates from it.
+## GPU
 
-### Formats and data movement
-
-- `dasllama_kqformat.das` — format identity: the format enum, per-format descriptors, predicates.
-- `dasllama_convert.das` — every tensor format conversion, any platform, any caller; also owns what
-  the Q8_0/Q4_0 format IS (block geometry, scales) and the quant-quality detector.
-- `dasllama_repack.das` — every disk-order to compute-order kernel-layout transform.
-- `dasllama_kv_codec.das` — the KV-cache runtime codec: one family per cache format, kept whole.
-- `dasllama_rope.das` — RoPE angle and table generation.
-- `dasllama_gguf.das` — the GGUF container and its byte readers.
-- `dasllama_layout.das` — disk-format to compute-layout transforms at load scope.
-- `dasllama_image.das` — the prepared-model image rail.
-- `dasllama_plane.das` — borrowed-plane types and accessors; only this file binds, reads, drops one.
-- `dasllama_tokenizer.das` — the tokenizer facade: backend selection and the encode/decode/piece
-  surface. A backend algorithm here is a defect.
-- `dasllama_spm.das` — the SentencePiece backend.
-- `dasllama_bpe.das` — the byte-level BPE backend: vocab, byte alphabet, ranked merges, and the
-  `pre`-name selector inside `bpe_encode`. A pre-tokenizer split here is a defect, except the gemma-4
-  newline-run split in `bpe_encode_spm_space`.
-- `dasllama_pretok.das` — the pre-tokenizer: one split function per family. A family-name test
-  elsewhere in `dasllama/` is a defect, except the `bpe_encode` selector and
-  `load_bpe_tokenizer_gguf`'s metadata defaults.
-- `dasllama_unicode.das` — the transcoded unicode RANGES/WS tables and their lookups.
-
-### CPU kernel tiers
-
-- `dasllama_math.das` — the numeric abstraction: typedefs, active backend pointers, public wrappers,
-  dispatch shaping (jobque caps, OS-conditional scheduling defaults). No kernel bodies.
-- `dasllama_math_default.das` — the portable kernel backend.
-- `dasllama_math_aarch64_neon.das` — the arm64 kernel backend.
-- `dasllama_math_accelerate.das` — the Accelerate/BNNS float tier.
-- `dasllama_math_gen.das` — the generated GEMM tier's runtime registration.
-- `dasllama_gemm_gen.das` — the GEMM tile generator.
-- `dasllama_gemm_schema.das` — the layout and permutation schema shared by generator and runtime.
-- `dasllama_gemm_register.das` — tune-family registration.
-- `dasllama_tune.das` — per-box kernel tuning policy; tuned values live in the sidecar, not source.
-
-### GPU
-
-A backend is a family of role files, and the role names the contents. `<gpu>` is `metal` or `vulkan`.
-
-- the kernel home — kernel source, no device state: `dasllama_metal_kernels.das` (Metal),
-  `dasllama_vulkan_classes.das` (Vulkan, each kernel a `[spirv_kernel]`/`[vk_dispatch]` class). Census
-  tables and report are `<gpu>_common`'s.
-- `dasllama_vulkan_dispatch.das` — the `[vk_dispatch]` structure macro: the `ensure_*`/`set_*`/`enc_*`
-  surface, per-binding access, the census seed. Macro code only; a kernel body or device call here is
-  a defect.
-- `dasllama_vulkan_seams.das` — the per-op class-rail seams (`vk_add_rms`, `vk_rope_kv_store`,
-  `vk_decode_attn`).
-- `dasllama_<gpu>_common.das` — device state, buffer/command plumbing, hazard/capture rail, profiler.
-- `dasllama_<gpu>_decode.das` — the resident token-step driver and its decode-time arms.
-- `dasllama_<gpu>_prefill.das` — the batched prefill driver and its batch arms.
-- `dasllama_metal_shapes.das` — model-shape servability gates, portable: no GPU requires, so any box
-  can bake. Vulkan has no shapes file (`ARCHITECTURE.md` §1.5).
-- `dasllama_metal_lens.das` — the `[metal_dispatch]` structure macro: generates the `enc_*` builders,
-  derives per-field access (`kernel=` picks the method; one lens instance per kernel), runs the
-  manual-dispatch census. Macro code only; a kernel body or device call here is a defect.
-- `dasllama_math_vulkan.das` — the Vulkan family entry: probe, arm, image identity, routers, init
-  hooks. Its name is a require contract; renaming it is a defect.
-- `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
-- `dasllama_gpu_tier.das` — the device-cooperation SPI: hook types, install slots, status.
-- `dasllama_kernel_access.das` — the shared read/write classifier both lenses run on, plus the
-  dispatch-lens micro-grammar (grid/tg/params spec parsing and emission). A grammar helper duplicated
-  into a lens file is a defect.
-- `dasllama_gpu_resident.das` — the whole-model GPU residency rail: flavor bake, stack upload,
-  device-resident overrides. No device call, GPU require, or device arm (`ARCHITECTURE.md` §1.5).
-
-A backend-only capability goes in that backend's matching role file. A new grab-bag file for it is a
-defect.
+**A backend-only capability goes in that backend's matching role file (`ARCHITECTURE.md` §1.5).** A
+new grab-bag file for it is a defect.
 
 **A GPU family shares ONE device and queue** from `<gpu>_common`'s init, except
 `dasllama_metal_gemm.das`'s second device+queue (`ARCHITECTURE.md` §1.5). Any other module creating
@@ -285,25 +222,13 @@ A race harness anywhere else is a defect.
 `dasllama_metal_shapes.das`; decline counting lives in `dasllama_metal_common.das`.** A string-typed
 metal decline, or a counter beside the decline site, is a defect.
 
-**The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that changes how
-Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 edit in the same change.
+**A diff that changes how Metal and Vulkan differ — adding or removing an asymmetry — lands its
+`ARCHITECTURE.md` §1.5 edit in the same change.** §1.5 is the closed list; an asymmetry it does not
+carry does not exist.
 
-### Model families
+---
 
-- `dasllama_arch_*.das` — one file per architecture family, declarative registration only. An
-  architecture that changes a forward loop, or tests a name on a shared path, is a defect.
-
-### Audio and ASR
-
-- `dasllama_asr_types.das` — the shared ASR floor: `AsrCaps`/`AsrTimestamps`/`TranscribeSegment`.
-- `dasllama_audio.das` — the shared audio tower, the mel/FFT machinery, the encoder block loop.
-- `dasllama_audio_io.das` — audio decode to PCM. The only file that talks to the audio library.
-- `dasllama_asr.das` — the ASR facade: the sniffing loaders, the model/session unions, one-call
-  dispatch arms. Family names never appear in its public API.
-- `dasllama_whisper.das`, `dasllama_parakeet.das`, `dasllama_canary.das`, `dasllama_qwen3a.das`,
-  `dasllama_gemma4a.das` — one file per model family: weights, encoder, session bundle, caps sheet,
-  transcribe driver, quirks. Shared tower pieces move up into `dasllama_audio.das`, never sideways.
-- `dasllama_vad.das` — voice-activity detection weights and stream state.
+## Audio and ASR
 
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode
@@ -325,14 +250,9 @@ family file is a defect.
 **A `create_session` / `transcribe` option that the model's `caps()` does not declare panics at the
 call site** (`dasllama_asr.das`). Accepting it and silently ignoring it is a defect.
 
-### Vision
+---
 
-- `dasllama_vision.das` — the preprocessing rail: dynamic-resolution geometry, the letterbox
-  resize, normalize, and the `DASLLAMA_VISION_DUMP` PPM writer. The only preproc home.
-- `dasllama_vision_io.das` — image decode to RGB8 and the debug PNG dump. The only file that talks
-  to stbimage.
-- `dasllama_gemma4uv.das` — the gemma4uv embedder: mmproj load, im2col, the norm/GEMM/pos-table
-  forward. One file per vision projector family, the audio tower pattern.
+## Vision
 
 **A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
 tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
@@ -355,14 +275,6 @@ BPE merges never cross the media. The engine's `render_turn_image_`, the schedul
 second representation — one stream with a placeholder token, a pre-flattened embedding buffer at
 the seam — is a defect, as is a new media kind growing a parallel prefill path.
 
-### Generated
-
-- `ENVIRONMENT.md` — generated by `harness/gen_env_doc.das`; it is regenerated in the same change
-  as whatever moved its inputs (`tests/test_env_registry.das` fails on drift).
-  Hand-editing it is a defect, as is editing
-  `dasllama_unicode.das`'s RANGES/WS tables, transcoded from llama.cpp's unicode-data.cpp;
-  retranscode.
-
 ---
 
 ## File and memory model
@@ -380,10 +292,13 @@ and `parse_image` in `dasllama_image.das`. Reading weights into a live carrier, 
 backing, anywhere else is a defect — and a second mint path, per family, per format, or per backend,
 is a defect even where its output is identical (`ARCHITECTURE.md` §2.1).
 
-**A DECODER mint never holds the whole model** (a family-CARRIER mint may stage through
-`cache_via_image_staged`; the streamed rail is preferred). It sizes the image before the first byte goes out and writes
-each plane as it is produced. Keeping the source model resident to write from is a defect, and a mint
-that is slower in exchange for a lower peak is correct (`ARCHITECTURE.md` §3).
+**A DECODER mint never holds the whole model.** It sizes the image before the first byte goes out
+and writes each plane as it is produced. Keeping the source model resident to write from is a
+defect, and a mint that is slower in exchange for a lower peak is correct (`ARCHITECTURE.md` §3).
+
+**A carrier mint stages (`cache_via_image_staged`) only while its source file is under 1 GiB; at or
+past the line it streams like a decoder.** A mint form that differs from the served form is work to
+restructure, not an exemption; carriers over the line owe the migration (`followup_general.md` #24).
 
 ---
 
@@ -393,8 +308,9 @@ that is slower in exchange for a lower peak is correct (`ARCHITECTURE.md` §3).
 profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A path that
 reinterprets a mismatched image, or widens an identity so that more files match, is a defect.
 
-**A bake reaps only its own lane** — an identity's (quant, tag) pair. A save may drop that lane's dead
-siblings plus BROKEN/version-stale images in any lane, nothing else (`ARCHITECTURE.md` §2.1).
+**A bake reaps only its own lane** — an identity's (quant, tag) pair. A save drops AT MOST that
+lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else
+(`ARCHITECTURE.md` §2.1).
 
 **Only a process that can recompute an image's identity may judge it dead.** Reaping an image whose
 identity the code cannot recompute — another flavor's, another family's — is a defect, with one
