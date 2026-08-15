@@ -80,9 +80,11 @@ no call site can supply crashes simulation", not "used to crash". A mechanism no
 stays when a maintainer needs it to change the code without breaking the guard (why
 an encoding stays injective); it goes when it only argues the guard was right.
 
-**The message is the comment.** A branch whose error/decline/log string already states
-the fact gets no comment on top. This makes good diagnostics double as documentation —
-one more reason to write them well.
+**The message is the comment.** Any site that already carries a human-readable failure
+string — a branch's error/decline/log, an assertion or panic message, a test
+expectation — gets no comment restating it; put the fact the reader needs *into* the
+string instead. This makes good diagnostics double as documentation — one more reason
+to write them well.
 
 **Counterpart pointers earn their line.** When a condition handles one half of a split
 responsibility, a few words naming where the other half lives is a good same-line

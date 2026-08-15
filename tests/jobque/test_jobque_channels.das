@@ -236,15 +236,13 @@ def test_channel_push_batch_clone(t : T?) {
     }
 }
 
-// A consumer that stops at the payload (pop_with_timeout_clone, try_pop) wakes on the worker's
-// push, which happens BEFORE the worker's notify_and_release - without a join() the with_channel
-// scope can close on a channel the worker still references, which panics the process. The sleep
-// holds that window open deliberately; join() waiting the count to zero is the fence (the count
-// drops after the reference inside notify_and_release, under the same lock).
+// A payload consumer (pop_with_timeout_clone) wakes on the worker's push, which lands BEFORE the
+// worker's notify_and_release - the deliberate sleep holds that window open, and join() before the
+// with_channel scope closes is the fence (see skills/jobque_debugging.md).
 [test]
 def test_join_fences_a_payload_consumer(t : T?) {
     t |> run("join before scope close outlives a slow-releasing worker") @(t : T?) {
-        var got_v = 0
+        var value = 0
         with_channel(1) $(ch) {
             new_thread() @() {
                 ch |> push_clone(IntVal(v = 42))
@@ -254,12 +252,12 @@ def test_join_fences_a_payload_consumer(t : T?) {
             var got = false
             while (!got) {
                 got = pop_with_timeout_clone(ch, 10) $(r : IntVal#) {
-                    got_v = r.v
+                    value = r.v
                 }
             }
             ch |> join()
         }
-        t |> equal(42, got_v)
+        t |> equal(42, value)
     }
 }
 

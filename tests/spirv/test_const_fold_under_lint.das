@@ -17,24 +17,21 @@ def fixture_path() : string {
     return "{get_das_root()}/tests/spirv/_lint_fold_fixture.das"
 }
 
-// The [compute_shader] macro stores the emitted blob as `name : array<uint>` whose initializer is
-// to_array_move([uint literals]) -- read the words back off the compiled program's AST.
+// The [compute_shader] macro stores the emitted blob as `name : array<uint>` initialized with
+// to_array_move([uint literals]) -- unwrap the call and read the words off the array literal.
 def shader_words(program : ProgramPtr; name : string) : array<uint> {
     var words : array<uint>
     for_each_global(get_this_module(program)) $(gv) {
         if (gv.name == name && gv.init != null) {
-            var mk = gv.init ?as ExprMakeArray
-            if (mk == null) {
-                let call = gv.init ?as ExprCall
-                if (call != null && length(call.arguments) == 1) {
-                    mk = call.arguments[0] ?as ExprMakeArray
-                }
-            }
-            if (mk != null) {
-                for (v in mk.values) {
-                    let cu = v ?as ExprConstUInt
-                    if (cu != null) {
-                        words |> push(cu.value)
+            let call = gv.init ?as ExprCall
+            if (call != null && length(call.arguments) == 1) {
+                let mk = call.arguments[0] ?as ExprMakeArray
+                if (mk != null) {
+                    for (v in mk.values) {
+                        let cu = v ?as ExprConstUInt
+                        if (cu != null) {
+                            words |> push(cu.value)
+                        }
                     }
                 }
             }
@@ -56,25 +53,19 @@ def test_shader_compiles_with_folding_off(t : T?) {
                 compile_file(fixture_path(), access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                     t |> success(ok, "the fixture did not compile: {issues}")
                     t |> success(program != null, "no program")
-                    if (!ok || program == null) {
-                        return
-                    }
+                    if (!ok || program == null) return
                     // pin the folded VALUES, not just compiles-clean: a get_const_expr answering
-                    // the wrong number would still compile. The words are the emitted artifact.
+                    // the wrong number would still compile.
                     var words <- shader_words(program, "fold_spv")
-                    t |> success(length(words) > 5, "no emitted words on fold_spv")
-                    // local_size_x = FOLD_LOCAL = 3 * 16: ExecutionMode LocalSize(17) 48 1 1
-                    t |> success(op_has_operand_pair(words, SpvOp.ExecutionMode, 17u, 48u),
-                        "LocalSize x is not 48")
-                    // @binding = FOLD_SLOT = 3 + 4: Decorate ... Binding(33) 7
-                    t |> success(op_has_operand_pair(words, SpvOp.Decorate, 33u, 7u),
-                        "Binding is not 7")
-                    // @set = FOLD_SET = 3 - 2: Decorate ... DescriptorSet(34) 1
-                    t |> success(op_has_operand_pair(words, SpvOp.Decorate, 34u, 1u),
-                        "DescriptorSet is not 1")
-                    // FOLD_ALIAS = FOLD_SCALE = 2u * 3u reaches the body as OpConstant 6
+                    t |> success(length(words) > 5, "fold_spv has no instructions past the 5-word header")
+                    t |> success(op_has_operand_pair(words, SpvOp.ExecutionMode, uint(SpvExecutionMode.LocalSize), 48u),
+                        "LocalSize x is not 48 (FOLD_LOCAL = 3 * 16)")
+                    t |> success(op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.Binding), 7u),
+                        "Binding is not 7 (FOLD_SLOT = 3 + 4)")
+                    t |> success(op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.DescriptorSet), 1u),
+                        "DescriptorSet is not 1 (FOLD_SET = 3 - 2)")
                     t |> success(op_has_operand_at(words, SpvOp.Constant, 2, 6u),
-                        "no OpConstant 6 from FOLD_ALIAS")
+                        "no OpConstant 6 (FOLD_ALIAS = FOLD_SCALE = 2u * 3u)")
                     delete words
                 }
             }
