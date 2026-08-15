@@ -250,11 +250,14 @@ def test_join_fences_a_payload_consumer(t : T?) {
                 ch |> notify_and_release()
             }
             var got = false
-            while (!got) {
+            var rounds = 0
+            while (!got && rounds < 500) {
                 got = pop_with_timeout_clone(ch, 10) $(r : IntVal#) {
                     value = r.v
                 }
+                rounds++
             }
+            t |> success(got, "worker payload never arrived within the 500 x 10ms cap")
             ch |> join()
         }
         t |> equal(42, value)
