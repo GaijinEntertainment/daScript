@@ -221,7 +221,7 @@ def document_module_fio(_root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|prefetch_map)$%%),
-        group_by_regex("File manipulation", mod, %regex~(f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
+        group_by_regex("File manipulation", mod, %regex~(f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),

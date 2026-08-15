@@ -154,8 +154,9 @@ through its caller, the collapse is a walk-abort instead: guard the callback's f
 line on the flag.
 
 **One guard style per function.** Message-setting early-outs are one-liners:
-`if (cond) { why = "..."; return false; }` — never a mix of one-liners and expanded
-blocks in the same function.
+`if (cond) { why = "..."; return false; }` — never a *gratuitous* mix of one-liners
+and expanded blocks in the same function. A guard whose message needs a local to
+build it stays expanded, and that's not a mix.
 
 **Declarations don't promise.** Declare at first use, not in an up-front batch — a
 block of aliases computed long before their consumers is a list of promises the

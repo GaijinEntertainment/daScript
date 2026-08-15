@@ -1,0 +1,1 @@
+Returns true if the path is a symbolic link — and on Windows, any reparse point: a junction, a mount point, or a less common flavor such as a cloud-file placeholder. Reports errors via the error out-parameter.

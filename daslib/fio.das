@@ -567,6 +567,16 @@ def is_symlink_result(path : string) : fs_result_bool {
     return fs_result_bool(value = res)
 }
 
+// a symlink everywhere; on Windows any reparse point - junction, mount point, and
+// less common flavors like a cloud-file placeholder
+[generic]
+def is_reparse_point_result(path : string) : fs_result_bool {
+    var error : string
+    let res = is_reparse_point(path, error)
+    if (!empty(error)) return fs_result_bool(error = error)
+    return fs_result_bool(value = res)
+}
+
 [generic]
 def copy_file_result(src : string; dst : string; overwrite : bool) : fs_result_bool {
     var error : string

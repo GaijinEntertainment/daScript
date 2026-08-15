@@ -13,35 +13,36 @@ bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das
 
 Fast, no network, runs interpreted. A daspkg change without a green unit run is a defect.
 
-**Run the integration suite on any edit to `index.das`, or to any function reachable from
-`install`, `update`, `upgrade`, `introduce`, `withdraw`, or `update-index` — whichever file it
-lives in, the `utils.das` helpers those commands call included — and a behavior-preserving
-refactor of one still counts:**
+**Run the integration suite on any edit to `commands.das`, `index.das`, or `utils.das` — a
+behavior-preserving refactor still counts:**
 
 ```text
 bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 ```
 
-Needs network (the `borisbat/daspkg-test-*` fixture repos). One exception to that trigger, even
-though those commands reach them: `gitignore_add` / `gitignore_remove` in `utils.das` run no git
-command, and stay the unit suite's.
+Needs network (the `borisbat/daspkg-test-*` fixture repos). Exception: a change confined to
+functions that run no git command (checkable in the diff's own hunks) stays the unit suite's.
 
-**A release-path change is verified on macOS, or the review says it was not.** The release
-layout forks per platform (`.app` bundle vs flat directory); the only CI on these suites is
-the nightly (`nightly_daspkg_index.yml`: Linux unit+git, macOS unit), so a per-change run is
-still the review's job — a change green on one platform has shipped red on the other before.
+**A change to `cmd_release`, `cmd_release_wasm`, or a `release_*` helper is verified on macOS,
+or the review says it was not.** The release layout forks per platform (`.app` bundle vs flat
+directory), and no per-PR CI runs these suites.
 
 **A new command or flag lands with its test cell, its `print_usage` line, and its README table
 row in the same change.**
 
 ## Behavior
 
-**A release always mints the tune sidecar; `--quick` is the only inherit, and it accepts only a
-complete one.** A bundle that ships an exe without a sidecar beside it is a defect.
+**A release always mints the tune sidecar.** A bundle that ships an exe without a sidecar
+beside it is a defect.
+
+**`--quick` is the only path that inherits a prior sidecar, and it refuses an incomplete one**
+— incomplete meaning missing any scope key the exe's deps JSON reports, the same completeness
+the release build itself checks.
 
 **`release_include_if_missing` files are user-owned after initialization.** A release path that
-overwrites or deletes one, on any platform, is a defect; `.daspkg_release.manifest` is written
-on every platform.
+overwrites or deletes one, on any platform, is a defect.
+
+**`.daspkg_release.manifest` is written on every platform.**
 
 **Unit cells touch only local fixtures.** A `test_daspkg.das` cell that reaches the network is
 a defect — network coverage belongs in `test_daspkg_git.das`.
