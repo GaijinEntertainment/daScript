@@ -292,18 +292,22 @@
     current callers pass equal lengths, so the test should pin the equal-length results,
     not the mismatch behavior.
 
-22. **Unexplained tune-sidecar rejection under `--gpu metal` (seen 2026-08-14, vision arc
-    slice K, NOT investigated).** A `--gpu metal` server run refused
-    `utils/dasllama-server/main.tune.json`, logged `scope 'dasllama' is untuned on this box`,
-    snapshotted the sidecar to `.tune.json.bak` and re-tuned from scratch (~20 min) — while
-    the CPU-tuned `ask.tune.json` was accepted for the same scope moments earlier via
-    `DAS_TUNE_MANIFEST`. Two readings, neither tested: (a) correct behavior with a wrong
-    MESSAGE (a metal-armed run demands a different kernel family set, so the CPU sidecar
-    genuinely does not cover the scope); (b) a real identity/staleness bug, in which case
-    every metal serving run on a tuned box silently re-tunes and measures off a fresh,
-    unvalidated sidecar. Done = dump the demanded key set on both arms, diff against each
-    sidecar's coverage, and either fix the message or fix the identity. Blocks Metal-arm
-    measurement (`vision_plan.md` defers the Metal leg on it).
+22. **Tune-sidecar rejection under `--gpu metal` — RESOLVED (2026-08-15): the staleness rail
+    working correctly behind an uninformative message.** Forensics: the refused
+    `main.tune.json` was an Aug-10 mint whose mtime predated the Aug-13 rebuilt binary
+    (stale reads as absent), while `ask.tune.json` was minted fresh by that binary — and
+    `--gpu metal` was a pure confound: the demand set is arm-invariant (one compiled
+    program; verified by an identical per-kernel stamp-line diff across cpu/metal server
+    arms). Neither reading (a) nor (b) held. Fixed in llvm_tune: every untuned refusal now
+    names its reason (stale-binary with both dates / foreign-box / version / missing
+    entries / absent / unreadable), `DAS_TUNE_MANIFEST` at an untuned-reading file warns
+    loudly instead of silently stamping fallbacks, and `[tune_scope] version_of=` pins the
+    scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners —
+    the trap the forensics surfaced) refuses by name. Metal-arm measurement is unblocked;
+    bringup owes the standing fresh quiet-box mint, which also refreshes
+    `performance/last_known_good_sidecar.json` and the `performance/<box>.tune.json` rig
+    sidecars — the checked-in and on-box copies predate the version pin, so until then they
+    serve fallbacks with the named warning.
 
 23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
     currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,

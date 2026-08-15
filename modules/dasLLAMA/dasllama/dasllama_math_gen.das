@@ -14,6 +14,7 @@ require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
 require dasllama/dasllama_par
 require dasllama/dasllama_env  // DASLLAMA_ALLOW_UNTUNED wires tune_suppress_mint at [init]
+require dasllama/dasllama_version  // nolint:STYLE030 — version_of= below names DASLLAMA_VERSION by string; the module must be in this compile
 require math
 
 // The GEMM family as a [tune] client (gemm_generator_plan.md part 3; promoted from the M2
@@ -52,7 +53,8 @@ require math
 // (tune_kernels). covers= names the modules whose [tuned] kernels this scope demands sidecar
 // entries for (the completeness set — drift shows up as a loud "missing:" list at startup).
 [tune_scope(name = "dasllama", tuner = "../harness/dasllama_tuner.das",
-            covers = "dasllama_math;dasllama_math_default;dasllama_math_aarch64_neon;dasllama_kv_codec;dasllama_convert")]
+            covers = "dasllama_math;dasllama_math_default;dasllama_math_aarch64_neon;dasllama_kv_codec;dasllama_convert",
+            version_of = "dasllama_version/DASLLAMA_VERSION")]
 struct private DasllamaTuneScope {}
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.

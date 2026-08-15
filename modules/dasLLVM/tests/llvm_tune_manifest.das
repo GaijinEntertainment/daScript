@@ -172,3 +172,85 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     delete rlines
     delete slines
 }
+
+// tune_sidecar_verdict: every refusal reason, in-process (the verdict is plain runtime code).
+// The boolean predicate must agree with the verdict on every case — the alignment invariant.
+[test]
+def test_llvm_tune_sidecar_verdict(t : T?) {
+    let tmpRes = create_temp_file_result("llvm_tune_verdict_", ".tune.json")
+    if (tmpRes is error) {
+        t |> failure("could not create a temp file: {tmpRes as error}")
+        return
+    }
+    let path = tmpRes as value
+    let ourBox = tune_box_identity()
+    t |> success(fwrite(path, "\{\"kernels\":\{\"a\":\"k1\",\"b\":\"k2\"\},\"provenance\":\{\"box\":\"{ourBox}\",\"myver\":\"2\"\}\}"))
+
+    var v = tune_sidecar_verdict("{path}.nope", "a")
+    t |> equal(v.reason, TuneSidecarReason.absent)
+    v = tune_sidecar_verdict(path, "a;b")
+    t |> success(v.complete)
+    v = tune_sidecar_verdict(path, "a;b;c")
+    t |> equal(v.reason, TuneSidecarReason.missing)
+    t |> success(find(v.detail, "c") >= 0)
+    v = tune_sidecar_verdict(path, "")   // empty demand is always satisfied
+    t |> success(v.complete)
+    v = tune_sidecar_verdict(path, "a;;b")   // empty segments are skipped, not demanded
+    t |> success(v.complete)
+
+    // the @version: pin token rides the demand list like a kernel name
+    v = tune_sidecar_verdict(path, "a;@version:myver=2")
+    t |> success(v.complete)
+    v = tune_sidecar_verdict(path, "a;@version:myver=3")
+    t |> equal(v.reason, TuneSidecarReason.version)
+    t |> success(find(v.detail, "myver 2") >= 0)
+    v = tune_sidecar_verdict(path, "a;@version:nover=1")
+    t |> equal(v.reason, TuneSidecarReason.version)
+    t |> success(find(v.detail, "records no nover") >= 0)
+    v = tune_sidecar_verdict(path, "a;@version:noequals")   // malformed token never blocks
+    t |> success(v.complete)
+    t |> equal(tune_sidecar_entries_complete(path, "a;@version:myver=2"), true)
+    t |> equal(tune_sidecar_entries_complete(path, "a;@version:myver=3"), false)
+    // the bare-list API carries the unsatisfied pin token verbatim beside missing kernels
+    t |> equal(tune_sidecar_missing_entries(path, "a;zzz;@version:myver=3"), "zzz;@version:myver=3")
+
+    // a numeric provenance value (hand-edited sidecar) reads equal to its string form
+    t |> success(fwrite(path, "\{\"kernels\":\{\"a\":\"k1\"\},\"provenance\":\{\"box\":\"{ourBox}\",\"myver\":2\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2032, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a;@version:myver=2")
+    t |> success(v.complete)
+
+    // stale beats everything else: back-dated under the binary, the same complete file refuses
+    t |> success(!(set_mtime_result(path, mktime(2000, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.stale_binary)
+    t |> equal(tune_sidecar_entries_complete(path, "a"), false)
+
+    // foreign box: fresh mtime, another box's provenance (distinct mtimes defeat the
+    // per-path+mtime box cache — same-second rewrites would reuse the first observation)
+    t |> success(fwrite(path, "\{\"kernels\":\{\"a\":\"k1\"\},\"provenance\":\{\"box\":\"some|other|box|id|entirely\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2033, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.foreign_box)
+    t |> success(find(v.detail, "some|other|box|id|entirely") >= 0)
+
+    // garbage and provenance-less files read unreadable, not foreign-box-of-nothing
+    t |> success(fwrite(path, "not json at all"))
+    t |> success(!(set_mtime_result(path, mktime(2034, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.unreadable)
+    t |> equal(tune_sidecar_entries_complete(path, "a"), false)
+
+    // the race twin: rewrite the file unparsable at the SAME mtime as a good read — the box
+    // cache still answers for (path, mtime), so the manifest read is what discovers the change
+    t |> success(fwrite(path, "\{\"kernels\":\{\"a\":\"k1\"\},\"provenance\":\{\"box\":\"{ourBox}\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2035, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> success(v.complete)
+    t |> success(fwrite(path, "not json either"))
+    t |> success(!(set_mtime_result(path, mktime(2035, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.unreadable)
+
+    remove(path)
+}
