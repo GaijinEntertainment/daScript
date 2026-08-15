@@ -440,7 +440,10 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
         var m <- load_model_cached(model, QuantMode.q8)
         var emb <- load_gemma4uv_embedder(mmproj)
         var pic <- load_image_rgb(image)
-        if (pic.width == 0) {
+        if (emb.proj_dim != m.config.dim) {
+            // this cell drives the low-level splice, so it owes the named refusal create_chat_ gives
+            print("lcpp_bench --image: mmproj proj_dim {emb.proj_dim} does not match the decoder dim {m.config.dim} — wrong model/mmproj pair\n")
+        } elif (pic.width == 0) {
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
