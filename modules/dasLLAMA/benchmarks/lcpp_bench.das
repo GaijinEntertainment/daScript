@@ -358,22 +358,24 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
 // on are the ordinary ones (prefill, decode) plus the embedder's own encode split — which is why
 // this is a cell here and not a bench beside the rig.
 
-// Best-of-`reps` for one image turn: `enc_ms` is the embedder alone, `pp_tok_s` the spliced
-// prefill (head tokens + soft-token rows + tail tokens, all positions), `tg_tok_s` the decode.
-// `text` carries the LAST rep's reply — a duration alone cannot tell "faster" from "said less".
+//! Best-of-`reps` for one image turn.
+struct private ImageTurn {
+    enc_ms : double = 1.0e30lf   // the embedder alone
+    pp_tok_s : double            // the spliced prefill: head tokens + soft-token rows + tail tokens, all positions
+    tg_tok_s : double            // the decode
+    n_rows : int64
+    text : string                // the LAST rep's reply — a duration alone cannot tell "faster" from "said less"
+}
+
 def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : VisionImage;
-                               prompt : string; reps : int; var enc_ms : double&;
-                               var pp_tok_s : double&; var tg_tok_s : double&;
-                               var n_rows : int64&; var text : string&) {
-    enc_ms = 1.0e30lf
-    pp_tok_s = 0.0lf
-    tg_tok_s = 0.0lf
+                               prompt : string; reps : int) : ImageTurn {
+    var r = ImageTurn()
     var st = Gemma4uvState()
     var rows : array<float>
     for (_rep in range(reps)) {
         let t_enc = ref_time_ticks()
-        n_rows = encode_image_(emb, st, img, "bench", rows)
-        enc_ms = min(enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
+        r.n_rows = encode_image_(emb, st, img, "bench", rows)
+        r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
         var chat <- create_chat_(m, "", 32l)
         set_thinking_(chat, false)   // the timed shape is the answer, not a scratchpad
         add_user_(chat, prompt)
@@ -382,20 +384,20 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
         render_turn_image_(m, chat, head, tail)
         let dim = m.config.dim
         let n_head = long_length(head)
-        let npos = n_head + n_rows + long_length(tail)
+        let npos = n_head + r.n_rows + long_length(tail)
         var inscope embd : array<float>
         embd |> ensure_capacity(npos * dim)
         embd |> resize(npos * dim)
         embed_text_rows(m, head, embd, 0l)
-        for (i in range64(n_rows * dim)) {
+        for (i in range64(r.n_rows * dim)) {
             embd[n_head * dim + i] = rows[i]
         }
-        embed_text_rows(m, tail, embd, n_head + n_rows)
+        embed_text_rows(m, tail, embd, n_head + r.n_rows)
         var parts : array<string>
         // the same stop protocol respond_ runs: without it a stray channel marker rides into the
         // timed text, and the row would price a reply the product would never have shown
         var stops <- effective_stop_ids_(chat)
-        generate_embd_(m, chat.session, embd, npos, SamplingParams(), 32l, n_head, n_head + n_rows) $(id, piece) {
+        generate_embd_(m, chat.session, embd, npos, SamplingParams(), 32l, n_head, n_head + r.n_rows) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -404,9 +406,9 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
         }
         delete stops
         let sres = stats_(chat.session)
-        pp_tok_s = max(pp_tok_s, sres.prefill_tps)
-        tg_tok_s = max(tg_tok_s, sres.gen_tps)
-        text = join(parts, "")
+        r.pp_tok_s = max(r.pp_tok_s, sres.prefill_tps)
+        r.tg_tok_s = max(r.tg_tok_s, sres.gen_tps)
+        r.text = join(parts, "")
         delete parts
         delete embd
         delete head
@@ -415,6 +417,7 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
     }
     delete rows
     delete st
+    return <- r
 }
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
@@ -440,13 +443,8 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
         if (pic.width == 0) {
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
-            var enc = 0.0lf
-            var pp = 0.0lf
-            var tg = 0.0lf
-            var rows = 0l
-            var text = ""
-            measure_image_turn(m, emb, pic, ask, 1, enc, pp, tg, rows, text)   // warm: JIT + first touch
-            measure_image_turn(m, emb, pic, ask, reps, enc, pp, tg, rows, text)
+            var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
+            var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
             var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
                 exec_fmt = model_exec_fmt(m),
                 workload = "image-chat", box = box_name(), threads = threads,
@@ -457,11 +455,11 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                 hardware = gather_hardware(),
                 files <- [file_identity(model, "weights"), file_identity(mmproj, "mmproj"),
                           file_identity(image, "image")])
-            run.tests |> insert("img:enc", BenchTest(ms = enc))
-            run.tests |> insert("img:pp", BenchTest(tok_s = pp))
-            run.tests |> insert("img:tg", BenchTest(tok_s = tg, text = text))
-            print("lcpp_bench --image: {pic.width}x{pic.height} -> {rows} soft tokens | enc {enc} ms | pp {pp} tok/s | tg {tg} tok/s\n")
-            print("  text: {text}\n")
+            run.tests |> insert("img:enc", BenchTest(ms = turn.enc_ms))
+            run.tests |> insert("img:pp", BenchTest(tok_s = turn.pp_tok_s))
+            run.tests |> insert("img:tg", BenchTest(tok_s = turn.tg_tok_s, text = turn.text))
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
+            print("  text: {turn.text}\n")
             var cell = BenchModel(gguf = base_name(model), arch = "gemma4uv",
                                   size_bytes = int64(stat(model).size))
             cell.runs |> emplace(run)

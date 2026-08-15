@@ -15,9 +15,9 @@ dastest run directly on one is a defect. Every other test, vulkan included, runs
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without `-jit`
 is a defect even if it passes.
 
-**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, except a self-check by its bench
-(`benchmarks/matmul/test_matmul_par.das`) and family live legs by their server
-(`utils/dasllama-server/test_openai_server_think.das`); no dasLLAMA test appears in any
+**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, except a live serving leg, which
+belongs beside the server it drives (`utils/dasllama-server/test_openai_server_*.das`), and one
+bench self-check (`benchmarks/matmul/test_matmul_par.das`); no dasLLAMA test appears in any
 `CMakeLists.txt`.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or model
@@ -26,12 +26,11 @@ gate; a test that silently vanishes on one platform is a defect.
 **A test loading a model over 6 GiB sits behind `model_available`**, run only under
 `DASLLAMA_PARITY_FULL=1`: a final pre-PR gate, not the iteration loop. Check what a test loads first.
 
-**A vision oracle artifact is fetched or minted by a recorded command, never produced ad hoc.** Real
-image fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated;
-reference dumps live beside them in the oracle directory, each recording the exact `llama-mtmd-debug`
-/ `llama-mtmd-cli` invocation that minted it, so regeneration is a command, not archaeology.
+**A real image fixture or mmproj a vision test loads has its `performance/fetch_models.das`
+entry.** The oracle-dump provenance convention beside them is `ARCHITECTURE.md` §1.7b.
 
-**A procedural vision fixture and its distilled expectations live in-repo and run model-free.**
+**A vision test that needs no model builds its fixture procedurally and pins its expectations
+in-repo.**
 
 **Every function whose signature or body changed — new, moved, extracted, or rewritten — ships a
 test for the bit itself** (a signature widening with an unchanged body counts: the new receivers are
@@ -55,8 +54,9 @@ print.** A run that ends without its comparison lines — wrong flags, failed lo
 `has_coopmat2`, `dn_shared_ok`), never on the existence of a runtime artifact such as a pipeline or a
 cached set.** An artifact gate goes permanently false when its producer moves.
 
-**A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage belongs to
-the image suites alone (`ARCHITECTURE.md` §2.1).
+**A test suite loads DECODERS with `load_model_`, never the image rail** (towers and embedders load
+through their family loaders). Image-rail coverage belongs to the image suites alone
+(`ARCHITECTURE.md` §2.1).
 
 **A family that gains a live thinking or tool format ships recognition tests in the same change.** The
 trigger is a chat template gaining `think_mode` or `tool_mode`, declared in a `dasllama_arch_*.das`
@@ -293,51 +293,6 @@ Metal and Vulkan differ — adding or removing an asymmetry — lands its §1.5 
   transcribe driver, quirks. Shared tower pieces move up into `dasllama_audio.das`, never sideways.
 - `dasllama_vad.das` — voice-activity detection weights and stream state.
 
-### Vision
-
-- `dasllama_vision.das` — the preprocessing rail: dynamic-resolution geometry, the letterbox
-  resize, normalize. The only preproc home.
-- `dasllama_vision_io.das` — image decode to RGB8 and the debug PNG dump. The only file that talks
-  to stbimage.
-- `dasllama_gemma4uv.das` — the gemma4uv embedder: mmproj load, im2col, the norm/GEMM/pos-table
-  forward. One file per vision projector family, the audio tower pattern.
-
-**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
-tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
-decides the question for a whole file, because a shipped file mixes them (`ARCHITECTURE.md` §1.7b).
-A plane split that follows the FILE rather than a runtime knob takes ONE image tag, with the meta
-flags describing the layout.
-
-**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
-as red.**
-
-**Every image a test feeds an embedder is a procedural fixture the test builds, or previewable via
-the `DASLLAMA_VISION_DUMP` knob** — a red never requires adding instrumentation before a human can
-see what the model saw.
-
-**A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
-from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
-and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
-
-**A media turn's prompt renders as two token spans around the soft-token splice**
-(`render_prompt_media`) — never one stream with a placeholder — so BPE merges cannot cross the
-media, and a new media kind adds its marker pair to the chat template rather than a second
-renderer. A family whose template declares no marker pair has no arm for that media kind, and
-`create_chat_` panics at create.
-
-**A scheduler stream carrying media rows neither reads nor writes the prefix cache.** Cache keys
-are token ids and the KV past the splice does not follow from them, so a media stream skips
-`prefix_attach` at admit and `donate_stream` at reap.
-
-**A media stream's rows eval as ONE prefill quantum.** The non-causal flag is per call, so a chunk
-boundary inside the span would change the mask.
-
-**A media splice is expressed as two token spans plus a row block, everywhere it appears.** The
-engine's `render_turn_image_`, the scheduler's `(prompt, media_at, media)` triple and the server's
-request path all carry the same shape; a second representation — a placeholder token, a
-pre-flattened embedding buffer at the seam — is a defect. A new media kind adds its render seam
-beside the existing one, not a parallel prefill path.
-
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade only at
 the union field, the finalize line, the `AsrKind` value, and the one-line arms; a prompt, a decode
 loop, a caps value, or a language rule in the facade is a defect.
@@ -357,6 +312,48 @@ family file is a defect.
 
 **A `create_session` / `transcribe` option that the model's `caps()` does not declare panics at the
 call site** (`dasllama_asr.das`). Accepting it and silently ignoring it is a defect.
+
+### Vision
+
+- `dasllama_vision.das` — the preprocessing rail: dynamic-resolution geometry, the letterbox
+  resize, normalize, and the `DASLLAMA_VISION_DUMP` PPM writer. The only preproc home.
+- `dasllama_vision_io.das` — image decode to RGB8 and the debug PNG dump. The only file that talks
+  to stbimage.
+- `dasllama_gemma4uv.das` — the gemma4uv embedder: mmproj load, im2col, the norm/GEMM/pos-table
+  forward. One file per vision projector family, the audio tower pattern.
+
+**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
+tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
+decides the question for a whole file, because a shipped file mixes them (`ARCHITECTURE.md` §1.7b).
+
+**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
+as red.**
+
+**Every image a test feeds an embedder is a procedural fixture the test builds, or previewable via
+the `DASLLAMA_VISION_DUMP` knob** — a red never requires adding instrumentation before a human can
+see what the model saw.
+
+**A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
+from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
+and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
+
+**A new media kind adds its marker pair to the chat template, never a second renderer.** A family
+whose template or vocab lacks the pair has no arm for that media kind — `create_chat_` panics at
+create, not at render.
+
+**A scheduler stream carrying media rows neither reads nor writes the prefix cache.** Cache keys
+are token ids and the KV past the splice does not follow from them, so a media stream skips
+`prefix_attach` at admit and `donate_stream` at reap.
+
+**A media stream's rows eval as ONE prefill quantum.** The non-causal flag is per call, so a chunk
+boundary inside the span would change the mask.
+
+**A media splice is expressed as two token spans plus a row block, everywhere it appears** — so
+BPE merges never cross the media. The engine's `render_turn_image_`, the scheduler's
+`(prompt, media_at, media_embd)` triple and the server's request path all carry the same shape; a
+second representation — one stream with a placeholder token, a pre-flattened embedding buffer at
+the seam — is a defect, as is a new media kind growing a parallel prefill path.
+
 
 ### Generated
 
@@ -401,6 +398,9 @@ siblings plus BROKEN/version-stale images in any lane, nothing else (`ARCHITECTU
 **Only a process that can recompute an image's identity may judge it dead.** Reaping an image whose
 identity the code cannot recompute — another flavor's, another family's — is a defect, with one
 carve-out: `dlim_wipe` from `gen_bench_records.das`. Any other `dlim_wipe` caller is a defect.
+
+**A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**, with
+the meta flags describing the layout — a per-tensor type split is not a second flavor.
 
 **An image carries only what its flavor uses.** A plane the target platform or config never reads is
 not written — the mint decides, not the load. A flavor takes its file through `image_path_for` and its
@@ -487,11 +487,11 @@ picks its own number is a defect, and so is a new root that omits the declaratio
 require `dasllama/` and export `main`; `tests/test_program_roots.das` enforces exactly that, plus
 prefill intent for model-loading roots (`ARCHITECTURE.md` §2.8).
 
-**A root that cannot recover from a panic declares its engine intent in code, not by side effect.**
-The CPU-prefill guard is a profiling tripwire that PANICS, so a long-running server or service reaches
-it and takes every live stream down with it; such a root calls `allow_cpu_prefill()` explicitly on the
-arms that will hit it and logs, once, which configuration it ended up on. `set_metal_mode(x)` with a
-runtime value declares nothing — `MetalMode.off` leaves the guard armed.
+**A long-running root declares its prefill arm with an explicit `allow_cpu_prefill()` on the arms
+that will hit the CPU-prefill guard** — the guard panics, and a panic takes every live stream down.
+`set_metal_mode(x)` with a runtime value declares nothing: `MetalMode.off` leaves the guard armed.
+
+**A long-running root logs, once, which prefill configuration it ended up on.**
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is a
 defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose value

@@ -312,6 +312,11 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
   embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
   follows its source tensor, per tensor, never a per-file verdict.
+  Oracle provenance convention: real image fixtures and mmproj files live in the models dir
+  with `.sha` pins, fetched never generated (their `performance/fetch_models.das` entries are
+  the checkable pins); the mtmd reference dumps live beside them in `gemma4-vision-oracle/`,
+  whose `mint.sh` records the exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that
+  minted each dump, so regeneration is a command, not archaeology.
 
 ### 1.8 Instrumentation and support
 

@@ -48,7 +48,7 @@ def private model_missing(t : T?) : bool {
 def private with_stream_server(t : T?; model_path : string; port : int; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
-            allow_cpu_prefill()   // SSE-framing test: CPU serving is the intent, no metal arm wanted
+            allow_cpu_prefill()   // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; this test serves on the CPU
             var m <- load_model(model_path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, TEST_CTX)
             set_model(m, "test-llm-stream")

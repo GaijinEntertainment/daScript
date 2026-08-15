@@ -60,8 +60,8 @@ struct ChatSession {
     enc : EncoderState = EncoderState()   // encoder scratch (sized once at create)
     audio_rows : array<float>             // encoded soft tokens awaiting the next respond()
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
-    vision : Gemma4uvEmbedder = Gemma4uvEmbedder()   // proj_dim == 0 => no vision embedder
-    venc : Gemma4uvState = Gemma4uvState()           // embedder scratch
+    embedder : Gemma4uvEmbedder = Gemma4uvEmbedder()   // proj_dim == 0 => no vision arm
+    embedder_scratch : Gemma4uvState = Gemma4uvState()
     image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
 }
@@ -83,8 +83,8 @@ def finalize(var c : ChatSession) {
     delete c.tower
     delete c.enc
     delete c.audio_rows
-    delete c.vision
-    delete c.venc
+    delete c.embedder
+    delete c.embedder_scratch
     delete c.image_rows
 }
 
@@ -531,13 +531,14 @@ def private render_tool_results(m : Model; c : ChatSession; var out : array<int6
     delete bp
 }
 
-//! Render an AUDIO turn's prefill as two spans around the soft-token splice point — see
-//! `render_prompt_media`. Public with ``create_chat_renderer_``: the render-only seam.
+//! Render an AUDIO turn's prefill as two spans around the soft-token splice point — the text
+//! chunks break at the media boundary so BPE merges never cross the media (the llama-mtmd-cli
+//! shape). Public with ``create_chat_renderer_``: the render-only seam.
 def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     render_prompt_media(m, c, c.tmpl.audio_pre.parts, c.tmpl.audio_post.parts, head, tail)
 }
 
-//! Render an IMAGE turn's prefill as two spans around the soft-token splice point (gemma-4:
+//! Render an IMAGE turn's prefill: same two-span contract as ``render_prompt_audio`` (gemma-4:
 //! `<|image>` … `<image|>`).
 def render_prompt_image(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     render_prompt_media(m, c, c.tmpl.image_pre.parts, c.tmpl.image_post.parts, head, tail)
@@ -688,7 +689,7 @@ def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string
     if (!image_vocab_ok(model, c.tmpl)) {
         panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
     }
-    c.vision <- embedder
+    c.embedder <- embedder
     return <- c
 }
 
@@ -696,7 +697,7 @@ def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string
 //! the head of the next user turn (before its text). ONE image per turn in v1: a second call
 //! before respond() panics. Call inside with_job_que() (the embedder threads its GEMMs).
 def add_user_image_(var c : ChatSession; img : VisionImage) {
-    if (c.vision.proj_dim == 0l) {
+    if (c.embedder.proj_dim == 0l) {
         panic("dasLLAMA chat: this chat has no vision embedder - create it with create_chat(model, embedder)")
     }
     if (c.n_image_rows > 0l) {
@@ -705,7 +706,7 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
     if (c.n_audio_rows > 0l) {
         panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
     }
-    c.n_image_rows = encode_image_(c.vision, c.venc, img, "turn{length(c.history)}", c.image_rows)
+    c.n_image_rows = encode_image_(c.embedder, c.embedder_scratch, img, "turn{length(c.history)}", c.image_rows)
 }
 
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,

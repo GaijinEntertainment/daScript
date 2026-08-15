@@ -482,7 +482,6 @@ function apply(s) {
             " (" + (100 * s.mtp_accepted / s.mtp_drafted).toFixed(0) + "%)";
     }
     $("b-img").style.display = s.vision ? "" : "none";
-    // seed the thinking box from the served family, once, and never over a user's choice
     if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
         $("kn-thinking").checked = s.thinking_default;
         thinkSeeded = true;
@@ -1033,12 +1032,8 @@ const KNOBS = [
 ];
 const chatMsgs = [];   // {role, content} — replayed on every send; TEXT only (see chatImage)
 let chatBusy = false;
-// The attached image rides the NEWEST user message on every send and stays attached until
-// removed — the server reads the image on the last user message only, so a sticky attachment is
-// what makes follow-up questions about the same picture work. History stays text: nothing
-// re-uploads an old turn's base64.
-let chatImage = null;   // { url: dataURI, name }
-let thinkTouched = false;   // until the user touches the box, the family's own default rules
+let chatImage = null;   // { url: dataURI, name } — sticky: rides the newest user message each send
+let thinkTouched = false;
 let thinkSeeded = false;
 
 {
@@ -1055,10 +1050,8 @@ let thinkSeeded = false;
         wrap.append(inp);
         box.append(wrap);
     }
-    // Thinking is TRI-STATE on the wire: an absent enable_thinking leaves the family's own
-    // default in force (gemma-4 ships it off, qwen3 on). The box seeds from /v1/stats and sends
-    // nothing until touched — a page that hardcoded `checked` forced reasoning onto families that
-    // ship without it, which is how a 12B ends up looping in a thought channel on first contact.
+    // Thinking is tri-state on the wire: an absent enable_thinking leaves the family default in
+    // force (gemma-4 off, qwen3 on). The box seeds from /v1/stats and sends nothing until touched.
     const think = document.createElement("label");
     think.className = "knob";
     const cb = document.createElement("input");
@@ -1072,8 +1065,7 @@ let thinkSeeded = false;
 // render one message: think span (serif), content text, tool-call chips
 function renderMsgContent(el, text, think, calls, keepChildren) {
     // reasoning arrives separated as delta.reasoning_content; calls as the tool_calls chunk
-    // (keepChildren preserves an already-appended image thumbnail on a user bubble)
-    if (!keepChildren) el.textContent = "";
+    if (!keepChildren) el.textContent = "";   // a user bubble may already hold the image thumbnail
     // fallback for families the server doesn't split (R1-distill-class fine-tunes): a literal
     // leading <think> block in the content renders as the think span
     if (!think && text && text.startsWith("<think>")) {

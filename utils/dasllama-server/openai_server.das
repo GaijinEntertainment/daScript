@@ -1414,8 +1414,7 @@ def private message_parts(mv : JsonValue?; route : string; var images : array<st
     return ""
 }
 
-// `message_parts` for the routes with no image path of their own: an image part there is dropped
-// with a warning, exactly as before vision existed.
+// `message_parts` for routes with no image path: image parts warn and drop.
 def private message_text(mv : JsonValue?; route : string) : string {
     var images : array<string>
     let s = message_parts(mv, route, images)
@@ -1643,7 +1642,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.close_toks <- close_toks
-    preq.media <- media
+    preq.media_embd <- media
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
@@ -1708,7 +1707,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     }
     var rendered : array<int64>
     var pending = false
-    var seen_images : array<string>   // collected so the parts walk stays silent; the handler ruled
+    var seen_images : array<string>   // handle_chat already validated and queued these
     defer() { delete seen_images }
     var tool_results : array<string>
     var tool_names : array<string>
@@ -1722,7 +1721,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         if (role != "system" && i < start) {
             continue
         }
-        let content = message_parts(mv, "/v1/chat/completions", seen_images)   // the handler already ruled on them
+        let content = message_parts(mv, "/v1/chat/completions", seen_images)
         if (role != "tool" && !empty(tool_results)) {
             add_tool_results(chat, tool_results, tool_names)
             tool_results |> clear()
@@ -1823,7 +1822,7 @@ def private next_user_start(msgs_v : JsonValue?; start : int) : int {
     return -1
 }
 
-def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {   // nolint:STYLE037,STYLE038 — flat request-field validation: one guard and one client-facing message per field
+def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
     if (reject_deferred_while_draining(srv, writer)) {
         return
     }

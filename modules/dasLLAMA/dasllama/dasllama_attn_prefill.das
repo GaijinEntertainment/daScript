@@ -28,7 +28,7 @@ def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp :
             let tile_rows = min(QT, npos - p0)
             let ap0 = start_pos + p0
             let apL = ap0 + tile_rows - 1l                 // max query position in this tile
-            // uniform_end > 0: the non-causal image span — every query attends [swa_lo, uniform_end)
+            // uniform_end > 0: the non-causal image span — every query attends [the sliding-window floor, uniform_end)
             let kend = uniform_end > 0l ? uniform_end : apL + 1l
             let kstart_min = (is_sliding && ap0 + 1l > sliding_window) ? (ap0 + 1l - sliding_window) : 0l
             // pack the Q tile contiguous [tile_rows × head_size] (q rows are qd-strided in q_b)
@@ -146,7 +146,6 @@ def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp :
 // attp_h = this head's ATTN_BLOCK_Q score rows (maxctx-strided). Scores go through kv_score
 // (q8_0 K: the same dot decode runs, keeping prefill == decode bit-exact under the block codec).
 def private attn_head_blocked(var attp_h : float?; var xbp : float?; qp : float const?; // nolint:STYLE037,STYLE038 — two K/V passes register-coupled through the shared score plane; the causal/span bounds must stay with both
-
                               qq : int8 const ?; qsp : float const?;
                               kcp, vcp : auto const?; runs : KVRun const?;
                               nrun, npos, start_pos, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh : int64;
@@ -158,7 +157,7 @@ def private attn_head_blocked(var attp_h : float?; var xbp : float?; qp : float 
             let bq = min(ATTN_BLOCK_Q, npos - p0)
             let ap_first = start_pos + p0
             let ap_last = ap_first + bq - 1l
-            // uniform_end > 0: the non-causal image span — every query attends [swa_lo, uniform_end)
+            // uniform_end > 0: the non-causal image span — every query attends [the sliding-window floor, uniform_end)
             let bend = uniform_end > 0l ? uniform_end : ap_last + 1l
             let kstart_block = (is_sliding && ap_first + 1l > sliding_window) ? (ap_first + 1l - sliding_window) : 0l
             // PASS 1: scores — each K[kk] loaded once, reused across the block's queries
@@ -240,7 +239,7 @@ def private attn_head_classic(var attp_h : float?; var xbp : float?; qp : float 
     unsafe {
         for (p in range64(npos)) {
             let ap = start_pos + p
-            // uniform_end > 0: the non-causal image span — every query attends [swa_lo, uniform_end)
+            // uniform_end > 0: the non-causal image span — every query attends [the sliding-window floor, uniform_end)
             let aend = uniform_end > 0l ? uniform_end : ap + 1l
             let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
             let cnt = aend - kstart

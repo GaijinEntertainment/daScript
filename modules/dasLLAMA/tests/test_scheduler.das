@@ -574,10 +574,8 @@ def test_scheduler_mtp(t : T?) {
 
 // ===== paged + SAMPLED: the combination the server actually serves =====
 
-// The seeded-sampling equivalence arm above runs a FLAT scheduler, and the paged arm above runs
-// GREEDY — so paged-and-sampled, which is exactly what dasllama-server does on every request that
-// sets a temperature, had no gate. A sampled stream consults the RNG once per token, so any extra
-// or missing sample() call in the paged path shows up as a diverged stream, not as a crash.
+// A sampled stream consults the RNG once per token, so an extra or missing sample() call in the
+// paged path shows up as a diverged stream, not as a crash.
 [test]
 def test_scheduler_paged_sampled(t : T?) {
     t |> run("paged scheduler, seeded sampling: stream == generate() (needs SmolLM2-135M)") @(t : T?) {
@@ -635,8 +633,8 @@ def private media_req(m : Model; id : int64; prompt : array<int64>; lo, hi : int
                         media_at = lo, n_media = hi - lo, media_non_causal = non_causal)
     r.prompt <- [for (k in range64(np)); prompt[k]; where k < lo || k >= hi]
     var mid <- [for (k in range64(lo, hi)); prompt[k]]
-    r.media |> resize((hi - lo) * m.config.dim)
-    embed_text_rows(m, mid, r.media, 0l)
+    r.media_embd |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, r.media_embd, 0l)
     delete mid
     return <- r
 }
@@ -681,7 +679,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             var base <- ref_generate(m, prompt, greedy, 6l, none)
             t |> success(!empty(base.toks), "the all-token reference produced tokens")
             // head (no leading tokens), middle (both spans), tail (no trailing tokens)
-            for (arm, lo, hi in range(3), [0l, 4l, np - 5l], [5l, 4l + 6l, np]) {
+            for (arm, lo, hi in ["head", "middle", "tail"], [0l, 4l, np - 5l], [5l, 4l + 6l, np]) {
                 var sch <- create_scheduler(m, 1l, 4l, 64l)
                 var events : array<SchedEvent>
                 var req <- media_req(m, 1l, prompt, lo, hi, false, greedy, 6l)
@@ -785,7 +783,7 @@ def test_scheduler_media_validation(t : T?) {
             try {
                 var bad <- PendingReq(id = 10l, params = greedy, max_new = 4l, media_at = 99l, n_media = 2l)
                 bad.prompt := prompt
-                bad.media |> resize(2l * m.config.dim)
+                bad.media_embd |> resize(2l * m.config.dim)
                 submit(m, sch, bad)
             } recover {
                 tripped = true
@@ -795,7 +793,7 @@ def test_scheduler_media_validation(t : T?) {
             try {
                 var bad <- PendingReq(id = 11l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l)
                 bad.prompt := prompt
-                bad.media |> resize(4l)   // far short of n_media * dim
+                bad.media_embd |> resize(4l)   // far short of n_media * dim
                 submit(m, sch, bad)
             } recover {
                 tripped = true
@@ -805,7 +803,7 @@ def test_scheduler_media_validation(t : T?) {
             try {
                 var bad <- PendingReq(id = 12l, params = greedy, max_new = 4l)
                 bad.prompt := prompt
-                bad.media |> resize(2l * m.config.dim)   // rows with n_media == 0
+                bad.media_embd |> resize(2l * m.config.dim)   // rows with n_media == 0
                 submit(m, sch, bad)
             } recover {
                 tripped = true

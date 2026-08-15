@@ -679,7 +679,7 @@ def private stream_whisper_model(path : string; q8 : bool; img, tag : string; va
             extra += 4ul * uint64(IMAGE_PAGE)
         }
         wrote = cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
-                                                                         var w : ImgWriter; var sections : array<ImgSection>) {
+                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
             if (name == "dblob") {
                 return wstream_plane(recs, bytes, decJobs, 0, q8, rep, w, sections, name)
             }

@@ -56,7 +56,7 @@ struct PendingReq {
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
-    media : array<float>                    // n_media * model.config.dim soft-token rows
+    media_embd : array<float>                    // n_media * model.config.dim soft-token rows
     n_media : int64
     media_at : int64                        // prompt index the rows splice at (0 <= media_at <= |prompt|)
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
@@ -72,7 +72,7 @@ struct Stream {
     close_toks : array<int64>
     stop_ids : array<int64>
     n_prefilled : int64                     // prompt tokens evaled so far
-    media : array<float>                    // the splice's soft-token rows (see PendingReq)
+    media_embd : array<float>                    // the splice's soft-token rows (see PendingReq)
     n_media : int64
     media_at : int64
     media_non_causal : bool
@@ -189,10 +189,10 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
         if (req.media_at < 0l || req.media_at > np) {
             panic("dasllama_scheduler: media splice at {req.media_at} outside the {np}-token prompt (stream {req.id})")
         }
-        if (long_length(req.media) < req.n_media * model.config.dim) {
-            panic("dasllama_scheduler: {req.n_media} media rows need {req.n_media * model.config.dim} floats, got {length(req.media)} (stream {req.id})")
+        if (long_length(req.media_embd) < req.n_media * model.config.dim) {
+            panic("dasllama_scheduler: {req.n_media} media rows need {req.n_media * model.config.dim} floats, got {length(req.media_embd)} (stream {req.id})")
         }
-    } elif (long_length(req.media) != 0l || req.media_at != 0l) {
+    } elif (long_length(req.media_embd) != 0l || req.media_at != 0l) {
         panic("dasllama_scheduler: media rows or media_at set with n_media == 0 (stream {req.id}) - the rows would be silently dropped")
     }
     if (np + req.n_media + 1l > model.config.seq_len) {
@@ -343,7 +343,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
-                         media <- sch.queue[0].media, n_media = sch.queue[0].n_media,
+                         media_embd <- sch.queue[0].media_embd, n_media = sch.queue[0].n_media,
                          media_at = sch.queue[0].media_at,
                          media_non_causal = sch.queue[0].media_non_causal,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
@@ -450,7 +450,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         // Head tokens chunk normally up to media_at, the tail resumes after.
         let media_pending = sch.streams[i].n_media > 0l && !sch.streams[i].media_done
         if (media_pending && sch.streams[i].n_prefilled >= sch.streams[i].media_at) {
-            eval_embd(m, sch.streams[i].session, sch.streams[i].media, sch.streams[i].n_media,
+            eval_embd(m, sch.streams[i].session, sch.streams[i].media_embd, sch.streams[i].n_media,
                       sch.streams[i].media_non_causal)
             sch.streams[i].media_done = true
             sch.prefill_tokens += sch.streams[i].n_media

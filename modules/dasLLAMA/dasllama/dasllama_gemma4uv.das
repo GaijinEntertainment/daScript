@@ -244,11 +244,11 @@ def private uv_gemm_off(bf16 : bool; var o : int64&; var wo : int64&; size : int
 // GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
 // reads it like any plain tensor
 def private uv_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4uvStaging;
-                         bf16 : bool; woff, n_elem : int64) {
+                         bf16 : bool; off, n_elem : int64) {
     if (bf16) {
-        gguf_transcode_bf16(m, b, name, st.wblob, woff, n_elem)
+        gguf_transcode_bf16(m, b, name, st.wblob, off, n_elem)
     } else {
-        gguf_read_tensor_f32(m, b, name, st.blob, woff, n_elem)
+        gguf_read_tensor_f32(m, b, name, st.blob, off, n_elem)
     }
 }
 
@@ -355,12 +355,12 @@ def private uv_rms_rows(var x : array<float>; d, npos : int64; eps : float) {
 // One GEMM, on whichever plane this embedder's offsets index. Both arms are the same arithmetic:
 // dot_bf16's widen is an exact high-half shift, so the bf16 arm reads half the bytes for the
 // identical result.
-def private uv_gemm(var y : array<float>; t : Gemma4uvEmbedder; bf16 : bool; woff : int64;
+def private uv_gemm(var y : array<float>; t : Gemma4uvEmbedder; bf16 : bool; off : int64;
                     x : array<float>; n, d, npos : int64) {
     if (bf16) {
-        mm_bf16_b(y, t.wblob, woff, x, n, d, npos)
+        mm_bf16_b(y, t.wblob, off, x, n, d, npos)
     } else {
-        mm_blob_b(y, t.blob, woff, x, n, d, npos)
+        mm_blob_b(y, t.blob, off, x, n, d, npos)
     }
 }
 
@@ -381,12 +381,10 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     let npos = uv_im2col(t, planes, w, h, s.x0)
     uv_ensure(s.x1, npos * d)
     uv_ensure(s.x2, npos * d)
-    // patch_norm.1 over raw rows, then the patch linear + bias
     layernorm_batch(s.x0, s.x0, t.blob, t.ln1_w, t.ln1_b, t.patch_dim, npos, GEMMA4UV_LN_EPS)
     uv_gemm(s.x1, t, t.patch_bf16, t.patch_w, s.x0, t.patch_dim, d, npos)
     add_bias_rows(s.x1, t.blob, t.patch_b, d, npos)
     layernorm_batch(s.x2, s.x1, t.blob, t.ln2_w, t.ln2_b, d, npos, GEMMA4UV_LN_EPS)
-    // learned position lookups: x table first, then y, then pos_norm
     unsafe {
         var xp = addr(s.x2[0])
         let tbl = plane_at(t.blob, t.pos_w)

@@ -74,9 +74,11 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
-            // serving test, not a kernel test: the CPU batched prefill arm is the intent whenever
-            // metal is off (and harmless when it is on — it permits the arm, it does not select it)
-            allow_cpu_prefill()
+            if (mode == MetalMode.off) {
+                // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; the metal
+                // arm keeps it ARMED — there it is the silent-GPU-fallback detector
+                allow_cpu_prefill()
+            }
             var m <- load_model(model_path, QuantMode.q8)
             set_model(m, "test-llm")
             set_default_max_tokens(4l)   // per-context global — exercised by the default-budget completion test
@@ -286,7 +288,6 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
             // an image_url part on a slot with NO vision arm: a named 400, never a silent drop
-            // (a client that asked about a picture must not get an answer about nothing)
             let one_img = "\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"text\",\"text\":\"what is this\"}]}"
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[{one_img}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
@@ -298,9 +299,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
             }
-            // /v1/stats declares the arm so the page can show its attach button, and the family's
-            // OWN thinking default so the page's checkbox seeds from truth instead of guessing —
-            // a page that hardcodes "on" forces reasoning onto a family that ships it off
+            // /v1/stats declares both arms the page reads: the vision flag and the thinking default
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
@@ -632,7 +631,7 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(MetalMode.off)
-            allow_cpu_prefill()   // routing test: both slots serve off the CPU arm by design
+            allow_cpu_prefill()   // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; this test serves on the CPU
             var ma <- load_model(path_a, QuantMode.q8)
             add_model(ma, "tiny")
             var mb <- load_model(path_b, QuantMode.q8)

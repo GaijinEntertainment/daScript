@@ -776,11 +776,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     set_metal_mode(metal_mode)
     if (metal_mode == MetalMode.off) {
-        // A server cannot answer a request by dying. The Metal-build CPU-prefill guard is a
-        // PROFILING tripwire — it exists so a batched prefill never sinks time on the CPU
-        // unnoticed — and its panic would take the process down mid-stream, killing every other
-        // live stream with it. Serving on the CPU arm is a legitimate configuration, so say so
-        // once, out loud, and name the flag that moves it to the GPU.
+        // the Metal-build CPU-prefill guard is a profiling tripwire; its panic would drop every
+        // live stream, and serving on the CPU arm is a legitimate configuration
         allow_cpu_prefill()
         to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
     }
@@ -878,7 +875,6 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     set_default_model(g_models[def_idx].name)
     set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 256l)
-    // vision arms: a per-entry image_mmproj wins, the flat --image-mmproj covers the default model
     for (i in range(length(g_models))) {
         let path = (!empty(g_models[i].image_mmproj) ? g_models[i].image_mmproj
                                                      : (i == def_idx ? g_cfg.image_mmproj : ""))

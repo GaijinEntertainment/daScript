@@ -89,8 +89,7 @@ def private make_planes(kind : string; w, h : int) : array<float> {
         }
     }
     // no rainbow arm: its generator runs atan2f, which is not float-portable across libms -
-    // tier-1 fixtures must have exact-value generators (see mint.sh); cb672x336 carries the
-    // non-square orientation gate instead (identical patches ⇒ tokens differ only by pos embd)
+    // tier-1 fixtures must have exact-value generators (see mint.sh)
     return <- planes
 }
 

@@ -58,12 +58,8 @@ def test_program_roots(t : T?) {
                     has_main ||= (line |> starts_with("def main")) || (line |> starts_with("def main("))
                     has_stack ||= line |> starts_with(STACK_LINE)
                     loads_model ||= find(line, "load_model(") >= 0 || find(line, "load_asr_model(") >= 0 || find(line, "load_audio_tower(") >= 0
-                    // CODE only: every root's `allow_cpu_prefill()` carries a tail comment that
-                    // NAMES set_metal_mode, so scanning the raw line would let the comment stand in
-                    // for the declaration. And a bare `set_metal_mode(x)` declares nothing the
-                    // runtime honors — MetalMode.off leaves the CPU-prefill guard armed, which is
-                    // fatal, so only a literal GPU mode counts.
                     let code = strip_comment(line)
+                    // MetalMode.off leaves the CPU-prefill guard armed, so only a literal GPU mode counts as intent
                     let gpu_pin = (find(code, "set_metal_mode(") >= 0
                         && (find(code, "MetalMode.when_available") >= 0 || find(code, "MetalMode.required") >= 0))
                     has_intent ||= find(code, "allow_cpu_prefill(") >= 0 || gpu_pin

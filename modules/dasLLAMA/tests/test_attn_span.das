@@ -16,7 +16,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ + set_prefill_attn_mo
 require dasllama/dasllama_env
 
 // The non-causal image span (eval_embd_/forward_prefill_embd non_causal=true): every query of
-// the span attends [swa_lo(q), span_end) — the mtmd_decode_use_non_causal semantics gemma
+// the span attends [the sliding-window floor, span_end) — the mtmd_decode_use_non_causal semantics gemma
 // vision decodes under. The reference here is the MASK DIRECTION itself: under causal
 // attention position 0's residual cannot depend on later rows; under the span it must.
 // Needs llama2.c's stories15M.bin (test_flash's fixture); skips cleanly when absent.
@@ -29,8 +29,8 @@ let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 let NPOS = 48l
 
-// deterministic pseudo-random embd rows in a tame range; `seed_last` perturbs ONLY the final row
-def private make_embd(dim : int64; seed_last : int) : array<float> {
+// deterministic pseudo-random embd rows in a tame range; `perturb_last` perturbs ONLY the final row
+def private make_embd(dim : int64; perturb_last : int) : array<float> {
     var e : array<float>
     e |> resize(NPOS * dim)
     var state = 0x12345u
@@ -38,9 +38,9 @@ def private make_embd(dim : int64; seed_last : int) : array<float> {
         state = state * 1664525u + 1013904223u
         e[i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.1
     }
-    if (seed_last != 0) {
+    if (perturb_last != 0) {
         for (i in range64(dim)) {
-            e[(NPOS - 1l) * dim + i] += 0.05 * float(seed_last)
+            e[(NPOS - 1l) * dim + i] += 0.05 * float(perturb_last)
         }
     }
     return <- e

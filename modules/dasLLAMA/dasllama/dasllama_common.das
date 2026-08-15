@@ -1539,7 +1539,7 @@ struct Session {
     uid : uint64
     n_past : int64            // absolute position of the next token to eval (0 at session start); advanced by eval()
     // batched-prefill mask override: 0 = causal; > 0 = every query of the CURRENT prefill call
-    // attends [swa_lo(q), attn_uniform_end) — the non-causal image span (gemma vision). Set and
+    // attends [the sliding-window floor, attn_uniform_end) — the non-causal image span (gemma vision). Set and
     // cleared by forward_prefill_embd; read by prefill_attention and the GPU readiness guard.
     attn_uniform_end : int64
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)

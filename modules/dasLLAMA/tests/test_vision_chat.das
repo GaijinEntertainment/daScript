@@ -13,11 +13,9 @@ require strings
 require _model_tier   // models_dir() + model_available() gate
 
 // The image chat turn: the prompt stream shape around the soft-token splice (tier 2) and the
-// greedy caption (tier 3). Token-for-token parity with llama-mtmd-cli is NOT the gate — the
-// oracle runs its jinja template in thinking mode while dasLLAMA's gemma-4 arm defaults to
-// instruct, and freeform token-parity cells are banned (tests/CLAUDE.md). What IS pinned: the
-// stream shape llama.cpp documents (marker ids, media-first, span length from the geometry)
-// and that the model describes what is actually in the picture.
+// greedy caption (tier 3). Pinned: marker ids, media-first order, span length from the
+// geometry, and that the model describes what is in the picture. NOT token-parity with
+// llama-mtmd-cli — tests/CLAUDE.md carries why.
 
 let MM = "mmproj-gemma-4-12B-it-BF16.gguf"
 let DEC = "gemma-4-12B-it-Q4_K_M.gguf"

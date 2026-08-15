@@ -13,13 +13,11 @@ require daslib/fio
 require strings
 require dasllama/dasllama_env
 
-// The image route end to end: a data-URI image on /v1/chat/completions must reach the embedder,
-// splice as soft tokens between the two rendered token spans, and come back as a caption about
-// what is in the picture. This is the ROUTE's proof — the splice arithmetic itself is pinned
-// unit-side (dasLLAMA tests/test_scheduler.das media arms), and the caption's wording is not a
-// gate (freeform token-parity cells are banned): what is asserted is a 200, usage counting the
-// soft-token rows as prompt positions, and the cats being called cats.
-// Model-gated + JIT-only: skips cleanly wherever the gemma-4 pair is absent.
+// The image route end to end: data URI -> vision worker -> soft tokens spliced between the two
+// rendered spans -> a caption.
+// Asserts: 200; usage counts the soft-token rows as prompt positions; the reply says "cat".
+// Splice arithmetic is pinned unit-side (dasLLAMA tests/test_scheduler.das media arms).
+// Model-gated (DASLLAMA_PARITY_FULL tier: 6.87 GiB decoder) + JIT-only; skips cleanly otherwise.
 
 let TEST_PORT = 18097
 
@@ -36,7 +34,7 @@ let CATS_ROWS = 130
 def private with_vision_server(port : int; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
-            allow_cpu_prefill()   // route test: the image span prefills on the CPU arm by design
+            allow_cpu_prefill()   // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; this test serves on the CPU
             var m <- load_model(DEC_PATH, QuantMode.q8)
             set_model(m, "test-vlm")
             set_model_vision("test-vlm", MM_PATH)
