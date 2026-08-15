@@ -833,7 +833,7 @@ namespace das
         bool                            gcEnabled = false;
         bool                            gcLogTime = false;          // log per-phase heap GC timing
         bool                            failed = false;
-        bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
+        bool                            verySafeContext = false;    // when true, array and table reserves don't free memory (unless the container's scratch flag or a scratch_* one-shot opts out)
         uint64_t                        maxUnreservedSize = 64ull<<20;  // mirrors CodeOfPolicies::max_unreserved_size (assigned in setup/simulate; this initializer covers raw contexts)
         bool                            sharedPtrContext = false;   // there is a shared ptr to this context
         bool                            skipInitShutdownScript = false; // this (cloned) context skipped global init, so skip shutdown too

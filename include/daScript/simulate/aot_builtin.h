@@ -112,6 +112,12 @@ namespace das {
     DAS_API void builtin_array_clear_lock ( const Array & arr, Context * );
     DAS_API void builtin_array_tag ( Array & arr, const char * name, Context * context );
     DAS_API void builtin_table_tag ( Table & tab, const char * name, Context * context );
+    DAS_API void builtin_array_set_scratch ( Array & arr, bool value, Context * );
+    DAS_API bool builtin_array_is_scratch ( const Array & arr );
+    DAS_API void builtin_array_scratch_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_scratch_reserve_i64 ( Array & pArray, int64_t newSize, int stride, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_set_scratch ( Table & tab, bool value, Context * );
+    DAS_API bool builtin_table_is_scratch ( const Table & tab );
     DAS_API void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_make_temp_array ( Array & arr, void * data, int size );
     DAS_API void builtin_make_temp_array_i64 ( Array & arr, void * data, int64_t size );

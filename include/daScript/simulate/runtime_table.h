@@ -563,7 +563,7 @@ namespace das
                     }
                 }
             }
-            if (tab.capacity && !context->verySafeContext) {
+            if (tab.capacity && (!context->verySafeContext || tab.scratch)) {
                 uint64_t oldHashBytes = (PackedPolicy<KeyType>::storesHash && tab.capacity <= TABLE_MAX_LINEAR_CAPACITY) ? uint64_t(PackedPolicy<KeyType>::hashBytes)
                     : (PackedPolicy<KeyType>::storesHash ? uint64_t(sizeof(TableHashKey)) : uint64_t(1));
                 uint64_t oldSize = tab.capacity * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + oldHashBytes);

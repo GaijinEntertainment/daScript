@@ -1182,6 +1182,14 @@ namespace das
         const_cast<Table&>(arr).hopeless = 0;
     }
 
+    void builtin_table_set_scratch ( Table & tab, bool value, Context * ) {
+        tab.scratch = value;
+    }
+
+    bool builtin_table_is_scratch ( const Table & tab ) {
+        return tab.scratch;
+    }
+
     void builtin_table_tag ( Table & tab, const char * name, Context * context ) {
         // Debug helper: tag the table's current heap block with `name` so it shows
         // up in heap reports under that name. Requires `options track_allocations`
@@ -2555,6 +2563,13 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_tag)>(*this, lib, "tag_table",
             SideEffects::modifyExternal, "builtin_table_tag")
                 ->args({"table","name","context"});
+        // scratch: same contract as the array flag; the bit lives in the shared Array flags word
+        addExtern<DAS_BIND_FUN(builtin_table_set_scratch)>(*this, lib, "set_scratch",
+            SideEffects::modifyArgument, "builtin_table_set_scratch")
+                ->args({"table","value","context"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_table_is_scratch)>(*this, lib, "is_scratch",
+            SideEffects::none, "builtin_table_is_scratch")
+                ->arg("table");
         addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
             SideEffects::modifyArgumentAndExternal, "builtin_table_keys")
                 ->args({"iterator","table","stride","context","at"});

@@ -54,6 +54,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | test_archive.das | mem_archive_save/load for variants, tables, arrays, structs | |
+| test_archive_scratch_churn.das | MemSerializer eager-grow opt-in under very_safe_context — round-trip + churn bound | |
 
 ## assert_once/
 
@@ -586,6 +587,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | cant_have_local_variable.das | Non-local type as local variable (uses `ast::TypeDecl`) | **expect** `30108:4` `30101:2` `31300:3` |
 | cant_index.das | Invalid index operations | **expect** `30502:2` |
 | cant_override_sealed.das | Sealed method override errors | **expect** `30115:2` |
+| cant_scratch_outside_unsafe.das | Every scratch container primitive requires `unsafe` | **expect** `31013:6` |
 | cant_write_to_constant_value.das | Const value write violations | **expect** `30504:3` |
 | capture_as_ref.das | Class lambda capturing `self` as ref | |
 | capture_string.das | String capture in lambdas and string builder (module) | |
@@ -733,6 +735,9 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | safe_index.das | Safe index `?[]` on arrays, tables, vectors, strings | |
 | safe_ptr_at.das | Safe index `?[]` on pointer types — null safety, struct pointer arrays | |
 | safe_operators.das | Custom `operator []`, `?[]`, `.`, `?.` on user struct | |
+| scratch_containers.das | scratch one-shot semantics (exact reserve/resize/ensure_capacity) + inert-outside-very-safe control | |
+| scratch_very_safe_array.das | Array scratch bit under very_safe_context — eager vs deferred heap deltas, move/delete/clear lifecycle | |
+| scratch_very_safe_table.das | Table scratch bit under very_safe_context — rehash free, bit rides rehash (self-calibrating) | |
 | serialization.das | Archive serialization — structs, custom serialize, arrays, tables | |
 | set_table.das | `table<int>` as set — insert, erase, keys iteration, clone, literal | |
 | setand_and_setor_bool.das | Short-circuit `\|\|=` and `&&=` operators | |

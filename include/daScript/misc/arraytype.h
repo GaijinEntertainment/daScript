@@ -169,6 +169,7 @@ namespace das {
                 bool forego_lock_check : 1; // don't need to check if elements are locked
                 bool tableNoHash : 1;       // Table only: key type stores no per-slot hash (non-string) - see tableHashSlotBytes
                 bool borrowed : 1;          // a mark_locked view over foreign storage (fmap/temp_array) — array_forget_locked requires it, so an owned array that merely holds a lock can never be "forgotten" (leaked)
+                bool scratch : 1;           // owner promises no interior alias escapes a grow: growth frees the old buffer eagerly even in a verySafeContext
             };
             uint32_t flags;
         };
@@ -199,6 +200,7 @@ namespace das {
     DAS_API void array_lock(Context &context, Array &arr, LineInfo *at);
     DAS_API void array_unlock(Context &context, Array &arr, LineInfo *at);
     DAS_API void array_reserve(Context &context, Array &arr, uint64_t newCapacity, uint32_t stride, LineInfo *at);
+    DAS_API void array_reserve_scratch(Context &context, Array &arr, uint64_t newCapacity, uint32_t stride, LineInfo *at);  // eager even in a verySafeContext
     DAS_API void array_resize(Context &context, Array &arr, uint64_t newSize, uint32_t stride, bool zero, LineInfo *at);
     DAS_API void array_grow(Context &context, Array &arr, uint64_t newSize, uint32_t stride); // always grows
     DAS_API void array_clear(Context &context, Array &arr, LineInfo *at);

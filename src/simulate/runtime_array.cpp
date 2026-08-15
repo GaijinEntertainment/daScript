@@ -75,7 +75,7 @@ namespace das
         }
     }
 
-    void array_reserve(Context & context, Array & arr, uint64_t newCapacity, uint32_t stride, LineInfo * at) {
+    static void array_reserve_impl(Context & context, Array & arr, uint64_t newCapacity, uint32_t stride, bool eager, LineInfo * at) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't change capacity of a locked array");
         if ( arr.capacity >= newCapacity ) return;
         // Explicit mul_overflow guard: stride is uint32, newCapacity is uint64.
@@ -89,7 +89,8 @@ namespace das
         uint64_t memSize64 = newCapacity * uint64_t(stride);
         const char * prev_comment = arr.data ? context.heap->get_comment(arr.data) : nullptr;
         char * newData = nullptr;
-        if ( context.verySafeContext ) {
+        // deferred arm: abandon the old buffer to GC so stale interior aliases stay readable
+        if ( context.verySafeContext && !arr.scratch && !eager ) {
             newData = (char *)context.allocate(memSize64, at);
             if ( newData && arr.data ) {
                 memcpy(newData, arr.data, arr.size*stride);
@@ -103,6 +104,14 @@ namespace das
             arr.data = newData;
         }
         arr.capacity = newCapacity;
+    }
+
+    void array_reserve(Context & context, Array & arr, uint64_t newCapacity, uint32_t stride, LineInfo * at) {
+        array_reserve_impl(context, arr, newCapacity, stride, false, at);
+    }
+
+    void array_reserve_scratch(Context & context, Array & arr, uint64_t newCapacity, uint32_t stride, LineInfo * at) {
+        array_reserve_impl(context, arr, newCapacity, stride, true, at);
     }
 
     void array_resize ( Context & context, Array & arr, uint64_t newSize, uint32_t stride, bool zero, LineInfo * at ) {

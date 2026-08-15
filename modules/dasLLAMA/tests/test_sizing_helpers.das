@@ -5,7 +5,7 @@ require dasllama/dasllama_common
 
 // The sizing helpers' own contract, fed directly: reserve_resize is exact at any element
 // width, grow_resize keeps a reused buffer amortized across shrink-then-grow, and
-// scratch_resize is grow-only no-init — and all three stay panic-free past the
+// overwrite_resize is grow-only no-init — and all three stay panic-free past the
 // max_unreserved_size guard (64 MB default), which is the reason they exist.
 
 [test]
@@ -42,16 +42,16 @@ def test_grow_resize(t : T?) {
 }
 
 [test]
-def test_scratch_resize(t : T?) {
+def test_overwrite_resize(t : T?) {
     t |> run("grow-only no-init scratch") @(t : T?) {
         var s : array<float>
-        scratch_resize(s, 1000l)
+        overwrite_resize(s, 1000l)
         t |> equal(long_length(s), 1000l)
         let cap0 = long_capacity(s)
-        scratch_resize(s, 10l)           // need below length: shrink, capacity kept
+        overwrite_resize(s, 10l)           // need below length: shrink, capacity kept
         t |> equal(long_length(s), 10l)
         t |> equal(long_capacity(s), cap0)
-        scratch_resize(s, 20000000l)     // 80 MB grow: exact reserve inside, no panic
+        overwrite_resize(s, 20000000l)     // 80 MB grow: exact reserve inside, no panic
         t |> equal(long_length(s), 20000000l)
         t |> equal(long_capacity(s), 20000000l)
     }

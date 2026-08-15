@@ -116,6 +116,8 @@ def test_playback(tt : T?) {
         var midi <- parse_midi(d)
         var state = MidiPlaybackState()
         init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
+        tt |> success(is_scratch(state.voices), "voice pool marked scratch at init")
+        tt |> success(is_scratch(state.csf2_voices), "sf2 voice pool marked scratch at init")
         var has_sound = false
         for (_ in range(20)) {
             var chunk <- midi_tick(state, 0.05)

@@ -74,7 +74,7 @@ struct DapiArray {
     capacity : uint64
     lock : uint
     magic : uint
-    flags : bitfield<_shared; _hopeless>
+    flags : bitfield<_shared; _hopeless; _forego_lock_check; _tableNoHash; _borrowed; _scratch>
     _pad_after_flags : uint
 }
 

@@ -216,6 +216,56 @@ def ensure_capacity(var Arr : array<auto(numT)>; newSize : int64) {
     }
 }
 
+//! `reserve` through the eager path: the old buffer is freed immediately even under
+//! `options very_safe_context` — the caller promises no interior alias survives the grow.
+//! Capacity is exact (reserve never rounds); a one-shot, no state left on the container.
+[unsafe_operation]
+def scratch_reserve(var Arr : array<auto(numT)>; newSize : int) {
+    unsafe(__builtin_array_scratch_reserve(Arr, newSize, typeinfo sizeof(Arr[0])))
+}
+
+//! Int64 form of `scratch_reserve`.
+[unsafe_operation]
+def scratch_reserve(var Arr : array<auto(numT)>; newSize : int64) {
+    unsafe(__builtin_array_scratch_reserve_i64(Arr, newSize, typeinfo sizeof(Arr[0])))
+}
+
+//! `ensure_capacity` through the eager path — same doubling policy, but old buffers are
+//! freed immediately even under `options very_safe_context`.
+[unsafe_operation]
+def scratch_ensure_capacity(var Arr : array<auto(numT)>; newSize : int) {
+    unsafe(scratch_ensure_capacity(Arr, int64(newSize)))
+}
+
+//! Int64 form of `scratch_ensure_capacity`.
+[unsafe_operation]
+def scratch_ensure_capacity(var Arr : array<auto(numT)>; newSize : int64) {
+    if (newSize > long_capacity(Arr)) {
+        var want = long_capacity(Arr) * 2l
+        if (newSize > want) {
+            want = newSize
+        }
+        unsafe(Arr |> scratch_reserve(want))
+    }
+}
+
+//! `resize` through the eager path: reserves the exact final size first (never pow2-rounds),
+//! so a grow frees the old buffer immediately even under `options very_safe_context`;
+//! a shrink never reallocates.
+[unsafe_operation]
+def scratch_resize(var Arr : array<auto(numT)>; newSize : int) {
+    unsafe(Arr |> scratch_resize(int64(newSize)))
+}
+
+//! Int64 form of `scratch_resize`.
+[unsafe_operation]
+def scratch_resize(var Arr : array<auto(numT)>; newSize : int64) {
+    if (newSize > long_capacity(Arr)) {
+        unsafe(Arr |> scratch_reserve(newSize))
+    }
+    Arr |> resize(newSize)
+}
+
 def pop(var Arr : array<auto(numT)>) {
     unsafe(resize(Arr, length(Arr) - 1))// resize will throw if negative
 }

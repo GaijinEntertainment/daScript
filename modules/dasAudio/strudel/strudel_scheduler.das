@@ -176,9 +176,38 @@ struct Scheduler {
         //! Stereo output scratch (right-channel HRTF result); interleaved L/R per frame.
 }
 
+//! The scheduler's pools and buffers are player-internal - no interior alias survives a
+//! grow - so growth may free the old buffer eagerly even under `options very_safe_context`.
+def mark_pools_scratch(var sched : Scheduler) {
+    unsafe {
+        sched.voices |> set_scratch(true)
+        sched.osc_voices |> set_scratch(true)
+        sched.output |> set_scratch(true)
+        sched.sf2_voices |> set_scratch(true)
+        sched.sf2_meta |> set_scratch(true)
+        sched.orbit_buses |> set_scratch(true)
+        sched.voice_fx_buf |> set_scratch(true)
+        sched.hrtf_mono_buf |> set_scratch(true)
+        sched.hrtf_stereo_buf |> set_scratch(true)
+        sched.hrtf_stereo_buf_r |> set_scratch(true)
+    }
+}
+
 // Convert wall-clock time to cycle position.
 def private current_cycle(sched : Scheduler; wall_time : double) : double {
     return (wall_time - sched.startTime) * sched.cps
+}
+
+//! Same contract as `mark_pools_scratch`, for one orbit bus's send/return buffers.
+def mark_orbit_scratch(var bus : OrbitBus) {
+    unsafe {
+        bus.reverb_send_buf |> set_scratch(true)
+        bus.reverb_out_buf |> set_scratch(true)
+        bus.delay_send_buf |> set_scratch(true)
+        bus.delay_out_buf |> set_scratch(true)
+        bus.chorus_send_buf |> set_scratch(true)
+        bus.chorus_out_buf |> set_scratch(true)
+    }
 }
 
 // Ensure orbit bus exists at given index, creating it if needed.
@@ -187,7 +216,9 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
         sched.orbit_buses |> push(null)
     }
     if (sched.orbit_buses[orbit] == null) {
-        sched.orbit_buses[orbit] = new OrbitBus()
+        var bus = new OrbitBus()
+        mark_orbit_scratch(*bus)
+        sched.orbit_buses[orbit] = bus
     }
 }
 
