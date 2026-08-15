@@ -79,10 +79,11 @@ def public base64_decode(_in : string; var out : array<uint8>) : int {
     return outlen
 }
 
-def base64_decode(inp : array<uint8> | #; var out : array<uint8>) : int {
+def public base64_decode(inp : array<uint8> | #; var out : array<uint8>) : int {
     let inlen = inp |> length
     var j = 0
     out |> clear()
+    out |> ensure_capacity(BASE64_DECODE_OUT_SIZE(inlen))   // input-sized growth must reserve, or max_unreserved_size panics on a large payload
     out |> resize(BASE64_DECODE_OUT_SIZE(inlen))
     for (i in range(inp |> length)) {
         var c = 0

@@ -481,7 +481,7 @@ function apply(s) {
         $("t-mtp").textContent = fmt(s.mtp_accepted) + " / " + fmt(s.mtp_drafted) +
             " (" + (100 * s.mtp_accepted / s.mtp_drafted).toFixed(0) + "%)";
     }
-    if (s.vision) $("b-img").style.display = "";
+    $("b-img").style.display = s.vision ? "" : "none";
     // seed the thinking box from the served family, once, and never over a user's choice
     if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
         $("kn-thinking").checked = s.thinking_default;
@@ -1127,6 +1127,7 @@ function renderImgStrip() {
 
 function attachImageFile(file) {
     if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > 32 * 1024 * 1024) { alert("image over the server's 32 MB cap (" + (file.size / 1048576).toFixed(1) + " MB)"); return; }
     const fr = new FileReader();
     fr.onload = () => { chatImage = { url: String(fr.result), name: file.name || "pasted image" }; renderImgStrip(); };
     fr.readAsDataURL(file);
@@ -1536,6 +1537,7 @@ const FIELDS = [
     { k: "gpu_dn", t: "bool" }, { k: "gpu_attn", t: "bool" }, { k: "gpu_dense", t: "bool" },
     { k: "metal", t: "sel", o: ["off", "auto", "required"] },
     { k: "asr", t: "path", wide: true }, { k: "mmproj", t: "path", wide: true },
+    { k: "image_mmproj", t: "path", wide: true },
     { k: "asr_workers", t: "int" },
     { k: "lcpp_bin", t: "path", wide: true },
 ];
@@ -1647,7 +1649,7 @@ function renderGpu(status) {
 // so the TOML stays name+path per model unless something is genuinely overridden.
 const QUANT_OPTS = ["", "q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"];
 const KV_OPTS = ["", "f16", "f32", "q8_0", "tq4"];
-let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, def, adv}
+let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, image_mmproj, def, adv}
 let gpuStatus = null;    // /config status.gpu — decline reason for the effective badge hover
 
 const routeName = r => r.name || String(r.path).split(/[/\\]/).pop();
@@ -1667,6 +1669,7 @@ function rosterFromSurface(surface) {
         page_rows: e.page_rows >= 0 ? String(e.page_rows) : "",
         prefix: (e.prefix !== undefined && e.prefix !== -2) ? String(e.prefix) : "",
         mtp: (e.mtp === 1 || e.mtp === true) ? "on" : ((e.mtp === 0 || e.mtp === false) ? "off" : ""),
+        image_mmproj: e.image_mmproj || "",
         def: !!e.default,
         adv: false,
     }));
@@ -1737,7 +1740,7 @@ function renderRoster() {
         adv.type = "button";
         adv.className = "mini xs" + (r.adv ? " on" : "");
         adv.textContent = "⚙";
-        adv.title = "per-model overrides (kv_dtype / scheduler / mtp)";
+        adv.title = "per-model overrides (kv_dtype / scheduler / mtp / vision mmproj)";
         adv.dataset.i = i;
         adv.dataset.act = "adv";
         const del = document.createElement("button");
@@ -1769,7 +1772,8 @@ function renderRoster() {
                 wrap("chunk", rosterInput(i, "chunk", r.chunk, "number")),
                 wrap("page_rows", rosterInput(i, "page_rows", r.page_rows, "number")),
                 wrap("prefix", rosterInput(i, "prefix", r.prefix, "number")),
-                wrap("mtp", rosterSelect(i, "mtp", r.mtp, ["", "off", "on"])));
+                wrap("mtp", rosterSelect(i, "mtp", r.mtp, ["", "off", "on"])),
+                wrap("image_mmproj", rosterInput(i, "image_mmproj", r.image_mmproj, "text")));
             for (const inp of grid.querySelectorAll("input")) inp.placeholder = "inherit";
             td.append(grid);
             at.append(td);
@@ -1817,7 +1821,7 @@ $("roster-body").addEventListener("click", e => {
 });
 $("b-addmodel").addEventListener("click", () => {
     roster.push({ name: "", path: "", backend: "auto", ctx: "", quant: "", kv_dtype: "",
-                  streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",
+                  streams: "", chunk: "", page_rows: "", prefix: "", mtp: "", image_mmproj: "",
                   def: roster.length === 0, adv: false });
     renderRoster();
 });
@@ -1835,6 +1839,7 @@ function gatherModels() {
         if (r.page_rows !== "") e.page_rows = Math.trunc(+r.page_rows);
         if (r.prefix !== "") e.prefix = Math.trunc(+r.prefix);
         if (r.mtp) e.mtp = r.mtp === "on";
+        if (r.image_mmproj) e.image_mmproj = r.image_mmproj;
         if (r.def) e.default = true;
         return e;
     });
