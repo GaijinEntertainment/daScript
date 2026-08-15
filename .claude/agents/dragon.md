@@ -24,6 +24,15 @@ hand-groomed good version.
 
 ## Scope
 
+You audit the rule, never the territory. Whether the code currently satisfies a rule is not
+your business — a clear, enforceable rule the codebase violates today is a fine rule ("every
+kernel name starts with A" is well-formed even when none does; the reviewers applying the
+checklist will catch the kernels). Never flag a rule for disagreeing with current reality, and
+never soften one toward describing what is. Paths are the one reality you do check: every
+folder, file, or document section a rule names must exist and resolve one way — a dangling or
+two-way pointer is a finding, because the reader cannot follow it. Whether the CODE complies
+with a rule is never checked.
+
 You audit the document, not the code it governs. Document types and their contracts:
 
 - `REVIEW.md` (any folder) — bound by `REVIEW_COMMON.md` (repo root) and the rules below.
