@@ -107,7 +107,7 @@ def test_vulkan_inline_bake(tst : T?) {
             remove(img_p)
             var a = Model()
             with_job_que() {
-                a <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030 'a' is a fresh Model(); the move must sit inside with_job_que
+                a <- load_model_cached(path, QuantMode.q8)   // the move must sit inside with_job_que
             }
             t |> success(a.image_map != null, "the cold cached load serves an image")
             t |> success(stat(img_v).is_valid, "the vulkan flavor was baked")

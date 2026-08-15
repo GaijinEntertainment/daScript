@@ -296,7 +296,7 @@ def private clear_node_cache(var entry : MarkdownNodeViewCache) {
     delete entry.content.runs
     delete entry.layout.lines
     delete entry.layout.fragments
-    entry = MarkdownNodeViewCache() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
+    entry = MarkdownNodeViewCache()
 }
 
 def private clear_selection(var state : MarkdownViewState) {
@@ -726,7 +726,7 @@ def public markdown_view_dispose(var state : MarkdownViewState) {
     unsafe { delete state.nodes }
     delete state.image_bindings
     markdown_view_clear_syntax(state)
-    state = MarkdownViewState() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
+    state = MarkdownViewState()
 }
 
 def private retain_image_bindings(var state : MarkdownViewState;
