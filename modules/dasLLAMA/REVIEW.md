@@ -44,11 +44,11 @@ and its cell is a defect; orientation coverage uses shaped exact fixtures instea
 **A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
 as red.**
 
-**Every function whose signature or body changed — new, moved, extracted, or rewritten — ships a
-test for the bit itself** (a signature widening with an unchanged body counts: the new receivers are
-the new bit) — feed the function, check the bytes; "the model still
+**Every function or registration whose signature, body, or wiring changed — new, moved, extracted,
+or rewritten — ships a test for the bit itself** (a signature widening with an unchanged body counts:
+the new receivers are the new bit) — feed the function, check the bytes; "the model still
 runs" is not that test. A platform-fixed predicate has no bytes to feed: test its observable, the argv
-it gates or the mode it selects. A moved registration's observable is reachability.
+it gates or the mode it selects. A moved or edited registration's observable is reachability.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a suspicious
 green, must be readable as text in the log, not only as an id or float difference.
@@ -340,9 +340,11 @@ and doc line that named the old value names the new one in the same diff.
 ## Implementation
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel work
-adds, removes, or edits a compute-kernel body or variant set — CPU tiers, generated GEMM families, GPU
-kernel classes, KV-codec and convert kernels — or a tune family's registration. A bump in a diff with
-no kernel work is a defect too: equal versions must keep meaning an equal kernel roster.
+is whatever changes the compiled compute a sidecar's winners were measured over: a kernel body, a
+variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]` metadata
+(`covers=`, `tuner=`, `version_of=`) is not kernel work. A bump with neither the kernel roster nor
+sidecar interchangeability changed is a defect — equal versions mean an equal kernel roster and an
+interchangeable sidecar set (the exchange keys validity on version and box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can this
 value change between dispatches? If yes it is data and belongs in a uniform or a kargs struct; if no

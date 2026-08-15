@@ -304,7 +304,10 @@
     loudly instead of silently stamping fallbacks, and `[tune_scope] version_of=` pins the
     scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners —
     the trap the forensics surfaced) refuses by name. Metal-arm measurement is unblocked;
-    bringup owes only the standing fresh quiet-box mint.
+    bringup owes the standing fresh quiet-box mint, which also refreshes
+    `performance/last_known_good_sidecar.json` and the `performance/<box>.tune.json` rig
+    sidecars — the checked-in and on-box copies predate the version pin, so until then they
+    serve fallbacks with the named warning.
 
 23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
     currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,
