@@ -1055,6 +1055,8 @@ struct ChatTemplate {
     assistant_open_think : ChatTurn = ChatTurn()   // replaces assistant_open when thinking is ON (gemma-4 bare header)
     audio_pre : ChatTurn = ChatTurn()
     audio_post : ChatTurn = ChatTurn()
+    image_pre : ChatTurn = ChatTurn()    // opens the image soft-token span (gemma-4: <|image>)
+    image_post : ChatTurn = ChatTurn()   // closes it (gemma-4: <image|>); empty = family has no image arm
     stop : array<string>
     stop_nothink : array<string>   // extra stops when thinking is OFF (gemma-4: a channel marker in an instruct turn is framing noise — the turn is over)
     // tool-calling format (ToolMode.none = the family declares none; see hermes_tools)
@@ -1536,6 +1538,10 @@ struct Session {
     // same-geometry sessions (ABA) and Stream erase memmoves Sessions. 0 = never assigned.
     uid : uint64
     n_past : int64            // absolute position of the next token to eval (0 at session start); advanced by eval()
+    // batched-prefill mask override: 0 = causal; > 0 = every query of the CURRENT prefill call
+    // attends [the sliding-window floor, attn_uniform_end) — the non-causal image span (gemma vision). Set and
+    // cleared by forward_prefill_embd; read by prefill_attention and the GPU readiness guard.
+    attn_uniform_end : int64
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for top-k selection
@@ -4619,6 +4625,14 @@ def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     a |> resize_no_init(need)
 }
 
+// scratch_resize's zero-init twin, for scratch a consumer may read before writing. Capacity
+// precedes growth (the max_unreserved_size guard) via ensure_capacity, whose doubling keeps the
+// context-scaled att_b amortized — an exact reserve re-allocates on every chunk of a long prefill.
+def zeroed_resize(@scratch var a : array<auto(numT)>; need : int64) {
+    a |> ensure_capacity(need)
+    a |> resize(need)
+}
+
 //! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
 [no_alloc, no_env, no_io]
@@ -4671,30 +4685,30 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     s.xqb |> scratch_resize(npos * maxn)
     s.xsb |> scratch_resize(npos * maxn / 32l)
     if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
-        s.xbsb |> resize(npos * maxn / 16l)
+        s.xbsb |> zeroed_resize(npos * maxn / 16l)
     }
     if (has_ple(c)) {   // gemma-4 E-series PLE prefill scratch (npos positions)
         let all = c.n_layers * c.n_embd_per_layer
-        s.ple_inp |> resize(npos * all)
-        s.ple_proj |> resize(npos * all)
-        s.ple_gate |> resize(npos * c.n_embd_per_layer)
+        s.ple_inp |> zeroed_resize(npos * all)
+        s.ple_proj |> zeroed_resize(npos * all)
+        s.ple_gate |> zeroed_resize(npos * c.n_embd_per_layer)
     }
     if (c.recr_mask != 0ul) {   // qwen35 deltanet batched projections (the recurrence itself is per-token)
         let cd = dn_conv_dim(c)
-        s.dn_qkv_b |> resize(npos * cd)
-        s.dn_z_b |> resize(npos * c.ssm_d_inner)
-        s.dn_beta_b |> resize(npos * c.ssm_dt_rank)
-        s.dn_g_b |> resize(npos * c.ssm_dt_rank)
-        s.dn_o_b |> resize(npos * c.ssm_d_inner)
+        s.dn_qkv_b |> zeroed_resize(npos * cd)
+        s.dn_z_b |> zeroed_resize(npos * c.ssm_d_inner)
+        s.dn_beta_b |> zeroed_resize(npos * c.ssm_dt_rank)
+        s.dn_g_b |> zeroed_resize(npos * c.ssm_dt_rank)
+        s.dn_o_b |> zeroed_resize(npos * c.ssm_d_inner)
         if (g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
-            s.dn_conv_b |> resize(npos * cd)
+            s.dn_conv_b |> zeroed_resize(npos * cd)
             s.dn_wtap |> resize(c.ssm_d_conv * cd)
             s.dn_cws |> resize(c.ssm_dt_rank * dn_cws_head_size(c))
         }
     }
     if (c.q_gated) {   // gated attention: batched fused [q | gate] projection + gate halves
-        s.dn_qg_b |> resize(npos * 2l * qd)
-        s.dn_qgate_b |> resize(npos * qd)
+        s.dn_qg_b |> zeroed_resize(npos * 2l * qd)
+        s.dn_qgate_b |> zeroed_resize(npos * qd)
     }
     // sized for blocked (ATTN_BLOCK_Q rows/head); classic indexes just the first row, a harmless superset
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
@@ -4705,7 +4719,7 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_tmp |> resize(n_heads * head_size)
     } else {
-        s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+        s.att_b |> zeroed_resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
     }
 }
 
@@ -4730,7 +4744,9 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     }
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 
-    // an active whole-prefill override may claim the entire stack (false = decline, fall back to the CPU loop)
+    // an active whole-prefill override may claim the entire stack (false = decline, fall back to
+    // the CPU loop). Contract: a claiming override must honor s.attn_uniform_end — both
+    // registered overrides decline the non-causal image span, so it lands on the CPU loop below.
     var stack_done = false
     g_prefill_logits_done = false
     if (!empty(g_prefill_override_name)) {
@@ -4738,8 +4754,10 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     }
     if (!stack_done) {
         blob_only_panic(t, "prefill stack")
-        // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared
-        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
+        // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
+        // The image span is exempt: CPU is its only correct arm today, so it is not a silent fallback.
+        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()
+                && s.attn_uniform_end == 0l) {
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {

@@ -231,7 +231,7 @@ def private sniff_asr_kind(path : string) : string {
 // image beside the source. -o is unsupported (family images are identity-named siblings).
 def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int {
     if (kind == "vision") {
-        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' is a VISION mmproj — no das image family bakes those\n")
+        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' is a VISION mmproj — its prepared image bakes on the first live load; there is no offline convert leg\n")
         return 2
     }
     if (cfg.flavor != Flavor.planar) {

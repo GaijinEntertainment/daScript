@@ -755,11 +755,12 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     prof_add("at_resid", ts_resid)
 }
 
-// npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's
-// own K/V device-side), tq4 excluded (the basis change lives in the CPU path), npos within the
-// chain's context capacity
+// npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's own
+// K/V device-side), tq4 excluded (basis change is CPU-side). A non-causal image span always
+// declines: the GPU chains encode the causal mask — the guard survives lifting start_pos == 0.
 def attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int64) : bool {
-    return (npos >= 32l && npos <= 4096l && start_pos == 0l && moe_gpu_attn_on_gpu(l)
+    return (npos >= 32l && npos <= 4096l && start_pos == 0l && s.attn_uniform_end == 0l
+        && moe_gpu_attn_on_gpu(l)
         && s.kv_dtype_k != KVDtype.tq4 && s.kv_dtype_v != KVDtype.tq4)
 }
 
@@ -1497,22 +1498,27 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64) {
+def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
+                         non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false) {
     if (npos <= 0l) {
         return
     }
     if (t.quant == QuantMode.q4_0) {
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
-    if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {long_length(embd)} floats - npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
+    if (non_causal && t.config.recr_mask != 0ul) {
+        panic("forward_prefill_embd: a non-causal span cannot apply to recurrent layers (recr_mask != 0) - the recurrence has no uniform-bound form")
+    }
+    if (long_length(embd) < (src_off + npos) * t.config.dim) {
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of dim={t.config.dim} need {(src_off + npos) * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
     let dim = t.config.dim
     let ts_embed = prof_ticks()
+    let base = src_off * dim
     for (i in range64(npos * dim)) {
-        s.x_b[i] = embd[i]
+        s.x_b[i] = embd[base + i]
     }
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
@@ -1520,7 +1526,11 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         ple_pre_prefill_pad(t, s, npos)
         prof_add("ple", ts_ple)
     }
-    forward_prefill_body(t, s, npos, start_pos)
+    // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): every query of THIS
+    // call attends [the sliding-window floor, start_pos + npos) — set for exactly this body
+    s.attn_uniform_end = non_causal ? start_pos + npos : 0l
+    forward_prefill_body(t, s, npos, start_pos, skip_logits)
+    s.attn_uniform_end = 0l
 }
 
 //! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the
@@ -1537,13 +1547,40 @@ def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at
 }
 
 //! ``eval_``'s embedding-input twin: prefill ``npos`` embedding rows at the session cursor and
-//! advance it. Leaves ``s.logits`` = the last position's logits.
-def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64) {
+//! advance it. Leaves ``s.logits`` = the last position's logits. ``non_causal`` marks the rows
+//! as a non-causal image span (gemma vision) — see forward_prefill_embd.
+def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; non_causal : bool = false) {
     if (npos <= 0l) {
         return
     }
-    forward_prefill_embd(t, s, embd, npos, s.n_past)
+    forward_prefill_embd(t, s, embd, npos, s.n_past, non_causal)
     s.n_past += npos
+}
+
+//! `eval_embd_` for a prompt carrying ONE non-causal image span: rows [span_lo, span_hi) prefill
+//! with the span flag, the text around them causally. Three evals, because the flag is per-call —
+//! the KV cache is identical either way, so only the masks differ (`vision_plan.md` §pipeline).
+def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
+    if (npos <= 0l) {
+        return
+    }
+    if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
+        panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    // slices read embd in place via src_off; only the last non-empty slice produces logits
+    eval_embd_slice_(t, s, embd, 0l, span_lo, false, false)
+    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, span_hi >= npos)
+    eval_embd_slice_(t, s, embd, span_hi, npos, false, true)
+}
+
+def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo, hi : int64;
+                             non_causal, last : bool) {
+    let n = hi - lo
+    if (n <= 0l) {
+        return
+    }
+    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last)
+    s.n_past += n
 }
 
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state

@@ -14,7 +14,8 @@ reach into engine internals, the facade is complete.
 
 ```sh
 bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
-                                                    [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--ctx 4096] \
+                                                    [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] \
+                                                    [--image-mmproj <mmproj.gguf>] [--ctx 4096] \
                                                     [--streams 4] [--chunk 64] [--page-rows 64] [--prefix N]
 ```
 
@@ -30,6 +31,7 @@ Run under `-jit` — interpreted inference is far too slow. Flags:
 | `--asr` | `-a` | — | ASR model (whisper/parakeet/qwen3-asr) — enables the `/v1/audio/*` routes |
 | `--asr-workers` | — | `1` | Long-lived ASR request threads; each owns a model and reusable session. Set `2` for two parallel transcriptions |
 | `--mmproj` | — | — | mmproj GGUF for the Qwen3-ASR route (paired with `--asr`) |
+| `--image-mmproj` | — | — | Vision mmproj (gemma4uv) for the default model — enables `image_url` parts on `/v1/chat/completions`. Per-model in a `[[models]]` roster: `image_mmproj = "..."` |
 | `--ctx` | — | *model* | Context-length cap in tokens (default: the model's trained `context_length`; set it to bound `--flat` KV or trim RAM) |
 | `--max-tokens` | — | `256` | Default reply token budget when a request omits `max_tokens` (clamped to `--ctx` per request) |
 | `--streams` | `-s` | `4` | Max concurrent generation streams |
@@ -149,7 +151,7 @@ Windows locks the DLLs.
 | `GET`  | `/` | Control page: live stats + charts, models panel (per-slot cards with state/GPU badges, prefix hit rate, switch telemetry, activate buttons; VRAM bar + switch strip), stream swimlane + live text cards, prefix-cache table, a chat panel (all sampling knobs, `<think>` inline, mic input under `--asr`), config editor with the `[[models]]` roster table + save/restart, GC + drain buttons. Serves `control.html` from beside the server sources — polls `/v1/stats` + `/v1/streams` at 1 Hz |
 | `GET`  | `/v1/models` | Lists every served slot (and `--asr` if loaded) — requests route on these ids via their `"model"` field |
 | `POST` | `/v1/models/activate` | `{"model": name}` admin warm-switch: make `name` the stepped slot and move the GPU tier to it now (instead of waiting for the owner to drain). `409` while any work is live, `404` on an unknown name; `200` reports `switch_ms` + `backend_effective` |
-| `POST` | `/v1/chat/completions` | Chat; `stream: true` → SSE, else buffered; OpenAI function calling (`tools`) |
+| `POST` | `/v1/chat/completions` | Chat; `stream: true` → SSE, else buffered; OpenAI function calling (`tools`); `image_url` content parts under `--image-mmproj` |
 | `POST` | `/v1/completions` | Raw completion; `stream: true` → SSE, else buffered |
 | `POST` | `/v1/embeddings` | Mean-pooled, L2-normalized sentence embeddings |
 | `POST` | `/v1/audio/transcriptions` | Speech→text (multipart upload; needs `--asr`). `response_format=verbose_json` adds timed segments |
@@ -195,6 +197,40 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
   "max_tokens": 16, "stream": false, "truncation": "auto"
 }'
 ```
+
+### Images
+
+A slot started with `--image-mmproj` accepts the OpenAI content-parts image form. The URL must be
+a `data:` URI — the server never fetches a remote URL on its request thread:
+
+```sh
+curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "messages": [{"role": "user", "content": [
+    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,'"$(base64 < cats.jpg | tr -d '\n')"'"}},
+    {"type": "text", "text": "What animals are in this picture?"}
+  ]}], "max_tokens": 64
+}'
+```
+
+The image is decoded and encoded on a dedicated vision worker thread — a large upload never
+stalls the other streams' decode — and its soft-token rows then prefill between the two token
+spans of the rendered turn, as one non-causal span. Wrapped base64 (GNU `base64`'s 76-column
+default) decodes fine; the payload caps at 32 MB of file and 64 MP decoded, each a named 400.
+Today's rules:
+
+- **One image per request, on the FINAL user message.** Two images is a 400; an image anywhere
+  else is dropped with a warning, so a follow-up question re-attaches it (the control page does
+  this for you — an attached image rides every message until you remove it).
+- A slot with no vision arm answers 400 rather than silently ignoring the picture.
+- An image stream neither reads nor writes the prefix cache: its KV past the splice does not follow
+  from its token ids. Everything else — batching, streaming, stops, usage — is the ordinary path,
+  and `usage.prompt_tokens` counts the soft-token rows as positions.
+
+On the control page the chat panel grows an `▣ image` button (shown when `/v1/stats` reports a
+vision arm); paste and drag-and-drop work too. The panel defaults to `temperature 0` — it is a
+test harness as much as a demo, so a turn someone reports should reproduce — and its `thinking`
+box seeds from `/v1/stats`'s `thinking_default`, sending `enable_thinking` only once you touch it
+so each family's own default stands otherwise.
 
 ### Demo load
 
@@ -317,6 +353,11 @@ absent; set `DASLLAMA_MODELS_DIR`):
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
   eviction, and the prefix cache returning an identical completion for a repeated request; needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
+- `test_openai_server_vision.das` — the image route end to end: a data-URI photo on
+  `/v1/chat/completions` reaches the embedder, splices as soft tokens between the two rendered
+  token spans, and comes back as a caption about the picture; plus the decode-failure and
+  remote-URL 400s. Needs `gemma-4-12B-it-Q4_K_M.gguf`, `mmproj-gemma-4-12B-it-BF16.gguf` and the
+  coco cats jpeg.
 - `test_exchange_client.das` — the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).
@@ -331,5 +372,7 @@ and warm-vs-cold TTFT for the prefix cache.
 
 ## Not yet implemented
 
-Multimodal content arrays in chat messages, the request's `stop` / `response_format` fields, and
-the forced-function `tool_choice` object form — all logged when a request carries them.
+The request's `stop` / `response_format` fields and the forced-function `tool_choice` object form
+— all logged when a request carries them. On the image path: more than one image per request,
+images on earlier turns of a conversation, remote `image_url` fetches, and audio content parts in
+a chat message (`/v1/audio/*` takes audio today).

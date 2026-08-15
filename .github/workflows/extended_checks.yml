@@ -439,16 +439,17 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/review-md/test_scan.das
 
     - name: "Test dasllama-server"
-      # OpenAI-compatible server conformance test. Model-gated + JIT-only, so it
-      # skips cleanly here (no GGUF, no -jit) — the value is the compile guard:
-      # it exercises the dasHV + dasAudio + dasllama facade surface the server
-      # reaches, catching any API/module breakage in CI. The exchange-client
-      # suite is model-free and runs fully (fake exchange on 127.0.0.1:18131).
+      # The model-gated server suites run --compile-only: this lane has no GGUF
+      # and no -jit, so the value is the explicit compile guard — it exercises
+      # the dasHV + dasAudio + dasllama facade surface the server reaches,
+      # catching any API/module breakage in CI. The exchange-client suite is
+      # model-free and runs fully (fake exchange on 127.0.0.1:18131).
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_vision.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_exchange_client.das
 
     - name: "Test env-knob registries"

@@ -6,7 +6,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //
 //   bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8]
 //                                                       [--kv-dtype f16] [--asr <asr.bin>] [--mmproj <mmproj.gguf>]
-//                                                       [--config server.toml] [--tune]
+//                                                       [--image-mmproj <mmproj.gguf>] [--config server.toml] [--tune]
 //
 // --config points at a TOML file whose keys mirror the long flag names (model = "...", port = 8080,
 // kv_dtype = "tq4", ...); explicit CLI flags override it. A config carrying `authoritative = true`
@@ -90,6 +90,10 @@ struct ServerArgs {
     @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr)"
     mmproj : string
 
+    @clarg_name = "image-mmproj"
+    @clarg_doc = "Vision mmproj (gemma4uv) for the default model — enables image_url parts on /v1/chat/completions"
+    image_mmproj : string
+
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"
     asr_workers : int
 
@@ -155,6 +159,7 @@ struct ModelEntry {
     page_rows : int = -1    // 0 = flat is meaningful, -1 = inherit
     prefix : int = -2       // -1 = unbounded is meaningful, -2 = inherit
     mtp : int = -1          // -1 inherit | 0 off | 1 on
+    image_mmproj : string   // vision mmproj (gemma4uv); empty = this model takes text only
     is_default : bool = false
 }
 
@@ -222,7 +227,7 @@ var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
-    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "asr_workers",
+    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
     "prefix", "flat", "mtp", "lcpp_bin", "models")
 
@@ -305,6 +310,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (!empty(cfg.mmproj)) {
         g_cfg_sources["mmproj"] = "cli"
     }
+    if (!empty(cfg.image_mmproj)) {
+        g_cfg_sources["image_mmproj"] = "cli"
+    }
     if (cfg.asr_workers > 0) {
         g_cfg_sources["asr_workers"] = "cli"
     }
@@ -377,6 +385,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "gpu_vram_mb", cfg.gpu_vram_mb, auth)
     cfg_from_toml(root, "asr", cfg.asr, auth)
     cfg_from_toml(root, "mmproj", cfg.mmproj, auth)
+    cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
     cfg_from_toml(root, "ctx", cfg.ctx, auth)
     cfg_from_toml(root, "max_tokens", cfg.max_tokens, auth)
@@ -421,6 +430,7 @@ def private apply_models_roster(root : JsonValue?) {
             streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
             page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
             mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
+            image_mmproj = e?["image_mmproj"] ?? "",
             is_default = e?["default"] ?? false)
         if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
             to_log(LOG_WARNING, "dasllama-server: [[models]] '{base_name(ent.path)}' backend '{ent.backend}' is not auto | cpu | gpu — using auto\n")
@@ -519,6 +529,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         gpu_vram_mb = cfg.gpu_vram_mb,
         asr = cfg.asr,
         mmproj = cfg.mmproj,
+        image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
         max_tokens = cfg.max_tokens > 0 ? cfg.max_tokens : 256,
@@ -543,7 +554,8 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
             "ctx" => JV(int64(ent.ctx)), "quant" => JV(ent.quant), "kv_dtype" => JV(ent.kv_dtype),
             "streams" => JV(int64(ent.streams)), "chunk" => JV(int64(ent.chunk)),
             "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
-            "mtp" => JV(int64(ent.mtp)), "default" => JV(ent.is_default)
+            "mtp" => JV(int64(ent.mtp)), "image_mmproj" => JV(ent.image_mmproj),
+            "default" => JV(ent.is_default)
         }
         mentries |> push(JV(etab))
     }
@@ -763,6 +775,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         metal_mode = MetalMode.off   // gpu = off | vulkan both keep metal out
     }
     set_metal_mode(metal_mode)
+    if (metal_mode == MetalMode.off) {
+        // the Metal-build CPU-prefill guard is a profiling tripwire; its panic would drop every
+        // live stream, and serving on the CPU arm is a legitimate configuration
+        allow_cpu_prefill()
+        to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
+    }
     to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
     if (gpu == "vulkan") {
         // shexp rides the blessed shape: the resident shared expert measured +8.3% on decode
@@ -783,6 +801,34 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // resolve the model roster: [[models]] entries, else the single legacy model key
     if (empty(g_models)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+    }
+    // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
+    // roster path is checked up front and degrades — skip the slot, drop the arm — instead of
+    // dying in a loader panic before the port (and the config page, the recovery UI) opens.
+    var roster : array<ModelEntry>
+    for (ent in g_models) {
+        var e = ent
+        if (!stat(e.path).is_valid) {
+            to_log(LOG_ERROR, "dasllama-server: skipping model '{empty(e.name) ? base_name(e.path) : e.name}' - file not found: {e.path} (fix the config, then POST /restart)\n")
+            continue
+        }
+        if (!empty(e.image_mmproj) && !stat(e.image_mmproj).is_valid) {
+            to_log(LOG_ERROR, "dasllama-server: dropping the vision arm of '{empty(e.name) ? base_name(e.path) : e.name}' - mmproj not found: {e.image_mmproj}\n")
+            e.image_mmproj = ""
+        }
+        roster |> push(e)
+    }
+    delete g_models
+    g_models <- roster
+    if (empty(g_models)) {
+        print("error: no loadable model - every roster path failed its file check\n")
+        g_exit_code = 2
+        request_exit()
+        return
+    }
+    if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
+        to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
+        g_cfg.image_mmproj = ""
     }
     var def_idx = 0
     for (i in range(length(g_models))) {
@@ -857,6 +903,13 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     set_default_model(g_models[def_idx].name)
     set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 256l)
+    for (i in range(length(g_models))) {
+        let path = (!empty(g_models[i].image_mmproj) ? g_models[i].image_mmproj
+                                                     : (i == def_idx ? g_cfg.image_mmproj : ""))
+        if (!empty(path)) {
+            set_model_vision(g_models[i].name, path)
+        }
+    }
 
     // the dlim GC rides server start (and every bake): only never-loadable images go
     for (ent in g_models) {

@@ -56,3 +56,26 @@ def test_scratch_resize(t : T?) {
         t |> equal(long_capacity(s), 20000000l)
     }
 }
+
+[test]
+def test_zeroed_resize(t : T?) {
+    t |> run("zero-init scratch: amortized growth, re-added tail zeroed") @(t : T?) {
+        var a : array<int64>
+        a |> zeroed_resize(100l)
+        for (i in range64(100l)) {
+            a[i] = i + 1l
+        }
+        a |> zeroed_resize(10l)          // shrink within capacity
+        let cap0 = long_capacity(a)
+        a |> zeroed_resize(100l)         // regrow: the re-added tail must read zero, not stale
+        t |> equal(long_capacity(a), cap0)
+        t |> equal(a[9], 10l, "kept elements survive")
+        t |> equal(a[10], 0l, "re-added tail is zeroed")
+        t |> equal(a[99], 0l, "re-added tail is zeroed to the end")
+        a |> zeroed_resize(long_capacity(a) + 1l)   // grow: ensure_capacity doubles, never exact
+        t |> success(long_capacity(a) >= cap0 * 2l, "growth stays amortized (an exact reserve reallocates every chunk)")
+        var big : array<float>
+        big |> zeroed_resize(20000000l)  // 80 MB grow past max_unreserved_size: reserved, so no panic
+        t |> equal(long_length(big), 20000000l)
+    }
+}

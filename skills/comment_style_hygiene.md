@@ -41,7 +41,8 @@ some (noted), C++/JS lints are follow-up work.
 
 **Short or absent.** 1–2 lines preferred, 3 the cap — das lint STYLE014 enforces it under
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
-reviewer's. It covers per-symbol and in-body comments; a file-header map (below) is exempt —
+reviewer's. Inside a `def private` body the cap is ONE line (STYLE015 — private symbols get
+no public docs), so a two-line note that would pass here still fails lint there. It covers per-symbol and in-body comments; a file-header map (below) is exempt —
 its test is prose-vs-enumeration, not length. A comment that doesn't fit is the signal to
 interrogate it: why does this need prose at all, and does the detail belong at the use
 site — or nowhere?
@@ -55,7 +56,9 @@ Terse section dividers stay.
 numbered overview — one line per fact — stating the whole contract: when it runs, what
 it consumes and produces, the kinds and tiers it deals in. A map legitimately repeats
 what per-symbol comments say; a reader entering cold needs the shape before any
-symbol. What stays banned is prose — paragraphs argue, maps enumerate.
+symbol. What stays banned is prose — paragraphs argue, maps enumerate. A header at
+or under the 3-line comment cap may stay prose; the enumeration form is required
+only past it.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a
@@ -64,7 +67,9 @@ The bar for any comment on a private symbol: a maintainer reading the symbol alo
 would be surprised without it.
 
 **Field comments ride the declaration line** *(lintable)*, never a line above — fewer
-lines, and the struct scans as a table.
+lines, and the struct scans as a table. A note that cannot fit the line belongs at the use
+site; one that explains a GROUP of fields rather than any single one may sit above the
+group, within the cap.
 
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
@@ -89,6 +94,10 @@ to write them well.
 **Counterpart pointers earn their line.** When a condition handles one half of a split
 responsibility, a few words naming where the other half lives is a good same-line
 comment: `if (isLiteral(a)) return true;   // variables resolve in BindingScan`.
+The discriminator against the consequence-note ban below: a pointer names WHERE the other
+half lives, so a maintainer changing this line knows what else to open
+(`// consumed by control.html's chat panel`); a note describing WHAT the effect looks like
+downstream (`// the page shows its attach button on this`) is the banned kind.
 
 **Define a term once, on the signature that coins it.** A predicate family's first
 member carries the tail comment defining the term; siblings say `// same, for X`. When

@@ -6,6 +6,8 @@ module dasllama_chat shared public
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
+require dasllama/dasllama_vision     // VisionImage + geometry/letterbox/normalize for the image turn
+require dasllama/dasllama_gemma4uv   // Gemma4uvEmbedder: chat sessions can carry a vision embedder
 require dasllama/dasllama_tools public   // the per-ToolMode wire codecs; public: parse_calls_ returns its ToolReply
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 require math   // min/max in the reply-side reasoning matcher
@@ -58,6 +60,10 @@ struct ChatSession {
     enc : EncoderState = EncoderState()   // encoder scratch (sized once at create)
     audio_rows : array<float>             // encoded soft tokens awaiting the next respond()
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
+    embedder : Gemma4uvEmbedder = Gemma4uvEmbedder()   // proj_dim == 0 => no vision arm
+    embedder_scratch : Gemma4uvState = Gemma4uvState()
+    image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
+    n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
 }
 
 // Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
@@ -77,6 +83,9 @@ def finalize(var c : ChatSession) {
     delete c.tower
     delete c.enc
     delete c.audio_rows
+    delete c.embedder
+    delete c.embedder_scratch
+    delete c.image_rows
 }
 
 // ===== Chat-template resolution =====
@@ -284,14 +293,22 @@ def private tool_vocab_ok(m : Model; tmpl : ChatTemplate) : bool {
     return true
 }
 
-def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool {
-    for (p in tmpl.think_gate.parts) {
+def private parts_vocab_ok(m : Model; parts : array<ChatPart>) : bool {
+    for (p in parts) {
         if (p.kind == ChatPartKind.special && special_id(m, p.s) < 0l) {
             return false
         }
     }
     return true
 }
+
+def private gate_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => parts_vocab_ok(m, tmpl.think_gate.parts)
+
+//! True when every image span marker resolves in the vocab — probe it at create (the way
+//! `create_chat(model, embedder)` does), so a stripped checkpoint fails there instead of
+//! panicking mid-render on a serving thread.
+def image_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => (
+    parts_vocab_ok(m, tmpl.image_pre.parts) && parts_vocab_ok(m, tmpl.image_post.parts))
 
 // The thinking gate (gemma-4's <|think|> opening the system turn) renders THIS turn: first turn,
 // thinking on, gate declared with its specials in the vocab, and a system turn to carry it.
@@ -514,10 +531,23 @@ def private render_tool_results(m : Model; c : ChatSession; var out : array<int6
     delete bp
 }
 
-//! Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
-//! tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
-//! BPE merges never cross the audio. Public with ``create_chat_renderer_``: the render-only seam.
+//! Render an AUDIO turn's prefill as two spans around the soft-token splice point — the text
+//! chunks break at the media boundary so BPE merges never cross the media (the llama-mtmd-cli
+//! shape). Public with ``create_chat_renderer_``: the render-only seam.
 def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    render_prompt_media(m, c, c.tmpl.audio_pre.parts, c.tmpl.audio_post.parts, head, tail)
+}
+
+//! Render an IMAGE turn's prefill: same two-span contract as ``render_prompt_audio`` (gemma-4:
+//! `<|image>` … `<image|>`).
+def render_prompt_image(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    render_prompt_media(m, c, c.tmpl.image_pre.parts, c.tmpl.image_post.parts, head, tail)
+}
+
+// Two spans around the media splice point (head before, tail after) — matches llama-mtmd-cli
+// exactly, whose text chunks break at media boundaries so BPE merges never cross the media.
+def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_parts : array<ChatPart>;
+                                var head : array<int64>; var tail : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
         head |> push(bos_id(m))
     }
@@ -544,8 +574,8 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
         }
     }
     render_parts(m, before, "", head)
-    render_parts(m, c.tmpl.audio_pre.parts, "", head)
-    var tail_parts := c.tmpl.audio_post.parts
+    render_parts(m, pre_parts, "", head)
+    var tail_parts := post_parts
     tail_parts |> push(chat_content())
     if (think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
         tail_parts |> push_from(after, c.tmpl.assistant_open_think.parts)
@@ -553,13 +583,16 @@ def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var
         tail_parts |> push_from(after, c.tmpl.assistant_open.parts)
     }
     render_parts(m, tail_parts, user_content, tail)
+    delete before
+    delete after
+    delete tail_parts
 }
 
 // ===== Public API =====
 
-// Consume the pending user turn once its render is done — render_prompt_audio reads c.pending
-// gated only on n_audio_rows, so a leftover would silently re-inject the text into a later
-// audio-only turn.
+// Consume the pending user turn once its render is done — a leftover pending text OR queued
+// media rows would silently re-inject into a later turn (the media renderers read c.pending
+// gated only on the row counts).
 def private consume_pending_(var c : ChatSession) {
     if (think_gate_now(c)) {   // this consumed turn rendered the gate — thinking arms for the session
         c.gate_rendered = true
@@ -570,6 +603,10 @@ def private consume_pending_(var c : ChatSession) {
     c.pending_is_tool = false
     c.pending_results |> clear()       // the render this consumption follows included them
     c.pending_result_names |> clear()
+    c.audio_rows |> clear()            // queued media dies with the turn it was queued for —
+    c.n_audio_rows = 0l                // an assistant-path consume must not leave rows armed
+    c.image_rows |> clear()
+    c.n_image_rows = 0l
     c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
@@ -580,7 +617,7 @@ def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 =
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
     c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
     c.think_vocab = think_vocab_ok(model, c.tmpl)
-    c.gate_ok = gate_specials_ok(model, c.tmpl)
+    c.gate_ok = gate_vocab_ok(model, c.tmpl)
     if (!tool_vocab_ok(model, c.tmpl)) {
         c.tmpl.tool_mode = ToolMode.none   // missing control specials: the honest declaration is none
     }
@@ -635,12 +672,55 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
     return <- c
 }
 
+//! Start a VISION-CAPABLE conversation: takes ownership of a gemma4uv embedder (moved in) so
+//! ``add_user_image`` can splice image soft tokens into its turns. A mismatched decoder/mmproj
+//! pair, a family with no image markers, or a metal-blob decoder panics here — not at respond time.
+def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+    if (embedder.proj_dim != model.config.dim) {
+        panic("dasLLAMA chat: mmproj projects to {embedder.proj_dim} but the decoder is {model.config.dim}-wide - mismatched pair")
+    }
+    if (model.metal_blob) {
+        panic("dasLLAMA chat: the image span prefills on the CPU and a metal-blob model has no CPU weights - load the decoder without the metal blob to use vision")
+    }
+    if (model.config.recr_mask != 0ul) {
+        panic("dasLLAMA chat: a non-causal image span cannot apply to recurrent layers - this architecture has no vision arm")
+    }
+    var c <- create_chat_(model, system, max_new, kv_dtype)
+    if (empty(c.tmpl.image_pre.parts)) {
+        panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
+    }
+    if (!image_vocab_ok(model, c.tmpl)) {
+        panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
+    }
+    c.embedder <- embedder
+    return <- c
+}
+
+//! Queue an image for the next respond() — geometry, letterbox and embedder run NOW, spliced at
+//! the head of the next user turn (before its text). ONE image per turn in v1: a second call
+//! before respond() panics. Call inside with_job_que() (the embedder threads its GEMMs).
+def add_user_image_(var c : ChatSession; img : VisionImage) {
+    if (c.embedder.proj_dim == 0l) {
+        panic("dasLLAMA chat: this chat has no vision embedder - create it with create_chat(model, embedder)")
+    }
+    if (c.n_image_rows > 0l) {
+        panic("dasLLAMA chat: one image per turn in v1 - respond() before adding another")
+    }
+    if (c.n_audio_rows > 0l) {
+        panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
+    }
+    c.n_image_rows = encode_image_(c.embedder, c.embedder_scratch, img, "turn{length(c.history)}", c.image_rows)
+}
+
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
 //! spliced at the head of the next user turn (before its text). Composes with add_user in the
 //! same turn; call inside with_job_que() (the encoder threads its kernels).
 def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     if (c.tower.d_model == 0l) {
         panic("dasLLAMA chat: this chat has no audio tower - create it with create_chat(model, tower)")
+    }
+    if (c.n_image_rows > 0l) {
+        panic("dasLLAMA chat: an image is already queued this turn - one media kind per turn")
     }
     let chunks <- log_mel_chunks(samples, c.tower.n_mel)
     let rows = audio_tokens_per_chunk(c.tower)
@@ -677,6 +757,14 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
     render_prompt(m, c, out)
     render_think_suppress(m, c, out)
     return <- out
+}
+
+//! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image
+//! soft-token splice — `head` before the rows, `tail` (generation prompt, think-suppress) after.
+//! Render-only: no KV, no embedder — the rows come from `gemma4uv_encode` on the caller's own.
+def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    render_prompt_image(m, c, head, tail)
+    render_think_suppress(m, c, tail)
 }
 
 //! Render the tokens that TERMINATE an assistant turn — the template's explicit assistant_close,
@@ -855,7 +943,7 @@ def add_assistant_(m : Model; var c : ChatSession; text : string) {
     let body <- encode_(m, text, false, false)
     eval_(m, c.session, body)
     consume_pending_(c)
-    var close : array<int64>
+    var inscope close : array<int64>
     render_parts(m, c.close_parts, "", close)
     eval_(m, c.session, close)
     c.history |> push(Message(role = Role.assistant, content = text))
@@ -1259,30 +1347,41 @@ def private track_reply_calls_(var c : ChatSession; reply : string) : bool {
 //! budget. Terminates the turn; history stores the reply reasoning-stripped (split_reasoning_).
 def respond_(m : Model; var c : ChatSession; params : SamplingParams;
              blk : block<(piece : string) : bool>) : string {
-    if (!c.has_pending && c.n_audio_rows == 0l) {
+    if (!c.has_pending && c.n_audio_rows == 0l && c.n_image_rows == 0l) {
         return ""
     }
     // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
-    var stops <- effective_stop_ids_(c)
-    var reply_parts : array<string>
-    if (c.n_audio_rows > 0l) {
-        // audio turn: token spans around the soft-token splice, prefilled as embedding rows
-        var head : array<int64>
-        var tail : array<int64>
-        render_prompt_audio(m, c, head, tail)
+    var inscope stops <- effective_stop_ids_(c)
+    var inscope reply_parts : array<string>
+    if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
+        // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
+        let is_image = c.n_image_rows > 0l
+        var inscope head : array<int64>
+        var inscope tail : array<int64>
+        if (is_image) {
+            render_prompt_image(m, c, head, tail)
+        } else {
+            render_prompt_audio(m, c, head, tail)
+        }
         render_think_suppress(m, c, tail)
         let dim = m.config.dim
         let n_head = long_length(head)
         let n_tail = long_length(tail)
-        let npos = n_head + c.n_audio_rows + n_tail
-        var embd : array<float>
+        let n_media = is_image ? c.n_image_rows : c.n_audio_rows
+        let npos = n_head + n_media + n_tail
+        var inscope embd : array<float>
+        embd |> ensure_capacity(npos * dim)
         embd |> resize(npos * dim)
         embed_text_rows(m, head, embd, 0l)
-        for (i in range64(c.n_audio_rows * dim)) {
-            embd[n_head * dim + i] = c.audio_rows[i]
+        for (i in range64(n_media * dim)) {
+            embd[n_head * dim + i] = is_image ? c.image_rows[i] : c.audio_rows[i]
         }
-        embed_text_rows(m, tail, embd, n_head + c.n_audio_rows)
-        generate_embd_(m, c.session, embd, npos, params, c.max_new) $(id, piece) {
+        embed_text_rows(m, tail, embd, n_head + n_media)
+        // gemma vision decodes the image span NON-CAUSALLY (mtmd_decode_use_non_causal); every
+        // audio projector is causal, so the audio turn passes an empty span
+        let span_lo = is_image ? n_head : 0l
+        let span_hi = is_image ? n_head + n_media : 0l
+        generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -1291,8 +1390,10 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         }
         c.audio_rows |> clear()
         c.n_audio_rows = 0l
+        c.image_rows |> clear()
+        c.n_image_rows = 0l
     } else {
-        var pre : array<int64>
+        var inscope pre : array<int64>
         render_prompt(m, c, pre)
         render_think_suppress(m, c, pre)
         generate_(m, c.session, pre, params, c.max_new) $(id, piece) {

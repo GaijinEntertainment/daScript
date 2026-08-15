@@ -129,7 +129,10 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
   merges over vocab pieces, `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** — the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
-  share no state; a third merge algorithm gets a fourth file.
+  share no state; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
+  live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
+  gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
+  metadata defaults are the third and last.
 - **`dasllama_pretok.das`** — the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine — the two change for different reasons (new model family
@@ -298,6 +301,27 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_audio`, not
   sideways between families.
 - **`dasllama_vad.das`** — Silero-VAD weights and per-stream state.
+
+### 1.7b Vision
+
+- **`dasllama_vision.das`** — the image preprocessing rail: dynamic-resolution geometry, the
+  letterbox resize (aspect-preserving bilinear onto a centered black canvas), u8→f32 normalize,
+  and the `DASLLAMA_VISION_DUMP` PPM writer. The only preprocessing home.
+- **`dasllama_vision_io.das`** — image decode to RGB8, from a file or a byte blob. The only file
+  that talks to stbimage; optional, like `dasllama_audio_io` — the facade takes decoded pixels.
+- **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
+  im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
+  projector family, following the audio tower pattern; shared pieces move up, never sideways.
+  A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
+  embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
+  follows its source tensor, per tensor, never a per-file verdict.
+
+Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
+fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
+(their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
+live beside them in `gemma4-vision-oracle/`, whose `mint.sh` records the exact
+`llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each dump, so regeneration is a
+command, not archaeology.
 
 ### 1.8 Instrumentation and support
 

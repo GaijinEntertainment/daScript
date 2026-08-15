@@ -33,7 +33,7 @@ def private test_save_path() : string {
 let TEST_SAVE_PATH = test_save_path()
 
 def private models_dir() : string {
-    return g_env_harness.models_dir   // empty -> MODEL_PATH is relative -> the test skips
+    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
 }
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 
@@ -74,6 +74,11 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
+            // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; the metal
+            // arm keeps it ARMED — there it is the silent-GPU-fallback detector
+            if (mode == MetalMode.off) {
+                allow_cpu_prefill()
+            }
             var m <- load_model(model_path, QuantMode.q8)
             set_model(m, "test-llm")
             set_default_max_tokens(4l)   // per-context global — exercised by the default-budget completion test
@@ -282,6 +287,34 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[\{\"type\":\"function\",\"function\":\{\"name\":\"f\"}}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
+            // an image_url part on a slot with NO vision arm: a named 400, never a silent drop
+            let one_img = "\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"text\",\"text\":\"what is this\"}]}"
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":[{one_img}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "no vision arm") >= 0, "the 400 names the missing vision arm")
+            }
+            // two images on a TEXT-ONLY slot: the missing arm is the more useful error, so it
+            // outranks the count (the one-image rule is pinned on the ARMED slot in the vision test)
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,BBBB\"}}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "no vision arm") >= 0, "the missing arm outranks the image count")
+            }
+            // /v1/stats declares both arms the page reads: the vision flag and the thinking default
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && !(js?["vision"] ?? true), "stats reports no vision arm for a text-only slot")
+                // the VALUE, not just presence: tinyllama neither defaults to thinking nor has the
+                // reply markers in its vocab, so a true here means the vocab gate fell off
+                t |> success(js != null && js?["thinking_default"] != null, "stats declares the family thinking default")
+                t |> success(js != null && !(js?["thinking_default"] ?? true), "the declared default is OFF for this family")
+                if (js != null) {
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
             // unknown endpoint hits the ANY("*") catch-all: logged server-side, OpenAI-shaped 404 back
             POST("{base_url}/v1/responses", "\{\"input\":\"hi\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NOT_FOUND))
@@ -334,7 +367,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 }
             }
             // POST /config — validated body writes an authoritative TOML to the registered path
-            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\"}") $(resp) {
+            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "restart_required") >= 0, "save response flags restart")
             }
@@ -349,6 +382,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(troot?["port"] ?? 0l, 8123l)
                     t |> equal(troot?["model"] ?? "", "m.gguf")
                     t |> success(troot?["mtp"] ?? false, "bool key round-trips")
+                    t |> equal(troot?["image_mmproj"] ?? "", "mm.gguf")   // a save must not eat the vision arm
                     unsafe {
                         delete troot
                     }
@@ -434,7 +468,7 @@ def test_asr_worker_panic_boundary(t : T?) {
         var failure = ""
         var failed = false
         with (module openai_server) {
-            failed = catch_asr_panic(failure) {
+            failed = catch_worker_panic(failure) {
                 panic("forced ASR worker failure")
             }
         }
@@ -446,7 +480,7 @@ def test_asr_worker_panic_boundary(t : T?) {
         var failure = ""
         var failed = true
         with (module openai_server) {
-            failed = catch_asr_panic(failure) {
+            failed = catch_worker_panic(failure) {
                 invoked = true
             }
         }
@@ -599,6 +633,7 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(MetalMode.off)
+            allow_cpu_prefill()   // multi-slot routing test: both slots serve on the CPU arm
             var ma <- load_model(path_a, QuantMode.q8)
             add_model(ma, "tiny")
             var mb <- load_model(path_b, QuantMode.q8)

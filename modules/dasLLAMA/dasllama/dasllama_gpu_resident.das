@@ -722,9 +722,10 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
 // the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
 [hot_path]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
-    // armed + embedder-allowed + a flat cache in the ARMED mirror codec (mismatch falls to the CPU rails)
+    // armed + embedder-allowed + flat cache in the ARMED mirror codec + causal (this path encodes the causal mask)
     if (!g_rdec_active || !g_resident_prefill_allowed
-            || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null) {
+            || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt || s.kv_pool != null
+            || s.attn_uniform_end != 0l) {
         return false
     }
     if (start_pos != 0l) {

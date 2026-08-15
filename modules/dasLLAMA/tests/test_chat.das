@@ -4,6 +4,11 @@ options persistent_heap   // + explicit deletes below: each test frees its model
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
+
+[init]
+def private allow_cpu_prefill_intent() {
+    allow_cpu_prefill()   // render/eval-seam test, CPU by design: on a Metal build the prefill guard panics otherwise
+}
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/jobque_boost
@@ -887,8 +892,18 @@ def test_chat_pending_cleared_on_consume(t : T?) {
             // audio-only turn's prompt
             t |> equal(c.pending, "", "respond() cleared the consumed text (reply: '{reply}')")
             add_user(c, "And now four.")
+            // queued media dies with the turn it was queued for: rows an assistant-path consume
+            // leaves armed would silently splice a stale image into a later unrelated turn
+            c.n_image_rows = 2l   // planted: content is never read on this text path
+            c.image_rows |> resize(8l)
+            c.n_audio_rows = 3l   // both modalities: the consume clears each independently
+            c.audio_rows |> resize(12l)
             add_assistant(m, c, "One, two, three, four.")
             t |> equal(c.pending, "", "add_assistant() cleared the consumed text")
+            t |> equal(c.n_image_rows, 0l, "add_assistant() cleared the queued image rows")
+            t |> success(empty(c.image_rows), "the image row buffer went with the count")
+            t |> equal(c.n_audio_rows, 0l, "add_assistant() cleared the queued audio rows")
+            t |> success(empty(c.audio_rows), "the audio row buffer went with the count")
             delete c
             delete m
         }

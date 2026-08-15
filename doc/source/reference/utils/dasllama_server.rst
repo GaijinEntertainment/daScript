@@ -33,7 +33,8 @@ Run
 Run under ``-jit`` --- interpreted inference is far too slow for model work::
 
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> \
-       [--port 8080] [--quant q8] [--asr <asr.bin>] [--mmproj <mmproj.gguf>] [--ctx 4096] [--tune]
+       [--port 8080] [--quant q8] [--asr <asr.bin>] [--mmproj <mmproj.gguf>] \
+       [--image-mmproj <mmproj.gguf>] [--ctx 4096] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -63,6 +64,11 @@ Run under ``-jit`` --- interpreted inference is far too slow for model work::
      -
      - ---
      - mmproj GGUF for the Qwen3-ASR route (paired with ``--asr``)
+   * - ``--image-mmproj``
+     -
+     - ---
+     - vision mmproj GGUF (gemma-4 family) --- the chat route then accepts
+       ``image_url`` content parts
    * - ``--ctx``
      -
      - ``4096``
@@ -76,9 +82,11 @@ Run under ``-jit`` --- interpreted inference is far too slow for model work::
      - ---
      - Show help and exit
 
-The server is single-context and serializes requests on the tick thread (one
-in-flight request), matching dasLLAMA's one-generation-loop. OpenAI is
-stateless --- the client resends the full transcript each turn.
+Generation runs on one tick thread: a scheduler interleaves every live stream's
+decode, so concurrent requests share the model rather than queue behind each
+other. Audio transcription and image encoding each run on their own worker
+thread and rejoin the tick loop with their result. OpenAI is stateless --- the
+client resends the full transcript each turn.
 
 Per-box tuning
 ==============

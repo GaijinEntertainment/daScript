@@ -687,9 +687,17 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, 
 //! token-major. Bit-for-bit matmul_batch's fp32 expand at half the weight read (dot_bf16's widen
 //! is exact). Decode (ntok == 1) takes the GEMV chunk shaper.
 def matmul_bf16_batch(var y : array<float>; w : array<uint16>; woff : int64; x : array<float>; n, d, ntok : int64) {
+    matmul_bf16_batch_at(y, unsafe(addr<uint16 const?>(w[woff])), x, n, d, ntok)
+}
+
+//! Borrowed-plane form: the BF16 weights live in a prepared image, indexed from `woff`.
+def matmul_bf16_batch(var y : array<float>; w : PlaneU16; woff : int64; x : array<float>; n, d, ntok : int64) {
+    matmul_bf16_batch_at(y, plane_at(w, woff), x, n, d, ntok)
+}
+
+def private matmul_bf16_batch_at(var y : array<float>; wp : uint16 const?; x : array<float>; n, d, ntok : int64) {
     unsafe {
         var yp = addr(y[0])
-        let wp = addr<uint16 const?>(w[woff])
         let xp = addr<float const?>(x[0])
         if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_bf16_batch_override, yp, wp, xp, n, d, ntok)) {
             return

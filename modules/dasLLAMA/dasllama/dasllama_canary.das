@@ -475,8 +475,9 @@ def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
         }
         var inscope st <- stage_canary_encoder(path, q8)
         var built = CanaryEncoder()
-        cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        if (cache_via_image_staged(st, built, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
+        }
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served encoder is always

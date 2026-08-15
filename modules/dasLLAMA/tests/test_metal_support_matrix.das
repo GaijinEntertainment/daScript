@@ -336,6 +336,32 @@ def test_metal_support_matrix(t : T?) {
                     "the retired start_pos clause records nothing")
                 delete pfd0
                 delete pfd
+
+                // a non-causal image span declines BY TYPE and never engages the metal chains
+                // (they encode the causal mask); the CPU loop serves the span call
+                var pfd1 <- metal_prefill_declines()
+                let pf1 = metal_prefill_stats().prefills
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    var sp = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    var rows : array<float>
+                    rows |> reserve(12l * tr.config.dim)
+                    rows |> resize(12l * tr.config.dim)
+                    select_prefill_override("metal")
+                    set_metal_prefill_min_npos(1l)   // isolate the span clause from npos_window
+                    eval_embd(tr, sp, rows, 12l, true)
+                    set_metal_prefill_min_npos(64l)
+                    select_prefill_override("")
+                    delete rows
+                    delete sp
+                }
+                var pfd2 <- metal_prefill_declines()
+                t |> success((pfd2?["non_causal_span"] ?? 0l) > (pfd1?["non_causal_span"] ?? 0l),
+                    "a non-causal span declines non_causal_span")
+                t |> success(metal_prefill_stats().prefills == pf1,
+                    "the span call never engages the metal prefill")
+                delete pfd1
+                delete pfd2
             }
 
             // ===== q8 weights, f16 scale plane (the load DEFAULT since wscale16) =====

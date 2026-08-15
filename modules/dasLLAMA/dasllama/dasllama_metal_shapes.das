@@ -67,6 +67,8 @@ enum MetalPrefillDecline {
     shape               // head/dim alignment outside the kernel grids
     layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
     rope_rows           // the window's rope table not built
+    non_causal_span     // s.attn_uniform_end armed — the GPU chains encode the causal mask, so
+                        // an image span serves on the CPU loop until a uniform-bound kernel lands
     device              // metal_prefill_init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
     planar              // weights not in the blob-image form (the drivers are blob-only)

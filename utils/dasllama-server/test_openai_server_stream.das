@@ -26,8 +26,7 @@ let TEST_PORT = 18101
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
 def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
 }
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
@@ -48,6 +47,7 @@ def private model_missing(t : T?) : bool {
 def private with_stream_server(t : T?; model_path : string; port : int; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
+            allow_cpu_prefill()   // SSE-framing test: CPU serving is the intent
             var m <- load_model(model_path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, TEST_CTX)
             set_model(m, "test-llm-stream")

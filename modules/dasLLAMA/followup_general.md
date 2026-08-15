@@ -248,17 +248,11 @@
    (verified in emitted IR), the double-count chore resolved by construction, and the census +
    report surface preserved.
 
-17. **Vision stills — when, not if (Boris 2026-08-05).** Image-in/text-out on the existing
-   mmproj carriers (the `v.*` towers the audio work already ships past unread). Explicitly
-   SEQUENCED: after the vulkan side comes together AND dasllama.io serves sidecars + hosts
-   ladders — not before. Scope expectation from the audio comparison: first family ≈ a
-   gemma4a-sized arc (vanilla ViT / MobileNet blocks, no DSP frontend, no realtime bar; the
-   soft-token splice, q8 tower rail, .dlim lane, and mtmd oracle harness all transfer;
-   qwen3vl's M-RoPE + deepstack are pre-registered and merely activate). One-time plumbing:
-   image decode (dasStbImage) + per-family resize/patchify conventions. VIDEO stays out:
-   not reasonable without GPU — "maybe hybrid mode, maybe one day"; its real dependency is
-   the deep-prefill context wall (50k-token splices), not new kernels.
-
+17. **Vision stills — DELIVERED for the first family (the vision arc, 2026-08-14).** gemma-4
+    dense via `gemma4uv` shipped end to end: preprocessing, non-causal span, chat/scheduler/
+    server splice, the `.dlim` rail, `ask --image`, and the `lcpp_bench --image` cell. What
+    remains of this item folded into #23 (uniform-bound GPU prefill kernels) and the v2 ledger
+    in `vision_plan.md` (the E-series `gemma4v` ViT, multi-image, remote fetch, video).
 18. **Tutorials + documentation resync sweep (Boris 2026-08-05).** The ASR/audio tutorials and
    module documentation have desynced from the API as the q8/KV/lever work landed — a full
    pass over `tutorials/` (`.das` and `.rst`) and the dasLLAMA doc pages against the current
@@ -297,3 +291,36 @@
     the shorter operand where the old indexed form panicked on mismatched lengths;
     current callers pass equal lengths, so the test should pin the equal-length results,
     not the mismatch behavior.
+
+22. **Unexplained tune-sidecar rejection under `--gpu metal` (seen 2026-08-14, vision arc
+    slice K, NOT investigated).** A `--gpu metal` server run refused
+    `utils/dasllama-server/main.tune.json`, logged `scope 'dasllama' is untuned on this box`,
+    snapshotted the sidecar to `.tune.json.bak` and re-tuned from scratch (~20 min) — while
+    the CPU-tuned `ask.tune.json` was accepted for the same scope moments earlier via
+    `DAS_TUNE_MANIFEST`. Two readings, neither tested: (a) correct behavior with a wrong
+    MESSAGE (a metal-armed run demands a different kernel family set, so the CPU sidecar
+    genuinely does not cover the scope); (b) a real identity/staleness bug, in which case
+    every metal serving run on a tuned box silently re-tunes and measures off a fresh,
+    unvalidated sidecar. Done = dump the demanded key set on both arms, diff against each
+    sidecar's coverage, and either fix the message or fix the identity. Blocks Metal-arm
+    measurement (`vision_plan.md` defers the Metal leg on it).
+
+23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
+    currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,
+    `prefill_decline` (`MetalPrefillDecline.non_causal_span`) and `vulkan_resident_prefill`
+    all refuse `s.attn_uniform_end != 0`, and metal-blob models refuse a vision arm outright
+    at create (no CPU weights to fall back on). Done = the GPU prefill chains take the
+    uniform bound, the three declines and the blob refusals are deleted, and the kernel
+    coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail —
+    pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
+
+24. **Stream the over-line audio-carrier mints (the 1 GiB staging rule, 2026-08-14).**
+    `REVIEW.md` caps `cache_via_image_staged` at a 1 GiB source file; six carriers on the
+    fleet stage over it today — mmproj-omni-3b-f32 (5.0 GB), canary-qwen-2.5b-encoder-f32
+    (3.1 GB), mmproj-ultravox-1b-f32 (2.6 GB), voxtral-mini-mmproj-f32 (2.5 GB),
+    qwen2audio-mmproj-f32 (2.4 GB), mmproj-Qwen3-Omni-30B bf16 (2.1 GB) — each paying a
+    staged peak of roughly source + built image. Done = the audio-family mints size the
+    image up front and write planes as produced (the decoder rail's shape), the staged
+    entry points refuse a source over the line, and the mint-form-differs conversions
+    restructure into per-plane producers. The vision carriers stay staged (gemma-4 12B
+    mmproj 0.2 GB, E2B 0.9 GB).

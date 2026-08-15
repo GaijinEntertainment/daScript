@@ -105,3 +105,30 @@ def test_every_knob_is_documented(t : T?) {
         delete undocumented
     }
 }
+
+[test]
+def test_registry_covers_every_documented_knob(t : T?) {
+    t |> run("every DASLLAMA-prefixed knob env_markdown renders is in registered_env_names") @(t : T?) {
+        // both lists are hand-maintained in dasllama_env.das: a struct can sit in the doc
+        // renderer and not the registry, and every other test here stays green when it does
+        var names <- registered_env_names()
+        var reg : table<string>
+        for (n in names) {
+            reg |> insert(n)
+        }
+        var missing : array<string>
+        for (line in split(env_markdown(), "\n")) {
+            continue if (!starts_with(line, "| `DASLLAMA"))
+            let tail = slice(line, 3)
+            let name = slice(tail, 0, find(tail, "`"))
+            if (!key_exists(reg, name)) {
+                missing |> push(name)
+            }
+        }
+        t |> success(length(names) > 100, "registry sane ({length(names)} names)")
+        t |> success(empty(missing), "documented but unregistered: {join(missing, ", ")}")
+        delete missing
+        delete reg
+        delete names
+    }
+}

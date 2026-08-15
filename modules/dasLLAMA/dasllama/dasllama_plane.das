@@ -22,6 +22,14 @@ struct PlaneI8 {
     n : int64 = 0l
 }
 
+//! A borrowed halfword plane — native BF16 weights (the gemma4uv GEMMs). Same contract as
+//! PlaneF; the elements are raw bf16 bit patterns, widened by the kernel that reads them.
+struct PlaneU16 {
+    borrowed_plane : bool = true
+    p : uint16 const? = null
+    n : int64 = 0l
+}
+
 //! A borrowed int plane — small baked tables (parakeet's TDT durations).
 struct PlaneI32 {
     borrowed_plane : bool = true
@@ -64,6 +72,16 @@ def operator [] (pl : PlaneI8; i : int) : int8 {
     return unsafe(pl.p[i])
 }
 
+def operator [] (pl : PlaneU16; i : int64) : uint16 {
+    plane_guard(i, pl.n)
+    return unsafe(pl.p[i])
+}
+
+def operator [] (pl : PlaneU16; i : int) : uint16 {
+    plane_guard(int64(i), pl.n)
+    return unsafe(pl.p[i])
+}
+
 def operator [] (pl : PlaneI32; i : int64) : int {
     plane_guard(i, pl.n)
     return unsafe(pl.p[i])
@@ -86,10 +104,12 @@ def operator [] (pl : PlaneI64; i : int) : int64 {
 
 def length(pl : PlaneF) : int64 => pl.n
 def length(pl : PlaneI8) : int64 => pl.n
+def length(pl : PlaneU16) : int64 => pl.n
 def length(pl : PlaneI32) : int64 => pl.n
 def length(pl : PlaneI64) : int64 => pl.n
 def empty(pl : PlaneF) : bool => pl.n == 0l
 def empty(pl : PlaneI8) : bool => pl.n == 0l
+def empty(pl : PlaneU16) : bool => pl.n == 0l
 def empty(pl : PlaneI32) : bool => pl.n == 0l
 def empty(pl : PlaneI64) : bool => pl.n == 0l
 
@@ -103,6 +123,13 @@ def plane_at(pl : PlaneF; off : int64) : float const? {
 }
 
 def plane_at(pl : PlaneI8; off : int64) : int8 const? {
+    if (uint64(off) > uint64(pl.n)) {
+        panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
+    }
+    return unsafe(pl.p + off)
+}
+
+def plane_at(pl : PlaneU16; off : int64) : uint16 const? {
     if (uint64(off) > uint64(pl.n)) {
         panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
     }
@@ -127,6 +154,17 @@ def plane_bind(var pl : PlaneI8; base : uint8 const?; off, nbytes : int64) : boo
         pl.p = reinterpret<int8 const?>(base + off)
     }
     pl.n = nbytes
+    return true
+}
+
+def plane_bind(var pl : PlaneU16; base : uint8 const?; off, nbytes : int64) : bool {
+    if (nbytes % 2l != 0l) {
+        return false
+    }
+    unsafe {
+        pl.p = reinterpret<uint16 const?>(base + off)
+    }
+    pl.n = nbytes / 2l
     return true
 }
 
@@ -164,6 +202,11 @@ def plane_release(var pl : PlaneI8) {
     pl.n = 0l
 }
 
+def plane_release(var pl : PlaneU16) {
+    pl.p = null
+    pl.n = 0l
+}
+
 def plane_release(var pl : PlaneI32) {
     pl.p = null
     pl.n = 0l
@@ -174,13 +217,18 @@ def plane_release(var pl : PlaneI64) {
     pl.n = 0l
 }
 
-// A plane holds a raw pointer, which would make `delete` unsafe for every struct that contains
-// one, all the way up the carrier. Declaring the teardown says what it is: dropping a view.
+// Declaring the teardown says what it is — dropping a view — and nulls the borrowed pointer, so
+// a torn-down carrier cannot dangle. (It does NOT make containing structs safe to delete: a
+// struct holding any plane still takes an unsafe delete, finalize or no finalize.)
 def finalize(var pl : PlaneF) {
     plane_release(pl)
 }
 
 def finalize(var pl : PlaneI8) {
+    plane_release(pl)
+}
+
+def finalize(var pl : PlaneU16) {
     plane_release(pl)
 }
 

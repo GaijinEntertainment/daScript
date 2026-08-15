@@ -124,6 +124,33 @@ bin/daslang modules/dasLLAMA/performance/gen_site_records.das
 
 ---
 
+## The image cell (`--image`)
+
+The image TURN on a vision decoder — what a user actually waits on when they attach a picture.
+One process, one tune-key demand, one image-identity stamp, same as the ASR cell:
+
+```sh
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
+  -m <decoder.gguf> --image-mmproj <mmproj.gguf> --image <picture.jpg> -r 5 --for-debug-purposes
+```
+
+- Three keys per row. `img:enc` is the embedder alone in ms (best of `-r`), `img:pp` the SPLICED
+  prefill in tok/s (head tokens + soft-token rows + tail tokens — every position the turn holds),
+  `img:tg` the decode in tok/s, carrying the reply text.
+- The reply rides the same stop protocol `respond` runs; without it a stray channel marker lands in
+  the timed text and the row prices a reply the product would never have shown.
+- `workload = "image-chat"` on the record, beside `asr` and `audio-chat`. The picture is pinned by
+  content hash in `files`, like the weights and the mmproj.
+- CPU by design: every GPU prefill arm — the per-layer rail (`attn_gpu_prefill_ready`), the
+  Metal whole-stack override (`MetalPrefillDecline.non_causal_span`) and the Vulkan resident
+  override — declines a non-causal span, and the CPU-prefill tripwire exempts the SPAN call
+  only: the head/tail text slices of an image turn still need declared CPU intent
+  (`allow_cpu_prefill()`), which every in-tree vision caller carries.
+  The Metal arm gets its cell when GPU multimodal prefill is the work (`followup_general.md` #23).
+- The embedder ALONE is a kernel question, not a board row: price it in the kernel A/B lab, not here.
+
+---
+
 ## The tokenizer cell (`--tok`)
 
 Encode/decode throughput of a GGUF's tokenizer, from the same rig — no weights are loaded, so the

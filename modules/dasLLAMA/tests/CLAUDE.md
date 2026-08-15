@@ -71,7 +71,7 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a`; the voxtral arm re-saves a
+canary-dec gemma4a gemma4uv`; the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
@@ -124,8 +124,26 @@ by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full e
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `scratch_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
+`test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
+bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
+`gemma4-vision-oracle/`), plus the stbimage decode/dump round-trips in a per-process temp dir.
+`test_gemma4uv.das` — the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
+(f32-mmproj-minted — the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
+mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
+`test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
+perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
+agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
+`test_cpu_prefill_tripwire.das` — the CPU-prefill guard vs the span: the non-causal span is
+EXEMPT (CPU is its only correct arm) while an undeclared causal prefill still panics; same
+stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it cannot
+live in test_attn_span — that file arms it in `[init]`). Metal-capable builds only; no suite arm.
+`test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
+`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
+span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
+llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
+arm defaults to instruct, and freeform token-parity cells are banned (see below).
 
-## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
+## Model loads — never the image rail (REVIEW: "A test suite loads DECODERS with load_model_")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box

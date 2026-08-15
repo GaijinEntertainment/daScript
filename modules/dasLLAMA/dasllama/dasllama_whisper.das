@@ -472,8 +472,9 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
             return <- t
         }
         var built = WhisperModel()
-        stream_whisper_model(path, q8, img, tag, built)
-        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        if (stream_whisper_model(path, q8, img, tag, built)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
+        }
         return <- built
     }
     // no persisted image: stream one into memory and serve THAT — a served model is always
@@ -653,11 +654,12 @@ def private whisper_dec_compact_offsets(var e : WhisperModel) {
 //! The STREAMED whisper mint — Phase 3 of the audio rail: the big planes transcode from the
 //! source mapping straight into the writer and never materialize. The staging carrier holds
 //! only scalars, the vocab, and the filterbank; peak drops from whole-model to one tensor.
-def private stream_whisper_model(path : string; q8 : bool; img, tag : string; var out : WhisperModel) {
+def private stream_whisper_model(path : string; q8 : bool; img, tag : string; var out : WhisperModel) : bool {
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA whisper: cannot open model '{path}'")
     }
+    var wrote = false
     fmap(f) $(var bytes : array<uint8>#) {
         var st = WhisperStaging()
         var recs : table<string; WTensorRec>
@@ -676,8 +678,8 @@ def private stream_whisper_model(path : string; q8 : bool; img, tag : string; va
             extra += uint64((sz.enc_len / 32l + sz.dec_len / 32l) * 4l) // scale planes
             extra += 4ul * uint64(IMAGE_PAGE)
         }
-        cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
-                                                                  var w : ImgWriter; var sections : array<ImgSection>) {
+        wrote = cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
+                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
             if (name == "dblob") {
                 return wstream_plane(recs, bytes, decJobs, 0, q8, rep, w, sections, name)
             }
@@ -703,6 +705,7 @@ def private stream_whisper_model(path : string; q8 : bool; img, tag : string; va
         delete decJobs
     }
     fclose(f)
+    return wrote
 }
 
 // Parse everything EXCEPT tensor data: hparams, filterbank, vocab, token ids, both blob

@@ -22,6 +22,7 @@ let ENGINE_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_sampling.das",  // sample_ / generate_ / generate_embd_ / stats_ / set_seed_
     "modules/dasLLAMA/dasllama/dasllama_prefix.das",
     "modules/dasLLAMA/dasllama/dasllama_chat.das",
+    "modules/dasLLAMA/dasllama/dasllama_gemma4uv.das",   // encode_image_ (the vision splice's encode half)
     "modules/dasLLAMA/dasllama/dasllama_math.das"   // setup_dasllama_jobque_ (jobque setup lives with the runtime knobs)
 ]
 let EXAMPLES = ["examples/dasLLAMA/run.das", "examples/dasLLAMA/chat.das"]
