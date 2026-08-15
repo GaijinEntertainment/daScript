@@ -892,8 +892,14 @@ def test_chat_pending_cleared_on_consume(t : T?) {
             // audio-only turn's prompt
             t |> equal(c.pending, "", "respond() cleared the consumed text (reply: '{reply}')")
             add_user(c, "And now four.")
+            // queued media dies with the turn it was queued for: rows an assistant-path consume
+            // leaves armed would silently splice a stale image into a later unrelated turn
+            c.n_image_rows = 2l   // planted: content is never read on this text path
+            c.image_rows |> resize(8l)
             add_assistant(m, c, "One, two, three, four.")
             t |> equal(c.pending, "", "add_assistant() cleared the consumed text")
+            t |> equal(c.n_image_rows, 0l, "add_assistant() cleared the queued media rows")
+            t |> success(empty(c.image_rows), "the row buffer went with the count")
             delete c
             delete m
         }

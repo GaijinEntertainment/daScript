@@ -305,7 +305,10 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var err : string
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null && !(js?["vision"] ?? true), "stats reports no vision arm for a text-only slot")
+                // the VALUE, not just presence: tinyllama neither defaults to thinking nor has the
+                // reply markers in its vocab, so a true here means the vocab gate fell off
                 t |> success(js != null && js?["thinking_default"] != null, "stats declares the family thinking default")
+                t |> success(js != null && !(js?["thinking_default"] ?? true), "the declared default is OFF for this family")
                 if (js != null) {
                     unsafe {
                         delete js

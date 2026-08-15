@@ -32,9 +32,9 @@ let CATS_ROWS = 130l
 [test]
 def test_vision_chat(t : T?) {
     t |> run("the image turn: stream shape, then the caption") @(tt : T?) {
-        let mm = "{models_dir()}{MM}"
-        let dec = "{models_dir()}{DEC}"
-        let cats = "{models_dir()}{CATS}"
+        let mm = path_join(models_dir(), MM)
+        let dec = path_join(models_dir(), DEC)
+        let cats = path_join(models_dir(), CATS)
         if (!model_available(tt, mm) || !model_available(tt, dec)) {
             return
         }

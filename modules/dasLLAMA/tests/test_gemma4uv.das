@@ -102,7 +102,7 @@ let TIER1_TOL = 2e-4
 def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
                         kind : string; w, h : int; logname : string) {
     var o = OracleEncode()
-    let logpath = "{models_dir()}gemma4-vision-oracle/{logname}"
+    let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
         t |> skip("oracle dump {logname} not present/parseable - mint via gemma4-vision-oracle/mint.sh")
         return
@@ -144,7 +144,7 @@ def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
 [test]
 def test_gemma4uv_tier1(t : T?) {
     t |> run("tier-1 embedder parity vs the mtmd encode dumps") @(tt : T?) {
-        let mm = "{models_dir()}mmproj-gemma-4-12B-it-BF16.gguf"
+        let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
         if (!model_available(tt, mm)) {
             return
         }
@@ -163,6 +163,21 @@ def test_gemma4uv_tier1(t : T?) {
         // the non-square orientation / transposed-grid gate: identical cb patches make the
         // per-token values a pure fingerprint of pos_x[col] + pos_y[row]
         tt |> gate_encode(emb, st, "cb", 672, 336, "encode.cb672x336.log")
+        // a grid wider than the pos table panics by name instead of reading past the plane
+        var tripped = false
+        try {
+            let w = (emb.pos_entries + 1l) * emb.patch
+            var planes : array<float>
+            planes |> reserve(w * emb.patch * 3l)
+            planes |> resize(w * emb.patch * 3l)
+            var wide : array<float>
+            gemma4uv_encode(emb, st, planes, w, emb.patch, wide)
+            delete wide
+            delete planes
+        } recover {
+            tripped = true
+        }
+        tt |> success(tripped, "a canvas past pos_entries columns panics at the grid check")
         delete st
         delete emb
     }

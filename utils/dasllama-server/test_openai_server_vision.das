@@ -24,7 +24,7 @@ require dasllama/dasllama_env
 let TEST_PORT = 18097
 
 def private models_dir() : string {
-    return g_env_harness.models_dir   // empty -> the paths are relative -> the test skips
+    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
 }
 let DEC_PATH = path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf")
 let MM_PATH = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
@@ -80,7 +80,7 @@ def private cats_data_uri() : string {
 }
 
 [test]
-def test_openai_server_vision(t : T?) {
+def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot, every route-proof cell against it
     t |> run("the image route: data URI -> soft tokens -> a caption (needs gemma-4-12B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
@@ -91,6 +91,10 @@ def test_openai_server_vision(t : T?) {
                 t |> success(true, "skipped: {base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
                 return
             }
+        }
+        if (!g_env_test.parity_full) {   // 6.87 GiB decoder: over the 6 GiB tier line
+            t |> success(true, "skipped: the 12B pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
+            return
         }
         let uri = cats_data_uri()
         t |> success(length(uri) > 1000, "the cats jpeg encoded to a data URI ({length(uri)} chars)")
@@ -139,6 +143,48 @@ def test_openai_server_vision(t : T?) {
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"https://example.com/cat.png\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "data: URI") >= 0, "the 400 names the data-URI requirement")
+            }
+            // a data URI with no base64 marker, and one with garbage payload — each its own 400
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png,rawbytes\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "base64-encoded") >= 0, "the 400 names the missing base64 marker")
+            }
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,@@@@\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "not valid base64") >= 0, "the 400 names the bad payload")
+            }
+            // an image on an EARLIER message drops with a warning; the request still serves as text
+            var early = "\{\"messages\":[\{\"role\":\"user\",\"content\":["
+            early += "\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"{uri}\"}},"
+            early += "\{\"type\":\"text\",\"text\":\"look at this\"}]},"
+            early += "\{\"role\":\"assistant\",\"content\":\"ok\"},"
+            early += "\{\"role\":\"user\",\"content\":\"say hi\"}],\"max_tokens\":8,\"temperature\":0}"
+            POST("{base_url}/v1/chat/completions", early) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    let np = int(js?["usage"]?["prompt_tokens"] ?? 0l)
+                    t |> success(np < CATS_ROWS, "no rows spliced for a dropped earlier-message image (prompt_tokens {np})")
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            // the per-slot stats carry the arm and the thinking default the page's roster reads
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                let slot0 = js?["models"]?[0]
+                t |> success(slot0?["vision"] ?? false, "the slot row reports its vision arm")
+                t |> success(slot0?["thinking_default"] != null, "the slot row reports its thinking default")
+                if (js != null) {
+                    unsafe {
+                        delete js
+                    }
+                }
             }
         }
     }

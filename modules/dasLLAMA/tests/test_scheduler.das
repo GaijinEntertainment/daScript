@@ -755,3 +755,67 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
         }
     }
 }
+
+// ===== media validation: submit refuses malformed shapes by panic =====
+
+[test]
+def test_scheduler_media_validation(t : T?) {
+    t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_capped(128l)
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var tripped = false
+            try {
+                // a negative count cleared every guard, LOWERED the seq_len check, and left a
+                // stream whose completion predicate could never hold - an infinite step loop
+                var bad <- PendingReq(id = 9l, params = greedy, max_new = 4l, n_media = -1l)
+                bad.prompt := prompt
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "negative n_media panics")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 10l, params = greedy, max_new = 4l, media_at = 99l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media |> resize(2l * m.config.dim)
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "media_at outside the prompt panics")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 11l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media |> resize(4l)   // far short of n_media * dim
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "undersized media rows panic")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 12l, params = greedy, max_new = 4l)
+                bad.prompt := prompt
+                bad.media |> resize(2l * m.config.dim)   // rows with n_media == 0
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "media rows with n_media == 0 panic instead of dropping silently")
+            unsafe {
+                delete sch
+            }
+            delete prompt
+            delete m
+        }
+    }
+}

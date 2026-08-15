@@ -89,6 +89,17 @@ def test_vision_geometry(t : T?) {
         t |> equal(vision_token_count(int2(336, 336), ALIGN), 49)
         t |> equal(vision_token_count(int2(960, 624), ALIGN), 260)
     }
+    t |> run("an extreme aspect ratio still holds the token budget") @(t : T?) {
+        // the per-side align floor used to defeat the area constraint: 300000x48 gave 1322
+        // columns against a 1120-entry position table
+        for (wh in [int2(300000, 48), int2(1000000, 48), int2(48, 1000000), int2(16777216, 1)]) {
+            let tgt = vision_target_size(wh.x, wh.y, ALIGN, MIN_TOKENS, MAX_TOKENS)
+            t |> success(vision_token_count(tgt, ALIGN) <= MAX_TOKENS, "{wh.x}x{wh.y} -> {tgt} within {MAX_TOKENS} tokens")
+        }
+        // int64 pixel math: a huge max_tokens no longer wraps negative and collapses the canvas
+        let big = vision_target_size(4000, 3000, ALIGN, MIN_TOKENS, 2000000)
+        t |> success(vision_token_count(big, ALIGN) > 1000, "no int32 collapse at max_tokens=2e6 ({big})")
+    }
 }
 
 [test]
@@ -176,6 +187,9 @@ def test_vision_io_roundtrip(t : T?) {
         t |> equal(count_byte_diffs(back.rgb, src.rgb), 0, "lossless file round-trip")
     }
     t |> run("decode failure yields a zero-size image") @(t : T?) {
+        var none : array<uint8>
+        let nothing <- load_image_rgb(none)   // the EMPTY guard arm: no addr on a zero array
+        t |> equal(nothing.width, 0)
         var garbage : array<uint8>
         garbage |> resize(16)   // zeroed - no image container starts like this
         let bad <- load_image_rgb(garbage)
@@ -184,6 +198,26 @@ def test_vision_io_roundtrip(t : T?) {
         let missing <- load_image_rgb(tmp_path("no_such_file.png"))
         t |> equal(missing.width, 0)
         t |> equal(missing.height, 0)
+    }
+    t |> run("max_pixels refuses an oversized image from the header alone") @(t : T?) {
+        let src <- make_fixture("gray", 32, 20)
+        let path = tmp_path("cap.png")
+        t |> success(dump_image_png(src, path), "png written")
+        let refused <- load_image_rgb(path, 100l)   // 640 px > 100: the info probe declines
+        t |> equal(refused.width, 0)
+        let served <- load_image_rgb(path, 640l)
+        t |> equal(served.width, 32)
+        var png : array<uint8>
+        stbi_write_png_to_memory(32, 20, 3, unsafe(addr(src.rgb[0])), 32 * 3) $(buf : array<uint8> const#) {
+            png |> reserve(length(buf))
+            for (b in buf) {
+                png |> push(b)
+            }
+        }
+        let refused2 <- load_image_rgb(png, 100l)
+        t |> equal(refused2.width, 0)
+        let served2 <- load_image_rgb(png, 640l)
+        t |> equal(served2.width, 32)
     }
 }
 
@@ -198,6 +232,13 @@ def test_vision_letterbox_probes(t : T?) {
         t |> equal(int(boxed.rgb[(815 * 480 + 0) * 3]), 0, "bottom-left pad")
         t |> equal(int(boxed.rgb[(815 * 480 + 479) * 3]), 0, "bottom-right pad")
         t |> equal(int(boxed.rgb[(408 * 480 + 240) * 3]), 128, "center content")
+    }
+    t |> run("identity-size letterbox is a pixel-exact copy") @(t : T?) {
+        let src <- make_fixture("cb", 96, 48)
+        let same <- vision_letterbox(src, int2(96, 48))
+        t |> equal(same.width, 96)
+        t |> equal(same.height, 48)
+        t |> equal(count_byte_diffs(same.rgb, src.rgb), 0, "bytes identical")
     }
     t |> run("upscaled checkerboard keeps corner-aligned orientation") @(t : T?) {
         let src <- make_fixture("cb", 100, 100)

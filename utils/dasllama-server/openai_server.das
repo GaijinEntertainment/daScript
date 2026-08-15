@@ -3284,6 +3284,8 @@ def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var eve
     var farewell = VisionEvent(bye = true)
     events |> push_clone(farewell)
     delete farewell
+    jobs |> release       // the captured channel refs, or the thread teardown panics
+    events |> release
 }
 
 def private start_vision_worker() {
@@ -3681,12 +3683,23 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     delete g_events
     delete g_wires
     delete g_asr_wires
+    for (w in values(g_vision_wires)) {   // parked image requests die with the server
+        unsafe {
+            delete w.js
+        }
+        w.js = null
+    }
+    delete g_vision_wires
     var asr_jobs = g_asr_jobs
     var asr_events = g_asr_events
+    var vision_jobs = g_vision_jobs
+    var vision_events = g_vision_events
     var bench_events = g_bench_events
     var bake_events = g_bake_events
     g_asr_jobs = null
     g_asr_events = null
+    g_vision_jobs = null
+    g_vision_events = null
     g_bench_events = null
     g_bake_events = null
     unsafe {
@@ -3695,6 +3708,12 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
         }
         if (asr_events != null) {
             asr_events |> channel_remove
+        }
+        if (vision_jobs != null) {
+            vision_jobs |> channel_remove
+        }
+        if (vision_events != null) {
+            vision_events |> channel_remove
         }
         // a still-running worker holds a channel ref, and channel_remove throws on outstanding
         // refs — leave the channel to the worker (its exit release is safe on the live object;
