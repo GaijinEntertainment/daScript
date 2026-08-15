@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 require dastest/testing_boost public
 require daslib/jobque_boost
+require daslib/fio
 
 // Channel boost helpers (push_clone, for_each_clone, etc.) require struct types.
 // POD types (int, float, int2) cannot be used with `new TT` or `delete temp`.
@@ -232,6 +233,33 @@ def test_channel_push_batch_clone(t : T?) {
             t |> equal(20, results[1])
             t |> equal(30, results[2])
         }
+    }
+}
+
+// A consumer that stops at the payload (pop_with_timeout_clone, try_pop) wakes on the worker's
+// push, which happens BEFORE the worker's notify_and_release - without a join() the with_channel
+// scope can close on a channel the worker still references, which panics the process. The sleep
+// holds that window open deliberately; join() waiting the count to zero is the fence (the count
+// drops after the reference inside notify_and_release, under the same lock).
+[test]
+def test_join_fences_a_payload_consumer(t : T?) {
+    t |> run("join before scope close outlives a slow-releasing worker") @(t : T?) {
+        var got_v = 0
+        with_channel(1) $(ch) {
+            new_thread() @() {
+                ch |> push_clone(IntVal(v = 42))
+                sleep(200u)
+                ch |> notify_and_release()
+            }
+            var got = false
+            while (!got) {
+                got = pop_with_timeout_clone(ch, 10) $(r : IntVal#) {
+                    got_v = r.v
+                }
+            }
+            ch |> join()
+        }
+        t |> equal(42, got_v)
     }
 }
 
