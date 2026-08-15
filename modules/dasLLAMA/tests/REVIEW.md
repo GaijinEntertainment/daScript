@@ -2,6 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (this folder's — the suite map, arm lists, and runner mechanics live there).
+Planned work: `../THINKING.md` (deferred remote legs).
 
 **Every PR runs the model-free tests here, plus each suite the change reaches — never the whole
 directory.** A change reaches a suite through a suite file, a shared helper's behavior, or engine
@@ -32,11 +33,11 @@ test loads first.
 **A suite loads decoders with `load_model_`, never the image rail** (towers and embedders load
 through their family loaders). Image-rail coverage belongs to the image suites alone.
 
-**Every function whose signature or body changed ships a test for the bit itself** — feed the
-function, check the bytes; "the model still runs" is not that test. A signature widening with an
-unchanged body counts (the new receivers are the new bit); a platform-fixed predicate's
-observable is the argv it gates or the mode it selects; a moved registration's observable is
-reachability.
+**Every new or changed piece of functionality ships its test in the same change — feed the
+function, check the bytes; "the model still runs" is not that test.** The folder's sharpenings
+of `REVIEW_COMMON.md`'s constitutional rule: a signature widening with an unchanged body counts
+(the new receivers are the new bit); a platform-fixed predicate's observable is the argv it
+gates or the mode it selects; a moved registration's observable is reachability.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.
@@ -63,9 +64,10 @@ in-repo; any image a test feeds an embedder is a fixture the test builds, or pre
 `DASLLAMA_VISION_DUMP`** — a red never requires adding instrumentation before a human can see
 what the model saw.
 
-**A tier-1 vision fixture has an exact-value generator.** The test regenerates every fixture
-from its formula, so a generator running libm transcendentals is not float-portable and its cell
-is a defect; orientation coverage uses shaped exact fixtures.
+**A tier-1 vision fixture — one an embedder-parity cell regenerates in-test and compares
+against an oracle dump — has an exact-value generator.** A generator running libm
+transcendentals is not float-portable and its cell is a defect; orientation coverage uses
+shaped exact fixtures.
 
 **A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as
 well as red.**
