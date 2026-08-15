@@ -1518,20 +1518,25 @@ namespace das
         VarInfo * makeVariableDebugInfo ( const Variable & var );
         VarInfo * makeVariableDebugInfo ( const Structure & st, const Structure::FieldDeclaration & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
-        FuncInfo * makeFunctionDebugInfo ( const Function & fn );
+        // unique=true builds a fresh, uncached info - block frames under gc/debugger carry
+        // per-instance locals and intervals, so same-typed blocks must not share one
+        FuncInfo * makeFunctionDebugInfo ( const Function & fn, bool unique = false );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
-        FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
+        FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at, bool unique = false );
         AnnotationArgumentInfo * makeAnnotationArguments ( const AnnotationArgumentList & list, uint32_t & count );
         AnnotationInfo * makeAnnotationList ( const AnnotationList & list, uint32_t & count );
         void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
-        void stampFramePositions ( ExpressionPtr body );
+        void stampFramePositions ( ExpressionPtr body, uint32_t spaceHash );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
         // per-variable liveness intervals in frame positions, filled by stampFramePositions
         // and read back by appendLocalVariables (see LocalVariableInfo::openPos)
         das_hash_map<Variable *, pair<uint32_t,uint32_t>> varFramePos;
+        // space id of the function currently being simulated - block frames created inside
+        // it inherit this as their FuncInfo::spaceHash (their positions live in its space)
+        uint32_t currentSpaceId = 0;
     public:
         das_hash_map<string,StructInfo *>        smn2s;
         das_hash_map<string,TypeInfo *>          tmn2t;

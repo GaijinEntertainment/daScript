@@ -624,7 +624,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        uint32_t framePos = lineFramePos(at);
+        const LineInfo * handoff = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -653,6 +653,7 @@ namespace das
                 }
                 if ( info->locals ) {
                     tp << "LOCALS:\n";
+                    uint32_t framePos = lineFramePos(handoff, info->spaceHash);
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
@@ -672,7 +673,7 @@ namespace das
                     }
                 }
             }
-            framePos = info ? lineFramePos(pp->line) : 0u;
+            handoff = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
         }
     }
@@ -935,9 +936,11 @@ namespace das
         // time (needCallerStackFrame) - nothing to check for them here
         if ( persistent && gcEnabled ) {
             char * scanSp = stack.ap();
-            // liveness is gated on frame POSITIONS (see LocalVariableInfo::openPos); a line
-            // with no stamped position - null, empty, or embedder-crafted - is unattributable
-            uint32_t scanPos = lineFramePos(at);
+            // liveness is gated on OWNED frame positions (see LocalVariableInfo::openPos and
+            // LINEINFO_FRAME_POS_TAG): a handoff that is null, unstamped, embedder-crafted,
+            // or owned by a DIFFERENT function (a frameless fastcall carrier sits between -
+            // the invoke edge the static denial can't see) is unattributable
+            const LineInfo * scanHandoff = at;
             while ( scanSp < stack.top() ) {
                 Prologue * pp = (Prologue *) scanSp;
                 FuncInfo * info = nullptr;
@@ -945,12 +948,14 @@ namespace das
                     intptr_t iblock = intptr_t(pp->block);
                     info = ( iblock & 1 ) ? ((Block *)(iblock & ~1))->info : pp->info;
                 }
-                if ( info && info->locals && info->localCount && !scanPos ) {
+                if ( info && info->locals && info->localCount
+                        && !lineFramePos(scanHandoff, info->spaceHash) ) {
                     throw_error_at(at, "heap collection can't attribute locals of '%s' - "
-                        "the frame was entered through a compiled (AOT/JIT) frame or a "
-                        "position-less line", info->name ? info->name : "?");
+                        "the frame was entered through a compiled (AOT/JIT) frame, a "
+                        "position-less line, or a frameless (fastcall) carrier",
+                        info->name ? info->name : "?");
                 }
-                scanPos = info ? lineFramePos(pp->line) : 0u;
+                scanHandoff = info ? pp->line : nullptr;
                 scanSp += info ? info->stackSize : pp->stackSize;
             }
         }
@@ -999,7 +1004,7 @@ namespace das
         }
         // mark stack
         char * sp = stack.ap();
-        uint32_t framePos = lineFramePos(at);
+        const LineInfo * handoff = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -1015,12 +1020,14 @@ namespace das
                     info = pp->info;
                 }
             }
-            // dishonest frames (AOT/JIT, position-less entry) were refused by the pre-scan above
+            // dishonest frames (AOT/JIT, position-less or foreign-space entry) were refused
+            // by the pre-scan above
             if ( info ) {
                 for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.prepare();
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
+                uint32_t framePos = lineFramePos(handoff, info->spaceHash);
                 if ( info->locals && framePos ) {
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
@@ -1039,7 +1046,7 @@ namespace das
                     }
                 }
             }
-            framePos = info ? lineFramePos(pp->line) : 0u;
+            handoff = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
         }
         while ( !walker.deferred.empty() ) {

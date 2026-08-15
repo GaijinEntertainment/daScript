@@ -61,8 +61,8 @@ def test_stackwalk_comprehension(t : T?) {  // nolint:STYLE038 - flat list of in
         }
     }
     t |> run("accumulated strings survive collects during the comprehension") @(t : T?) {
-        // probabilistic instrument: a regression sweeps the earlier elements (their only
-        // root is the invisible accumulator), and the churn reuses the freed blocks
+        // the accumulator is the only root of everything built so far; per-instance block
+        // infos + owner-tagged positions keep it gated live through the whole loop
         var since = 0
         let names <- [for (i in range(60)); make_name(i, since)]
         var idx = 0

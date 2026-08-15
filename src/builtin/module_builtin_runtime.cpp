@@ -1139,6 +1139,12 @@ namespace das
         }
     }
 
+    int32_t builtin_frame_position ( Context *, LineInfoArg * info ) {
+        // the call site's frame position (see LINEINFO_FRAME_POS_TAG); 0 when the program
+        // carries no positions (no gc/debugger) or the line is foreign
+        return ( info && (info->last_line & LINEINFO_FRAME_POS_TAG) ) ? int32_t(info->last_column) : 0;
+    }
+
     void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
         if ( !context->persistent ) {
             context->throw_error_at(info, "heap collection is not allowed in this context, needs 'options persistent'");
@@ -2475,6 +2481,9 @@ namespace das
         hcol->needCallerStackFrame = true;
         hcol->arguments[0]->init = new ExprConstBool(true);
         hcol->arguments[1]->init = new ExprConstBool(false);
+        addExtern<DAS_BIND_FUN(builtin_frame_position)>(*this, lib, "frame_position",
+            SideEffects::accessExternal, "builtin_frame_position")
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
             SideEffects::modifyExternal, "string_heap_report")
                 ->args({"context","line"});

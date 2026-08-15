@@ -598,14 +598,26 @@ namespace das
         uint32_t            annotation_count;
     };
 
-    // marks a runtime LineInfo copy whose last_column carries the 1-based frame position
-    // (an honest range can never end on this line); see LocalVariableInfo::openPos
-    constexpr uint32_t LINEINFO_FRAME_POS = 0xFFFFFFFFu;
+    // runtime call-site LineInfo copies are stamped: last_column = 1-based frame position,
+    // last_line = LINEINFO_FRAME_POS_TAG | hash31 of the OWNING function (whose body holds
+    // the call node; an honest range can never reach the tag bit). the owner makes a missing
+    // frame detectable: a frameless (fastcall) carrier between two frames leaves ITS position
+    // in the handoff, and the owner mismatch at the next frame down refuses the walk instead
+    // of gating locals with a foreign function's numbers. see LocalVariableInfo::openPos
+    constexpr uint32_t LINEINFO_FRAME_POS_TAG = 0x80000000u;
 
-    // recover the frame position from a runtime line copy; 0 = not a stamped position
-    // (a null, embedder-crafted, or unstamped line - the locals gate skips or refuses)
-    inline uint32_t lineFramePos ( const LineInfo * li ) {
-        return ( li && li->last_line == LINEINFO_FRAME_POS ) ? li->last_column : 0u;
+    // recover the frame position from a runtime line copy, iff it is stamped AND owned by
+    // the function whose locals are being gated; 0 = unattributable (null, embedder-crafted,
+    // unstamped, or a frameless-carrier handoff) - the locals gate skips or refuses
+    inline uint32_t lineFramePos ( const LineInfo * li, uint32_t spaceHash ) {
+        if ( !li || !(li->last_line & LINEINFO_FRAME_POS_TAG) ) return 0u;
+        return ( (li->last_line & ~LINEINFO_FRAME_POS_TAG) == spaceHash ) ? li->last_column : 0u;
+    }
+
+    // position-space owner id = function index + 1 (0 stays "no space"); indexes are
+    // per-program unique, well under 31 bits, and collision-free by construction
+    inline uint32_t frameSpaceId ( int32_t fnIndex ) {
+        return uint32_t(fnIndex + 1) & ~LINEINFO_FRAME_POS_TAG;
     }
 
     struct LocalVariableInfo : TypeInfo {
@@ -649,6 +661,10 @@ namespace das
         uint32_t                localCount;
         uint32_t                globalCount;
         uint32_t                annotation_count;
+        // position-space owner (see LINEINFO_FRAME_POS_TAG): frameSpaceId of the function
+        // whose numbering gates this frame's locals; a block frame carries its HOST's.
+        // 0 = no position space (builtins, AOT/JIT frames) - every gate check refuses
+        uint32_t                spaceHash;
         FuncInfo() = default;
         FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
                 TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags,
@@ -667,6 +683,7 @@ namespace das
             globalCount = 0;
             annotations = _annotations;
             annotation_count = _annotation_count;
+            spaceHash = 0;
         }
     };
 

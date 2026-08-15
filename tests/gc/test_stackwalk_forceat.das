@@ -20,7 +20,7 @@ def test_stackwalk_forceat(t : T?) {
     t |> run("force_at-stamped generated body's let is live at its park") @(t : T?) {
         var w = new CollectingWalker()
         let r = forced_walker(w)
-        t |> equal(r, length("FORCED_PRECIOUS"))
+        t |> equal(r, length("FORCED_0"))
         t |> success(has_live_local(w, "forced_precious"), "forced_precious must be live in the walk")
         unsafe {
             delete w

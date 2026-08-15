@@ -32,13 +32,13 @@ namespace das {
     // manufactured blocks, one-line scopes, and sibling arms all encode exactly
     class FramePositionStamp : public Visitor {
     public:
-        FramePositionStamp ( das_hash_map<Variable *, pair<uint32_t,uint32_t>> & vfp )
-            : intervals(vfp) {}
+        FramePositionStamp ( das_hash_map<Variable *, pair<uint32_t,uint32_t>> & vfp, uint32_t spaceH )
+            : intervals(vfp), space(LINEINFO_FRAME_POS_TAG | spaceH) {}
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             pos ++;
-            expr->at.last_line = LINEINFO_FRAME_POS;
+            expr->at.last_line = space;
             expr->at.last_column = pos;
         }
         virtual void preVisit ( ExprBlock * block ) override {
@@ -56,6 +56,7 @@ namespace das {
             // point past the init for initialized ones
             intervals[var].first = pos;
             if ( !scopes.empty() ) scopes.back().push_back(var);
+            bodyVars.push_back(var);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * let, const VariablePtr & var, Expression * that ) override {
             intervals[var].first = pos;
@@ -63,16 +64,26 @@ namespace das {
         }
         virtual void preVisitForBody ( ExprFor * expr, Expression * body ) override {
             Visitor::preVisitForBody(expr,body);
-            for ( auto & var : expr->iteratorVariables ) intervals[var].first = pos;
+            for ( auto & var : expr->iteratorVariables ) {
+                intervals[var].first = pos;
+                bodyVars.push_back(var);
+            }
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             for ( auto & var : expr->iteratorVariables ) intervals[var].second = pos;
             return Visitor::visit(expr);
         }
+        virtual void preVisit ( ExprLabel * expr ) override {
+            Visitor::preVisit(expr);
+            sawLabel = true;    // a goto can enter an interval past its open point
+        }
     public:
         das_hash_map<Variable *, pair<uint32_t,uint32_t>> & intervals;
         vector<vector<Variable *>> scopes;
+        vector<Variable *> bodyVars;
+        uint32_t space = 0;
         uint32_t pos = 0;
+        bool sawLabel = false;
     };
 
     void DebugInfoHelper::logMemInfo ( TextWriter & tw ) {
@@ -96,9 +107,14 @@ namespace das {
         }
     }
 
-    void DebugInfoHelper::stampFramePositions ( ExpressionPtr body ) {
-        FramePositionStamp stamp(varFramePos);
+    void DebugInfoHelper::stampFramePositions ( ExpressionPtr body, uint32_t spaceHash ) {
+        FramePositionStamp stamp(varFramePos, spaceHash);
         body->visit(stamp);
+        if ( stamp.sawLabel ) {
+            // a labeled body (generator lowering) admits jumps into intervals - keep every
+            // local conservatively always-live rather than gating on entry order
+            for ( auto v : stamp.bodyVars ) varFramePos[v] = { 0u, ~0u };
+        }
     }
 
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, ExpressionPtr body ) {
@@ -193,10 +209,12 @@ namespace das {
         return eni;
     }
 
-    FuncInfo * DebugInfoHelper::makeFunctionDebugInfo ( const Function & fn ) {
+    FuncInfo * DebugInfoHelper::makeFunctionDebugInfo ( const Function & fn, bool unique ) {
         string mangledName = fn.getMangledName();
-        auto it = fmn2f.find(mangledName);
-        if ( it!=fmn2f.end() ) return it->second;
+        if ( !unique ) {
+            auto it = fmn2f.find(mangledName);
+            if ( it!=fmn2f.end() ) return it->second;
+        }
         FuncInfo * fni = debugInfo->makeNode<FuncInfo>();
         fni->name = debugInfo->allocateCachedName(fn.name);
         if ( fn.builtIn ) {
@@ -225,13 +243,14 @@ namespace das {
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->locals = nullptr;
         fni->localCount = 0;
+        fni->spaceHash = 0;
         fni->annotations = makeAnnotationList(fn.annotations, fni->annotation_count);
         fni->hash = hash_blockz64((uint8_t *)mangledName.c_str());
-        fmn2f[mangledName] = fni;
+        if ( !unique ) fmn2f[mangledName] = fni;
         return fni;
     }
 
-    FuncInfo * DebugInfoHelper::makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at ) {
+    FuncInfo * DebugInfoHelper::makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at, bool unique ) {
         gc_local<Function> fakeFuncPtr(new Function());
         Function & fakeFunc = *fakeFuncPtr;
         fakeFunc.name = "invoke " + blk->describe();
@@ -246,7 +265,7 @@ namespace das {
             argV->type = blk->argTypes[ai];
             fakeFunc.arguments.push_back(argV);
         }
-        return makeFunctionDebugInfo(fakeFunc);
+        return makeFunctionDebugInfo(fakeFunc, unique);
     }
 
     StructInfo * DebugInfoHelper::makeStructureDebugInfo ( const Structure & st ) {

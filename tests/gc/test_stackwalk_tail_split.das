@@ -24,12 +24,14 @@ def scan_then_walk(var w : CollectingWalker?; xs : array<int>; needle : int) : i
 }
 
 // no [inline]: small and loop-free grants the canonicalization pre-pass candidacy on
-// its own, and a plain function's address can be taken for the unspliced-call arm
+// its own, and a plain function's address can be taken for the unspliced-call arm.
+// runtime-built strings throughout the file: a const-foldable single-use let gets
+// legally forwarded past the park by the optimizer, and then there is nothing to walk
 def guard_then_walk(var w : CollectingWalker?; flag : bool) : int {
     if (flag) {
         return 0
     }
-    let precious = "CANON_PRECIOUS"
+    let precious = "CANON_{length(w.frames) + 42}"
     run_walk(w)
     return length(precious)
 }
@@ -39,7 +41,8 @@ def test_stackwalk_tail_split(t : T?) {
     t |> run("tail local after an in-loop return is live at a spliced park") @(t : T?) {
         var w = new CollectingWalker()
         var xs <- [1, 2, 3]
-        let r = scan_then_walk(w, xs, 99)
+        let needle = 96 + length(xs)    // runtime value - the let must survive to the park
+        let r = scan_then_walk(w, xs, needle)
         t |> equal(r, length("TAIL_99"))
         t |> success(has_live_local(w, "tail_local"), "tail_local must be live in the walk")
         unsafe {
@@ -51,8 +54,8 @@ def test_stackwalk_tail_split(t : T?) {
         // a function-pointer call keeps a real frame; the body was still permanently
         // canonicalized by the pre-pass, so the hole lives in the un-spliced function
         let fp = @@guard_then_walk
-        let r = invoke(fp, w, false)
-        t |> equal(r, length("CANON_PRECIOUS"))
+        let r = invoke(fp, w, length(w.frames) > 0)
+        t |> equal(r, length("CANON_42"))
         t |> success(has_frame(w, "guard_then_walk"), "guard_then_walk keeps its frame")
         t |> success(has_live_local(w, "precious"), "precious must be live in the walk")
         unsafe {

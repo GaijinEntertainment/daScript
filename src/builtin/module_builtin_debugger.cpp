@@ -1002,7 +1002,7 @@ namespace debugger {
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at ) {
     #if DAS_ENABLE_STACK_WALK
         char * sp = context.stack.ap();
-        uint32_t framePos = lineFramePos(&at);
+        const LineInfo * handoff = &at;
         while ( sp < context.stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
@@ -1046,6 +1046,7 @@ namespace debugger {
             if ( info && info->locals ) {
                 if ( walker->canWalkVariables() ) {
                     walker->onBeforeVariables();
+                    uint32_t framePos = lineFramePos(handoff, info->spaceHash);
                     for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = framePos > lv->openPos && framePos <= lv->closePos;
@@ -1066,7 +1067,7 @@ namespace debugger {
                     }
                 }
             }
-            framePos = info ? lineFramePos(pp->line) : 0u;
+            handoff = info ? pp->line : nullptr;
             sp += incr;
             if ( sp > context.stack.top() ) {
                 walker->onCorruptStack(pp);

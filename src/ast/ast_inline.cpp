@@ -527,79 +527,29 @@ namespace das {
         };
 
         // stamps spliced material (manufactured temps + the cloned CALLEE subtree) with the
-        // host call-site location: the GC / stackwalk / debugger locals gate compares the
-        // parked line against local visibility ranges, and both must be host-function lines
-        // or the frame's locals silently drop out of the walk. the COLUMN LADDER restores
-        // the ordering protection line order gives user code - only already-initialized
-        // locals pass the gate. `f(a, b)` at 7:3:
-        //   let _inl0_arg_a = <a>    // subtree stamped @7:3, visible from 7:4
-        //   let _inl0_arg_b = <b>    // subtree stamped @7:4, visible from 7:5
-        //   <spliced body>           // stamped @7:5+ - sees both temps
-        // blocks get a one-line-wide range - LineInfo::inside excludes last_line, so a
-        // single-line range would hide every spliced local (infer re-derives let visibility
-        // from the enclosing scope's at); multi-var lets share one column, the joint window
-        // user-code multi-var lets have. (KNOWN RESIDUAL: the counter advances in visit
-        // order, so a let in an EARLIER conditional arm stays gate-visible at parks in a
-        // LATER sibling arm where it never initialized - and sibling scopes REUSE stack
-        // offsets, so the slot may hold an unrelated live value walked as the wrong type.
-        // inside() can't encode same-line column intervals.)
-        // one instance covers a whole site in EXECUTION order (prefix temps, arg temps,
-        // body) so the counter threads through; it runs BEFORE InlineBodyRewriter so
-        // substituted caller expressions keep their own at.
+        // host call-site location - ATTRIBUTION ONLY: stack traces and at-keyed macros read
+        // the splice as the call site. liveness is NOT gated by these ranges anymore - the
+        // GC / stackwalk locals gate runs on frame positions stamped at simulate over the
+        // final tree (see LocalVariableInfo::openPos), which encode manufactured code
+        // exactly. runs BEFORE InlineBodyRewriter so substituted caller expressions keep
+        // their own at.
         class SpliceAtStamp : public Visitor {
         public:
-            // the ladder is CAPPED at the call's own last column: a host let opens its
-            // visibility at its declaration END, so an uncapped ladder could run past it
-            // and gate the host's still-uninitialized slot visible; the cap also keeps a
-            // nested round's ladder (base = an already-stamped point) from re-walking the
-            // outer round's columns
-            SpliceAtStamp ( const LineInfo & callAt ) : base(callAt), col(callAt.column) {
-                cap = callAt.last_column > callAt.column ? callAt.last_column - 1 : callAt.column;
-            }
-            LineInfo pointAt ( uint32_t c ) const {
-                LineInfo p = base;
-                p.column = c;
-                p.last_column = c;
-                p.last_line = p.line;
-                return p;
-            }
-            LineInfo wideAt ( uint32_t c ) const {
-                LineInfo w = pointAt(c);
-                w.last_line = w.line + 1;
-                w.last_column = 0;
-                return w;
-            }
-            uint32_t bump ( uint32_t c ) const { return c < cap ? c + 1 : cap; }
-            LineInfo base;
-            uint32_t col = 0;
-            uint32_t cap = 0;
+            SpliceAtStamp ( const LineInfo & callAt ) : at(callAt) {}
+            LineInfo at;
             bool markGenerated = true;
         protected:
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             virtual void preVisitExpression ( Expression * expr ) override {
                 Visitor::preVisitExpression(expr);
-                expr->at = expr->rtti_isBlock() ? wideAt(col) : pointAt(col);
+                expr->at = at;
                 // a spliced clone is compiler-inserted: the original body is linted at its
                 // definition, and at-keyed macros must not re-analyze the copy (the stamp
                 // makes it look host-authored, defeating their foreign-file heuristics).
                 // temp INITS are exempt - they are caller-authored argument/prefix
                 // expressions merely relocated, and marking them would hide lint findings
-                // on user code; their at still joins the ladder (uninitialized-temp gating)
+                // on user code
                 if ( markGenerated ) expr->generated = true;
-            }
-            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-                Visitor::preVisitLet(let, var, last);
-                let->atInit = pointAt(bump(col));    // visibility opens after the init, which parks at col
-                var->at = pointAt(col);
-            }
-            virtual ExpressionPtr visit ( ExprLet * let ) override {
-                col = bump(col);                     // later statements park past this let's visibility start
-                return Visitor::visit(let);
-            }
-            virtual void preVisit ( ExprFor * expr ) override {
-                Visitor::preVisit(expr);
-                expr->visibility = wideAt(col);     // not re-derived by infer, unlike let visibility
-                for ( auto & var : expr->iteratorVariables ) var->at = pointAt(col);
             }
         };
 
@@ -2616,7 +2566,7 @@ namespace das {
             ExpressionPtr callReplacement = nullptr;
             if ( calleeFn ) {
                 stamp.markGenerated = false;    // caller-authored arg inits, only relocated
-                for ( auto & t : temps ) t->visit(stamp);   // arg temps ladder after the prefix temps
+                for ( auto & t : temps ) t->visit(stamp);   // arg temps read as the call site too
                 stamp.markGenerated = true;
             }
             if ( exprBody ) {
@@ -2644,12 +2594,9 @@ namespace das {
                 ReturnStoreRewrite rsr(in.result ? INLINE_TEMP_PREFIX + to_string(inlineId) + "_res" : string(),
                     INLINE_TEMP_PREFIX + to_string(inlineId) + "_ret");
                 // _res goes FIRST: a no-init decl zero-fills its slot, so the walk reads
-                // zeros until a return-store writes it - no ladder column needed. callee
-                // splices park at/after the call site, so visibility can open there; a
-                // LITERAL's body may park earlier - keep whole-function
+                // zeros until a return-store writes it
                 if ( in.result ) {
                     auto resLet = makeUninitDecl(callLike->at, rsr.resName, in.result);
-                    if ( calleeFn ) resLet->atInit = stamp.pointAt(callLike->at.column);
                     splice.insert(splice.begin(), resLet);
                 }
                 rsr.apply(bodyClone);
@@ -2671,8 +2618,7 @@ namespace das {
                         host = static_cast<ExprBlock *>(spliced);
                     } else {
                         host = new ExprBlock();
-                        // manufactured scope needs the same one-line-wide range spliced blocks get
-                        host->at = calleeFn ? stamp.wideAt(callLike->at.column) : callLike->at;
+                        host->at = callLike->at;
                         host->list.push_back(spliced);
                     }
                     auto scopeWrap = new ExprWith(callLike->at);
@@ -2683,8 +2629,7 @@ namespace das {
                 }
                 if ( !temps.empty() || rsr.flagUsed ) {
                     auto scope = new ExprBlock();
-                    // same one-line-wide range as above - the arg temps live HERE
-                    scope->at = calleeFn ? stamp.wideAt(callLike->at.column) : callLike->at;
+                    scope->at = callLike->at;
                     for ( auto & t : temps ) scope->list.push_back(t);
                     if ( rsr.flagUsed ) {
                         scope->list.push_back(makeTemp(callLike->at, rsr.flagName,
