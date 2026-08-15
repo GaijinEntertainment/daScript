@@ -206,6 +206,12 @@ that a question answered for one backend has an obvious address in the other. Th
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class — "the builder needs the driver module" is never a placement reason. Prefill's
   prefill-only classes are convergence debt, not precedent.
+- **Ledgered kernel-binding asymmetries** — a REVIEW rule firing on one of these is expected, and
+  this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` /
+  `MetalMoeMulMmMx4T`) keep the pre-family compact kargs slots while their base classes bind the
+  family numbers, so no shared bind path may span the two layouts; and the in-engine moe mul_mm
+  A/B race harnesses (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail`
+  rather than a per-class `enc_*` builder.
 - **`dasllama_gpu_tier.das`** — the device-cooperation SPI: hook types, install/unset slots,
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
   resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
