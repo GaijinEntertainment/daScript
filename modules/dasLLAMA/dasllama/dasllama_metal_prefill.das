@@ -1981,6 +1981,10 @@ def private rope_rows_ready(t : Model; s : Session; npos : int64) : bool {
 // existing rows gather into the K/V panels and the causal diagonal shifts by qoff — the gate
 // keeps the argument so future clauses can window it
 def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : MetalPrefillDecline {
+    // these chains encode the causal mask — the span call serves on CPU, head/tail chunks stay here
+    if (s.attn_uniform_end != 0l) {
+        return MetalPrefillDecline.non_causal_span
+    }
     let why = prefill_decline_caps(t, npos)
     if (why != MetalPrefillDecline.none) return why
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)

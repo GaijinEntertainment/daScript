@@ -297,3 +297,25 @@
     the shorter operand where the old indexed form panicked on mismatched lengths;
     current callers pass equal lengths, so the test should pin the equal-length results,
     not the mismatch behavior.
+
+22. **Unexplained tune-sidecar rejection under `--gpu metal` (seen 2026-08-14, vision arc
+    slice K, NOT investigated).** A `--gpu metal` server run refused
+    `utils/dasllama-server/main.tune.json`, logged `scope 'dasllama' is untuned on this box`,
+    snapshotted the sidecar to `.tune.json.bak` and re-tuned from scratch (~20 min) — while
+    the CPU-tuned `ask.tune.json` was accepted for the same scope moments earlier via
+    `DAS_TUNE_MANIFEST`. Two readings, neither tested: (a) correct behavior with a wrong
+    MESSAGE (a metal-armed run demands a different kernel family set, so the CPU sidecar
+    genuinely does not cover the scope); (b) a real identity/staleness bug, in which case
+    every metal serving run on a tuned box silently re-tunes and measures off a fresh,
+    unvalidated sidecar. Done = dump the demanded key set on both arms, diff against each
+    sidecar's coverage, and either fix the message or fix the identity. Blocks Metal-arm
+    measurement (`vision_plan.md` defers the Metal leg on it).
+
+23. **Uniform-bound non-causal prefill kernels for Metal and Vulkan.** The image span
+    currently serves on the CPU loop by decline: `attn_gpu_prefill_ready`,
+    `prefill_decline` (`MetalPrefillDecline.non_causal_span`) and `vulkan_resident_prefill`
+    all refuse `s.attn_uniform_end != 0`, and metal-blob models refuse a vision arm outright
+    at create (no CPU weights to fall back on). Done = the GPU prefill chains take the
+    uniform bound, the three declines and the blob refusals are deleted, and the kernel
+    coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail —
+    pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).

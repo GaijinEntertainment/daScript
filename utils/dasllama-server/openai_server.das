@@ -325,14 +325,21 @@ def set_default_max_tokens(n : int64) {
 }
 
 //! Give slot `name` a vision arm: load the gemma4uv mmproj at `path` so its chat route accepts
-//! `image_url` content parts. Call after ``add_model``, before ``run_server``. A mismatched
-//! decoder/mmproj pair or a family with no image markers PANICS here, not on the first request.
+//! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``run_server``. A
+//! mismatched decoder/mmproj pair, a family with no image markers, a metal-blob decoder (the
+//! image span prefills on the CPU), or a second call PANICS here, not on the first request.
 def set_model_vision(name : string; path : string) {
     let mi = slot_index(name)
     if (mi < 0) {
         panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
     }
-    var emb <- load_gemma4uv_embedder(path)
+    if (g_slots[mi].vision.proj_dim != 0l) {
+        panic("dasllama-server: slot '{name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - set_model_vision is once per slot")
+    }
+    if (g_slots[mi].model.metal_blob) {
+        panic("dasllama-server: '{name}' is a metal-blob model - the image span prefills on the CPU, which a blob model cannot do; serve it without the metal blob to take a vision arm")
+    }
+    var inscope emb <- load_gemma4uv_embedder(path)
     if (emb.proj_dim != g_slots[mi].model.config.dim) {
         panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
     }

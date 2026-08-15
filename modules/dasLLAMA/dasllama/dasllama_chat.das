@@ -658,10 +658,13 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
 
 //! Start a VISION-CAPABLE conversation: takes ownership of a gemma4uv embedder (moved in) so
 //! ``add_user_image`` can splice image soft tokens into its turns. A mismatched decoder/mmproj
-//! pair, or a family with no image markers, panics here — not at respond time.
+//! pair, a family with no image markers, or a metal-blob decoder panics here — not at respond time.
 def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
     if (embedder.proj_dim != model.config.dim) {
         panic("dasLLAMA chat: mmproj projects to {embedder.proj_dim} but the decoder is {model.config.dim}-wide - mismatched pair")
+    }
+    if (model.metal_blob) {
+        panic("dasLLAMA chat: the image span prefills on the CPU and a metal-blob model has no CPU weights - load the decoder without the metal blob to use vision")
     }
     var c <- create_chat_(model, system, max_new, kv_dtype)
     if (empty(c.tmpl.image_pre.parts)) {

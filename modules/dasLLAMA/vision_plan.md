@@ -92,8 +92,11 @@ Naming: `dasllama_vision*` — `dasllama_image.das` is the dlim model-image file
    Template media slot is `<__media__>`, media-first before the user text. NOTE:
    `tokenizer.ggml.suppress_tokens = [258883, 258882]` — llama.cpp never SAMPLES the end
    markers; check dasLLAMA's sampler honors this before tier-2 (slice E).
-6. **Eval**: image rows via `eval_embd_` WITH the non-causal span flag — span queries attend
-   `[0, span_end)` (uniform bound), text stays causal. Decoder positions sequential — no
+6. **Eval**: image rows via `eval_embd_` WITH the non-causal span flag — the causal UPPER
+   bound lifts to the uniform bound `span_end`; the sliding-window LOWER bound stays, so a
+   SWA-layer span query attends `[sliding-window floor, span_end)`. That matches llama.cpp's
+   `is_masked_swa` (it masks distant past only; a future key is never masked), so do not
+   "fix" the kernels to `[0, span_end)`. Text stays causal. Decoder positions sequential — no
    mrope, that's the qwen family. The DECODER does all visual reasoning — there is no ViT;
    this is why the non-causal span is load-bearing for gemma4uv.
 
@@ -440,21 +443,11 @@ oracle's arithmetic, not only about the port.
   CONTEXT-GLOBALLY around a media chunk (`llama_set_causal_attn(false)`), which cannot be
   right for a mixed batch — so upstream serializes media prefill too, and this rail would put
   dasLLAMA ahead of the reference rather than level with it.
-- **Metal/Vulkan**: uniform-bound non-causal prefill kernels (then delete the readiness
-  guard); Metal embedder is likely pointless (2 GEMMs, ~245 ms CPU).
-  **Carry this into that leg — an unexplained sidecar rejection under `--gpu metal` (seen
-  2026-08-14, slice K, NOT investigated).** A `--gpu metal` server run refused
-  `utils/dasllama-server/main.tune.json`, logged `scope 'dasllama' is untuned on this box`,
-  snapshotted the sidecar to `.tune.json.bak` and re-tuned from scratch (~20 min); the CPU-tuned
-  `ask.tune.json` was accepted for the same scope moments earlier via `DAS_TUNE_MANIFEST`. Two
-  readings, and NEITHER was tested: (a) correct — a metal-armed run demands a different kernel
-  family set, so the CPU sidecar genuinely does not cover the scope, and only the MESSAGE is
-  wrong (it says untuned when it means "tuned for a different arming"); (b) a real
-  identity/staleness bug, in which case every metal serving run on a tuned box silently re-tunes.
-  What would settle it: dump the demanded key set on both arms and diff it against each
-  sidecar's coverage. Load-bearing for the Metal leg specifically, because that leg will be
-  measured under `--gpu metal` — and a run that quietly re-tuned is a run whose numbers came
-  off a fresh, unvalidated sidecar. **Do not measure the Metal arm until this is understood.**
+- **Metal/Vulkan**: uniform-bound non-causal prefill kernels — `followup_general.md` #23
+  (the span serves on the CPU by decline until then; blob models refuse a vision arm at
+  create). Metal embedder is likely pointless (2 GEMMs, ~245 ms CPU). The Metal leg is also
+  blocked on `followup_general.md` #22 (the unexplained `--gpu metal` sidecar rejection) —
+  **do not measure the Metal arm until #22 is understood.**
 - Multi-image turns, remote URL fetch, video.
 - (Dead claim from the original plan, for the record: nothing in gemma-4 uses MobileNet —
   that's gemma3n's `gemma3nv`.)
