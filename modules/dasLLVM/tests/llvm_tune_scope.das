@@ -272,12 +272,18 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(l15 |> has("no sidecar at"))
     t |> success(!(l15 |> has("FAKE TUNER")))
     t |> success(l15 |> has("RESULT 5"))
+    // same warning from the DEFAULT-policy seat (no [tune_policy] declared)
+    var l15b : array<string>
+    t |> equal(spawn_child("{mfEnv}\"{bin}\" \"{autoClient}\"", l15b), 0)
+    t |> success(l15b |> has("WARNING DAS_TUNE_MANIFEST"))
+    t |> success(!(l15b |> has("FAKE TUNER")))
 
     remove(verSidecar)
     delete l14
     delete l14b
     delete l14c
     delete l15
+    delete l15b
 
     remove(sidecar)
     remove(autoSidecar)
