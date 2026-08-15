@@ -248,17 +248,11 @@
    (verified in emitted IR), the double-count chore resolved by construction, and the census +
    report surface preserved.
 
-17. **Vision stills — when, not if (Boris 2026-08-05).** Image-in/text-out on the existing
-   mmproj carriers (the `v.*` towers the audio work already ships past unread). Explicitly
-   SEQUENCED: after the vulkan side comes together AND dasllama.io serves sidecars + hosts
-   ladders — not before. Scope expectation from the audio comparison: first family ≈ a
-   gemma4a-sized arc (vanilla ViT / MobileNet blocks, no DSP frontend, no realtime bar; the
-   soft-token splice, q8 tower rail, .dlim lane, and mtmd oracle harness all transfer;
-   qwen3vl's M-RoPE + deepstack are pre-registered and merely activate). One-time plumbing:
-   image decode (dasStbImage) + per-family resize/patchify conventions. VIDEO stays out:
-   not reasonable without GPU — "maybe hybrid mode, maybe one day"; its real dependency is
-   the deep-prefill context wall (50k-token splices), not new kernels.
-
+17. **Vision stills — DELIVERED for the first family (the vision arc, 2026-08-14).** gemma-4
+    dense via `gemma4uv` shipped end to end: preprocessing, non-causal span, chat/scheduler/
+    server splice, the `.dlim` rail, `ask --image`, and the `lcpp_bench --image` cell. What
+    remains of this item folded into #23 (uniform-bound GPU prefill kernels) and the v2 ledger
+    in `vision_plan.md` (the E-series `gemma4v` ViT, multi-image, remote fetch, video).
 18. **Tutorials + documentation resync sweep (Boris 2026-08-05).** The ASR/audio tutorials and
    module documentation have desynced from the API as the q8/KV/lever work landed — a full
    pass over `tutorials/` (`.das` and `.rst`) and the dasLLAMA doc pages against the current

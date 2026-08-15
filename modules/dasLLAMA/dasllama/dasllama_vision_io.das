@@ -8,11 +8,9 @@ require daslib/safe_addr
 require dasllama/dasllama_vision
 
 //! Image decode to RGB8 `VisionImage` — the only dasLLAMA file that talks to stbimage.
-//! Mirrors `dasllama_audio_io`: the engine facade takes decoded pixels, not a path, so
-//! image-file IO stays out of the core module; apps require this optional companion when
-//! they have a file or a byte blob (the server's data-URI arm). Both entry points return a
-//! zero-size image when the decode fails or when `max_pixels` (0 = uncapped) is exceeded —
-//! the cap reads the header only, so an oversized file never reaches the decode allocation.
+//! Takes a path or a byte blob; the engine facade takes pixels, not paths (`dasllama_audio_io`'s shape).
+//! Zero-size image on decode failure, or when `max_pixels` (0 = uncapped) is exceeded.
+//! The cap reads the header only — an oversized file never reaches the decode allocation.
 //! Decode parity with the mtmd oracle is free — it vendors stb_image too.
 
 def private image_from_stb(pixels; x, y : int) : VisionImage {
@@ -42,6 +40,21 @@ def public load_image_rgb(path : string; max_pixels : int64 = 0l) : VisionImage 
     img <- image_from_stb(pixels, x, y)
     stbi_image_free(pixels)
     return <- img
+}
+
+//! Header-only probe: the encoded image's dimensions without decoding it, `int2(0, 0)` when the
+//! header is unreadable. Lets a caller tell an over-cap image from a corrupt one after a capped
+//! `load_image_rgb` returns zero-size.
+def public probe_image_size(bytes : array<uint8>) : int2 {
+    if (empty(bytes)) {
+        return int2(0, 0)
+    }
+    var x, y, comp : int
+    if (stbi_info_from_memory(unsafe(addr(bytes[0])), length(bytes),
+            safe_addr(x), safe_addr(y), safe_addr(comp)) == 0) {
+        return int2(0, 0)
+    }
+    return int2(x, y)
 }
 
 def public load_image_rgb(bytes : array<uint8>; max_pixels : int64 = 0l) : VisionImage {

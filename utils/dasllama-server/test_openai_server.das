@@ -74,9 +74,9 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
+            // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; the metal
+            // arm keeps it ARMED — there it is the silent-GPU-fallback detector
             if (mode == MetalMode.off) {
-                // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; the metal
-                // arm keeps it ARMED — there it is the silent-GPU-fallback detector
                 allow_cpu_prefill()
             }
             var m <- load_model(model_path, QuantMode.q8)
@@ -633,7 +633,7 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(MetalMode.off)
-            allow_cpu_prefill()   // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; this test serves on the CPU
+            allow_cpu_prefill()   // multi-slot routing test: both slots serve on the CPU arm
             var ma <- load_model(path_a, QuantMode.q8)
             add_model(ma, "tiny")
             var mb <- load_model(path_b, QuantMode.q8)

@@ -182,8 +182,8 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     let was_gpu = was_resident || moe_gpu_marks_armed(slot.gpu_marks.marks)
     slot.backend_effective = was_resident ? "gpu:resident" : (was_gpu ? "gpu:rails" : "cpu")
     var probe <- create_chat_renderer(slot.model, "", 1l)
-    // the renderer arms thinking only when the template default AND the vocab markers agree -
-    // reporting the raw default would show the page a checked box for a family that cannot think
+    // reporting the raw template default would show the page a checked box for a family whose
+    // vocab cannot think
     slot.think_default = probe.enable_thinking && probe.think_vocab
     delete probe
     g_slots |> emplace(slot)
@@ -322,9 +322,8 @@ def set_default_max_tokens(n : int64) {
 
 //! Give slot `name` a vision arm: load the gemma4uv mmproj at `path` so its chat route accepts
 //! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``init_server`` /
-//! ``run_server`` (the vision worker snapshots the arms at init). A
-//! mismatched decoder/mmproj pair, a family with no image markers, a metal-blob decoder (the
-//! image span prefills on the CPU), or a second call PANICS here, not on the first request.
+//! ``run_server`` (the vision worker snapshots the arms at init). Anything wrong with the pair
+//! PANICS here, not on the first request.
 def set_model_vision(name : string; path : string) {
     if (g_server_started) {
         panic("dasllama-server: set_model_vision after init_server - the vision worker snapshots the arms at init; arm the slot before starting")
@@ -1123,6 +1122,11 @@ def private bad_request(srv : WebSocketServer; var writer : HttpResponseWriter?;
             error_body(msg, "invalid_request_error"))
 }
 
+def private service_unavailable(srv : WebSocketServer; var writer : HttpResponseWriter?; msg : string) {
+    respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
+            error_body(msg, "server_error"))
+}
+
 def private reject_deferred_while_draining(
                                            srv : WebSocketServer;
                                            var writer : HttpResponseWriter?
@@ -1130,8 +1134,7 @@ def private reject_deferred_while_draining(
     if (!g_shutdown_requested) {
         return false
     }
-    respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-            error_body("the server is draining for shutdown — retry shortly", "server_error"))
+    service_unavailable(srv, writer, "the server is draining for shutdown — retry shortly")
     return true
 }
 
@@ -1430,7 +1433,7 @@ def private message_text(mv : JsonValue?; route : string) : string {
 }
 
 // image file-byte and pixel ceilings: past either the request is a 400, never an allocation.
-// 32 MB of file covers any sane photo; 64 MP is ~4x a modern phone sensor.
+// 32 MB of file covers any sane photo; 67 MP (64 * 2^20) is ~4x a modern phone sensor.
 let private IMAGE_MAX_FILE_BYTES = 32 * 1024 * 1024
 let private IMAGE_MAX_PIXELS = 64l * 1024l * 1024l
 
@@ -1448,8 +1451,9 @@ def private decode_data_uri_bytes(url : string; var bytes : array<uint8>; var wh
         return false
     }
     let payload_at = marker + length(";base64,")
-    if (length(url) - payload_at > (IMAGE_MAX_FILE_BYTES / 3) * 4 + 8) {
-        why = "image payload exceeds the {IMAGE_MAX_FILE_BYTES / (1024 * 1024)} MB cap"
+    let max_encoded = (IMAGE_MAX_FILE_BYTES / 3) * 4 + 8   // base64 expansion of the cap, plus padding slack (wire bytes, pre-strip)
+    if (length(url) - payload_at > max_encoded) {
+        why = "image payload exceeds the {IMAGE_MAX_FILE_BYTES / (1024 * 1024)} MB cap (wrapped base64 counts its newlines)"
         return false
     }
     var raw : array<uint8>
@@ -1474,7 +1478,13 @@ def private decode_data_uri_bytes(url : string; var bytes : array<uint8>; var wh
 def private decode_image_bytes(bytes : array<uint8>; var why : string&) : VisionImage {
     var img <- load_image_rgb(bytes, IMAGE_MAX_PIXELS)
     if (img.width == 0) {
-        why = "could not decode the image ({length(bytes)} bytes) — png, jpeg, bmp, gif, tga and psd up to {IMAGE_MAX_PIXELS / 1000000l} MP are supported"
+        // name the right mistake: a valid-but-huge image is not a corrupt one
+        let dims = probe_image_size(bytes)
+        if (int64(dims.x) * int64(dims.y) > IMAGE_MAX_PIXELS) {
+            why = "image is {dims.x}x{dims.y} ({int64(dims.x) * int64(dims.y) / 1000000l} MP), over the {IMAGE_MAX_PIXELS / 1000000l} MP cap"
+        } else {
+            why = "could not decode the image ({length(bytes)} bytes) — png, jpeg, bmp, gif, tga and psd are supported"
+        }
     }
     return <- img
 }
@@ -1642,7 +1652,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let created = created_ts()
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
                            media_at = media_at, n_media = n_media,
-                           media_non_causal = n_media > 0l)   // rows here are always IMAGE rows (gemma vision, non-causal); audio rows would be causal - derive per modality when audio joins this route
+                           media_non_causal = n_media > 0l)   // image rows only on this route: the gemma image span is non-causal
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.close_toks <- close_toks
@@ -1650,8 +1660,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
-        respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-                error_body("the server is at capacity ({cur_sched().max_queue} requests queued) — retry shortly", "server_error"))
+        service_unavailable(srv, writer, "the server is at capacity ({cur_sched().max_queue} requests queued) — retry shortly")
         return
     }
     g_slots[g_cur].last_used = ref_time_ticks()
@@ -1856,8 +1865,8 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
         for (i in range(n_msgs)) {
             var here : array<string>
             message_parts((msgs_v.value as _array)[i], "/v1/chat/completions", here)
-            let takes = i == n_msgs - 1 && ((msgs_v.value as _array)[i]?["role"] ?? "") == "user"
-            if (!empty(here) && !takes) {
+            let is_final_user = i == n_msgs - 1 && ((msgs_v.value as _array)[i]?["role"] ?? "") == "user"
+            if (!empty(here) && !is_final_user) {
                 to_log(LOG_WARNING, "/v1/chat/completions: dropping {length(here)} image(s) on message {i} — the image is read from the FINAL user message only\n")
             } elif (!empty(here)) {
                 images |> push_from(here)
@@ -1874,13 +1883,11 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
                 return
             }
             if (!g_vision_armed || g_vision_ready < 1) {
-                respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-                        error_body("the vision worker is not ready", "server_error"))
+                service_unavailable(srv, writer, "the vision worker is not ready")
                 return
             }
             if (length(g_vision_wires) >= VISION_QUEUE_LIMIT) {
-                respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-                        error_body("the vision queue is at capacity ({VISION_QUEUE_LIMIT}) — retry shortly", "server_error"))
+                service_unavailable(srv, writer, "the vision queue is at capacity ({VISION_QUEUE_LIMIT}) — retry shortly")
                 return
             }
             var file_bytes : array<uint8>
@@ -3078,13 +3085,11 @@ def private queue_transcription(
         return
     }
     if (!g_has_asr || g_asr_ready < g_asr_worker_count) {
-        respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-                error_body("ASR workers are not ready", "server_error"))
+        service_unavailable(srv, writer, "ASR workers are not ready")
         return
     }
     if (g_asr_pending >= ASR_QUEUE_LIMIT) {
-        respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
-                error_body("the ASR queue is at capacity ({ASR_QUEUE_LIMIT}) — retry shortly", "server_error"))
+        service_unavailable(srv, writer, "the ASR queue is at capacity ({ASR_QUEUE_LIMIT}) — retry shortly")
         return
     }
     var fname = ""
@@ -3217,8 +3222,7 @@ def private stop_asr_worker_threads() {
 
 // ===== async vision encode (the ASR worker pattern: own context, own embedder) =====
 // The decode + letterbox + embedder GEMMs run on ONE worker thread, so an image request never
-// stalls the tick loop's decode of every live stream. The request parks (writer + parsed json)
-// at the encode boundary; drain_vision_events resumes it at handle_chat_tail with the rows.
+// stalls the tick loop's decode of every live stream.
 
 struct private VisionJob {
     id : int64
@@ -3228,9 +3232,14 @@ struct private VisionJob {
     stop : bool
 }
 
+enum private VisionEventKind {
+    completed   // one job's result (ok + why say how it went); zero value — the channel pops zeroed clones
+    ready       // the worker loaded its embedders
+    stopped     // the worker exited
+}
+
 struct private VisionEvent {
-    ready : bool
-    bye : bool
+    kind : VisionEventKind
     id : int64
     ok : bool
     why : string
@@ -3255,12 +3264,12 @@ var private g_vision_wires : table<int64; VisionWire>
 var private g_vision_ready = 0
 var private g_vision_armed = false
 
-def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var events : Channel?&) {
+def private vision_worker_main(slot_path_lines : string; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_vision"
     set_jobque_thread_team_mode(false)
     var embs : table<int; Gemma4uvEmbedder>
     var states : table<int; Gemma4uvState>
-    for (line in split(arms_spec, "\n")) {
+    for (line in split(slot_path_lines, "\n")) {
         continue if (empty(line))
         let sep = find(line, "\t")
         let slot = to_int(slice(line, 0, sep))
@@ -3275,7 +3284,7 @@ def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var eve
             states |> erase(slot)
         }
     }
-    var hello = VisionEvent(ready = true)
+    var hello = VisionEvent(kind = VisionEventKind.ready)
     events |> push_clone(hello)
     delete hello
     var stopping = false
@@ -3320,7 +3329,7 @@ def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var eve
         delete embs
         delete states
     }
-    var farewell = VisionEvent(bye = true)
+    var farewell = VisionEvent(kind = VisionEventKind.stopped)
     events |> push_clone(farewell)
     delete farewell
     jobs |> release       // the captured channel refs, or the thread teardown panics
@@ -3341,7 +3350,7 @@ def private start_vision_worker() {
         return
     }
     g_vision_armed = true
-    let arms_spec = join(arms, "\n")
+    let arms_spec = join(arms, "\n")   // "<slot index>\t<mmproj path>" per line
     var jobs_capture = g_vision_jobs
     var events_capture = g_vision_events
     to_log(LOG_INFO, "dasllama-server: starting the asynchronous vision encode worker\n")
@@ -3350,7 +3359,7 @@ def private start_vision_worker() {
     }
     while (g_vision_ready < 1) {
         g_vision_events |> pop_with_timeout_clone(1000) $(event : VisionEvent#) {
-            if (event.ready) {
+            if (event.kind == VisionEventKind.ready) {
                 g_vision_ready++
                 to_log(LOG_INFO, "dasllama-server: vision encode worker ready\n")
             }
@@ -3368,9 +3377,9 @@ def private stop_vision_worker() {
     var stopped = false
     while (!stopped) {
         g_vision_events |> pop_with_timeout_clone(1000) $(event : VisionEvent#) {
-            if (event.bye) {
+            if (event.kind == VisionEventKind.stopped) {
                 stopped = true
-            } elif (!event.ready) {
+            } elif (event.kind == VisionEventKind.completed) {
                 to_log(LOG_WARNING, "[req {event.id}] vision result discarded during teardown\n")
             }
         }
@@ -3383,7 +3392,7 @@ def private drain_vision_events(srv : WebSocketServer) {
     var draining = true
     while (draining) {
         draining = g_vision_events |> try_pop_clone() $(event : VisionEvent#) {
-            return if (event.ready || event.bye)
+            return if (event.kind != VisionEventKind.completed)
             var ev : VisionEvent
             ev := event
             defer() { delete ev }

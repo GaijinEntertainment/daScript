@@ -302,7 +302,7 @@ def private parts_vocab_ok(m : Model; parts : array<ChatPart>) : bool {
     return true
 }
 
-def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool => parts_vocab_ok(m, tmpl.think_gate.parts)
+def private gate_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => parts_vocab_ok(m, tmpl.think_gate.parts)
 
 //! True when every image span marker resolves in the vocab — probe it at create (the way
 //! `create_chat(model, embedder)` does), so a stripped checkpoint fails there instead of
@@ -617,7 +617,7 @@ def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 =
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
     c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
     c.think_vocab = think_vocab_ok(model, c.tmpl)
-    c.gate_ok = gate_specials_ok(model, c.tmpl)
+    c.gate_ok = gate_vocab_ok(model, c.tmpl)
     if (!tool_vocab_ok(model, c.tmpl)) {
         c.tmpl.tool_mode = ToolMode.none   // missing control specials: the honest declaration is none
     }

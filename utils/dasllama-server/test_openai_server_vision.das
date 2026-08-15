@@ -34,7 +34,7 @@ let CATS_ROWS = 130
 def private with_vision_server(port : int; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
-            allow_cpu_prefill()   // the Metal-build CPU-prefill guard panics on an undeclared CPU prefill; this test serves on the CPU
+            allow_cpu_prefill()   // the image span prefills on the CPU arm
             var m <- load_model(DEC_PATH, QuantMode.q8)
             set_model(m, "test-vlm")
             set_model_vision("test-vlm", MM_PATH)
@@ -75,6 +75,24 @@ def private cats_data_uri() : string {
         }
     }
     return empty(bytes) ? "" : "data:image/jpeg;base64,{base64_encode(bytes)}"
+}
+
+// a valid 54-byte BMP header (BITMAPINFOHEADER, 24bpp) declaring w x h, with NO pixel data —
+// header probes answer without any pixels (test_vision.das builds the same stub)
+def private bmp_header_stub(w, h : int) : array<uint8> {
+    var bytes : array<uint8>
+    bytes |> resize(54)
+    bytes[0] = uint8('B')
+    bytes[1] = uint8('M')
+    bytes[10] = uint8(54)         // pixel-data offset
+    bytes[14] = uint8(40)         // BITMAPINFOHEADER size
+    for (i in range(4)) {
+        bytes[18 + i] = uint8((w >> (i * 8)) & 0xFF)
+        bytes[22 + i] = uint8((h >> (i * 8)) & 0xFF)
+    }
+    bytes[26] = uint8(1)          // planes
+    bytes[28] = uint8(24)         // bits per pixel
+    return <- bytes
 }
 
 [test]
@@ -159,6 +177,15 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,@@@@\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "not valid base64") >= 0, "the 400 names the bad payload")
+            }
+            // an over-cap image names its size, not a decode failure: a 54-byte BMP header
+            // declaring 16384x16384 (268 MP) probes as huge without carrying any pixels
+            var inscope huge_stub <- bmp_header_stub(16384, 16384)
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/bmp;base64,{base64_encode(huge_stub)}\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "over the") >= 0 && find(string(resp.body), "MP cap") >= 0,
+                             "the 400 names the pixel cap, with the declared size")
             }
             // an image on an EARLIER message drops with a warning; the request still serves as text
             var early = "\{\"messages\":[\{\"role\":\"user\",\"content\":["

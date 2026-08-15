@@ -252,7 +252,7 @@ def private uv_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var 
     }
 }
 
-//! Load the eleven-tensor gemma4uv embedder, image-backed: a prepared `.dlim` maps and every plane
+//! Load the gemma4uv embedder, image-backed: a prepared `.dlim` maps and every plane
 //! borrows it, so there is no allocation and no processing at load; missing or stale, one is minted
 //! from the source mmproj first. Panics on any other projector (the E-series `gemma4v` is a v2 leg).
 def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {

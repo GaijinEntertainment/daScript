@@ -6,7 +6,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 //
 //   bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8]
 //                                                       [--kv-dtype f16] [--asr <asr.bin>] [--mmproj <mmproj.gguf>]
-//                                                       [--config server.toml] [--tune]
+//                                                       [--image-mmproj <mmproj.gguf>] [--config server.toml] [--tune]
 //
 // --config points at a TOML file whose keys mirror the long flag names (model = "...", port = 8080,
 // kv_dtype = "tq4", ...); explicit CLI flags override it. A config carrying `authoritative = true`
@@ -818,6 +818,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         }
         roster |> push(e)
     }
+    delete g_models
     g_models <- roster
     if (empty(g_models)) {
         print("error: no loadable model - every roster path failed its file check\n")

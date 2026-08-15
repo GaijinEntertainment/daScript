@@ -56,7 +56,7 @@ struct PendingReq {
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
-    media_embd : array<float>                    // n_media * model.config.dim soft-token rows
+    media_embd : array<float>               // n_media * model.config.dim soft-token rows
     n_media : int64
     media_at : int64                        // prompt index the rows splice at (0 <= media_at <= |prompt|)
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
@@ -72,7 +72,7 @@ struct Stream {
     close_toks : array<int64>
     stop_ids : array<int64>
     n_prefilled : int64                     // prompt tokens evaled so far
-    media_embd : array<float>                    // the splice's soft-token rows (see PendingReq)
+    media_embd : array<float>               // the splice's soft-token rows (see PendingReq)
     n_media : int64
     media_at : int64
     media_non_causal : bool

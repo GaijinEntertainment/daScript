@@ -143,7 +143,9 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
   content hash in `files`, like the weights and the mmproj.
 - CPU by design: every GPU prefill arm — the per-layer rail (`attn_gpu_prefill_ready`), the
   Metal whole-stack override (`MetalPrefillDecline.non_causal_span`) and the Vulkan resident
-  override — declines a non-causal span, and the CPU-prefill tripwire exempts the span call.
+  override — declines a non-causal span, and the CPU-prefill tripwire exempts the SPAN call
+  only: the head/tail text slices of an image turn still need declared CPU intent
+  (`allow_cpu_prefill()`), which every in-tree vision caller carries.
   The Metal arm gets its cell when GPU multimodal prefill is the work (`followup_general.md` #23).
 - The embedder ALONE is a kernel question, not a board row: price it in the kernel A/B lab, not here.
 

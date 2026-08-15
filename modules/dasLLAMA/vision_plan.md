@@ -11,7 +11,8 @@ projector decodes causally, so no such flag exists in the tree yet).
 
 **Slice-A recon corrected the family map** (the plan's original premise had the variants
 inverted): gemma-4 has TWO vision projectors. The dense 12B/26B models use **`gemma4uv`**
-("unified") — an 11-tensor, 52M-param linear EMBEDDER with no attention, no rope, no clamps:
+("unified") — a ten-tensor-read, 52M-param linear EMBEDDER (the file carries 11; the audio
+projection never loads) with no attention, no rope, no clamps:
 the decoder itself does the visual processing through the non-causal span, which is why that
 flag exists. The E-series uses **`gemma4v`** — a full 16-block ViT tower (the E2B mmproj on
 disk carries it, alongside the gemma4a audio conformer the audio arc already runs; it is NOT
@@ -64,6 +65,10 @@ Naming: `dasllama_vision*` — `dasllama_image.das` is the dlim model-image file
    patch: effective `patch_size = 16 × 3 = 48`, `n_merge = 1`, so `align = 48` and
    N = (w/48)×(h/48). Oracle-verified: 640×640→624×624 (169 tok), 640×480→624×480 (130
    tok), 800×480→816×480, 3000×2000→960×624, 100×100→336×336.
+   **Deliberate divergence from mtmd:** dasLLAMA clamps the long side until N ≤ max_tokens —
+   mtmd's per-side align floor can defeat the area constraint at extreme aspect ratios
+   (300000×48 wants 1322 columns against the 1120-entry pos table). No oracle shape changes
+   (probe-verified); the clamp is max-wins, so a narrow user min/max band can undershoot min.
 2. **Letterbox resize** (`img_tool::resize`, PAD_CEIL default, pad color BLACK — a slice-A
    discovery, the plan originally assumed per-side stretch): content scale =
    min(tw/sw, th/sh) as float; content size = min(ceil(side×scale), target) per side;
@@ -74,7 +79,7 @@ Naming: `dasllama_vision*` — `dasllama_image.das` is the dlim model-image file
    936/960).
 3. **Normalize**: u8/255 exactly — `image_mean = 0`, `image_std = 1` (identity, verified),
    NO ×2−1 anywhere in the uv path (gray 128 → 0.501960814 in the dump).
-4. **Embedder** (the whole "tower" — 11 tensors, 52M, no attention/rope/clamps):
+4. **Embedder** (the whole "tower" — ten tensors read, 52M, no attention/rope/clamps):
    im2col 48×48 stride 48 → rows of 6912 (=48×48×3, interleaved RGB row-major) →
    LayerNorm(**eps 1e-5 HARDCODED** — pytorch default, NOT the meta's 1e-6) with
    `v.patch_norm.1` w+b → linear `v.patch_embd` 6912→3840 **+ bias** →
@@ -124,10 +129,10 @@ Naming: `dasllama_vision*` — `dasllama_image.das` is the dlim model-image file
   `test_gemma4uv.das` (tier-1/2, DASLLAMA_MODELS_DIR-gated skip-as-PASS), tier-3 caption
   checks alongside.
 
-## Review contract — CODEREVIEW.md entries land in the same commit as what they govern
+## Review contract — REVIEW.md entries land in the same commit as what they govern
 
 Not end-loaded into the docs slice: each slice that creates a file, an oracle convention, or
-an output rule lands its `CODEREVIEW.md` entry in the SAME commit, written to the checklist's
+an output rule lands its `REVIEW.md` entry in the SAME commit, written to the checklist's
 opening contract (diff-checkable, one short paragraph, no numbers, no history) and subject to
 the per-PR checklist audit like everything else. Expected entries:
 
@@ -183,11 +188,11 @@ invariant — a transposed patch grid is only visible per-token).
 - **A. Oracle rig** (DONE 2026-08-14): mmproj fetched + pinned; sibling check resolved the
   inverted family map (this plan corrected in place); local llama.cpp debug patch; 16
   reference dumps minted via `mint.sh`; meta facts + token ids + stream shape pinned above;
-  oracle rules into CODEREVIEW.md.
+  oracle rules into REVIEW.md.
 - **B. Vision rail**: VisionImage + geometry + letterbox (bilinear + center-pad-black) +
-  normalize + tier-0 tests; placement entries into CODEREVIEW.md.
-- **C. Embedder**: mmproj load + f32 forward (the 11-tensor gemma4uv graph) → tier-1
-  parity; embedder placement + output rules into CODEREVIEW.md.
+  normalize + tier-0 tests; placement entries into REVIEW.md.
+- **C. Embedder**: mmproj load + f32 forward (the ten-tensor gemma4uv graph) → tier-1
+  parity; embedder placement + output rules into REVIEW.md.
 - **D. Non-causal**: flag + CPU arm + guard; toy-config unit test proving span output
   differs from causal and matches a reference computed in-test (branch-test rule).
 - **E. Splice**: chat arm + eval → tier-2 parity; `ask.das --image`; tier-3 captions.
@@ -211,7 +216,8 @@ invariant — a transposed patch grid is only visible per-token).
   `render_turn_image_` (`render_turn_`'s two-span twin) and `encode_image_` (geometry+letterbox+
   normalize+encode, which `add_user_image_` now also rides). The server keeps one embedder per
   slot (`--image-mmproj`, or `image_mmproj` per `[[models]]` entry) and encodes at parse time.
-  v1 reads the image on the LAST user message only; the page compensates by keeping an attached
+  the image is read from the FINAL message, which must be a user message (a trailing tool or
+  assistant turn drops it); the page compensates by keeping an attached
   image sticky across turns, which is also why follow-up questions work. Measured over HTTP on the
   M1 Max: 640x480 -> 130 soft tokens in 62 ms, 158 positions prefilled in 7.9 s, 14 t/s decode -
   the same shape slice G measured through `ask.das`, so the route costs nothing over the CLI.
@@ -281,7 +287,7 @@ invariant — a transposed patch grid is only visible per-token).
   image timing (ttft, prefill, decode; CPU and Metal arms) becomes a cell in the documented
   rig (`performance/gen_profile.das` → `benchmarks/lcpp_bench.das`), inheriting `tune_gate()`,
   sidecar resolution, noise probes and box/engine provenance; embedder-only timing takes the
-  kernel A/B lab shape instead. **The rule this arc earned, now in `CODEREVIEW.md`: a new
+  kernel A/B lab shape instead. **The rule this arc earned, now in `REVIEW.md`: a new
   servable capability updates the profiling app in the same arc, and a timing figure that
   reaches a doc, a ledger or a PR without a cell behind it is a defect.** The old rule already
   called a one-off measurement script a defect — what was missing was the positive obligation,
@@ -410,7 +416,7 @@ oracle's arithmetic, not only about the port.
   exact mismatch `load_asr_model` panics on. Upstream `ggml-org/gemma-4-E4B-it-GGUF` does list
   `mmproj-gemma-4-E4B-it-{BF16,Q8_0}.gguf` (992 MB / 560 MB), so it is a download, not a gap —
   but claim E4B only after dumping the downloaded file. Note also that the size classes
-  disagree about what "gemma-4 vision" means: 12B = `gemma4uv`, 11 tensors of linear
+  disagree about what "gemma-4 vision" means: 12B = `gemma4uv`, ten read tensors of linear
   projection; E-series = a real 16-block ViT. Two encoders, one family name — not a config
   flag.
   **On "the E-series is small" — it is not, and the name is why it reads that way.** The `E`

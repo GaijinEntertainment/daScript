@@ -358,7 +358,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
 // on are the ordinary ones (prefill, decode) plus the embedder's own encode split — which is why
 // this is a cell here and not a bench beside the rig.
 
-//! Best-of-`reps` for one image turn.
+// Best-of-`reps` for one image turn.
 struct private ImageTurn {
     enc_ms : double = 1.0e30lf   // the embedder alone
     pp_tok_s : double            // the spliced prefill: head tokens + soft-token rows + tail tokens, all positions

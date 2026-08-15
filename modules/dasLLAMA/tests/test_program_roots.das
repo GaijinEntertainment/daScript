@@ -58,6 +58,8 @@ def test_program_roots(t : T?) {
                     has_main ||= (line |> starts_with("def main")) || (line |> starts_with("def main("))
                     has_stack ||= line |> starts_with(STACK_LINE)
                     loads_model ||= find(line, "load_model(") >= 0 || find(line, "load_asr_model(") >= 0 || find(line, "load_audio_tower(") >= 0
+                    // CODE only: roots' allow_cpu_prefill() tail comments NAME set_metal_mode, so a
+                    // raw-line scan would let a comment satisfy the check
                     let code = strip_comment(line)
                     // MetalMode.off leaves the CPU-prefill guard armed, so only a literal GPU mode counts as intent
                     let gpu_pin = (find(code, "set_metal_mode(") >= 0

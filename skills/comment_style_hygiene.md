@@ -56,7 +56,9 @@ Terse section dividers stay.
 numbered overview — one line per fact — stating the whole contract: when it runs, what
 it consumes and produces, the kinds and tiers it deals in. A map legitimately repeats
 what per-symbol comments say; a reader entering cold needs the shape before any
-symbol. What stays banned is prose — paragraphs argue, maps enumerate.
+symbol. What stays banned is prose — paragraphs argue, maps enumerate. A header at
+or under the 3-line comment cap may stay prose; the enumeration form is required
+only past it.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a

@@ -143,7 +143,7 @@ span length from the geometry) and the greedy caption, logged in full. NOT token
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
 arm defaults to instruct, and freeform token-parity cells are banned (see below).
 
-## Model loads — never the image rail (REVIEW: "A test suite loads models with load_model_")
+## Model loads — never the image rail (REVIEW: "A test suite loads DECODERS with load_model_")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box

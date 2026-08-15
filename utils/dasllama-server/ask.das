@@ -70,7 +70,7 @@ struct AskArgs {
     image : string
 
     @clarg_path
-    @clarg_doc = "Path to the vision mmproj GGUF; required with --image (named like the server flag; its --mmproj is the ASR projector)"
+    @clarg_doc = "Path to the vision mmproj GGUF; required with --image"
     image_mmproj : string
 
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch"

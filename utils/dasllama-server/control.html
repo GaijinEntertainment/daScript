@@ -1117,9 +1117,10 @@ function renderImgStrip() {
     strip.append(img, note, x);
 }
 
+const IMAGE_MAX_MB = 32;   // mirrors the server's IMAGE_MAX_FILE_BYTES
 function attachImageFile(file) {
     if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 32 * 1024 * 1024) { alert("image over the server's 32 MB cap (" + (file.size / 1048576).toFixed(1) + " MB)"); return; }
+    if (file.size > IMAGE_MAX_MB * 1024 * 1024) { alert("image over the server's " + IMAGE_MAX_MB + " MB cap (" + (file.size / 1048576).toFixed(1) + " MB)"); return; }
     const fr = new FileReader();
     fr.onload = () => { chatImage = { url: String(fr.result), name: file.name || "pasted image" }; renderImgStrip(); };
     fr.readAsDataURL(file);

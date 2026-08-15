@@ -108,10 +108,9 @@ def test_every_knob_is_documented(t : T?) {
 
 [test]
 def test_registry_covers_every_documented_knob(t : T?) {
-    t |> run("every knob env_markdown renders is in registered_env_names") @(t : T?) {
-        // both lists are hand-maintained in dasllama_env.das, and they can drift apart
-        // silently: VisionEnv once sat in the doc renderer but not the registry, and every
-        // other test here stayed green
+    t |> run("every DASLLAMA-prefixed knob env_markdown renders is in registered_env_names") @(t : T?) {
+        // both lists are hand-maintained in dasllama_env.das: a struct can sit in the doc
+        // renderer and not the registry, and every other test here stays green when it does
         var names <- registered_env_names()
         var reg : table<string>
         for (n in names) {

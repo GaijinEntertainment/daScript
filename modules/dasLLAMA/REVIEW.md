@@ -12,25 +12,36 @@ diagnostic-text-only change reaches none. The suites `run.das` lists (decode, pr
 kernels, image, image-vulkan, coverage) run only through it, `--arm`-scoped; it refuses `--full`, and
 dastest run directly on one is a defect. Every other test, vulkan included, runs under dastest.
 
-**Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without `-jit`
-is a defect even if it passes.
+**Every test RUN runs under `-jit`.** Never the interpreter, never AOT. A CI compile-guard lane may
+invoke a model-gated suite interpreted — every cell must skip explicitly there, and it counts as a
+compile check, not a run.
 
-**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, except a live serving leg, which
-belongs beside the server it drives (`utils/dasllama-server/test_openai_server_*.das`), and one
-bench self-check (`benchmarks/matmul/test_matmul_par.das`); no dasLLAMA test appears in any
-`CMakeLists.txt`.
+**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, except a test whose SUBJECT lives
+beside it under `utils/` (the serving legs and the exchange client, which require their sibling by
+bare name) and one bench self-check (`benchmarks/matmul/test_matmul_par.das`); no dasLLAMA test
+appears in any `CMakeLists.txt`.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or model
 gate; a test that silently vanishes on one platform is a defect.
 
-**A test loading a model over 6 GiB sits behind `model_available`**, run only under
-`DASLLAMA_PARITY_FULL=1`: a final pre-PR gate, not the iteration loop. Check what a test loads first.
+**A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
+gate, not the iteration loop; under `tests/` the spelling is `model_available` (`_model_tier.das`),
+a serving leg may open-code the gate. Check what a test loads first.
 
 **A real image fixture or mmproj a vision test loads has its `performance/fetch_models.das`
 entry.** The oracle-dump provenance convention beside them is `ARCHITECTURE.md` §1.7b.
 
-**A vision test that needs no model builds its fixture procedurally and pins its expectations
-in-repo.**
+**A vision test that needs no model builds its image procedurally and pins its expectations
+in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via the
+`DASLLAMA_VISION_DUMP` knob** — a red never requires adding instrumentation before a human can see
+what the model saw.
+
+**A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
+from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
+and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
+
+**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
+as red.**
 
 **Every function whose signature or body changed — new, moved, extracted, or rewritten — ships a
 test for the bit itself** (a signature widening with an unchanged body counts: the new receivers are
@@ -85,9 +96,10 @@ exempt, as is the `--tok` cell in `benchmarks/lcpp_bench.das`, which dispatches 
 rig is a defect; the one sanctioned sub-model instrument is the kernel A/B lab. A tutorial's printed
 wall-clock is teaching output, feeding no board (`ARCHITECTURE.md` §2.5).
 
-**A new servable capability gets its cell in the rigs `PROFILE.md` documents, in the same arc.**
-A modality, a family, or a serving path a user can wait on counts — not a bench beside the rigs,
-and not a number quoted from a script that no longer exists.
+**A new servable capability gets its cell in the same arc**: either a board row spawned by
+`performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
+`PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts — not a
+bench beside the rigs, and not a number quoted from a script that no longer exists.
 
 **A timing figure that reaches a doc, a ledger, or a PR without a cell behind it is a defect.**
 The cell states its quant mode and stamps box and engine provenance, so a number can never
@@ -326,17 +338,6 @@ call site** (`dasllama_asr.das`). Accepting it and silently ignoring it is a def
 tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
 decides the question for a whole file, because a shipped file mixes them (`ARCHITECTURE.md` §1.7b).
 
-**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as well
-as red.**
-
-**Every image a test feeds an embedder is a procedural fixture the test builds, or previewable via
-the `DASLLAMA_VISION_DUMP` knob** — a red never requires adding instrumentation before a human can
-see what the model saw.
-
-**A tier-1 vision fixture has an exact-value generator.** The das test regenerates every fixture
-from its formula, so a generator running libm transcendentals (atan2, sin) is not float-portable
-and its cell is a defect; orientation coverage uses shaped exact fixtures instead.
-
 **A new media kind adds its marker pair to the chat template, never a second renderer.** A family
 whose template or vocab lacks the pair has no arm for that media kind — `create_chat_` panics at
 create, not at render.
@@ -353,7 +354,6 @@ BPE merges never cross the media. The engine's `render_turn_image_`, the schedul
 `(prompt, media_at, media_embd)` triple and the server's request path all carry the same shape; a
 second representation — one stream with a placeholder token, a pre-flattened embedding buffer at
 the seam — is a defect, as is a new media kind growing a parallel prefill path.
-
 
 ### Generated
 
@@ -380,7 +380,8 @@ and `parse_image` in `dasllama_image.das`. Reading weights into a live carrier, 
 backing, anywhere else is a defect — and a second mint path, per family, per format, or per backend,
 is a defect even where its output is identical (`ARCHITECTURE.md` §2.1).
 
-**A mint never holds the whole model.** It sizes the image before the first byte goes out and writes
+**A DECODER mint never holds the whole model** (a family-CARRIER mint may stage through
+`cache_via_image_staged`; the streamed rail is preferred). It sizes the image before the first byte goes out and writes
 each plane as it is produced. Keeping the source model resident to write from is a defect, and a mint
 that is slower in exchange for a lower peak is correct (`ARCHITECTURE.md` §3).
 
@@ -488,10 +489,10 @@ require `dasllama/` and export `main`; `tests/test_program_roots.das` enforces e
 prefill intent for model-loading roots (`ARCHITECTURE.md` §2.8).
 
 **A long-running root declares its prefill arm with an explicit `allow_cpu_prefill()` on the arms
-that will hit the CPU-prefill guard** — the guard panics, and a panic takes every live stream down.
-`set_metal_mode(x)` with a runtime value declares nothing: `MetalMode.off` leaves the guard armed.
-
-**A long-running root logs, once, which prefill configuration it ended up on.**
+that will hit the CPU-prefill guard, and logs, once, which configuration it ended on** — the guard
+panics, and a panic takes every live stream down. `set_metal_mode(x)` with a runtime value declares
+nothing: `MetalMode.off` leaves the guard armed. Roots live outside this folder, so the rule's
+enforcer is in-folder: weakening `tests/test_program_roots.das` is a defect here.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is a
 defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose value

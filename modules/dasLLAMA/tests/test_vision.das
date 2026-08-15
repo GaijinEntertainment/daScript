@@ -41,6 +41,24 @@ def make_fixture(kind : string; w, h : int) : VisionImage {
     return <- img
 }
 
+// a valid 54-byte BMP header (BITMAPINFOHEADER, 24bpp) declaring w x h, with NO pixel data —
+// header probes answer without any pixels (stbi would zero-fill an uncapped decode)
+def bmp_header_stub(w, h : int) : array<uint8> {
+    var bytes : array<uint8>
+    bytes |> resize(54)
+    bytes[0] = uint8('B')
+    bytes[1] = uint8('M')
+    bytes[10] = uint8(54)         // pixel-data offset
+    bytes[14] = uint8(40)         // BITMAPINFOHEADER size
+    for (i in range(4)) {
+        bytes[18 + i] = uint8((w >> (i * 8)) & 0xFF)
+        bytes[22 + i] = uint8((h >> (i * 8)) & 0xFF)
+    }
+    bytes[26] = uint8(1)          // planes
+    bytes[28] = uint8(24)         // bits per pixel
+    return <- bytes
+}
+
 // the oracle's gate: FNV-1a 64 over the f32le bytes of the normalized planes
 def fnv1a64_f32(planes : array<float>) : uint64 {
     var h = 0xcbf29ce484222325ul
@@ -90,8 +108,8 @@ def test_vision_geometry(t : T?) {
         t |> equal(vision_token_count(int2(960, 624), ALIGN), 260)
     }
     t |> run("an extreme aspect ratio still holds the token budget") @(t : T?) {
-        // the per-side align floor used to defeat the area constraint: 300000x48 gave 1322
-        // columns against a 1120-entry position table
+        // the per-side align floor defeats the area constraint without the clamp: 300000x48
+        // wants 1322 columns against a 1120-entry position table
         for (wh in [int2(300000, 48), int2(1000000, 48), int2(48, 1000000), int2(16777216, 1)]) {
             let tgt = vision_target_size(wh.x, wh.y, ALIGN, MIN_TOKENS, MAX_TOKENS)
             t |> success(vision_token_count(tgt, ALIGN) <= MAX_TOKENS, "{wh.x}x{wh.y} -> {tgt} within {MAX_TOKENS} tokens")
@@ -191,19 +209,6 @@ def test_vision_io_roundtrip(t : T?) {
         t |> equal(back.height, 20)
         t |> equal(count_byte_diffs(back.rgb, src.rgb), 0, "lossless file round-trip")
     }
-    t |> run("decode failure yields a zero-size image") @(t : T?) {
-        var none : array<uint8>
-        let nothing <- load_image_rgb(none)   // the EMPTY guard arm: no addr on a zero array
-        t |> equal(nothing.width, 0)
-        var garbage : array<uint8>
-        garbage |> resize(16)   // zeroed - no image container starts like this
-        let bad <- load_image_rgb(garbage)
-        t |> equal(bad.width, 0)
-        t |> equal(bad.height, 0)
-        let missing <- load_image_rgb(tmp_path("no_such_file.png"))
-        t |> equal(missing.width, 0)
-        t |> equal(missing.height, 0)
-    }
     t |> run("write_image_ppm round-trips header and bytes") @(t : T?) {
         let src <- make_fixture("cb", 9, 5)
         let path = tmp_path("probe.ppm")
@@ -225,6 +230,37 @@ def test_vision_io_roundtrip(t : T?) {
         }
         let empty_img = VisionImage()
         t |> success(!write_image_ppm(empty_img, tmp_path("empty.ppm")), "a zero-size image refuses to write")
+    }
+}
+
+[test]
+def test_vision_io_guards(t : T?) {
+    t |> run("decode failure yields a zero-size image") @(t : T?) {
+        var none : array<uint8>
+        let nothing <- load_image_rgb(none)   // the EMPTY guard arm: no addr on a zero array
+        t |> equal(nothing.width, 0)
+        var garbage : array<uint8>
+        garbage |> resize(16)   // zeroed - no image container starts like this
+        let bad <- load_image_rgb(garbage)
+        t |> equal(bad.width, 0)
+        t |> equal(bad.height, 0)
+        let missing <- load_image_rgb(tmp_path("no_such_file.png"))
+        t |> equal(missing.width, 0)
+        t |> equal(missing.height, 0)
+    }
+    t |> run("probe_image_size reads the header alone") @(t : T?) {
+        // 54 header bytes declaring 4096x4096: the probe answers from the header, and a capped
+        // load refuses at the same header — before the 50 MB pixel allocation would happen
+        let stub <- bmp_header_stub(4096, 4096)
+        let dims = probe_image_size(stub)
+        t |> equal(dims.x, 4096)
+        t |> equal(dims.y, 4096)
+        t |> equal(load_image_rgb(stub, 100l).width, 0, "a capped load refuses it at the header")
+        var garbage : array<uint8>
+        garbage |> resize(16)
+        t |> equal(probe_image_size(garbage).x, 0)
+        var none : array<uint8>
+        t |> equal(probe_image_size(none).x, 0)
     }
     t |> run("max_pixels refuses an oversized image from the header alone") @(t : T?) {
         let src <- make_fixture("gray", 32, 20)

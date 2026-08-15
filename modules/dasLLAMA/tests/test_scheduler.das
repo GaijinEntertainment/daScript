@@ -770,8 +770,8 @@ def test_scheduler_media_validation(t : T?) {
             var sch <- create_scheduler(m, 1l, 4l, 64l)
             var tripped = false
             try {
-                // a negative count cleared every guard, LOWERED the seq_len check, and left a
-                // stream whose completion predicate could never hold - an infinite step loop
+                // a negative count clears every guard, lowers the seq_len check, and leaves a
+                // stream whose completion predicate can never hold - an infinite step loop
                 var bad <- PendingReq(id = 9l, params = greedy, max_new = 4l, n_media = -1l)
                 bad.prompt := prompt
                 submit(m, sch, bad)

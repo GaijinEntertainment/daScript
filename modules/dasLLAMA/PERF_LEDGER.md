@@ -16,8 +16,8 @@ what it costs today and what the fix would change.
   2026-08-14, M1 Max, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
   projection, 3840×3840 output projection). In a product-shaped turn — gemma-4-12B Q4_K_M
   served q8 off the image rail, a 640×480 photo → 130 soft tokens — the whole image side
-  (geometry + letterbox + encode) costs **59 ms** against an **8.7 s** time-to-first-token
-  and 14 t/s decode: **0.7% of the turn**. Encode alone is ~54 ms at 130 tokens
+  (geometry + letterbox + encode) is **under one percent of the turn** against the
+  time-to-first-token and decode the cell reproduces (`img:enc` vs `img:pp`/`img:tg`). Encode alone is ~54 ms at 130 tokens
   (`img:enc`, the cell) and scales with the row count, so the 280-row geometry ceiling bounds
   what any image can cost — re-measure via the cell with a max-geometry input. **A quantized plane pair is DECLINED:** a second
   plane format cannot be worth it against 0.7%.
@@ -31,7 +31,7 @@ what it costs today and what the fix would change.
   allocation and no processing at load; the embedder's `blob : array<float>` is the second,
   array-owning shape `dasllama_audio.das` explicitly refuses to maintain. What it buys is RSS
   (mapped pages are shared and evictable across processes; a 190 MB owned bf16→f32 widening is
-  neither) and zero load-time work — not the 30 ms. **Both are DONE (2026-08-14, the same arc's slices I and J).** The rail
+  neither) and zero load-time work — not the load wall. **Both are DONE (2026-08-14, the same arc's slices I and J).** The rail
   landed: the embedder stages, mints and maps like the audio towers, and the prepared image maps
   with no load-time work (mmap). Plane format settled as **per-GEMM, following each source tensor's on-disk type** —
   and the premise that the mmproj is uniformly bf16 was HALF WRONG: gemma-4's shipped "BF16"
