@@ -539,10 +539,11 @@ def prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, start_pos,
                       sinksp : float const?) {           // this layer's per-head sink logits; null = no sinks
     let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
     // the non-causal image span (0 = causal); forward_prefill_embd sets it to start_pos + npos
-    // for exactly one call, so anything past maxctx is a foreign write, not a bigger span
+    // for exactly one call, so any OTHER value is a foreign write — a smaller one would drive a
+    // negative score count into the softmax, so both sides are checked
     let uniform_end = s.attn_uniform_end
-    if (uniform_end > maxctx) {
-        panic("prefill_attention: attn_uniform_end {uniform_end} exceeds this call's context {maxctx}")
+    if (uniform_end != 0l && (uniform_end < start_pos + 1l || uniform_end > maxctx)) {
+        panic("prefill_attention: attn_uniform_end {uniform_end} outside this call's ({start_pos}, {maxctx}] span")
     }
     // narrow batches are decode-shaped: under the prefill work threshold they lose every lane
     let attn_par = npos <= ATTN_NARROW_NPOS || npos * maxctx * n_heads >= g_attn_par_threshold

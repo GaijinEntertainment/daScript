@@ -1506,6 +1506,9 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     if (t.quant == QuantMode.q4_0) {
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
+    if (non_causal && t.config.recr_mask != 0ul) {
+        panic("forward_prefill_embd: a non-causal span cannot apply to recurrent layers (recr_mask != 0) - the recurrence has no uniform-bound form")
+    }
     if (long_length(embd) < (src_off + npos) * t.config.dim) {
         panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of dim={t.config.dim} need {(src_off + npos) * t.config.dim}")
     }

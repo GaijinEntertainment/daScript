@@ -54,7 +54,7 @@ struct PendingReq {
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
-    // prefill BETWEEN prompt[media_at] and prompt[media_at-1] — the render seam hands the two
+    // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
     media : array<float>                    // n_media * model.config.dim soft-token rows
     n_media : int64
@@ -114,7 +114,7 @@ struct Scheduler {
     queue : array<PendingReq>
     max_streams : int64 = 4l
     max_queue : int64 = 32l
-    chunk_tokens : int64 = 64l              // prefill quantum K: decode stalls at most this many tokens
+    chunk_tokens : int64 = 64l              // prefill quantum K for TEXT chunks; a media span evals as ONE body (per-call mask), so it may stall decode by its row count
     // paged serving (page_rows > 0 at create): sessions page KV out of the pool, and finished
     // streams donate their pages to the prefix cache so repeat prefixes skip their prefill
     paged : bool
@@ -182,6 +182,9 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     if (np <= 0l) {
         panic("dasllama_scheduler: empty prompt (stream {req.id}) - the wiring must reject it first")
     }
+    if (req.n_media < 0l) {
+        panic("dasllama_scheduler: negative n_media {req.n_media} (stream {req.id})")
+    }
     if (req.n_media > 0l) {
         if (req.media_at < 0l || req.media_at > np) {
             panic("dasllama_scheduler: media splice at {req.media_at} outside the {np}-token prompt (stream {req.id})")
@@ -189,6 +192,8 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
         if (long_length(req.media) < req.n_media * model.config.dim) {
             panic("dasllama_scheduler: {req.n_media} media rows need {req.n_media * model.config.dim} floats, got {length(req.media)} (stream {req.id})")
         }
+    } elif (long_length(req.media) != 0l || req.media_at != 0l) {
+        panic("dasllama_scheduler: media rows or media_at set with n_media == 0 (stream {req.id}) - the rows would be silently dropped")
     }
     if (np + req.n_media + 1l > model.config.seq_len) {
         panic("dasllama_scheduler: {np + req.n_media}-position prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) - the wiring must reject it first")

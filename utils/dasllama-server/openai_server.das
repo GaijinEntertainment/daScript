@@ -344,10 +344,10 @@ def set_model_vision(name : string; path : string) {
         panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
     }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
-    let no_markers = empty(probe.tmpl.image_pre.parts)
+    let no_markers = empty(probe.tmpl.image_pre.parts) || !image_vocab_ok(g_slots[mi].model, probe.tmpl)
     delete probe
     if (no_markers) {
-        panic("dasllama-server: {name}'s chat template declares no image span markers - it has no vision arm")
+        panic("dasllama-server: {name}'s chat template or vocab carries no image span markers - it has no vision arm")
     }
     g_slots[mi].vision <- emb
     g_slots[mi].vision_path = path

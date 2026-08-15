@@ -293,14 +293,22 @@ def private tool_vocab_ok(m : Model; tmpl : ChatTemplate) : bool {
     return true
 }
 
-def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool {
-    for (p in tmpl.think_gate.parts) {
+def private parts_vocab_ok(m : Model; parts : array<ChatPart>) : bool {
+    for (p in parts) {
         if (p.kind == ChatPartKind.special && special_id(m, p.s) < 0l) {
             return false
         }
     }
     return true
 }
+
+def private gate_specials_ok(m : Model; tmpl : ChatTemplate) : bool => parts_vocab_ok(m, tmpl.think_gate.parts)
+
+//! True when every image span marker resolves in the vocab — probe it at create (the way
+//! `create_chat(model, embedder)` does), so a stripped checkpoint fails there instead of
+//! panicking mid-render on a serving thread.
+def image_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => (
+    parts_vocab_ok(m, tmpl.image_pre.parts) && parts_vocab_ok(m, tmpl.image_post.parts))
 
 // The thinking gate (gemma-4's <|think|> opening the system turn) renders THIS turn: first turn,
 // thinking on, gate declared with its specials in the vocab, and a system turn to carry it.
@@ -581,9 +589,9 @@ def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_part
 
 // ===== Public API =====
 
-// Consume the pending user turn once its render is done — render_prompt_audio reads c.pending
-// gated only on n_audio_rows, so a leftover would silently re-inject the text into a later
-// audio-only turn.
+// Consume the pending user turn once its render is done — a leftover pending text OR queued
+// media rows would silently re-inject into a later turn (the media renderers read c.pending
+// gated only on the row counts).
 def private consume_pending_(var c : ChatSession) {
     if (think_gate_now(c)) {   // this consumed turn rendered the gate — thinking arms for the session
         c.gate_rendered = true
@@ -594,6 +602,10 @@ def private consume_pending_(var c : ChatSession) {
     c.pending_is_tool = false
     c.pending_results |> clear()       // the render this consumption follows included them
     c.pending_result_names |> clear()
+    c.audio_rows |> clear()            // queued media dies with the turn it was queued for —
+    c.n_audio_rows = 0l                // an assistant-path consume must not leave rows armed
+    c.image_rows |> clear()
+    c.n_image_rows = 0l
     c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
@@ -673,6 +685,9 @@ def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string
     if (empty(c.tmpl.image_pre.parts)) {
         panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
     }
+    if (!image_vocab_ok(model, c.tmpl)) {
+        panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
+    }
     c.vision <- embedder
     return <- c
 }
@@ -687,6 +702,9 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
     if (c.n_image_rows > 0l) {
         panic("dasLLAMA chat: one image per turn in v1 - respond() before adding another")
     }
+    if (c.n_audio_rows > 0l) {
+        panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
+    }
     c.n_image_rows = encode_image_(c.vision, c.venc, img, "turn{length(c.history)}", c.image_rows)
 }
 
@@ -696,6 +714,9 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
 def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     if (c.tower.d_model == 0l) {
         panic("dasLLAMA chat: this chat has no audio tower - create it with create_chat(model, tower)")
+    }
+    if (c.n_image_rows > 0l) {
+        panic("dasLLAMA chat: an image is already queued this turn - one media kind per turn")
     }
     let chunks <- log_mel_chunks(samples, c.tower.n_mel)
     let rows = audio_tokens_per_chunk(c.tower)
@@ -1329,7 +1350,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
     var stops <- effective_stop_ids_(c)
     var reply_parts : array<string>
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
-        // media turn: token spans around the soft-token splice, prefilled as embedding rows
+        // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
         let is_image = c.n_image_rows > 0l
         var head : array<int64>
         var tail : array<int64>
