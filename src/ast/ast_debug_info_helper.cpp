@@ -104,6 +104,9 @@ namespace das {
     }
 
     void DebugInfoHelper::stampFramePositions ( ExpressionPtr body, uint32_t spaceId ) {
+        // this function's consumers (its own appendLocalVariables + per-block appends
+        // during its simulate) all run before the next stamp - no need to keep the rest
+        varFramePos.clear();
         FramePositionStamp stamp(varFramePos, spaceId);
         body->visit(stamp);
         if ( stamp.sawLabel ) {
