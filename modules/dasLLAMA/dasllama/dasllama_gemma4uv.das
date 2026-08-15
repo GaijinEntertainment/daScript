@@ -356,6 +356,10 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     if (w % t.patch != 0l || h % t.patch != 0l) {
         panic("dasLLAMA gemma4uv: canvas {w}x{h} is not a multiple of the {t.patch}px superpatch - letterbox first")
     }
+    // the learned position table holds pos_entries per axis; a wider grid would read past it
+    if (w / t.patch > t.pos_entries || h / t.patch > t.pos_entries) {
+        panic("dasLLAMA gemma4uv: canvas {w}x{h} needs a {w / t.patch}x{h / t.patch} position grid but the mmproj table holds {t.pos_entries} per axis - lower DASLLAMA_VISION_MAX_TOKENS")
+    }
     let d = t.n_embd
     let n_cols = w / t.patch
     let npos = uv_im2col(t, planes, w, h, s.x0)
@@ -395,9 +399,13 @@ def encode_image_(t : Gemma4uvEmbedder; var s : Gemma4uvState; img : VisionImage
     if (img.width <= 0 || img.height <= 0) {
         panic("dasLLAMA gemma4uv: encode_image_ got an empty image (decode failed?)")
     }
+    let min_tok = g_env_vision.vision_min_tokens
+    let max_tok = g_env_vision.vision_max_tokens
+    if (min_tok < 1 || max_tok < min_tok) {
+        panic("dasLLAMA gemma4uv: DASLLAMA_VISION_MIN_TOKENS={min_tok} / DASLLAMA_VISION_MAX_TOKENS={max_tok} - need 1 <= min <= max")
+    }
     let align = int(t.patch)
-    let target = vision_target_size(img.width, img.height, align,
-        g_env_vision.image_min_tokens, g_env_vision.image_max_tokens)
+    let target = vision_target_size(img.width, img.height, align, min_tok, max_tok)
     let boxed <- vision_letterbox(img, target)
     maybe_dump_vision(boxed, tag)
     let planes <- vision_normalize(boxed)

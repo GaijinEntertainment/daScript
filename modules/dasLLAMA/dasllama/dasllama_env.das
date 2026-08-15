@@ -144,11 +144,11 @@ struct public GpuTierEnv {
 struct public VisionEnv {
     @clarg_default_doc = "40 (the gemma-4 model default)"
     @clarg_doc = "Minimum soft tokens per image; dynamic-resolution geometry upscales to reach it."
-    image_min_tokens : int = 40
+    vision_min_tokens : int = 40
 
     @clarg_default_doc = "280 (the gemma-4 model default)"
     @clarg_doc = "Maximum soft tokens per image; dynamic-resolution geometry downscales to fit."
-    image_max_tokens : int = 280
+    vision_max_tokens : int = 280
 
     @clarg_doc = "Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off."
     vision_dump : string = ""
@@ -769,6 +769,7 @@ def public registered_env_names() : array<string> {
     out |> reserve(140)
     push_info_names(out, get_env_config_info(type<EngineEnv>))
     push_info_names(out, get_env_config_info(type<GpuTierEnv>))
+    push_info_names(out, get_env_config_info(type<VisionEnv>))
     push_info_names(out, get_env_config_info(type<MetalEnv>))
     push_info_names(out, get_env_config_info(type<VulkanEnv>))
     push_info_names(out, get_env_config_info(type<MoltenVkEnv>))

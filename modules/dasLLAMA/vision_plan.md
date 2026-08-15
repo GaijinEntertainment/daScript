@@ -116,7 +116,7 @@ Naming: `dasllama_vision*` — `dasllama_image.das` is the dlim model-image file
   `<|image>` / `<image|>`. ONE image per turn in v1 — second `add_user_image_` panics.
 - `dasllama_blocks.das` / `dasllama_attn_prefill.das`: non-causal span flag through
   `forward_prefill_embd` → prefill body; CPU arm uniform bound; the readiness guard.
-- `dasllama_env.das`: `DASLLAMA_IMAGE_MIN_TOKENS` / `DASLLAMA_IMAGE_MAX_TOKENS` (40/280
+- `dasllama_env.das`: `DASLLAMA_VISION_MIN_TOKENS` / `DASLLAMA_VISION_MAX_TOKENS` (40/280
   defaults), the dump knob.
 - `dasllama_image.das`: IMAGE_VERSION → 9 when embedder planes enter the dlim (slice G).
 - Server: `openai_server.das` image_url data-URI arm; `ask.das --image`.

@@ -19,23 +19,28 @@ struct public VisionImage {
     rgb : array<uint8>   // interleaved RGB, row-major
 }
 
-//! The target canvas under dynamic resolution: sides round to the nearest `align` multiple
-//! (ties AWAY like std::round — roundi is trunc(x+copysign(0.5)) on every platform), then
-//! floor-align ÷ β when over `max_tokens` patches / ceil-align × β when under `min_tokens`.
+//! The target canvas under dynamic resolution: sides round to the nearest `align` multiple,
+//! then floor-align ÷ β over `max_tokens` / ceil-align × β under `min_tokens`. Never yields
+//! more than `max_tokens` patches — an extreme aspect ratio clamps the long side.
 def public vision_target_size(width, height : int; align, min_tokens, max_tokens : int) : int2 {
     let f = float(align)
-    let min_pixels = min_tokens * align * align
-    let max_pixels = max_tokens * align * align
+    let min_pixels = int64(min_tokens) * int64(align) * int64(align)
+    let max_pixels = int64(max_tokens) * int64(align) * int64(align)
+    let src_pixels = int64(height) * int64(width)
+    // ties AWAY like std::round — roundi is trunc(x+copysign(0.5)) on every platform
     var w_bar = max(align, roundi(float(width) / f) * align)
     var h_bar = max(align, roundi(float(height) / f) * align)
-    if (h_bar * w_bar > max_pixels) {
-        let beta = sqrt(float(height * width) / float(max_pixels))
+    if (int64(h_bar) * int64(w_bar) > max_pixels) {
+        let beta = sqrt(float(src_pixels) / float(max_pixels))
         w_bar = max(align, floori(float(width) / beta / f) * align)
         h_bar = max(align, floori(float(height) / beta / f) * align)
-    } elif (h_bar * w_bar < min_pixels) {
-        let beta = sqrt(float(min_pixels) / float(height * width))
+    } elif (int64(h_bar) * int64(w_bar) < min_pixels) {
+        let beta = sqrt(float(min_pixels) / float(src_pixels))
         w_bar = ceili(float(width) * beta / f) * align
         h_bar = ceili(float(height) * beta / f) * align
+    }
+    while (int64(w_bar / align) * int64(h_bar / align) > int64(max_tokens)) {
+        if (w_bar >= h_bar && w_bar > align) { w_bar -= align } elif (h_bar > align) { h_bar -= align } else { break }
     }
     return int2(w_bar, h_bar)
 }
