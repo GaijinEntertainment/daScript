@@ -252,7 +252,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 115;   // 115: generator lowering stamps genFlags.generated (serialized per-node)
+            return 116;   // 116: inline splices carry the host call-site line (gc locals-walk honesty)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

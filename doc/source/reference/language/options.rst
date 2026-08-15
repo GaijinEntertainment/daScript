@@ -398,7 +398,8 @@ Debugging and Profiling
    * - ``debugger``
      - bool
      - false
-     - Enables debugger support. Disables fastcall and adds a context mutex.
+     - Enables debugger support. Disables fastcall and auto-inlining (the debugger
+       needs true frames and true lines) and adds a context mutex.
    * - ``profiler``
      - bool
      - false

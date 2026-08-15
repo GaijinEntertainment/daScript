@@ -387,9 +387,10 @@ namespace das {
             auto top = popSp();
             func->totalStackSize = top.maxStack;
             DAS_ASSERT(stackTopStack.empty());
-            // detecting fastcall
+            // detecting fastcall; a needCallerStackFrame carrier (the transitive closure
+            // over every referenced callee, operators included) keeps a real frame
             func->fastCall = false;
-            if ( !program->getDebugger() && !program->getProfiler() && !noFastCall ) {
+            if ( !program->getDebugger() && !program->getProfiler() && !noFastCall && !func->needCallerStackFrame ) {
                 if ( !func->exports && !func->addr && func->totalStackSize==sizeof(Prologue) && func->arguments.size()<=32 ) {
                     if (func->body->rtti_isBlock()) {
                         auto block = static_cast<ExprBlock*>(func->body);

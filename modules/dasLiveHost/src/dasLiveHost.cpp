@@ -319,12 +319,16 @@ const char * live_get_watched_file(int32_t index, Context * ctx) {
 
 // --- GC ---
 
-void live_collect_gc(Context * ctx) {
-    ctx->collectHeap(nullptr, /*stringHeap*/true, /*validate*/false);
+// the call-site LineInfo is required: the collector walks caller frames and gates their
+// locals on it - a null line below live frames refuses the collect (a root-level null,
+// with no das frames on the stack, stays legal)
+void live_collect_gc(Context * ctx, LineInfoArg * at) {
+    ctx->collectHeap(at, /*stringHeap*/true, /*validate*/false);
 }
 
-void live_collect_string_gc(Context * ctx) {
-    ctx->collectHeap(nullptr, /*stringHeap*/true, /*validate*/false);
+// byte-identical to live_collect_gc - kept for live-reload API compatibility
+void live_collect_string_gc(Context * ctx, LineInfoArg * at) {
+    ctx->collectHeap(at, /*stringHeap*/true, /*validate*/false);
 }
 
 // --- Annotations ---
@@ -485,10 +489,15 @@ public:
                 ->args({"key", "value", "context"});
 
         // GC
-        addExtern<DAS_BIND_FUN(live_collect_gc)>(*this, lib, "live_collect_gc",
+        // these reach collectHeap from C++, where the closure can't see it - seed by hand
+        auto lcg = addExtern<DAS_BIND_FUN(live_collect_gc)>(*this, lib, "live_collect_gc",
             SideEffects::modifyExternal, "das::live_collect_gc");
-        addExtern<DAS_BIND_FUN(live_collect_string_gc)>(*this, lib, "live_collect_string_gc",
+        lcg->args({"context","at"});
+        lcg->needCallerStackFrame = true;
+        auto lcsg = addExtern<DAS_BIND_FUN(live_collect_string_gc)>(*this, lib, "live_collect_string_gc",
             SideEffects::modifyExternal, "das::live_collect_string_gc");
+        lcsg->args({"context","at"});
+        lcsg->needCallerStackFrame = true;
 
         // Command dispatch bridge (called from live_api agent, dispatches in main context)
         addExtern<DAS_BIND_FUN(live_dispatch_command_via_host)>(*this, lib, "dispatch_command",

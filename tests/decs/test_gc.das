@@ -1,6 +1,9 @@
 options gen2
 options persistent_heap
 options gc
+// gc-semantics file: heap_collect refuses chains with compiled (AOT/JIT) frames -
+// no_aot covers the AOT sweep; the collect tests carry [test, no_jit] for the jit sweep
+options no_aot
 
 require daslib/decs_boost
 require dastest/testing_boost public
@@ -71,7 +74,7 @@ def test_archive_strings(t : T?) {
     }
 }
 
-[test]
+[test, no_jit]
 def test_gc_arrays(t : T?) {
     restart()
     for (i in range(3)) {
@@ -102,7 +105,7 @@ def test_gc_arrays(t : T?) {
     }
 }
 
-[test]
+[test, no_jit]
 def test_gc_strings(t : T?) {
     restart()
     for (i in range(3)) {
@@ -156,7 +159,7 @@ def test_arrays_lifetime(t : T?) {
     t |> success(total_foo == 0)
 }
 
-[test]
+[test, no_jit]
 def test_gc_stress(t : T?) {   // nolint:STYLE037,STYLE038 - one randomized stress scenario; every phase consumes the same RNG stream and running entity count, so a split would only thread state
     var seed = random_seed(13)
     restart()

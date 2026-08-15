@@ -86,15 +86,14 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
-    // GC tests are interp-only under JIT: jitted frames keep locals on the native stack,
-    // so heap_collect can't see a heap pointer whose only reference is a jitted local and
-    // frees it (double-free / reuse-after-collect; Debug memory_model.h assert catches it,
-    // Release passes by luck). Lift only once the JIT spills GC roots somewhere the
-    // collector can scan.
+    // GC tests are interp-only: compiled frames (JIT, AOT) keep locals where the collector
+    // can't scan them, and one entered from the interpreter is indistinguishable from an
+    // interpreted frame, so the walk would read never-written slots. Lift once compiled
+    // frames spill GC roots somewhere scannable.
     if (folder_name == "gc") {
         let args <- get_command_line_arguments()
         for (arg in args) {
-            if (arg == "-jit") {
+            if (arg == "-jit" || arg == "--use-aot") {
                 *result = false
                 return
             }
