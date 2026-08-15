@@ -432,6 +432,11 @@ def copy_dir_rec(src, dst : string) : bool {
             if (!copy_file_bytes(src_child, dst_child)) {
                 ok = false
             }
+        } else {
+            // stat failed, or the entry is neither file nor dir - a copy that silently
+            // dropped an entry must not report itself complete
+            to_log(LOG_ERROR, "Error: cannot stat {src_child} (or unsupported entry kind)\n")
+            ok = false
         }
     }
     return ok

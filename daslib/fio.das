@@ -567,7 +567,8 @@ def is_symlink_result(path : string) : fs_result_bool {
     return fs_result_bool(value = res)
 }
 
-// a link of any flavor: symlink everywhere; on Windows also a junction / mount point
+// a symlink everywhere; on Windows any reparse point - junction, mount point, and
+// less common flavors like a cloud-file placeholder
 [generic]
 def is_reparse_point_result(path : string) : fs_result_bool {
     var error : string

@@ -1,1 +1,1 @@
-Returns true if the path is a link of any flavor: a symbolic link on every platform, and on Windows also a junction or mount point (any reparse point). Reports errors via the error out-parameter.
+Returns true if the path is a symbolic link — and on Windows, any reparse point: a junction, a mount point, or a less common flavor such as a cloud-file placeholder. Reports errors via the error out-parameter.
