@@ -1743,6 +1743,13 @@ class public LlvmJitVisitor : AstVisitor {
                     params |> push(cmresPtr, 0)
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
+                } elif (is_array_push_back(expr)) {
+                    var arr_ptr = getE(expr.arguments[0])
+                    var arrTy = type_to_llvm_type(expr.arguments[0]._type)
+                    var ccall = build_array_push_back_fast(arr_ptr, arrTy) {
+                        return build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
+                    }
+                    setE(expr, ccall)
                 } else {
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
                     setE(expr, ccall)
@@ -3681,6 +3688,38 @@ class public LlvmJitVisitor : AstVisitor {
         return expr
     }
 
+    // The AST node carries the trailing context and line-info arguments, so arity is a lower bound.
+    def is_array_push_back(expr : ExprCallFunc?) {
+        if (expr.func == null || length(expr.arguments) < 2
+                || expr.func._module.name != "$" || expr.func.name != "__builtin_array_push_back") return false
+        assume argT = expr.arguments[0]._type
+        return argT != null && argT.isGoodArrayType
+    }
+
+    // AOT inlines array_grow: its common case is a lock check, a capacity compare and a size store,
+    // and only the GROW case needs the helper — keeping the call for everything else leaves growth
+    // policy and the locked throw in one place. size < capacity <= INT64_MAX covers its guard.
+    def build_array_push_back_fast(arr_ptr : LLVMOpaqueValue?; arrTy : LLVMOpaqueType?; slow : block<() : LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+        var hdr = LLVMBuildLoad2(g_builder, arrTy, arr_ptr, "push.hdr")
+        var size = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.SIZE), "push.size")
+        var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.CAPACITY), "push.cap")
+        var lock = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_ARRAY.LOCK), "push.lock")
+        var unlocked = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, lock,
+            LLVMConstInt(LLVMTypeOf(lock), 0ul, 0), "push.unlocked")
+        var fits = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, size, cap, "push.fits")
+        var fast = LLVMBuildAnd(g_builder, unlocked, fits, "push.fast")
+        var res = build_select(fast, types.t_int64) {
+            var sizePtr = LLVMBuildStructGEP2(g_builder, arrTy, arr_ptr, uint(JIT_ARRAY.SIZE), "push.sizep")
+            var next = LLVMBuildAdd(g_builder, size, LLVMConstInt(LLVMTypeOf(size), 1ul, 0), "push.next")
+            LLVMBuildStore(g_builder, next, sizePtr)
+            return size
+        }
+        lpipe() {
+            return invoke(slow)
+        }
+        return res
+    }
+
 // ExprFor
     def build_array_lock(array_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
@@ -3795,6 +3834,19 @@ class public LlvmJitVisitor : AstVisitor {
         return is_workhorse_table_key(tabT.firstType.baseType)
     }
 
+    // `for (x in each(container))` hides an array or fixed array behind a Sequence, costing the
+    // generic iterator protocol over a source this backend walks inline. Unwrap to the argument
+    // so it lowers as `for (x in container)`; the each() call is then skipped, never evaluated.
+    def inline_each_source(expr : ExpressionPtr) : ExpressionPtr {
+        if (!(expr is ExprCall)) return expr
+        var cf = expr as ExprCall
+        if (cf.func == null || length(cf.arguments) != 1
+                || !starts_with(cf.func.name, "builtin`each`")) return expr
+        assume srcT = cf.arguments[0]._type
+        if (srcT == null || !(srcT.isGoodArrayType || srcT.baseType == Type.tFixedArray)) return expr
+        return cf.arguments[0]
+    }
+
     def build_table_lock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, tab_ptr, types.LLVMVoidPtrType(), ""),
@@ -3884,7 +3936,7 @@ class public LlvmJitVisitor : AstVisitor {
             forBodyToExpr[expr.body as ExprBlock] = expr
         }
         for (ssrc in expr.sources) {
-            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc)) {
+            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc) || inline_each_source(ssrc) != ssrc) {
                 skipCall |> insert(ssrc as ExprCall)
             }
         }
@@ -3921,7 +3973,11 @@ class public LlvmJitVisitor : AstVisitor {
         LOOP_START:
         */
         var lblk = loop_stack |> back()
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
+            if (ssrc != ssource) {
+                visit(ssrc, adapter)    // the each() call is skipped, its argument still needs a value
+            }
             if (ssrc._type.isRange) {// range()->first()
                 var srange = getE(ssrc)
                 var sfrom = LLVMBuildExtractElement(g_builder, srange, types.ConstI32(0ul), "range_from_{svar.name}")
@@ -4095,7 +4151,8 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildBr(g_builder, lblk.loop_continue)                           // LOOP CONTINUE
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_continue)
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
             if (ssrc._type.isRange) {// range()->next()
                 let isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
                 var svar_v = LLVMBuildLoad2(g_builder, isRange64 ? types.t_int64 : types.t_int32, getV(svar), "")
@@ -4191,7 +4248,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (i in range(len)) {
             let ri = len - i - 1
             let svar & = unsafe(expr.iteratorVariables[ri])
-            let ssrc & = unsafe(expr.sources[ri])
+            let ssrc = inline_each_source(expr.sources[ri])
             if (ssrc._type.isGoodArrayType) {
                 build_array_unlock(getE(ssrc), ssrc.at)
             } elif (ssrc._type.isIterator) {
@@ -5261,6 +5318,32 @@ class public LlvmJitVisitor : AstVisitor {
         return true
     }
 
+    // jit_call_or_fastcall's jitted-callee case, emitted in place: load SimFunction::jitFunction,
+    // call it, clear Context::stopFlags. Saves a PLT hop and the dispatcher frame per indirect
+    // call; the helper stays as the else-branch for interpreted / fastcall callees.
+    def build_call_or_fastcall(simfunc, args : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+        var slot = LLVMBuildGEP2(g_builder, types.t_int8,
+            LLVMBuildPointerCast(g_builder, simfunc, LLVMPointerType(types.t_int8, 0u), ""),
+            types.ConstI32(uint64(g_simfunction_jit_offset)), "simfn.jitp")
+        var jitfn = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), slot, "simfn.jitfn")
+        var direct = LLVMBuildIsNotNull(g_builder, jitfn, "simfn.jitted")
+        var res = build_select(direct, types.LLVMFloat4Type()) {
+            var r = LLVMBuildCall2(g_builder, g_t_jit_function, jitfn,
+                fixed_array(get_context_param(), args, LLVMConstPointerNull(types.LLVMVoidPtrType())), "")
+            var sfp = LLVMBuildGEP2(g_builder, types.t_int8,
+                LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), ""),
+                types.ConstI32(uint64(g_context_stopflags_offset)), "ctx.stopflagsp")
+            LLVMBuildStore(g_builder, LLVMConstInt(types.t_int32, 0ul, 0), sfp)
+            return r
+        }
+        lpipe() {
+            return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_OR_FASTCALL],
+                LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL),
+                fixed_array(simfunc, args, get_context_param()), "")
+        }
+        return res
+    }
+
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
         var cmresEval : LLVMOpaqueValue?
@@ -5310,9 +5393,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5334,9 +5421,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5361,9 +5452,13 @@ class public LlvmJitVisitor : AstVisitor {
                 params |> push(cmresEvalPtr)
             }
             params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall : LLVMOpaqueValue?
+            if (cmresEval == null) {
+                ccall = build_call_or_fastcall(SIMFUNCTION, args)
+            } else {
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES)
+                ccall = LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES], func, params, "invoke")
+            }
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {

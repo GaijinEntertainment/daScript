@@ -30,6 +30,12 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test13.das` | `hash(string)` microbenchmark — short vs long keys; inlined FNV intrinsic (JIT) vs bound C++ builtin (interp) |
 | `test14.das` | Large string-keyed builtin table (open-addressed, inlined find/at) vs int reference — sizes the large-string lookup against the int reference; `_fresh`/`_same` isolate strcmp |
 
+## core/jit_aot/
+
+| File | Description |
+|---|---|
+| `primitives.das` | Per-primitive JIT-vs-AOT cost probes, grouped as `iteration` / `calls` / `compare` / `containers` / `dispatch` / `pipelines` / `interop`: `das_iterator` over range / array / fixed array / `each()` Sequence / generator, `SimPolicy_String::Equ` vs `jit_str_cmp`, and the `addInterop` builtins (`SimNode_AotInterop` vs `jit_simnode_interop`). `pipelines` prices realistic composites — `sort_block` (one comparator invoke per comparison) against `sort_default`, array clone, `finally` scope exit, string search. `dispatch` covers class-method calls (polymorphic and monomorphic receivers), table insert, `build_string`, struct clone and `try/recover` scope entry. `containers` covers table lookup by int and string key, array push growth, and float4 math. The `calls` group (`block_invoke` / `static_call` / `lambda_invoke` / `fnptr_invoke`) prices the das call boundary itself — AOT emits a native C++ signature, the JIT keeps the interpreter ABI (`vec4f(Context*, vec4f* args)`) and dispatches through `jit_call_or_fastcall`. The `generator` / `generator_while` pair guards `replaceGeneratorFor`: a range-source `for` inside a generator body must cost the same as the hand-written `while`, i.e. keep its counter in the capture frame rather than falling back to `each()` + `_builtin_iterator_first`/`next`. The AOT lane needs stubs: this dir is appended to the language suite in `tests/aot/CMakeLists.txt`, so run it as `bin/test_aot_subset dastest/dastest.das -- --bench --use-aot --test benchmarks/core/jit_aot/` against `-jit` on the same binary |
+
 ## core/gc/
 
 | File | Description |

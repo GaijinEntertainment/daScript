@@ -350,6 +350,43 @@ def test_for_finally_continue(t : T?) {
     checkSeq(t, gen, [99, 1, 99, 99, 3, 99, 99])
 }
 
+def test_for_range_flavors(t : T?) {
+    var gen <- generator<int> {
+        for (u in urange(3u)) {
+            yield int(u)
+        }
+        for (l in range64(3l, 7l)) {
+            yield int(l)
+        }
+        for (ul in urange64(7ul, 10ul)) {
+            yield int(ul)
+        }
+        return false
+    }
+    checkIt(t, gen)
+}
+
+def test_for_two_ranges(t : T?) {
+    var gen <- generator<int> {
+        for (a, _b in range(10), range(100, 200)) {
+            yield a
+        }
+        return false
+    }
+    checkIt(t, gen)
+}
+
+def test_for_range_and_iterator(t : T?) {
+    // one source keeps the generic iterator, the other is a plain counter
+    var gen <- generator<int> {
+        for (c, _i in "0123456789", range(10)) {
+            yield c - 48
+        }
+        return false
+    }
+    checkIt(t, gen)
+}
+
 def test_for_finally_empty(t : T?) {
     // empty iterator: body never enters, finally never runs
     var gen <- generator<int> {
@@ -385,4 +422,7 @@ def test_generators(t : T?) {
     t |> run("for finally + break in generator") @(t : T?) { test_for_finally_break(t); }
     t |> run("for finally + continue in generator") @(t : T?) { test_for_finally_continue(t); }
     t |> run("for finally empty in generator") @(t : T?) { test_for_finally_empty(t); }
+    t |> run("for over every range flavor") @(t : T?) { test_for_range_flavors(t); }
+    t |> run("for over two ranges") @(t : T?) { test_for_two_ranges(t); }
+    t |> run("for over range and iterator") @(t : T?) { test_for_range_and_iterator(t); }
 }
