@@ -195,7 +195,7 @@ def generate_(t : Model; var s : Session; prompt : array<int64>; params : Sampli
 //! splice — see eval_embd_), then stream-sample exactly like generate_. Rows [span_lo, span_hi)
 //! prefill as a NON-CAUSAL image span; span_hi <= span_lo is the plain all-causal prefill.
 def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; params : SamplingParams;
-                   max_tokens : int64; span_lo : int64; span_hi : int64;
+                   max_tokens : int64; span_lo : int64 = 0l; span_hi : int64 = 0l;
                    blk : block<(id : int64; piece : string) : bool>) : int64 {
     s.recent |> clear()
     let t_pre = ref_time_ticks()

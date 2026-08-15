@@ -42,7 +42,7 @@ bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
 # ask about an image (gemma-4 dense: decoder GGUF + vision mmproj)
-bin/daslang -jit utils/dasllama-server/ask.das -- --model <decoder.gguf> --mmproj <mmproj.gguf> \
+bin/daslang -jit utils/dasllama-server/ask.das -- --model <decoder.gguf> --image-mmproj <mmproj.gguf> \
     --image <picture.jpg|png|...> --prompt "describe this image"
 
 # speech-to-text: whisper / parakeet / canary ggml bins, or qwen3-asr GGUF pairs

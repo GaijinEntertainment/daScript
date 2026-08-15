@@ -66,12 +66,12 @@ struct AskArgs {
     quant : string
 
     @clarg_path
-    @clarg_doc = "Ask about an image: the prompt becomes a chat turn carrying it (needs --mmproj)"
+    @clarg_doc = "Ask about an image: the prompt becomes a chat turn carrying it (needs --image-mmproj)"
     image : string
 
     @clarg_path
-    @clarg_doc = "Path to the vision mmproj GGUF; required with --image"
-    mmproj : string
+    @clarg_doc = "Path to the vision mmproj GGUF; required with --image (named like the server flag; its --mmproj is the ASR projector)"
+    image_mmproj : string
 
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch"
     tune : bool
@@ -111,13 +111,12 @@ def main : int {
 
     let max_new = cfg.max_tokens > 0 ? int64(cfg.max_tokens) : 256l
 
-    if (!empty(cfg.image) && empty(cfg.mmproj)) {
-        to_log(LOG_ERROR, "ask: --image needs --mmproj <vision mmproj gguf>\n")
+    if (!empty(cfg.image) && empty(cfg.image_mmproj)) {
+        to_log(LOG_ERROR, "ask: --image needs --image-mmproj <vision mmproj gguf>\n")
         return 1
     }
     var m <- load_model(cfg.model, pick_quant(cfg.quant))
     allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
-    let toks <- encode(m, cfg.prompt, true, false)
     var params = SamplingParams()
     params.temp = cfg.temp
     params.top_k = int64(cfg.top_k)
@@ -127,12 +126,14 @@ def main : int {
     params.presence_penalty = cfg.presence_penalty
     params.frequency_penalty = cfg.frequency_penalty
 
+    var rc = 0
     with_job_que() {
         setup_dasllama_jobque()
         if (!empty(cfg.image)) {
-            ask_image(m, cfg, params, max_new)
+            rc = ask_image(m, cfg, params, max_new)
             return
         }
+        let toks <- encode(m, cfg.prompt, true, false)
         var s = create_session(m)
         if (cfg.seed != 0) {
             set_seed(s, cfg.seed)
@@ -147,17 +148,16 @@ def main : int {
         print("\n[prompt {st.n_prompt} tok | gen {st.n_gen} tok | ttft {int(st.ttft_s * 1000.0lf)}ms | ")
         print("prefill {int(st.prefill_tps)} t/s | gen {int(st.gen_tps)} t/s]\n")
     }
-    return 0
+    return rc
 }
 
-// --image: one chat turn carrying the image, the prompt as its text
-def private ask_image(m : Model; cfg : AskArgs; params : SamplingParams; max_new : int64) {
-    let img <- load_image_rgb(cfg.image)
+def private ask_image(m : Model; cfg : AskArgs; params : SamplingParams; max_new : int64) : int {
+    var inscope img <- load_image_rgb(cfg.image)
     if (img.width == 0) {
         to_log(LOG_ERROR, "ask: could not decode image '{cfg.image}'\n")
-        return
+        return 1
     }
-    var emb <- load_gemma4uv_embedder(cfg.mmproj)
+    var emb <- load_gemma4uv_embedder(cfg.image_mmproj)
     var chat <- create_chat(m, emb, "", max_new)
     add_user_image(chat, img)
     add_user(chat, cfg.prompt)
@@ -170,4 +170,5 @@ def private ask_image(m : Model; cfg : AskArgs; params : SamplingParams; max_new
     print("\n[image {img.width}x{img.height} | prompt {st.n_prompt} tok | gen {st.n_gen} tok | ")
     print("ttft {int(st.ttft_s * 1000.0lf)}ms | gen {int(st.gen_tps)} t/s]\n")
     delete chat
+    return 0
 }
