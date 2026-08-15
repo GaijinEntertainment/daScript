@@ -41,9 +41,11 @@ some (noted), C++/JS lints are follow-up work.
 
 **Short or absent.** 1–2 lines preferred, 3 the cap — das lint STYLE014 enforces it under
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
-reviewer's. Inside a `def private` body the cap is ONE line (STYLE015 — private symbols get
-no public docs), so a two-line note that would pass here still fails lint there. It covers per-symbol and in-body comments; a file-header map (below) is exempt —
-its test is prose-vs-enumeration, not length. A comment that doesn't fit is the signal to
+reviewer's. Inside a `def private` body the cap is ONE line (STYLE015), and that cap is
+body-only: a comment *attached to* a private symbol takes the ordinary 3-line cap plus the
+bar in *Private symbols don't get public-style docs* below. It covers per-symbol and
+in-body comments; a file-header map (below) is exempt — its test is prose-vs-enumeration,
+not length. A comment that doesn't fit is the signal to
 interrogate it: why does this need prose at all, and does the detail belong at the use
 site — or nowhere?
 

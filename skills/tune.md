@@ -263,10 +263,11 @@ monthly cumulative update does not re-tune while a real OS-version change does.
 A scope declaring `version_of=` adds a third axis: a sidecar minted at another
 library version reads incomplete for that scope alone.
 
-Every "untuned" refusal **names its reason** — stale-vs-binary (both dates),
-foreign box (both identities), version mismatch (both values), missing entries
-(the kernel names) — via `tune_sidecar_verdict`; a bare "untuned" no longer
-leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
+Every "untuned" refusal **names its reason** via `tune_sidecar_verdict` —
+`absent` (no sidecar at the path), `stale-binary` (both dates), `foreign-box`
+(both identities), `unreadable` (not a tune sidecar), `version` (both values),
+`missing` (the kernel names); a bare "untuned" no longer leaves the operator
+to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
 points at a file that reads untuned, the compile prints one loud warning per
 scope instead of silently stamping fallbacks — an explicit manifest disables
 the policy rail, so nothing else would say so, and a measurement run believing
