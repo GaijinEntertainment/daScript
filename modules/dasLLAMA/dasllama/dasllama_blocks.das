@@ -1499,22 +1499,23 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
 }
 
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
-                         non_causal : bool = false) {
+                         non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false) {
     if (npos <= 0l) {
         return
     }
     if (t.quant == QuantMode.q4_0) {
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
-    if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {long_length(embd)} floats - npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
+    if (long_length(embd) < (src_off + npos) * t.config.dim) {
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of dim={t.config.dim} need {(src_off + npos) * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
     let dim = t.config.dim
     let ts_embed = prof_ticks()
+    let base = src_off * dim
     for (i in range64(npos * dim)) {
-        s.x_b[i] = embd[i]
+        s.x_b[i] = embd[base + i]
     }
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
@@ -1523,9 +1524,9 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         prof_add("ple", ts_ple)
     }
     // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): every query of THIS
-    // call attends [swa_lo(q), start_pos + npos) — set for exactly this body, cleared after
+    // call attends [the sliding-window floor, start_pos + npos) — set for exactly this body
     s.attn_uniform_end = non_causal ? start_pos + npos : 0l
-    forward_prefill_body(t, s, npos, start_pos)
+    forward_prefill_body(t, s, npos, start_pos, skip_logits)
     s.attn_uniform_end = 0l
 }
 
@@ -1563,26 +1564,20 @@ def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_
     if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
         panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
-    // each eval reads its own rows from the front of a slice buffer; the source stays untouched
-    var part : array<float>
-    eval_embd_slice_(t, s, embd, 0l, span_lo, false, part)
-    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, part)
-    eval_embd_slice_(t, s, embd, span_hi, npos, false, part)
-    delete part
+    // slices read embd in place via src_off; only the last non-empty slice produces logits
+    eval_embd_slice_(t, s, embd, 0l, span_lo, false, false)
+    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, span_hi >= npos)
+    eval_embd_slice_(t, s, embd, span_hi, npos, false, true)
 }
 
 def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo, hi : int64;
-                             non_causal : bool; var part : array<float>) {
+                             non_causal, last : bool) {
     let n = hi - lo
     if (n <= 0l) {
         return
     }
-    let dim = t.config.dim
-    part |> resize(n * dim)
-    for (i in range64(n * dim)) {
-        part[i] = embd[lo * dim + i]
-    }
-    eval_embd_(t, s, part, n, non_causal)
+    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last)
+    s.n_past += n
 }
 
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state

@@ -4625,6 +4625,15 @@ def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     a |> resize_no_init(need)
 }
 
+// scratch_resize's zero-init twin, for input-scaled scratch whose consumers were not audited for
+// full overwrite; capacity precedes growth so the max_unreserved_size guard never fires
+def sized_resize(@scratch var a : array<auto(numT)>; need : int64) {
+    if (long_capacity(a) < need) {
+        a |> reserve(need)
+    }
+    a |> resize(need)
+}
+
 //! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
 [no_alloc, no_env, no_io]
@@ -4677,30 +4686,30 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     s.xqb |> scratch_resize(npos * maxn)
     s.xsb |> scratch_resize(npos * maxn / 32l)
     if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
-        s.xbsb |> resize(npos * maxn / 16l)
+        s.xbsb |> sized_resize(npos * maxn / 16l)
     }
     if (has_ple(c)) {   // gemma-4 E-series PLE prefill scratch (npos positions)
         let all = c.n_layers * c.n_embd_per_layer
-        s.ple_inp |> resize(npos * all)
-        s.ple_proj |> resize(npos * all)
-        s.ple_gate |> resize(npos * c.n_embd_per_layer)
+        s.ple_inp |> sized_resize(npos * all)
+        s.ple_proj |> sized_resize(npos * all)
+        s.ple_gate |> sized_resize(npos * c.n_embd_per_layer)
     }
     if (c.recr_mask != 0ul) {   // qwen35 deltanet batched projections (the recurrence itself is per-token)
         let cd = dn_conv_dim(c)
-        s.dn_qkv_b |> resize(npos * cd)
-        s.dn_z_b |> resize(npos * c.ssm_d_inner)
-        s.dn_beta_b |> resize(npos * c.ssm_dt_rank)
-        s.dn_g_b |> resize(npos * c.ssm_dt_rank)
-        s.dn_o_b |> resize(npos * c.ssm_d_inner)
+        s.dn_qkv_b |> sized_resize(npos * cd)
+        s.dn_z_b |> sized_resize(npos * c.ssm_d_inner)
+        s.dn_beta_b |> sized_resize(npos * c.ssm_dt_rank)
+        s.dn_g_b |> sized_resize(npos * c.ssm_dt_rank)
+        s.dn_o_b |> sized_resize(npos * c.ssm_d_inner)
         if (g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
-            s.dn_conv_b |> resize(npos * cd)
+            s.dn_conv_b |> sized_resize(npos * cd)
             s.dn_wtap |> resize(c.ssm_d_conv * cd)
             s.dn_cws |> resize(c.ssm_dt_rank * dn_cws_head_size(c))
         }
     }
     if (c.q_gated) {   // gated attention: batched fused [q | gate] projection + gate halves
-        s.dn_qg_b |> resize(npos * 2l * qd)
-        s.dn_qgate_b |> resize(npos * qd)
+        s.dn_qg_b |> sized_resize(npos * 2l * qd)
+        s.dn_qgate_b |> sized_resize(npos * qd)
     }
     // sized for blocked (ATTN_BLOCK_Q rows/head); classic indexes just the first row, a harmless superset
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
@@ -4711,7 +4720,7 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_tmp |> resize(n_heads * head_size)
     } else {
-        s.att_b |> resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+        s.att_b |> sized_resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
     }
 }
 

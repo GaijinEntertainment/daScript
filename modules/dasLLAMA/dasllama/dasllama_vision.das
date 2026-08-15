@@ -84,12 +84,16 @@ def private resize_bilinear(src : VisionImage; tw, th : int) : VisionImage {
     return <- dst
 }
 
+def private copy_image(src : VisionImage) : VisionImage {
+    var same = VisionImage(width = src.width, height = src.height)
+    same.rgb := src.rgb
+    return <- same
+}
+
 // identity resize is a copy (the bilinear would be bit-equal, this is just cheaper)
 def private content_for(src : VisionImage; new_w, new_h : int) : VisionImage {
     if (new_w == src.width && new_h == src.height) {
-        var same = VisionImage(width = src.width, height = src.height)
-        same.rgb := src.rgb
-        return <- same
+        return <- copy_image(src)
     }
     return <- resize_bilinear(src, new_w, new_h)
 }
@@ -99,16 +103,14 @@ def private content_for(src : VisionImage; new_w, new_h : int) : VisionImage {
 //! a BLACK canvas at floor((target−content)/2); an unchanged overall size is a plain copy.
 def public vision_letterbox(src : VisionImage; target : int2) : VisionImage {
     if (target.x == src.width && target.y == src.height) {
-        var same = VisionImage(width = src.width, height = src.height)
-        same.rgb := src.rgb
-        return <- same
+        return <- copy_image(src)
     }
     let scale_w = float(target.x) / float(src.width)
     let scale_h = float(target.y) / float(src.height)
     let scale = min(scale_w, scale_h)
     let new_w = min(ceili(float(src.width) * scale), target.x)
     let new_h = min(ceili(float(src.height) * scale), target.y)
-    let content <- content_for(src, new_w, new_h)
+    var inscope content <- content_for(src, new_w, new_h)
     var dst = VisionImage(width = target.x, height = target.y)
     dst.rgb |> reserve(target.x * target.y * 3)
     dst.rgb |> resize(target.x * target.y * 3)   // fresh elements are zero — the black canvas

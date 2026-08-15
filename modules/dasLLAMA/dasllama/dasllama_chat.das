@@ -574,6 +574,9 @@ def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_part
         tail_parts |> push_from(after, c.tmpl.assistant_open.parts)
     }
     render_parts(m, tail_parts, user_content, tail)
+    delete before
+    delete after
+    delete tail_parts
 }
 
 // ===== Public API =====
@@ -1341,7 +1344,8 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         let n_tail = long_length(tail)
         let n_media = is_image ? c.n_image_rows : c.n_audio_rows
         let npos = n_head + n_media + n_tail
-        var embd : array<float>
+        var inscope embd : array<float>
+        embd |> ensure_capacity(npos * dim)
         embd |> resize(npos * dim)
         embed_text_rows(m, head, embd, 0l)
         for (i in range64(n_media * dim)) {

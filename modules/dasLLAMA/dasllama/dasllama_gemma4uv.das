@@ -406,8 +406,8 @@ def encode_image_(t : Gemma4uvEmbedder; var s : Gemma4uvState; img : VisionImage
     }
     let align = int(t.patch)
     let target = vision_target_size(img.width, img.height, align, min_tok, max_tok)
-    let boxed <- vision_letterbox(img, target)
+    var inscope boxed <- vision_letterbox(img, target)
     maybe_dump_vision(boxed, tag)
-    let planes <- vision_normalize(boxed)
+    var inscope planes <- vision_normalize(boxed)
     return gemma4uv_encode(t, s, planes, int64(target.x), int64(target.y), out)
 }

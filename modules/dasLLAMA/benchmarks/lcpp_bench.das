@@ -383,7 +383,8 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
         let dim = m.config.dim
         let n_head = long_length(head)
         let npos = n_head + n_rows + long_length(tail)
-        var embd : array<float>
+        var inscope embd : array<float>
+        embd |> ensure_capacity(npos * dim)
         embd |> resize(npos * dim)
         embed_text_rows(m, head, embd, 0l)
         for (i in range64(n_rows * dim)) {
