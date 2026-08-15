@@ -206,17 +206,20 @@ a `data:` URI — the server never fetches a remote URL on its request thread:
 ```sh
 curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{
   "messages": [{"role": "user", "content": [
-    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,'"$(base64 -i cats.jpg)"'"}},
+    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,'"$(base64 < cats.jpg | tr -d '\n')"'"}},
     {"type": "text", "text": "What animals are in this picture?"}
   ]}], "max_tokens": 64
 }'
 ```
 
-The image is preprocessed and encoded when the request is parsed; its soft-token rows then prefill
-between the two token spans of the rendered turn, as one non-causal span. v1 rules:
+The image is decoded and encoded on a dedicated vision worker thread — a large upload never
+stalls the other streams' decode — and its soft-token rows then prefill between the two token
+spans of the rendered turn, as one non-causal span. Wrapped base64 (GNU `base64`'s 76-column
+default) decodes fine; the payload caps at 32 MB of file and 64 MP decoded, each a named 400.
+Today's rules:
 
-- **One image per request, on the LAST user message.** Two images is a 400; an image on an earlier
-  message is dropped with a warning, so a follow-up question re-attaches it (the control page does
+- **One image per request, on the FINAL user message.** Two images is a 400; an image anywhere
+  else is dropped with a warning, so a follow-up question re-attaches it (the control page does
   this for you — an attached image rides every message until you remove it).
 - A slot with no vision arm answers 400 rather than silently ignoring the picture.
 - An image stream neither reads nor writes the prefix cache: its KV past the splice does not follow

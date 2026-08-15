@@ -51,6 +51,7 @@ def public vision_token_count(target : int2; align : int) : int => (target.x / a
 // mirrors img_tool::resize_bilinear: corner-aligned (src-1)/(dst-1) ratio, truncating u8 cast.
 // The lerp accumulates in double - single-rounded like the fmadd clang contracts the oracle's
 // lerp into, and deterministic across interp/JIT/AOT (unfused floats missed 2/112896 px by 1).
+[no_env, no_io]
 def private resize_bilinear(src : VisionImage; tw, th : int) : VisionImage {
     var dst = VisionImage(width = tw, height = th)
     dst.rgb |> reserve(tw * th * 3)
@@ -101,6 +102,7 @@ def private content_for(src : VisionImage; new_w, new_h : int) : VisionImage {
 //! Letterbox `src` onto `target` (mtmd `img_tool::resize`, PAD_CEIL): content scale =
 //! min(tw/sw, th/sh), sides min(ceil(side×scale), target), bilinear, composited centered on
 //! a BLACK canvas at floor((target−content)/2); an unchanged overall size is a plain copy.
+[no_env, no_io]
 def public vision_letterbox(src : VisionImage; target : int2) : VisionImage {
     if (target.x == src.width && target.y == src.height) {
         return <- copy_image(src)
@@ -159,6 +161,7 @@ def public maybe_dump_vision(img : VisionImage; tag : string) {
 
 //! u8 → f32 planes for the embedder: exactly x/255, interleaved layout preserved — gemma-4's
 //! `image_mean`/`image_std` are identity and nothing else touches the values.
+[no_env, no_io]
 def public vision_normalize(img : VisionImage) : array<float> {
     var planes : array<float>
     planes |> reserve(length(img.rgb))

@@ -16,7 +16,7 @@ require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + norm
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
 require math
 
-//! The gemma4uv "unified" vision embedder (gemma-4 dense 12B/26B): TEN tensors read (the mmproj
+//! The gemma4uv "unified" vision embedder (gemma-4 dense; 12B is the tested pair): TEN tensors read (the mmproj
 //! file's eleventh, mm.a.input_projection.weight, is the audio projection and never loads), no
 //! attention — im2col 48px superpatches → LN → linear+bias → LN → x/y pos-table adds → LN →
 //! weightless rms → square projection. The DECODER does the visual reasoning through the
