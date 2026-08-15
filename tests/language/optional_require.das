@@ -11,7 +11,7 @@ require dastest/testing_boost public
 // expressible as a cant_ test).
 require ?math math                                  // nolint:STYLE030 — the guarded-load mechanics ARE the test: guard present (math is a core builtin) -> target loaded
 require ?no_such_guard_xyz no_such_target_also_xyz  // guard absent, target unresolvable -> skipped
-require ?no_such_guard_pkg optional_require_fixture // nolint:STYLE030 — guard absent -> SKIPPED even though the target resolves (strict plain guards); the non-load IS the test
+require ?no_such_guard_pkg optional_require_fixture // guard absent -> SKIPPED even though the target resolves (strict plain guards); the non-load IS the test
 // PATH guard (contains '/'): availability = the guard's OWN file resolves; the rail for
 // pure-das packages (nothing C++ to guard on) and cross-package dependency witnesses — the
 // target may live in an always-present package while depending on an optional one (e.g.

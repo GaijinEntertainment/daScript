@@ -101,7 +101,7 @@ def public clipboard_validate_content(content : ClipboardContent const) : Clipbo
 
 def public clipboard_dispose_content(var content : ClipboardContent) {
     delete content.image.rgba8
-    content = ClipboardContent()  // nolint:PERF030 - the only owned field is deleted above; strings are borrowed, so a whole-struct delete would double-free
+    content = ClipboardContent()  // strings are borrowed - a whole-struct delete would double-free
 }
 
 def public clipboard_clone_content(content : ClipboardContent const) : ClipboardContent {

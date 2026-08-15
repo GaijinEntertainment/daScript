@@ -37,6 +37,17 @@ instrument anything, compile in anything, and emit any metadata we want.
 
 ## Roadmap
 
+### One-process many-engine-compile SIGSEGV in IPSCCP (unreproduced, 2026-08-15)
+
+A single dastest process compiling all of `modules/dasLLAMA/tests` under `-jit` (the
+invocation dasLLAMA's checklist forbids — its suites run through `run.das`) crashed once in
+`llvm::SCCPInstVisitor::visitInsertValueInst` → `getStructValueState` → DenseMap insert,
+under `IPSCCPPass` inside `runPasses`. `--isolated-mode` over the same corpus does not
+reproduce, and the sanctioned invocations never enter the shape. Suspect cross-compile
+state in the shared process (many huge JIT compiles back to back), not the IR of any one
+program. Worth a dig if it recurs: repro would start from two-in-a-row engine compiles in
+one process, watching LLVM context/heap reuse.
+
 ### The shadow buffer (the endgame)
 
 A `--jit-debug`-family flag that makes the JIT emit its own bookkeeping into a

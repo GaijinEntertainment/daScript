@@ -502,10 +502,12 @@ run that requires the engine — a probe, a one-off script, a REPL experiment �
 full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for
 exactly that: a frozen copy of a complete, noise-gated mint, tracked in git (the `*.tune.json`
 ignore rule deliberately does not match it). Point `DAS_TUNE_MANIFEST` at it and the framework
-never retunes; on a different box the identity mismatch just serves fallbacks. That is the whole
+never retunes; on a different box the identity mismatch just serves fallbacks, and a copy minted
+before the current `DASLLAMA_VERSION` serves fallbacks on any box — the compile says which with
+one `WARNING DAS_TUNE_MANIFEST` line per scope. That is the whole
 contract — it suppresses the re-exec, it does not tune the box, and a number measured under it
 is not a benchmark. Benches and the rig keep minting their own; refresh the copy when a
-paranoid re-mint moves the crowns.
+paranoid re-mint moves the crowns or `DASLLAMA_VERSION` bumps.
 
 ### 2.6 Capability questions and readiness questions are different questions
 

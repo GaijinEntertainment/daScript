@@ -199,8 +199,9 @@ class ImguiLintVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        // Combined skip: null guards, macro-generated bodies, and macro-synthesized call sites (qmacro's ExprCall `at` points at the template file, not the user's — skip when fileInfo differs).
+        // skip compiler-inserted nodes: generated splices/bodies were linted at their definition, and a foreign fileInfo means a macro-synthesized call site
         if (expr.func == null || expr.func._module == null
+                || expr.genFlags.generated
                 || (current_function != null
                     && (current_function.flags.generated
                         || (current_function.at.fileInfo != null

@@ -59,7 +59,10 @@ triple — same inputs, same filename, cache hit. AST-level changes therefore se
 through the function hashes; **emitter-level changes do not** — a change that alters generated
 machine code for identical inputs (IR generation, target-machine setup, `[llvm_code]`
 generators, the jit ABI) is invisible to the key and silently serves stale code from cache
-unless `LLVM_JIT_CODEGEN_VERSION` is bumped. "The jit call ABI" is the contract between the
+unless `LLVM_JIT_CODEGEN_VERSION` is bumped. Stamped `[llvm_code]` *arguments* are not
+emitter-level: they fold into both cache keys per function (the hint folds), so a change that
+merely re-selects which perm gets stamped — the `[tune]` machinery — self-invalidates with no
+bump. "The jit call ABI" is the contract between the
 generated code and the engine: the generated function signatures and name scheme
 (`create_uid_nodes` / `get_dll_fn_name`), the prologue shape (`jit_emit_prologue`), the
 `LlvmJitFlags`/`LlvmJitMode` inputs to the emitter, and the extern-resolution surface the
@@ -108,3 +111,8 @@ and per-scope or per-site repeats are correct. A library that only exposes the o
 when the announce lands at the consumer in the same change. Verbosity knobs
 (`DAS_TUNE_VERBOSITY`) shape only how much is printed, not what runs — they are not overrides
 under this contract.
+
+Environment knobs load ONCE, at context init, into the `[EnvConfig]` structs `g_env_jit` /
+`g_env_tune` (`llvm_env.das`) — a mid-process `setenv` changes nothing the backend reads.
+In-process overrides therefore go through the tune setters (`tune_set_verbosity`,
+`tune_set_noise_cv`, …), which also arm spawned children by exporting the matching variable.

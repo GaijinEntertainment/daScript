@@ -14,6 +14,10 @@ options gen2
 
 expect 31208:5
 
+// the rule is source-level: without this, main()'s auto-inlined copies of the bad_*
+// bodies re-report every finding at the (stamped) call-site lines
+options auto_inline_functions = false
+
 require daslib/perf_lint
 
 struct Holder {

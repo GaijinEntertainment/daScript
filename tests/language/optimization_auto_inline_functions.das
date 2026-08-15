@@ -151,7 +151,7 @@ def private big_private_addr(a : int) : int {
     return t
 }
 
-def recur_inc(n : int) : int => n <= 0 ? 0 : recur_inc(n - 1) + 1  // nolint:LINT010
+def recur_inc(n : int) : int => n <= 0 ? 0 : recur_inc(n - 1) + 1
 
 def gadd(a, b : auto) => a + b  // generic: instances stay out of the heuristic tier
 

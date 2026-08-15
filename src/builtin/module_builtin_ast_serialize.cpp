@@ -836,15 +836,11 @@ namespace das {
             at.last_line = at.line + diff;
         }
 
-        // if ( writing ) {
-        //     DAS_ASSERTF(at.column <= 255 && at.last_column <= 255, "unexpected long line");
-        //     uint8_t column = at.column, last_column = at.last_column;
-        //     *this << column << last_column;
-        // } else {
-        //     uint8_t column, last_column;
-        //     *this << column << last_column;
-        //     at.column = column; at.last_column = last_column;
-        // }
+        // columns must round-trip: local VISIBILITY ranges gate the GC walk, and inline
+        // splices distinguish locals on one line by column alone (the SpliceAtStamp
+        // ladder) - dropping columns here made a deserialized program collect unsoundly
+        serializeAdaptiveSize32(at.column);
+        serializeAdaptiveSize32(at.last_column);
 
         return *this;
     }
