@@ -1,8 +1,8 @@
 options gen2
 options persistent_heap
 options gc
-// gc-semantics file: heap_collect refuses chains with compiled (AOT/JIT) frames,
-// so the whole file stays interpreted under both sweeps
+// gc-semantics file: heap_collect refuses chains with compiled (AOT/JIT) frames -
+// no_aot covers the AOT sweep; the collect tests carry [test, no_jit] for the jit sweep
 options no_aot
 
 require daslib/decs_boost
