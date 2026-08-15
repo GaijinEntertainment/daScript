@@ -142,6 +142,13 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "data: URI") >= 0, "the 400 names the data-URI requirement")
             }
+            // TWO images on the ARMED slot: the one-image rule fires here (the text-only twin in
+            // test_openai_server answers "no vision arm" instead — the arm check outranks the count)
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,BBBB\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
+            }
             // a data URI with no base64 marker, and one with garbage payload — each its own 400
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png,rawbytes\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {

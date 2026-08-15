@@ -608,8 +608,13 @@ def exchange_boot_submit_check(policy : ExchangePolicy) {
     var info : SidecarInfo
     if (empty(text) || tune_sidecar_stale(manifest) || !parse_sidecar_info(text, info)
             || box_match_key(info.box) != box_match_key(tune_box_identity())
-            || info.dasllama_version != DASLLAMA_VERSION
             || sidecar_origin(text) == "exchange") {
+        return
+    }
+    if (info.dasllama_version != DASLLAMA_VERSION) {
+        // the version keys EXCHANGE validity only (the local rail keys on mtime + box) — say why
+        // this box's sidecar quietly stops being offered after an engine version bump
+        to_log(LOG_INFO, "dasllama exchange: local sidecar is v{info.dasllama_version}, engine is v{DASLLAMA_VERSION} - not offered for submission (re-tune to publish)\n")
         return
     }
     let raw_sha = sha256_hex(text)

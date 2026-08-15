@@ -26,8 +26,7 @@ let TEST_PORT = 18101
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
 def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
 }
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 

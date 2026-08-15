@@ -52,6 +52,18 @@ def test_vision_chat(t : T?) {
             add_user_image_(chat, img)
             add_user_(chat, "describe this image")
             tt |> equal(chat.n_image_rows, CATS_ROWS, "image span length from the geometry")
+            // one media kind per turn: audio on a vision chat panics (no tower arm, and the
+            // cross-guard behind it), never a silent drop of either modality's rows
+            var mixed = false
+            try {
+                var pcm : array<float>
+                pcm |> resize(1600)
+                add_user_audio_(chat, pcm)
+                delete pcm
+            } recover {
+                mixed = true
+            }
+            tt |> success(mixed, "audio beside a queued image panics instead of dropping rows")
             // TIER 2 - the stream shape: head ends at the open marker, tail opens at the close one
             var head : array<int64>
             var tail : array<int64>

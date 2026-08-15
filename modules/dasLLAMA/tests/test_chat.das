@@ -896,10 +896,14 @@ def test_chat_pending_cleared_on_consume(t : T?) {
             // leaves armed would silently splice a stale image into a later unrelated turn
             c.n_image_rows = 2l   // planted: content is never read on this text path
             c.image_rows |> resize(8l)
+            c.n_audio_rows = 3l   // both modalities: the consume clears each independently
+            c.audio_rows |> resize(12l)
             add_assistant(m, c, "One, two, three, four.")
             t |> equal(c.pending, "", "add_assistant() cleared the consumed text")
-            t |> equal(c.n_image_rows, 0l, "add_assistant() cleared the queued media rows")
-            t |> success(empty(c.image_rows), "the row buffer went with the count")
+            t |> equal(c.n_image_rows, 0l, "add_assistant() cleared the queued image rows")
+            t |> success(empty(c.image_rows), "the image row buffer went with the count")
+            t |> equal(c.n_audio_rows, 0l, "add_assistant() cleared the queued audio rows")
+            t |> success(empty(c.audio_rows), "the audio row buffer went with the count")
             delete c
             delete m
         }

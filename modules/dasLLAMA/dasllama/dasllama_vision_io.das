@@ -17,10 +17,11 @@ require dasllama/dasllama_vision
 
 def private image_from_stb(pixels; x, y : int) : VisionImage {
     var img = VisionImage(width = x, height = y)
-    img.rgb |> reserve(x * y * 3)   // a decoded photo can exceed max_unreserved_size; size it exactly
-    img.rgb |> resize(x * y * 3)
+    let n = int64(x) * int64(y) * 3l   // widen BEFORE the multiply: an int product wraps past ~715 MP
+    img.rgb |> reserve(n)   // a decoded photo can exceed max_unreserved_size; size it exactly
+    img.rgb |> resize(n)
     unsafe {
-        memcpy(addr<void?>(img.rgb[0]), reinterpret<void?>(pixels), int64(x * y * 3))
+        memcpy(addr<void?>(img.rgb[0]), reinterpret<void?>(pixels), n)
     }
     return <- img
 }
@@ -70,7 +71,8 @@ def public load_image_rgb(bytes : array<uint8>; max_pixels : int64 = 0l) : Visio
 //! `dasllama_vision` instead — it must not pull stbimage into the core; this is for apps that
 //! already require this module and want a viewer-friendly format.
 def public dump_image_png(img : VisionImage; path : string) : bool {
-    if (img.width == 0 || img.height == 0 || long_length(img.rgb) < int64(img.width * img.height * 3)) {
+    if (img.width == 0 || img.height == 0
+            || long_length(img.rgb) < int64(img.width) * int64(img.height) * 3l) {
         return false
     }
     return stbi_write_png(path, img.width, img.height, 3,

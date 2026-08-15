@@ -266,6 +266,7 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
             panic("dasLLAMA: '{path}' is not a prepared gemma4uv-embedder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
+        uv_check_planes(t, path)
         return <- t
     }
     if (g_env_engine.image) {

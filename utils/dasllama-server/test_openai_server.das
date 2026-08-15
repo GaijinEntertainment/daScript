@@ -33,7 +33,7 @@ def private test_save_path() : string {
 let TEST_SAVE_PATH = test_save_path()
 
 def private models_dir() : string {
-    return g_env_harness.models_dir   // empty -> MODEL_PATH is relative -> the test skips
+    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
 }
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 
@@ -293,11 +293,12 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "no vision arm") >= 0, "the 400 names the missing vision arm")
             }
-            // two images in one message: v1 splices one span, so this is a 400 BEFORE any decode
+            // two images on a TEXT-ONLY slot: the missing arm is the more useful error, so it
+            // outranks the count (the one-image rule is pinned on the ARMED slot in the vision test)
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,BBBB\"}}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
-                t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
+                t |> success(find(string(resp.body), "no vision arm") >= 0, "the missing arm outranks the image count")
             }
             // /v1/stats declares both arms the page reads: the vision flag and the thinking default
             GET("{base_url}/v1/stats") $(resp) {
@@ -366,7 +367,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 }
             }
             // POST /config — validated body writes an authoritative TOML to the registered path
-            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\"}") $(resp) {
+            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "restart_required") >= 0, "save response flags restart")
             }
@@ -381,6 +382,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(troot?["port"] ?? 0l, 8123l)
                     t |> equal(troot?["model"] ?? "", "m.gguf")
                     t |> success(troot?["mtp"] ?? false, "bool key round-trips")
+                    t |> equal(troot?["image_mmproj"] ?? "", "mm.gguf")   // a save must not eat the vision arm
                     unsafe {
                         delete troot
                     }
@@ -466,7 +468,7 @@ def test_asr_worker_panic_boundary(t : T?) {
         var failure = ""
         var failed = false
         with (module openai_server) {
-            failed = catch_asr_panic(failure) {
+            failed = catch_worker_panic(failure) {
                 panic("forced ASR worker failure")
             }
         }
@@ -478,7 +480,7 @@ def test_asr_worker_panic_boundary(t : T?) {
         var failure = ""
         var failed = true
         with (module openai_server) {
-            failed = catch_asr_panic(failure) {
+            failed = catch_worker_panic(failure) {
                 invoked = true
             }
         }

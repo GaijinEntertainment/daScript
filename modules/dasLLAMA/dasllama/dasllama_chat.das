@@ -682,6 +682,9 @@ def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string
     if (model.metal_blob) {
         panic("dasLLAMA chat: the image span prefills on the CPU and a metal-blob model has no CPU weights - load the decoder without the metal blob to use vision")
     }
+    if (model.config.recr_mask != 0ul) {
+        panic("dasLLAMA chat: a non-causal image span cannot apply to recurrent layers - this architecture has no vision arm")
+    }
     var c <- create_chat_(model, system, max_new, kv_dtype)
     if (empty(c.tmpl.image_pre.parts)) {
         panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
@@ -940,7 +943,7 @@ def add_assistant_(m : Model; var c : ChatSession; text : string) {
     let body <- encode_(m, text, false, false)
     eval_(m, c.session, body)
     consume_pending_(c)
-    var close : array<int64>
+    var inscope close : array<int64>
     render_parts(m, c.close_parts, "", close)
     eval_(m, c.session, close)
     c.history |> push(Message(role = Role.assistant, content = text))
@@ -1348,13 +1351,13 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         return ""
     }
     // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
-    var stops <- effective_stop_ids_(c)
-    var reply_parts : array<string>
+    var inscope stops <- effective_stop_ids_(c)
+    var inscope reply_parts : array<string>
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
         // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
         let is_image = c.n_image_rows > 0l
-        var head : array<int64>
-        var tail : array<int64>
+        var inscope head : array<int64>
+        var inscope tail : array<int64>
         if (is_image) {
             render_prompt_image(m, c, head, tail)
         } else {
@@ -1390,7 +1393,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         c.image_rows |> clear()
         c.n_image_rows = 0l
     } else {
-        var pre : array<int64>
+        var inscope pre : array<int64>
         render_prompt(m, c, pre)
         render_think_suppress(m, c, pre)
         generate_(m, c.session, pre, params, c.max_new) $(id, piece) {

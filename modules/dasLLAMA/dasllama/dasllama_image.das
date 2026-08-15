@@ -1372,9 +1372,10 @@ def private metal_derive_plane(var t : Model; name : string; var w : ImgWriter;
 //! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared
 //! image and put the image-served struct in `out`. With a target path the FILE is the handoff (`m`
 //! is dropped between write and map); without one the image is built in memory. `m` is spent.
-def cache_via_image(var m; var out; img : string; tag : string = ""; quant : string = "q8") {
-    // no plane wants special handling — the walk writes them all from RAM
-    cache_via_image_(m, out, img, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+def cache_via_image(var m; var out; img : string; tag : string = ""; quant : string = "q8") : bool {
+    // no plane wants special handling — the walk writes them all from RAM.
+    // True only when the FILE was written — only then may the caller reap its lane.
+    return cache_via_image_(m, out, img, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
         return false
     }
 }
@@ -1415,24 +1416,25 @@ def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag :
 // cache_via_image with the walk's plane hook exposed — the metal flavor derives its blob plane
 // from the planar ones here instead of materializing it first (see metal_derive_plane).
 def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
-                             plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
+                             plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img == "" || !image_save_enabled()) {
         if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
             out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         }
-        return
+        return false
     }
     let ts = ref_time_ticks()
     if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - serving the carrier as loaded\n")
         out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
-        return
+        return false
     }
     to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
     delete m   // before the map, not after: holding both is what makes a cold load peak twice
     if (!load_image(img, out, tag, quant)) {
         panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
     }
+    return true
 }
 
 // interp-load guard: the gguf path's O(model) das loops run ~10x slower interpreted (tinyllama
@@ -1618,7 +1620,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         // and now the load's own flavor, on the one rail: built once in memory, written out for
         // the next run, and served from the very bytes that were written
         var built = Model()
-        cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
+        let wrote = cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
             metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs) $(name : string;
                                                                              var w : ImgWriter; var sections : array<ImgSection>) {
             return metal_flavor && metal_derive_plane(m, name, w, sections)
@@ -1629,7 +1631,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             convert_model_to_metal_blob(built)
         }
         delete m
-        dlim_gc_stale(path, metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs)   // this lane only
+        if (wrote) {
+            dlim_gc_stale(path, metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs)   // this lane only; a failed/skipped write reaps nothing
+        }
         // the GPU MoE tier gathered from planes the build just freed — re-gather from the image,
         // exactly as the mapped rail does (a no-op when the build declined and `built` IS m)
         moe_gpu_upload_resident(built)

@@ -802,6 +802,33 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     if (empty(g_models)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
     }
+    // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
+    // roster path is checked up front and degrades — skip the slot, drop the arm — instead of
+    // dying in a loader panic before the port (and the config page, the recovery UI) opens.
+    var roster : array<ModelEntry>
+    for (ent in g_models) {
+        var e = ent
+        if (!stat(e.path).is_valid) {
+            to_log(LOG_ERROR, "dasllama-server: skipping model '{empty(e.name) ? base_name(e.path) : e.name}' - file not found: {e.path} (fix the config, then POST /restart)\n")
+            continue
+        }
+        if (!empty(e.image_mmproj) && !stat(e.image_mmproj).is_valid) {
+            to_log(LOG_ERROR, "dasllama-server: dropping the vision arm of '{empty(e.name) ? base_name(e.path) : e.name}' - mmproj not found: {e.image_mmproj}\n")
+            e.image_mmproj = ""
+        }
+        roster |> push(e)
+    }
+    g_models <- roster
+    if (empty(g_models)) {
+        print("error: no loadable model - every roster path failed its file check\n")
+        g_exit_code = 2
+        request_exit()
+        return
+    }
+    if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
+        to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
+        g_cfg.image_mmproj = ""
+    }
     var def_idx = 0
     for (i in range(length(g_models))) {
         if (g_models[i].is_default) {

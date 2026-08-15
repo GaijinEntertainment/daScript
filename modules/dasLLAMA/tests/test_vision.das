@@ -96,9 +96,14 @@ def test_vision_geometry(t : T?) {
             let tgt = vision_target_size(wh.x, wh.y, ALIGN, MIN_TOKENS, MAX_TOKENS)
             t |> success(vision_token_count(tgt, ALIGN) <= MAX_TOKENS, "{wh.x}x{wh.y} -> {tgt} within {MAX_TOKENS} tokens")
         }
-        // int64 pixel math: a huge max_tokens no longer wraps negative and collapses the canvas
-        let big = vision_target_size(4000, 3000, ALIGN, MIN_TOKENS, 2000000)
-        t |> success(vision_token_count(big, ALIGN) > 1000, "no int32 collapse at max_tokens=2e6 ({big})")
+        // int64 pixel math: max_tokens in the int32-wrapping band [932067, 1864135] must not
+        // wrap max_pixels negative and collapse the canvas to one patch
+        let big = vision_target_size(4000, 3000, ALIGN, MIN_TOKENS, 1000000)
+        t |> success(vision_token_count(big, ALIGN) > 1000, "no int32 collapse at max_tokens=1e6 ({big})")
+        // and the SOURCE product: w*h past 2^31 must not wrap before the beta ratio
+        let vast = vision_target_size(16777216, 16777216, ALIGN, MIN_TOKENS, MAX_TOKENS)
+        t |> success(vast.x > 0 && vast.y > 0 && vision_token_count(vast, ALIGN) <= MAX_TOKENS,
+            "a 2^48-pixel source downscales sanely ({vast})")
     }
 }
 
@@ -198,6 +203,28 @@ def test_vision_io_roundtrip(t : T?) {
         let missing <- load_image_rgb(tmp_path("no_such_file.png"))
         t |> equal(missing.width, 0)
         t |> equal(missing.height, 0)
+    }
+    t |> run("write_image_ppm round-trips header and bytes") @(t : T?) {
+        let src <- make_fixture("cb", 9, 5)
+        let path = tmp_path("probe.ppm")
+        t |> success(write_image_ppm(src, path), "ppm written")
+        var inscope bytes : array<uint8>
+        fopen(path, "rb") $(f) {
+            if (f != null) {
+                bytes |> resize(int(fstat(f).size))
+                fread(f, bytes)
+            }
+        }
+        let head = "P6\n9 5\n255\n"
+        t |> equal(length(bytes), length(head) + 9 * 5 * 3, "header plus one byte per channel")
+        for (i in range(9 * 5 * 3)) {
+            if (bytes[length(head) + i] != src.rgb[i]) {
+                t |> failure("pixel byte {i} differs")
+                break
+            }
+        }
+        let empty_img = VisionImage()
+        t |> success(!write_image_ppm(empty_img, tmp_path("empty.ppm")), "a zero-size image refuses to write")
     }
     t |> run("max_pixels refuses an oversized image from the header alone") @(t : T?) {
         let src <- make_fixture("gray", 32, 20)

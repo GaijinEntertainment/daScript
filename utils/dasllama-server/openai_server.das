@@ -321,10 +321,14 @@ def set_default_max_tokens(n : int64) {
 }
 
 //! Give slot `name` a vision arm: load the gemma4uv mmproj at `path` so its chat route accepts
-//! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``run_server``. A
+//! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``init_server`` /
+//! ``run_server`` (the vision worker snapshots the arms at init). A
 //! mismatched decoder/mmproj pair, a family with no image markers, a metal-blob decoder (the
 //! image span prefills on the CPU), or a second call PANICS here, not on the first request.
 def set_model_vision(name : string; path : string) {
+    if (g_server_started) {
+        panic("dasllama-server: set_model_vision after init_server - the vision worker snapshots the arms at init; arm the slot before starting")
+    }
     let mi = slot_index(name)
     if (mi < 0) {
         panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
@@ -540,7 +544,7 @@ def private handle_bench_start(var resp : HttpResponse?) : http_status {
             error_body(empty(g_lcpp_bin) ? "set lcpp_bin in the config to enable benchmarking" : "benchmarking needs a source-tree daslang (standalone exe cannot spawn the bench child)", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0) {
+    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_vision_wires)) {
         return resp |> JSON(
             error_body("streams are active — contended numbers are misleading; drain first, then bench", "invalid_request_error"),
             http_status.CONFLICT)
@@ -693,7 +697,7 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
             error_body("baking needs a source-tree daslang (standalone exe cannot spawn the converter child)", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0) {
+    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_vision_wires)) {
         return resp |> JSON(
             error_body("streams are active — the converter competes for cores and RAM; drain first, then bake", "invalid_request_error"),
             http_status.CONFLICT)
@@ -1585,7 +1589,7 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
             error_body("model '{want}' not found — GET /v1/models lists the served ids", "model_not_found"),
             http_status.NOT_FOUND)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0) {
+    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_vision_wires)) {
         return resp |> JSON(
             error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"),
             http_status.CONFLICT)
@@ -1627,13 +1631,13 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0; think : ThinkStream = ThinkStream();
-                             tool_mode : ToolMode = ToolMode.none) {
+                             tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l) {
     let np = long_length(prompt) + n_media
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
     }
-    let rid = next_id()
+    let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
@@ -1869,6 +1873,16 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
                 bad_request(srv, writer, "one image per request — this message carries {length(images)}")
                 return
             }
+            if (!g_vision_armed || g_vision_ready < 1) {
+                respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
+                        error_body("the vision worker is not ready", "server_error"))
+                return
+            }
+            if (length(g_vision_wires) >= VISION_QUEUE_LIMIT) {
+                respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
+                        error_body("the vision queue is at capacity ({VISION_QUEUE_LIMIT}) — retry shortly", "server_error"))
+                return
+            }
             var file_bytes : array<uint8>
             var why = ""
             if (!decode_data_uri_bytes(images[0], file_bytes, why)) {
@@ -1884,6 +1898,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
             var vjob = VisionJob(id = rid, slot = g_cur, file_bytes <- file_bytes, tag = "req{rid}")
             g_vision_jobs |> push_clone(vjob)
             delete vjob
+            to_log(LOG_INFO, "[req {rid}] image parked for the vision worker ({length(g_vision_wires)} in flight)\n")
             js = null   // ownership parked with the wire; the defer above must not free it
             return
         }
@@ -1897,7 +1912,8 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
 // and registers. Runs synchronously for a text request; an image request re-enters here from
 // drain_vision_events with the worker's rows.
 def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?;   // nolint:STYLE037,STYLE038 — flat request-field derivation: one guard and one client-facing message per field
-                             slot : int; var media : array<float>; n_media : int64) {
+                             slot : int; var media : array<float>; n_media : int64;
+                             resume_rid : int64 = 0l) {
     g_cur = slot
     let msgs_v = js?["messages"]
     let streaming = js?["stream"] ?? false
@@ -2010,7 +2026,7 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     }
     register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
                      streaming, true, "chatcmpl",
-                     has_tools, call_open, call_close, seed, think_stream, wire_tool_mode)
+                     has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -2350,8 +2366,9 @@ struct private OaiStatsResponse {
     hardware : string
     asr_done_jobs : int64
     asr_audio_s : float
-    vision : bool             // the ACTIVE slot's vision arm (the page shows its attach button on this)
-    thinking_default : bool   // the ACTIVE slot's family thinking default (the page's checkbox seed)
+    vision : bool             // the DEFAULT slot's vision arm — the slot a model-less page request lands on
+    thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
+    vision_pending : int      // image requests parked on the vision worker (0 = idle)
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
@@ -2391,7 +2408,8 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         // DEFAULT slot, not g_active: these two gate the page's request UI, and a page request
         // carries no model field, so it lands on the default slot - the UI must show ITS truth
         vision = g_slots[g_default_slot].vision.proj_dim > 0l,
-        thinking_default = g_slots[g_default_slot].think_default)
+        thinking_default = g_slots[g_default_slot].think_default,
+        vision_pending = length(g_vision_wires))
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -2920,7 +2938,7 @@ def private emit_asr_event(events : Channel?; event : AsrEvent) {
     events |> push_clone(event)
 }
 
-def private catch_asr_panic(var failure : string&; blk : block<() : void>) : bool {
+def private catch_worker_panic(var failure : string&; blk : block<() : void>) : bool {
     var caught = false
     try {
         invoke(blk)
@@ -3019,7 +3037,7 @@ def private asr_worker_main(
                 var job_copy : AsrJob
                 job_copy := job
                 var failure = ""
-                let failed = catch_asr_panic(failure) {
+                let failed = catch_worker_panic(failure) {
                     process_asr_job(model, session, session_language, has_session, job_copy, events)
                 }
                 if (failed) {
@@ -3229,6 +3247,8 @@ struct private VisionWire {
     slot : int
 }
 
+let VISION_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes ride the channel)
+
 var private g_vision_jobs : Channel?
 var private g_vision_events : Channel?
 var private g_vision_wires : table<int64; VisionWire>
@@ -3244,8 +3264,16 @@ def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var eve
         continue if (empty(line))
         let sep = find(line, "\t")
         let slot = to_int(slice(line, 0, sep))
-        embs[slot] <- load_gemma4uv_embedder(slice(line, sep + 1))   // own mapping; pages shared with the slot's
-        states[slot] <- Gemma4uvState()
+        var load_failure = ""
+        let load_failed = catch_worker_panic(load_failure) {
+            embs[slot] <- load_gemma4uv_embedder(slice(line, sep + 1))   // own mapping; pages shared with the slot's
+            states[slot] <- Gemma4uvState()
+        }
+        if (load_failed) {   // the slot's requests take the no-embedder 400; the boot must not hang on this thread
+            to_log(LOG_ERROR, "dasllama-server: vision worker could not load slot {slot}'s embedder: {load_failure}\n")
+            embs |> erase(slot)
+            states |> erase(slot)
+        }
     }
     var hello = VisionEvent(ready = true)
     events |> push_clone(hello)
@@ -3260,18 +3288,30 @@ def private vision_worker_main(arms_spec : string; var jobs : Channel?&; var eve
             var job_copy : VisionJob
             job_copy := job
             var out = VisionEvent(id = job_copy.id)
-            var inscope img <- decode_image_bytes(job_copy.file_bytes, out.why)
-            if (img.width == 0) {
-                events |> push_clone(out)   // ok = false; why carries the client-facing reason
+            if (!key_exists(embs, job_copy.slot)) {
+                out.why = "this slot has no vision embedder in the worker (armed after init_server, or its load failed at boot)"
             } else {
-                let t0 = ref_time_ticks()
-                out.n_media = encode_image(embs[job_copy.slot], states[job_copy.slot], img, job_copy.tag, out.rows)
-                out.ok = true
-                out.width = img.width
-                out.height = img.height
-                out.enc_ms = int64(get_time_usec(t0)) / 1000l
-                events |> push_clone(out)
+                // the one rail that chews untrusted bytes: an escaping panic in a new_thread
+                // worker is a PROCESS abort, so every job runs under the catch (the ASR shape)
+                var failure = ""
+                let failed = catch_worker_panic(failure) {
+                    var inscope img <- decode_image_bytes(job_copy.file_bytes, out.why)
+                    if (img.width != 0) {
+                        let t0 = ref_time_ticks()
+                        out.n_media = encode_image(embs[job_copy.slot], states[job_copy.slot], img, job_copy.tag, out.rows)
+                        out.ok = true
+                        out.width = img.width
+                        out.height = img.height
+                        out.enc_ms = int64(get_time_usec(t0)) / 1000l
+                    }
+                }
+                if (failed) {
+                    to_log(LOG_ERROR, "[req {job_copy.id}] vision encode failed: {failure}\n")
+                    out.ok = false
+                    out.why = "the vision encode failed - see the server log"
+                }
             }
+            events |> push_clone(out)
             delete out
             delete job_copy
         }
@@ -3330,6 +3370,8 @@ def private stop_vision_worker() {
         g_vision_events |> pop_with_timeout_clone(1000) $(event : VisionEvent#) {
             if (event.bye) {
                 stopped = true
+            } elif (!event.ready) {
+                to_log(LOG_WARNING, "[req {event.id}] vision result discarded during teardown\n")
             }
         }
     }
@@ -3345,6 +3387,9 @@ def private drain_vision_events(srv : WebSocketServer) {
             var ev : VisionEvent
             ev := event
             defer() { delete ev }
+            // interior pointer into g_vision_wires — nothing inserts into the table between here
+            // and the erase (the only insert is handle_chat's park, and handlers cannot run inside
+            // this drain)
             var wire = unsafe(g_vision_wires?[ev.id])
             if (wire == null) {
                 return   // the client vanished while encoding; reap released the writer
@@ -3353,9 +3398,11 @@ def private drain_vision_events(srv : WebSocketServer) {
                 release_writer(srv, wire.writer)
             } elif (!ev.ok) {
                 bad_request(srv, wire.writer, ev.why)
+            } elif (reject_deferred_while_draining(srv, wire.writer)) {
+                pass   // a clean terminal 503: the drain must not admit a new generation
             } else {
                 to_log(LOG_INFO, "[req {ev.id}] image {ev.width}x{ev.height} -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
-                handle_chat_tail(srv, wire.writer, wire.js, wire.slot, ev.rows, ev.n_media)
+                handle_chat_tail(srv, wire.writer, wire.js, wire.slot, ev.rows, ev.n_media, ev.id)
             }
             unsafe {
                 delete wire.js
@@ -3455,7 +3502,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}\n")
+                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, vision_parked={length(g_vision_wires)}\n")
             }
             g_shutdown_requested = true
             g_restart_requested = true
@@ -3466,7 +3513,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}\n")
+                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, vision_parked={length(g_vision_wires)}\n")
             }
             g_shutdown_requested = true
             return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
@@ -3636,7 +3683,7 @@ def update_server() : bool {
     flush_events(g_server.server)
     flush_tool_keepalives(g_server.server)
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
-        g_asr_pending == 0) {
+        g_asr_pending == 0 && empty(g_vision_wires)) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")
         return false
     }
@@ -3654,6 +3701,8 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_server_started = false
     if (g_asr_jobs != null && g_asr_events != null) {
         stop_asr_worker_threads()
+    }
+    if (g_vision_jobs != null && g_vision_events != null) {
         stop_vision_worker()
     }
     if (g_server != null) {
