@@ -4,7 +4,8 @@ These module-owned tests cover the `llvm_tune` permutation, manifest, policy, tu
 and re-execution integration paths. They are intentionally outside the core `tests/jit_tests`
 sweep because several cases spawn nested `daslang` processes and full JIT compilations.
 
-Run the suite explicitly from the repository root:
+Run the suite explicitly from the repository root, on an LLVM-enabled build
+(`-DDAS_LLVM_DISABLED=OFF`):
 
 ```text
 bin/Release/daslang.exe dastest/dastest.das -jit -- --timing-outliers 10 --test modules/dasLLVM/tests

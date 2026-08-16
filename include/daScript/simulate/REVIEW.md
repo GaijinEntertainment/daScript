@@ -16,5 +16,7 @@
   states a per-consumer verdict (updated / no change needed / rebuild required) for the
   rtti binding (`src/builtin/module_builtin_rtti.cpp`), the das-side readers of the
   struct (enumerate with MCP `grep_usage` on the struct name), and external-module
-  rebuilds (`skills/abi_break_sweep.md`).** A diff doing so with no such statement is a
-  defect.
+  rebuilds (`skills/abi_break_sweep.md`); such a diff with no verdict statement is a
+  defect.** The layout pin (`tests-cpp/small/test_debug_info_layout_pin.cpp`) pins the
+  size and every field offset of every `debug_info.h` struct; a diff weakening the pin
+  is a defect.
