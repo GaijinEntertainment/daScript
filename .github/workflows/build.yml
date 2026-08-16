@@ -486,12 +486,12 @@ jobs:
         esac
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
-            # LSan suppressions: format_error (fmt::throw_format_error allocates
-            # std::runtime_error whose internal string is reported as leaked
-            # because the exception object isn't always destroyed); uriParseSingleUriA
-            # / uriMakeOwner (Uri handle bound to daslang without auto-finalize —
-            # tracked separately, real fix is in the binding).
-            printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
+            # LSan suppressions: uriParseSingleUriA / uriMakeOwner (Uri handle bound
+            # to daslang without auto-finalize — tracked separately, real fix is in
+            # the binding). format_error is deliberately NOT suppressed: FMT_THROW
+            # destroys the exception before the panic jump, and this lane is the
+            # regression canary for that.
+            printf 'leak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             export TSAN_OPTIONS="suppressions=$(pwd)/.github/tsan_suppressions.txt"
             # Sanitizer matrix: only run language tests under JIT (full test
@@ -540,9 +540,9 @@ jobs:
     - name: "Small C++ Tests"
       run: |
         set -eux
-        # Suppress LSan false-positives from format_error and JIT-mode exit() paths;
-        # see "Test" step above for the same suppressions.
-        printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > build/suppressions.txt
+        # Suppress LSan false-positives from the Uri binding; see "Test" step above
+        # for the same suppressions.
+        printf 'leak:uriParseSingleUriA\nleak:uriMakeOwner\n' > build/suppressions.txt
         export LSAN_OPTIONS="suppressions=$(pwd)/build/suppressions.txt"
         cd build
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -571,7 +571,7 @@ jobs:
            *)
             # Same suppressions as the "Test" step — sanitizer matrix entries
             # need them here too.
-            printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
+            printf 'leak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             export TSAN_OPTIONS="suppressions=$(pwd)/.github/tsan_suppressions.txt"
             cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot

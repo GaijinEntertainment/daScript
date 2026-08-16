@@ -26,29 +26,27 @@ fixes.
   problem and the fix in its own words ("this comment narrates the assignment below
   it"), never by citing this guide. The guide teaches writing; it is not an authority
   to invoke.
-- **Exceptions justify themselves.** There is no exception marker. A comment that
-  needs to be long must make the reason obvious from its content alone — an
-  injectivity argument, a wire-format contract, a miscompile it prevents. If a reader
-  who never saw this guide would ask "why is this comment so long?", that is the
-  finding.
+- **Exceptions justify themselves.** There is no exception marker; a rule's own text
+  carries the boundary for when a departure stands.
 - **The audit is not a gate.** Style review runs on every PR; findings persuade, lint
   compels. Fix or consciously decline — there is no re-run-until-clean loop.
 
 Rules marked *(lintable)* are mechanical enough for a lint to enforce; das already has
-some (noted), C++/JS lints are follow-up work.
+some (noted), C++ and JS have none — there the rule is the reviewer's.
 
 ## Comments
 
-**Short or absent.** 1–2 lines preferred, 3 the cap — das lint STYLE014 enforces it under
-`daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
-reviewer's. Inside a `def private` body the cap is ONE line (STYLE015, same gating), and that cap is
-body-only: a comment *attached to* a private symbol takes the ordinary 3-line cap plus the
-bar in *Private symbols don't get public-style docs* below. The cap covers per-symbol
-and in-body comments; the file header — the block before the first declaration,
-STYLE014's boundary — is governed by the map rule below. A comment that doesn't fit is
-the signal to interrogate it: why does this need prose at all, and does the detail
-belong at the use site, in the file-header map (shared contract moves up, the symbol
-keeps what is specific to it) — or nowhere?
+**Short or absent.** 1–2 lines preferred, 3 the cap. A comment's volume is the number
+of lines its text would occupy re-wrapped at the width the file's other comments use —
+count those against the cap. das lint STYLE014 enforces the physical line count under
+`daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is
+the reviewer's. The cap covers per-symbol and in-body comments; the file header — the
+block before the first declaration, STYLE014's boundary — is governed by the map rule
+below. Over the cap, a comment stands only when its content alone shows why — an
+injectivity argument, a wire-format contract, a miscompile it prevents; the test is
+that a cold reader never asks "why is this comment so long?". Anything else over the
+cap gets interrogated: does the detail belong at the use site, in the file-header map
+(shared contract moves up, the symbol keeps what is specific to it) — or nowhere?
 
 **No banners, no preambles.** No `// ===== name — desc =====` block above a function
 that already carries its own doc-comment, and no section-head essay restating what the
@@ -66,6 +64,11 @@ reader who already has it; if there is a genuine one-line WHY, write a plain com
 The bar for any comment on a private symbol: a maintainer reading the symbol alone
 would be surprised without it.
 
+**The body of a private function caps comments at ONE line** — a `def private`, a C++
+static or anonymous-namespace helper, a non-exported JS function (das: STYLE015, same
+gating as STYLE014). Body-only: a comment *attached to* a private symbol takes the
+ordinary cap plus the bar in *Private symbols don't get public-style docs* above.
+
 **Field comments ride the declaration line** *(lintable)*, never a line above — fewer
 lines, and the struct scans as a table. A note that cannot fit the line belongs at the use
 site; one that explains a GROUP of fields rather than any single one may sit above the
@@ -73,19 +76,20 @@ group, within the cap.
 
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
-sits directly above the `if`, two lines at most; a hint never gets a standalone comment
-line inside the body — owned by one statement it rides that statement's line, `pass`
-included; spanning more than one it is about the branch and belongs on the `if` line or
+sits directly above the `if`, two lines at most. A hint inside the body never gets its
+own line: a note about one statement rides that statement's line (`pass` included); a
+note spanning several statements is about the branch — it belongs on the `if` line or
 in the WHY above. A self-describing predicate — a named helper, a compare against a named
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 
 **No incident citations.** The banned form is a citation that can only be verified
-outside the code — a PR or issue number, a date, "proven: <module> lost <bug>". The required form is the
-failure mode named in present tense at the code that guards it: "a defaulted operand
-no call site can supply crashes simulation", not "used to crash". A mechanism note
-stays when a maintainer needs it to change the code without breaking the guard (why
-an encoding stays injective); it goes when it only argues the guard was right.
+outside the code — a PR or issue number, a date, "proven: <module> lost <bug>". The
+required form is the failure mode named in present tense at the code that guards it:
+"a defaulted operand no call site can supply crashes simulation", not "used to crash".
+A mechanism note stays when a maintainer needs it to change the code without breaking
+the guard (why an encoding stays injective); it goes when it only argues the guard was
+right.
 
 **The message is the comment.** Any site that already carries a human-readable failure
 string — a branch's error/decline/log, an assertion or panic message, a test
@@ -93,9 +97,13 @@ expectation — gets no comment restating it; put the fact the reader needs *int
 string instead. This makes good diagnostics double as documentation — one more reason
 to write them well.
 
-**Counterpart pointers earn their line.** When a condition handles one half of a split
-responsibility, a few words naming where the other half lives is a good same-line
-comment: `if (isLiteral(a)) return true;   // variables resolve in BindingScan`.
+**Counterpart pointers earn their line.** When code has a counterpart that must change
+with it — the other half of a split condition, a block duplicated in a second file — a
+few words naming where the counterpart lives are a good comment:
+`if (isLiteral(a)) return true;   // variables resolve in BindingScan`. The pointer
+rides the pointed-from line when it fits; when the pointed-from code is a whole region
+— its half of a duplicated block — or the pointer overflows the line, it sits directly
+above the pointed-from code, each copy carrying its own.
 The discriminator against the consequence-note ban below: a pointer names WHERE the other
 half lives, so a maintainer changing this line knows what else to open
 (`// consumed by control.html's chat panel`); a note describing WHAT the effect looks like
