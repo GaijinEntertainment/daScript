@@ -394,3 +394,90 @@ the q8 tower lane (own slice, possibly post-PR — the transform-vs-upload-dequa
 measurement-driven); server `asr_workers` GPU wiring (per-context metal state — map-and-wrap
 or a device-owning worker, a design decision deferred with #25's audio-chat surfaces);
 mel/FFT + im2col/pool/stack on GPU (CPU seams); whisper LUT-GELU bit-exactness on GPU.
+
+# Chunk 3 — the ASR path GPU-complete (Boris 2026-08-16: "the idea is to have entire
+# thing on metal" — kill the CPU-GPU-CPU sandwich; decoder first, then the conv frontends;
+# the q8/f16 GPU lanes stay deferred)
+
+Wall today (gb1, record-grade f32-GPU 9.38 s): encode 4.35 s (blocks.gpu 3.03 + conv 1.32)
++ decode 3.50 s + cross_kv 1.65 s. whisper-cli Metal q8 runs the same clip in 5.80 s — the
+remaining gap IS the CPU decoder + frontends (encoder blocks are at parity).
+
+Ground facts the design leans on (scouted 2026-08-16):
+- The whisper decoder is a BESPOKE loop (`whisper_decode_batch`, dasllama_whisper.das) with
+  no Session/Model — the TOWER hook pattern fits, not `DecodeOverrideFn`. qwen3a and canary
+  decode through the LLM path and already inherit the metal decode override.
+- Under GPU serving (`--ngl` ⇒ `set_asr_fp32`) the decoder loads f32 — the f32 decoder lane
+  rides the EXISTING GPU serving mode, no new quant decision; a q8 decoder declines
+  (quant_mode), same contract as the tower.
+- `whisper_cross_kv` is once per 30 s window: per layer two `[1500×d]×[d×d]` GEMMs + the kx
+  transpose (pre-scaled hs^-0.25) + the vx t-major copy — tower-shaped work.
+- Logits MUST return to CPU each token: the filter suite (suppress/timestamp rules) needs
+  2-token history + `has_ts`/`seek_delta`, then double argmax. One n_vocab f32 readback per
+  token is the design; GPU-side filtering is a non-goal.
+- The decoder MLP is `gelu_tanh_lut` — the SAME LUT form chunk 2's MetalGeluLut form-matched
+  (1.2e-7). The form-matched-GELU law is already satisfied by an existing kernel.
+- Every kernel a decoder step needs is public (`enc_ln` with bias, `enc_f32_mm`, `enc_add`,
+  `enc_add_bias_rows`, `enc_gelu_lut`, `enc_softmax`) EXCEPT attention against whisper's
+  pre-transposed K layouts (kcache `[H][hs][Tmax]`, kx likewise) — new small kernels or a
+  transposed-K variant of the qk/av pair; decided at the prototype, measured not argued.
+
+## Predictions (chunk 3 — on record before slice M's probe)
+
+- P10: gb1 f32-GPU 9.38 s → ≤ 6.2 s after decoder+cross_kv (N+O), ≤ 5.5 s after the conv
+  slices — das f32-GPU lands within ~10% of whisper-cli's q8-Metal 5.80 s.
+- P11: cross_kv 1.65 s → ≤ 0.15 s (the GEMMs are tower-shaped; the transposes ride along).
+- P12: decode 3.50 s → 1.2–1.8 s (per-token command-buffer round-trip keeps it off the
+  pure-bandwidth floor; if the cb overhead dominates, encode-ahead is the known escape,
+  ledgered not built).
+- P13: qwen3a encode ~10 s (gb1) → ≤ 2 s (the frontend ~8.9 s → under 1 s; blocks stay 1.1).
+- P14: wh.mel is < 5% of the remaining wall on gb1 — if wrong it becomes a ledger item,
+  never silent scope creep.
+
+## Slices (each gate green before the next)
+
+- **M — buckets + baselines.** qwen3a's `q3a.encode` is ONE bucket (the ~89% was an ad-hoc
+  slice-G measurement) — split conv/blocks/projector. Whisper decode: verify/extend the
+  step splits (self-attn / cross-attn / mlp / vocab GEMV vs the existing `wh.dec.logits`),
+  and get `wh.mel` a number. Fresh stage-probe baselines: large-v3-turbo (gb1 + hp0x2),
+  tiny, qwen3a; token counts per clip recorded (the per-token denominators). P-judgments.
+- **N — cross_kv on GPU.** `register_whisper_cross_kv_gpu` (tower contract: decline/false,
+  counter deltas). Per window: upload enc_out once, per layer two `enc_f32_mm` + bias +
+  the kx transpose-scale kernel + the vx t-major copy, outputs GPU-resident AND read back
+  (the CPU decoder still runs until O; after O the readback drops). enc_out re-upload
+  residency (tower writes s.x back to CPU) is a ledger item, measured not assumed.
+- **O — the decoder step driver.** `register_whisper_decode_gpu` at the
+  `whisper_decode_batch` seam; own knob + `set_` twin (decline policy differs from the
+  tower's). GPU-resident mirrors: decoder planes uploaded once, kcache/vcache on GPU
+  (Tmax=448, appended by kernel), kx/vx resident from N. Per token: CPU embed (two-row
+  add) + d-float upload, ONE command buffer through the layer stack (LN → QKV GEMV → KV
+  append → self-attn over npos → out proj → cross-attn vs kx/vx → MLP with enc_gelu_lut →
+  final LN → vocab GEMV), logits readback. Prompt rows (3–4, once per window) loop the same
+  driver. Gates: transcripts CPU-vs-GPU byte-identical (tiny + large, jfk + gb1), logits
+  parity rung (shallow-depth bars), engage census, hook-flip audit on every test reaching
+  the seams (the chunk 2 trap), decline battery (q8, required-panic, absence).
+- **P — whisper conv frontend.** GPU im2col (k=3, s=1 and s=2) + `enc_f32_mm` + bias +
+  GELU + posadd (`enc_posadd2d` exists); kills the 1.32 s conv bucket. Mel stays CPU (P14).
+- **Q — qwen3a conv2d frontend.** GPU im2col for `conv2d_s2` (stride-2 pad-1, c-fastest
+  rows) ×3 convs + the feature shuffle + conv_out GEMM + bias + `enc_gelu_erf` + pos-add;
+  batch the per-100-frame chunk loop into few command buffers. The projector/blocks path
+  is untouched (already GPU).
+- **R — bench + docs.** `lcpp_bench --asr --ngl` re-run (anti-sandbag live), record-grade
+  released-exe numbers, the whisper-cli comparison re-quoted, followup #26 updated,
+  ENVIRONMENT.md regen (new knob), arm lists, REVIEW companions.
+
+## Open design decisions (named before O starts)
+
+- Driver home: a new `dasllama_metal_asr_dec.das` (registered in BOTH .das_module and
+  CMakeLists) vs growing dasllama_metal_tower.das — decided by size; either way new kernel
+  classes compile/release in the registry pair (the chunk 2 PSO-ownership rule).
+- The attention kernel shape: transposed-K variants of enc_qk_mm/enc_av_mm vs dedicated
+  n=1 GEMV-shaped kernels — prototype both ways only if the first measures short.
+
+## Non-goals (chunk 3)
+
+The q8/f16 GPU lanes for tower AND decoder (deferred by ruling — "2 can wait"); Conformer
+families (canary/parakeet decode through NeMo-ish/LLM paths); beam/temperature fallback
+(greedy stays greedy); GPU-side logit filtering; mel/FFT on GPU; server asr_workers GPU
+wiring (deferred with #25); enc_out GPU residency across the tower→cross_kv seam (ledger,
+measure first).
