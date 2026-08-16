@@ -13,9 +13,8 @@ name: nightly dasImgui integration
 # imports; no glfw function is called under --headless).
 #
 # windows-latest is deliberately absent: the suite fastfails (0xC0000409) only
-# on the CI Windows runner, and libhv's Windows event loop stalls after 16
-# POST /command round-trips per subprocess. Re-add when both are fixed; the
-# per-OS recipe lived in the old borisbat/dasImgui tests.yml (archived).
+# on the CI Windows runner. Re-add when that is fixed; the per-OS recipe lived
+# in the old borisbat/dasImgui tests.yml (archived).
 #
 # The record_*.das drivers beside the tests are def-main scripts (not [test]s);
 # dastest skips them. Recordings need a real windowed GL host and cannot run on

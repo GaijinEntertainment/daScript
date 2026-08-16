@@ -955,8 +955,8 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
         }
         return classify_build_fail("imgui", "imgui module build failed", b, ctx.daslang, t0)
     }
-    // Direct folder targeting bypasses the tests/.das_test nightly gate by
-    // design — no --imgui flag needed here (that opt-in is for full sweeps).
+    // modules/dasImgui/tests lies outside tests/, so --test tests/ sweeps
+    // never reach it — the gate targets the folder directly.
     return run_test_gate("imgui",
         [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
          "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",

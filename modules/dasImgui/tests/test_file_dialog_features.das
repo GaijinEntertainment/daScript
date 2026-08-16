@@ -11,11 +11,9 @@ require daslib/json public
 require daslib/json_boost public
 
 //! Fixture-driven feature coverage for `imgui_file_dialog`, driven through
-//! `imgui_playwright`. Builds a temp directory with known files (alpha.png /
+//! `imgui_playwright`: builds a temp directory with known files (alpha.png /
 //! beta.jpg / gamma.txt + a subdir), drives the dialog there via the editable
-//! path bar, then verifies the multi-extension filter (Images shows png+jpg,
-//! hides txt), the Modified (date) column, and New Folder creation. Cleans up
-//! the fixture. Headless on ubuntu/macOS like the rest.
+//! path bar, and cleans up the fixture.
 
 let FIXTURE_NAME = "das_fd_dialog_test"
 

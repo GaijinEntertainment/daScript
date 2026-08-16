@@ -33,7 +33,7 @@ let DEFAULT_FRAME_WAIT_SEC : float = 10.0f           // upper bound on "first fr
 
 let READY_POLL_INTERVAL_MS : uint = 100u             // ms between /status polls — wait_until_ready and reload convergence
 let READY_POLL_REQUEST_TIMEOUT_SEC : int = 2         // per-poll http timeout for the readiness probe: fail-fast-and-retry so one slow round-trip on a loaded runner (the host serves /status off the main loop, so a stalled frame delays it) doesn't burn the whole budget on a single 10s DEFAULT_REQUEST_TIMEOUT_SEC block
-let FRAME_POLL_INTERVAL_MS : uint = 50u              // ms between snapshot polls — 20 req/sec, ~3 polls/frame at
+let FRAME_POLL_INTERVAL_MS : uint = 50u              // ms between snapshot polls — one poll per ~3 frames at
                                                      // 60fps; most calls finish in 1-2 iterations
 
 // ===== Centralized recording timing =====
@@ -1270,8 +1270,8 @@ def public menu_pick_voice(app : ImguiApp; dwell : uint; header_target : string;
 
 def public wait_for_key_idle(app : ImguiApp; timeout_sec : float = DEFAULT_FRAME_WAIT_SEC) : bool {
     //! Poll ``imgui_key_status`` until ``playing == false`` or timeout; returns true on idle.
-    //! Uses one HTTP request per poll (unlike a ``wait_until`` body that pairs a snapshot
-    //! with a status call), keeping the per-subprocess connection count low on Windows.
+    //! Uses one HTTP request per poll (a ``wait_until`` body would pair a snapshot with a
+    //! status call).
     let start = ref_time_ticks()
     let timeout_usec = int(timeout_sec * 1000000.0f)
     while (get_time_usec(start) < timeout_usec) {
@@ -1286,7 +1286,7 @@ def public wait_for_key_idle(app : ImguiApp; timeout_sec : float = DEFAULT_FRAME
 def public wait_for_mouse_idle(app : ImguiApp; timeout_sec : float = DEFAULT_FRAME_WAIT_SEC) : bool {
     //! Poll ``imgui_mouse_status`` until ``busy == false`` (both gesture rails: the timeline
     //! AND the click/drag coroutine ``imgui_click`` rides — ``playing`` alone misses the latter,
-    //! letting a click land mid-keystrokes). One HTTP request per poll, cheap on Windows.
+    //! letting a click land mid-keystrokes). One HTTP request per poll.
     let start = ref_time_ticks()
     let timeout_usec = int(timeout_sec * 1000000.0f)
     while (get_time_usec(start) < timeout_usec) {
