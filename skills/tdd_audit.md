@@ -30,6 +30,13 @@ Enumerate from the diff, not from the whole file:
 Reachable means a public entry point can drive it. An unreachable branch is a different
 finding (dead code), not a missing test.
 
+**A rejection branch wants a reliably-failing fixture.** For a branch whose job is to
+refuse — a compile error, a rejected input, a guard that panics — the distinguishing test
+is a fixture that must FAIL, and passes the suite by failing: a `failed_*`/`cant_*` file,
+an `expect error[NNNNN]` directive, a must-panic case. Its negative control is inverted:
+remove the guard and the fixture wrongly succeeds. A rejection covered only by
+happy-path tests is untested — the guard can vanish and everything stays green.
+
 ## The audit procedure
 
 For each branch, in order of preference:

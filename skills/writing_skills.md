@@ -1,37 +1,17 @@
 # Writing and reviewing a skill (repo-only)
 
 Read this before adding a `skills/*.md` file, before moving content between skills, and
-before reviewing someone else's skill change. It is repo-only: it is about *this* tree's
-`skills/` directory, `install/skills.list`, and the shipping gate.
+before reviewing someone else's skill change.
 
-Shipping mechanics — how `install/skills.list` works, the closure invariant, the ASCII
-rule — live in `skills/install_instructions.md`. This file is about the *content*.
+**Where a skill lives — and whether it ships — is `skills/internal/skill_taxonomy.md`'s
+law**: the folder is the shipping decision, one fact has one home, and the move rules.
+Decide the folder before writing. This file is about the *content*.
 
-## The one question that matters: who reads this?
-
-A skill is read by two different audiences and they are NOT interchangeable:
-
-- **SDK readers** — a human or a Claude session working inside an installed daslang SDK.
-  They have `bin/daslang`, `daslib/`, `include/`, `tutorials/`, `dastest/`, `utils/`. They
-  do **not** have `src/`, `tests/`, `benchmarks/`, `doc/source/`, `modules/*/src`, or any
-  build plumbing.
-- **Repo readers** — someone working on daslang itself, who has all of it.
-
-Decide the audience **before** writing, because the failure mode is not a typo — it is a
-file that serves neither. `aot_testing.md` spent a release as 400 lines with its
-SDK-relevant half (AOT concepts, `Module::aotRequire`, semantic-hash diagnosis) *interleaved*
-with repo plumbing (the `test_aot` binary, `tests/aot` registration, `libDaScriptAot` regen,
-CI wiring). Splitting it afterwards is a reorganization, not a cut. Writing it as two files
-costs nothing up front.
-
-Rules of thumb:
-
-- If most of it is repo plumbing, make it repo-only and leave it off `install/skills.list`.
-- If most of it is usable from an SDK, ship it and push the repo bits into a `(repo-only)`
-  section or a separate repo-only skill (`writing_tests.md` + `tests_in_repo.md` is the
-  worked example).
-- **Never** solve an audience mismatch by shipping `src/` or `tests/`. Mark the line
-  instead.
+Audience facts the content must respect: SDK readers have `bin/daslang`, `daslib/`,
+`include/`, `tutorials/`, `dastest/`, `utils/` — and do **not** have `src/`, `tests/`,
+`benchmarks/`, `doc/source/`, `modules/*/src`, or build plumbing. Never solve an
+audience mismatch by shipping those paths — the split-vs-marker threshold is the
+taxonomy's rule 3; the marker mechanics are below.
 
 ## Before you add a new file: is it actually new?
 
@@ -40,7 +20,7 @@ miss because the names differ by a word. Check:
 
 - Does an existing skill already own this topic? Extend it.
 - Does a `doc/source/**` page already own it? Then the content should have ONE source —
-  see the pattern in `skills/install_instructions.md` (markdown is the source; the `.rst`
+  see the pattern in `skills/design_philosophy.md` (markdown is the source; the `.rst`
   includes it).
 - Is your new name a near-duplicate of an existing one? `detect_dupe.md` (agent-facing,
   short) vs `detect_dupe_reference.md` (long-form, every flag) is deliberate and the names
@@ -57,20 +37,22 @@ every PR. It fails on, in a shipped skill:
 
 | Class | Why |
 |---|---|
-| `src/`, `doc/source/`, `benchmarks/`, `modules/*/{src,tests,tutorial,harness}` | Not in a bundle, ever |
+| `src/`, `tests/`, `tests-cpp/`, `doc/source/`, `benchmarks/`, `modules/*/{src,tests,tutorial,harness}` | Not in a bundle, ever |
 | `bin/Release/…`, `bin/Debug/…` | Windows repo layout; a bundle has `bin/daslang` |
 | `daslang.exe script.das` | `.exe` is Windows-only — invocations must be portable |
-| `C:\Users\…`, `/home/<name>/…`, `AppData` | Someone's machine leaked into a doc |
+| `C:\Users\…`, `/home/<name>/…`, `…\AppData\…` (path form; the bare word is the env-var name) | Someone's machine leaked into a doc |
 | A relative link whose target is absent from the bundle | Dead link for every SDK reader |
 | `skills/<other>.md` where `<other>` is not shipped | Dead link (the closure invariant) |
 
 Escape hatch, when the path is genuinely repo internals worth naming: put `repo-only` on
 the line, or in the **heading** of a section that is entirely repo internals. A heading
 marker exempts that section only and resets at the next heading. Fenced code blocks are
-exempt from the path checks, because they quote tool output that must stay verbatim.
+exempt from the repo-path and link checks; the command checks (`bin/Release/…`, `.exe`
+invocations, machine-local paths) run inside fences too, because fences are exactly
+where command lines live.
 
-Do not reach for the marker to silence a real problem. If a *shipped* skill needs a
-`repo-only` marker on half its lines, the answer is a split, not markers.
+Do not reach for the marker to silence a real problem — the split-vs-marker threshold
+is the taxonomy's rule 3.
 
 ## What the gate cannot check — the review checklist
 
@@ -79,9 +61,9 @@ None of the following is mechanical, and each has bitten this tree:
 1. **Is the substance right for the audience?** A skill can pass every path check and still
    be 60% useless to its stated reader.
 2. **Is it duplicative?** Two documents drifting apart is worse than one imperfect one.
-3. **Is the trigger row accurate?** Every shipped skill needs a row in
-   `install/CLAUDE.md`, and every repo skill a row in the top-level `CLAUDE.md`, saying
-   *when to read it*. A wrong trigger means the skill is never opened, or always opened.
+3. **Is the trigger row accurate?** Every skill gets a row in the top-level `CLAUDE.md`;
+   a shipped skill additionally gets one in `install/CLAUDE.md` — each saying *when to
+   read it*. A wrong trigger means the skill is never opened, or always opened.
 4. **Are the claims verified or assumed?** Syntax and behavior claims must be
    probe-compiled with the current binary, not recalled. `ds2_parser.ypp` is grammar truth.
    A confidently wrong skill is worse than a missing one, because it is trusted.
@@ -98,8 +80,7 @@ None of the following is mechanical, and each has bitten this tree:
 
 ## Registering it
 
-1. File at `skills/<name>.md`.
-2. Shipped? Add `<name>.md` to `install/skills.list` **and** a row to the
-   `install/CLAUDE.md` skill table.
+1. File it in the folder `skills/internal/skill_taxonomy.md` assigns.
+2. Shipped? Add a row to the `install/CLAUDE.md` skill table.
 3. Add a row to the top-level `CLAUDE.md` table (repo readers need to find it either way).
 4. Run the gate. If it fires, fix the path — do not reach for the marker first.

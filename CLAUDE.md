@@ -78,7 +78,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
 | `skills/external_module_debugging.md` | Working on an external daslang module (dasImguiNodeEditor, dasImguiImplot, dasCards, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
 | `skills/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
-| `skills/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the audience decision (SDK vs repo-only), the shipping gate, and the review checklist for what the gate can't check |
+| `skills/internal/skill_taxonomy.md` | Deciding where a skill lives and whether it ships — the folder taxonomy (root/daslang/internal), one-fact-one-home, and the move/merge rules |
+| `skills/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the content craft: claims verified, commands run, the gate mechanics, the review checklist |
 | `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
 | `skills/llvm_tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, per-box manifests, the runtime-tune-and-re-exec model, the AOT/-exe gates, adding a kernel family (`modules/dasLLVM/daslib/llvm_tune.das`) |
 | `skills/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
