@@ -366,6 +366,14 @@ hp0x2 47266 -> 25187. GPU xRT ~21.3 on the long clips vs the q8-CPU 11.7.
   J-qwen3a as the follow-up perf items).
 - Whisper tiny f32-GPU: gb1 1.27 s (xRT 157), hp0x2 3.12 s (xRT 175).
 
+## Record-grade re-profile (released exe, winners baked; M1, best-of-3, 2026-08-16)
+
+All four legs exit 0 (the gpu legs' anti-sandbag live). ASR whisper large-v3-turbo:
+q8-CPU gb1 16.97 s / hp0x2 47.3 s; f32-GPU 9.38 s / 25.2 s — the debug-grade pair confirmed
+within noise. Image turn (12B Q4_K_M + cats): CPU enc 11.6 ms / pp 60.1 / tg 14.2 -> GPU
+enc 10.2 ms / pp 139.1 / tg 34.4 — pp 2.31x, tg 2.43x, and the EMBEDDER encode itself is
+now 10.2 ms vs chunk 1's 53.3 ms CPU figure (the tower serves it, ~5.2x).
+
 ## Sequencing (each gate green before the next)
 
 G stage-probe baselines (whisper-large + qwen3a; predictions P5 judged) ->
