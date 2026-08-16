@@ -152,8 +152,8 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
-                t |> success(js != null && int64(js?["media_rows"] ?? 0l) >= int64(CATS_ROWS),
-                    "stats media_rows counts the admitted span rows ({int64(js?["media_rows"] ?? 0l)})")
+                t |> success(js != null && (js?["media_rows"] ?? 0l) >= int64(CATS_ROWS),
+                    "stats media_rows counts the admitted span rows ({js?["media_rows"] ?? 0l})")
                 if (js != null) {
                     unsafe {
                         delete js

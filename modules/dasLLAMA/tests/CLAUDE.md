@@ -220,7 +220,7 @@ Always capture COMPLETE logs (the runner does this); grep afterwards, never at c
 a capture-time filter once hid the exact proof line a verification run existed to produce.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
-THE EYEBALL RAIL (REVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
+THE EYEBALL RAIL (REVIEW: "Every test that compares generated tokens, ids, or logits logs the decoded text for both sides"): every token-for-token generate cell logs both decoded
 streams (`log_gen_texts` in `_model_tier.das`), and every logits-tolerance cell logs a decoded
 text form (forced stream + the GPU's greedy would-be picks, or both next-token pieces) — read
 the text before trusting a red or a suspicious green; a near-tie synonym flip and real garbage

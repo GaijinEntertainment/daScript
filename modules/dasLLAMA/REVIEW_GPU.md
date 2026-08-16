@@ -35,8 +35,8 @@ a builder parameter the `grid=`/`tg=` spec consumes host-side never arrives at t
 the request, and different upload forms live in separate tables.
 
 **A backend-only capability goes in that backend's matching role file.** A capability with no
-matching role gets its own role file AND its `ARCHITECTURE.md` §1 role-table line in the same
-change; anything else is a grab-bag, and a grab-bag file is a defect.
+matching role gets its own role file; anything else is a grab-bag, and a grab-bag file is a
+defect.
 
 **A GPU family shares ONE device and queue from `<gpu>_common`'s init.** A module creating its
 own is a defect.
@@ -66,12 +66,12 @@ not carry does not exist.
 **A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its size
 is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized wrong.
 
-**A change to a driver that serves a whole decoder forward on device (`dasllama_metal_decode`
-/ `dasllama_metal_prefill` / `dasllama_gpu_resident` and its Vulkan chain) ships with
-`harness/parity.das` GPU-vs-CPU runs on one q8 and one kq model, with `--kv` matching the
-armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never
-`--ngl`, and its driver declines codec-mismatched sessions silently, so that log must show
-`resident driver armed`.
+**A change to `dasllama_metal_decode.das`, `dasllama_metal_prefill.das`,
+`dasllama_gpu_resident.das`, `dasllama_vulkan_decode.das`, or `dasllama_vulkan_prefill.das`
+ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one kq model, with `--kv`
+matching the armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is
+`DASLLAMA_GPU=1`, never `--ngl`, and its driver declines codec-mismatched sessions silently,
+so that log must show `resident driver armed`.
 
 **A kernel that reads or writes the K/V mirrors is stamped from a
 `[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16

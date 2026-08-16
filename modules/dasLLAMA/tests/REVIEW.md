@@ -71,7 +71,8 @@ reference leg, external dump or CPU control alike — and every such cell logs i
 an `eyeball:` line.** An id-only comparison is a defect.
 
 **A real model file, mmproj, or image fixture a test in this folder loads has its
-`../performance/fetch_models.das` entry** (or a documented convert recipe beside it).
+`../performance/fetch_models.das` entry**, or a convert script checked in beside that
+manifest in `../performance/`.
 
 **A vision test that needs no model builds its image procedurally and pins its expectations
 in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via

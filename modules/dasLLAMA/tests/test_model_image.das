@@ -26,7 +26,6 @@ require daslib/fio
 require strings
 require math
 require _model_tier
-require dasllama/dasllama_env
 
 // The prepared-model image (.dlim) rail. The mechanics arm exercises save/load on a synthetic
 // carrier (no models, runs everywhere incl. CI): value round trip, dotted nested-carrier

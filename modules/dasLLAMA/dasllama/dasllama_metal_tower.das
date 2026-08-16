@@ -26,9 +26,8 @@ var private g_tw_env_tower = true
 var private g_tw_ones : MetalBuffer?      // [TW_ONES_DIM] ones — the weightless-rms weight bind
 let private TW_ONES_DIM = 8192
 
-//! Engage/decline counters (the counts live in dasllama_metal_common, the counting home):
-//! `encodes` = GPU tower encodes served, `rows` = rows produced, `blocks` = transformer blocks
-//! run (n_layer per whisper-class encode; 0 for gemma4uv), `declines` = total declined calls.
+//! Engage/decline counters (the counts live in dasllama_metal_common, the counting home);
+//! `blocks` = transformer blocks run (n_layer per whisper-class encode; 0 for gemma4uv).
 //! Model-level gates assert DELTAS on these.
 def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64> {
     var dtot = 0l
@@ -71,10 +70,8 @@ def metal_tower_shutdown {
 
 [cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
 def private metal_tower_init : bool {
-    if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init()) {
-        return false
-    }
-    if (g_pso_ln == null) {   // the registry owns the tower PSOs (metal_decode_init compiles them)
+    // the registry owns the tower PSOs (metal_decode_init compiles them, via the prefill seat)
+    if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init() || g_pso_ln == null) {
         return false
     }
     if (g_tw_ones == null) {
@@ -114,7 +111,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
         memcpy(p, addr(s.x0[0]), npos * t.patch_dim * 4l)
-        if (mp > npos) {   // zero the pad rows: their GEMM outputs then pin at 0
+        if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
             var zp = reinterpret<float?>(p + npos * t.patch_dim * 4l)
             for (i in range64((mp - npos) * t.patch_dim)) {
                 zp[i] = 0.0
@@ -130,7 +127,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     var u_pe = uniform_u32(uint(t.pos_entries))
     var u_tot = uniform_u32(uint(npos * d))
     var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         // ln1 over the im2col rows, in place
         enc_ln(enc, bx0, bblob, uint64(t.ln1_w * 4l), bblob, uint64(t.ln1_b * 4l), bx0, u_pdim, u_eps, npos)
         // the patch GEMM: per-plane format (gemma-4's shipped mmproj is MIXED)
@@ -216,7 +213,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
-        if (mp > npos) {   // zero the residual pads: every pad product downstream then starts finite
+        if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
             var zp = reinterpret<float?>(p + npos * d * 4l)
             for (i in range64((mp - npos) * d)) {
                 zp[i] = 0.0
@@ -232,7 +229,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (l in range64(t.n_layer)) {
             let lo = enc_layer_offsets(t, l)
             enc_ln(enc, bx, bblob, uint64(lo.ln1_w * 4l), bblob, uint64(lo.ln1_b * 4l), bxb, u_d, u_eps, npos)

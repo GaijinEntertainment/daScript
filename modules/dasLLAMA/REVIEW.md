@@ -49,9 +49,10 @@ value feeds logic is marked `// clock: control`. The rails, and where free-hand 
 legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
-or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts (`ARCHITECTURE.md` §2.11 has the
-coverage model). A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the
-tokenizer encode/decode path is out of scope.
+or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. Covered means an annotated entry
+reaches it: the contracts arm down the call graph, so an interior function carries nothing of
+its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
+encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
 
 **A new entry point — a kernel-backend override, a batch donor, a step driver — carries its
 annotation itself; a rename is not new** (annotations follow the name in the same change).

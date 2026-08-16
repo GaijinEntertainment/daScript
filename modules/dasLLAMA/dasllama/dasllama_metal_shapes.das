@@ -46,10 +46,9 @@ enum MetalDecodeDecline {
                         // forward-only and NOT re-derivable — no watermark repair exists)
 }
 
-// The tower/embedder driver's decline set — same contract as the prefill/decode enums: the
-// FIRST failing clause, .none = supported, names asserted as strings by the image suite's
-// mtower cells. Conformer families (canary/parakeet/gemma4a) never DECLINE — their
-// hand-written forwards have no seam, so their evidence is frozen counters, not a reason.
+// The tower/embedder driver's decline set — same contract as the prefill/decode enums: FIRST
+// failing clause, .none = supported, names asserted as strings by the image suite's mtower
+// cells. Conformer families never decline — no seam; their evidence is frozen counters.
 enum MetalTowerDecline {
     none                // supported — the tower encode runs on the GPU
     knob                // DASLLAMA_METAL_TOWER=0 — the A/B rail
