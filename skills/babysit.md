@@ -49,16 +49,15 @@ The two heavy Windows toolchain builds (`build_windows_mingw`, `build_windows_cl
 
 **Manual re-request is mandatory.** `review_on_push: true` is set on the default-branch ruleset, but in testing it did NOT auto-trigger a review on any push (force-push *or* normal commit) — Copilot only auto-reviews once, on PR open. Every subsequent round needs an explicit `request_copilot_review`. (CI itself *does* auto-run on every PR commit via the `pull_request` trigger, free on standard runners, so it gates honestly without any manual nudge.)
 
-**Polling cadence (use `/loop`, dynamic mode):** ~5 min (≤270s, keeps the prompt cache warm) while iterating on Copilot; switch to ~20 min once Copilot is dry and you're only waiting on the matrix.
-
-**Status commands per tick:**
-- `gh pr checks <PR>` — CI status (pending / pass / fail), or `gh api repos/<owner>/<repo>/commits/<tip>/check-runs` filtered to `status!="completed"` (pending) and `conclusion` ∈ {`failure`, `cancelled`, `timed_out`, `action_required`} (reds — don't match only `failure`; a cancelled or timed-out lane is red too)
-- **NEVER tick on `gh run list` — it is workflow-granular and goes blind on matrix reds.** build.yml's matrix runs `fail-fast: false`, so a dead job leaves the workflow `in_progress` for the surviving siblings' full runtime — `gh run list` reports "nothing red" the entire time while the PR checks page already shows the failure. Only the two job-granular forms above see it.
-- A detached `workflow_dispatch` run is NOT in `gh pr checks` (no PR association) — job-level poll it separately: `gh run view <runID> --json jobs --jq '.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped") | .name + " " + .conclusion'` (empty output = no reds yet).
-- `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — Copilot's latest review; check its `commit_id` matches your tip (confirms it reviewed the latest code, not a stale commit)
-- unresolved threads via GraphQL `reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved …}}`, paginated when needed and filtered to `isResolved==false`
-
-Stop polling and surface as soon as: (a) Copilot left new comments (react), (b) a CI check went red (fix), or (c) CI green AND Copilot dry (ready to merge).
+**Watching is a tool call, not a polling script.** Run
+`daslang utils/pr-babysit/main.das -- --pr <N> --watch` in the background and react to its
+exit code: `2` = CI red (failing checks named), `3` = a review targets the tip and threads
+are unresolved — triage it, `0` = CI green + reviewed tip + zero unresolved — ready to
+merge, `5` = nothing actionable within the timeout. The tool owns the GitHub mechanics
+(job-granular check reads that see matrix reds, the bot-reviewer blind spots, thread
+counting); when GitHub changes, fix the tool, not this file. One gap stays manual: a
+detached `workflow_dispatch` run has no PR association, so the tool cannot see it — poll it
+with `gh run view <runID> --json jobs`.
 
 > **Pure-prose tail.** If a fresh review contains only prose/wording nits, reject them, reply, resolve, and let the PR proceed to merge. Do not edit, push, or start another review cycle. A small related wording cleanup may ride along when the same round already requires a substantive fix, but prose never justifies a push by itself. Factually wrong or materially misleading text is not a nit.
 
@@ -190,9 +189,13 @@ Expect `0`.
 
 After all replies + resolves + any push, re-request. **Every push requires a new request; no change is too trivial to review.**
 ```
-mcp__github__request_copilot_review(owner=…, repo=…, pullNumber=…)
+daslang utils/pr-babysit/main.das -- --pr <N> --request-review --watch
 ```
-Record the current `headRefOid` when requesting. When the review arrives, verify its `commit_id` equals that recorded tip. A review on an older SHA does not satisfy the round, even if it arrived after the latest push.
+This requests the review and blocks until one lands on the current tip (exit 3 or 0). The
+tool owns the request transport and its verification — REST vs GraphQL rails, the
+requested-reviewers blind spot, tip matching — and a review on an older SHA never
+satisfies the round. `mcp__github__request_copilot_review` also works when the GitHub MCP
+is connected; verify through the tool's `--watch` either way.
 
 If a round was reject-only and no push occurred, do not request an identical review merely because threads were resolved: Copilot already reviewed the current tip. The mandatory trigger is a changed PR tip.
 
@@ -209,7 +212,7 @@ Each fix iteration: triage → discuss → fix → gate → amend → force-push
 
 | Step | Tool/Command | Fix policy |
 |---|---|---|
-| Watch PR | `gh pr checks`, `gh api .../comments`, `gh api .../reviews` | Surface as soon as Copilot comments, CI fails, or both CI + Copilot are done |
+| Watch PR | `daslang utils/pr-babysit/main.das -- --pr <N> --watch` | React to the exit code: 2 CI red, 3 triage review, 0 ready to merge, 5 timeout |
 | CI fail | `gh pr checks`, `gh run view --log-failed` | Fix own, fix obvious pre-existing, ask about unclear |
 | Triage comments | `gh api .../pulls/<PR>/comments` | **YOU are the judge, Copilot is the tool.** Accept ONLY actual bugs + actual factual prose errors — no nits, no never-happens bugs, no asteroid guards. All-reject rounds are the NORM |
 | Terminal state | a judged round with NOTHING accepted (zero comments, or all rejected + resolved, no push) | Never merge on "Copilot ran out" via accept-and-repush cycles |
@@ -217,5 +220,5 @@ Each fix iteration: triage → discuss → fix → gate → amend → force-push
 | Amend/push | `git commit --amend --no-edit`, `git push --force-with-lease` | Keep squashed branch squashed |
 | Reply | `mcp__github__add_reply_to_pull_request_comment` | Every addressed comment gets a reply |
 | Resolve | `gh api graphql ... resolveReviewThread` | Every addressed thread gets resolved; paginate and verify unresolved = 0 |
-| Re-request | `mcp__github__request_copilot_review` | Mandatory after EVERY push, after prior threads are resolved |
+| Re-request | `daslang utils/pr-babysit/main.das -- --pr <N> --request-review --watch` | Mandatory after EVERY push, after prior threads are resolved |
 | Merge gate | Compare latest Copilot `commit_id` to PR `headRefOid` | CI green + matching reviewed tip + zero unresolved threads |

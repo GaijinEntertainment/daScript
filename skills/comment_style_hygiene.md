@@ -55,14 +55,10 @@ that already carries its own doc-comment, and no section-head essay restating wh
 code, the doc-comments, or the file-header map already carry — architectural WHY with
 no home in the file goes to a design doc. Terse section dividers stay.
 
-**A file header is a map, not an essay.** A pass or subsystem file may open with a
-numbered overview — one line per fact — stating the whole contract: when it runs, what
-it consumes and produces, the kinds and tiers it deals in. A map legitimately repeats
-what per-symbol comments say; a reader entering cold needs the shape before any
-symbol. What stays banned is prose — paragraphs argue, maps enumerate. A map repeats
-per-symbol *comments*, not text the code already prints as a message or expectation.
-A header at or under the comment cap may stay prose; the enumeration form is
-required only past it.
+**A file header is a map, not an essay.** At or under the comment cap a header may stay
+prose; past it, it either becomes a map — one line per fact of the file's contract — or
+gets trimmed. A map may repeat per-symbol comments (a cold reader needs the shape before
+any symbol), never text the code already prints.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a
@@ -82,8 +78,8 @@ never right. A self-describing predicate — a named helper, a compare against a
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 
-**No incident citations.** The banned form is a citation only a reviewer can check —
-a PR or issue number, a date, "proven: <module> lost <bug>". The required form is the
+**No incident citations.** The banned form is a citation that can only be verified
+outside the code — a PR or issue number, a date, "proven: <module> lost <bug>". The required form is the
 failure mode named in present tense at the code that guards it: "a defaulted operand
 no call site can supply crashes simulation", not "used to crash". A mechanism note
 stays when a maintainer needs it to change the code without breaking the guard (why
