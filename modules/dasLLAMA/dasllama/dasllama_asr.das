@@ -73,6 +73,7 @@ struct AsrSession {
 
 // exact-fp32 knob for oracle rails: flip BEFORE load_asr_model to skip the Q8 fast path
 var private g_asr_force_fp32 = false
+var private g_asr_tower_fp32 = false
 // LLM-decoder ASR sessions' KV dtype. f16 is the DEFAULT (matches llama.cpp's KV — format-to-
 // format comparisons; zen2 gb1 -3%, transcripts near-tie-sane); f32 is the oracle/parity rail
 // (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)
@@ -89,6 +90,13 @@ def set_asr_kv(dt : KVDtype) {
 //! default load quantizes the encoder GEMMs to Q8_0 (~4x on CPU, tolerance-gated).
 def set_asr_fp32(on : bool) {
     g_asr_force_fp32 = on
+}
+
+//! Force fp32 on the ENCODER/TOWER half only (whisper enc, the parakeet bin, the canary
+//! encoder) for models loaded AFTER this call — the GPU-tower serving mode: the decoder half
+//! keeps its fast q8 rail. ``set_asr_fp32`` (both halves) wins; GGUF facade towers stay q8.
+def set_asr_tower_fp32(on : bool) {
+    g_asr_tower_fp32 = on
 }
 
 // a prepared image's family, from the baked identity's trailing tag ("" = no family tag —
@@ -110,9 +118,9 @@ def private image_family_tag(path : string) : string {
 def load_asr_model(path : string) : AsrModel {
     if (path |> ends_with(".dlim")) {
         let tag = image_family_tag(path)
-        if (tag == "whisper-q8" || tag == "whisper-f32") {
+        if (tag == "whisper-q8" || tag == "whisper-f32" || tag == "whisper-f32-q8") {
             var wm = AsrModel(kind = AsrKind.whisper)
-            wm.whisper <- load_whisper_model(path, tag == "whisper-q8")
+            wm.whisper <- load_whisper_model(path, tag == "whisper-q8", tag != "whisper-f32")
             return <- wm
         }
         if (tag == "parakeet-q8" || tag == "parakeet-f32") {
@@ -146,7 +154,7 @@ def load_asr_model(path : string) : AsrModel {
     }
     if (vocab < 32768) {   // parakeet SPM vocabs: 1024 (v2, English) / 8192 (v3, 25-lang)
         var pm = AsrModel(kind = AsrKind.parakeet)
-        pm.pk <- load_parakeet_model(path, !g_asr_force_fp32)
+        pm.pk <- load_parakeet_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32))
         return <- pm
     }
     // whisper vocabs: 51864 (.en) / 51865 (multilingual) / 51866 (large-v3 family); anything
@@ -155,7 +163,7 @@ def load_asr_model(path : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' has n_vocab {vocab} - matches neither whisper (51864-51866) nor parakeet (~1k)")
     }
     var m = AsrModel(kind = AsrKind.whisper)
-    m.whisper <- load_whisper_model(path, !g_asr_force_fp32)
+    m.whisper <- load_whisper_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32), !g_asr_force_fp32)
     return <- m
 }
 
@@ -165,7 +173,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! bin = Canary-Qwen FastConformer. Every decoder loads Q8 (the tuned rail); the fp32 parity arm rides ``QuantMode.fp32 + image_fp32`` off-facade. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
-    var canary_q8 = !g_asr_force_fp32   // raw-bin default; a .dlim's baked tag overrides
+    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32)   // raw-bin default; a .dlim's baked tag overrides
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_family_tag(mmproj)
         if (tag == "qwen3a-f32") {

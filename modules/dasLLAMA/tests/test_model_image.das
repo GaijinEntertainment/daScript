@@ -812,6 +812,22 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> equal(count_mismatch_i8(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
         t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
+        // and the MIXED flavor (f32 enc / q8 dec — the GPU-tower serving mode): the decoder
+        // q-planes match the eager pass, the encoder stays unquantized, and the facade's
+        // .dlim route reads the tag back
+        let imgm = image_path_for(path, "whisper-f32-q8")
+        remove(imgm)
+        var inscope stgm <- stage_whisper_model(path, false, true)
+        var inscope wm <- load_whisper_model(path, false, true)
+        t |> success(wm.image_map != null, "mixed cold load serves the image it streamed")
+        t |> success(!wm.enc.q8 && wm.dq8, "mixed flavor: f32 encoder, q8 decoder")
+        t |> equal(count_mismatch_i8(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dqscales, wm.dqscales), 0l, "mixed streamed dqscales element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dblob, wm.dblob), 0l, "mixed streamed dblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.enc.fblob, wm.enc.fblob), 0l, "mixed enc.fblob element-exact (full f32 layout)")
+        var inscope am <- load_asr_model(imgm)
+        t |> success(am.kind == AsrKind.whisper, "facade routes the mixed tag")
+        t |> success(!am.whisper.enc.q8 && am.whisper.dq8, "facade .dlim route lands the mixed halves")
         delete samples
     }
 }

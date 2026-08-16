@@ -40,6 +40,10 @@ struct ProbeArgs {
     @clarg_doc = "Pin fp32 weights (set_asr_fp32) — A/B the q8 default"
     fp32 : bool
 
+    @clarg_name = "fp32-tower"
+    @clarg_doc = "Pin fp32 on the tower half only (set_asr_tower_fp32) — the GPU serving mode"
+    fp32_tower : bool
+
     @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only: f16 (default) | f32 | q8"
     kv : string
 
@@ -107,6 +111,7 @@ def main() : int {
         return 1
     }
     set_asr_fp32(cfg.fp32)
+    set_asr_tower_fp32(cfg.fp32_tower)
     if (cfg.kv == "f16") {
         set_asr_kv(KVDtype.f16)
     } elif (cfg.kv == "f32") {

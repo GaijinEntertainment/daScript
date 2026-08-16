@@ -485,6 +485,21 @@ hp0x2, large-v3-turbo, f32 arm: encode 12107 (blocks.gpu 8683, conv 3409) / deco
 6.8 ms both clips, bucket sums match slice K's e2e wall (25.25 vs 25.2 s; gb1 9.45 vs
 9.38) — the rail accounts for the whole transcribe.
 
+## Slice N0 record — the per-half fp32 knob DONE 2026-08-16 (F1's fix)
+
+`set_asr_tower_fp32` (encoder/tower half only: whisper enc, the parakeet bin, the canary
+encoder; `set_asr_fp32` = both halves, wins when both set; GGUF facade towers stay q8) +
+per-half `load/stage/mint/stream_whisper_model` overloads (one-flag forms forward) + the
+third family tag `whisper-f32-q8` (enc-q8/dec-f32 panics — no serving mode). The `--ngl`
+bench leg now serves the mixed mode; the probe gained `--fp32-tower`. Measured (probe, gb1,
+turbo, debug-grade): the mixed serve sums to **6.01 s vs 9.38 all-f32** — decode 1.59
+(was 3.55), cross_kv 0.19 (was 1.60), encode unchanged — F1's ~6.0 s call EXACT, and das is
+at whisper-cli parity (5.80) before any new kernel. Tiny decode 476 ms (was 826). Gates
+green: the knob cell (test_whisper — mixed vs q8-default token-identical on jfk, exec_fmt
+"f32/q8", 35/0) and the mixed-flavor roundtrip leg (image suite `--arm whisper`, 24/0 —
+dq planes element-exact streamed-vs-staged, enc.fblob full-layout exact, facade .dlim tag
+route).
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`
@@ -522,7 +537,13 @@ cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated
   rows) ×3 convs + the feature shuffle + conv_out GEMM + bias + `enc_gelu_erf` + pos-add;
   batch the per-100-frame chunk loop into few command buffers. The projector/blocks path
   is untouched (already GPU).
-- **R — bench + docs.** `lcpp_bench --asr --ngl` re-run (anti-sandbag live), record-grade
+- **R — the f32-fallback compliance audit (Boris 2026-08-16: "audit where we do similar
+  silly stuff and make compliant with new ruling").** Every call site of the slow-f32 GEMM
+  family (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32`) across the module, classified
+  three ways per the REVIEW rule: parity/oracle rail (stays), faster twin exists for the
+  same weights (FIX — route it), no faster twin (comment or out of scope). The audit table
+  lands in this plan; fixes land before S so the bench measures the compliant tree.
+- **S — bench + docs.** `lcpp_bench --asr --ngl` re-run (anti-sandbag live), record-grade
   released-exe numbers, the whisper-cli comparison re-quoted, followup #26 updated,
   ENVIRONMENT.md regen (new knob), arm lists, REVIEW companions.
 

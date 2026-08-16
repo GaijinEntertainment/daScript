@@ -331,7 +331,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : 
     allow_cpu_prefill()   // ASR decoders/Conformer paths are CPU by protocol — disarm the tripwire
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_asr_fp32(true)   // the tower serves the f32 rail; q8 towers decline (quant_mode)
+            set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
             set_metal_tower(true)
         } else {
             print("lcpp_bench --asr: --ngl needs a Metal build (no das_metal on this platform)\n")
