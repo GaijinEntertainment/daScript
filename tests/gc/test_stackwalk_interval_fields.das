@@ -52,6 +52,7 @@ def test_stackwalk_interval_fields(t : T?) {
         var w = new IntervalWalker()
         let probe = probe_interval(w)
         t |> success(probe.pos > 0, "the probe returned a stamped position")
+        t |> success(probe.tagLen == 4, "the probe's runtime-built local reads back at its built length")
         let pos = uint(probe.pos)
         let hit = find_interval(w, "precious")
         t |> success(hit.found, "the local 'precious' reports its interval")
