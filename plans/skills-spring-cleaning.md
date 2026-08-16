@@ -191,10 +191,34 @@ Listed by agent C, deleted from nowhere yet — each needs a probe before enteri
 ## Phases
 
 1. ✅ Charter + census + rulings (this file).
-2. Language migration: bundle absorbs B-bucket + divergence reconciliation (probe-armed);
-   CLAUDE.md and install/CLAUDE.md shrink to policy + digest; daslang_internals.md born.
-3. Moves + splits + absorptions per the destination tables, links retargeted per file.
-4. Infra per the census-F spec; skills.list dies last, gate rework proves the tree.
-5. Verification: reworked gate green, bundle smoke, sphinx (RST includes), full link walk,
-   lint on touched .das; sweep report; PR (dragon waiver noted for the mass content, the
-   two rule docs already dragon-passed).
+2. ✅ Language migration (bundle = truth; twins shrank; daslang_internals.md born).
+3. ✅ Moves + splits + absorptions + retargets (opus fleet + day rulings: lint catalogs
+   deleted everywhere, idiom table trimmed, gc_migration deleted, hygiene trim reverted).
+4. ✅ Infra: install(DIRECTORY) + .claude auto-pickup + dragon/REVIEW_COMMON ship;
+   gate rewritten; skills.list dead; getting-started x3.
+5. ✅ Verification + PR #3755: install+smoke 19/19, gate fixture suite 12/12
+   (negative-controlled), sphinx -W clean, lint/AST/format clean, module registry tests
+   green; 7-auditor round applied. OPEN: babysit #3755; the ledgered pre-existing
+   checklist findings below go to Boris one at a time.
+
+## Ledgered checklist findings (pre-existing, NOT this PR — Boris rules each)
+
+- benchmarks/REVIEW.md: structurally homeless (all four rules' triggers live under
+  modules/dasLLAMA/benchmarks/ — the ancestor walk can never fire them from root
+  benchmarks/); "the one sanctioned" phrase REVIEW_COMMON bans; A/B-lab rule = four
+  undefined terms; "today that is X alone" census; tune_gate rule duplicates
+  performance/REVIEW.md's sharper copy. Proposed fix: move to
+  modules/dasLLAMA/benchmarks/REVIEW.md + the five rewrites.
+- include/daScript/simulate/REVIEW.md: eval* trigger names runtime_table.h which has no
+  SimNode (property-vs-locator ambiguity); the new layout-pin clause cannot fire from
+  this folder (pin lives in tests-cpp/).
+- modules/dasImgui/REVIEW.md: behavioral-vs-file-kind trigger ambiguity (comment-only
+  .das change: suite or no suite?); exclude-passthrough impossible on Windows as
+  written; tree-sitter routing rule can never change an outcome; `tests/dasImgui`
+  missing "(repo root)".
+- modules/dasLLVM/REVIEW.md: two env rules fully scanner-enforced (automated =>
+  deleted); LLVM_JIT_CODEGEN_VERSION rule = 3 rules in one paragraph.
+- modules/dasLLAMA/REVIEW.md: can-run/is-ready rule names no API; version-bump and
+  hot-path-coverage rules over the one-paragraph limit.
+- comment_style_hygiene.md GUIDE gap: header-that-is-also-__doc__-output — map rule vs
+  message rule undecidable (hygiene file frozen per Boris; ledger only).
