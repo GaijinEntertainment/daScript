@@ -1407,6 +1407,9 @@ namespace das {
 
     bool srcNeedTempVar ( Expression * src, TypeDecl * type ) {
         if ( !type->isRef() ) return false;
+        // an iterator source is consumed directly by the source variable's move-init;
+        // a temp would evaluate the source expression a second time
+        if ( type->isGoodIteratorType() ) return false;
         return src->rtti_isCallLikeExpr() || src->rtti_isMakeLocal();
     }
 
@@ -1537,7 +1540,6 @@ namespace das {
                 svar->at = expr->at;
                 svar->name = srcName + "_temp_var";
                 svar->type = new TypeDecl(Type::autoinfer);
-            svar->type->at = svar->at;
                 svar->type->at = svar->at;
                 svar->init_via_move = true;
                 svar->init = src->clone();
