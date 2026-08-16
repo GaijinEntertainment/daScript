@@ -10,3 +10,10 @@
   not in scope. A hot-path addition is a defect.** A load, branch, or counter on that path
   taxes every program on every step; a correctness-required addition is ledgered under
   `ARCHITECTURE.md`'s sanctioned hot-path additions.
+
+- **A field added, removed, or reordered in a `debug_info.h` struct: the PR description
+  states a per-consumer verdict (updated / no change needed / rebuild required) for the
+  rtti binding (`src/builtin/module_builtin_rtti.cpp`), the das-side readers of the
+  struct (enumerate with MCP `grep_usage` on the struct name), and external-module
+  rebuilds (`skills/abi_break_sweep.md`).** A diff doing so with no such statement is a
+  defect.
