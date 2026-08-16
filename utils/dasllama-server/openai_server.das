@@ -335,9 +335,6 @@ def set_model_vision(name : string; path : string) {
     if (g_slots[mi].vision.proj_dim != 0l) {
         panic("dasllama-server: slot '{name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - set_model_vision is once per slot")
     }
-    if (g_slots[mi].model.metal_blob) {
-        panic("dasllama-server: '{name}' is a metal-blob model - the image span prefills on the CPU, which a blob model cannot do; serve it without the metal blob to take a vision arm")
-    }
     var inscope emb <- load_gemma4uv_embedder(path)
     if (emb.proj_dim != g_slots[mi].model.config.dim) {
         panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")

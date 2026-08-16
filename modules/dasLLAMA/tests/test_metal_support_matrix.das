@@ -337,8 +337,8 @@ def test_metal_support_matrix(t : T?) {
                 delete pfd0
                 delete pfd
 
-                // a non-causal image span declines BY TYPE and never engages the metal chains
-                // (they encode the causal mask); the CPU loop serves the span call
+                // a non-causal media span ENGAGES the metal chains (AttnArgs.uend carries the
+                // bound); the retired non_causal_span clause records nothing
                 var pfd1 <- metal_prefill_declines()
                 let pf1 = metal_prefill_stats().prefills
                 with_job_que() {
@@ -356,10 +356,10 @@ def test_metal_support_matrix(t : T?) {
                     delete sp
                 }
                 var pfd2 <- metal_prefill_declines()
-                t |> success((pfd2?["non_causal_span"] ?? 0l) > (pfd1?["non_causal_span"] ?? 0l),
-                    "a non-causal span declines non_causal_span")
-                t |> success(metal_prefill_stats().prefills == pf1,
-                    "the span call never engages the metal prefill")
+                t |> success((pfd2?["non_causal_span"] ?? 0l) == (pfd1?["non_causal_span"] ?? 0l),
+                    "the retired non_causal_span clause records nothing")
+                t |> success(metal_prefill_stats().prefills - pf1 == 1l,
+                    "the span call ENGAGES the metal prefill")
                 delete pfd1
                 delete pfd2
             }

@@ -1987,11 +1987,7 @@ def private rope_rows_ready(t : Model; s : Session; npos : int64) : bool {
 // existing rows gather into the K/V panels and the causal diagonal shifts by qoff — the gate
 // keeps the argument so future clauses can window it
 def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : MetalPrefillDecline {
-    // these chains encode the causal mask — the span call serves on CPU, head/tail chunks stay here
-    if (s.attn_uniform_end != 0l) {
-        return MetalPrefillDecline.non_causal_span
-    }
-    let why = prefill_decline_caps(t, npos)
+    let why = prefill_decline_caps(t, npos, s.attn_uniform_end != 0l)
     if (why != MetalPrefillDecline.none) return why
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
     return rope_rows_ready(t, s, npos) ? MetalPrefillDecline.none : MetalPrefillDecline.rope_rows
@@ -2000,9 +1996,9 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
 // Everything a model either can or cannot do, independent of how far THIS window has been set up.
 // Callers that run before the window is staged (the PLE gpu gate) ask this one; a window that then
 // turns out not to be ready declines later, and metal_prefill_forward's fallback covers it.
-def private prefill_decline_caps(t : Model; npos : int64) : MetalPrefillDecline {
-    // npos window is a POLICY decline (short prefills were cheaper on CPU); blob-only has no CPU path, so any npos serves
-    if (!t.metal_blob && (npos < g_min_npos || npos > g_max_npos)) {
+def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) : MetalPrefillDecline {
+    // npos window is a POLICY decline (blob-only and short SPANS serve any npos: neither has a safe CPU path)
+    if (!t.metal_blob && ((npos < g_min_npos && !span) || npos > g_max_npos)) {
         return MetalPrefillDecline.npos_window
     }
     if (t.quant != QuantMode.q8) {

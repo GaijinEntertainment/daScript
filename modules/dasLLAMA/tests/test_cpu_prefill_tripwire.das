@@ -9,10 +9,11 @@ require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_env
 
-// The CPU-prefill tripwire vs the image span — this file deliberately never calls
-// allow_cpu_prefill() (test_attn_span arms it in [init], which is why this cell cannot live
-// there): on a Metal-capable build a >32-row undeclared batched prefill panics, but the
-// non-causal image span is EXEMPT, because the CPU loop is its only correct arm today.
+// The CPU-prefill tripwire — this file deliberately never calls allow_cpu_prefill()
+// (test_attn_span arms it in [init], which is why this cell cannot live there): on a
+// Metal-capable build a >32-row undeclared batched prefill panics, the non-causal media
+// span INCLUDED — the metal rail serves spans now, so a CPU-served span is as silent a
+// fallback as any other.
 
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
@@ -23,7 +24,7 @@ let NROWS = 40l
 
 [test]
 def test_cpu_prefill_tripwire(t : T?) {
-    t |> run("the span is exempt; an undeclared text prefill still trips (needs stories15M)") @(t : T?) {
+    t |> run("an undeclared prefill trips - span and causal alike (needs stories15M)") @(t : T?) {
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
             return
@@ -39,8 +40,13 @@ def test_cpu_prefill_tripwire(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var s <- make_run_state(tr.config)
-            forward_prefill_embd(tr, s, rows, NROWS, 0l, true)   // the span: must run, not panic
-            t |> success(true, "the non-causal span prefilled {NROWS} rows without declared CPU intent")
+            var span_tripped = false
+            try {
+                forward_prefill_embd(tr, s, rows, NROWS, 0l, true)
+            } recover {
+                span_tripped = true
+            }
+            t |> success(span_tripped, "an undeclared {NROWS}-row SPAN prefill panics (the exemption is gone)")
             var tripped = false
             try {
                 var s2 <- make_run_state(tr.config)

@@ -163,7 +163,7 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
 // uend = qoff + npos — the eval_embd non-causal contract. The continuation shape (qoff > 0) and
 // a sliding layer (window > 0) exercise the two bounds independently: the upper bound is
 // uniform, the window floor stays query-based (a floor derived from uend would flatten it).
-def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos, qoff, window : int; mm : bool) {  // nolint:STYLE037 — one gate, one dispatch ladder, mirrors attn_trio_gate
+def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos, qoff, window : int; mm : bool) {
     let kv_mul = n_heads / n_kv_heads
     let qd = n_heads * head_size
     let kv_dim = n_kv_heads * head_size
@@ -279,9 +279,9 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
 
 [test]
 def test_metal_prefill_kernels(t : T?) {
-    t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") <| @(t : T?) {
+    t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return
@@ -315,7 +315,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var bry = buf_fill(dev, NROWS * DIM, 0.0)
                 var brdim = buf_u32(dev, uint(DIM))
                 var breps = buf_f32(dev, EPS)
-                let rran = with_compute_encoder(queue, err) <| $(enc : MetalComputeEncoder?) {
+                let rran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
                     metal_set_pipeline(enc, pso_rms)
                     metal_set_threadgroup_memory_length(enc, metal_rmsnorm_msl_tgmem, 0)
                     metal_set_buffer(enc, brx, 0ul, 0)

@@ -4745,8 +4745,8 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 
     // an active whole-prefill override may claim the entire stack (false = decline, fall back to
-    // the CPU loop). Contract: a claiming override must honor s.attn_uniform_end — both
-    // registered overrides decline the non-causal image span, so it lands on the CPU loop below.
+    // the CPU loop). Contract: a claiming override must honor s.attn_uniform_end — metal serves
+    // the span through AttnArgs.uend; vulkan still declines it (followup #23's other half).
     var stack_done = false
     g_prefill_logits_done = false
     if (!empty(g_prefill_override_name)) {
@@ -4755,9 +4755,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     if (!stack_done) {
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
-        // The image span is exempt: CPU is its only correct arm today, so it is not a silent fallback.
-        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()
-                && s.attn_uniform_end == 0l) {
+        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {
