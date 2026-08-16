@@ -438,6 +438,12 @@ jobs:
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/review-md/test_scan.das
 
+    - name: "Test pr-babysit verdict core"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/pr-babysit/test_watch_verdict.das
+
     - name: "Test dasllama-server"
       # The model-gated server suites run --compile-only: this lane has no GGUF
       # and no -jit, so the value is the explicit compile guard — it exercises
