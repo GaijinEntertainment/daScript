@@ -8,21 +8,24 @@ directory.** A change reaches a suite when it alters what code does at runtime �
 file, a shared helper, or engine code the suite exercises; an identifier- or comment-only edit
 reaches none.
 
-**A suite runs only through `run.das`, `--arm`-scoped (it refuses `--full`); every other test,
-vulkan included, runs under dastest.** dastest run directly on a suite file is a defect.
+**A suite — a test file `run.das` lists — runs only through `run.das`, `--arm`-scoped (it
+refuses `--full`); every test `run.das` does not list runs under dastest.** dastest run
+directly on a `run.das`-listed file is a defect.
 
 **Every test RUN runs under `-jit`** — never the interpreter, never AOT. A compile-only CI lane
 passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
 for the guard, is a defect.
 
-**A dasLLAMA `[test]` file lives here unless it requires its subject by bare same-dir name, in
-which case it lives beside that subject; no dasLLAMA test appears in any `CMakeLists.txt`.**
+**A dasLLAMA `[test]` file lives in this folder.** Out-of-folder instances are ledgered in
+`CLAUDE.md`.
+
+**No dasLLAMA test appears in any `CMakeLists.txt`.**
 
 **A suite-less file's `CLAUDE.md` entry is accurate in the same change** — added when the file
 is added, corrected when what it covers is renamed or re-scoped.
 
-**`test_program_roots.das` is the enforcer for program-root discipline; weakening it is a
-defect.** The contract it enforces is `../ARCHITECTURE.md`'s to state.
+**Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
+`options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect.
@@ -40,10 +43,9 @@ through their family loaders). Image-rail coverage belongs to the image suites a
 
 **Every new or changed piece of functionality — a function or a registration, its signature,
 body, or wiring — ships its test in the same change: feed the function, check the bytes; "the
-model still runs" is not that test.** The folder's sharpenings of `REVIEW_COMMON.md`'s
-constitutional rule: a signature widening with an unchanged body counts (the new receivers are
-the new bit); a platform-fixed predicate's observable is the argv it gates or the mode it
-selects; a moved or edited registration's observable is reachability.
+model still runs" is not that test.** A signature widening with an unchanged body counts (the
+new receivers are the new bit); a platform-fixed predicate's observable is the argv it gates
+or the mode it selects; a moved or edited registration's observable is reachability.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.
@@ -80,9 +82,9 @@ well as red.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** — the wire-shape pins, the render pins, and a live server leg gated on the family's
-smallest GGUF (the file homes are `CLAUDE.md`'s suite map). A family whose vocab lacks the
-markers has no format to test; with no small-enough local model the remote leg goes to
-`THINKING.md`.
+smallest GGUF (the file homes are `CLAUDE.md`'s "Model-free / no-arm tests" and
+"Out-of-folder test files" notes). A family whose vocab lacks the markers has no format to
+test; with no small-enough local model the remote leg goes to `../THINKING.md`.
 
 **A change reaching `dasllama_tokenizer.das`, `dasllama_spm.das`, `dasllama_bpe.das`, or
 `dasllama_pretok.das` records a `test_tokenizer.das` run with its cases EXECUTED, not

@@ -43,9 +43,11 @@ legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
 or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. A region entry is a KERNEL
-`*_encode` / `*_decode` / step driver; the tokenizer encode/decode path is out of scope. A new
-entry point, including a kernel-backend override or a batch donor, carries its annotation
-itself; a rename is not new — annotations follow the name in the same change.
+`*_encode` / `*_decode` / step driver; the tokenizer encode/decode path is out of scope.
+Covered means an annotated entry reaches it: the contracts arm down the call graph, so an
+interior function carries nothing of its own. A new entry point, including a kernel-backend
+override or a batch donor, carries its annotation itself; a rename is not new — annotations
+follow the name in the same change.
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
 `dasllama_bpe.das` / `dasllama_pretok.das` ships before/after `--tok` rows for the affected
@@ -53,10 +55,12 @@ backend** — the instrument is the scaling ratio across the size ladder, and su
 defect. A change to the cell's own corpus input ships the same rows or a statement that the
 bytes are unchanged.
 
-**No raw environment access outside `dasllama_env.das` — declare a knob there instead.** A knob
-is an `[EnvConfig]` field, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` /
-`set_env_variable` / literal-name `env_config_*` elsewhere is a defect. Sanctioned forms are
-`ARCHITECTURE.md` §2.9.
+**Weakening `tests/test_env_registry.das` is a defect.** It enforces the rest of the knob
+contract: no raw environment access outside `dasllama_env.das` (declare an `[EnvConfig]` field
+and read `g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no
+re-declared env helper, and a checked-in `ENVIRONMENT.md` matching what the declarations
+render (regenerate with `harness/gen_env_doc.das`). Sanctioned forms are `ARCHITECTURE.md`
+§2.9.
 
 **An override announces itself where it changes the outcome.** An override is a gate escape,
 policy override, or threshold recalibration. Where one changes what a run measures, mints, or
@@ -118,13 +122,12 @@ reads is not written — the mint decides, not the load. A flavor takes its file
 `image_path_for` and its tag through `register_image_family_tag`; carrying another flavor's
 planes is a defect.
 
-**A change to user-facing API checks every tutorial and document that touches it.** User-facing
-means anything a consumer outside this repo calls or types — exported facade functions, CLI
-flags, environment knobs, file formats, defaults — plus the in-repo rig and tool surface: any
-output another tool parses, a console-only diagnostic not being one. The check covers the
-tutorial `.das` sources, their `.rst` pages, docstrings and help strings, and `BRINGUP.md` /
-`PROFILE.md` / `METHODOLOGY.md` / `ARCHITECTURE.md`; one still showing the old call, flag, or
-default is a defect of the change, not of the docs.
+**A change to user-facing API updates every place it is shown.** User-facing means anything a
+consumer outside this repo calls or types — exported facade functions, CLI flags, environment
+knobs, file formats, defaults — plus the in-repo rig and tool surface: any output another tool
+parses, a console-only diagnostic not being one. A tutorial source, `.rst` page, docstring,
+help string, `README.md`, or checked-in document still showing the old call, flag, or default
+is a defect of the change, not of the docs.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
 `dasllama/dasllama_transformer`) by code outside the module; engine internals, in-module tests,
@@ -132,15 +135,13 @@ harnesses and benchmarks require engine files directly.** A split that spreads f
 requires instead of fixing the re-export is a defect.
 
 **A NEW `[EnvConfig]` area struct is wired into `env_markdown()` AND `registered_env_names()`
-in the same change, and `ENVIRONMENT.md` is regenerated.** Those two lists are hand-maintained.
+in the same change.** Both lists are hand-maintained, and a struct in neither is invisible to
+every test.
 
-**A new module file is registered in `.das_module` in the same change** (membership of the
-`ADD_MODULE_DAS` list in `CMakeLists.txt` is `ARCHITECTURE.md` §1's to define).
+**A new module file is registered in `.das_module` in the same change.**
 
-**`ENVIRONMENT.md` and `dasllama_unicode.das`'s RANGES/WS tables are generated; hand-editing
-either is a defect.** `ENVIRONMENT.md` regenerates via `harness/gen_env_doc.das` in the same
-change as whatever moved its inputs (`tests/test_env_registry.das` fails on drift); the
-unicode tables retranscode from llama.cpp's unicode-data.cpp.
+**`dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
+`unicode-data.cpp`; hand-editing them is a defect.**
 
 **Placement truth — what each file holds, the seams, the carve-outs — lives in
 `ARCHITECTURE.md` §1 and nowhere else; a diff that adds a file, moves code between files, or
@@ -179,6 +180,3 @@ registrations, GPU tiers, every module requiring the engine back; it sits in
 
 **An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.
-
-**Every environment knob lives in `dasllama_env.das`** — all `[EnvConfig]` area structs and
-their `g_env_*` globals; `tests/test_env_registry.das` enforces both directions.

@@ -33,6 +33,14 @@
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`** — the
   family's reference.
 
+- **A change to what the tune sidecar EMITS — a new top-level section, or a value shape —
+  updates the exchange validator in the same change and keeps its test green.**
+  `modules/dasLLAMA/performance/exchange_schema.das` allow-lists exactly `kernels` /
+  `runtime` / `provenance` / `race`; an emitted section it does not know makes every newly
+  minted sidecar unsubmittable, and the checked-in corpus swept by
+  `modules/dasLLAMA/tests/test_exchange_schema.das` cannot show it. A new provenance key
+  needs no schema change — any identifier key with a render-safe string value validates.
+
 - **A diff introducing an override knob adds it to `ARCHITECTURE.md` §3's inventory in the
   same change.** An override knob is readable from outside the code under review — an
   environment variable, a command-line flag, or an exported runtime setter — and changes what

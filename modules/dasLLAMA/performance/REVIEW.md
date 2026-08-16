@@ -2,14 +2,16 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
-A tune-sidecar emission change lives in the dasLLVM tune rail and is reviewed with
-`skills/llvm_tune.md`; its exchange gate is the same
-`modules/dasLLAMA/tests/test_exchange_schema.das`.
+
+A tune-sidecar emission change lives in the dasLLVM tune rail and answers to
+`modules/dasLLVM/REVIEW.md`.
 
 **`exchange_schema.das` is the single validator for exchange submissions — record stores and
-tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require added
-to it, is a defect; a change to what `write_bench_records` (`profile_common.das`) emits keeps
-`modules/dasLLAMA/tests/test_exchange_schema.das` green.
+tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require
+added to it, is a defect.
+
+**A change to what `write_bench_records` (`profile_common.das`) emits keeps
+`modules/dasLLAMA/tests/test_exchange_schema.das` green in the same change.**
 
 **`exchange_client.das` is the single exchange client — every HTTP call to the sidecar exchange
 (lookup, download, submit) goes through it.** A second HTTP path is a defect.
@@ -18,20 +20,25 @@ to it, is a defect; a change to what `write_bench_records` (`profile_common.das`
 `DASLLAMA_VERSION` — before anything reads it.**
 
 **Every submission goes through `exchange_strip_private`; exchange-sourced and foreign-box
-sidecars are never submitted; a lookup failure never kills a boot.** A submission around the
-strip is a defect.
+sidecars are never submitted.** A submission around the strip is a defect.
+
+**A lookup failure never kills a boot.** A boot path that fails when the exchange lookup
+fails is a defect.
 
 **`fetch_models.das` is the model-provenance manifest** — an entry is the HF repo + revision
-pin, canonical bytes + sha256, or a conversion recipe. A model referenced anywhere without its
-entry is a defect. `--fetch` downloads only: a convert, a bench, or a tune-state write added to
-it is a defect.
+pin, canonical bytes + sha256, or a conversion recipe. A model referenced anywhere without
+its entry is a defect.
 
-**A change to an entry, or to the verify or fetch logic, in `fetch_models.das` records its gate
-run: `fetch_models.das --` ends `0 failed`.** A comment-only change does not.
+**`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
+added to it is a defect.
+
+**A change to `fetch_models.das` other than to its comments records its gate run:
+`fetch_models.das --` ends `0 failed`.**
 
 **An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
-names** — `mode` `paranoid`, `noise` `ok`, the current `dasllama_version`, a `race` entry for
-every raced family in `kernels`; a partial or hand-edited copy is a defect.
+names** — `mode` `paranoid`, `noise` `ok`, the current `dasllama_version`, and a `race` entry
+for every family in `kernels` whose grid holds more than one variant; a partial or hand-edited
+copy is a defect.

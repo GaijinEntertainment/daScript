@@ -144,7 +144,7 @@ span length from the geometry) and the greedy caption, logged in full. NOT token
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
 arm defaults to instruct, and freeform token-parity cells are banned (see below).
 
-## Model loads — never the image rail (REVIEW: "A test suite loads DECODERS with load_model_")
+## Model loads — never the image rail (REVIEW: "A suite loads decoders with `load_model_`, never the image rail")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box
@@ -228,10 +228,15 @@ and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tre
 records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
 with `-jit` — no runner, no arms, no models.
 
-## Out-of-folder test files (the bare-same-dir-require rule)
+## Out-of-folder test files (the checklist's placement ledger)
 
-A `[test]` file that requires its subject by bare same-dir name lives beside that subject,
-not here. Current instances: the serving-leg and exchange-client tests
-(`utils/dasllama-server/test_openai_server*.das`, `test_exchange_client.das` — the hyphenated
-directory is unreachable by path require), and the bench self-check
-`modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das`.
+Every dasLLAMA `[test]` file outside this folder, each with its reason:
+- `utils/dasllama-server/test_openai_server*.das` — require the server by bare same-dir name
+  (the hyphenated directory is unreachable by path require).
+- `utils/dasllama-server/test_exchange_client.das` — requires its subject by relative path,
+  but coordinates its fixed test port with the serving-leg suites' ports in that directory
+  (see its `TEST_PORT` note).
+- `utils/dasllama-ladder/test_ladder_server.das`, `test_ladder_store.das` — require the
+  ladder server by bare same-dir name; governed by that folder's own `REVIEW.md`.
+- `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` — the bench self-check, requiring
+  `matmul_variants` by bare same-dir name.

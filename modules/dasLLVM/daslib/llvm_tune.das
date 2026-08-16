@@ -39,7 +39,8 @@ require llvm/daslib/llvm_env
 //! Winners live in the PER-APP sidecar `<app>.tune.json` beside the app — the root script
 //! this process runs (the first `.das` on the command line), or the binary itself when
 //! there is none. One sectioned file per app: `"kernels"` (this module's stamps and the
-//! loop-hint perms), `"runtime"` (library runtime knobs), `"provenance"` (who wrote it).
+//! loop-hint perms), `"runtime"` (library runtime knobs), `"provenance"` (who wrote it),
+//! `"race"` (per-family race results behind each multi-variant crown).
 //! A sidecar OLDER than the running binary is stale and reads as absent everywhere — a
 //! rebuilt binary invalidates every measured winner. `DAS_TUNE_MANIFEST` env overrides the
 //! location outright. A library declares `[tune_scope(name=, tuner=)]` to wire the harness
