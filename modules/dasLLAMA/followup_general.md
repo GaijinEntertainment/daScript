@@ -317,6 +317,11 @@
     uniform bound, the three declines and the blob refusals are deleted, and the kernel
     coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail —
     pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
+    **Metal half DONE (metal-media chunk 1, 2026-08-16):** the trio takes the bound as
+    `AttnArgs.uend` (no separate kernel — the census criterion is moot), the declines and
+    blob refusals are deleted, and the span parity arm + support-matrix engage cell gate it.
+    REMAINING: the Vulkan half (`vk_moe_attn` signature surgery, device KV pre-seed,
+    `AT_CTX`), on the PC box.
 
 24. **Stream the over-line audio-carrier mints (the 1 GiB staging rule, 2026-08-14).**
     `REVIEW.md` caps `cache_via_image_staged` at a 1 GiB source file; six carriers on the

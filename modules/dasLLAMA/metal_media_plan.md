@@ -83,13 +83,16 @@ lane-owned stores, no divergent guards.
 vision refusals; invert the tripwire test; flip the support-matrix cell. One commit — the
 guards and their tests move together.
 
-**D — routing and parity surfaces.** New `span` arm in the prefill parity suite
-(embd-driven — no existing arm feeds embeddings; CPU control via `eval_embd`, per KV codec
-f16/q8_0/tq4, plus a continuation-shaped variant with the span at `start_pos > 0`);
-`test_attn_span` gains a fourth mode row (Metal chain vs classic, blocked's tolerance
-family); extend `arm14-poison` (a GPU media prefill writes the shared region it guards);
-coverage census gains the non-causal dispatch leg (synthetic embd rows in `cov_model` —
-model-free, no mmproj download).
+**D — routing and parity surfaces. DONE.** The `span` arm landed in the prefill parity
+suite: the media eval shape (causal head chunk, non-causal embd span at `start_pos > 0`
+built from the tail tokens' own embedding rows, greedy decode) — token-exact vs the all-CPU
+control per KV codec f16/q8_0/tq4, with both prefill calls asserted GPU-served. Run green.
+Three planned sub-items dissolved on inspection, deliberately: the `test_attn_span` GPU
+mode row is redundant across the three tiers that now gate (kernel-unit oracle, support-
+matrix engage cell, model-level token-exact parity); `arm14-poison` needs no extension (a
+span rides the identical panels and driver — there is no new region to collide); and the
+census has no new kernel to cover — the same six kernels serve spans via the uniform, which
+is the design #23's "dispatches the non-causal arm" criterion predates.
 
 **E — server + stats + demo.** Engine knob `DASLLAMA_METAL_SPAN` (MetalEnv bool, default
 true, doc names the CPU A/B fallback — `attn`/`mulmm` precedent; declared in
