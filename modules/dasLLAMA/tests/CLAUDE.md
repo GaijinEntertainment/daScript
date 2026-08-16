@@ -102,8 +102,9 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Model-free / no-arm tests
 
 Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
-New suite-less files register on this note (REVIEW: "A new file under `tests/` registers
-in `tests/CLAUDE.md`"); suite members register in their suite's arm list via `run.das` instead.
+New suite-less files register on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is
+accurate in the same change"); suite members register in their suite's arm list via `run.das`
+instead.
 Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs
@@ -226,3 +227,11 @@ exist for it. Counting cells stay token-exact.
 and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
 with `-jit` — no runner, no arms, no models.
+
+## Out-of-folder test files (the bare-same-dir-require rule)
+
+A `[test]` file that requires its subject by bare same-dir name lives beside that subject,
+not here. Current instances: the serving-leg and exchange-client tests
+(`utils/dasllama-server/test_openai_server*.das`, `test_exchange_client.das` — the hyphenated
+directory is unreachable by path require), and the bench self-check
+`modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das`.

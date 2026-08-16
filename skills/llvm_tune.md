@@ -38,6 +38,10 @@ pin travels INSIDE the joined fnames string as one `@version:key=value` token
 contract, daspkg's status walk — enforces it with no signature change. When
 `DAS_TUNE_MANIFEST` gates the policy rail, `warn_manifest_untuned` still prints one loud
 per-scope warning if the pointed file reads untuned (dedup: once per scope+path per process).
+A change to what the sidecar EMITS — a section, a provenance key, a value shape — keeps
+`modules/dasLLAMA/tests/test_exchange_schema.das` green in the same change: the sidecar
+exchange validates submissions against that schema, and its test sweeps the checked-in
+corpus, so emission drift reds there first.
 
 ## The annotation set
 

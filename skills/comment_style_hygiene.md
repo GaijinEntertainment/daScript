@@ -140,6 +140,11 @@ rename first, then see what's left to say.
 synonyms for one idea ("timeout" / "deadline" / "budget") are three chances to
 misread; pick the accurate one and sweep the rest.
 
+**One mechanism, one family word.** When a mechanism surfaces as a family of public
+names — a flag plus its one-shot forms, a verb plus its variants — every member
+shares the family word; a second vocabulary for part of the family makes the reader
+ask what the difference is when there is none.
+
 **Diagnostics name the concrete thing.** If the code knows which one — which operator,
 which type, which file — the message says which one; a category without an instance
 reads as "trust us". User-facing messages carry no vocabulary that exists only inside

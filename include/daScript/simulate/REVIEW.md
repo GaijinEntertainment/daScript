@@ -1,7 +1,7 @@
 # Simulate Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
-`CLAUDE.md` (repo root).
+`ARCHITECTURE.md`.
 
 - **No new work in code executed once per evaluation step — the `SimNode::eval*` methods
   (`simulate_nodes.h`, `runtime_*.h`, their AOT twins in `aot.h`) and the dispatchers
