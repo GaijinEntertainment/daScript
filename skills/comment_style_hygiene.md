@@ -43,24 +43,26 @@ some (noted), C++/JS lints are follow-up work.
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
 reviewer's. Inside a `def private` body the cap is ONE line (STYLE015), and that cap is
 body-only: a comment *attached to* a private symbol takes the ordinary 3-line cap plus the
-bar in *Private symbols don't get public-style docs* below. It covers per-symbol and
-in-body comments; a file-header map (below) is exempt — its test is prose-vs-enumeration,
-not length. A comment that doesn't fit is the signal to
-interrogate it: why does this need prose at all, and does the detail belong at the use
-site — or nowhere?
+bar in *Private symbols don't get public-style docs* below. The cap covers per-symbol
+and in-body comments; the file header — the block before the first declaration,
+STYLE014's boundary — is governed by the map rule below. A comment that doesn't fit is
+the signal to interrogate it: why does this need prose at all, and does the detail
+belong at the use site, in the file-header map (shared contract moves up, the symbol
+keeps what is specific to it) — or nowhere?
 
 **No banners, no preambles.** No `// ===== name — desc =====` block above a function
-that already carries its own doc-comment, and no multi-paragraph architectural essay
-at the head of a section. Code reads well; design docs and tutorials carry the WHY.
-Terse section dividers stay.
+that already carries its own doc-comment, and no section-head essay restating what the
+code, the doc-comments, or the file-header map already carry — architectural WHY with
+no home in the file goes to a design doc. Terse section dividers stay.
 
 **A file header is a map, not an essay.** A pass or subsystem file may open with a
 numbered overview — one line per fact — stating the whole contract: when it runs, what
 it consumes and produces, the kinds and tiers it deals in. A map legitimately repeats
 what per-symbol comments say; a reader entering cold needs the shape before any
-symbol. What stays banned is prose — paragraphs argue, maps enumerate. A header at
-or under the 3-line comment cap may stay prose; the enumeration form is required
-only past it.
+symbol. What stays banned is prose — paragraphs argue, maps enumerate. A map repeats
+per-symbol *comments*, not text the code already prints as a message or expectation.
+A header at or under the comment cap may stay prose; the enumeration form is
+required only past it.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a

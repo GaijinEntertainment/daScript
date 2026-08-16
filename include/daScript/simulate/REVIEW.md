@@ -10,3 +10,10 @@
   any added load, branch, or counter there taxes every program. A correctness-required
   addition is FLAGGED for human review in the PR description, naming the alternative that
   was rejected; an unflagged hot-path addition is a defect.
+
+- **A field added, removed, or reordered in a `debug_info.h` struct: the PR description
+  states a per-consumer verdict (updated / no change needed / rebuild required) for the
+  rtti binding (`src/builtin/module_builtin_rtti.cpp`), the das-side readers of the
+  struct (enumerate with MCP `grep_usage` on the struct name), and external-module
+  rebuilds (`skills/abi_break_sweep.md`).** A diff doing so with no such statement is a
+  defect.

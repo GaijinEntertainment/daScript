@@ -13,3 +13,5 @@ visibility information
 name of the variable
 stack top offset
 local variable flags
+liveness interval open, in frame positions (exclusive)
+liveness interval close, in frame positions (inclusive)
