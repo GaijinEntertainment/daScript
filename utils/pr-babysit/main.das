@@ -8,7 +8,6 @@ options gen2
 // /pulls/N/reviews with commit_id == the requested tip.
 
 require strings
-require math
 require daslib/fio
 require daslib/clargs
 require daslib/strings_boost
@@ -150,7 +149,7 @@ def private request_review_graphql(cfg : Config) : bool {
 }
 
 def private watch(cfg : Config) : int {
-    let polls = max(1, (cfg.timeout_min * 60) / max(1, cfg.interval_sec))
+    let polls = poll_budget(cfg.timeout_min, cfg.interval_sec)
     var last_state = ""
     var escalated = false
     for (poll in range(polls)) {
@@ -167,28 +166,19 @@ def private watch(cfg : Config) : int {
             to_log(LOG_WARNING, "pr-babysit: api read failed, retrying\n")
             continue
         }
-        var fails : array<string>
-        var pending = 0
-        for (c in checks) {
-            if (c |> starts_with("fail ")) {
-                fails |> push(slice(c, 5))
-            } elif (c |> starts_with("pending ")) {
-                pending++
-            }
-        }
+        let cls <- classify_checks(checks)
         let reviewed = reviews |> has_value(head)
-        let state = "tip {slice(head, 0, 9)}: {length(fails)} failed, {pending} pending, reviewed={reviewed}, unresolved={unresolved}"
+        let state = "tip {slice(head, 0, 9)}: {length(cls.fails)} failed, {cls.pending} pending, reviewed={reviewed}, unresolved={unresolved}"
         if (state != last_state) {
             to_log(LOG_INFO, "pr-babysit: {state}\n")
             last_state = state
         }
-        let verdict = watch_verdict(length(fails), pending, reviewed, unresolved)
+        let verdict = watch_verdict(length(cls.fails), cls.pending, reviewed, unresolved)
         if (verdict == WatchVerdict.ci_red) {
-            to_log(LOG_ERROR, "pr-babysit: CI red - {join(fails, ", ")}\n")
-            return 2
+            to_log(LOG_ERROR, "pr-babysit: CI red - {join(cls.fails, ", ")}\n")
         }
-        return 3 if (verdict == WatchVerdict.review_to_triage)
-        return 0 if (verdict == WatchVerdict.ready_to_merge)
+        let ec = exit_for(verdict)
+        return ec if (ec >= 0)
         // REST accepted but never re-triggered
         if (cfg.request_review && !escalated && !reviewed && poll >= polls / 2) {
             escalated = true
