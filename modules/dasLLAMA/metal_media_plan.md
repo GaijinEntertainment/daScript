@@ -58,10 +58,15 @@ The Vulkan decline (`dasllama_gpu_resident.das:728`) and `attn_gpu_prefill_ready
 
 ## Slices
 
-**A — measure the cliff first.** `lcpp_bench --image` on the M1 (12B Q4_K_M, cats): the
-CPU baseline row exists; add the timing probe run (`--prof` pp window) splitting head/span/
-tail eval wall. Text-only control at the same knobs. No code changes; predictions above
-judged against this.
+**A — measure the cliff first. DONE 2026-08-16.** The checked-in m1 record rows carry the
+rates (12B Q4_K_M: das CPU pp 67.1 / tg 14.8; das metal-blob pp 326.5 / tg 33.4), so the
+span arithmetic needed no fresh mint: 130 cats rows = 1.94 s at CPU pp vs 0.40 s at metal
+pp; the 280-row ceiling = 4.2 s vs 0.9 s. P2 HELD (predicted ~2.0 s / >1 s saving). The
+today-side of P1 reproduced live: `--gpu metal --image-mmproj` dies at boot with the
+`openai_server.das:339` refusal ("a metal-blob model … serve it without the metal blob to
+take a vision arm") — on Metal there is no slow image path, there is none. The live
+before/after turn (same binary both sides) rides slice F, where the one re-mint is
+amortized across the before and after cells.
 
 **B — `uend` through the six kernels.** Add `uend : uint` (0 = causal) to `AttnArgs`; edit
 the three QK skips, softmax `cnt`, the three AV limits; driver passes
