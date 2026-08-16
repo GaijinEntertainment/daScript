@@ -11,6 +11,10 @@ require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown ra
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model — the census's model-switch drops
+require dasllama/dasllama_whisper   // the cov_tower whisper row
+require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
+require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
+require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -165,6 +169,67 @@ def private census_zoo(t : T?) {
     // qwen2moe: q8 expert stacks + the sigmoid-gated shared expert on std attention; large tier
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
         [KVDtype.f16], none)
+    cov_tower(t)
+}
+
+// cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
+// borrowed trio) go non-zero — a whisper tiny f32 chunk plus a small gemma4uv canvas
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(true)
+        let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
+        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (model_available(t, wpath) && !empty(samples)) {
+            var inscope w = WhisperModel()
+            var inscope stg <- stage_whisper_model(wpath)
+            mint_whisper_model(stg, w)
+            with_job_que() {
+                setup_dasllama_jobque()
+                var ws <- create_session(w)
+                transcribe(w, ws, samples) $(_seg) {
+                    pass
+                }
+                delete ws
+            }
+        }
+        delete samples
+        // the erf-GELU carrier (whisper is the LUT flavor): one qwen2audio chunk on varied mel
+        let apath = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
+        if (model_available(t, apath)) {
+            var atw <- load_audio_tower(apath)
+            var mel = MelChunk(n_mel = atw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+            mel.data |> resize(atw.n_mel * AUDIO_CHUNK_FRAMES)
+            for (i in range(length(mel.data))) {
+                mel.data[i] = sin(float(i) * 0.0137) * 0.8
+            }
+            var aenc <- make_encoder_state(atw)
+            with_job_que() {
+                setup_dasllama_jobque()
+                audio_encode(atw, aenc, mel)
+            }
+            delete aenc
+            delete atw
+        }
+        let mpath = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+        if (model_available(t, mpath)) {
+            var inscope emb <- load_gemma4uv_embedder(mpath)
+            var st = Gemma4uvState()
+            var planes : array<float>
+            planes |> resize(96l * 96l * 3l)
+            for (i in range64(96l * 96l * 3l)) {
+                planes[i] = sin(float(i) * 0.013) * 0.7
+            }
+            var out : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                gemma4uv_encode(emb, st, planes, 96l, 96l, out)
+            }
+            delete out
+            delete planes
+            delete st
+        }
+    }
 }
 
 [test]
@@ -209,6 +274,7 @@ def test_metal_kernel_coverage(tst : T?) {
                 to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")
             }
             delete cov
+            metal_tower_shutdown()
             metal_decode_shutdown()
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)

@@ -46,6 +46,9 @@ struct ProbeArgs {
     @clarg_doc = "Save a jobque lane trace of the profiled reps to this path (perfetto JSON, encoder stages colored)"
     trace : string
 
+    @clarg_doc = "Session language (default en; Qwen3-ASR needs auto)"
+    lang : string = "en"
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -78,8 +81,8 @@ def load_audio_16k_mono(path : string) : array<float> {
     return <- out
 }
 
-def run_once(m : AsrModel; samples : array<float>) {
-    var s = create_session(m, "en")
+def run_once(m : AsrModel; samples : array<float>; lang : string) {
+    var s = create_session(m, lang)
     transcribe(m, s, samples) $(seg : TranscribeSegment) {
         feint("{seg.text}\n")
     }
@@ -87,6 +90,7 @@ def run_once(m : AsrModel; samples : array<float>) {
 
 [export]
 def main() : int {
+    allow_cpu_prefill()   // a CPU-stage instrument by design: the LLM-decoder families (qwen3a, canary) prefill encoder rows on the CPU
     var r <- parse_args(type<ProbeArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
@@ -123,7 +127,7 @@ def main() : int {
     with_job_que() {
         setup_dasllama_jobque_()   // the engine dispatch standard — bare with_job_que profiles the
                                    // ~10us/job fifo fork/join instead of the shipped team dispatch
-        run_once(m, samples)               // warmup, unprofiled
+        run_once(m, samples, cfg.lang)     // warmup, unprofiled
         if (!empty(cfg.trace)) {
             jobque_trace_start(1 << 21)   // encoder chunks are coarse — a couple of reps fit easily
             set_trace_tags(true)
@@ -135,7 +139,7 @@ def main() : int {
             print("note: decoder-engine buckets need JOBQUE_PROFILING=1 - printing the ASR stage table only\n")
         }
         for (_rep in range(reps)) {
-            run_once(m, samples)
+            run_once(m, samples, cfg.lang)
         }
         if (!empty(cfg.trace)) {
             set_trace_tags(false)

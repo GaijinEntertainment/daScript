@@ -46,6 +46,18 @@ enum MetalDecodeDecline {
                         // forward-only and NOT re-derivable — no watermark repair exists)
 }
 
+// The tower/embedder driver's decline set — same contract as the prefill/decode enums: FIRST
+// failing clause, .none = supported, names asserted as strings by the image suite's mtower
+// cells. Conformer families never decline — no seam; their evidence is frozen counters.
+enum MetalTowerDecline {
+    none                // supported — the tower encode runs on the GPU
+    knob                // DASLLAMA_METAL_TOWER=0 — the A/B rail
+    quant_mode          // a q8-loaded tower: the f32/bf16 lane only (the q8 tower lane is its own slice)
+    shape               // a dim violating the GEMM grids (m%32 / ndim%64 / kdim%32) or a misaligned plane offset
+    device              // metal init failed (no device / PSO build failure)
+    gpu_error           // dispatch failed at execution time
+}
+
 // why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's
 // twin; the support-matrix test asserts these names as strings)
 enum MetalPrefillDecline {
@@ -67,8 +79,8 @@ enum MetalPrefillDecline {
     shape               // head/dim alignment outside the kernel grids
     layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
     rope_rows           // the window's rope table not built
-    non_causal_span     // s.attn_uniform_end armed — the GPU chains encode the causal mask, so
-                        // an image span serves on the CPU loop until a uniform-bound kernel lands
+    non_causal_span     // the A/B decline only (DASLLAMA_METAL_SPAN=0): the trio takes the
+                        // uniform bound as AttnArgs.uend, so a span serves by default
     device              // metal_prefill_init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
     planar              // weights not in the blob-image form (the drivers are blob-only)

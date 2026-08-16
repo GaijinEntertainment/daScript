@@ -11,6 +11,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require _model_tier   // models_dir() + model_available() gate
+require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs (the facade registers the hook)
 
 // The image chat turn: the prompt stream shape around the soft-token splice (tier 2) and the
 // greedy caption (tier 3). Pinned: marker ids, media-first order, span length from the
@@ -28,7 +29,7 @@ let IMAGE_CLOSE = 258882l
 let CATS_ROWS = 130l
 
 [test]
-def test_vision_chat(t : T?) {
+def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn story: shape → caption → tower legs
     t |> run("the image turn: stream shape, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM)
         let dec = path_join(models_dir(), DEC)
@@ -47,6 +48,11 @@ def test_vision_chat(t : T?) {
         allow_cpu_prefill()
         with_job_que() {
             setup_dasllama_jobque_()
+            var tower0_encodes = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_tower(true)
+                tower0_encodes = metal_tower_stats().encodes
+            }
             var emb <- load_gemma4uv_embedder(mm)
             var chat <- create_chat_(m, emb, "", 96l)
             add_user_image_(chat, img)
@@ -89,6 +95,32 @@ def test_vision_chat(t : T?) {
             tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
             delete chat
+            // The tower legs. The caption is the FLOOR, not token parity
+            // (freeform token cells are banned; the soft-token numeric bars live in the tier-1 GPU
+            // and gemma4uv-metal gates) - here the contract is engage evidence plus "still cats"
+            // with the knob off.
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                tt |> equal(metal_tower_stats().encodes - tower0_encodes, 1l,
+                            "the image encode above was GPU-served (encodes delta)")
+                set_metal_tower(false)
+                let sc0 = metal_tower_stats()
+                var emb2 <- load_gemma4uv_embedder(mm)   // fresh: create_chat_ consumed `emb`
+                var chat2 <- create_chat_(m, emb2, "", 96l)
+                add_user_image_(chat2, img)
+                add_user_(chat2, "describe this image")
+                let reply2 = respond_(m, chat2, params) $(piece : string) {
+                    return true
+                }
+                to_log(LOG_INFO, "vision caption (tower off): {replace(reply2, "\n", "\\n")}\n")
+                let low2 = to_lower(reply2)
+                tt |> success(find(low2, "cat") >= 0, "knob-off leg still describes the cats")
+                tt |> success(length(reply2) > 40, "knob-off caption is a description, not a fragment")
+                let sc1 = metal_tower_stats()
+                tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
+                tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
+                set_metal_tower(true)
+                delete chat2
+            }
         }
         delete m
     }

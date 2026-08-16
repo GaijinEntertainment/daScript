@@ -11,6 +11,7 @@ require daslib/strings_boost
 require strings
 require math
 require _model_tier   // models_dir() + model_available() gate
+require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
 
 // Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload):
 // pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff here isolates the
@@ -99,12 +100,12 @@ def private make_planes(kind : string; w, h : int) : array<float> {
 let TIER1_TOL = 2e-4
 
 def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
-                        kind : string; w, h : int; logname : string) {
+                        kind : string; w, h : int; logname : string; gpu_ladder : bool = false) : bool {
     var o = OracleEncode()
     let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
         t |> skip("oracle dump {logname} not present/parseable - mint via gemma4-vision-oracle/mint.sh")
-        return
+        return false
     }
     let planes <- make_planes(kind, w, h)
     var out : array<float>
@@ -115,29 +116,46 @@ def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
     }
     t |> equal(int(npos), o.npos, "{kind} {w}x{h} token count")
     if (int(npos) != o.npos) {
-        return
+        return false
     }
     var maxdiff = 0.0
     var max_tok = -1
+    var max_excess = 0.0   // gpu ladder: worst diff past its per-token scale-relative bound
     let d = int(emb.proj_dim)
     for (p in range(o.npos)) {
         var mean = 0.0
+        var sq = 0.0
         for (i in range(d)) {
             mean += out[p * d + i]
+            sq += out[p * d + i] * out[p * d + i]
         }
         mean /= float(d)
+        let bound = TIER1_TOL + (gpu_ladder ? 4e-3 * sqrt(sq / float(d)) : 0.0)
         for (diff in [abs(mean - o.means[p]), abs(out[p * d + 0] - o.v0[p]), abs(out[p * d + 1] - o.v1[p]),
                       abs(out[p * d + 2] - o.v2[p]), abs(out[p * d + 3] - o.v3[p])]) {
             if (diff > maxdiff) {
                 maxdiff = diff
                 max_tok = p
             }
+            if (diff - bound > max_excess) {
+                max_excess = diff - bound
+            }
         }
+    }
+    if (gpu_ladder) {
+        let rung = (maxdiff <= TIER1_TOL ? "held the strict CPU 2e-4"
+            : (max_excess <= 0.0 ? "held the scale-relative rung" : "EXCEEDED the scale-relative rung"))
+        to_log(LOG_INFO, "gemma4uv tier-1 GPU {kind} {w}x{h}: {o.npos} tokens, maxdiff {maxdiff} at tok {max_tok} - {rung}\n")
+        if (max_excess > 0.0) {
+            t |> failure("{kind} {w}x{h} GPU: worst diff exceeds TIER1_TOL + 4e-3*rms by {max_excess} (maxdiff {maxdiff} at tok {max_tok})")
+        }
+        return true
     }
     to_log(LOG_INFO, "gemma4uv tier-1 {kind} {w}x{h}: {o.npos} tokens, maxdiff {maxdiff} at tok {max_tok}\n")
     if (maxdiff > TIER1_TOL) {
         t |> failure("{kind} {w}x{h}: maxdiff {maxdiff} at tok {max_tok} exceeds {TIER1_TOL} - got ({out[max_tok * d]}, {out[max_tok * d + 1]}, ...) want ({o.v0[max_tok]}, {o.v1[max_tok]}, ...)")
     }
+    return true
 }
 
 [test]
@@ -149,6 +167,9 @@ def test_gemma4uv_tier1(t : T?) {
         }
         var emb <- load_gemma4uv_embedder(mm)
         var st = Gemma4uvState()
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain; the GPU rung is the next test
+        }
         tt |> equal(int(emb.patch), 48, "folded superpatch")
         tt |> equal(int(emb.patch_dim), 6912, "im2col row")
         tt |> equal(int(emb.n_embd), 3840, "embedding width")
@@ -177,7 +198,43 @@ def test_gemma4uv_tier1(t : T?) {
             tripped = true
         }
         tt |> success(tripped, "a canvas past pos_entries columns panics at the grid check")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete st
         delete emb
+    }
+}
+
+// The GPU tier-1 gate: the same oracle dumps through the Metal tower.
+// The f16-staged GEMMs cannot promise the CPU 2e-4, so the bar is the scale-relative rung
+// (TIER1_TOL + 4e-3 * token rms) with the CPU constant untouched; the log states which rung
+// each fixture actually held. Engage evidence is the encodes counter, per fixture.
+[test]
+def test_gemma4uv_tier1_gpu(t : T?) {
+    t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+            if (!model_available(tt, mm)) {
+                return
+            }
+            var emb <- load_gemma4uv_embedder(mm)
+            var st = Gemma4uvState()
+            set_metal_tower(true)
+            let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
+                            (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
+                            (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
+                            (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
+            for (fx in fixtures) {
+                let s0 = metal_tower_stats()
+                let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, true)
+                if (ran) {
+                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l,
+                                "{fx.kind} {fx.w}x{fx.h}: GPU-served (encodes delta)")
+                }
+            }
+            delete st
+            delete emb
+        }
     }
 }

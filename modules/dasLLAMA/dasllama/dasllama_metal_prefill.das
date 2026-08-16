@@ -1074,7 +1074,7 @@ class MetalRope {
 [metal_dispatch(name = "enc_add_bias_rows", pso = "g_pf_pso_addbias", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalAddBiasRows {
     @ssbo @binding = 0 @role = "readwrite" @off = "off" @span = "total*4" x : array<float>     // [nrows x n], updated in place (bound at the panel offset)
-    @ssbo @binding = 1 @role = "weight" b : array<float>     // [n]
+    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>     // [n] (the tower driver binds biases inside the model blob)
     @uniform @binding = 2 n : uint
     @uniform @binding = 3 total : uint      // nrows * n — grid guard
 
@@ -1108,6 +1108,7 @@ struct AttnArgs {
     window : uint       // > 0 = sliding span (this layer); 0 = global
     softcap : float     // > 0 = attention-logit soft cap (gemma2)
     hass : uint
+    uend : uint         // > 0 = uniform span end (media rows): every query attends [window floor, uend); 0 = causal
 }
 
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 score block; blocks fully above the
@@ -1127,9 +1128,10 @@ class MetalAttnQK {
         let qi0 = gl_WorkGroupID.x * 32u
         let j0 = gl_WorkGroupID.y * 32u
         let h = gl_WorkGroupID.z
-        // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window
-        // (the first row's wstart is the block minimum; softmax zeroes P over the skipped region)
-        if (j0 > ka.qoff + qi0 + 31u ||
+        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
+        // below every row's sliding ka.window (the first row's wstart is the block minimum;
+        // softmax zeroes P over the skipped region)
+        if ((ka.uend > 0u ? j0 >= ka.uend : j0 > ka.qoff + qi0 + 31u) ||
                 (ka.window > 0u && ka.qoff + qi0 + 1u > ka.window && j0 + 32u <= ka.qoff + qi0 + 1u - ka.window)) {
             return
         }
@@ -1200,8 +1202,8 @@ class MetalAttnSoftmax {
         let h = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
         let nthreads = gl_WorkGroupSize.x
-        let cnt = ka.qoff + qi + 1u
-        let jlo = ka.window > 0u && cnt > ka.window ? cnt - ka.window : 0u
+        let cnt = ka.uend > 0u ? ka.uend : ka.qoff + qi + 1u
+        let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
         let rowbase = (h * ka.qrows + qi) * ka.np32
         var m = -1.0e30
         var j = jlo + lid
@@ -1299,7 +1301,8 @@ class MetalAttnAV {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let kvhoff = (h / ka.kv_mul) * ka.head_size
-        let jlimit = min(ka.qoff + qi0 + 32u, ka.np32)   // causal: P rows here are zero past qoff+qi0+31
+        // causal: P rows here are zero past qoff+qi0+31; uniform span: softmax zeroed [uend, np32)
+        let jlimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + qi0 + 32u, ka.np32)
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
         var c00 : simdgroup_float8x8
@@ -1363,7 +1366,7 @@ class MetalAttnQKMmT {
     def metal_attn_qk_mm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
-        if (nBase > ka.qoff + mBase + 31u ||
+        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -1407,8 +1410,9 @@ class MetalAttnQKMm : MetalMmTileBase {
     def metal_attn_qk_mm {
         let mBase = gl_WorkGroupID.x * 32u  // query rows
         let nBase = gl_WorkGroupID.y * 64u  // key rows
-        // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window
-        if (nBase > ka.qoff + mBase + 31u ||
+        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
+        // below every row's sliding ka.window
+        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -1504,7 +1508,8 @@ class MetalAttnAVMmT {
         let h = gl_WorkGroupID.z
         let kvhoff = (h / ka.kv_mul) * ka.head_size
         let lid = gl_LocalInvocationID.x
-        let klimit = min(ka.qoff + mBase + 32u, ka.np32)   // P rows here are zero past qoff+mBase+31
+        // P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
+        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
         tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
@@ -1561,7 +1566,8 @@ class MetalAttnAVMm : MetalMmTileBase {
         let bB = (sg / 2u) * 128u
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
-        let klimit = min(ka.qoff + mBase + 32u, ka.np32)   // causal: P rows here are zero past qoff+mBase+31
+        // causal: P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
+        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
         var kb = 0u
         while (kb * 32u < klimit) {
             let posg = kb * 32u + pr
@@ -1707,6 +1713,11 @@ def private pf_skip_moe_reduce : bool {
 
 //! Prefills below this npos decline to the CPU path (submit+readback overhead outweighs the win).
 //! Set 1 to force every prefill onto the GPU (tests).
+//! Test A/B seat: pin the span serving on/off in-process (DASLLAMA_METAL_SPAN's setter twin).
+def public set_metal_prefill_span(on : bool) {
+    g_pf_env_span = on
+}
+
 def public set_metal_prefill_min_npos(v : int64) {
     g_min_npos = v
 }
@@ -1764,6 +1775,12 @@ def public metal_prefill_stage_stats() : tuple<prefills : int64; setup_us : int6
 //! machinery lives in dasllama_metal_common (W1 split), so the count reads from there.
 def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
     return (prefills = g_prefills, declines = g_prefill_declines)
+}
+
+//! The tower driver's borrow seat: full prefill PSO bring-up, idempotent — the borrowed builders
+//! (pf_enc_bf16_mm, enc_add_bias_rows; the attention trio next) bind prefill-owned PSOs.
+def public metal_prefill_pso_init : bool {
+    return metal_prefill_init()
 }
 
 //! Release every GPU object the driver holds — the tests' leak-gate rail (and the reset for
@@ -1981,11 +1998,11 @@ def private rope_rows_ready(t : Model; s : Session; npos : int64) : bool {
 // existing rows gather into the K/V panels and the causal diagonal shifts by qoff — the gate
 // keeps the argument so future clauses can window it
 def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : MetalPrefillDecline {
-    // these chains encode the causal mask — the span call serves on CPU, head/tail chunks stay here
-    if (s.attn_uniform_end != 0l) {
+    // the A/B rail: DASLLAMA_METAL_SPAN=0 declines the span to the tripwire-guarded CPU arm
+    if (s.attn_uniform_end != 0l && !g_pf_env_span) {
         return MetalPrefillDecline.non_causal_span
     }
-    let why = prefill_decline_caps(t, npos)
+    let why = prefill_decline_caps(t, npos, s.attn_uniform_end != 0l)
     if (why != MetalPrefillDecline.none) return why
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
     return rope_rows_ready(t, s, npos) ? MetalPrefillDecline.none : MetalPrefillDecline.rope_rows
@@ -1994,9 +2011,9 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
 // Everything a model either can or cannot do, independent of how far THIS window has been set up.
 // Callers that run before the window is staged (the PLE gpu gate) ask this one; a window that then
 // turns out not to be ready declines later, and metal_prefill_forward's fallback covers it.
-def private prefill_decline_caps(t : Model; npos : int64) : MetalPrefillDecline {
-    // npos window is a POLICY decline (short prefills were cheaper on CPU); blob-only has no CPU path, so any npos serves
-    if (!t.metal_blob && (npos < g_min_npos || npos > g_max_npos)) {
+def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) : MetalPrefillDecline {
+    // npos window is a POLICY decline (blob-only and short SPANS serve any npos: neither has a safe CPU path)
+    if (!t.metal_blob && ((npos < g_min_npos && !span) || npos > g_max_npos)) {
         return MetalPrefillDecline.npos_window
     }
     if (t.quant != QuantMode.q8) {
@@ -2066,8 +2083,8 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
 
 // the E-series model_proj GEMM off the kept-bf16 blob — ONE PSO global holds whichever of the
 // base/tensor pair compiled (crown resolved at init), so the pick is the tgmem/binding layout.
-def private pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;
-                           bx, by, bk, bn : MetalBuffer?; mp, nd : int64) {
+def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;
+                   bx, by, bk, bn : MetalBuffer?; mp, nd : int64) {
     if (g_pf_bf16_mm_tensor) {
         pf_enc_bf16_mm_t_c(enc, bw, wboff, bx, by, bk, bn, mp, nd)
     } else {
@@ -2216,7 +2233,7 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
 // MetalAttnSoftmax (sink @default = g_one — identity on null). The mm wrappers below pick the
 // Metal-4 tensor twin's generated builder (_t_c) when it compiled.
 
-def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
+def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {   // public: the tower driver dispatches the crowned trio too
     if (g_pf_qkmm_tensor && g_pf_pso_qkmm_t != null) {
         enc_qk_mm_t_c(enc, bq, bk, batt, ka, mp, nk64, heads)
     } else {
@@ -2224,7 +2241,7 @@ def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; v
     }
 }
 
-def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
+def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {   // public: the tower driver dispatches the crowned trio too
     if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
         enc_av_mm_t_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
     } else {
@@ -2836,9 +2853,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     var bbq = upload_region(addr < void? >(t.bq[l * qd_l]), uint64(qd_l * 4l))
                     var bbk = upload_region(addr < void? >(t.bk[l * kvd_l]), uint64(kvd_l * 4l))
                     var bbv = upload_region(addr < void? >(t.bv[l * kvd_l]), uint64(kvd_l * 4l))
-                    enc_add_bias_rows(enc, bq, 0ul, bbq, u_qd, u_totq, npos * qd)
-                    enc_add_bias_rows(enc, bks[l], koff, bbk, u_kvd, u_totkv, npos * kv_dim)
-                    enc_add_bias_rows(enc, bvs[l], koff, bbv, u_kvd, u_totkv, npos * kv_dim)
+                    enc_add_bias_rows(enc, bq, 0ul, bbq, 0ul, u_qd, u_totq, npos * qd)
+                    enc_add_bias_rows(enc, bks[l], koff, bbk, 0ul, u_kvd, u_totkv, npos * kv_dim)
+                    enc_add_bias_rows(enc, bvs[l], koff, bbv, 0ul, u_kvd, u_totkv, npos * kv_dim)
                 }
                 if (!recr && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     // per-head QK-norm before rope — the chunk's q panel and its new K rows
@@ -2873,7 +2890,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         scale = het ? (c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))) : scale,
                         qoff = uint(start_pos), qrows = uint(mp),
                         window = uint(lsl && c.sliding_window > 0l ? c.sliding_window : 0l),
-                        softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u)
+                        softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u,
+                        uend = s.attn_uniform_end > 0l ? uint(s.attn_uniform_end) : 0u)
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads)
@@ -2910,7 +2928,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     if (c.attn_out_bias) {
                         var bwo_b = upload_region(unsafe(addr < void? >(t.bo[l * dim])), uint64(dim * 4l))
-                        enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, u_dim, u_total_dim, npos * dim)
+                        enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, 0ul, u_dim, u_total_dim, npos * dim)
                     }
                 }
                 // ffn: [post-attn norm ->] [WO residual +] norm -> [requant ->] W1/W3 ->
@@ -3388,6 +3406,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
 // Knobs resolved once at [init]. They were read per prefill call, and get_env_variable allocates
 // its result in the context heap on every call — see PERF027.
 var private g_pf_env_mulmm = true
+var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
 var private g_pf_env_unretained = false
@@ -3401,6 +3420,7 @@ def dasllama_metal_prefill_register() {
     register_prefill_override("metal", @@metal_prefill_forward)
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     g_pf_env_mulmm = g_env_metal.mulmm
+    g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn
     g_pf_env_unretained = g_env_metal.unretained

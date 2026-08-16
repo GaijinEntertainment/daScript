@@ -15,6 +15,9 @@ require dasllama/dasllama_gemma4uv // Gemma4uvStaging/stage_gemma4uv_embedder �
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
+require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_tower_stats — the gemma4uv-metal arm
+require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
+require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -23,7 +26,6 @@ require daslib/fio
 require strings
 require math
 require _model_tier
-require dasllama/dasllama_env
 
 // The prepared-model image (.dlim) rail. The mechanics arm exercises save/load on a synthetic
 // carrier (no models, runs everywhere incl. CI): value round trip, dotted nested-carrier
@@ -33,11 +35,6 @@ require dasllama/dasllama_env
 // voxtral-mini arm is the designated >2 GiB-plane coverage (its q8 image is 5.4 GB), so it
 // re-saves the image from cold on every run by design. Drive through modules/dasLLAMA/tests/run.das
 // (--suite image); model arms follow the suite's presence/tier gates.
-
-def private whisper_dir() : string {
-    let env = g_env_test.whisper_dir
-    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
-}
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -743,38 +740,6 @@ def test_tower_image_roundtrip(t : T?) {
     }
 }
 
-// minimal RIFF/WAVE reader for the 16-bit PCM mono fixture (jfk.wav) — test_whisper's twin
-def private read_wav_pcm16_mono(path : string) : array<float> {
-    var out : array<float>
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return <- out
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let n = long_length(bytes)
-        var o = 12l
-        while (o + 8l <= n) {
-            let id = rd_u32(bytes, o)
-            let sz = int64(rd_u32(bytes, o + 4l))
-            if (id == 0x61746164u) {
-                let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(cnt)
-                for (i in range64(cnt)) {
-                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
-                    if (v >= 32768) {
-                        v -= 65536
-                    }
-                    out[i] = float(v) / 32768.0
-                }
-                break
-            }
-            o += 8l + sz + (sz & 1l)
-        }
-    }
-    fclose(f)
-    return <- out
-}
-
 def private whisper_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
     var inscope w = WhisperModel()
     if (cached) {
@@ -848,6 +813,153 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
         t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
         delete samples
+    }
+}
+
+// The whisper-class tower blocks on the GPU (arm `mtower`): CPU-vs-GPU transcript equality on
+// the corpus clip + geometry-derived counter deltas, OFF leg in the same arm. Numeric bars live
+// in the kernels suite; the transcript is the backend-portable oracle (battery: stated claims).
+[test]
+def test_whisper_metal_tower(tst : T?) {
+    tst |> run("whisper tiny f32: the Metal tower blocks - transcript + counters + knob") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            set_metal_tower(false)
+            let s0 = metal_tower_stats()
+            let cpu = whisper_transcribe_text(path, samples, cached = false)
+            set_metal_tower(true)
+            let s1 = metal_tower_stats()
+            t |> equal(s1.encodes, s0.encodes, "OFF leg never dispatches")
+            t |> equal(s1.declines - s0.declines, 1l, "OFF leg records the knob decline")
+            let gpu = whisper_transcribe_text(path, samples, cached = false)
+            let s2 = metal_tower_stats()
+            let chunks = s2.encodes - s1.encodes
+            t |> equal(chunks, 1l, "jfk is one 30s chunk")
+            t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
+            t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
+            to_log(LOG_INFO, "whisper tiny mtower CPU eyeball: '{cpu.text}'\n")
+            to_log(LOG_INFO, "whisper tiny mtower GPU eyeball: '{gpu.text}'\n")
+            t |> success(!empty(gpu.text), "non-empty transcript")
+            t |> success(cpu.text == gpu.text, "transcript-exact CPU vs GPU")
+            // the deep instrument: large-v3-turbo's 32-layer encoder (f16 file, f32 mint)
+            let lpath = path_join(whisper_dir(), "ggml-large-v3-turbo.bin")
+            if (model_available(t, lpath)) {
+                set_metal_tower(false)
+                let lc = whisper_transcribe_text(lpath, samples, cached = false)
+                set_metal_tower(true)
+                let s3 = metal_tower_stats()
+                let lg = whisper_transcribe_text(lpath, samples, cached = false)
+                let s4 = metal_tower_stats()
+                t |> equal(s4.encodes - s3.encodes, 1l, "large: one GPU chunk")
+                t |> equal(s4.blocks - s3.blocks, 32l, "large: blocks delta = n_layer (32)")
+                to_log(LOG_INFO, "whisper large mtower CPU eyeball: '{lc.text}'\n")
+                to_log(LOG_INFO, "whisper large mtower GPU eyeball: '{lg.text}'\n")
+                t |> success(!empty(lg.text), "large: non-empty transcript")
+                t |> success(lc.text == lg.text, "large: transcript-exact CPU vs GPU")
+            }
+            // the q8 SERVING DEFAULT declines (quant_mode) and never dispatches — the shipped path stays CPU
+            var inscope w8 = WhisperModel()
+            var inscope stg8 <- stage_whisper_model(path, true)
+            mint_whisper_model(stg8, w8)
+            t |> success(w8.enc.q8, "the q8 flavor is on the q8 rail")
+            let sq0 = metal_tower_stats()
+            var q8_text = ""
+            with_job_que() {
+                setup_dasllama_jobque()
+                var s8 <- create_session(w8)
+                transcribe(w8, s8, samples) $(seg) {
+                    q8_text += seg.text
+                }
+                delete s8
+            }
+            let sq1 = metal_tower_stats()
+            t |> equal(sq1.encodes, sq0.encodes, "q8 default never dispatches the tower")
+            t |> equal(sq1.declines - sq0.declines, 1l, "q8 default records the quant_mode decline")
+            t |> success(key_exists(metal_tower_declines(), "quant_mode"), "the decline reason is quant_mode")
+            t |> success(!empty(q8_text), "q8 default still transcribes (CPU serves)")
+            // required-mode contract: a capability decline (quant_mode) under MetalMode.required
+            // panics instead of silently CPU-serving; the knob decline is POLICY and never does
+            set_metal_mode(MetalMode.required)
+            var tripped = false
+            try {
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    var s9 <- create_session(w8)
+                    transcribe(w8, s9, samples) $(seg) {
+                        pass
+                    }
+                    delete s9
+                }
+            } recover {
+                tripped = true
+            }
+            set_metal_mode(MetalMode.when_available)
+            t |> success(tripped, "required mode: the q8 tower decline panics")
+            // the POLICY class: a knob decline never panics, even under required mode
+            set_metal_mode(MetalMode.required)
+            set_metal_tower(false)
+            let sp0 = metal_tower_stats()
+            let pol = whisper_transcribe_text(path, samples, cached = false)
+            set_metal_tower(true)
+            set_metal_mode(MetalMode.when_available)
+            t |> success(!empty(pol.text), "required mode + knob off: the policy decline serves CPU, no panic")
+            t |> equal(metal_tower_stats().declines - sp0.declines, 1l, "the knob decline is counted, not escalated")
+            // re-arm after the shutdown seats: the registry PSOs and the tower's own objects
+            // release, and the next encode brings everything back up
+            metal_tower_shutdown()
+            metal_prefill_shutdown()
+            metal_decode_shutdown()
+            let sr0 = metal_tower_stats()
+            let rearm = whisper_transcribe_text(path, samples, cached = false)
+            t |> equal(metal_tower_stats().encodes - sr0.encodes, 1l, "post-shutdown encode re-arms and serves")
+            t |> success(rearm.text == cpu.text, "post-shutdown transcript unchanged")
+            delete samples
+        }
+    }
+}
+
+// Conformer families have NO seam - their hand-written encoders never reach encoder_blocks, so
+// the tower counters must not move AT ALL (engagement absence, not a decline).
+[test]
+def test_parakeet_tower_absence(tst : T?) {
+    tst |> run("parakeet: a Conformer transcribe never touches the tower rail") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            set_metal_tower(true)
+            let s0 = metal_tower_stats()
+            let g = parakeet_transcribe_text(path, samples, cached = false)
+            let s1 = metal_tower_stats()
+            t |> success(!empty(g.text), "transcript non-empty")
+            t |> equal(s1.encodes, s0.encodes, "no tower encodes")
+            t |> equal(s1.declines, s0.declines, "no tower declines either - the seam is never reached")
+            delete samples
+        }
     }
 }
 
@@ -1012,6 +1124,86 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
             t |> equal(long_length(a32.wblob), 0l, "the all-fp32 source leaves wblob empty")
             t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
             t |> success(img32 != img, "a different source keys a different image")
+        }
+    }
+}
+
+// The GPU tower vs the CPU chain on synthetic canvases — engage evidence is COUNTER DELTAS
+// (a green that never dispatched is vacuous), and the OFF leg lives in the same arm so the
+// knob is proven both ways every run.
+[test]
+def test_gemma4uv_metal_tower(tst : T?) {
+    tst |> run("gemma4uv: the Metal tower serves the embedder - parity + counters + knob") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv-metal")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            var inscope emb <- load_gemma4uv_embedder(path)
+            var st = Gemma4uvState()
+            // 672x336 is the non-square/orientation gate, 384x384 the no-pad shape (npos % 32 == 0)
+            let shapes = [(w = 480l, h = 480l), (w = 336l, h = 336l), (w = 672l, h = 336l),
+                          (w = 384l, h = 384l), (w = 96l, h = 96l)]
+            for (sh in shapes) {
+                let tag = "gemma4uv tower {sh.w}x{sh.h}"
+                var planes : array<float>
+                planes |> resize(sh.w * sh.h * 3l)
+                for (i in range64(sh.w * sh.h * 3l)) {
+                    planes[i] = sin(float(i % 977l) * 0.013) * 0.7
+                }
+                let s0 = metal_tower_stats()
+                set_metal_tower(false)
+                var cpu_out : array<float>
+                let np_cpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, cpu_out)
+                set_metal_tower(true)
+                let s1 = metal_tower_stats()
+                t |> equal(s1.encodes, s0.encodes, "{tag}: OFF leg never dispatches")
+                t |> equal(s1.declines - s0.declines, 1l, "{tag}: OFF leg records the knob decline")
+                var gpu_out : array<float>
+                let np_gpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, gpu_out)
+                let s2 = metal_tower_stats()
+                t |> equal(np_cpu, (sh.w / emb.patch) * (sh.h / emb.patch), "{tag}: npos from geometry")
+                t |> equal(np_gpu, np_cpu, "{tag}: both legs agree on npos")
+                t |> equal(s2.encodes - s1.encodes, 1l, "{tag}: GPU leg served (encodes delta)")
+                t |> equal(s2.rows - s1.rows, np_gpu, "{tag}: rows delta is npos")
+                t |> equal(s2.declines, s1.declines, "{tag}: GPU leg declined nothing")
+                tower_parity(t, tag, cpu_out, gpu_out)
+                delete gpu_out
+                delete cpu_out
+                delete planes
+            }
+            delete st
+            // the all-F32 mmproj leg: both GEMMs ride the f32 plane (the BF16 file's MIXED
+            // layout never exercises the f32 PROJECTION arm) — skips honestly without the file
+            let f32path = path_join(models_dir(), "mmproj-gemma-4-12B-it-F32.gguf")
+            if (stat(f32path).is_valid) {
+                var inscope emb32 <- load_gemma4uv_embedder(f32path)
+                t |> success(!emb32.patch_bf16 && !emb32.proj_bf16, "the F32 file keeps both GEMMs on the f32 plane")
+                var st32 = Gemma4uvState()
+                var planes32 : array<float>
+                planes32 |> resize(96l * 96l * 3l)
+                for (i in range64(96l * 96l * 3l)) {
+                    planes32[i] = sin(float(i) * 0.013) * 0.7
+                }
+                set_metal_tower(false)
+                var cpu32 : array<float>
+                gemma4uv_encode(emb32, st32, planes32, 96l, 96l, cpu32)
+                set_metal_tower(true)
+                let sf0 = metal_tower_stats()
+                var gpu32 : array<float>
+                gemma4uv_encode(emb32, st32, planes32, 96l, 96l, gpu32)
+                t |> equal(metal_tower_stats().encodes - sf0.encodes, 1l, "f32-mmproj leg GPU-served")
+                tower_parity(t, "gemma4uv tower f32-mmproj 96x96", cpu32, gpu32)
+                delete gpu32
+                delete cpu32
+                delete planes32
+                delete st32
+            }
         }
     }
 }
@@ -1285,6 +1477,69 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
         delete samples
+    }
+}
+
+// The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
+// vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
+// default declines by design (the whisper mtower cell above owns that assert).
+[test]
+def test_qwen3a_metal_tower(tst : T?) {
+    tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "qwen3a") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var lang = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_qwen3a_q8(false)
+                var inscope tw <- load_qwen3a_tower(mmp_path)
+                t |> success(!tw.core.q8, "tower core is on the f32 rail")
+                nlayer = tw.core.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s, "", samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s2, "", samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                set_qwen3a_q8(true)
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            to_log(LOG_INFO, "qwen3a mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "qwen3a mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
+            delete samples
+        }
     }
 }
 

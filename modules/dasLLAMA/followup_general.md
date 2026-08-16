@@ -317,6 +317,11 @@
     uniform bound, the three declines and the blob refusals are deleted, and the kernel
     coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail —
     pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
+    **Metal half DONE (metal-media chunk 1, 2026-08-16):** the trio takes the bound as
+    `AttnArgs.uend` (no separate kernel — the census criterion is moot), the declines and
+    blob refusals are deleted, and the span parity arm + support-matrix engage cell gate it.
+    REMAINING: the Vulkan half (`vk_moe_attn` signature surgery, device KV pre-seed,
+    `AT_CTX`), on the PC box.
 
 24. **Stream the over-line audio-carrier mints (the 1 GiB staging rule, 2026-08-14).**
     `REVIEW.md` caps `cache_via_image_staged` at a 1 GiB source file; six carriers on the
@@ -328,3 +333,45 @@
     entry points refuse a source over the line, and the mint-form-differs conversions
     restructure into per-plane producers. The vision carriers stay staged (gemma-4 12B
     mmproj 0.2 GB, E2B 0.9 GB).
+
+25. **OpenAI-standard audio/image API surface — conformance, decisions, hygiene (2026-08-16).**
+    The server implements `image_url`/`input_image` chat parts (data:-only) and
+    `/v1/audio/transcriptions` (`json`/`text`/`verbose_json`, `language`, VAD segments).
+    The rest of the standard surface, tiered:
+    - CONFORMANCE DEBT (plumbing, no new capability): `input_audio` chat parts plus the
+      ecosystem `audio_url` twin (accept both — audio-in-chat rides the existing
+      `render_prompt_media` splice); `srt`/`vtt` transcription response formats;
+      `timestamp_granularities[]` where the family has word timestamps; `prompt` biasing;
+      `stream=true` transcription events; `/v1/audio/translations` for the whisper family
+      (native decoder mode; other families decline); accept-and-ignore `image_url.detail`.
+    - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS — `/v1/audio/speech`
+      and chat `modalities:["text","audio"]`. No served artifact can speak; the two Omni
+      families have Talkers upstream but the GGUF ecosystem carries only thinker + audio
+      encoder, and a talker conditions on thinker HIDDEN STATES (not a bolt-on). The
+      reference-backed route if wanted: a dedicated small TTS family (llama.cpp's tts
+      example — OuteTTS + WavTokenizer ggufs). Realtime API (WebSocket voice, barge-in) is
+      the end-state the smaller audio choices point at; name it before choosing them.
+    - DECLINE/PARK: `/v1/images/generations` (+edits/variations) — no roster model
+      generates images even upstream; diffusion is a disjoint class (DiT/UNet + conv2d VAE,
+      no reference in llama.cpp; the GGML reference is stable-diffusion.cpp, which shares
+      our quants/GGUF/GEMMs but not the graph). `file`/`video_url` parts likewise parked.
+    - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint — a name squat on the
+      standard image-API prefix; rename ours or accept the squat deliberately.
+
+26. **ASR perf follow-ups after the Metal tower (metal-media chunk 2, 2026-08-16).** With the
+    whisper-class block loop GPU-served (~31x the CPU f32 block rate; large-v3-turbo f32-GPU
+    beats the q8-CPU serving default 1.82x end to end), the remaining ASR wall splits into:
+    - **J-qwen3a — the conv2d frontend** (~89% of that family's encode, quant-independent,
+      measured slice G): GPU im2col+mm, or at minimum threading the serial im2col. The
+      blocks-only offload buys qwen3a ~11%; the frontend is the family's actual bottleneck.
+    - **The whisper decoder half**: post-tower gb1 splits encode 4.35 s vs decode 3.50 s +
+      cross_kv 1.65 s — the decoder is now the larger half of a whisper-large transcribe.
+    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven, possibly
+      post-PR (the chunk 2 non-goal note); the f32 lane already beats the q8-CPU default
+      for whisper-class, so this is upside, not a gap.
+    - **Audio mmproj provenance**: `qwen2audio-mmproj-f32.gguf` and
+      `voxtral-mini-mmproj-f32.gguf` are locally-converted fixtures with no
+      `performance/fetch_models.das` entry — the tests that load them (encoder oracles, the
+      blocks-parity cells, the erf-GELU census carrier) skip honestly without them, but the
+      files are not re-fetchable from the manifest. Mint the entries (or a documented
+      convert recipe) rather than inventing provenance.

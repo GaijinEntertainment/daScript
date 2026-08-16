@@ -1692,10 +1692,29 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     encoder_blocks(t, s, tt)
 }
 
+// ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
+// cannot be required from here). Serves the whole block loop or declines; the CPU loop below
+// stays the correct fallback. The diff-stage rail keeps the CPU loop (its dumps ARE the point).
+typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
+var private g_tw_blocks_gpu : TowerBlocksGpuFn
+var private g_tw_blocks_gpu_set = false
+
+def register_tower_blocks_gpu(fn : TowerBlocksGpuFn) {
+    g_tw_blocks_gpu = fn
+    g_tw_blocks_gpu_set = true
+}
+
 //! The pre-LN transformer block loop over ``npos`` positions of the residual stream in ``s.x``
 //! (token-major). Shared by the whisper conv frontend above and the qwen3a conv2d frontend —
 //! any frontend that leaves ``npos × d_model`` rows in ``s.x`` can run the blocks.
 def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
+    if (g_tw_blocks_gpu_set && empty(g_audio_ref_dir)) {
+        let te = ref_time_ticks()
+        if (invoke(g_tw_blocks_gpu, t, s, npos)) {
+            asr_prof_add("enc.blocks.gpu", te)
+            return
+        }
+    }
     let tt = npos
     let d = t.d_model
     for (l in range64(t.n_layer)) {

@@ -39,38 +39,6 @@ def private corpus_dir() : string {
     return empty(env) ? "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/asr/corpus/" : env
 }
 
-// Minimal RIFF/WAVE reader for the 16-bit PCM mono test fixture (jfk.wav).
-def private read_wav_pcm16_mono(path : string) : array<float> {
-    var out : array<float>
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return <- out
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let n = long_length(bytes)
-        var o = 12l                       // "RIFF" size "WAVE"
-        while (o + 8l <= n) {
-            let id = rd_u32(bytes, o)
-            let sz = int64(rd_u32(bytes, o + 4l))
-            if (id == 0x61746164u) {      // "data"
-                let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(cnt)
-                for (i in range64(cnt)) {
-                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
-                    if (v >= 32768) {
-                        v -= 65536
-                    }
-                    out[i] = float(v) / 32768.0
-                }
-                break
-            }
-            o += 8l + sz + (sz & 1l)
-        }
-    }
-    fclose(f)
-    return <- out
-}
-
 [test]
 def test_f32_to_f16(t : T?) {
     t |> run("round-trips every non-nan f16 pattern") @(t : T?) {

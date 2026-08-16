@@ -159,11 +159,129 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
     delete prow
 }
 
+// The trio under a uniform span (media rows): every query attends [window floor, uend) with
+// uend = qoff + npos — the eval_embd non-causal contract. The continuation shape (qoff > 0) and
+// a sliding layer (window > 0) exercise the two bounds independently: the upper bound is
+// uniform, the window floor stays query-based (a floor derived from uend would flatten it).
+def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos, qoff, window : int; mm : bool) {
+    let kv_mul = n_heads / n_kv_heads
+    let qd = n_heads * head_size
+    let kv_dim = n_kv_heads * head_size
+    let nk = qoff + npos                    // key rows: existing context + the span chunk
+    let nkp = (nk + 63) / 64 * 64           // 64-padded key extent (the driver's nk64)
+    let qp = (npos + 31) / 32 * 32          // padded query rows (continuation: != nkp)
+    var err : string
+    var pso_sc = (mm
+        ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
+    t |> success(pso_sc != null, "span qk pipeline (mm={mm}): {err}")
+    var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
+    t |> success(pso_sm != null, "span softmax pipeline: {err}")
+    var pso_av = (mm
+        ? pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
+    t |> success(pso_av != null, "span av pipeline (mm={mm}): {err}")
+    let scale = 1.0 / sqrt(float(head_size))
+    var aq : array<float>
+    var ak : array<float>
+    var av : array<float>
+    var axb_want : array<float>
+    aq |> resize(qp * qd)
+    ak |> resize(nkp * kv_dim)
+    av |> resize(nkp * kv_dim)
+    axb_want |> resize(npos * qd)
+    for (k in range(npos * qd)) {
+        aq[k] = 0.11 * float(k % 29) - 1.7
+    }
+    for (k in range(nk * kv_dim)) {
+        ak[k] = 0.15 * float(k % 27) - 1.9
+        av[k] = 0.07 * float(k % 41) - 1.4
+    }
+    var prow : array<float>
+    prow |> resize(nk)
+    for (h in range(n_heads)) {
+        let kvhoff = (h / kv_mul) * head_size
+        for (qi in range(npos)) {
+            let ap = qoff + qi
+            let jlo = window > 0 && ap + 1 > window ? ap + 1 - window : 0
+            var m = -1.0e30
+            for (j in range(jlo, nk)) {
+                var dot = 0.0
+                for (d in range(head_size)) {
+                    dot += aq[qi * qd + h * head_size + d] * ak[j * kv_dim + kvhoff + d]
+                }
+                prow[j] = dot * scale
+                m = max(m, prow[j])
+            }
+            var sum = 0.0
+            for (j in range(jlo, nk)) {
+                prow[j] = exp(prow[j] - m)
+                sum += prow[j]
+            }
+            for (d in range(head_size)) {
+                var acc = 0.0
+                for (j in range(jlo, nk)) {
+                    acc += (prow[j] / sum) * av[j * kv_dim + kvhoff + d]
+                }
+                axb_want[qi * qd + h * head_size + d] = acc
+            }
+        }
+    }
+    var baq = buf_upload(dev, aq)
+    var bak = buf_upload(dev, ak)
+    var bav = buf_upload(dev, av)
+    var batt = buf_fill(dev, n_heads * qp * nkp, 0.0)
+    var bxb = buf_fill(dev, qp * qd, 0.0)
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
+        kv_mul = uint(kv_mul), npos = uint(nk), np32 = uint(nkp), scale = scale,
+        qoff = uint(qoff), qrows = uint(qp), window = uint(window), softcap = 0.0, hass = 0u,
+        uend = uint(nk))
+    var bcap0 = buf_f32(dev, 0.0)   // stands in for the sink buffer slot (hass = 0: never read)
+    let aran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_sc)
+        metal_set_threadgroup_memory_length(enc, mm ? metal_attn_qk_mm_msl_tgmem : metal_attn_qk_msl_tgmem, 0)
+        metal_set_buffer(enc, baq, 0ul, 0)
+        metal_set_buffer(enc, bak, 0ul, 1)
+        metal_set_buffer(enc, batt, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(qp / 32), uint(nkp / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_sm)
+        metal_set_threadgroup_memory_length(enc, metal_attn_softmax_msl_tgmem, 0)
+        metal_set_buffer(enc, batt, 0ul, 0)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
+        metal_set_buffer(enc, bcap0, 0ul, 20)   // sink identity (hass = 0)
+        metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_av)
+        metal_set_threadgroup_memory_length(enc, mm ? metal_attn_av_mm_msl_tgmem : metal_attn_av_msl_tgmem, 0)
+        metal_set_buffer(enc, batt, 0ul, 0)
+        metal_set_buffer(enc, bav, 0ul, 1)
+        metal_set_buffer(enc, bxb, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(qp / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
+    }
+    t |> success(aran, "span attention dispatches (hs={head_size}, qoff={qoff}, w={window}, mm={mm}): {err}")
+    t |> equal(buf_mismatch_tol(bxb, axb_want, mm ? 2e-2 : 1e-4), 0)
+    metal_release(baq)
+    metal_release(bak)
+    metal_release(bav)
+    metal_release(batt)
+    metal_release(bxb)
+    metal_release(bcap0)
+    metal_release(pso_sc)
+    metal_release(pso_sm)
+    metal_release(pso_av)
+    delete aq
+    delete ak
+    delete av
+    delete axb_want
+    delete prow
+}
+
 [test]
 def test_metal_prefill_kernels(t : T?) {
-    t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") <| @(t : T?) {
+    t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return
@@ -197,7 +315,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var bry = buf_fill(dev, NROWS * DIM, 0.0)
                 var brdim = buf_u32(dev, uint(DIM))
                 var breps = buf_f32(dev, EPS)
-                let rran = with_compute_encoder(queue, err) <| $(enc : MetalComputeEncoder?) {
+                let rran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
                     metal_set_pipeline(enc, pso_rms)
                     metal_set_threadgroup_memory_length(enc, metal_rmsnorm_msl_tgmem, 0)
                     metal_set_buffer(enc, brx, 0ul, 0)
@@ -341,6 +459,14 @@ def test_metal_prefill_kernels(t : T?) {
                 // the ggml-geometry pair (hs % 64 shapes: llama-1B/3B classes + GQA)
                 attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true)
                 attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
+
+                // ===== the uniform span (media rows): fresh, continuation, continuation+window =====
+                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 0, 0, false)
+                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 32, 0, false)
+                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 32, 40, false)
+                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 0, 0, true)
+                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 32, 0, true)
+                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 32, 40, true)
 
                 // ===== swiglu + residual add =====
                 var pso_sw = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, err)

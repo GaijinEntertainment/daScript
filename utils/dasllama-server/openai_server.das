@@ -335,9 +335,6 @@ def set_model_vision(name : string; path : string) {
     if (g_slots[mi].vision.proj_dim != 0l) {
         panic("dasllama-server: slot '{name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - set_model_vision is once per slot")
     }
-    if (g_slots[mi].model.metal_blob) {
-        panic("dasllama-server: '{name}' is a metal-blob model - the image span prefills on the CPU, which a blob model cannot do; serve it without the metal blob to take a vision arm")
-    }
     var inscope emb <- load_gemma4uv_embedder(path)
     if (emb.proj_dim != g_slots[mi].model.config.dim) {
         panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
@@ -1663,6 +1660,9 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
         service_unavailable(srv, writer, "the server is at capacity ({cur_sched().max_queue} requests queued) — retry shortly")
         return
     }
+    g_media_rows += n_media   // after submit: a 503-rejected request counts nothing (an image
+                              // request reaches here once — it parks at the encode boundary
+                              // BEFORE this function and re-enters only as the resume)
     g_slots[g_cur].last_used = ref_time_ticks()
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     to_log(LOG_INFO, "[req {rid}] {prefix}: prompt={np} tok, stream={streaming}, max_new={max_new}\n")
@@ -2376,6 +2376,7 @@ struct private OaiStatsResponse {
     vision : bool             // the DEFAULT slot's vision arm — the slot a model-less page request lands on
     thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
     vision_pending : int      // image requests parked on the vision worker (0 = idle)
+    media_rows : int64        // media (image span) rows admitted to prefill since boot
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
@@ -2416,7 +2417,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         // carries no model field, so it lands on the default slot - the UI must show ITS truth
         vision = g_slots[g_default_slot].vision.proj_dim > 0l,
         thinking_default = g_slots[g_default_slot].think_default,
-        vision_pending = length(g_vision_wires))
+        vision_pending = length(g_vision_wires), media_rows = g_media_rows)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -3261,6 +3262,7 @@ let VISION_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes r
 var private g_vision_jobs : Channel?
 var private g_vision_events : Channel?
 var private g_vision_wires : table<int64; VisionWire>
+var private g_media_rows = 0l   // media (image span) rows admitted to prefill since boot
 var private g_vision_ready = 0
 var private g_vision_armed = false
 

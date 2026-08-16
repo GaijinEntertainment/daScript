@@ -77,6 +77,46 @@ def private chunked_greedy(trp, trd : Model; c1, c2 : array<int64>; kdt : KVDtyp
     return <- ids
 }
 
+// the media turn's eval shape: a causal head chunk, then a NON-CAUSAL embd span at
+// start_pos > 0 (rows = the tail tokens' own embedding rows, so the greedy continuation
+// stays meaningful), then n greedy steps on trd — CPU control and GPU run share it verbatim
+def private span_greedy(trp, trd : Model; head, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
+    var ids : array<int64>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        eval_(trp, s, head)
+        let ntail = long_length(tail)
+        var rows : array<float>
+        rows |> reserve(ntail * trp.config.dim)
+        rows |> resize(ntail * trp.config.dim)
+        embed_text_rows(trp, tail, rows, 0l)
+        eval_embd(trp, s, rows, ntail, true)
+        let vocab = trp.config.vocab_size
+        var cur = 0l
+        for (v in range64(1l, vocab)) {
+            if (s.logits[v] > s.logits[cur]) {
+                cur = v
+            }
+        }
+        for (_i in range(nsteps)) {
+            ids |> push(cur)
+            var one <- [cur]
+            eval_(trd, s, one)
+            delete one
+            cur = 0l
+            for (v in range64(1l, vocab)) {
+                if (s.logits[v] > s.logits[cur]) {
+                    cur = v
+                }
+            }
+        }
+        delete rows
+        delete s
+    }
+    return <- ids
+}
+
 // prompt-to-continuation: prefill on trp (the arm's subject — GPU when the override is
 // selected and trp is the blob twin), then n_gen greedy decode steps on trd (the planar
 // model = the shared CPU decode both runs ride, preserving the prefill-isolation property).
@@ -264,6 +304,45 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete ch2
                 delete trc
                 delete trcg
+            }
+
+            // span arm (metal-media): the media eval shape — causal head, non-causal embd span
+            // at start_pos > 0, greedy decode. Both prefill calls must serve on the GPU (the
+            // span through AttnArgs.uend), token-exact vs the all-CPU control, per KV codec.
+            if (arm_on(t, "span")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trs <- load_model_(path, QuantMode.q8)
+                if (trs.config.seq_len > 2048l) {
+                    trs.config.seq_len = 2048l
+                }
+                var trsg <- blob_twin(t, path, 2048l)
+                let nfull = long_length(prompt)
+                let scut = int(nfull * 3l / 5l)
+                var shead <- [for (i in range(scut)); prompt[i]]
+                var stail <- [for (i in range(scut, int(nfull))); prompt[i]]
+                for (kdt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+                    var cpu_s <- span_greedy(trs, trs, shead, stail, kdt, 24)
+                    select_prefill_override("metal")
+                    set_metal_prefill_min_npos(1l)
+                    let pfs0 = metal_prefill_stats().prefills
+                    var gpu_s <- span_greedy(trsg, trs, shead, stail, kdt, 24)
+                    select_prefill_override("")
+                    set_metal_prefill_min_npos(64l)
+                    t |> success(metal_prefill_stats().prefills - pfs0 == 2l,
+                        "{kdt} head + span both served on the GPU")
+                    log_gen_texts(trs, "span/{kdt}", cpu_s, gpu_s)
+                    t |> success(same(cpu_s, gpu_s), "{kdt} span turn matches the all-CPU control")
+                    delete cpu_s
+                    delete gpu_s
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete shead
+                delete stail
+                delete trs
+                delete trsg
             }
 
             // dim-4096 arm (M2.6): past the fused add+rms+quant slab (dim <= 3072) the prefill

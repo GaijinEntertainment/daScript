@@ -3576,6 +3576,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_pso(MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, ok)
+    g_pso_ln = compile_pso(metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, ok)
+    g_pso_f32mm = compile_pso(metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, ok)
+    g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
+    g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
+    g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
     g_pso_softcap = compile_pso(metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, ok)
     g_pso_suppress = compile_pso(metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, ok)
     g_pso_attn16 = compile_pso(MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, ok)
@@ -4233,6 +4238,26 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_geglu)
         g_pso_geglu = null
     }
+    if (g_pso_ln != null) {
+        metal_release(g_pso_ln)
+        g_pso_ln = null
+    }
+    if (g_pso_gelu_erf != null) {
+        metal_release(g_pso_gelu_erf)
+        g_pso_gelu_erf = null
+    }
+    if (g_pso_gelu_lut != null) {
+        metal_release(g_pso_gelu_lut)
+        g_pso_gelu_lut = null
+    }
+    if (g_pso_posadd != null) {
+        metal_release(g_pso_posadd)
+        g_pso_posadd = null
+    }
+    if (g_pso_f32mm != null) {
+        metal_release(g_pso_f32mm)
+        g_pso_f32mm = null
+    }
     if (g_pso_softcap != null) {
         metal_release(g_pso_softcap)
         g_pso_softcap = null
@@ -4527,6 +4552,160 @@ class MetalRmsNorm {
     }
 }
 
+// LayerNorm (weight + bias), the tower/embedder norm: two-pass mean then POPULATION variance,
+// affine out. In-place safe: the write loop's x read is per-element by its owner, after both
+// reduction barriers (gemma4uv calls it in place).
+[metal_dispatch(name = "enc_ln", pso = "g_pso_ln", tgmem = "metal_layernorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalLayerNorm {
+    @ssbo @binding = 0 x : array<float>     // [nrows x dim] source
+    @ssbo @binding = 1 @role = "weight" @off = "woff" w : array<float>     // [dim]
+    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     // [dim]
+    @ssbo @binding = 3 y : array<float>     // [nrows x dim] out (x aliasing safe, see header)
+    @uniform @binding = 4 dim : uint
+    @uniform @binding = 5 eps : float
+    @workgroup partial : float[32]          // one per simdgroup; reused across the two passes
+    @workgroup mean_sh : float
+    @workgroup inv_sh : float
+
+    [metal_kernel(name="metal_layernorm_msl")]
+    def metal_layernorm {
+        let row = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var k = lid
+        while (k < dim) {
+            ss += x[row * dim + k]
+            k += gl_WorkGroupSize.x
+        }
+        ss = simd_sum(ss)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            mean_sh = tot / float(dim)
+        }
+        barrier()
+        let mean = mean_sh
+        var vs = 0.0
+        k = lid
+        while (k < dim) {
+            let dv = x[row * dim + k] - mean
+            vs += dv * dv
+            k += gl_WorkGroupSize.x
+        }
+        vs = simd_sum(vs)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = vs
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            inv_sh = rsqrt(tot / float(dim) + eps)
+        }
+        barrier()
+        let inv = inv_sh
+        k = lid
+        while (k < dim) {
+            y[row * dim + k] = (x[row * dim + k] - mean) * inv * w[k] + b[k]
+            k += gl_WorkGroupSize.x
+        }
+    }
+}
+
+// One elementwise map g[i] = map(g[i]) in place — the ew1 family (the 2-operand twin is MetalEw2T).
+[ |> template_struct_instance]
+class template MetalEw1T {
+    @ssbo @binding = 0 @role = "readwrite" @off = "goff" @span = "total*4" g : array<float>
+    @uniform @binding = 1 total : uint      // grid guard
+
+    def abstract map(a : float) : float
+
+    [metal_kernel]
+    def metal_ew1 {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let vv = g[gid]
+        g[gid] = map(vv)
+    }
+}
+
+// The tower GELUs are FORM-MATCHED per model, never substituted — a ~1e-3/element form delta
+// amplifies coherently through a 32-layer residual stream into ~4e-2 rel_l2 (measured). The erf
+// flavor's A&S 7.1.26 polynomial sits within f32 rounding of the CPU's double-precision erf.
+[never_inline]   // the auto-inliner would fold this back into `map`, breaking its value-position splice (single-return rule)
+def private msl_gelu_erf_form(a : float) : float {
+    let z = abs(a) * 0.7071067811865476
+    let tt = 1.0 / (1.0 + 0.3275911 * z)
+    let e = tt * (0.254829592 + tt * (-0.284496736 + tt * (1.421413741 + tt * (-1.453152027 + tt * 1.061405429)))) * exp(-z * z)
+    return 0.5 * a * (1.0 + (a >= 0.0 ? 1.0 - e : e - 1.0))
+}
+
+[metal_dispatch(name = "enc_gelu_erf", pso = "g_pso_gelu_erf", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGeluErf : MetalEw1T {
+    def override map(a : float) : float => msl_gelu_erf_form(a)
+}
+
+[never_inline]   // same single-return-splice protection as msl_gelu_erf_form
+def private msl_gelu_lut_form(a : float) : float {
+    if (a <= -10.0) {
+        return 0.0
+    }
+    if (a >= 10.0) {
+        return a
+    }
+    let xr = float(float16(a))
+    let gv = 0.5 * xr * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))))
+    return float(float16(gv))
+}
+
+// whisper.cpp's fp16-LUT tanh GELU, form-matched: the +-10 clamps and BOTH f16 round-trips run
+// in kernel (RNE, same as the CPU table's domain), tanh via the exp identity (Metal tanh NaNs
+// past ~44; the clamped argument reaches 43.7). Near-bit-exact vs the CPU LUT by construction.
+[metal_dispatch(name = "enc_gelu_lut", pso = "g_pso_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGeluLut : MetalEw1T {
+    def override map(a : float) : float => msl_gelu_lut_form(a)
+}
+
+// The gemma4uv 2-axis position add: row p gains its x-table row (p % ncols) and its y-table
+// row (pos_entries + p / ncols), one thread per element — bit-exact vs the CPU loop's
+// (row + ex) + ey order.
+[metal_dispatch(name = "enc_posadd2d", pso = "g_pso_posadd", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalPosAdd2D {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>   // [npos x dim]
+    @ssbo @binding = 1 @role = "weight" @off = "tbloff" tbl : array<float>    // [2*pos_entries x dim] x rows then y rows
+    @uniform @binding = 2 dim : uint
+    @uniform @binding = 3 ncols : uint
+    @uniform @binding = 4 pos_entries : uint
+    @uniform @binding = 5 total : uint
+
+    [metal_kernel(name="metal_posadd2d_msl")]
+    def metal_posadd2d {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let p = gid / dim
+        let i = gid % dim
+        let ex = tbl[(p % ncols) * dim + i]
+        let ey = tbl[(pos_entries + p / ncols) * dim + i]
+        x[gid] = (x[gid] + ex) + ey
+    }
+}
+
 // The shared 32x64 GEMM tile stage: every mul_mm-family kernel (dense, MoE, attention, KV-quant)
 // stages A into ta (4 k-tiles x 8 row-tiles of 8x8) and B into tb (4 k-tiles x 4 token-tiles),
 // then walks 4 k-steps of 4 A-loads / 2 B-loads / 8 MACs. The method splices flat at emission.
@@ -4549,6 +4728,83 @@ class MetalMmTileBase {
             }
             acur = unsafe(acur + 512)
             bcur = unsafe(bcur + 256)
+        }
+    }
+}
+
+// Dense f32-weight GEMM y[m x ndim] = x[m x kdim] . W^T: the attention QK mm form with head
+// indexing and the causal skip stripped — both operands stage f32 -> half tiles, f32
+// accumulate; ndim % 64, kdim % 32, M padded to 32.
+[metal_dispatch(name = "enc_f32_mm", pso = "g_pso_f32mm", tgmem = "metal_f32_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalF32MulMm : MetalMmTileBase {
+    @ssbo @binding = 0 @role = "weight" @off = "woff" w : array<float4>   // [ndim x kdim/4] weight rows
+    @ssbo @binding = 1 @role = "read" xf : array<float4>                  // [m x kdim/4] activations
+    @ssbo @binding = 2 @role = "write" @off = "yoff" @span = "mp*d*4" y : array<float>
+    @uniform @binding = 3 kdim : uint
+    @uniform @binding = 4 ndim : uint
+    // inherited ta = W tiles (k row, wrow col), tb = X tiles (token row, k col)
+
+    [metal_kernel(name="metal_f32_mulmm_msl")]
+    def metal_f32_mulmm {
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let mBase = gl_WorkGroupID.x * 32u  // token rows
+        let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        let kdim4 = kdim / 4u
+        let lr0 = lid / 2u                  // A split: weight row + 16-k half
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u                  // B split: token row + 8-k run
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        var kb = 0u
+        while (kb * 32u < kdim) {
+            let srcA = (nBase + lr0) * kdim4 + (kb * 32u + il0 * 16u) / 4u
+            let a0 = w[srcA]
+            let a1 = w[srcA + 1u]
+            let a2 = w[srcA + 2u]
+            let a3 = w[srcA + 3u]
+            let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+            let b0 = xf[srcB]
+            let b1 = xf[srcB + 1u]
+            var va : float16[16]
+            va[0] = float16(a0.x)
+            va[1] = float16(a0.y)
+            va[2] = float16(a0.z)
+            va[3] = float16(a0.w)
+            va[4] = float16(a1.x)
+            va[5] = float16(a1.y)
+            va[6] = float16(a1.z)
+            va[7] = float16(a1.w)
+            va[8] = float16(a2.x)
+            va[9] = float16(a2.y)
+            va[10] = float16(a2.z)
+            va[11] = float16(a2.w)
+            va[12] = float16(a3.x)
+            va[13] = float16(a3.y)
+            va[14] = float16(a3.z)
+            va[15] = float16(a3.w)
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            acc_quad(aB, bB, ma, mb, mc)
+            kb++
+        }
+        let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = tokens
+        let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = weight rows
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
         }
     }
 }
