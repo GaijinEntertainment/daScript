@@ -26,6 +26,10 @@ like `const char*`: immutable, passed by value (the value *is* the reference). `
 `empty(s)` need no `require`; the rest of the string surface needs `require strings`.
 Container operations live in modules-and-stdlib.md.
 
+`das_string` interoperates with `string` directly — `ds == "lit"`, `empty(ds)` and `length(ds)`
+all work as written. Never wrap one in `string(...)` to compare or test it.
+(probe-verified 2026-08-16)
+
 ## Literals
 
 | Literal | Type |
@@ -41,7 +45,14 @@ Container operations live in modules-and-stdlib.md.
 
 Strings use `"..."`, may span lines, and take escapes (`\t \n \r \\ \" \' \b \f \v \xHH
 \uHHHH \UHHHHHHHH`). `{expr}` interpolates, with an optional format specifier
-(`"{pi:5.2f}"`); literal braces must be escaped `\{` `\}`.
+(`"{pi:5.2f}"`); literal braces must be escaped `\{` `\}`. A nested string literal inside an
+interpolation is written plain (`"{s == "abc"}"`); escaping the inner quotes there
+(`"{s == \"abc\"}"`) is a syntax error.
+
+**Character literals take a smaller escape set than strings** — `\b \t \n \f \r \\ \'` only.
+There is no `'\v'` (`error[30151] syntax error, unexpected invalid token`) even though the
+string escape `"\v"` works; in a character position write the number, `11`.
+(probe-verified 2026-08-16)
 
 ## Conversions
 
@@ -162,7 +173,11 @@ for ((p, q) in arr) { ... }            // destructuring iteration
 ```
 
 Each destructured name binds like a `let` declaration — reusing a name that already exists in
-scope (or repeating one within a pattern) is an error; only the `_` discard repeats freely.
+scope (or repeating one within a pattern) is `error[30704] can't destructure into <name>`, and
+`error[30708]` in the `for` form; only the `_` discard repeats freely. The check holds even under
+`options allow_local_variable_shadowing = true`, and it also refuses a name taken by an `assume`
+alias ("name already taken by alias") — an alias is same-scope replacement, not shadowing.
+(probe-verified 2026-08-16)
 
 Field names are part of the type: `tuple<int;float>` and `tuple<i:int;f:float>` are different
 types and do not assign to each other. A positional literal whose elements are *all* bare
@@ -241,6 +256,11 @@ unsafe { delete pt }                    // frees and nulls
 Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? default`,
 `safe_addr(x)` (from `daslib/safe_addr`), `intptr(p)` (address as `uint64`).
 Needs `unsafe`: `addr(x)`, `delete p`, `p[i]`, `++p` / `p += n`, `reinterpret<T>(x)`.
+
+**A `void?` carries no stride, so arithmetic on one is refused outright** —
+`error[30950] operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math
+on `intptr(p)` and `reinterpret` once at the end, or reinterpret to `uint8?` first and add there.
+(probe-verified 2026-08-16)
 
 **The two const positions are independent, and writing through a pointer needs both open** —
 a non-const pointee *and* a `var` handle:

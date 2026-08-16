@@ -136,6 +136,28 @@ splitting the idiom table at ~line 425.
 - The full per-file link inventory was enumerated in the census; move agents re-derive
   per file with `grep --no-ignore` and cross-check against the trap list above.
 
+## Wave-2 follow-ups (for wave 3 owners)
+
+- `linq_fold_patterns.md` "What falls back" bullet is STALE (probe-resolved against
+  `daslib/linq_fold_common.das:6090` + adapter `emit_join_hook`s): array/table/JSON/XML
+  equi-`_join` DOES splice; only left/right/full-outer/cross joins + non-primitive keys
+  cascade. Fix the bullet in the light-touch pass (RST include — doc edit).
+- `get_this_module_dir()` / `daslib/module_path` (locating assets beside a script) lost
+  its home in the files-and-paths absorption → add to `daspkg.md`.
+- New probe (2026-08-16): one-line enum body takes commas — `enum E { A; B }` is
+  error[30151] → one line for `references/types.md`.
+- `filesystem.md`'s `parse_file_list(file, ...)` param is argument TEXT, not a path —
+  carried with annotation; fix the root source too if it survives.
+
+## Wave-2c residuals
+
+- LINT016 (`:=` on a string) lost its only rule-ID mention in the shrink — the digest
+  carries the semantics; add an idiom-table row for the rule ID.
+- `install/README.md:33` lists `das-fmt` as a `bin/` binary — same inversion fixed in
+  install/CLAUDE.md; phase 4 owns README.
+- Transient until phase 4: install/CLAUDE.md points at `skills/daslang/` before the CMake
+  rules ship it; the old gate may flag it until the rework lands.
+
 ## Phases
 
 1. ✅ Charter + census + rulings (this file).

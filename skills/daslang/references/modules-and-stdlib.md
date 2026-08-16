@@ -28,6 +28,10 @@ takes its module name from the file stem — the same format serves both roles.
 `[finalize]` at shutdown (both take no arguments, return nothing). `main` is a convention, not a
 keyword.
 
+`main` returns `void` by default. Declare it `def main() : int` and the returned value becomes the
+process exit code — the way a command-line tool reports failure to whatever launched it. Do not
+reach for `panic` to force a non-zero exit. (probe-verified 2026-08-16)
+
 ## Module declaration
 
 ```das
@@ -120,6 +124,32 @@ and `delete` lower to `_::clone` and `_::finalize`. `__::name` means the current
 inside an instanced generic that is still the *caller's* module, so it cannot pin a call to the
 defining module.
 
+### with (module ...)
+
+`with (module physics) { ... }` opens a compile-time **resolution scope**: names inside resolve as
+if the code were written in that module — its *private* symbols included, plus everything it
+requires.
+
+```das
+require physics                     // it must already be loaded
+
+with (module physics) {
+    let s = internal_state()        // private to physics, reachable here
+    _::report(describe(s))          // describe: physics; _::report: this module
+}
+```
+
+- The module has to be required — an unloaded name is `error[30298] with module 'x' is not found`.
+- The enclosing module's own symbols are **not** visible inside: a bare call to one reports
+  `module is not visible directly from physics`. Reach them with `_::`.
+- Locals stay lexical and win over anything the target module offers.
+- Nested forms do not combine — the innermost wins outright.
+- It is erased after inference; there is no runtime cost, and no value is bound.
+
+A host can set `options with_module_is_unsafe = true` (or a `.das_project` `with_module_unsafe()`
+rule) to make user-written ones require an `unsafe` wrap (`error[31037]`); forms the inliner
+generates are exempt. (probe-verified 2026-08-16)
+
 ## options
 
 ```das
@@ -142,6 +172,9 @@ the escape hatch for a project's own flags. Modules may register their own optio
   the host compiles. A library **cannot** raise them for its users: a module declaring
   `options stack = 262144` still overflows at the 16 KB default when driven by a program that
   does not declare it — and the failure surfaces *inside* the library, looking like a library bug.
+- **One context option does unify upward: `threadlock_context`.** It is OR-ed across every module
+  parsed, so a library that needs the context mutex gets it regardless of what the program
+  declares. No other context option behaves this way.
 
 | Option | Type | Default | Notes |
 |---|---|---|---|
@@ -163,12 +196,14 @@ Diagnostic dumps (`log`, `log_infer_passes`, `log_compile_time`, ...) are all bo
 ## Built-in modules
 
 `builtin` is always in scope with no `require`: `print`, `assert`/`verify`, `panic`, `invoke`,
-`clone`, all container operations, and `length`/`empty` on strings. Everything else is a require.
+`clone`, all container operations, `length`/`empty` on strings, and `to_log(LOG_INFO, msg)` —
+level-tagged output (`LOG_WARNING`, `LOG_ERROR`, …) that a host can filter, unlike `print`.
+Everything else is a require.
 
 | Module | Contents |
 |---|---|
 | `math` | Trig, `sqrt`/`pow`/`exp`/`log`, `abs`, `min`/`max`/`clamp`/`saturate`, `lerp`, rounding, `PI`, vector and matrix math. |
-| `strings` | `find`, `slice`, `replace`, `strip`, `to_upper`/`to_lower`, `starts_with`/`ends_with`, `to_int`/`to_float`, `character_at`, `peek_data`/`modify_data`, `build_string`. |
+| `strings` | `find`, `slice`, `replace`, `strip`, `to_upper`/`to_lower`, `starts_with`/`ends_with`, `to_int`/`to_float`, `character_at`, `peek_data`/`modify_data`, `build_string`. Depth, including the byte-view twin of every haystack operation and the cost model that makes it matter: strings.md. |
 | `jobque` | Job queue, threads, channels, lock boxes, atomics. |
 | `fio_core`, `rtti_core`, `ast_core`, `network_core` | Low-level C++ layers; require the wrapper instead — `daslib/fio`, `daslib/rtti`, `daslib/ast`, `daslib/network`. Bare `require rtti` / `require ast` do **not** resolve. |
 
@@ -232,7 +267,9 @@ Two traps:
 
 - **`tab[key]` inserts a default entry when the key is missing.** For a pure read use
   `tab?[key] ?? fallback`. Indexing a non-`var` table is a compile error outright, since the
-  insert needs mutability.
+  insert needs mutability. Under `default_init_containers` the inserted slot gets `default<V>` —
+  but only for a *reading* index; a direct store (`tab[k] = v`, `<- v`, `:= v`) and
+  `addr(tab[k])` keep the raw zeroed slot, since the value is about to be written anyway.
 - **Never index the same table twice in one expression.** `tab[a] = tab[b]` is rejected
   (`table_lookup_collision`): a rehash from one lookup invalidates the other's reference. Two
   *different* tables in one expression are fine.
@@ -264,6 +301,9 @@ pattern, where `_boost` re-exports its base and adds macro sugar.
 | `archive`, `clargs`, `logger`, `profiler_boost`, `debug` | Binary serialization, argument parsing, structured logging, profiling, debug/DAP server. |
 | `math_boost`, `random`, `math_bits` | `AABB`/`Ray`/`Plane`, RNG, bit twiddling. |
 | `lint`, `perf_lint`, `style_lint` | Extra lint passes, opt-in per file. |
+| `shader_lingua_franca` | Operator rail for porting GLSL: closed `+` / `-` and ordering compares over the int16 lattice family, `half4(half2, half2)`, `unpackHalf2x16`. GLSL has arithmetic there that core daslang deliberately does not, so a port lowers to the same native 16-bit ops instead of widening around the gap. The operators exist only where this module is required. |
+| `sql_linq` (+ `sql_boost`, `sql_migrate`) | LINQ-to-SQL against a provider module (SQLite, DuckDB, PostgreSQL): `[sql_table]` declarations, `_sql(...)` queries, transactions, migrations. Details in the `sql` skill. |
+| `pugixml/PUGIXML_boost` | XML over the `dasPUGIXML` module (not daslib): RAII parsing, builder, XPath, struct round-trip. Details in the `xml` skill. |
 
 **Preference order for transforms:** comprehension first
 (`[for (x in src); f(x); where p(x)]` and its table form), `daslib/linq` when the chain is long

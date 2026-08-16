@@ -45,6 +45,10 @@ Not: "semicolon is the separator and comma is an error" — both work. But note 
 generic you must use `;` (form `e`). Every `def` needs a body; there are no bodiless
 declarations.
 
+The parameter list wraps freely inside its parentheses, but **the return-type annotation must
+stay on the closing-paren line** — a continuation line starting `: int {` is
+`error[30151] syntax error, unexpected ':', expecting => or '{'`. (probe-verified 2026-08-16)
+
 ### var / let parameters
 
 A parameter with no keyword is const (`let` is the explicit, redundant spelling). `var` makes
@@ -107,6 +111,12 @@ rect(1, 2, [w = 3, h = 4])      // legacy bracketed form, still valid
 The bracketed form groups **all** named arguments in one `[...]`; separate groups
 (`foo([a = 1], [b = 2])`) are a syntax error. Prefer the bare form. Named arguments also work
 on method calls: `obj.m(bias = 1)`, `obj->m(bias = 1)`.
+
+**There is no angle-bracket call form.** `take<int>(1, 2)` is
+`error[30151] syntax error, unexpected '>', expecting '('` — a type is passed as an ordinary
+argument instead, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(TT)>`
+(tag it `[unused_argument(t)]`, since a `type<>` parameter occupies no stack and cannot be read).
+Take `default<T>` instead of `type<T>` when the body needs a value. (probe-verified 2026-08-16)
 
 Defaults sitting between the explicit arguments and a trailing block are padded automatically —
 don't spell them out:

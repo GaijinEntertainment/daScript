@@ -33,7 +33,7 @@ Full catalogs and detailed semantics live in `./references/`:
 - **Structs and classes** — `./references/structs-and-classes.md`: initialization modes,
   inheritance, virtuals, sealed/static, runtime type checks
 - **Closures** — `./references/closures.md`: block/lambda/function-pointer semantics,
-  capture modes, generators, iterators
+  capture modes and what capture does *not* freeze, generators, iterators and their element types
 - **Memory and lifetime** — `./references/memory.md`: the const model, move/copy/clone
   rules, finalizers, `inscope`, delete semantics, contexts and threading, unsafe catalog
 - **Generic programming** — `./references/generics.md`: `auto(TT)` patterns, type
@@ -41,7 +41,18 @@ Full catalogs and detailed semantics live in `./references/`:
 - **Macros and annotations** — `./references/macros.md`: compilation pipeline, macro
   classes, reification (`qmacro`), AST matching (`qmatch`), annotation catalog
 - **Modules and standard library** — `./references/modules-and-stdlib.md`: module
-  declarations, `require` rules, options reference, container operations, daslib catalog
+  declarations, `require` rules, `with (module ...)`, options reference, container operations,
+  daslib catalog
+- **Strings and text** — `./references/strings.md`: the string surface, byte views, the
+  parse family, `build_string`, conversions, regular expressions
+- **Files, paths, and processes** — `./references/files-and-paths.md`: the fio helper
+  surface, directory walking, subprocess capture, glob patterns
+- **JSON** — `./references/json.md`: `sprint_json`/`sscan_json`, `JV`, manual
+  `JsonValue?`, safe-navigation idioms
+- **Queries** — `./references/queries.md`: comprehensions, the linq surface, what fuses
+  into one pass and what falls back
+- **CLI and configuration** — `./references/cli-and-config.md`: declarative argv parsing,
+  environment twins, ambient config knobs
 
 ## Functions
 
@@ -291,9 +302,10 @@ iterator protocols: `./references/closures.md`.
 - **Hex literals are `uint`** — `int(0x3F)` when an int is needed.
 - **Reserved words that look like identifiers:** `where`, `shared`, `label`, `expect`,
   `pass`, `explicit`, `capture`, `deref`, `template` are keywords; `range`, `urange`,
-  `block`, `function`, `lambda`, `iterator`, and the small-vector type names (`half2`,
-  `short4`, `byte16`, ...) are type tokens. Using any as a variable/parameter/field/function
-  name is a syntax error — rename (`rng`, `body`, `fn`, `grab`, `unref`, `pattern`).
+  `range64`, `urange64`, `block`, `function`, `lambda`, `iterator`, and the small-vector type
+  names (`half2`, `short4`, `byte16`, ...) are type tokens. Using any as a
+  variable/parameter/field/function or annotation-argument name is a syntax error — including
+  `@range = 5` on a field. Rename (`rng`, `span`, `body`, `fn`, `grab`, `unref`, `pattern`).
 - **A statement-level expression must fit one line** unless wrapped in `(...)`. DANGER: a
   continuation line starting with `+` or `-` parses as a separate unary statement and is
   silently optimized away — wrap multi-line arithmetic in parentheses.
