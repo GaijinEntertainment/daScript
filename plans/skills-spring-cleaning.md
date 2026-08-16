@@ -228,10 +228,13 @@ PERF026-028 reachability walk); .das_module completeness diff vs dasllama/*.das 
 current drift, 85 = 85); audio/stbimage require-graph single-file assertion; dlim_wipe
 single-call-site assertion.
 
-Ruling 5 (dasLLAMA master) EXECUTED same day: version paragraph split, supported/ready rule
-named by name shape (§2.6 cite), coverage mechanism → §2.11, rename rule standalone,
-routing-block count dropped, all engine filenames dasllama/-qualified. Dragon-converged
-all-OK. The full ledgered-findings queue is now CLOSED — all five rulings executed.
+Ruling 5 (dasLLAMA master) EXECUTED same day, then largely SUPERSEDED at the rebase:
+master had its own parallel grooming of the same rules (the version split, a concrete
+`*_decline_caps` rule, the EMITTED-shader indirection form, the entry-point split) —
+master's text won wholesale; what survives from our round is the mechanical layer
+(21 engine-filename `dasllama/` qualifications + the routing-block count drop). Same at
+the checklist-round commit for REVIEW_GPU's role-file and decline rules. The
+ledgered-findings queue is CLOSED — all five rulings executed, by one hand or the other.
 
 ## Ledgered checklist findings (pre-existing, NOT this PR — Boris rules each)
 
