@@ -57,8 +57,8 @@ no home in the file goes to a design doc. Terse section dividers stay.
 
 **A file header is a map, not an essay.** At or under the comment cap a header may stay
 prose; past it, it either becomes a map — one line per fact of the file's contract — or
-gets trimmed. A map may repeat per-symbol comments (a cold reader needs the shape before
-any symbol), never text the code already prints.
+gets trimmed. A header may repeat per-symbol comments (a cold reader needs the shape
+before any symbol), never text the code already prints.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a
@@ -73,8 +73,10 @@ group, within the cap.
 
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
-sits directly above the `if`, two lines at most; prose inside the branch body is
-never right. A self-describing predicate — a named helper, a compare against a named
+sits directly above the `if`, two lines at most; a hint never gets a standalone comment
+line inside the body — owned by one statement it rides that statement's line, `pass`
+included; spanning more than one it is about the branch and belongs on the `if` line or
+in the WHY above. A self-describing predicate — a named helper, a compare against a named
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 

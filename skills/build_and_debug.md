@@ -26,10 +26,9 @@ This skill uses `bin/Release/daslang.exe` in examples below (the dominant local-
 ## Build timing
 
 - **Builds are slow** — clean builds take **15-25 minutes**, incremental builds take **2-10 minutes** depending on what changed
-- **Always use `timeout: 0`** (no timeout) when running `cmake --build` commands. A build that hasn't finished is not stuck or broken, it's just compiling
+- **Always use `timeout: 0`** (no timeout) when running `cmake --build` commands. A build that hasn't finished is not stuck or broken, it's just compiling. A build killed mid-compile is worse than slow — it leaves truncated `.obj` files (see Build failures by symptom below)
 - **Do not assume build failure** from lack of output — MSVC and most generators are silent during compilation and only print when there are warnings/errors or when it finishes
 - For incremental builds after editing a single `.cpp` file, expect ~2-5 minutes. For changes touching headers, expect longer
-- **MSVC `C1001` / `LNK1000` during "Generating code"** (Windows) — link-time codegen (LTCG) choking on a **stale incremental database** (`.ipdb`/`.iobj`) in a long-lived `build/`, *not* a code bug. The line `"no usable IPDB/IOBJ from previous compilation … fall back to full compilation"` on a clean retry confirms it. Fix: clean-rebuild just the offending target — `cmake --build build --target <name> --clean-first` — rather than nuking `build/`. Commonly triggered when a config change (e.g. flipping a `DAS_*_DISABLED` flag) forces a recompile of an object whose stale LTCG state no longer matches.
 
 ### Shared OpenSSL cache (Windows/MSVC) — the big first-build lever
 
@@ -41,6 +40,15 @@ To build OpenSSL **once and reuse it everywhere**, point it at a shared cache (i
 
 The default (no env, no flag) stays per-build-dir, so **CI is unchanged** — its lanes use vcpkg (`vcpkg install openssl` + the vcpkg toolchain) or a cached from-source `build-clangcl/openssl` for the same effect. Linux/macOS use the system OpenSSL (brew/apt/mingw sysroot), so this is MSVC-only.
 
+## Build failures by symptom
+
+Each entry is symptom → cause → fix. Never `rm -rf build` as a first move — every one of these has a targeted repair.
+
+- **MSVC `C1001` / `LNK1000` during "Generating code"** (Windows) — link-time codegen (LTCG) choking on a **stale incremental database** (`.ipdb`/`.iobj`) in a long-lived `build/`, *not* a code bug. The line `"no usable IPDB/IOBJ from previous compilation … fall back to full compilation"` on a clean retry confirms it. Fix: clean-rebuild just the offending target — `cmake --build build --target <name> --clean-first` — rather than nuking `build/`. Commonly triggered when a config change (e.g. flipping a `DAS_*_DISABLED` flag) forces a recompile of an object whose stale LTCG state no longer matches.
+- **MSVC `LNK1103` "debugging information corrupt" / `LNK1136`** (Windows) — a build killed mid-compile (tool timeout, manual interrupt) left a **truncated `.obj`** whose fresh timestamp incremental builds trust forever. Fix: `powershell utils/build-heal/heal.ps1 [-Target <name>]` — it runs the build, deletes the `.obj` files named by corrupt-obj link errors, and retries.
+- **MSVC `LNK1104` on `libDaScriptDyn*.dll`** (Windows) — the DLL is loaded by a live process: the MCP server host, a stray `daslang`/`daslang-live`. Shut the MCP server down (`mcp__daslang__shutdown`) and kill strays **by path, never by image name** — details in `skills/make_pr.md`.
+- **daslang crashes on every script run — even after a full clean rebuild — while `tests-cpp-small` stays green**: a **stale external-module `shared_module`** (built in its own `modules/<name>/_build` against pre-change headers) is ABI-drifted; shared-module auto-discovery loads it into every compile, `tests-cpp` never scans them. Find it by mtime (`ls -lt modules/*/[a-zA-Z]*.shared_module` — the odd one out predates the header change) and rebuild that module's `_build`. Under cdb the giveaway is the `ModLoad` of the stale `.shared_module` right before the AV (see Native crash triage below).
+
 ## Debugging runtime crashes
 
 - **Always check the exit code** after running `daslang` — a crash may produce no output, looking like a silent success
@@ -50,7 +58,19 @@ The default (no env, no flag) stays per-build-dir, so **CI is unchanged** — it
 - **Don't truncate output** with `head`/`tail` — daslang stack traces and `DAS_GC_BREAK_ON_ID` traces are easily clipped. Capture full output, then `grep` if needed
 - **`options log_infer_passes`** — append at the end of a failing `.das` file to dump per-pass infer activity (which generics got reified, when finalize ran, where lookups missed). Smaller and more targeted than `options log` for template/generic reification bugs. `options log` stays the right tool when you need the final program text
 
-### JIT crash symbols and daslang stacks
+### Native crash triage (Windows)
+
+When daslang itself AVs, get the faulting instruction before theorizing:
+
+```text
+"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe" -o -c ".lines; g; .exr -1; ln @rip; kc 20; q" bin\Release\daslang.exe <args>
+```
+
+- `ln @rip` names the nearest symbol and source line; `kc` gives the call stack. Release LTCG inlines aggressively, so a thin stack (`daslang!main` only) means the attribution is useless — go to the faulting instruction instead.
+- Watch the `ModLoad` lines just before the AV — a `.shared_module` loading right before the crash points at ABI drift (see Build failures by symptom above).
+- **Heap corruption** (`RtlFreeHeap`/`RtlpHeapHandleError` in the stack — the crash site is the *victim*, not the culprit): arm full PageHeap so the corrupting WRITE faults instead — `gflags /p /enable daslang.exe /full` (elevated; gflags sits beside cdb), re-run under cdb, and **always disarm after** with `gflags /p /disable daslang.exe /full` — the IFEO entry is machine-wide, keyed by image name, and taxes every daslang run ~4× on memory until removed.
+
+### JIT crash debugging
 
 Use both debug rails for a long-running JIT repro:
 
@@ -60,20 +80,25 @@ bin/Release/daslang.exe -jit -jit-stack path/to/main.das -- --jit-debug
 
 - `-jit-stack` is a host flag placed before the script. It retains a logical daslang frame for every generated function and block so `Context::getStackWalk()` has useful JIT state.
 - `--jit-debug` is an LLVM JIT option passed after the script separator. It emits CodeView/PDB debug information, generated function names, and `.das` file/line locations. On Windows the PDB lands beside the content-addressed DLL under `.jitted_scripts/`.
-- `--jit-opt-level=0` disables the LLVM IR pass pipeline AND drives the DLL path's codegen-side target machine (fast isel) — a true end-to-end O0 for `-jit` runs, several-fold faster to build. Exe (`-exe`) and AOT-object emission still pin codegen level 3 deliberately (shipped artifacts). At level 0 the injected tune-policy default becomes `fallback` (winners are raced under O3 codegen); `DAS_TUNE_POLICY` still overrides.
 - **JIT DLL cache staleness** — the cache key folds the codegen version, per-function AOT hashes, loop hints, and fast-math, so `LLVM_JIT_CODEGEN_VERSION` bumps and tune-sidecar edits re-key automatically. Blunt fallback when behavior looks stale anyway: delete `.jitted_scripts/`. Always wipe it before declaring a JIT regression.
-- **Fast edit iteration: `--jit-split-modules=-1`** (after the `--` separator) partitions codegen per das-module — parallel emit makes the cold build several-fold faster, and the per-module obj cache (on by default under split; `--jit-obj-cache=0` disables) re-emits only from the FIRST CHANGED MODULE onward on a warm edit. **Invalidation is positional, so require order is the cache layout: place the module you are actively editing as LATE in the require chain as its dependencies allow** — a hot-edit module required early drags everything after it into every rebuild, one required last rebuilds nearly alone (canonical: the dasLLAMA umbrella requires the vulkan drivers last for exactly this reason). The cache holds ONE generation — reverting an edit re-emits from the reverted module on, same as the edit did. Dev tier only — split partitions lose cross-module inlining, so never benchmark through a split DLL.
-- **Front-end cache: `-module-cache <path>`** (host flag, before the script; also on `daslang-live`) caches the compiled AST module graph via the env-serializer rail: the first run writes the file, later runs deserialize post-infer modules instead of parsing them — measured ~12x on the dasLLAMA graph (12.2s → 1.0s compile-only). Invalidation is mtime-based with the same positional model as the obj cache: an edited module recompiles itself and everything after it, and the cache rewrites itself. A record that can never deserialize in a cold process (`llvm_func.das` — its `[dasbind]` externs register into the dasbind builtin module during compile) reparses in place (~0.03s) without cutting the stream — the run reports `deser: partial`. `-ser <path>` / `-deser <path>` are the explicit write/read halves (the round-trip test instrument; `deser: clean` vs `deser: FALLBACK` is the honest verdict). Composes with the split obj cache: a warm `-jit` edit deserializes the unchanged prefix and re-emits only the tail partitions. Dev tier only; the cache is one file you own — delete it when in doubt.
 - JIT crash bundles should preserve the matching `.dll`, `.pdb`, `.map`, and retained `.o` together. The content hash changes when debug info is toggled, so artifacts from a non-debug cache entry do not decode a debug run.
 - Windows Release C/C++ builds use `/Z7` plus linker `/DEBUG /OPT:REF /OPT:ICF`, producing side PDBs without changing optimized code. Keep the PDB that matches every shipped exe/DLL when diagnosing native runtime frames.
 
 The implementation and remaining debugger roadmap are in `modules/dasLLVM/DEBUGGING.md`.
 
+## Fast JIT iteration
+
+Dev-tier rails that cut the edit-compile-run loop; never benchmark through them.
+
+- **`--jit-opt-level=0`** (after the script separator) disables the LLVM IR pass pipeline AND drives the DLL path's codegen-side target machine (fast isel) — a true end-to-end O0 for `-jit` runs, several-fold faster to build. Exe (`-exe`) and AOT-object emission still pin codegen level 3 deliberately (shipped artifacts). At level 0 the injected tune-policy default becomes `fallback` (winners are raced under O3 codegen); `DAS_TUNE_POLICY` still overrides.
+- **`--jit-split-modules=-1`** (after the `--` separator) partitions codegen per das-module — parallel emit makes the cold build several-fold faster, and the per-module obj cache (on by default under split; `--jit-obj-cache=0` disables) re-emits only from the FIRST CHANGED MODULE onward on a warm edit. **Invalidation is positional, so require order is the cache layout: place the module you are actively editing as LATE in the require chain as its dependencies allow** — a hot-edit module required early drags everything after it into every rebuild, one required last rebuilds nearly alone (canonical: the dasLLAMA umbrella requires the vulkan drivers last for exactly this reason). The cache holds ONE generation — reverting an edit re-emits from the reverted module on, same as the edit did. Split partitions lose cross-module inlining, so never benchmark through a split DLL.
+- **Front-end cache: `-module-cache <path>`** (host flag, before the script; also on `daslang-live`) caches the compiled AST module graph via the env-serializer rail: the first run writes the file, later runs deserialize post-infer modules instead of parsing them — measured ~12x on the dasLLAMA graph (12.2s → 1.0s compile-only). Invalidation is mtime-based with the same positional model as the obj cache: an edited module recompiles itself and everything after it, and the cache rewrites itself. A record that can never deserialize in a cold process (`llvm_func.das` — its `[dasbind]` externs register into the dasbind builtin module during compile) reparses in place (~0.03s) without cutting the stream — the run reports `deser: partial`. `-ser <path>` / `-deser <path>` are the explicit write/read halves (the round-trip test instrument; `deser: clean` vs `deser: FALLBACK` is the honest verdict). Composes with the split obj cache: a warm `-jit` edit deserializes the unchanged prefix and re-emits only the tail partitions. The cache is one file you own — delete it when in doubt.
+
 ## Build configurations (module flags)
 
 Optional modules are controlled by CMake flags (`DAS_*_DISABLED`). The active configuration lives in `.vscode/settings.json` under `cmake.configureSettings` (the "WIP" block is the active one; others are commented-out presets).
 
-Key flags (defaults are MIXED — see CMakeLists.txt:28-43):
+Key flags (defaults are MIXED — see the `option(DAS_*_DISABLED …)` block near the top of CMakeLists.txt):
 - Default `OFF` (module ENABLED by default): `DAS_HV_DISABLED` (dasHV — HTTP/WebSocket via libhv), `DAS_GLFW_DISABLED` (GLFW/OpenGL windowing), `DAS_PUGIXML_DISABLED` (XML), `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STDDLG_DISABLED`
 - Default `ON` (module DISABLED by default): `DAS_LLVM_DISABLED` (LLVM JIT), `DAS_CLANG_BIND_DISABLED` (Clang bindings), `DAS_SQLITE_DISABLED`
 - dasImgui is in-tree (`modules/dasImgui`) with `DAS_IMGUI_DISABLED` (default `OFF` = enabled). It needs dasGlfw + dasClipboard — a derived gate in `modules/dasImgui/CMakeLists.txt` drops it when either is disabled. Its still-external dependents (dasImguiImplot, dasImguiNodeEditor) are cloned into `modules/` by consumers like the wasm playground (see `.github/workflows/wasmboy.yml`)
@@ -88,4 +113,4 @@ When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic h
 
 For the full debugging workflow, see `skills/aot_hash_desync_debugging.md` (side-by-side SimNode dumps via `options log_nodes`/`log_nodes_aot_hash`, common shapes, C++ debug switches).
 
-The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was deleted by commit `581363ebc`). When codegen output diverges, edit `daslib/aot_cpp.das`.
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was deleted; only the header remains). When codegen output diverges, edit `daslib/aot_cpp.das`.
