@@ -454,6 +454,7 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     let oh = (ih - 1l) / 2l + 1l
     let kdim = cin * 9l
     let rows = oh * ow
+    var tc = ref_time_ticks()
     col |> resize(rows * kdim)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
@@ -471,10 +472,13 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
             }
         }
     }
+    asr_prof_add("q3a.conv.im2col", tc)
+    tc = ref_time_ticks()
     out |> resize(rows * cout)
     mm_blob_b(out, blob, w_off, col, kdim, cout, rows)
     add_bias_rows(out, blob, b_off, cout, rows)
     gelu_erf(out, rows * cout)
+    asr_prof_add("q3a.conv.mm", tc)
 }
 
 //! Scratch for the qwen3a conv frontend (sized on first use, reused across windows/calls).
@@ -525,6 +529,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     }
 
     // conv frontend per chunk -> rows of s.x
+    var tstage = ref_time_ticks()
     cs.xin |> resize(QWEN3A_CHUNK * nm)
     for (ci in range64(n_chunks)) {
         // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
@@ -555,10 +560,14 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
             s.x[xbase + i] = cs.crow[i] + t.cblob[t.pos_off + i]
         }
     }
+    asr_prof_add("q3a.conv", tstage)
+    tstage = ref_time_ticks()
 
     // transformer blocks + post-LN over the window's positions
     encoder_blocks(t.core, s, npos)
     layernorm_batch(s.xb, s.x, t.core.fblob, t.core.lnp_w_off, t.core.lnp_b_off, d, npos, t.core.eps)
+    asr_prof_add("q3a.blocks", tstage)
+    tstage = ref_time_ticks()
 
     // MLP projector: mm1 + bias -> gelu_erf -> mm2 + bias
     s.ph |> resize(npos * d)
@@ -568,6 +577,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     s.out |> resize(npos * t.proj_dim)
     q3a_mm_rq(t, s.out, t.mm2_w_off, s.ph, cs.xq, cs.xs, d, t.proj_dim, npos)
     add_bias_rows(s.out, t.cblob, t.mm2_b_off, t.proj_dim, npos)
+    asr_prof_add("q3a.proj", tstage)
 }
 
 //! Soft tokens for the whole clip: run every 800-frame window and append rows (proj_dim
@@ -634,6 +644,7 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
                       var detected_lang : string&) : int {
     let tprof = ref_time_ticks()
     let mel <- log_mel_qwen3a(samples, t.core.n_mel)
+    asr_prof_add("q3a.mel", tprof)
     var rows : array<float>
     let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, rows)
     asr_prof_add("q3a.encode", tprof)

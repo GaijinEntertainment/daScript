@@ -449,6 +449,52 @@ Ground facts the design leans on (scouted 2026-08-16):
   step splits (self-attn / cross-attn / mlp / vocab GEMV vs the existing `wh.dec.logits`),
   and get `wh.mel` a number. Fresh stage-probe baselines: large-v3-turbo (gb1 + hp0x2),
   tiny, qwen3a; token counts per clip recorded (the per-token denominators). P-judgments.
+
+## Slice M record — DONE 2026-08-16 (M1, debug-grade -jit probe, ONE profiled rep; ran on
+## fallback stamps — the sidecar predates the rebuilt binary — shares are the product and
+## the absolutes cross-check slice K within noise)
+
+Buckets added: `q3a.mel`/`q3a.conv`/`q3a.blocks`/`q3a.proj` + the `q3a.conv.im2col`/`.mm`
+split inside `conv2d_s2`. The whisper decode splits already existed
+(`wh.dec.self`/`.cross`/`.ffn`/`.logits`).
+
+gb1, large-v3-turbo, **f32 arm (the GPU serving mode)**: encode 4243 ms (blocks.gpu 3037,
+conv 1201) / decode 3551 (logits 1166 over 531 calls = 2.2 ms/call, ffn 1063, self 665,
+cross 623) / cross_kv 1599 / mel 56. Filter+sample+embed residue ≈ 34 ms total =
+0.06 ms/token — the CPU sampler is FREE, the readback design confirmed. 523 sampled tokens
+(531 decode calls − 8 window prompts).
+
+gb1, large-v3-turbo, **q8 arm (the CPU serving default)**: decode 1537 (cross 431, ffn 404,
+logits 349, self 318) / cross_kv 191 / conv 267.
+
+**FINDING F1 — the GPU serve's decoder cost is 2.3x self-inflicted.** `set_asr_fp32` is
+model-wide, so `--ngl` serving forces the CPU decoder AND cross_kv to f32: 3.55 + 1.60 =
+5.15 s where the q8-CPU default pays 1.54 + 0.19 = 1.73 s — ~3.4 s of the 9.38 s GPU serve
+is the enc/dec coupling artifact, not GPU-vs-CPU. Consequences: (a) slices N+O must beat
+the q8-CPU 1.73 s, not the 5.15 s in the serve; (b) decoupling the halves (f32 tower +
+q8 CPU decoder) takes the serve to ~6.0 s with ZERO new kernels — folded in as the natural
+first step of N/O, since the hooks land on the q8 decoder anyway; (c) the GPU decoder's
+marginal win over q8-CPU decode is ~0.5–0.7 s on gb1 — the knob split is half the chunk's
+e2e win, stated honestly. GPU decode still carries the arc's point (all-Metal, frees the
+CPU, and non-turbo large-v3 has 8x the decoder layers; tiny's decode is 36% of ITS wall —
+logits alone 42% of tiny's decode).
+
+hp0x2, large-v3-turbo, f32 arm: encode 12107 (blocks.gpu 8683, conv 3409) / decode 8263
+(logits 2766, ffn 2454, self 1547, cross 1417; 1189 tokens over 23 windows) / cross_kv 4705
+/ mel 145. Everything scales with the window count (23 vs gb1's 8): per-token decode
+6.8 ms both clips, bucket sums match slice K's e2e wall (25.25 vs 25.2 s; gb1 9.45 vs
+9.38) — the rail accounts for the whole transcribe.
+
+**qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
+confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
+(7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`
+conv GEMMs (K = 9·n_ch shapes), the exact f32-fallback pattern the new REVIEW rule names.
+Slice Q design update: the GEMM offload is the win; im2col threading is a rider.
+
+P-judgments so far: P14 HELD (wh.mel 0.32% of the gb1 wall; q3a.mel 3.9% of its encode —
+under the bar). P11's bar RESTATED vs the q8-CPU 191 ms — the raw win is marginal; GPU
+cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated vs
+1.54 s q8-CPU.
 - **N — cross_kv on GPU.** `register_whisper_cross_kv_gpu` (tower contract: decline/false,
   counter deltas). Per window: upload enc_out once, per layer two q8-weight × f32-act GEMMs
   (the ck/cv planes are decoder q8) + bias + the kx transpose-scale kernel + the vx t-major
