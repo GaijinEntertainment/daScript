@@ -4233,6 +4233,22 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_geglu)
         g_pso_geglu = null
     }
+    if (g_pso_ln != null) {
+        metal_release(g_pso_ln)
+        g_pso_ln = null
+    }
+    if (g_pso_gelu1 != null) {
+        metal_release(g_pso_gelu1)
+        g_pso_gelu1 = null
+    }
+    if (g_pso_posadd != null) {
+        metal_release(g_pso_posadd)
+        g_pso_posadd = null
+    }
+    if (g_pso_f32mm != null) {
+        metal_release(g_pso_f32mm)
+        g_pso_f32mm = null
+    }
     if (g_pso_softcap != null) {
         metal_release(g_pso_softcap)
         g_pso_softcap = null
@@ -4533,8 +4549,8 @@ class MetalRmsNorm {
 [metal_dispatch(name = "enc_ln", pso = "g_pso_ln", tgmem = "metal_layernorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalLayerNorm {
     @ssbo @binding = 0 x : array<float>     // [nrows x dim] source
-    @ssbo @binding = 1 @role = "weight" w : array<float>     // [dim]
-    @ssbo @binding = 2 @role = "weight" b : array<float>     // [dim]
+    @ssbo @binding = 1 @role = "weight" @off = "woff" w : array<float>     // [dim]
+    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     // [dim]
     @ssbo @binding = 3 y : array<float>     // [nrows x dim] out (x aliasing safe, see header)
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 eps : float
@@ -4633,7 +4649,7 @@ class MetalGelu1 : MetalEw1T {
 [metal_dispatch(name = "enc_posadd2d", pso = "g_pso_posadd", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPosAdd2D {
     @ssbo @binding = 0 @role = "readwrite" x : array<float>   // [npos x dim]
-    @ssbo @binding = 1 @role = "weight" tbl : array<float>    // [2*pos_entries x dim] x rows then y rows
+    @ssbo @binding = 1 @role = "weight" @off = "tbloff" tbl : array<float>    // [2*pos_entries x dim] x rows then y rows
     @uniform @binding = 2 dim : uint
     @uniform @binding = 3 ncols : uint
     @uniform @binding = 4 pos_entries : uint

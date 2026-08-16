@@ -365,6 +365,18 @@ def private uv_gemm(var y : array<float>; t : Gemma4uvEmbedder; bf16 : bool; off
     }
 }
 
+// ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
+// cannot be required from here). It consumes the im2col rows (s.x0) and fills `out` (already
+// sized); false = declined, the CPU chain below stays the correct fallback.
+typedef Gemma4uvGpuEncodeFn = function<(t : Gemma4uvEmbedder; var s : Gemma4uvState; npos, n_cols : int64; var out : array<float>) : bool>
+var private g_uv_gpu : Gemma4uvGpuEncodeFn
+var private g_uv_gpu_set = false
+
+def register_gemma4uv_gpu(fn : Gemma4uvGpuEncodeFn) {
+    g_uv_gpu = fn
+    g_uv_gpu_set = true
+}
+
 //! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into
 //! `out` = [npos × proj_dim] soft tokens. Returns npos = (w/48)×(h/48).
 [hot_path]
@@ -380,6 +392,12 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     let d = t.n_embd
     let n_cols = w / t.patch
     let npos = uv_im2col(t, planes, w, h, s.x0)
+    if (g_uv_gpu_set) {
+        uv_ensure(out, npos * t.proj_dim)
+        if (invoke(g_uv_gpu, t, s, npos, n_cols, out)) {
+            return npos
+        }
+    }
     uv_ensure(s.x1, npos * d)
     uv_ensure(s.x2, npos * d)
     layernorm_batch(s.x0, s.x0, t.blob, t.ln1_w, t.ln1_b, t.patch_dim, npos, GEMMA4UV_LN_EPS)

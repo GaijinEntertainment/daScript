@@ -167,6 +167,9 @@ struct public MetalEnv {
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
     span : bool = true
 
+    @clarg_doc = "Serve tower/embedder encodes (gemma4uv; the whisper-class towers as they land) on the Metal tower driver; 0 pins the CPU tower."
+    tower : bool = true
+
     @clarg_doc = "Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair."
     attn_d : bool = true
 

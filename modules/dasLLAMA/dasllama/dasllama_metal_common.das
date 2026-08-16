@@ -578,7 +578,7 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
 // Each GPU-ready plane becomes ONE resident buffer (zero-copy page wrap when image-mapped, else a
 // one-time untracked copy); tensors bind at byte offsets, keeping in-kernel indices REGION-relative — a 13GB blob's absolute byte indices overflow the kernels' uint32 index math.
 
-def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {
+def plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {   // public: the tower driver (chunk 2) wraps embedder planes too
     let key = intptr(base)
     if (key_exists(g_regions, key)) {
         var cached = g_regions[key]

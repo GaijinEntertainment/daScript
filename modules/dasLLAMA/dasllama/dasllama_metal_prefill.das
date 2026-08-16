@@ -1074,7 +1074,7 @@ class MetalRope {
 [metal_dispatch(name = "enc_add_bias_rows", pso = "g_pf_pso_addbias", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalAddBiasRows {
     @ssbo @binding = 0 @role = "readwrite" @off = "off" @span = "total*4" x : array<float>     // [nrows x n], updated in place (bound at the panel offset)
-    @ssbo @binding = 1 @role = "weight" b : array<float>     // [n]
+    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>     // [n] (the tower driver binds biases inside the model blob)
     @uniform @binding = 2 n : uint
     @uniform @binding = 3 total : uint      // nrows * n — grid guard
 
@@ -1772,6 +1772,12 @@ def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
     return (prefills = g_prefills, declines = g_prefill_declines)
 }
 
+//! The tower driver's borrow seat: full prefill PSO bring-up, idempotent — the borrowed builders
+//! (pf_enc_bf16_mm, enc_add_bias_rows; the attention trio next) bind prefill-owned PSOs.
+def public metal_prefill_pso_init : bool {
+    return metal_prefill_init()
+}
+
 //! Release every GPU object the driver holds — the tests' leak-gate rail (and the reset for
 //! refilled weight arrays, same contract as metal_gemm_shutdown). Lazily re-initializes on the
 //! next served prefill.
@@ -2072,8 +2078,8 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
 
 // the E-series model_proj GEMM off the kept-bf16 blob — ONE PSO global holds whichever of the
 // base/tensor pair compiled (crown resolved at init), so the pick is the tgmem/binding layout.
-def private pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;
-                           bx, by, bk, bn : MetalBuffer?; mp, nd : int64) {
+def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;
+                   bx, by, bk, bn : MetalBuffer?; mp, nd : int64) {
     if (g_pf_bf16_mm_tensor) {
         pf_enc_bf16_mm_t_c(enc, bw, wboff, bx, by, bk, bn, mp, nd)
     } else {
@@ -2842,9 +2848,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     var bbq = upload_region(addr < void? >(t.bq[l * qd_l]), uint64(qd_l * 4l))
                     var bbk = upload_region(addr < void? >(t.bk[l * kvd_l]), uint64(kvd_l * 4l))
                     var bbv = upload_region(addr < void? >(t.bv[l * kvd_l]), uint64(kvd_l * 4l))
-                    enc_add_bias_rows(enc, bq, 0ul, bbq, u_qd, u_totq, npos * qd)
-                    enc_add_bias_rows(enc, bks[l], koff, bbk, u_kvd, u_totkv, npos * kv_dim)
-                    enc_add_bias_rows(enc, bvs[l], koff, bbv, u_kvd, u_totkv, npos * kv_dim)
+                    enc_add_bias_rows(enc, bq, 0ul, bbq, 0ul, u_qd, u_totq, npos * qd)
+                    enc_add_bias_rows(enc, bks[l], koff, bbk, 0ul, u_kvd, u_totkv, npos * kv_dim)
+                    enc_add_bias_rows(enc, bvs[l], koff, bbv, 0ul, u_kvd, u_totkv, npos * kv_dim)
                 }
                 if (!recr && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     // per-head QK-norm before rope — the chunk's q panel and its new K rows
@@ -2917,7 +2923,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     if (c.attn_out_bias) {
                         var bwo_b = upload_region(unsafe(addr < void? >(t.bo[l * dim])), uint64(dim * 4l))
-                        enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, u_dim, u_total_dim, npos * dim)
+                        enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, 0ul, u_dim, u_total_dim, npos * dim)
                     }
                 }
                 // ffn: [post-attn norm ->] [WO residual +] norm -> [requant ->] W1/W3 ->
