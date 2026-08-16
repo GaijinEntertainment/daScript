@@ -185,11 +185,12 @@ namespace das {
 
     // `return <- a` from a by-ref function passes the reference through; the move-out
     // (copy, then zero the source) belongs to the caller, so zeroing here would destroy
-    // the value before the consumer reads it
+    // the value before the consumer reads it. Lvalue-only parameter (like das_auto_cast_ref):
+    // a temporary source would return a dangling reference, so it must not compile.
     template <typename TT>
     struct das_auto_cast_move<TT &> {
         template <typename QQ>
-        __forceinline static TT & cast ( QQ && expr ) {
+        __forceinline static TT & cast ( QQ & expr ) {
             return expr;
         }
     };
