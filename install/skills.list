@@ -21,7 +21,6 @@
 # Keep this file ASCII-only, comments included: CMake's file(STRINGS) treats
 # non-ASCII bytes as separators, so an em-dash inside a comment splits the line
 # and the tail gets read as a skill filename.
-clargs_usage.md
 cpp_integration.md
 das_formatting.md
 das_macros.md
@@ -31,28 +30,18 @@ daslib_modules.md
 daspkg.md
 decs.md
 design_philosophy.md
-detect_dupe.md
-detect_dupe_reference.md
 dynamic_modules.md
 external_module_debugging.md
-filesystem.md
-find_dupe.md
 gc_migration.md
-glob.md
 imgui_ui_debugging.md
 jobque_debugging.md
-json.md
-linq.md
 linq_fold_patterns.md
-llvm_tune.md
 mcp_tools.md
 memory_leak_detection.md
 perf_lint.md
 profiler.md
 project_overview.md
-regex.md
 sql.md
-strings.md
 strudel_port.md
 style_lint.md
 tdd_audit.md
