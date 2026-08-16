@@ -1108,6 +1108,7 @@ struct AttnArgs {
     window : uint       // > 0 = sliding span (this layer); 0 = global
     softcap : float     // > 0 = attention-logit soft cap (gemma2)
     hass : uint
+    uend : uint         // > 0 = uniform span end (media rows): every query attends [window floor, uend); 0 = causal
 }
 
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 score block; blocks fully above the
@@ -1127,9 +1128,10 @@ class MetalAttnQK {
         let qi0 = gl_WorkGroupID.x * 32u
         let j0 = gl_WorkGroupID.y * 32u
         let h = gl_WorkGroupID.z
-        // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window
-        // (the first row's wstart is the block minimum; softmax zeroes P over the skipped region)
-        if (j0 > ka.qoff + qi0 + 31u ||
+        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
+        // below every row's sliding ka.window (the first row's wstart is the block minimum;
+        // softmax zeroes P over the skipped region)
+        if ((ka.uend > 0u ? j0 >= ka.uend : j0 > ka.qoff + qi0 + 31u) ||
                 (ka.window > 0u && ka.qoff + qi0 + 1u > ka.window && j0 + 32u <= ka.qoff + qi0 + 1u - ka.window)) {
             return
         }
@@ -1200,8 +1202,8 @@ class MetalAttnSoftmax {
         let h = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
         let nthreads = gl_WorkGroupSize.x
-        let cnt = ka.qoff + qi + 1u
-        let jlo = ka.window > 0u && cnt > ka.window ? cnt - ka.window : 0u
+        let cnt = ka.uend > 0u ? ka.uend : ka.qoff + qi + 1u
+        let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
         let rowbase = (h * ka.qrows + qi) * ka.np32
         var m = -1.0e30
         var j = jlo + lid
@@ -1299,7 +1301,8 @@ class MetalAttnAV {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let kvhoff = (h / ka.kv_mul) * ka.head_size
-        let jlimit = min(ka.qoff + qi0 + 32u, ka.np32)   // causal: P rows here are zero past qoff+qi0+31
+        // causal: P rows here are zero past qoff+qi0+31; uniform span: softmax zeroed [uend, np32)
+        let jlimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + qi0 + 32u, ka.np32)
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
         var c00 : simdgroup_float8x8
@@ -1363,7 +1366,7 @@ class MetalAttnQKMmT {
     def metal_attn_qk_mm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
-        if (nBase > ka.qoff + mBase + 31u ||
+        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -1407,8 +1410,9 @@ class MetalAttnQKMm : MetalMmTileBase {
     def metal_attn_qk_mm {
         let mBase = gl_WorkGroupID.x * 32u  // query rows
         let nBase = gl_WorkGroupID.y * 64u  // key rows
-        // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window
-        if (nBase > ka.qoff + mBase + 31u ||
+        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
+        // below every row's sliding ka.window
+        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -1504,7 +1508,8 @@ class MetalAttnAVMmT {
         let h = gl_WorkGroupID.z
         let kvhoff = (h / ka.kv_mul) * ka.head_size
         let lid = gl_LocalInvocationID.x
-        let klimit = min(ka.qoff + mBase + 32u, ka.np32)   // P rows here are zero past qoff+mBase+31
+        // P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
+        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
         tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
@@ -1561,7 +1566,8 @@ class MetalAttnAVMm : MetalMmTileBase {
         let bB = (sg / 2u) * 128u
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
-        let klimit = min(ka.qoff + mBase + 32u, ka.np32)   // causal: P rows here are zero past qoff+mBase+31
+        // causal: P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
+        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
         var kb = 0u
         while (kb * 32u < klimit) {
             let posg = kb * 32u + pr
@@ -2873,7 +2879,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         scale = het ? (c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))) : scale,
                         qoff = uint(start_pos), qrows = uint(mp),
                         window = uint(lsl && c.sliding_window > 0l ? c.sliding_window : 0l),
-                        softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u)
+                        softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u,
+                        uend = s.attn_uniform_end > 0l ? uint(s.attn_uniform_end) : 0u)
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads)
