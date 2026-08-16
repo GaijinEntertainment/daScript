@@ -347,6 +347,25 @@ uend = npos (chunk 1's span machinery IS the tower attention); q8 towers decline
   [never_inline] escape on MSL helper bodies is the workaround, and the block-annotation
   inline asymmetry is filed as daScript #3752.
 
+## Slice K — bench legs + the A/B numbers DONE 2026-08-16 (M1, debug-grade -jit cells, -r 3)
+
+`lcpp_bench --asr --ngl`: the f32 tower rail under set_asr_fp32, backend stamped "metal",
+per-row anti-sandbag (a measured row with zero tower encodes or zero encode_ms exits
+non-zero — a Conformer row under --ngl is a refused measurement, not a silent CPU row);
+decoders/Conformer paths keep declared CPU intent.
+
+Whisper large-v3-turbo, best-of-3 per clip, same binary/box (q8-CPU default vs f32-GPU):
+jfk 1969 -> 910 ms; jfk3 4031 -> 2019; gb1 16982 -> 9319; hp0 24503 -> 12851;
+hp0x2 47266 -> 25187. GPU xRT ~21.3 on the long clips vs the q8-CPU 11.7.
+- P6 HELD, all three bars: block loop 3.03 s GPU vs ~95 s CPU f32 on gb1's 8 chunks
+  (~31x; bar 4x); whisper-large f32-rail xRT 21.3 (bar 12); the q8-CPU serving default
+  (xRT 11.7) beaten 1.82x END TO END — the f32-lane win now reaches the product default
+  path, closing the "doesn't reach q8 serving" caveat for whisper-class.
+- Post-fix split (gb1): encode 4.35 s (blocks.gpu 3.03, conv 1.32) vs decode 3.50 +
+  cross_kv 1.65 — the decoder is now the larger half (out of scope, ledgered with
+  J-qwen3a as the follow-up perf items).
+- Whisper tiny f32-GPU: gb1 1.27 s (xRT 157), hp0x2 3.12 s (xRT 175).
+
 ## Sequencing (each gate green before the next)
 
 G stage-probe baselines (whisper-large + qwen3a; predictions P5 judged) ->
@@ -354,7 +373,7 @@ H kernels + unit gates (controls recorded) -> statistic helper ->
 I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) — DONE ->
 J tower driver, whisper tiny first, then large + the other four — DONE (cells in mtower,
 not a matrix arm; see the slice J deviations note) ->
-census row -> K bench legs + the A/B numbers (only after every gate is green) ->
+census row -> K bench legs + the A/B numbers (only after every gate is green) — DONE ->
 L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms).
 
 ## Non-goals (chunk 2)

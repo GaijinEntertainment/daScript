@@ -13,6 +13,7 @@ require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see 
 require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe (narrower than the full facade; it requires the transformer umbrella itself)
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
+require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_gemma4uv   // --image: the vision embedder + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -242,8 +243,11 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
     return best
 }
 
-// One catalog model's timed buckets -> a BenchModel cell, appended to `jsonModels`.
-def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>) {
+// One catalog model's timed buckets -> a BenchModel cell, appended to `jsonModels`. The gpu
+// arm (--ngl) rides the f32 tower rail; a row that never dispatches the tower (Conformer
+// families, or a regression) FAILS the leg — a "metal" row that silently measured the CPU
+// would sandbag the whole board.
+def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu : bool) : bool {
     let model_path = asr_model_path(spec)
     var m <- (empty(spec.das_mmproj)
         ? load_asr_model(model_path)
@@ -253,7 +257,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     var warm_enc = 0.0lf
     measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
-    var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
+    var leg_ok = true
+    var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
         exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
@@ -271,7 +276,17 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
         var enc_ms = 0.0lf
+        var tw_enc0 = 0l
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            tw_enc0 = metal_tower_stats().encodes
+        }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (gpu && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
+                print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
+                leg_ok = false
+            }
+        }
         run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text, encode_ms = enc_ms))
         run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
         print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
@@ -306,16 +321,30 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     cell.runs |> emplace(run)
     jsonModels |> emplace(cell)
     delete m
+    return leg_ok
 }
 
-// The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit.
-def private asr_cell_main(model, json_path : string; reps, threads : int) : bool {
-    allow_cpu_prefill()   // the ASR cell is CPU by protocol — disarm the Metal-build tripwire
+// The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
+// selects the gpu leg: the f32 tower rail on the Metal tower driver (the q8 default has no GPU
+// lane by design); decoders and Conformer paths stay CPU (declared intent), and every measured
+// row must show tower engagement or the leg exits non-zero.
+def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : bool) : bool {
+    allow_cpu_prefill()   // ASR decoders/Conformer paths are CPU by protocol — disarm the tripwire
+    if (gpu) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_asr_fp32(true)   // the tower serves the f32 rail; q8 towers decline (quant_mode)
+            set_metal_tower(true)
+        } else {
+            print("lcpp_bench --asr: --ngl needs a Metal build (no das_metal on this platform)\n")
+            return false
+        }
+    }
     apply_box_profile_runtime()
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
         return false
     }
     var found = false
+    var all_ok = true
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
@@ -328,8 +357,13 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
                 continue
             }
             found = true
-            asr_measure_spec(spec, reps, threads, jsonModels)
+            if (!asr_measure_spec(spec, reps, threads, jsonModels, gpu)) {
+                all_ok = false
+            }
         }
+    }
+    if (!all_ok) {
+        return false
     }
     if (!found) {
         print("lcpp_bench --asr: no catalog model matches '{model}'\n")
@@ -1161,7 +1195,7 @@ def main() : int {
     let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        return asr_cell_main(cfg.model, cfg.json_path, reps, threads) ? 0 : 1
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, cfg.ngl != 0) ? 0 : 1
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {

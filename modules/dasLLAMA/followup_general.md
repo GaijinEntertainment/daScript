@@ -357,3 +357,15 @@
       our quants/GGUF/GEMMs but not the graph). `file`/`video_url` parts likewise parked.
     - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint — a name squat on the
       standard image-API prefix; rename ours or accept the squat deliberately.
+
+26. **ASR perf follow-ups after the Metal tower (metal-media chunk 2, 2026-08-16).** With the
+    whisper-class block loop GPU-served (~31x the CPU f32 block rate; large-v3-turbo f32-GPU
+    beats the q8-CPU serving default 1.82x end to end), the remaining ASR wall splits into:
+    - **J-qwen3a — the conv2d frontend** (~89% of that family's encode, quant-independent,
+      measured slice G): GPU im2col+mm, or at minimum threading the serial im2col. The
+      blocks-only offload buys qwen3a ~11%; the frontend is the family's actual bottleneck.
+    - **The whisper decoder half**: post-tower gb1 splits encode 4.35 s vs decode 3.50 s +
+      cross_kv 1.65 s — the decoder is now the larger half of a whisper-large transcribe.
+    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven, possibly
+      post-PR (the chunk 2 non-goal note); the f32 lane already beats the q8-CPU default
+      for whisper-class, so this is upside, not a gap.
