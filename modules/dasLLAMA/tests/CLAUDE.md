@@ -71,7 +71,9 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv`; the voxtral arm re-saves a
+canary-dec gemma4a gemma4uv gemma4uv-metal`; the gemma4uv-metal arm is the GPU tower driver's
+parity/counter/knob gate (Apple builds; `--arm gemma4uv` selects it too by substring); the
+voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
@@ -131,6 +133,9 @@ bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
 `test_gemma4uv.das` — the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
 (f32-mmproj-minted — the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
 mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
+On Apple builds the CPU gate pins the tower knob off, and a second test runs the GPU tier-1
+ATTEMPT: same dumps, scale-relative rung (2e-4 + 4e-3·token-rms), rung reached logged, engage
+proven per fixture by the encodes counter.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
 agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
@@ -142,7 +147,10 @@ live in test_attn_span — that file arms it in `[init]`). Metal-capable builds 
 `DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
 span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
-arm defaults to instruct, and freeform token-parity cells are banned (see below).
+arm defaults to instruct, and freeform token-parity cells are banned (see below). On Apple
+builds the turn also carries the tower legs: the default caption's image encode must show an
+encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU embedder — same
+caption floor, zero dispatches, the knob decline counted.
 
 ## Model loads — never the image rail (REVIEW: "A suite loads decoders with `load_model_`, never the image rail")
 

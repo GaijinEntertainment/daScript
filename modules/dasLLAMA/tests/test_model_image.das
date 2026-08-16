@@ -15,6 +15,7 @@ require dasllama/dasllama_gemma4uv // Gemma4uvStaging/stage_gemma4uv_embedder �
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
+require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_tower_stats — the gemma4uv-metal arm
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -1012,6 +1013,60 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
             t |> equal(long_length(a32.wblob), 0l, "the all-fp32 source leaves wblob empty")
             t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
             t |> success(img32 != img, "a different source keys a different image")
+        }
+    }
+}
+
+// The GPU tower vs the CPU chain on synthetic canvases — engage evidence is COUNTER DELTAS
+// (the chunk-1 lesson made structural: a green that never dispatched is vacuous), and the OFF
+// leg lives in the same arm so the knob is proven both ways every run.
+[test]
+def test_gemma4uv_metal_tower(tst : T?) {
+    tst |> run("gemma4uv: the Metal tower serves the embedder - parity + counters + knob") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv-metal")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            var inscope emb <- load_gemma4uv_embedder(path)
+            var st = Gemma4uvState()
+            // 672x336 is the non-square/orientation gate, 384x384 the no-pad shape (npos % 32 == 0)
+            let shapes = [(w = 480l, h = 480l), (w = 336l, h = 336l), (w = 672l, h = 336l),
+                          (w = 384l, h = 384l), (w = 96l, h = 96l)]
+            for (sh in shapes) {
+                let tag = "gemma4uv tower {sh.w}x{sh.h}"
+                var planes : array<float>
+                planes |> resize(sh.w * sh.h * 3l)
+                for (i in range64(sh.w * sh.h * 3l)) {
+                    planes[i] = sin(float(i % 977l) * 0.013) * 0.7
+                }
+                let s0 = metal_tower_stats()
+                set_metal_tower(false)
+                var cpu_out : array<float>
+                let np_cpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, cpu_out)
+                set_metal_tower(true)
+                let s1 = metal_tower_stats()
+                t |> equal(s1.encodes, s0.encodes, "{tag}: OFF leg never dispatches")
+                t |> equal(s1.declines - s0.declines, 1l, "{tag}: OFF leg records the knob decline")
+                var gpu_out : array<float>
+                let np_gpu = gemma4uv_encode(emb, st, planes, sh.w, sh.h, gpu_out)
+                let s2 = metal_tower_stats()
+                t |> equal(np_cpu, (sh.w / emb.patch) * (sh.h / emb.patch), "{tag}: npos from geometry")
+                t |> equal(np_gpu, np_cpu, "{tag}: both legs agree on npos")
+                t |> equal(s2.encodes - s1.encodes, 1l, "{tag}: GPU leg served (encodes delta)")
+                t |> equal(s2.rows - s1.rows, np_gpu, "{tag}: rows delta is npos")
+                t |> equal(s2.declines, s1.declines, "{tag}: GPU leg declined nothing")
+                tower_parity(t, tag, cpu_out, gpu_out)
+                delete gpu_out
+                delete cpu_out
+                delete planes
+            }
+            delete st
         }
     }
 }

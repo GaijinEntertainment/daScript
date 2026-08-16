@@ -289,11 +289,30 @@ Slice G instrument fixes that rode along: the stage probe gained `--lang` (Qwen3
 `auto`) and its missing `allow_cpu_prefill()` declaration — chunk 1's tripwire caught the
 probe itself on qwen3a's 2597-row decoder prefill.
 
+## Slice I — DONE 2026-08-16 (driver + gates, controls recorded)
+
+`dasllama_metal_tower.das` on the prefill contract (decline/false, counter-delta engage
+evidence); one command buffer runs ln1 -> patch GEMM (per-plane f32/bf16) -> bias -> ln2 ->
+posadd -> ln3 -> weightless rms -> proj GEMM, pad rows zeroed. Hook = register_gemma4uv_gpu
+seam after uv_im2col; umbrella-required under ?das_metal. Borrowed prefill PSOs come up via
+the new public metal_prefill_pso_init (per-encode, re-arms after either shutdown seat);
+enc_add_bias_rows grew a bias offset (tower biases live inside the model blob).
+- Gates green: `gemma4uv-metal` arm (5 canvases; rel_elem 2.7-4.0e-3 vs bar 8e-3, rel_l2
+  <= 1.9e-4, cos 1-2e-8, norm_dev <= 8.3e-5, counters exact both legs); tier-1 GPU attempt
+  (all fixtures held the SCALE-RELATIVE rung, maxdiff ~4.4e-3 — P8 CONFIRMED: strict CPU
+  2e-4 does not hold on the f16-staged lane, so slice J inherits the staged GEMM with
+  tolerance bars, not element-exactness); vision-chat tower legs (engage + knob-off floor).
+- Controls: rms-stage drop -> parity arm red (rel_elem ~144, cos-cell red too) AND tier-1
+  rung red (excess 276+) while the pinned CPU gate stayed green (the pin is real); knob
+  no-op -> exactly the two OFF-leg cells red. All reverted.
+- The CPU tier-1 gate now pins the tower off explicitly — the facade's require graph
+  registers the hook, so an unpinned "CPU" gate would silently measure the GPU.
+
 ## Sequencing (each gate green before the next)
 
 G stage-probe baselines (whisper-large + qwen3a; predictions P5 judged) ->
 H kernels + unit gates (controls recorded) -> statistic helper ->
-I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) ->
+I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) — DONE ->
 J tower driver, whisper tiny first, then large + the other four; matrix `tower` arm ->
 census row -> K bench legs + the A/B numbers (only after every gate is green) ->
 L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms).

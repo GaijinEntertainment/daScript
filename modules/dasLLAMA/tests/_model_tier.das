@@ -15,6 +15,7 @@ require dastest/testing_boost public
 require daslib/fio public
 require strings public
 require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
+require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 require dasllama/dasllama_env
@@ -85,6 +86,39 @@ def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
+}
+
+//! The GPU-tower parity block (metal-media chunk 2): four bars derived from the 2-GEMM
+//! f16-staging model at ~5x headroom, LOGGED on green so a drifting margin is visible before it
+//! reds. rel_elem is SCALE-relative (max abs diff over the CPU tensor rms) — per-element ratios
+//! are unbounded on near-zero elements under f16 staging and are deliberately not a bar.
+def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
+    t |> equal(long_length(cpu), long_length(gpu), "{tag}: length")
+    return if (long_length(cpu) != long_length(gpu) || empty(cpu))
+    var max_ad = 0.0lf
+    var l2n = 0.0lf
+    var na = 0.0lf
+    var nb = 0.0lf
+    var dot = 0.0lf
+    for (cv, gv in cpu, gpu) {
+        let a = double(cv)
+        let b = double(gv)
+        max_ad = max(max_ad, abs(a - b))
+        l2n += (a - b) * (a - b)
+        na += a * a
+        nb += b * b
+        dot += a * b
+    }
+    let rms = sqrt(na / double(long_length(cpu)))
+    let rel_elem = max_ad / max(rms, 1e-30lf)
+    let rel_l2 = sqrt(l2n) / max(sqrt(na), 1e-30lf)
+    let cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
+    let norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
+    to_log(LOG_INFO, "{tag}: rel_elem={rel_elem} rel_l2={rel_l2} cos={cos} norm_dev={norm_dev} n={long_length(cpu)}\n")
+    t |> success(rel_elem <= 8e-3lf, "{tag}: rel_elem <= 8e-3")
+    t |> success(rel_l2 <= 4e-3lf, "{tag}: rel_l2 <= 4e-3")
+    t |> success(cos >= 1.0lf - 1e-5lf, "{tag}: cos >= 1-1e-5")
+    t |> success(norm_dev <= 4e-3lf, "{tag}: norm_dev <= 4e-3")
 }
 
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to
