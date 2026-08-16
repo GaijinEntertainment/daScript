@@ -13,7 +13,7 @@ class LeafNode : Node {
 
 [test]
 def test_ctor_literal_pointer_upcast(t : T?) {
-    t |> run("derived news land upcast in a base-pointer array") @(t : T?) {
+    t |> run("derived instances land upcast in a base-pointer array") @(t : T?) {
         var arr <- array<Node?>(new LeafNode(), new Node())
         t |> equal(length(arr), 2)
         t |> equal(arr[0]->kind(), 2)

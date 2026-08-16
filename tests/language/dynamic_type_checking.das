@@ -111,7 +111,7 @@ def test_polymorphic_area(t : T?) {
 
 [test]
 def test_array_of_base_pointers(t : T?) {
-    t |> run("array of base pointers from derived news") @(t : T?) {
+    t |> run("array of base pointers from derived instances") @(t : T?) {
         var arr <- array<Shape?>(new Circle(), new Rectangle(), new Square(2.0))
         t |> equal(length(arr), 3)
         t |> equal(arr[0]->area() > 3.14, true)

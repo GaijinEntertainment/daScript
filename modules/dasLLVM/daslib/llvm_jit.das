@@ -1070,6 +1070,8 @@ class public LlvmJitVisitor : AstVisitor {
         return !inv.cmresAlias && isCMRESType(inv._type)
     }
 
+    def is2CMRES(expr : ExpressionPtr) => isCall2CMRES(expr) || isInvoke2CMRES(expr)
+
     def make_call_to_cmres(expr : ExpressionPtr; v_ptr : LLVMOpaqueValue?) {
         if (isCall2CMRES(expr)) {
             call2cmres[expr] = LLVMBuildPointerCast(g_builder, v_ptr, types.LLVMVoidPtrType(), "call_result_{(expr as ExprCall).func.name}")
@@ -1118,8 +1120,8 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitExprLetVariableInit(blk : ExprLet?; arg : VariablePtr; expr : ExpressionPtr) : ExpressionPtr {
         var tdst = getV(arg)
-        if (isCall2CMRES(expr) || isInvoke2CMRES(expr)) {
-            pass    // this variable is initialized via cmres call/invoke
+        if (is2CMRES(expr)) {
+            pass    // this variable is initialized via cmres
         } elif (arg._type.flags.ref) {
             var src = getE(expr)
             LLVMBuildStore(g_builder, src, tdst)
@@ -3480,7 +3482,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override isRightFirstExprCopy(expr : ExprCopy?) : bool {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) return false
+        if (is2CMRES(expr.right)) return false
         return !expr.copy_flags.takeOverRightStack
     }
 
@@ -3497,8 +3499,8 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprCopy(expr : ExprCopy?) : ExpressionPtr {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) {
-            pass    // already a call/invoke to cmres, no need to copy
+        if (is2CMRES(expr.right)) {
+            pass    // already a cmres target, no need to copy
         } else {
             var tdst = getE(expr.left)
             build_copy(tdst, expr.right)
@@ -3549,7 +3551,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override isRightFirstExprMove(expr : ExprMove?) : bool {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) return false
+        if (is2CMRES(expr.right)) return false
         return !expr.move_flags.takeOverRightStack
     }
 
@@ -3566,8 +3568,8 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMove(expr : ExprMove?) : ExpressionPtr {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) {
-            pass    // already a call/invoke to cmres, no need to copy
+        if (is2CMRES(expr.right)) {
+            pass    // already a cmres target, no need to move
         } else {
             var tdst = getE(expr.left)
             build_move(tdst, expr.right, true)
@@ -4294,7 +4296,7 @@ class public LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[field_index]), "")
         if (decl.value |> isMakeLocal) {
             pass // do nothing. we already took care of makeLocal in preVisitExprMakeVariantField
-        } elif (isCall2CMRES(decl.value) || isInvoke2CMRES(decl.value)) {
+        } elif (is2CMRES(decl.value)) {
             pass // do nothing. we already handled this in preVisitExprMakeVariantField
         } else {
             if (decl.flags.moveSemantics) {
@@ -4506,7 +4508,7 @@ class public LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field_type), "")
         if (decl.value |> isMakeLocal) {
             pass // do nothing. we already took care of makeLocal in preVisitExprMakeStructField
-        } elif (isCall2CMRES(decl.value) || isInvoke2CMRES(decl.value)) {
+        } elif (is2CMRES(decl.value)) {
             pass // do nothing. we already handled this in preVisitExprMakeStructField
         } else {
             if (decl.flags.moveSemantics) {
@@ -4556,6 +4558,8 @@ class public LlvmJitVisitor : AstVisitor {
             // zero the Array header, size it once, then point the per-element stores at arr.data so they
             // land straight in the heap buffer (no stack T[N] + copy).
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(expr._type.sizeOf), uint(expr._type.alignOf))
+            // element slots are recordType.sizeOf apart - makeType.stride is the INNER stride when the
+            // element is itself a fixed array (interp mirror: simulateExprMakeArray's recordType->getSizeOf())
             build_array_resize(mks_ptr, expr.values |> length, expr.recordType.sizeOf, expr.at)
             var dataPtr = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), mks_ptr, "mka_heap_data_{expr.at.line}")
             setE(expr, mks_ptr)
@@ -4573,8 +4577,6 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : void {
-        // element slots are recordType.sizeOf apart - makeType.stride is the INNER stride when the
-        // element is itself a fixed array (interp mirror: simulateExprMakeArray's recordType->getSizeOf())
         let stride = expr.recordType.sizeOf
         let offset =  index * stride
         // heap literals fill arr.data (top of heapMkaData), not the Array struct held in getE(expr)
@@ -4604,9 +4606,9 @@ class public LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "[{index}]")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.recordType), "")
         if (init |> isMakeLocal) {
-            pass // do nothing. we already took care of makeLocal in preVisitExprMakeArrayField
-        } elif (isCall2CMRES(init) || isInvoke2CMRES(init)) {
-            pass // do nothing. we already handled this in preVisitExprMakeArrayField
+            pass // do nothing. we already took care of makeLocal in preVisitExprMakeArrayIndex
+        } elif (is2CMRES(init)) {
+            pass // do nothing. we already handled this in preVisitExprMakeArrayIndex
         } else {
             if (expr.recordType.canCopy) {
                 build_copy(v_ptr, init)
@@ -4661,7 +4663,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override preVisitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; init : ExpressionPtr; last : bool) : void {
         let offset = get_tuple_field_offset(expr.makeType, index)
         var v_ptr = getE(expr)
-        verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make struct field, but no pointer")
+        verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make tuple index, but no pointer")
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
         if (init |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?>(init))
@@ -4690,7 +4692,7 @@ class public LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[index]), "")
         if (init |> isMakeLocal) {
             pass // do nothing. we already took care of makeLocal in preVisitExprMakeTupleIndex
-        } elif (isCall2CMRES(init) || isInvoke2CMRES(init)) {
+        } elif (is2CMRES(init)) {
             pass // do nothing. we already handled this in preVisitExprMakeTupleIndex
         } else {
             if (expr.makeType.canCopy) {

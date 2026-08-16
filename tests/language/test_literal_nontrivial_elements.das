@@ -1,6 +1,4 @@
-// Bracket/ctor literal lowering must construct non-trivial elements identically in
-// every tier: moved-in iterator elements, fixed-array elements, and a comprehension
-// moved straight into a constructor argument.
+// Bracket/ctor literal lowering must construct non-trivial elements identically in every tier.
 options gen2
 require dastest/testing_boost public
 require daslib/coroutines
@@ -33,8 +31,13 @@ def make_iota() : int[4] {
 }
 
 struct IntsPair {
-    a : array<int>
-    b : array<int>
+    comprehended : array<int>
+    moved : array<int>
+}
+
+variant IntsOrTag {
+    ints : array<int>
+    tag : int
 }
 
 [test]
@@ -69,13 +72,46 @@ def test_ctor_comprehension_move_init(t : T?) {
     t |> run("a comprehension moved into a constructor argument keeps its elements") @(t : T?) {
         var src <- [1, 2, 3]
         var other <- [7, 8]
-        var pair = IntsPair(a <- [for (x in src); x * 10], b <- other)
-        t |> equal(length(pair.a), 3)
-        t |> equal(pair.a[0], 10)
-        t |> equal(pair.a[2], 30)
-        t |> equal(length(pair.b), 2)
-        t |> equal(pair.b[1], 8)
+        var pair = IntsPair(comprehended <- [for (x in src); x * 10], moved <- other)
+        t |> equal(length(pair.comprehended), 3)
+        t |> equal(pair.comprehended[0], 10)
+        t |> equal(pair.comprehended[2], 30)
+        t |> equal(length(pair.moved), 2)
+        t |> equal(pair.moved[1], 8)
         delete pair
+        delete src
+    }
+}
+
+[test]
+def test_comprehension_literal_elements(t : T?) {
+    t |> run("comprehension elements land intact in an array literal") @(t : T?) {
+        var src <- [1, 2, 3]
+        var arr <- [ [for(x in src); x * 10], [for (x in src); x * 100]]
+        t |> equal(length(arr), 2)
+        t |> equal(length(arr[0]), 3)
+        t |> equal(length(arr[1]), 3)
+        t |> equal(arr[0][2], 30)
+        t |> equal(arr[1][2], 300)
+        delete arr
+        delete src
+    }
+    t |> run("a comprehension element lands intact in a tuple literal") @(t : T?) {
+        var src <- [1, 2, 3]
+        var tup <- ([for (x in src); x * 10], 7)
+        t |> equal(length(tup._0), 3)
+        t |> equal(tup._0[1], 20)
+        t |> equal(tup._1, 7)
+        delete tup
+        delete src
+    }
+    t |> run("a comprehension element lands intact in a variant literal") @(t : T?) {
+        var src <- [1, 2, 3]
+        var v <- IntsOrTag(ints <- [for (x in src); x * 10])
+        t |> success(v is ints, "the variant holds the ints alternative")
+        t |> equal(length(v as ints), 3)
+        t |> equal((v as ints)[0], 10)
+        delete v
         delete src
     }
 }

@@ -36,7 +36,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4ful   // literal lowering: fixed-array element slots sized by recordType.sizeOf; invoke-to-cmres skipped in make-field visit halves (0x4e: scalar ABI coercion at calls, returns and branches)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4ful   // literal lowering: fixed-array element slots sized by recordType.sizeOf; invoke-to-cmres now skipped like call-to-cmres at let-init, copy/move and every make-* element visit (0x4e: scalar ABI coercion at calls, returns and branches)
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
