@@ -178,6 +178,7 @@ struct Scheduler {
 
 //! The scheduler's pools and buffers are player-internal - no interior alias survives a
 //! grow - so growth may free the old buffer eagerly even under `options very_safe_context`.
+[unsafe_operation]
 def mark_pools_scratch(var sched : Scheduler) {
     unsafe {
         sched.voices |> set_scratch(true)
@@ -199,6 +200,7 @@ def private current_cycle(sched : Scheduler; wall_time : double) : double {
 }
 
 //! Same contract as `mark_pools_scratch`, for one orbit bus's send/return buffers.
+[unsafe_operation]
 def mark_orbit_scratch(var bus : OrbitBus) {
     unsafe {
         bus.reverb_send_buf |> set_scratch(true)
@@ -217,7 +219,7 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
     }
     if (sched.orbit_buses[orbit] == null) {
         var bus = new OrbitBus()
-        mark_orbit_scratch(*bus)
+        unsafe(mark_orbit_scratch(*bus))
         sched.orbit_buses[orbit] = bus
     }
 }

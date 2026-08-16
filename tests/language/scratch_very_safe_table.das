@@ -12,6 +12,7 @@ require dastest/testing_boost public
 var g_eager : table<int; int>
 var g_deferred : table<int; int>
 var g_unmarked : table<int; int>
+var g_deleted : table<int; int>
 
 [test]
 def test_scratch_table(t : T?) {
@@ -56,5 +57,15 @@ def test_scratch_table(t : T?) {
         let lateDelta = heap_bytes_allocated() - b3
         t |> equal(long_capacity(g_eager), 2048l)
         t |> equal(lateDelta, grewEager)
+    }
+    t |> run("delete clears the bit - grown and never-grown alike") @(t : T?) {
+        // never-grown: no backing store to free, but delete still resets the mark
+        unsafe(g_deleted |> set_scratch(true))
+        delete g_deleted
+        t |> equal(is_scratch(g_deleted), false)
+        unsafe(g_deleted |> set_scratch(true))
+        g_deleted[1] = 1
+        delete g_deleted
+        t |> equal(is_scratch(g_deleted), false)
     }
 }

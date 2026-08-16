@@ -93,10 +93,12 @@ def test_scratch_lifecycle(t : T?) {
         let grew = heap_bytes_allocated() - before
         t |> equal(grew, uint64(long_capacity(g_dst)) * 4ul)   // eager: the bit moved with the buffer
     }
-    t |> run("delete clears the bit") @(t : T?) {
+    t |> run("delete clears the bit - grown and never-grown alike") @(t : T?) {
+        // never-grown: no backing store to free, but delete still resets the mark
         unsafe(g_deleted |> set_scratch(true))
-        // reserve before delete is load-bearing: builtin_array_free's memset sits under
-        // `if (dim.data)`, so deleting a never-grown array leaves the flags word untouched
+        delete g_deleted
+        t |> equal(is_scratch(g_deleted), false)
+        unsafe(g_deleted |> set_scratch(true))
         g_deleted |> reserve(16l)
         delete g_deleted
         t |> equal(is_scratch(g_deleted), false)

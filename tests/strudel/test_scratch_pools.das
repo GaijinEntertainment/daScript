@@ -18,7 +18,7 @@ var g_orbit_sched : Scheduler
 [test]
 def test_scheduler_pools_marked(t : T?) {
     t |> run("mark_pools_scratch marks every pool and buffer") @(t : T?) {
-        mark_pools_scratch(g_sched)
+        unsafe(mark_pools_scratch(g_sched))
         t |> success(is_scratch(g_sched.voices), "voices")
         t |> success(is_scratch(g_sched.osc_voices), "osc_voices")
         t |> success(is_scratch(g_sched.output), "output")
@@ -44,7 +44,7 @@ def test_scheduler_pools_marked(t : T?) {
 def test_orbit_bus_marked(t : T?) {
     t |> run("mark_orbit_scratch marks the six send/return buffers") @(t : T?) {
         var bus : OrbitBus   // no inscope: nothing here allocates, and finalizing the raw FX pointers needs unsafe
-        mark_orbit_scratch(bus)
+        unsafe(mark_orbit_scratch(bus))
         t |> success(is_scratch(bus.reverb_send_buf), "reverb_send_buf")
         t |> success(is_scratch(bus.reverb_out_buf), "reverb_out_buf")
         t |> success(is_scratch(bus.delay_send_buf), "delay_send_buf")

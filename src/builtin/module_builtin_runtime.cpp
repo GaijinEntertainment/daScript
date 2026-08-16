@@ -1438,6 +1438,10 @@ namespace das
             } else {
                 memset ( &dim, 0, sizeof(Array) );
             }
+        } else {
+            // no backing store to free, but delete still resets the scratch mark - the one
+            // flag settable on a dataless container; lock state must survive untouched
+            dim.scratch = false;
         }
     }
 
@@ -1455,6 +1459,8 @@ namespace das
             } else {
                 memset ( &tab, 0, sizeof(Table) );
             }
+        } else {
+            tab.scratch = false;
         }
     }
 
