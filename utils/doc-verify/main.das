@@ -46,8 +46,8 @@ struct Config {
     @clarg_doc = "Output directory for synthetic modules and reports"
     out : string = "build/doc_verify"
 
-    @clarg_doc = "Path to the daslang binary used for compile checks"
-    daslang : string = "bin/daslang"
+    @clarg_doc = "Path to the daslang binary used for compile checks (default: the running binary)"
+    daslang : string
 
     @clarg_short = "p"
     @clarg_doc = "Only process pages whose path contains this substring"
@@ -1058,6 +1058,10 @@ def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
     return run_and_capture(args, output, 120.0)
 }
 
+def spawn_failure(cfg : Config) : string {
+    return "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
+}
+
 def first_lines(s : string; n : int) : array<string> {
     var out : array<string>
     for (l in split(s, "\n")) {
@@ -1112,7 +1116,10 @@ def check_expects(em : EmittedPage; cfg : Config; base_file : string; var rep : 
         fwrite(ex_file, join(lines, "\n") + "\n")
         var out : string
         let rc = compile_file_rc(cfg, ex_file, out)
-        if (rc == 0) {
+        if (rc == -1) {
+            rep.status = "red"
+            rep.errors |> push(spawn_failure(cfg))
+        } elif (rc == 0) {
             rep.status = "red"
             rep.errors |> push("expect block at :{ex.rst_line} compiled clean (expected {ex.marker_arg})")
         } elif (!empty(ex.marker_arg) && find(out, ex.marker_arg) < 0) {
@@ -1176,8 +1183,10 @@ def run_probes(require_lines : table<string; bool>; file_mods : table<string>; c
     for (idx in range(length(origins))) {
         let pfile = path_join(probe_dir, "probe_{idx}.das")
         var out : string
-        if (compile_file_rc(cfg, pfile, out) != 0) {
-            failures |> push((origins[idx] ? "[companion] " : "[page] ") + trim(fread(pfile)))
+        let prc = compile_file_rc(cfg, pfile, out)
+        if (prc != 0) {
+            let why = prc == -1 ? " ({spawn_failure(cfg)})" : ""
+            failures |> push((origins[idx] ? "[companion] " : "[page] ") + trim(fread(pfile)) + why)
         }
     }
     return <- failures
@@ -1198,9 +1207,14 @@ def report_page(page_path : string; cfg : Config) : PageReport {
     rep.status = "green"
     for (f in em.files) {
         var out : string
-        if (compile_file_rc(cfg, f, out) != 0) {
+        let crc = compile_file_rc(cfg, f, out)
+        if (crc != 0) {
             rep.status = "red"
-            rep.errors |> push_from(first_lines(out, 24))
+            if (crc == -1) {
+                rep.errors |> push(spawn_failure(cfg))
+            } else {
+                rep.errors |> push_from(first_lines(out, 24))
+            }
         }
     }
     // expects append to the main page program, not an alt program
@@ -1222,6 +1236,10 @@ def main() : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "doc-verify")
     return rc if (rc >= 0)
+    // a fixed "bin/daslang" default silently spawn-fails wherever the exe lives elsewhere (bin/Release, worktrees)
+    if (empty(cfg.daslang)) {
+        cfg.daslang = get_command_line_arguments()[0]
+    }
     mkdir_rec(path_join(cfg.out, "pages"))
     let pages <- scan_pages(cfg)
     to_log(LOG_INFO, "doc-verify: {length(pages)} pages\n")
