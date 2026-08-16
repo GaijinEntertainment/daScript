@@ -69,20 +69,24 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/internal/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
 | `skills/internal/tutorial_prose.md` | WRITING or revising any general-reader doc/tutorial prose — the voice/vocabulary/structure rules; `documentation_rst.md` is mechanics, this is the words |
-| `skills/cpp_integration.md` | Writing/editing C++ in `src/`, `modules/`, `tutorials/integration/cpp/` |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
+| `skills/internal/cpp_codebase_notes.md` | Working on daslang's own C++ — where inference/builtins/errors/parser live, AST function flags, the `cpp_*` MCP search workflow |
 | `skills/internal/clang_bind_build.md` | Enabling `dasClangBind` / bumping the libclang SDK / running any `bind_*.das` self-binder |
 | `skills/daslib_modules.md` | Working with `daslib/` modules or extending the stdlib |
 | `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
 | `skills/internal/daslang_internals.md` | Reasoning about how the compiler implements something no user-facing doc covers — the collect banner, the `/*option*/` marker, known mangling defects |
-| `skills/writing_benchmarks.md` | Writing/running `benchmarks/` files |
+| `skills/writing_benchmarks.md` | Writing/running benchmark `.das` files (`--bench`, `run`, `Asserter`) |
+| `skills/internal/benchmarks_in_repo.md` | Adding or moving a file under `benchmarks/` — layout, the README index rule, output capture |
 | `skills/daspkg.md` | Running daspkg commands, `.das_package` manifests |
-| `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
+| `skills/dynamic_modules.md` | `.das_module` descriptors, `register_native_path`, module resolution |
+| `skills/internal/dynamic_modules_plumbing.md` | Adding a module under this repo's `modules/` tree — static-binary resolution, the `ADD_MODULE_*` CMake macros |
 | `skills/external_module_debugging.md` | Working on an external daslang module locally (dasImguiNodeEditor, dasCards, …) — run/lint/test from a standalone daslang or MCP before push-to-CI; the junction pattern + `project_root` MCP arg |
 | `skills/internal/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
 | `skills/internal/skill_taxonomy.md` | Deciding where a skill lives and whether it ships — the folder taxonomy (root/daslang/internal), one-fact-one-home, and the move/merge rules |
 | `skills/internal/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the content craft: claims verified, commands run, the gate mechanics, the review checklist |
 | `skills/internal/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
 | `skills/tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, sidecars, the tune-and-re-exec model, adding a kernel family |
+| `skills/internal/llvm_tune_internals.md` | Maintaining `modules/dasLLVM/daslib/llvm_tune.das` itself — macro-context traps, the AOT/`-exe` gate split, the dasLLAMA tuner |
 | `skills/internal/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
 | `skills/internal/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server) — locked architecture, coordinate conventions, protocol tests |
