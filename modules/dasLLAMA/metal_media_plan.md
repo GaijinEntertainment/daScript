@@ -257,17 +257,29 @@ slice, possibly post-PR).
   (decline-tested only); worker wiring is a design decision; cross-shape determinism not
   contractual.
 
-## Predictions (before slice G runs)
+## Predictions (before slice G ran) and slice G verdicts (measured 2026-08-16, gb1 198.7 s)
 
-- P5: encoder >= 70% of whisper-large-v3-turbo transcription wall on M1; blocks >= 85% of
-  encoder time.
-- P6: the Metal block loop is >= 4x the CPU f32 block loop at T=1500/d=1280 (mulmm-class
-  GEMMs dominate); end-to-end whisper-large xRT 5.6 -> >= 12 on the f32 rail.
-- P7: qwen3a (18 layers, hs 64) closes its 4.8x encode gap to <= 2x on the f32 rail.
+- P5: encoder >= 70% of whisper-large wall; blocks >= 85% of encoder. **BOTH HELD, with
+  room**: f32 rail encode 102.1 s vs decode 3.5 s (~97% of engine time); FFN GEMMs alone
+  68.6 s, conv 1.2%.
+- **The q8 CPU context (the product default)**: whisper-large q8 encode 15.7 s — and 85%
+  of it (13.3 s) is the f32 attention micro-GEMMs (`gemm_f32` per head-block), which the
+  Metal trio serves directly. The q8-CPU tower's bottleneck is attention, not weights.
+- P6: Metal block loop >= 4x CPU f32; whisper-large xRT -> >= 12 on the f32 rail. OPEN
+  (slice K judges). The bar that matters: beat the q8-CPU xRT 11.8.
+- P7 **REVISED by measurement**: qwen3a's encode (~10 s on gb1, f32 AND q8 — identical) is
+  ~89% its family conv2d FRONTEND (serial im2col + per-chunk convs), only ~1.1 s in the
+  shared blocks. Blocks-only offload buys qwen3a ~11%. The family needs its frontend
+  addressed — GPU im2col+mm, or at minimum threading the serial im2col — added to slice J
+  as J-qwen3a, judged separately from the whisper-class win.
 - P8: the gemma4uv Metal embedder holds the derived envelope (rel_elem <= 8e-3) but NOT
   tier-1 2e-4 on the f16-staged lane; the bf16 tensor lane gets within 2e-4 where crowned.
 - P9: the f32-lane tower serve costs no correctness: transcript-exact on the pinned corpus
   for whisper tiny AND large.
+
+Slice G instrument fixes that rode along: the stage probe gained `--lang` (Qwen3-ASR needs
+`auto`) and its missing `allow_cpu_prefill()` declaration — chunk 1's tripwire caught the
+probe itself on qwen3a's 2597-row decoder prefill.
 
 ## Sequencing (each gate green before the next)
 
