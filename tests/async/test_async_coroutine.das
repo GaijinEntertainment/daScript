@@ -163,10 +163,7 @@ def mix_co_b() {
 def test_cr_run_all_coroutines(t : T?) {
     t |> run("cr_run_all with multiple coroutines") @(t : T?) {
         g_mix_log |> clear()
-        // stays the emplace form: a bracket literal of moved-in ITERATOR elements arrives dead under AOT
-        var tasks : Coroutines    // nolint:STYLE012 - the suggested literal form miscompiles under AOT for iterator elements
-        tasks |> emplace <| mix_co_a()
-        tasks |> emplace <| mix_co_b()
+        var tasks <- [ <- mix_co_a(), <- mix_co_b()]
         cr_run_all(tasks)
         // Both should complete
         var a_count = 0

@@ -111,12 +111,8 @@ def test_polymorphic_area(t : T?) {
 
 [test]
 def test_array_of_base_pointers(t : T?) {
-    t |> run("array push derived into base array") @(t : T?) {
-        // stays the push form: the AOT emitter mistypes array<Base?>(new Derived(), ...) - C2440 in the generated C++
-        var arr : array<Shape?>     // nolint:STYLE012 - the suggested ctor form miscompiles under AOT for polymorphic elements
-        arr |> push(new Circle())
-        arr |> push(new Rectangle())
-        arr |> push(new Square(2.0))
+    t |> run("array of base pointers from derived news") @(t : T?) {
+        var arr <- array<Shape?>(new Circle(), new Rectangle(), new Square(2.0))
         t |> equal(length(arr), 3)
         t |> equal(arr[0]->area() > 3.14, true)
         t |> equal(arr[1]->area(), 1.0)

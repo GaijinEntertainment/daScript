@@ -183,6 +183,17 @@ namespace das {
         }
     };
 
+    // `return <- a` from a by-ref function passes the reference through; the move-out
+    // (copy, then zero the source) belongs to the caller, so zeroing here would destroy
+    // the value before the consumer reads it
+    template <typename TT>
+    struct das_auto_cast_move<TT &> {
+        template <typename QQ>
+        __forceinline static TT & cast ( QQ && expr ) {
+            return expr;
+        }
+    };
+
     template <typename TT>
     __forceinline void das_zero ( TT & a ) {
         using TTNC = typename remove_const<TT>::type;
