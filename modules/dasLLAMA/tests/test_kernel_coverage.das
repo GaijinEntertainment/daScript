@@ -174,6 +174,7 @@ def private census_zoo(t : T?) {
 
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
 // borrowed trio) go non-zero — a whisper tiny f32 chunk plus a small gemma4uv canvas
+[unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(true)

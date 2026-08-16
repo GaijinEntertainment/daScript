@@ -48,7 +48,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
         allow_cpu_prefill()
         with_job_que() {
             setup_dasllama_jobque_()
-            var tower0_encodes = 0l
+            var tower0_encodes = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 set_metal_tower(true)
                 tower0_encodes = metal_tower_stats().encodes

@@ -256,7 +256,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     var warm_enc = 0.0lf
     measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
-    var leg_ok = true
+    var leg_ok = true   // nolint:LINT003,LINT019 — falsified in the apple static_if half; the linux flavor sees it const
     var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
         exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,
@@ -275,7 +275,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
         var enc_ms = 0.0lf
-        var tw_enc0 = 0l
+        var tw_enc0 = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
         static_if (typeinfo builtin_module_exists(das_metal)) {
             tw_enc0 = metal_tower_stats().encodes
         }
