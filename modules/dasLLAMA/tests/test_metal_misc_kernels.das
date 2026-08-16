@@ -560,13 +560,16 @@ def private layernorm_gate(t : T?; dev, queue; dim, nrows : int; eps : float; in
     delete want
 }
 
-// 1-operand tanh-GELU: bulk range vs the CPU tanh formula, saturation exact at |x| >= 50
-// (Metal tanh NaNs there; the exp identity must saturate), and the form-delta cell pinning
-// the substitution size vs the CPU LUT and erf flavors over the tower's real range.
-def private gelu1_gate(t : T?; dev, queue; total : int) {
-    let tag = "gelu1 total={total}"
+// The two FORM-MATCHED tower GELUs vs their shipped CPU flavors on the same fixture. The LUT
+// flavor runs the CPU's own clamps + f16 round-trips in kernel (bar = one f16 ulp at the range
+// edge, tie flips only); the erf flavor's A&S polynomial sits within ~1e-5 of the CPU's
+// double-precision erf. Saturation/NaN probes ride the tail slots of every arm.
+def private gelu_flavor_gate(t : T?; dev, queue; total : int; lut : bool) {
+    let tag = "gelu_{lut ? "lut" : "erf"} total={total}"
     var err : string
-    var pso = pipeline_from_source(dev, MetalGelu1_metal_ew1_msl, MetalGelu1_metal_ew1_msl_entry, MetalGelu1_metal_ew1_msl_fastmath, err)
+    var pso = (lut
+        ? pipeline_from_source(dev, MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var g : array<float>
@@ -583,11 +586,11 @@ def private gelu1_gate(t : T?; dev, queue; total : int) {
         g[total - 6] = 1e-30
         g[total - 7] = -1e-30
     }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(total)) {
-        let vv = g[i]
-        want[i] = 0.5 * vv * (1.0 + tanh(0.7978845608028654 * (vv + 0.044715 * vv * vv * vv)))
+    var want := g
+    if (lut) {
+        gelu_tanh_lut(want, int64(total))
+    } else {
+        gelu_erf(want, int64(total))
     }
     var bg = buf_upload(dev, g)
     var btot = buf_u32(dev, uint(total))
@@ -599,12 +602,19 @@ def private gelu1_gate(t : T?; dev, queue; total : int) {
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran && total >= 8) {
-        t |> equal(buf_mismatch_approx(bg, want, tag), 0)
         var back : array<float>
         back |> resize(total)
         unsafe {
             memcpy(addr(back[0]), metal_buffer_contents(bg), total * 4)
         }
+        var maxd = 0.0
+        for (bv, wv in back, want) {
+            maxd = max(maxd, abs(bv - wv))
+        }
+        to_log(LOG_INFO, "{tag}: max |gpu - cpu flavor| = {maxd}\n")
+        // LUT: one f16 ulp at |g|~10 (RNE tie flips between the tanh and exp-identity evals);
+        // erf: two ~1.5e-7-accurate erf approximations (NR double vs A&S f32) plus f32 eval noise
+        t |> success(maxd <= (lut ? 1e-2 : 1e-5), "{tag}: form-matched inside the flavor bar")
         t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")
         t |> success(back[total - 2] == 0.0 && back[total - 4] == 0.0, "{tag}: negative saturation exact")
         var nan_found = false
@@ -623,8 +633,9 @@ def private gelu1_gate(t : T?; dev, queue; total : int) {
     delete want
 }
 
-// The form-delta cell: the GPU lane's analytic tanh-GELU vs the CPU flavors, pinned bounds
-// over the tower's real range — the quantitative basis of "tolerance-gated, not bit-exact".
+// The form-delta cell: the analytic tanh-GELU vs the two shipped CPU flavors — the measured
+// per-element distances whose 32-layer coherent amplification (~4e-2 rel_l2 on qwen2audio)
+// is WHY the GPU ships form-matched flavors instead of one substituted form.
 def private gelu_form_delta(t : T?) {
     let n = 65536
     var xs : array<float>
@@ -945,9 +956,11 @@ def test_metal_misc_kernels(t : T?) {
                 layernorm_gate(t, dev, queue, 100, 2, 1.0e-5, false)    // smaller than a simdgroup stride
                 layernorm_gate(t, dev, queue, 1280, 2, 1.0e-3, false)   // non-default eps: the uniform is live
                 layernorm_gate(t, dev, queue, 1280, 2, 1.0e-5, true)    // IN PLACE - the gemma4uv production shape
-                gelu1_gate(t, dev, queue, 800)     // %64 != 0 tail guard
-                gelu1_gate(t, dev, queue, 1000)
-                gelu1_gate(t, dev, queue, 5120)    // whisper-large n_ff
+                gelu_flavor_gate(t, dev, queue, 800, true)     // %64 != 0 tail guard
+                gelu_flavor_gate(t, dev, queue, 1000, true)
+                gelu_flavor_gate(t, dev, queue, 5120, true)    // whisper-large n_ff
+                gelu_flavor_gate(t, dev, queue, 800, false)
+                gelu_flavor_gate(t, dev, queue, 5120, false)
                 gelu_form_delta(t)
                 rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible

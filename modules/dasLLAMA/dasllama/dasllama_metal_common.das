@@ -140,7 +140,8 @@ var g_pso_swiglu : MetalComputePipeline?
 var g_pso_geglu : MetalComputePipeline?
 // ===== tower primitives (metal-media chunk 2; compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
-var g_pso_gelu1 : MetalComputePipeline?
+var g_pso_gelu_erf : MetalComputePipeline?
+var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
 var g_pso_f32mm : MetalComputePipeline?
 var g_pso_softcap : MetalComputePipeline?

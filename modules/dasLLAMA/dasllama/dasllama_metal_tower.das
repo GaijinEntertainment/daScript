@@ -70,7 +70,8 @@ def private metal_tower_init : bool {
     var ok = true
     g_pso_ln = compile_pso(metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, ok)
     g_pso_f32mm = compile_pso(metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, ok)
-    g_pso_gelu1 = compile_pso(MetalGelu1_metal_ew1_msl, MetalGelu1_metal_ew1_msl_entry, MetalGelu1_metal_ew1_msl_fastmath, ok)
+    g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
+    g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
     if (!ok) {
         g_tw_failed = true
@@ -259,7 +260,11 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
             enc_ln(enc, bx, bblob, uint64(lo.ln2_w * 4l), bblob, uint64(lo.ln2_b * 4l), bxb, u_d, u_eps, npos)
             enc_f32_mm(enc, bblob, uint64(lo.fc1_w * 4l), bxb, bh, 0ul, u_d, u_ff, mp, ff)
             enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(lo.fc1_b * 4l), u_ff, u_totff, npos * ff)
-            enc_gelu1(enc, bh, 0ul, u_totff, npos * ff)
+            if (t.gelu_tanh) {
+                enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
+            } else {
+                enc_gelu_erf(enc, bh, 0ul, u_totff, npos * ff)
+            }
             enc_f32_mm(enc, bblob, uint64(lo.fc2_w * 4l), bh, bxb2, 0ul, u_ff, u_d, mp, d)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(lo.fc2_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)

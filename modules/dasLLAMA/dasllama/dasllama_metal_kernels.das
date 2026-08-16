@@ -4237,9 +4237,13 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_ln)
         g_pso_ln = null
     }
-    if (g_pso_gelu1 != null) {
-        metal_release(g_pso_gelu1)
-        g_pso_gelu1 = null
+    if (g_pso_gelu_erf != null) {
+        metal_release(g_pso_gelu_erf)
+        g_pso_gelu_erf = null
+    }
+    if (g_pso_gelu_lut != null) {
+        metal_release(g_pso_gelu_lut)
+        g_pso_gelu_lut = null
     }
     if (g_pso_posadd != null) {
         metal_release(g_pso_posadd)
@@ -4634,13 +4638,41 @@ class template MetalEw1T {
     }
 }
 
-// 1-operand tanh-approx GELU (the tower activation) via the exp identity — Metal tanh NaNs
-// past ~44 while exp saturates. The whisper f16-LUT flavor stays a CPU property; this lane
-// is tolerance-gated (the substitution size is pinned by the unit gate's delta cell).
-[metal_dispatch(name = "enc_gelu1", pso = "g_pso_gelu1", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalGelu1 : MetalEw1T {
-    def override map(a : float) : float => (
-        0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))))
+// The tower GELUs are FORM-MATCHED per model, never substituted — a ~1e-3/element form delta
+// amplifies coherently through a 32-layer residual stream into ~4e-2 rel_l2 (measured). The erf
+// flavor's A&S 7.1.26 polynomial sits within f32 rounding of the CPU's double-precision erf.
+[never_inline]   // the auto-inliner would fold this back into `map`, breaking its value-position splice (single-return rule)
+def private msl_gelu_erf_form(a : float) : float {
+    let z = abs(a) * 0.7071067811865476
+    let tt = 1.0 / (1.0 + 0.3275911 * z)
+    let e = tt * (0.254829592 + tt * (-0.284496736 + tt * (1.421413741 + tt * (-1.453152027 + tt * 1.061405429)))) * exp(-z * z)
+    return 0.5 * a * (1.0 + (a >= 0.0 ? 1.0 - e : e - 1.0))
+}
+
+[metal_dispatch(name = "enc_gelu_erf", pso = "g_pso_gelu_erf", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGeluErf : MetalEw1T {
+    def override map(a : float) : float => msl_gelu_erf_form(a)
+}
+
+[never_inline]   // same single-return-splice protection as msl_gelu_erf_form
+def private msl_gelu_lut_form(a : float) : float {
+    if (a <= -10.0) {
+        return 0.0
+    }
+    if (a >= 10.0) {
+        return a
+    }
+    let xr = float(float16(a))
+    let gv = 0.5 * xr * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))))
+    return float(float16(gv))
+}
+
+// whisper.cpp's fp16-LUT tanh GELU, form-matched: the +-10 clamps and BOTH f16 round-trips run
+// in kernel (RNE, same as the CPU table's domain), tanh via the exp identity (Metal tanh NaNs
+// past ~44; the clamped argument reaches 43.7). Near-bit-exact vs the CPU LUT by construction.
+[metal_dispatch(name = "enc_gelu_lut", pso = "g_pso_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGeluLut : MetalEw1T {
+    def override map(a : float) : float => msl_gelu_lut_form(a)
 }
 
 // The gemma4uv 2-axis position add: row p gains its x-table row (p % ncols) and its y-table

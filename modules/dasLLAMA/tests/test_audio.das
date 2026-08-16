@@ -9,6 +9,7 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
+require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes off-GPU + the blocks parity cell
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder test
 // needs the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skips without it.
@@ -143,9 +144,15 @@ def test_ultravox_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
+            }
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
+            }
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_tower(true)
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // -0.831656 1.679679 0.112337 -0.558047; stats mean=0.002889 max=4.306354.
@@ -185,9 +192,15 @@ def test_voxtral_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
+            }
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
+            }
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                set_metal_tower(true)
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // 0.967699 -0.765652 0.050477 -0.571310; stats mean=-0.001517 max=1.459851.
@@ -205,6 +218,52 @@ def test_voxtral_tower(t : T?) {
             t |> success(abs(mx - 1.459851) < 5e-2, "max")
         }
         delete tw   // image-backed planes are locked views — only the finalizer may release them
+    }
+}
+
+// The GPU tower blocks vs the CPU encoder on the SAME all-ones fixture as the oracle above -
+// the projector runs CPU on both legs, so the delta isolates the 32-layer block loop (the
+// battery's deep structural check; whisper-large geometry). Counters prove the dispatch.
+[test]
+def test_encoder_blocks_gpu(tst : T?) {
+    tst |> run("qwen2audio tower: GPU blocks vs CPU encoder, 32 layers") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            var tw <- load_audio_tower(path)
+            var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+            mel.data |> resize(int(tw.n_mel * AUDIO_CHUNK_FRAMES))
+            for (i in range(length(mel.data))) {
+                // varied, speech-scale mel: the all-ones fixture is degenerate (identical rows
+                // make every attention weight a near-tie, so single elements flip O(1))
+                mel.data[i] = sin(float(i) * 0.0137) * 0.8 + sin(float(i) * 0.00291) * 0.5
+            }
+            var enc <- make_encoder_state(tw)
+            set_metal_tower(false)
+            var cpu_out : array<float>
+            let s0 = metal_tower_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                audio_encode(tw, enc, mel)
+                cpu_out := enc.out
+                set_metal_tower(true)
+                audio_encode(tw, enc, mel)
+            }
+            let s1 = metal_tower_stats()
+            t |> equal(s1.encodes - s0.encodes, 1l, "exactly the GPU leg dispatched")
+            t |> equal(s1.blocks - s0.blocks, 32l, "blocks delta = n_layer")
+            t |> equal(s1.rows - s0.rows, 1500l, "rows delta = n_ctx")
+            tower_parity(t, "qwen2audio blocks 32L", cpu_out, enc.out, 32l)
+            delete cpu_out
+            delete enc
+            delete tw
+        }
     }
 }
 
@@ -245,9 +304,15 @@ def test_encoder_oracle(t : T?) {
             mel.data[i] = 1.0
         }
         var enc <- make_encoder_state(tw)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
+        }
         with_job_que() {
             setup_dasllama_jobque_()
             audio_encode(tw, enc, mel)
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
         }
         // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
         // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.

@@ -88,11 +88,13 @@ def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
-//! The GPU-tower parity block (metal-media chunk 2): four bars derived from the 2-GEMM
-//! f16-staging model at ~5x headroom, LOGGED on green so a drifting margin is visible before it
-//! reds. rel_elem is SCALE-relative (max abs diff over the CPU tensor rms) — per-element ratios
-//! are unbounded on near-zero elements under f16 staging and are deliberately not a bar.
-def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
+//! The GPU-tower parity block (metal-media chunk 2): bars derived from the f16-staging model,
+//! LOGGED on green so a drifting margin is visible before it reds. rel_elem is SCALE-relative
+//! (max abs diff over the CPU tensor rms). `depth` = 0 is the shallow form (embedder-scale
+//! bars); depth = L asserts the depth-scaled bars (rel_l2/norm <= 3e-3*sqrt(L), cos within
+//! 1e-4) and only LOGS rel_elem — the worst single element rides attention near-ties, which
+//! diverge O(1) under staging noise while the tensor stays structurally identical.
+def tower_parity(t : T?; tag : string; cpu, gpu : array<float>; depth : int64 = 0l) {
     t |> equal(long_length(cpu), long_length(gpu), "{tag}: length")
     return if (long_length(cpu) != long_length(gpu) || empty(cpu))
     var max_ad = 0.0lf
@@ -115,6 +117,13 @@ def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
     let cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
     let norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
     to_log(LOG_INFO, "{tag}: rel_elem={rel_elem} rel_l2={rel_l2} cos={cos} norm_dev={norm_dev} n={long_length(cpu)}\n")
+    if (depth > 0l) {
+        let bar = 3e-3lf * sqrt(double(depth))
+        t |> success(rel_l2 <= bar, "{tag}: rel_l2 <= 3e-3*sqrt({depth})")
+        t |> success(cos >= 1.0lf - 1e-4lf, "{tag}: cos >= 1-1e-4")
+        t |> success(norm_dev <= bar, "{tag}: norm_dev <= 3e-3*sqrt({depth})")
+        return
+    }
     t |> success(rel_elem <= 8e-3lf, "{tag}: rel_elem <= 8e-3")
     t |> success(rel_l2 <= 4e-3lf, "{tag}: rel_l2 <= 4e-3")
     t |> success(cos >= 1.0lf - 1e-5lf, "{tag}: cos >= 1-1e-5")
