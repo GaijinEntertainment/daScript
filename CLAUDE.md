@@ -109,6 +109,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
 | `skills/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
 | `skills/babysit.md` | Babysitting an open PR through CI failures and Copilot/human review feedback after the PR is created (the post-open loop) |
+| `skills/review_triage.md` | Triaging ANY review comment on a PR (Copilot, bot, or human) — the verdict tests, the fix-now vs ledgered disposition, what the user is asked versus told |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
 | `skills/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
@@ -363,7 +364,6 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 - **Literal `{`/`}` in string literals must be escaped `\{`/`\}`** — unescaped `{...}` is interpolation. Bites when embedding shader/C source as inline strings. String literals may span multiple lines (raw newlines are legal); probe-verified 2026-07-11
 - **Character literals accept only `\b \t \n \f \r \\ \'`** — there is no `'\v'` (it is `error[30151] syntax error, unexpected invalid token`), even though the STRING escape `"\v"` works and yields 11. In a char position write the number: `is_white_space(11)`. Probe-verified 2026-08-12
 - String builder requires `unsafe` or `options persistent_heap` if returned
-- **DANGER — silent JIT miscompile:** a comprehension used **inline** as a `<-` move-init argument inside a struct constructor (`Foo(a <- [for (x in src); expr], b <- local)`) yields an **empty array under `-jit`** (interp is fine; a plain-local `<-` field beside it is unaffected). No diagnostic. **Hoist the comprehension to a `var` local first**, then `Foo(a <- local_comp, b <- local)`. (This is exactly the fix applied in `modules/dasLLAMA/performance/gen_asr_profile.das`.)
 - Tuple field access: `t._0`, `t._1`, `t._2`
 - **Tuple destructuring binds like `let`**: `let (ok, a) = f()` errors (30704; 30708 in `for`) when a name repeats an alias/local/argument/earlier destructured name — the alias half holds even under `allow_local_variable_shadowing` (aliases are same-scope replacement, not shadowing). `_` is the discard: binds nothing, repeats freely (`let (_, _, c) = t3()`)
 - Annotations: `[export]`, `[test]`; `options no_aot`, `options rtti`

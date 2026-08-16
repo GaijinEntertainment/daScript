@@ -12,3 +12,4 @@ stack size in bytes
 number of local variables
 number of accessed global variables
 number of annotations attached to the function
+id of the position space this frame's locals gate against; 0 = none (builtins, AOT/JIT frames, or a program built without gc or debugger)

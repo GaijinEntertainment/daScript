@@ -41,26 +41,24 @@ some (noted), C++/JS lints are follow-up work.
 
 **Short or absent.** 1–2 lines preferred, 3 the cap — das lint STYLE014 enforces it under
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is the
-reviewer's. Inside a `def private` body the cap is ONE line (STYLE015), and that cap is
+reviewer's. Inside a `def private` body the cap is ONE line (STYLE015, same gating), and that cap is
 body-only: a comment *attached to* a private symbol takes the ordinary 3-line cap plus the
-bar in *Private symbols don't get public-style docs* below. It covers per-symbol and
-in-body comments; a file-header map (below) is exempt — its test is prose-vs-enumeration,
-not length. A comment that doesn't fit is the signal to
-interrogate it: why does this need prose at all, and does the detail belong at the use
-site — or nowhere?
+bar in *Private symbols don't get public-style docs* below. The cap covers per-symbol
+and in-body comments; the file header — the block before the first declaration,
+STYLE014's boundary — is governed by the map rule below. A comment that doesn't fit is
+the signal to interrogate it: why does this need prose at all, and does the detail
+belong at the use site, in the file-header map (shared contract moves up, the symbol
+keeps what is specific to it) — or nowhere?
 
 **No banners, no preambles.** No `// ===== name — desc =====` block above a function
-that already carries its own doc-comment, and no multi-paragraph architectural essay
-at the head of a section. Code reads well; design docs and tutorials carry the WHY.
-Terse section dividers stay.
+that already carries its own doc-comment, and no section-head essay restating what the
+code, the doc-comments, or the file-header map already carry — architectural WHY with
+no home in the file goes to a design doc. Terse section dividers stay.
 
-**A file header is a map, not an essay.** A pass or subsystem file may open with a
-numbered overview — one line per fact — stating the whole contract: when it runs, what
-it consumes and produces, the kinds and tiers it deals in. A map legitimately repeats
-what per-symbol comments say; a reader entering cold needs the shape before any
-symbol. What stays banned is prose — paragraphs argue, maps enumerate. A header at
-or under the 3-line comment cap may stay prose; the enumeration form is required
-only past it.
+**A file header is a map, not an essay.** At or under the comment cap a header may stay
+prose; past it, it either becomes a map — one line per fact of the file's contract — or
+gets trimmed. A header may repeat per-symbol comments (a cold reader needs the shape
+before any symbol), never text the code already prints.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a
@@ -75,13 +73,15 @@ group, within the cap.
 
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
-sits directly above the `if`, two lines at most; prose inside the branch body is
-never right. A self-describing predicate — a named helper, a compare against a named
+sits directly above the `if`, two lines at most; a hint never gets a standalone comment
+line inside the body — owned by one statement it rides that statement's line, `pass`
+included; spanning more than one it is about the branch and belongs on the `if` line or
+in the WHY above. A self-describing predicate — a named helper, a compare against a named
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 
-**No incident citations.** The banned form is a citation only a reviewer can check —
-a PR or issue number, a date, "proven: <module> lost <bug>". The required form is the
+**No incident citations.** The banned form is a citation that can only be verified
+outside the code — a PR or issue number, a date, "proven: <module> lost <bug>". The required form is the
 failure mode named in present tense at the code that guards it: "a defaulted operand
 no call site can supply crashes simulation", not "used to crash". A mechanism note
 stays when a maintainer needs it to change the code without breaking the guard (why

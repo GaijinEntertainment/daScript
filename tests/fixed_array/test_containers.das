@@ -42,10 +42,7 @@ def test_array_of_fa(t : T?) {
         delete arr
     }
     t |> run("iterate array of FA") @(t : T?) {
-        // stays the push form: a bracket literal of fixed-array elements computes garbage under -jit
-        var arr : array<int[4]>    // nolint:STYLE012 - the suggested literal form miscompiles under JIT for FA elements
-        arr |> push(make_iota())
-        arr |> push(make_iota())
+        var arr <- [make_iota(), make_iota()]
         var total = 0
         for (fa in arr) {
             for (x in fa) {

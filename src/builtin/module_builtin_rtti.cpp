@@ -888,6 +888,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(visibility)>("visibility");
+            addField<DAS_BIND_MANAGED_FIELD(openPos)>("openPos");
+            addField<DAS_BIND_MANAGED_FIELD(closePos)>("closePos");
             addFieldEx ( "localFlags", "localFlags", offsetof(LocalVariableInfo, localFlags), makeLocalVariableInfoFlagsFlags());
             from("TypeInfo");
         }
@@ -907,6 +909,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(localCount)>("localCount");
             addField<DAS_BIND_MANAGED_FIELD(globalCount)>("globalCount");
             addField<DAS_BIND_MANAGED_FIELD(annotation_count)>("annotation_count");
+            addField<DAS_BIND_MANAGED_FIELD(spaceId)>("spaceId");
             fieldType = makeType<VarInfo>(*mlib);
             fieldType->ref = true;
         }

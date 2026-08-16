@@ -87,6 +87,9 @@ For each, run the **reverse control**: the OLD test against the NEW code.
   written from what the author hopes is documentation, not a test.
 - **Never mutate a test to change a verdict.** The mutation goes in the code under test;
   the test is the instrument.
+- **A test is named for the invariant it pins, never the ticket.** `test_issue_NNNN`
+  says nothing without leaving the code; `test_stackwalk_tail_split` states what must
+  hold. Same for fixture files and test-case labels.
 
 ## Reporting
 

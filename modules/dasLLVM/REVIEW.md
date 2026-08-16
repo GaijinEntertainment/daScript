@@ -3,45 +3,43 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `DEBUGGING.md` (§ Roadmap).
 
-- **A change under `modules/dasLLVM/` runs the module-owned suite** — `bin/daslang -jit
-  dastest/dastest.das -- --test modules/dasLLVM/tests` on an LLVM-enabled build. The suite is
-  outside the core `tests/` sweep, so no other lane covers it; the build gate lives in
-  `tests/README.md` here.
+- **A change under `modules/dasLLVM/` runs the module-owned suite** (command and build gate:
+  `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
+  covers it.
 
 - **Work added to or moved within the JIT pipeline — `run_jit`, `run_split_codegen`
-  (`llvm_jit_run.das`), or an artifact emitter (`llvm_jit_common.das`) — runs inside a timed
-  phase of the `LLVM JIT time:` breakdown** (phase inventory: `ARCHITECTURE.md` §1). Option
-  resolution before the first timer and log lines are not pipeline work.
+  (`daslib/llvm_jit_run.das`), or an artifact emitter (`daslib/llvm_jit_common.das`) —
+  runs inside a timed phase of the `LLVM JIT time:` breakdown** (phase inventory:
+  `ARCHITECTURE.md` §1). Option resolution before the first timer and log lines are not
+  pipeline work.
 
-- **A diff that breaks one timed phase into finer steps gives each step its own number in
-  the log;** a parent label may keep printing the sum only while its steps print too.
-
-- **New work inside an existing phase prints its own number when `ARCHITECTURE.md` §1 names
-  it as a step;** otherwise it rides the phase's number.
+- **Work added to or split out of a timed phase prints its own `LLVM JIT time:` number, or
+  the phase's number covers it and the phase's line still prints.**
 
 - **A change to code that EMITS machine code — IR generation, target-machine setup, an
-  `[llvm_code]` generator body, the jit call ABI — bumps `LLVM_JIT_CODEGEN_VERSION`**
-  (`llvm_jit_run.das`). A change that only SELECTS among existing generators' `[llvm_code]`
-  arguments — the `[tune]` stamping — needs no bump: stamped arguments fold into the cache
-  keys per function.
+  `[llvm_code]` generator body, the jit call ABI (the generated function signatures, name
+  scheme, prologue, and the externs the install phase binds) — bumps
+  `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`). A change that only SELECTS
+  among existing generators' `[llvm_code]` arguments — the `[tune]` stamping — needs no
+  bump: stamped arguments fold into the cache keys per function. The emitter-edit trigger
+  is enforced by `tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); weakening that
+  test is a defect.
 
 - **A new environment or config input to the cache key folds inside `jit_env_salt`
-  (`llvm_jit_run.das`), never directly into either key** — salt feeds both keys, and a config
+  (`daslib/llvm_jit_run.das`), never directly into either cache key — the DLL key or the
+  split-obj key (`ARCHITECTURE.md` §2)** — salt feeds both keys, and a config
   folded into one but not the other links stale objects. Inputs that vary per function set
   (AOT hashes) are key material, not salt.
 
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`** — the
   family's reference.
 
-- **A diff that makes `llvm_tune.das`'s sidecar writers (`tune_manifest_set`,
-  `tune_sidecar_merge`, `tune_sidecar_section_merge`, `tune_provenance_note`) emit a new
-  top-level section, or a new value shape inside one, updates
+- **A diff that adds a new top-level section, or a new value shape inside one, to the tune
+  sidecar (`<app>.tune.json`, written by `daslib/llvm_tune.das`) updates
   `modules/dasLLAMA/performance/exchange_schema.das` in the same change and keeps
-  `modules/dasLLAMA/tests/test_exchange_schema.das` green.** That validator allow-lists
-  exactly `kernels` / `runtime` / `provenance` / `race`, so a section it does not know fails
-  every newly minted sidecar at submission, and the checked-in corpus the test sweeps cannot
-  show it. A new `provenance` key needs no change there — a lowercase `[a-z0-9_.-]` key with
-  a plain printable-ASCII value already validates.
+  `modules/dasLLAMA/tests/test_exchange_schema.das` green** — the validator allow-lists
+  sections, so one it does not know fails every newly minted sidecar at submission, and
+  the checked-in corpus the test sweeps cannot show it.
 
 - **A diff introducing an override knob adds it to `ARCHITECTURE.md` §3's inventory in the
   same change.** An override knob is readable from outside the code under review — an
@@ -54,19 +52,14 @@
   consumer, same change. A knob added, or given a new effect, without its announce is a
   defect.
 
-- **An environment knob is an `[EnvConfig]` field in `llvm_env.das`, read as a `g_env_jit` /
-  `g_env_tune` field — declare knobs there, never read raw.** The load-once/arm-children
-  mechanism is `ARCHITECTURE.md` §3.
+- **An environment knob is an `[EnvConfig]` field in `daslib/llvm_env.das`, read as a `g_env_jit` /
+  `g_env_tune` field.** The load-once/arm-children mechanism is `ARCHITECTURE.md` §3.
 
 - **An ambient name — an environment variable the module reads but does not own — goes
   through `env_value_of` / `env_is_set`, with an `ambient_rows` entry backing every literal
   name; a `set_env_variable` names only a declared knob.**
 
-- **`get_env_variable` / `has_env_variable` / literal-name `env_config_*` anywhere outside
-  `llvm_env.das` in the module is a defect** — including the non-literal spelling
-  `get_env_variable(expr)`, which only review catches; `tests/llvm_env_registry.das` (run
-  per-PR by the extended checks) enforces the literal-name forms.
-
-- **`ENVIRONMENT.md` is generated (`harness/gen_env_doc.das`); hand-editing it is a defect.**
-  A change to `llvm_env.das` or the repo-root `daslib/env_registry.das` re-runs the generator
-  and commits the diff; `tests/llvm_env_registry.das` fails on drift.
+- **A computed-name env read — `get_env_variable(expr)` / `has_env_variable(expr)` outside
+  `daslib/llvm_env.das` — is a defect only review catches: spell the name as a literal
+  through the declared forms, or declare the knob, instead** (the literal-name forms are
+  scanner-enforced by `tests/llvm_env_registry.das`; weakening that test is a defect).
