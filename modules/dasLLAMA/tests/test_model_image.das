@@ -852,6 +852,49 @@ def test_whisper_image_roundtrip(t : T?) {
     }
 }
 
+// The whisper-class tower blocks on the GPU (arm `mtower`): CPU-vs-GPU transcript equality on
+// the corpus clip + geometry-derived counter deltas, OFF leg in the same arm. Numeric bars live
+// in the kernels suite; the transcript is the backend-portable oracle (battery: stated claims).
+[test]
+def test_whisper_metal_tower(tst : T?) {
+    tst |> run("whisper tiny f32: the Metal tower blocks - transcript + counters + knob") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            set_metal_tower(false)
+            let s0 = metal_tower_stats()
+            let cpu = whisper_transcribe_text(path, samples, cached = false)
+            set_metal_tower(true)
+            let s1 = metal_tower_stats()
+            t |> equal(s1.encodes, s0.encodes, "OFF leg never dispatches")
+            t |> equal(s1.declines - s0.declines, 1l, "OFF leg records the knob decline")
+            let gpu = whisper_transcribe_text(path, samples, cached = false)
+            let s2 = metal_tower_stats()
+            let chunks = s2.encodes - s1.encodes
+            t |> equal(chunks, 1l, "jfk is one 30s chunk")
+            t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
+            t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
+            to_log(LOG_INFO, "whisper tiny mtower CPU: '{cpu.text}'\n")
+            to_log(LOG_INFO, "whisper tiny mtower GPU: '{gpu.text}'\n")
+            t |> success(!empty(gpu.text), "non-empty transcript")
+            t |> success(cpu.text == gpu.text, "transcript-exact CPU vs GPU")
+            delete samples
+        }
+    }
+}
+
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
     var inscope m = AsrModel()
     if (cached) {

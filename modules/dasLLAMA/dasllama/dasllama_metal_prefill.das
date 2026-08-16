@@ -2228,7 +2228,7 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
 // MetalAttnSoftmax (sink @default = g_one — identity on null). The mm wrappers below pick the
 // Metal-4 tensor twin's generated builder (_t_c) when it compiled.
 
-def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
+def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {   // public: the tower driver dispatches the crowned trio too
     if (g_pf_qkmm_tensor && g_pf_pso_qkmm_t != null) {
         enc_qk_mm_t_c(enc, bq, bk, batt, ka, mp, nk64, heads)
     } else {
@@ -2236,7 +2236,7 @@ def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; v
     }
 }
 
-def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
+def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {   // public: the tower driver dispatches the crowned trio too
     if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
         enc_av_mm_t_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
     } else {

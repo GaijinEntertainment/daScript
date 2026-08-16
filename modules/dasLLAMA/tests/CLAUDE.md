@@ -71,9 +71,10 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal`; the gemma4uv-metal arm is the GPU tower driver's
-parity/counter/knob gate (Apple builds; `--arm gemma4uv` selects it too by substring); the
-voxtral arm re-saves a
+canary-dec gemma4a gemma4uv gemma4uv-metal mtower`; the gemma4uv-metal arm is the GPU tower
+driver's parity/counter/knob gate and `mtower` the whisper-class tower-blocks gate
+(transcript-exact CPU vs GPU + geometry-derived counter deltas; both Apple builds;
+`--arm gemma4uv` selects gemma4uv-metal too by substring); the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
