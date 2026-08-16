@@ -343,13 +343,13 @@ def test_metal_support_matrix(t : T?) {
                 let pf1 = metal_prefill_stats().prefills
                 with_job_que() {
                     setup_dasllama_jobque()
-                    var sp = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    var sp = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                     var rows : array<float>
-                    rows |> reserve(12l * tr.config.dim)
-                    rows |> resize(12l * tr.config.dim)
+                    rows |> reserve(12l * trg.config.dim)
+                    rows |> resize(12l * trg.config.dim)
                     select_prefill_override("metal")
-                    set_metal_prefill_min_npos(1l)   // isolate the span clause from npos_window
-                    eval_embd(tr, sp, rows, 12l, true)
+                    set_metal_prefill_min_npos(1l)   // isolate the span from npos_window
+                    eval_embd(trg, sp, rows, 12l, true)   // the BLOB twin: the arm that can engage
                     set_metal_prefill_min_npos(64l)
                     select_prefill_override("")
                     delete rows

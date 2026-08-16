@@ -1647,6 +1647,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
+    g_media_rows += n_media
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
                            media_at = media_at, n_media = n_media,
                            media_non_causal = n_media > 0l)   // image rows only on this route: the gemma image span is non-causal
@@ -2373,6 +2374,7 @@ struct private OaiStatsResponse {
     vision : bool             // the DEFAULT slot's vision arm — the slot a model-less page request lands on
     thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
     vision_pending : int      // image requests parked on the vision worker (0 = idle)
+    media_rows : int64        // media (image span) rows admitted to prefill since boot
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
@@ -2413,7 +2415,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         // carries no model field, so it lands on the default slot - the UI must show ITS truth
         vision = g_slots[g_default_slot].vision.proj_dim > 0l,
         thinking_default = g_slots[g_default_slot].think_default,
-        vision_pending = length(g_vision_wires))
+        vision_pending = length(g_vision_wires), media_rows = g_media_rows)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -3258,6 +3260,7 @@ let VISION_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes r
 var private g_vision_jobs : Channel?
 var private g_vision_events : Channel?
 var private g_vision_wires : table<int64; VisionWire>
+var private g_media_rows = 0l   // media (image span) rows admitted to prefill since boot
 var private g_vision_ready = 0
 var private g_vision_armed = false
 

@@ -421,8 +421,14 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
 }
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
-def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int) : bool {
-    allow_cpu_prefill()   // the image cell is CPU by protocol — disarm the Metal-build tripwire
+def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu : bool) : bool {
+    if (gpu) {
+        // the metal arm: blob flavor via the rail, span + chunks served by the driver — the
+        // tripwire stays ARMED so a CPU fallback reds the row instead of sandbagging it
+        set_metal_mode(MetalMode.required)
+    } else {
+        allow_cpu_prefill()   // the CPU arm is CPU by intent — disarm the Metal-build tripwire
+    }
     apply_box_profile_runtime()
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
         return false
@@ -448,7 +454,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
-            var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
+            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
                 exec_fmt = model_exec_fmt(m),
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
@@ -1163,7 +1169,7 @@ def main() : int {
             return 1
         }
         return image_cell_main(cfg.model, cfg.image_mmproj, cfg.image, cfg.image_prompt,
-                               cfg.json_path, reps, threads) ? 0 : 1
+                               cfg.json_path, reps, threads, gpu) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag

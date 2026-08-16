@@ -94,13 +94,16 @@ span rides the identical panels and driver — there is no new region to collide
 census has no new kernel to cover — the same six kernels serve spans via the uniform, which
 is the design #23's "dispatches the non-causal arm" criterion predates.
 
-**E — server + stats + demo.** Engine knob `DASLLAMA_METAL_SPAN` (MetalEnv bool, default
-true, doc names the CPU A/B fallback — `attn`/`mulmm` precedent; declared in
-`dasllama_env.das` or `test_env_registry` reds; ENVIRONMENT.md regen). No new server CLI
-knob — rail selection rides the existing `--gpu` surface and `GET /config`. `/v1/stats`
-gains a media-prefill-served counter beside `vision_pending`; the page needs zero new UI —
-the demo is a metal-blob model with `--image-mmproj`: the vision button appears where it
-was previously refused, and the prefill tok/s chart + ttft tile move.
+**E — server + stats + demo. DONE (code).** `DASLLAMA_METAL_SPAN` landed (MetalEnv bool,
+default true; snapshot into `g_pf_env_span` at the prefill [init]; the A/B decline is the
+retired clause's seat, knob-gated; ENVIRONMENT.md regenerated, registry green). On a BLOB
+model span=0 is a loud `blob_only_panic` — there is no CPU arm to A/B to; the knob's CPU
+arm exists only on planar loads with declared intent. `/v1/stats` gains `media_rows`
+(admitted span rows since boot). ⚠ VALIDATION LESSON, recorded: the support-matrix span
+cell lives in the `window` ARM, not `cells-q8` — two earlier "greens" were vacuous arm-
+filter skips (the loud SKIPPED verdict said so), and the cell also had to move to the BLOB
+twin to engage at all. Real proof now: `--arm window` green with an `npos=12` driver line,
+and `DASLLAMA_METAL_SPAN=0` reds the same arm (the knob control).
 
 **F — the bench row + docs.** `lcpp_bench --image` gains the `backend = "metal"` row (same
 three keys `img:enc/img:pp/img:tg`; the cell's `allow_cpu_prefill()` protocol line and

@@ -164,6 +164,9 @@ struct public MetalEnv {
     @clarg_doc = "ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio."
     attn : bool = true
 
+    @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
+    span : bool = true
+
     @clarg_doc = "Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair."
     attn_d : bool = true
 

@@ -67,8 +67,8 @@ enum MetalPrefillDecline {
     shape               // head/dim alignment outside the kernel grids
     layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
     rope_rows           // the window's rope table not built
-    non_causal_span     // RETIRED (metal-media): the trio takes the uniform bound as AttnArgs.uend,
-                        // so a media span serves on the GPU like any other chunk
+    non_causal_span     // the A/B decline only (DASLLAMA_METAL_SPAN=0): the trio takes the
+                        // uniform bound as AttnArgs.uend, so a span serves by default
     device              // metal_prefill_init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
     planar              // weights not in the blob-image form (the drivers are blob-only)

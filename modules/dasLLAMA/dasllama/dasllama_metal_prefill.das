@@ -1987,6 +1987,10 @@ def private rope_rows_ready(t : Model; s : Session; npos : int64) : bool {
 // existing rows gather into the K/V panels and the causal diagonal shifts by qoff — the gate
 // keeps the argument so future clauses can window it
 def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : MetalPrefillDecline {
+    // the A/B rail: DASLLAMA_METAL_SPAN=0 declines the span to the tripwire-guarded CPU arm
+    if (s.attn_uniform_end != 0l && !g_pf_env_span) {
+        return MetalPrefillDecline.non_causal_span
+    }
     let why = prefill_decline_caps(t, npos, s.attn_uniform_end != 0l)
     if (why != MetalPrefillDecline.none) return why
     // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
@@ -3391,6 +3395,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
 // Knobs resolved once at [init]. They were read per prefill call, and get_env_variable allocates
 // its result in the context heap on every call — see PERF027.
 var private g_pf_env_mulmm = true
+var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
 var private g_pf_env_unretained = false
@@ -3404,6 +3409,7 @@ def dasllama_metal_prefill_register() {
     register_prefill_override("metal", @@metal_prefill_forward)
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     g_pf_env_mulmm = g_env_metal.mulmm
+    g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn
     g_pf_env_unretained = g_env_metal.unretained
