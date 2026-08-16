@@ -195,6 +195,10 @@ def main() : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "pr-babysit")
     return rc if (rc >= 0)
+    if (find(cfg.repo, "/") <= 0) {
+        to_log(LOG_ERROR, "pr-babysit: --repo must be owner/name, got '{cfg.repo}'\n")
+        return 1
+    }
     if (!cfg.request_review && !cfg.watch && !cfg.list_unresolved && empty(cfg.resolve)) {
         to_log(LOG_ERROR, "pr-babysit: pick --request-review, --watch, --list-unresolved, and/or --resolve\n")
         return 1
