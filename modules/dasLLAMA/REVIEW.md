@@ -40,6 +40,13 @@ count, its span shape), not the session's setup progress.
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
 ships the measured pair — peak footprint and wall-clock — and an explicit stated decision.
 
+**A new GEMM/GEMV call site takes the fastest serving lane that exists for its weights; the
+f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matmul_batch`,
+`mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) where a faster-format twin already serves
+the same weights and shape is a defect unless the site is a parity/oracle rail or carries a
+comment naming why f32 is load-bearing there. Weights with no faster twin (unquantized
+planes) are out of scope.
+
 **Platform-specific code lands only in a platform backend file.** A platform-neutral file
 carrying it is a defect; a new shared concern gets its own file, not more of
 `dasllama/dasllama_common.das`.
