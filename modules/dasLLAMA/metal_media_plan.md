@@ -137,82 +137,151 @@ before/after in the PR body (cells behind every figure); `img:*` metal row in th
 
 ---
 
-# Chunk 2 — towers and embedders on Metal
 
-## Ground truth (three sweeps, 2026-08-16)
+# Chunk 2 — towers and embedders on Metal (proper plan)
+
+## Ground truth (three exploration sweeps + battery design, 2026-08-16)
 
 **Two encoder implementations, not seven.** One config-driven Whisper-class core
-(`audio_encode_blocks` + `encoder_blocks` + `enc_attention`, `dasllama_audio.das`) serves
-whisper, qwen2audio, ultravox, voxtral, AND qwen3a (its conv2d frontend is family-local, the
-block loop is shared). Canary, parakeet, gemma4a are hand-written Conformer forwards sharing
-only leaf kernels — with scalar conv/GLU modules and (gemma4a) fully scalar attention.
+(`audio_encode_blocks` + `encoder_blocks` + `enc_attention` in `dasllama_audio.das`) serves
+whisper, qwen2audio, ultravox, voxtral, and qwen3a (family-local conv frontend, shared block
+loop). Canary, parakeet, gemma4a are hand-written Conformer forwards sharing only leaf
+kernels — scalar conv/GLU modules, and gemma4a's attention is fully scalar with a 12-wide
+window. Chunk 2 takes the Whisper-class core; the Conformers are a later chunk with their
+own CPU-vectorize-vs-offload call.
 
-**The hard pieces are free; the cheap pieces are missing.** The mul_mm GEMM family serves q8
-and bf16 planes today (zero-copy off a mapped `.dlim` — the format guarantees 16 KB section
-alignment), and non-causal attention is chunk 1's own `uend` with
-`AttnArgs(uend = npos, qoff = 0, window = 0, kv_mul = 1)` — no new attention kernel. Missing:
-LayerNorm w+b (clone `MetalRmsNorm`, ~40 lines), a dense f32-weight mul_mm stamp (strip
-`MetalAttnQKMm`'s head indexing + causal skip — it already stages f32×f32), a 1-operand GELU
-(the tanh body exists verbatim in `MetalGeglu`), im2col, avg-pool, stack-N, the gemma4uv
-2-axis pos add. Activations are f32 everywhere; no requant step exists on the metal GEMM path.
+**The hard kernels are free.** The mul_mm family serves q8 and bf16 planes zero-copy off a
+mapped `.dlim` (the format guarantees 16 KB section alignment; `plane_buffer` +
+`bytesNoCopy`), and chunk 1's `uend` IS the bidirectional mask:
+`AttnArgs(uend = npos, qoff = 0, window = 0, kv_mul = 1)` — no new attention kernel, and no
+head packing either: the tower's `[rows x qd]` activations are exactly the strided layout
+the trio reads. Missing, all cheap: LayerNorm w+b (clone `MetalRmsNorm`, two-pass), a dense
+f32-weight mul_mm stamp (strip `MetalAttnQKMm`'s head indexing + causal skip — it already
+stages f32 x f32), a 1-operand tanh-GELU (the body exists in `MetalGeglu`; Metal `tanh`
+NaNs past ~44, the exp-identity form saturates — keep it), im2col/pool/stack (CPU-side
+initially), and the gemma4uv 2-axis pos add (~10 lines).
 
-**The prize, from the ledger:** gemma4a das encode is 16x mtmd's (1888 vs 117 ms); the
-Omni/qwen3a towers carry a ~4.8x encode gap; whisper-large-v3-turbo serves at xRT 5.6-11.8 —
-"fp32 scalar tower, no perf pass". The das rows carry no `encode_ms` (field postdates the
-sweep), so slice G re-instruments before predicting per-family wins.
+**The prize, priced by the ledger:** gemma4a das encode 16x mtmd (1888 vs 117 ms — deferred
+with the Conformers), Omni/qwen3a ~4.8x encode gap, whisper-large-v3-turbo xRT 5.6-11.8 —
+all "fp32 scalar tower, no perf pass". The das record rows carry no `encode_ms` (field
+postdates the sweep) — slice G re-instruments the split before per-family predictions.
 
-**Precision doctrine, declared up front:** metal GEMMs stage f16 (the 2e-2 mm envelope);
-the CPU tower gates are 1e-4/5e-3 vs external dumps and CANNOT be reused as GPU bars. GPU
-tower gates are (a) transcript/text equality — backend-portable by construction (whisper +
-parakeet transcript-exact, gemma4a/qwen3a q8-vs-f32 text cells are the shape), and (b)
-envelope-relative numeric arms (`buf_mismatch_env` style) with the tolerance stated from the
-f16-stage model, not borrowed. The gemma4uv tier-1 gate (2e-4 abs vs mtmd dumps) is NOT
-assumed to hold under f16 staging — the bf16 tensor lane (`tmm2d`, no f16 stage) is the
-first thing to try if it reds, and the caption-level gate is the floor.
+**Precision doctrine.** Metal GEMMs stage f16; the CPU dump oracles (1e-4/5e-3 abs;
+gemma4uv tier-1 2e-4) are NOT GPU bars. GPU gates: transcript/text equality
+(backend-portable) + envelope-relative numeric arms with DERIVED constants (below). bf16
+weights cost nothing extra (bf16 -> f16 is exact in f16's normal range); only the
+activation staging rounds (~4.88e-4/element, ~8e-4 per GEMM against row RMS).
 
-## Slices
+**The serving-default caveat (product honesty, stated up front):** `load_asr_model`
+defaults to q8 towers. Chunk 2 ships the f32 lane first, so the measured win is available
+on `set_asr_fp32(true)` / f32-mmproj loads; the DEFAULT ASR path stays CPU until the q8
+tower lane lands (either the interleaved-34B tower blob transform matching `MetalQ8MulMm` +
+the off%256 rule, or upload-time dequant to device f16 — decided by measurement in its own
+slice, possibly post-PR).
 
-**G — the stage split first.** `asr_stage_probe` on whisper-large-v3-turbo and qwen3a on the
-M1: encoder share of transcription wall (`wh.encode_total` / `q3a.encode` buckets).
-Predictions on record before the probe: encoder >= 70% of whisper-large wall; blocks (not
-frontend/tail) >= 85% of encoder time.
+## The driver — `dasllama_metal_tower.das`
 
-**H — three primitive kernels + unit gates.** LayerNorm (weight+bias, two-pass mean/var,
-`MetalRmsNorm` skeleton), the dense f32 mul_mm stamp, the 1-operand GELU (tanh form; the
-whisper f16-LUT flavor stays CPU-bit-exact territory — the GPU lane is tolerance-gated).
-Unit arms in the kernels suite with negative controls before first commit.
+- Entry points `metal_tower_encode(t, s, ...) : bool` (Whisper-class blocks) and
+  `metal_gemma4uv_encode(...) : bool`, decline-and-return-false contract like
+  `metal_prefill_forward`; CPU fallback always correct.
+- `MetalTowerDecline` in `dasllama_metal_shapes.das` (portable, PC-answerable): `none`,
+  `knob`, `quant_mode` (q8 tower — f32 lane only for now), `graph` (Conformer family),
+  `shape` (m%32 / ndim%64 / kdim%32 — no current family violates; gate anyway), `device`,
+  `gpu_error`. Declines route through the required-mode panic rail — the tower's tripwire.
+- Rides the lens/kn_ rail (no census opt-out — the gemm driver's require-cycle does not
+  apply here). PSOs compiled in one `*_init` with a `g_failed` latch; census auto-registers.
+- Weights: one `plane_buffer` per plane (zero-copy when `image_map != null`), tensors bound
+  at byte offsets; `upload_region` for LN weight/bias rows. Uploaded once, resident.
+- Buffers: `g_tw_pool` (tracked activations, sized to ceil64 rows) + `g_tw_upool`
+  (untracked uniforms). ONE command buffer, one commit/wait (no KV readback to interleave —
+  `ncb` chunking only if encode-CPU shows on 32-block towers); capture rail armed so the hz
+  oracle derives barriers.
+- Stats: `metal_tower_stats() : (encodes, blocks, rows, declines)` +
+  `metal_tower_declines() : table` — every model-level gate asserts COUNTER DELTAS derived
+  from geometry (`encodes == N chunks`, `blocks == n_layer * N`), never "the model ran".
+- Knob: `DASLLAMA_METAL_TOWER` (MetalEnv bool, default on, [init] snapshot — the SPAN seat)
+  + in-process `set_metal_tower(on)` for tests.
 
-**I — the gemma4uv Metal embedder: the smallest end-to-end proof.** CPU im2col (serial, cheap,
-input prep) -> upload -> LN -> f32 GEMM (patch) -> bias -> LN -> pos-add kernel -> LN ->
-weightless rms -> bf16 GEMM (proj, zero-copy plane) -> readback. New module
-`dasllama_metal_tower.das` on the lens/kn_ rail (no census opt-out — the gemm driver's cycle
-does not apply), one command buffer, decline enum in `dasllama_metal_shapes.das`,
-`DASLLAMA_METAL_TOWER` env bool. Gates: CPU-vs-GPU envelope arm + tier-1 attempt (bf16
-tensor lane if f16 staging reds it) + the img:enc metal cell.
+## Kernel specs (slice H)
 
-**J — the Whisper-class block loop on Metal (five families at once).** Blocks-on-GPU,
-seams-on-CPU: frontend (conv im2col + GEMMs) and family tails stay CPU initially; the 32-layer
-block loop (LN -> qkv GEMMs -> non-causal trio -> o-proj -> LN -> fc1 -> GELU -> fc2, T<=1500,
-hs=64 throughout) runs as one command buffer. q8 towers need the tower blob transform
-(interleaved 34B blocks + the off%256 rule) — f32 lane first, q8 lane after parity. Gates:
-transcript-exact (whisper tiny + parakeet excluded — Conformer), qwen3a/ultravox/voxtral
-text-equality cells, one support-matrix engage cell (in a RUN arm, on the right model — the
-chunk-1 lesson), stage-probe A/B.
+1. **`MetalLayerNorm`** — `MetalRmsNorm` skeleton (one tg/row, `simd_sum` + partial[32] +
+   broadcast), two-pass mean then population variance (f32 tree-sum; CPU doubles — the
+   1e-4 bar has ~100x headroom over the reduction delta), affine `(x-mean)*rsqrt(var+eps)*w+b`,
+   in-place-safe (barrier between read and write passes — gemma4uv calls it in place).
+2. **`MetalF32MulMm`** — the dense f32-weight stamp from `MetalAttnQKMm`: strip head
+   indexing + the causal/uend skip; weight rows `[out][k]`, activations `[m][k]`, both
+   staged f32 -> f16 tiles, f32 accumulate; grid m/32 x out/64.
+3. **`MetalGelu1`** — 1-operand `MetalEw1T` template beside `MetalEw2T`; the exp-identity
+   tanh-GELU body from `MetalGeglu`, in-place, saturation-exact at |x| >= 50.
+   The whisper f16-LUT flavor is NOT ported (bit-exactness stays a CPU property; the GPU
+   lane is tolerance-gated, with the substitution SIZE pinned by a `gelu_form_delta` cell).
+4. Reuse arms: weightless rms = `MetalRmsNorm` + ones vector + meta eps; pos-add = new
+   ~10-line 2-axis broadcast kernel; bias/residual = `enc_add_bias_rows` / `enc_add_c`.
 
-**K — the measurement legs.** `lcpp_bench --asr --ngl`: `backend = "metal"` rows with the
-tripwire ARMED (the CPU-by-protocol line and `backend="cpu"` stamp both flip on the gpu arm),
-`encode_ms` populated on das rows. A/B whisper-large + qwen3a + E2B audio-chat on the M1.
+## The battery (designed 2026-08-16; the full text is the design-agent record)
 
-**L — docs + the serving note.** PROFILE.md asr-cell paragraph, ENVIRONMENT.md regen, the
-ledger: server `asr_workers` GPU wiring is a DESIGN decision (metal state is per-context —
-N workers cannot each upload; map-and-wrap or a device-owning worker), deferred with the
-audio-chat HTTP surface (#25).
+- **Unit gates** (kernels suite, arm-less): `layernorm_gate` (9 arms incl. in-place,
+  zero-variance, dim 100/384/6912; bar 1e-4 derived; 3 controls incl. drop-bias and
+  sample-variance), `f32_mulmm_gate` (f16-exact-stage arm at 2e-3 + rounded-stage arm at
+  4e-3 derived from 2xRNE; transpose + sized-poison + sentinel controls; the 2e-2 envelope
+  deliberately NOT used at unit level), `gelu1_gate` (+ `gelu_form_delta` pinning the
+  LUT/erf substitution at <=1.5e-3/<=1e-3 over [-10,10], logged on green),
+  `rms_weightless_gate`, `pos_add_gate` (bit-EXACT, split-exponent fixture, axis-swap
+  control on the non-square shape).
+- **Embedder gates**: arm `gemma4uv-metal` in test_model_image (5 canvases incl. 672x336
+  non-square and a no-pad 384x384; four-statistic helper in _model_tier — rel_elem <= 8e-3,
+  rel_l2 <= 4e-3, cos >= 1-1e-5, norm_dev <= 4e-3, all derived from the 2-GEMM f16-stage
+  model at 5x headroom, all logged on green); tier-1 ATTEMPT in test_gemma4uv (ladder:
+  hold 2e-4 -> else bf16 tensor lane -> else scale-relative 2e-4 + 4e-3*rms with the CPU
+  constant untouched); the caption floor in test_vision_chat (forced-feed logits form —
+  freeform token parity is banned).
+- **Tower gates**: ONE new arm token `mtower`, five family blocks in test_model_image, all
+  on the f32 rail both sides; depth-scaled numeric bar `3e-3*sqrt(L)` (whisper tiny at
+  6e-3 is the sharp instrument; 32-layer towers at 1.7e-2 are the structural check);
+  whisper cells are transcript-exact AND pinned-id-exact vs the whisper-cli list (in-repo
+  pins are not freeform caches); qwen3a/ultravox text-equality cells with the
+  forced-feed-conversion escape recorded for near-ties.
+- **Matrix arm `tower`**: engage / q8-declines (THE consequential cell — the default path
+  is untouched) / Conformer-graph-declines / knob / required-mode panic / feint.
+- **Knob controls**: ON and OFF legs inside the same arm (the chunk-1 lesson made
+  structural); PR-body evidence = `--arm mtower` green with counter lines + the same arm
+  red under `DASLLAMA_METAL_TOWER=0`.
+- **Census**: `cov_tower` row (whisper tiny f32 + a small gemma4uv canvas) — the new
+  kernels appear non-zero.
+- **Bench leg** (slice K): `lcpp_bench --asr --ngl` — required metal mode instead of
+  `allow_cpu_prefill`, `backend="metal"`, `encode_ms` populated, LOUD non-zero-exit if
+  `encodes == 0` or `encode_ms == 0` on a gpu row (anti-sandbag).
+- **Stated claims** (9, in the battery record): LUT bit-exactness not claimed; transcript
+  equality is corpus-scoped; the win is f32-rail-scoped until the q8 lane; tier-1 2e-4 is
+  CPU-only; bars are M1-measured; frontend/tails stay CPU; Conformers out of scope
+  (decline-tested only); worker wiring is a design decision; cross-shape determinism not
+  contractual.
+
+## Predictions (before slice G runs)
+
+- P5: encoder >= 70% of whisper-large-v3-turbo transcription wall on M1; blocks >= 85% of
+  encoder time.
+- P6: the Metal block loop is >= 4x the CPU f32 block loop at T=1500/d=1280 (mulmm-class
+  GEMMs dominate); end-to-end whisper-large xRT 5.6 -> >= 12 on the f32 rail.
+- P7: qwen3a (18 layers, hs 64) closes its 4.8x encode gap to <= 2x on the f32 rail.
+- P8: the gemma4uv Metal embedder holds the derived envelope (rel_elem <= 8e-3) but NOT
+  tier-1 2e-4 on the f16-staged lane; the bf16 tensor lane gets within 2e-4 where crowned.
+- P9: the f32-lane tower serve costs no correctness: transcript-exact on the pinned corpus
+  for whisper tiny AND large.
+
+## Sequencing (each gate green before the next)
+
+G stage-probe baselines (whisper-large + qwen3a; predictions P5 judged) ->
+H kernels + unit gates (controls recorded) -> statistic helper ->
+I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) ->
+J tower driver, whisper tiny first, then large + the other four; matrix `tower` arm ->
+census row -> K bench legs + the A/B numbers (only after every gate is green) ->
+L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms).
 
 ## Non-goals (chunk 2)
 
-- **Conformer families** (canary, parakeet, gemma4a) — per-family forwards with scalar
-  conv/GLU modules; gemma4a's attention is scalar CPU with a 12-wide window. Their gap
-  (incl. the 16x) is part scalar-CPU, part GPU-shape — a separate chunk with its own
-  CPU-vectorize-vs-offload call per family.
-- Server ASR-worker GPU wiring; audio-chat HTTP surfaces (#25); the whisper f16-LUT GELU
-  bit-exactness on GPU (tolerance lane instead); mel/FFT on GPU (frontend stays CPU).
+Conformer families (canary/parakeet/gemma4a — decline-tested, gap split unmeasured);
+the q8 tower lane (own slice, possibly post-PR — the transform-vs-upload-dequant call is
+measurement-driven); server `asr_workers` GPU wiring (per-context metal state — map-and-wrap
+or a device-owning worker, a design decision deferred with #25's audio-chat surfaces);
+mel/FFT + im2col/pool/stack on GPU (CPU seams); whisper LUT-GELU bit-exactness on GPU.
