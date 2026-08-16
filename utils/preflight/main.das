@@ -957,10 +957,16 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
     }
     // modules/dasImgui/tests lies outside tests/, so --test tests/ sweeps
     // never reach it — the gate targets the folder directly.
-    return run_test_gate("imgui",
-        [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
-         "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
-         "--exclude", "glfw_synth", "--exclude", "key_hud", "--exclude", "embedded_terminal"],
+    // glfw_synth + key_hud cannot pass headless (no GLFW event queue);
+    // embedded_terminal needs the Windows-only ConPTY backend, so only Windows runs it
+    var argv <- [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
+        "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
+        "--exclude", "glfw_synth", "--exclude", "key_hud"]
+    if (get_platform_name() != "windows") {
+        argv |> push("--exclude")
+        argv |> push("embedded_terminal")
+    }
+    return run_test_gate("imgui", argv,
         "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the only pre-merge check)")
 }
 
