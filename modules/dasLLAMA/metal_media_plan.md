@@ -105,10 +105,16 @@ filter skips (the loud SKIPPED verdict said so), and the cell also had to move t
 twin to engage at all. Real proof now: `--arm window` green with an `npos=12` driver line,
 and `DASLLAMA_METAL_SPAN=0` reds the same arm (the knob control).
 
-**F — the bench row + docs.** `lcpp_bench --image` gains the `backend = "metal"` row (same
-three keys `img:enc/img:pp/img:tg`; the cell's `allow_cpu_prefill()` protocol line and
-`PROFILE.md:144-149`'s CPU-by-design paragraph are the doc edits). REVIEW rules already
-demand the cell in the same change as the capability.
+**F — the bench row + docs. DONE, measured.** `lcpp_bench --image` takes `--ngl`: the metal
+arm loads the blob flavor and serves the whole turn on the driver, tripwire ARMED. Measured
+on the M1 (12B Q4_K_M, cats, same binary/sidecar/fixture, debug-grade cells, `-r 3`):
+CPU 53.3 enc ms / 63.6 pp / 14.0 tg → METAL 53.3 / **135.8** / **34.3** — prefill 2.14x,
+decode 2.45x, encoder identical (the CPU embedder is chunk 2's subject), captions correct
+both arms. Turn-level: a 158-position + ~60-token reply goes ~6.8 s → ~2.9 s. Demo smoke:
+the `--gpu metal --image-mmproj` boot that threw the `openai_server.das:339` EXCEPTION in
+slice A now boots with `vision = true` and `media_rows` in `/v1/stats`. Mint note: the
+first settling mint's kernel half died on a noise refusal (the gate doing its job); the
+second completed and both cells gated through it.
 
 ## Non-goals (this chunk)
 
