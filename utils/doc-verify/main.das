@@ -1058,6 +1058,10 @@ def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
     return run_and_capture(args, output, 120.0)
 }
 
+def spawn_failure(cfg : Config) : string {
+    return "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
+}
+
 def first_lines(s : string; n : int) : array<string> {
     var out : array<string>
     for (l in split(s, "\n")) {
@@ -1114,7 +1118,7 @@ def check_expects(em : EmittedPage; cfg : Config; base_file : string; var rep : 
         let rc = compile_file_rc(cfg, ex_file, out)
         if (rc == -1) {
             rep.status = "red"
-            rep.errors |> push("compile spawn failed for '{cfg.daslang}' - bad --daslang path?")
+            rep.errors |> push(spawn_failure(cfg))
         } elif (rc == 0) {
             rep.status = "red"
             rep.errors |> push("expect block at :{ex.rst_line} compiled clean (expected {ex.marker_arg})")
@@ -1181,7 +1185,7 @@ def run_probes(require_lines : table<string; bool>; file_mods : table<string>; c
         var out : string
         let prc = compile_file_rc(cfg, pfile, out)
         if (prc != 0) {
-            let why = prc == -1 ? " (compile spawn failed for '{cfg.daslang}' - bad --daslang path?)" : ""
+            let why = prc == -1 ? " ({spawn_failure(cfg)})" : ""
             failures |> push((origins[idx] ? "[companion] " : "[page] ") + trim(fread(pfile)) + why)
         }
     }
@@ -1207,7 +1211,7 @@ def report_page(page_path : string; cfg : Config) : PageReport {
         if (crc != 0) {
             rep.status = "red"
             if (crc == -1) {
-                rep.errors |> push("compile spawn failed for '{cfg.daslang}' - bad --daslang path?")
+                rep.errors |> push(spawn_failure(cfg))
             } else {
                 rep.errors |> push_from(first_lines(out, 24))
             }
@@ -1232,9 +1236,8 @@ def main() : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "doc-verify")
     return rc if (rc >= 0)
+    // a fixed "bin/daslang" default silently spawn-fails wherever the exe lives elsewhere (bin/Release, worktrees)
     if (empty(cfg.daslang)) {
-        // the running binary - a fixed "bin/daslang" default silently spawn-fails on
-        // layouts that keep the exe elsewhere (bin/Release on MSVC, worktrees)
         cfg.daslang = get_command_line_arguments()[0]
     }
     mkdir_rec(path_join(cfg.out, "pages"))

@@ -1,8 +1,6 @@
-// Frame-position stamps (position-based GC liveness) must live on the sim-side
-// LineInfo copies only. The AST outlives simulate — macro modules, lint, and the
-// LSP read expression spans after a gc/debugger context is built — so a stamp
-// left on Expression::at corrupts every at-keyed consumer (STYLE038 reported
-// 2^31-line functions in daslib/debug.das).
+// Frame-position stamps must live on the sim-side LineInfo copies only: the AST outlives
+// simulate, so a stamp left on Expression::at makes every at-keyed consumer - macro
+// modules, lint, LSP - see 2^31-line functions.
 
 #include <doctest/doctest.h>
 
@@ -36,15 +34,14 @@ TEST_CASE("frame-position stamps live on sim nodes, not the AST") {
     REQUIRE(program->simulate(ctx, tout));
     REQUIRE(bool(ctx.gcEnabled));   // `options gc` armed the stamping path
 
-    // sim-side copies keep the stamp: frame_position() reads the call site's
-    // runtime LineInfo, 0 means the stamp never reached the sim nodes
+    // frame_position() reads the call site's runtime LineInfo - 0 means the stamp
+    // never reached the sim nodes
     auto fn = ctx.findFunction("stamped_position");
     REQUIRE(fn);
     int32_t pos = cast<int32_t>::to(ctx.evalWithCatch(fn, nullptr));
     CHECK_MESSAGE(ctx.getException() == nullptr, "stamped_position panicked");
     CHECK_MESSAGE(pos > 0, "sim-side call site lost its frame-position stamp");
 
-    // the AST leaves simulate honest: no expression may still carry the tag
     uint32_t tagged = 0;
     program->thisModule->functions.foreach([&](auto pfun){
         if ( !pfun->body ) return;

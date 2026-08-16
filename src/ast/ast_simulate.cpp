@@ -145,9 +145,7 @@ namespace das
 
         void setE ( const Expression * e, SimNode * n ) {
             e2v[e] = n;
-            // under gc/debugger the node's own LineInfo copy carries the expression's
-            // frame position (the GC locals gate and LineInfoArg externs read it via
-            // &node->debugInfo); the AST's `at` stays honest
+            // the GC locals gate and LineInfoArg externs read the position via &node->debugInfo
             if ( n && context.thisHelper ) context.thisHelper->stampSimNode(e, n->debugInfo);
         }
 
@@ -1459,8 +1457,7 @@ namespace das
             }
         }
         pInvoke->debugInfo = at;
-        // same as sv_simulateCall: the keep-alive wrapper takes setE, the invoke node's
-        // own debugInfo is the handoff the invoked frame reads
+        // the invoked frame reads &pInvoke->debugInfo, not the keep-alive wrapper setE gets
         if ( context.thisHelper ) context.thisHelper->stampSimNode(expr, pInvoke->debugInfo);
         int nArg = (int) expr->arguments.size();
         if ( expr->isInvokeMethod ) nArg --;
@@ -3830,9 +3827,8 @@ namespace das
                         // number the body BEFORE building sim nodes and locals info: the
                         // positions stamp each expression's sim node as it is built (see
                         // SimulateVisitor::setE), and the intervals feed the locals gate
-                        // (see LocalVariableInfo::openPos). the AST's `at` is never written
+                        // (see LocalVariableInfo::openPos)
                         gfun.debugInfo->spaceId = frameSpaceId(pfun->index);
-                        helper.currentSpaceId = gfun.debugInfo->spaceId;
                         helper.stampFramePositions(pfun->body, gfun.debugInfo->spaceId);
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                         helper.appendGlobalVariables(gfun.debugInfo, pfun);
@@ -3858,10 +3854,9 @@ namespace das
                     lookupFunctionTable.push_back(pfun);
                 });
             }
-            // stamping off past the last function - global inits and annotation simulate
-            // build nodes outside any position space
+            // global inits and annotation simulate build nodes outside any position space
             helper.exprFramePos.clear();
-            helper.currentTaggedSpace = 0;
+            helper.framePosStamping = false;
         }
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {

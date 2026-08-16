@@ -25,8 +25,7 @@ namespace das {
     };
 
     // numbers the FINAL tree in dense preorder; a local's interval opens after its own
-    // init subtree and closes with its scope. positions land in a side map, never in the
-    // AST's `at` - SimulateVisitor stamps them onto each expression's own sim node copy
+    // init subtree and closes with its scope
     class FramePositionStamp : public Visitor {
     public:
         FramePositionStamp ( das_hash_map<Variable *, FramePosInterval> & vfp,
@@ -109,7 +108,8 @@ namespace das {
         // during its simulate) all run before the next stamp - no need to keep the rest
         varFramePos.clear();
         exprFramePos.clear();
-        currentTaggedSpace = LINEINFO_FRAME_POS_TAG | spaceId;
+        framePosStamping = true;
+        currentSpaceId = spaceId;
         FramePositionStamp stamp(varFramePos, exprFramePos);
         body->visit(stamp);
         if ( stamp.sawLabel ) {
@@ -122,10 +122,10 @@ namespace das {
     }
 
     void DebugInfoHelper::stampSimNode ( const Expression * expr, LineInfo & nodeAt ) {
-        if ( !currentTaggedSpace ) return;
+        if ( !framePosStamping ) return;
         auto it = exprFramePos.find(expr);
         if ( it == exprFramePos.end() ) return;
-        nodeAt.last_line = currentTaggedSpace;
+        nodeAt.last_line = LINEINFO_FRAME_POS_TAG | currentSpaceId;
         nodeAt.last_column = it->second;
     }
 

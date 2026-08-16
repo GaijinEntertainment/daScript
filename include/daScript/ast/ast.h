@@ -1528,16 +1528,15 @@ namespace das
         void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void stampFramePositions ( ExpressionPtr body, uint32_t spaceId );
-        // writes the recorded frame position of `expr` into a sim node's own LineInfo copy;
-        // no-op for unrecorded expressions or outside a stamped function's simulate. the AST's
-        // `at` is never written - it outlives simulate (macro modules, lint, LSP)
+        // no-op for unrecorded expressions or outside a stamped function's simulate.
+        // the AST's `at` is never written - it outlives simulate (macro modules, lint, LSP)
         void stampSimNode ( const Expression * expr, LineInfo & nodeAt );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
         das_hash_map<Variable *, FramePosInterval> varFramePos;    // filled by stampFramePositions, read by appendLocalVariables
         das_hash_map<const Expression *, uint32_t> exprFramePos;   // filled by stampFramePositions, read by stampSimNode
-        uint32_t currentTaggedSpace = 0;    // LINEINFO_FRAME_POS_TAG | spaceId of the function being simulated; 0 = stamping off
+        bool framePosStamping = false;  // on from stampFramePositions until the last function's sim nodes are built
         uint32_t currentSpaceId = 0;    // owner of the function being simulated; block frames inherit it
     public:
         das_hash_map<string,StructInfo *>        smn2s;
