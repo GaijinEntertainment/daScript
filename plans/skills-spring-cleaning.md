@@ -223,7 +223,15 @@ dastest cell (deletes its rule); debug_info PR-verdict-lines CI assertion; pin-w
 touch assertion; JIT timed-phase inventory dastest; sidecar mint-and-validate round-trip
 dastest; env-knob §3-inventory scanner extension; computed-name env-read non-literal-arg
 scanner extension; preflight changed-set auto-escalation for the imgui gate; machine-local
-path-literal style lint for test files.
+path-literal style lint for test files; hot-path entry-annotation perf_lint rule (reuses the
+PERF026-028 reachability walk); .das_module completeness diff vs dasllama/*.das (verified NO
+current drift, 85 = 85); audio/stbimage require-graph single-file assertion; dlim_wipe
+single-call-site assertion.
+
+Ruling 5 (dasLLAMA master) EXECUTED same day: version paragraph split, supported/ready rule
+named by name shape (§2.6 cite), coverage mechanism → §2.11, rename rule standalone,
+routing-block count dropped, all engine filenames dasllama/-qualified. Dragon-converged
+all-OK. The full ledgered-findings queue is now CLOSED — all five rulings executed.
 
 ## Ledgered checklist findings (pre-existing, NOT this PR — Boris rules each)
 

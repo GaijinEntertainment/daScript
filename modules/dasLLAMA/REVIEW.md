@@ -7,12 +7,12 @@
 location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`; an exchange, provenance-manifest, or measuring-rig change answers to its
 `performance/REVIEW.md`.
-Three kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
+Kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
 lands, answers to `modules/dasLLVM/REVIEW.md`. This file's rules bind the rest of the engine.
 
-**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel
+**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
 body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]`
 metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work.
@@ -41,7 +41,7 @@ ships the measured pair — peak footprint and wall-clock — and an explicit st
 
 **Platform-specific code lands only in a platform backend file.** A platform-neutral file
 carrying it is a defect; a new shared concern gets its own file, not more of
-`dasllama_common.das`.
+`dasllama/dasllama_common.das`.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
 a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
@@ -57,8 +57,8 @@ encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
 **A new entry point — a kernel-backend override, a batch donor, a step driver — carries its
 annotation itself; a rename is not new** (annotations follow the name in the same change).
 
-**A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
-`dasllama_bpe.das` / `dasllama_pretok.das` ships before/after `--tok` rows for the affected
+**A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
+`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows for the affected
 backend** — the instrument is the scaling ratio across the size ladder, and superlinear is a
 defect. A change to the cell's own corpus input ships the same rows or a statement that the
 bytes are unchanged.
@@ -98,7 +98,7 @@ path that falls back to reading weights out of the source file into a live carri
 as is one serving a carrier the mint did not produce.
 
 **There is one way to mint, and one way to load.** A weight carrier becomes live through
-`build_image` and `parse_image` in `dasllama_image.das`. Reading weights into a live carrier,
+`build_image` and `parse_image` in `dasllama/dasllama_image.das`. Reading weights into a live carrier,
 or releasing an image backing, anywhere else is a defect — and a second mint path, per family,
 per format, or per backend, is a defect even where its output is identical.
 
@@ -118,7 +118,7 @@ defect.
 lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
 
 **Only a process that can recompute an image's identity may judge it dead, and the one
-`dlim_wipe` caller is `gen_bench_records.das`.** Reaping an image whose identity the code
+`dlim_wipe` caller is `performance/gen_bench_records.das`.** Reaping an image whose identity the code
 cannot recompute — another flavor's, another family's — is a defect.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
@@ -148,7 +148,7 @@ a struct the renderer emits but the registry does not is caught by
 
 **A new module file is registered in `.das_module` in the same change.**
 
-**`dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
+**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
 `unicode-data.cpp`; hand-editing them is a defect.**
 
 **Placement truth — what each file holds, the seams, the carve-outs — lives in
@@ -156,18 +156,18 @@ a struct the renderer emits but the registry does not is caught by
 changes what a file owns lands the §1 edit that keeps the charters true, in the same change.**
 A file inventory restated in this checklist is a defect of the checklist.
 
-**A tensor format conversion lands in `dasllama_convert.das`.**
+**A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
 **A disk-order → compute-order transform lands per scope: kernel-layout in
-`dasllama_repack.das`, load-scope in `dasllama_layout.das`.**
+`dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**A KV-cache store, read, score dot, or V-accumulate lands in `dasllama_kv_codec.das`, its
+**A KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`, its
 format family kept whole.**
 
-**A pre-tokenizer split lands in `dasllama_pretok.das`; a merge algorithm in its backend file
-(`dasllama_spm.das` / `dasllama_bpe.das`).**
+**A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
+(`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A kernel body lands in its tier or backend kernel file** — never in `dasllama_math.das` or a
+**A kernel body lands in its tier or backend kernel file** — never in `dasllama/dasllama_math.das` or a
 lens/dispatch macro file.
 
 **A family quirk lands in the family file — or, when it is platform-specific, in that
@@ -182,20 +182,20 @@ decides the question for a whole file, because a shipped file mixes them.
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits
 non-zero.
 
-**Tool wire text — building or parsing — is produced only in `dasllama_tools.das`.**
+**Tool wire text — building or parsing — is produced only in `dasllama/dasllama_tools.das`.**
 
-**No engine file (`dasllama/`) other than `dasllama_audio_io.das` requires `audio` (the
+**No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
 miniaudio decode module).** Benchmarks, harnesses, and tests decode their own fixtures.
 
-**No engine file (`dasllama/`) other than `dasllama_vision_io.das` requires `stbimage`.**
+**No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
 Benchmarks, harnesses, and tests decode their own fixtures.
 
-**Engine, HTTP, or writer logic never lands in `dasllama_scheduler.das`** — engine logic in
+**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** — engine logic in
 engine files, HTTP in the server, writer logic in the writer's own file.
 
-**An `[init]`-only side-effect require lives in `dasllama_transformer.das`** — arch
+**An `[init]`-only side-effect require lives in `dasllama/dasllama_transformer.das`** — arch
 registrations, GPU tiers, every module requiring the engine back; it sits in
-`dasllama_common.das` only if engine code needs it.
+`dasllama/dasllama_common.das` only if engine code needs it.
 
 **An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.
