@@ -175,15 +175,15 @@ run_check "mcp.das (empty stdin)" bash -c \
 # demands the line be marked `repo-only` instead.
 echo
 echo "Shipped skills:"
-# The folder is the shipping decision, so the layout assertions replace the old
-# manifest FATAL_ERROR: the language bundle must be present, internal/ must not.
+# nothing lists the shipped skills any more, so the layout itself is the assertion
 printf '  %-30s ' "bundle layout"
 if [[ -f "$BUNDLE/skills/daslang/SKILL.md" && -d "$BUNDLE/skills/daslang/references" \
-      && ! -d "$BUNDLE/skills/internal" && -f "$BUNDLE/.claude/skills/daslang/SKILL.md" ]]; then
+      && ! -d "$BUNDLE/skills/internal" && -f "$BUNDLE/.claude/skills/daslang/SKILL.md" \
+      && -f "$BUNDLE/REVIEW_COMMON.md" && -f "$BUNDLE/.claude/agents/dragon.md" ]]; then
     echo "OK"
     PASS=$((PASS + 1))
 else
-    echo "FAIL (need skills/daslang/{SKILL.md,references/} + .claude/skills/daslang, and no skills/internal/)"
+    echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, and no skills/internal/)"
     FAIL=$((FAIL + 1))
 fi
 printf '  %-30s ' "references resolve in bundle"

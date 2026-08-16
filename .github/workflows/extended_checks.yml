@@ -432,6 +432,12 @@ jobs:
         set -eux
         python3 utils/lsp/test_crosstree_guard.py
 
+    - name: "Test shipped-skills gate (python)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        python3 ci/test_check_shipped_skills.py
+
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'
       run: |

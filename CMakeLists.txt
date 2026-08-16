@@ -1818,11 +1818,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/GETTING_STARTED.md DESTINATION ${DAS_INSTALL
 install(FILES ${PROJECT_SOURCE_DIR}/CHANGELIST.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 
-# Skills shipped to the SDK — the FOLDER is the shipping decision: every
-# skills/*.md ships, skills/daslang/ (the standalone language skill) ships,
-# skills/internal/ never ships. Content rules (no unmarked repo paths, no links
-# into internal/, daslang/ purity) are enforced per PR by
-# ci/check_shipped_skills.py; the bundle's presence is asserted by
+# Skills shipped to the SDK — the FOLDER is the shipping decision. Content
+# rules are enforced per PR by ci/check_shipped_skills.py; layout presence by
 # ci/smoke_test_bundle.sh. Pattern order matters: first match wins, so the
 # EXCLUDE clauses must precede the inclusive *.md pattern.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
@@ -1834,8 +1831,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
     REGEX "/skills/daslang$" EXCLUDE
     PATTERN "*.md"
 )
-# The language bundle — SKILL.md + references/, minus its README (editing rules
-# for this repo's maintainers, meaningless in the SDK).
+# its README is editing rules for this repo's maintainers, meaningless in the SDK
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION ${DAS_INSTALL_DOCDIR}/skills/daslang
     FILES_MATCHING

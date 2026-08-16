@@ -29,7 +29,7 @@ miss because the names differ by a word. Check:
 ## What the gate checks — run it before you push
 
 ```bash
-python3 ci/check_shipped_skills.py <bundle-root> install/skills.list
+python3 ci/check_shipped_skills.py <bundle-root>
 ```
 
 It is wired into `ci/smoke_test_bundle.sh`, so `build.yml`'s `bundle_smoke` job runs it on

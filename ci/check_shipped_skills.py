@@ -13,7 +13,7 @@ is worse than no gate). Two escape hatches, both spelled `repo-only`:
   * in a HEADING -> exempts that section, resetting at the next heading of any level.
     (Not "everything after the marker": cpp_integration.md has a repo-internals section
     in the MIDDLE, and a trailing rule would exempt the rest of the file.)
-  * on a LINE    -> exempts that line, for one-off mentions in prose.
+  * on any LINE of a paragraph -> exempts that paragraph, because prose wraps.
 Files under skills/daslang/ get NO escape hatch: the bundle is standalone by
 contract (no repo paths, no MCP, no CI, no lint rule IDs -- see its README in
 the repo), so a violation there is fixed, never marked.
@@ -62,27 +62,26 @@ EXE_CMD = re.compile(
 MACHINE_PATH = re.compile(
     r"(?:[A-Za-z]:[\\/](?:Users|Work|DASPKG)\b|/home/[A-Za-z0-9_.]+|[\\/]AppData\b)", re.I)
 
-# Nested paths too: the old single-segment regex was BLIND to skills/internal/x.md,
-# which is exactly the reference that must not leak into a shipped file unmarked.
+# nested paths too -- a skills/internal/x.md reference must not sit unmarked in
+# a shipped file
 SKILL_REF = re.compile(r"skills/((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.md)")
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 FENCE = re.compile(r"^\s*```")
 HEADING = re.compile(r"^#+\s")
 
 # skills/daslang/ standalone-contract bans (its README states the rules; the gate
-# holds them). Narrow by design: \bMCP\b not "mcp" (filenames), rule IDs by shape.
+# holds them). \bMCP\b is case-sensitive because filenames are lowercase mcp;
 # not \bCI\b: a das typedef named CI is legitimate code (generics.md has one)
 BUNDLE_MCP = re.compile(r"\bMCP\b")
 BUNDLE_CI = re.compile(r"\bCI (?:lane|run|job|pipeline)|\.github/|workflows/|GitHub Actions")
 BUNDLE_LINT_ID = re.compile(r"\b(?:PERF|STYLE|LINT|IMGUI)\d{3}\b")
 
 
-def scan_file(path, relname, problems, *, bundle_pure, link_bases, shipped_exists,
+def scan_file(path, relname, problems, *, standalone_skill, link_bases, shipped_exists,
               links_only=False):
     """Run the content checks over one markdown file.
 
-    bundle_pure: True under skills/daslang/ -- no repo-only escape, extra bans.
-    link_bases: directories to resolve relative markdown links against, in order.
+    standalone_skill: True under skills/daslang/ -- no repo-only escape, extra bans.
     shipped_exists: callable(skill_rel) -> bool for skills/<rel> references;
                     None disables the check (repo-side internal walk).
     links_only: dead-link check only -- for skills/internal/, where repo paths,
@@ -136,12 +135,12 @@ def scan_file(path, relname, problems, *, bundle_pure, link_bases, shipped_exist
             exempt_section = "repo-only" in low
             continue
 
-        exempt = (not bundle_pure
+        exempt = (not standalone_skill
                   and (exempt_section or ("repo-only" in low)
                        or para_marked.get(para_of[idx], False)))
 
         def flag(kind, detail):
-            problems.append((relname, lineno, kind, detail))
+            problems.append(("skills/%s:%d" % (relname, lineno), kind, detail))
 
         # these are about COMMANDS, so they apply inside fences as well
         if not exempt and not links_only:
@@ -164,7 +163,7 @@ def scan_file(path, relname, problems, *, bundle_pure, link_bases, shipped_exist
             for m in REPO_PATH.finditer(raw):
                 flag("not in bundle", m.group(1))
 
-        if bundle_pure:
+        if standalone_skill:
             if BUNDLE_MCP.search(raw):
                 flag("bundle purity", "MCP mention -- the language skill is tool-agnostic")
             if BUNDLE_CI.search(raw):
@@ -197,7 +196,11 @@ def scan_file(path, relname, problems, *, bundle_pure, link_bases, shipped_exist
                 flag("dead link", tgt)
 
 
-def check(bundle):
+def check(bundle, repo_root=None):
+    # repo_root is injectable for the fixture test; a real run derives it from
+    # this file's location and skips the repo-side checks when absent.
+    if repo_root is None:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     skills_dir = os.path.join(bundle, "skills")
     if not os.path.isdir(skills_dir):
         print("  no skills/ in bundle: %s" % skills_dir)
@@ -219,7 +222,7 @@ def check(bundle):
             if rel_dir == ".":
                 root_skills.append(name)
             scan_file(path, rel, problems,
-                      bundle_pure=rel.startswith("daslang/"),
+                      standalone_skill=rel.startswith("daslang/"),
                       link_bases=(dirpath, skills_dir, bundle),
                       shipped_exists=shipped_exists)
 
@@ -231,21 +234,32 @@ def check(bundle):
             claude_text = fh.read()
         for name in root_skills:
             if ("skills/" + name) not in claude_text:
-                problems.append(("(bundle CLAUDE.md)", 0, "no trigger row",
+                problems.append(("bundle CLAUDE.md", "no trigger row",
                                  "skills/%s ships but has no row" % name))
     else:
-        problems.append(("(bundle)", 0, "no trigger row", "CLAUDE.md missing from bundle"))
+        problems.append(("bundle", "no trigger row", "CLAUDE.md missing from bundle"))
+
+    # The repo is the authority on what ships: every root skills/*.md must be in
+    # the bundle. An install-rule regex that silently drops one (the unanchored
+    # /skills/daslang prefix-match swallowed daslang_live.md) is invisible to
+    # every content check -- only this set compare sees it.
+    repo_skills = os.path.join(repo_root, "skills")
+    if os.path.isdir(repo_skills):
+        for name in sorted(os.listdir(repo_skills)):
+            if name.endswith(".md") and not os.path.exists(
+                    os.path.join(skills_dir, name)):
+                problems.append(("repo skills/" + name, "missing from bundle",
+                                 "the install rules did not ship it"))
 
     # Repo-side: internal skills rot too, they just rot privately. Dead relative
     # links only -- internal files may reference anything that exists.
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     internal_dir = os.path.join(repo_root, "skills", "internal")
     if os.path.isdir(internal_dir):
         for name in sorted(os.listdir(internal_dir)):
             if not name.endswith(".md"):
                 continue
             scan_file(os.path.join(internal_dir, name), "internal/" + name, problems,
-                      bundle_pure=False,
+                      standalone_skill=False,
                       link_bases=(internal_dir, os.path.join(repo_root, "skills"),
                                   repo_root),
                       shipped_exists=None, links_only=True)
@@ -254,13 +268,12 @@ def check(bundle):
         return 0
 
     by_kind = {}
-    for name, lineno, kind, detail in problems:
-        by_kind.setdefault(kind, []).append((name, lineno, detail))
+    for where, kind, detail in problems:
+        by_kind.setdefault(kind, []).append((where, detail))
     for kind in sorted(by_kind):
         rows = by_kind[kind]
         print("  %s (%d):" % (kind, len(rows)))
-        for name, lineno, detail in rows:
-            where = name if name.startswith("(") else "skills/%s:%d" % (name, lineno)
+        for where, detail in rows:
             print("    %s  %s" % (where, detail))
     print("")
     print("  Fix the path, or mark it: put 'repo-only' on the line, or on the heading")

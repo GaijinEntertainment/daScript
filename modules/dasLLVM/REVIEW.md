@@ -32,7 +32,8 @@
   (AOT hashes) are key material, not salt.
 
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`** — the
-  family's reference.
+  family's reference. A change to the framework itself — `daslib/llvm_tune.das` or its
+  tests — is reviewed with `skills/internal/llvm_tune_internals.md`.
 
 - **A diff that adds a new top-level section, or a new value shape inside one, to the tune
   sidecar (`<app>.tune.json`, written by `daslib/llvm_tune.das`) updates

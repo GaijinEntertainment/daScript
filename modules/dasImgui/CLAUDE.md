@@ -9,7 +9,7 @@ The old standalone repo (borisbat/dasImgui) is archived with full history. `dasp
 - Module source: `modules/dasImgui/` (`bind/`, `src/`, `widgets/`, `examples/`, `utils/`)
 - Tests: `modules/dasImgui/tests/` — nightly CI lane `.github/workflows/nightly_imgui.yml`; see `modules/dasImgui/tests/README.md`
 - Docs: stdlib section `doc/source/stdlib/sec_imgui.rst` (+ generated pages), tutorials `doc/source/reference/tutorials/imgui/*.rst` (see Documentation below)
-- Skills: **repo root** `skills/imgui_*.md` (see table below)
+- Skills: `skills/imgui_*.md` (repo root) and `skills/internal/imgui_*.md` (see table below)
 - Recordings: intermediates in `doc/source/_static/tutorials/` (gitignored); MP4 deliverables on the rolling `docs-assets` GitHub release (see Recordings below)
 
 ## Skill files (REQUIRED)
