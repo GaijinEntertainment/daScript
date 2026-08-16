@@ -374,7 +374,10 @@ I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) — D
 J tower driver, whisper tiny first, then large + the other four — DONE (cells in mtower,
 not a matrix arm; see the slice J deviations note) ->
 census row -> K bench legs + the A/B numbers (only after every gate is green) — DONE ->
-L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms).
+L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms) — DONE
+incrementally: ENVIRONMENT.md regenerated with the tower knob (slice I), the arm lists and
+suite-less ledger entries rode each battery commit, the plan carries every slice record;
+website perf figures stay embargoed per the standing rule.
 
 ## Non-goals (chunk 2)
 
