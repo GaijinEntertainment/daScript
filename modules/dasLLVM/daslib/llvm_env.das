@@ -108,7 +108,7 @@ def public env_markdown() : string {
             "Loaded once at context init into `g_env_jit`. The force-features pair exists to reproduce another box's codegen locally or check that a feature-gated kernel is the one being measured; both override `cpu_supports`, which `requires=` on a `[tune_perm]` and `suffix:requires` fallback entries match against.")
         write_env_info_rows(w, get_env_config_info(type<JitEnv>))
         write_env_section(w, "Kernel tuning",
-            "Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/llvm_tune.md`.")
+            "Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/tune.md`.")
         write_env_info_rows(w, get_env_config_info(type<TuneEnv>))
         write_env_section(w, "Ambient variables dasLLVM reads but does not own",
             "Read live at the point of use (`env_value_of`), not loaded at context init.")

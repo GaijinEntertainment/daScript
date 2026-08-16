@@ -4,7 +4,7 @@ options indenting = 4
 module dupe_detect shared private
 
 //! Extractable-duplicate detection over the AST. Backs STYLE040; the rule wiring lives in
-//! ``daslib/style_lint``, the design walkthrough in ``skills/style_lint.md``.
+//! ``daslib/style_lint``.
 //!
 //! Hashes only PICK candidates - ``subtree_equal`` decides, so no collision can be reported.
 //! Do NOT replace the ``hash_combine64`` fold with ``(h ^ v) * prime``: it annihilates to 0 when

@@ -59,6 +59,9 @@ The `--root` flag sets the project root directory (default: current directory). 
 - Packages install to `{root}/modules/<RepoName>/` (e.g. `modules/dasAnthropic/`)
 - Lock file: `daspkg.lock` in the `--root` directory
 - Package name (in `.das_package`) can differ from repo name
+- Code locates data files sitting beside its own `.das` source with `get_this_module_dir()`
+  (`require daslib/module_path`) — **never** `dir_name(get_module_file_name("X"))`, which bakes
+  the build-machine path. Resolution tiers and the call-site rule: *Runtime asset paths* below
 - `install` and `update`/`upgrade` can take 10+ minutes for packages with native builds — use long timeouts
 
 ## Global Modules
@@ -179,7 +182,7 @@ def initialize(project_path : string) {
 
 The recipient can run the bundled exe **without daslang installed**. PR #1 (exe-relative shared modules, merged 2026-05-05) is the prerequisite — the runtime resolves dylibs against the exe's own directory first.
 
-**Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` runs the tuners of incomplete scopes (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe — a sidecar older than the binary reads as stale). The exe self-reports its baked stamps via `tune_status()`. See `skills/llvm_tune.md`.
+**Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` always mints: it runs the tuners (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe — a sidecar older than the binary reads as stale). `--quick` is the only inheriting mode, and only from a complete, fresh sidecar; a tuner refusal (noise gate / validation) fails the release rather than shipping fallbacks. The exe self-reports its baked stamps via `tune_status()`. See `skills/tune.md`.
 
 ### `release()` hook in `.das_package`
 

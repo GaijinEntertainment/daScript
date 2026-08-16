@@ -170,5 +170,3 @@ harmless. The codebase is mixed: `ast_cursor.das` uses `return fun`,
 visitor overrides needed `return <- clone_to_move(fun)` to avoid
 stealing the safebox's reference. That rule no longer applies — there
 are no smart_ptr-returning visitor overrides in the current codebase.
-See `skills/gc_migration.md` for the full migration table if you're
-porting older `.das` code.

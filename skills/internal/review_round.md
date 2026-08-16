@@ -1,8 +1,8 @@
 # The multi-agent review round (repo-only)
 
 Read this before running a deep review of a branch or diff — the pre-PR review round of
-`skills/make_pr.md`, or a standalone "review this" request. This is NOT `skills/review_md.md`
-(authoring the per-folder checklists) and NOT the post-open Copilot loop (`skills/babysit.md`);
+`skills/internal/make_pr.md`, or a standalone "review this" request. This is NOT `skills/review_md.md`
+(authoring the per-folder checklists) and NOT the post-open Copilot loop (`skills/internal/babysit.md`);
 this is the round where agents read the change and findings are proven before anyone reads them.
 
 The shape: **ground → derive dimensions → surface → prove → report**. Two principles carry it:
@@ -27,7 +27,7 @@ Spawn ONE read-only agent over the full diff range. It produces a map, not findi
   ordering dependency, a semantics change) and file:line.
 - **Blind spots** — what the diff does NOT show: consumers in other directories, generated
   files, configs, platform arms the change can break without touching.
-- **The REVIEW.md binding set** — the `skills/make_pr.md` step-0a walk over the changed set.
+- **The REVIEW.md binding set** — the `skills/internal/make_pr.md` step-0a walk over the changed set.
 
 Grounding is context, not authority: a later agent that finds the code disagreeing with the
 grounding believes the code.

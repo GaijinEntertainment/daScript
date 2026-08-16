@@ -23,7 +23,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO"
 
 if [[ ! -d "$BUILD" ]]; then
-    echo "ERROR: build dir '$BUILD' not found. Configure it first (see skills/build_and_debug.md)." >&2
+    echo "ERROR: build dir '$BUILD' not found. Configure it first (see skills/internal/build_and_debug.md)." >&2
     exit 2
 fi
 

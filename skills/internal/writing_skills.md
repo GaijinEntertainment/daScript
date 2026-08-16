@@ -67,7 +67,7 @@ None of the following is mechanical, and each has bitten this tree:
 4. **Are the claims verified or assumed?** Syntax and behavior claims must be
    probe-compiled with the current binary, not recalled. `ds2_parser.ypp` is grammar truth.
    A confidently wrong skill is worse than a missing one, because it is trusted.
-5. **Does it say what it does, not narrate?** Follow `skills/tutorial_prose.md` for
+5. **Does it say what it does, not narrate?** Follow `skills/internal/tutorial_prose.md` for
    general-reader prose and the comment-hygiene rules in `CLAUDE.md`.
 6. **Do the commands actually run?** Paste them. `bin/daslang …` from the bundle root is
    the shipped form.

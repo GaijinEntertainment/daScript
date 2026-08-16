@@ -3,7 +3,7 @@
 The dasImgui tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/imgui/`, with an MP4 per page. Recordings are produced by **one-shell driver scripts** under `modules/dasImgui/tests/record_*.das` that spawn their own `daslang-live` host and drive it over HTTP. A recording carries a **voiceover + music soundtrack** and is **also an integration test** — every interaction it narrates is performed for real and verified.
 
 This page is the recipe. Read it before writing or revising any `record_*.das` driver. It builds on
-`skills/imgui_playwright.md` — read that first for the foundation: a recording is a playwright driver, so the
+`skills/internal/imgui_playwright.md` — read that first for the foundation: a recording is a playwright driver, so the
 **async rule applies** (every interaction must be gated on its observable effect, never a frame/sleep
 guess; `hold_through_voice`/`verify_click_effect` are the recording-side enforcement of exactly that).
 
@@ -58,7 +58,7 @@ bin/Release/daslang-live -project_root . modules/dasImgui/examples/tutorial/<sce
 - `mcp__daslang__live_command name="screenshot"` → `Read` the PNG — confirm the gesture produced the effect (handle moved, counter ticked, menu opened).
 - Iterate until the gesture reliably drives the widget; **full-restart the host between tries** (interactive state contaminates the next probe). Then transcribe the proven coords/sequence into the `record_*.das` driver.
 
-Essential for **drags** (the value follows track geometry, so a guessed end-point lands on the wrong value) and **menus/popups** (open-then-click must be one bundled `imgui_mouse_play` stream before the auto-close timer fires). The probes obey the async rule in `skills/imgui_playwright.md` — gate each step on the snapshot, not a sleep.
+Essential for **drags** (the value follows track geometry, so a guessed end-point lands on the wrong value) and **menus/popups** (open-then-click must be one bundled `imgui_mouse_play` stream before the auto-close timer fires). The probes obey the async rule in `skills/internal/imgui_playwright.md` — gate each step on the snapshot, not a sleep.
 
 ## The pipeline: prepare → record → convert
 

@@ -19,7 +19,7 @@ The repo builds on **Windows, Linux, macOS, iOS, Android, and WASM** (CI runs th
 - **Compile-only check:** `<daslang-binary> -compile-only path/to/script.das` — compiles without simulation or execution, useful for syntax/type checking without needing a window or GL context. Use `-dry-run` to also simulate (but not execute).
 - **Run tests:** `<daslang-binary> dastest/dastest.das -- --test path/to/test.das`
 - **AOT tests (full):** `cmake --build build --config Release --target test_aot` then `<test_aot-binary> -use-aot dastest/dastest.das -- --use-aot --test tests`. The full binary is `EXCLUDE_FROM_ALL` (~1080 AOT TUs); the default build only makes `test_aot_subset` (tests/language — the per-PR CI gate; `--target run_tests_aot_subset` sweeps it)
-- **IMPORTANT:** When adding a new test directory under `tests/`, register it in `tests/aot/CMakeLists.txt` for AOT compilation. See `skills/aot_testing.md` for the step-by-step pattern. The nightly CI + `preflight --full` run ALL tests with AOT enabled — unregistered test directories cause `error[50101]: AOT link failed` there (per-PR CI won't catch it)
+- **IMPORTANT:** When adding a new test directory under `tests/`, register it in `tests/aot/CMakeLists.txt` for AOT compilation. See `skills/internal/aot_testing.md` for the step-by-step pattern. The nightly CI + `preflight --full` run ALL tests with AOT enabled — unregistered test directories cause `error[50101]: AOT link failed` there (per-PR CI won't catch it)
 
 This skill uses `bin/Release/daslang.exe` in examples below (the dominant local-dev case); substitute the right path on other platforms.
 
@@ -111,6 +111,6 @@ Key flags (defaults are MIXED — see the `option(DAS_*_DISABLED …)` block nea
 
 When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic hash mismatch** between the generated C++ stubs and runtime. Each generated `.cpp` file has hash comments showing function hashes and dependency hashes. The runtime error also prints the same breakdown. Compare them to find the diverging function or dependency.
 
-For the full debugging workflow, see `skills/aot_hash_desync_debugging.md` (side-by-side SimNode dumps via `options log_nodes`/`log_nodes_aot_hash`, common shapes, C++ debug switches).
+For the full debugging workflow, see `skills/internal/aot_hash_desync_debugging.md` (side-by-side SimNode dumps via `options log_nodes`/`log_nodes_aot_hash`, common shapes, C++ debug switches).
 
 The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was deleted; only the header remains). When codegen output diverges, edit `daslib/aot_cpp.das`.

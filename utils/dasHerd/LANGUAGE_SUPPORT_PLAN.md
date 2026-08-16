@@ -36,7 +36,7 @@ explain llm what to keep."
   the same trick — write the git blob to the overlay. This single flag is
   what makes diff-mode LSP possible, including the OLD side no editor gives
   you.
-- The "no resident daslang" architecture is LOCKED (`skills/daslang_lsp.md`)
+- The "no resident daslang" architecture is LOCKED (`skills/internal/daslang_lsp.md`)
   for macro-state, lock, and crash-isolation reasons. dasHerd inherits that
   decision by spawning subtools per request; it does NOT need
   `lsp_supervisor.py` (that layer exists to speak LSP framing to editors —

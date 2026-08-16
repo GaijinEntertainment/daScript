@@ -2,7 +2,7 @@
 
 How to WRITE tutorial and doc prose — voice, vocabulary, structure. The RST
 mechanics (labels, toctrees, Sphinx workflow) live in
-`skills/documentation_rst.md`; this file is about the words. It was distilled
+`skills/internal/documentation_rst.md`; this file is about the words. It was distilled
 from the tutorial-00 reader-feedback sessions (2026-07); the worked example of
 every rule is `doc/source/reference/tutorials/dasLLAMA_00_problem_statement.rst`.
 

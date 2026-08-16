@@ -18,7 +18,7 @@ def nvm_step(x : int) : int => x + 1
 
 var g_seed = 1
 
-[never_inline]  // structural anchors resist the heuristic tier (skills/tests_in_repo.md)
+[never_inline]  // structural anchors resist the heuristic tier (skills/internal/tests_in_repo.md)
 def target_must() : int {
     return nvm_add(g_seed, 2)
 }

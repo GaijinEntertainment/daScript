@@ -467,7 +467,7 @@ for presentation, never the correctness oracle.
   GitHub becomes a redundant firehose; Boris intends to switch it off. Advisory
   review turns on-demand: summoned by the observer or the human when bundle
   deviation warrants it. When the repo setting actually flips, revisit
-  skills/babysit.md, which still assumes Copilot feedback arrives on every PR.
+  skills/internal/babysit.md, which still assumes Copilot feedback arrives on every PR.
 - 2026-07-26: review-by-another-agent/tool graduates from avoided to planned.
   What makes it safe now: the reviewer is summoned against a declared bundle
   (reviews a claim, cheapest finding = deviation from the declaration), its

@@ -3,7 +3,7 @@
 Read this before triaging any review comment on a PR — Copilot, another bot, or a human
 reviewer. It owns the judgment half of the review loop: what verdict a comment gets, when
 an accepted fix lands, and what the user is asked. The loop mechanics — watching, replying,
-resolving, re-requesting — stay in `skills/babysit.md`.
+resolving, re-requesting — stay in `skills/internal/babysit.md`.
 
 ## The verdict — three classes, tested in order
 
@@ -56,7 +56,7 @@ to be cheap was not a verdict.
   count — AND the fix is bounded: no new design, no new arc, focused gates cover it. Fix
   it in this round without asking.
 - **Ledgered**: off the PR's surface, or the fix is its own arc. Record it — the PR
-  body's `### Not done` section (`skills/make_pr.md`, step 6), an issue, or memory — and
+  body's `### Not done` section (`skills/internal/make_pr.md`, step 6), an issue, or memory — and
   reply with the entry. The entry travels in the verdict report for the user to confirm
   or reshape; a pending confirmation blocks neither thread resolution nor round completion.
 - **In doubt, the user decides** — doubt about now-vs-ledgered, about whether the defect
@@ -94,4 +94,4 @@ Ask exactly where a rule says ask, and ask the decision, not permission:
   cleanup may ride that push — applying it does not change its Reject verdict. Prose never
   causes a push by itself.
 - A round is complete when every comment carries a verdict and every now-fix is pushed;
-  thread reply-and-resolve closure is `skills/babysit.md`'s Section 0 invariant.
+  thread reply-and-resolve closure is `skills/internal/babysit.md`'s Section 0 invariant.

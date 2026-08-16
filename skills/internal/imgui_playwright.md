@@ -9,7 +9,7 @@ feature file, then drives it with verbs (`click`, `right_click`, `drag`, `type_t
 `ne_*` helpers on top.
 
 Read this before writing or revising any playwright test or driver. For the recording-specific layer
-(voiceover/music/self-verify), read `skills/imgui_recording.md` — it sits on top of everything here.
+(voiceover/music/self-verify), read `skills/internal/imgui_recording.md` — it sits on top of everything here.
 
 ## The one rule: playwright is ASYNCHRONOUS — gate on the effect, never on a guess (REQUIRED)
 
@@ -140,5 +140,5 @@ Run dual-platform verification **sequentially** — one platform fully finished 
 
 Driver process (`daslang.exe test_X.das`) ⇄ HTTP/9090 ⇄ host process (`daslang-live feature.das`,
 its own frame loop). Verbs POST and return on *queue*; effects land *later*; the `wait_*` family is how
-you observe an effect before depending on it. Recordings (`skills/imgui_recording.md`) are playwright
+you observe an effect before depending on it. Recordings (`skills/internal/imgui_recording.md`) are playwright
 drivers that additionally self-verify each interaction and carry a voiceover/music soundtrack.

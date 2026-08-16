@@ -19,8 +19,10 @@ produced it, the durable decisions live here.
 7. dasImgui SHIPS with the SDK (follow-up arc, right after this one, adds the install
    rules). imgui skills classify to that end state: application/ui_debugging/migration =
    root; playwright/recording = internal.
-8. `comment_style_hygiene.md` ships, its "How this guide is applied" block trimmed to
-   internal. The review machinery ships with it: `.claude/agents/dragon.md` installs to
+8. `comment_style_hygiene.md` ships. The "How this guide is applied" trim was tried by a
+   wave-3 agent and REVERTED (Boris: not sold on agent work there, for now) — the file is
+   byte-identical to pre-arc; the applied-block's repo references are a known phase-4 gate
+   question. The review machinery ships with it: `.claude/agents/dragon.md` installs to
    `<prefix>/.claude/agents/`, `REVIEW_COMMON.md` ships to the SDK root, `review_md.md`
    ships.
 9. `tdd_audit.md` ships; the reliably-failing-fixture rule was folded in (done).
@@ -58,8 +60,10 @@ no MCP, no repo paths; stripped lint material folds into CLAUDE.md policy or die
   `review_md.md`, `imgui_application.md`, `imgui_ui_debugging.md`, `imgui_migration.md`,
   `dynamic_modules.md` (split: .das_module authoring root, CMake/static plumbing
   internal), `cpp_integration.md` (split: embedding root, codebase-notes + repo-MCP
-  sections internal), `gc_migration.md` (split: .das half root, C++/parser half internal),
-  `writing_benchmarks.md` (split per census line)
+  sections internal), `writing_benchmarks.md` (split per census line).
+  `gc_migration.md`: DELETED outright (Boris, wave 3 — migration is complete; history
+  lives in git), both halves; inbound pointers dropped in memory_leak_detection (skill +
+  RST), visitor_gen_bind, sql.md, both CLAUDE.md tables, skills.list.
 
 **Move to `skills/internal/`:** abi_break_sweep, aot_hash_desync_debugging, aot_testing,
 babysit, build_and_debug, clang_bind_build, daslang_lsp, doc_archiving, doc_sweep,
@@ -142,8 +146,10 @@ splitting the idiom table at ~line 425.
   `daslib/linq_fold_common.das:6090` + adapter `emit_join_hook`s): array/table/JSON/XML
   equi-`_join` DOES splice; only left/right/full-outer/cross joins + non-primitive keys
   cascade. Fix the bullet in the light-touch pass (RST include — doc edit).
-- `get_this_module_dir()` / `daslib/module_path` (locating assets beside a script) lost
-  its home in the files-and-paths absorption → add to `daspkg.md`.
+- ~~`get_this_module_dir()` → add to `daspkg.md`~~ RESOLVED wave 3: the fact never lost its
+  home — daspkg.md already carried the full *Runtime asset paths* section; a cross-link from
+  Key Details was added. Residual idea (not this arc): `daslib/fio.das` `parse_file_list`'s
+  param is NAMED `file` though it is argument text — a rename would kill the trap at the root.
 - New probe (2026-08-16): one-line enum body takes commas — `enum E { A; B }` is
   error[30151] → one line for `references/types.md`.
 - `filesystem.md`'s `parse_file_list(file, ...)` param is argument TEXT, not a path —

@@ -86,7 +86,7 @@ with_context() $(ctx) {
 
 ## Regenerating bindings
 
-Requires a `dasClangBind` build (`-DDAS_CLANG_BIND_DISABLED=OFF`, libclang SDK — see `skills/clang_bind_build.md`) and the Z3 headers (the downloaded release zip ships them; the configure step caches the path as `DAS_Z3_INCLUDE_DIR`):
+Requires a `dasClangBind` build (`-DDAS_CLANG_BIND_DISABLED=OFF`, libclang SDK — see `skills/internal/clang_bind_build.md`) and the Z3 headers (the downloaded release zip ships them; the configure step caches the path as `DAS_Z3_INCLUDE_DIR`):
 
 ```
 bin/daslang modules/dasClangBind/bind/bind_z3.das -- --input <z3-include-dir>

@@ -32,7 +32,6 @@ decs.md
 design_philosophy.md
 dynamic_modules.md
 external_module_debugging.md
-gc_migration.md
 imgui_ui_debugging.md
 jobque_debugging.md
 linq_fold_patterns.md

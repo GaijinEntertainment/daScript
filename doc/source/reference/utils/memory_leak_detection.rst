@@ -207,8 +207,7 @@ node whose id matches --- you get the full C++ + daslang stack at the
 creation site.
 
 **Common fix.** daslang tools/utilities that build AST nodes at runtime need
-``ast_gc_guard() { ... }`` around the scope. See the ``gc_migration`` skill
-for the full ownership story.
+``ast_gc_guard() { ... }`` around the scope.
 
 
 .. _utils_mlk_smart_ptr:
@@ -350,5 +349,3 @@ See also
 * ``skills/memory_leak_detection.md`` --- the compact version of this
   guide intended as a Claude reference.
 * ``skills/jobque_debugging.md`` --- full workflow for mechanism #5.
-* ``skills/gc_migration.md`` --- background for mechanism #3 and the
-  ``ast_gc_guard`` helper.

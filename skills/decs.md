@@ -308,5 +308,5 @@ Components serialize through the type-info `serializer` callback that `make_comp
 - daslib sources: [daslib/decs.das](daslib/decs.das), [daslib/decs_boost.das](daslib/decs_boost.das), [daslib/decs_state.das](daslib/decs_state.das)
 - Tests as worked examples (repo-only): [tests/decs/](tests/decs/) — `test_queries.das`, `test_create_update_remove.das`, `test_bulk_create.das`, `test_optional_values.das`, `test_default_values.das`, `test_stages.das`, `test_serialize.das`
 - Linq bridge test (repo-only): [tests/linq/test_linq_from_decs.das](tests/linq/test_linq_from_decs.das)
-- Linq operators reference: [skills/linq.md](skills/linq.md)
+- Linq operators reference: `skills/daslang/references/queries.md`
 - Bulk-create benchmark (repo-only): [benchmarks/decs/bench_bulk_create.das](benchmarks/decs/bench_bulk_create.das)

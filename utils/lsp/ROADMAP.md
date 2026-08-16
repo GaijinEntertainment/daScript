@@ -222,7 +222,7 @@ and CC converts to 0-based LSP before they reach the server.
   binary path that broke under the subtools' per-request cwd — compiler
   discovery now absolutizes.
 - Docs: `utils/lsp/README.md` (registration, config, Windows `python3`
-  spelling note), `skills/daslang_lsp.md`, CLAUDE.md skill-table row. No
+  spelling note), `skills/internal/daslang_lsp.md`, CLAUDE.md skill-table row. No
   bootstrap script needed — the committed manifest is portable as-is
   (`${CLAUDE_PLUGIN_ROOT}`-relative args; only the `python3` spelling can
   need a local edit on Windows).

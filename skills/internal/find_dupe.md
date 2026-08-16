@@ -2,7 +2,7 @@
 
 `detect-dupe` produces clusters of suspected duplicate functions; on a real codebase those clusters mix real duplicates with false positives (boilerplate, generic accessors, shared-shape glue). `find-dupe` (directory: `utils/find-dupe/`) consumes the detect-dupe JSON and asks Claude to **partition** each cluster into real-duplicate groups + false positives, with a one-line reason.
 
-This skill covers when and how to invoke that judge — via MCP for AI-driven workflows, or via the CLI when iterating directly. Read [skills/detect_dupe.md](detect_dupe.md) first if you haven't already; that's the upstream cluster-producing pipeline.
+This skill covers when and how to invoke that judge — via MCP for AI-driven workflows, or via the CLI when iterating directly. Read [skills/internal/detect_dupe.md](detect_dupe.md) first if you haven't already; that's the upstream cluster-producing pipeline.
 
 ## When to use this
 

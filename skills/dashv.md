@@ -161,6 +161,6 @@ with_test_server(type<MyServer>, PORT_X) $(base_url) {
   for a stateless request/response server; don't assume handler concurrency.
 - `delete writer` / `delete server` / `delete req` (from `with_http_request`) need `unsafe`.
 - JSON: build with `write_json(JV(...))` / `sprint_json(struct, false)`; parse with
-  `read_json(string(body), err)` (returns `JsonValue?`, null on parse failure) — see `skills/json.md`.
+  `read_json(string(body), err)` (returns `JsonValue?`, null on parse failure) — see `skills/daslang/references/json.md`.
 - **JIT-only for heavy handlers** — an inference server must run under `-jit` (interpreted is far
   too slow); wrap generation in `with_job_que()` + the tool's job-queue setup so kernels thread.

@@ -266,7 +266,7 @@ gets its binding.
   whole-word, count, prev/next, Ctrl+F/Esc) plus the editor-only half:
   replace one / replace all, both running through the undo journal as a
   single group so one Ctrl+Z reverts a replace-all.
-- `daslib/regex` is the engine (the `skills/regex.md` surface).
+- `daslib/regex` is the engine (the `skills/daslang/references/strings.md` surface).
 
 ### Syntax while editing
 

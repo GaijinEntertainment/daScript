@@ -2,7 +2,7 @@
 
 When `test_aot.exe -use-aot` (or any binary that links pre-built AOT stubs) reports `error[50101]: AOT link failed on <fn>`, it means the runtime computed a different semantic hash for `<fn>` than the AOT generator recorded. The AOT stub map has entries keyed by hash; lookup miss → link fails.
 
-Background on the hash machinery is in [`skills/aot_testing.md`](aot_testing.md). This skill is the playbook for *finding why* the hashes disagree.
+Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_testing.md). This skill is the playbook for *finding why* the hashes disagree.
 
 ## First checks before investigating codegen
 

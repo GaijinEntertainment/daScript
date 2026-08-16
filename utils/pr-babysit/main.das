@@ -1,6 +1,6 @@
 options gen2
 
-// pr-babysit - the GitHub mechanics of the babysit loop (skills/babysit.md keeps the policy).
+// pr-babysit - the GitHub mechanics of the babysit loop (skills/internal/babysit.md keeps the policy).
 // Exit codes: 0 ready to merge, 1 request/api failure, 2 CI red, 3 review to triage,
 // 5 watch timeout. Thread resolution is GraphQL-only - REST has none. Bot reviewers never
 // appear in requested_reviewers or reviewRequests and Copilot converts a request into a

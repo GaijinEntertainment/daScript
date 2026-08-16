@@ -33,7 +33,7 @@ Release instead — the MCP watcher restarts it.
 (Windows MSVC multi-config), `bin/daslang` (Ninja single-config — what CI's
 extended_checks uses on all three OSes), or `build/daslang` (Make/Ninja
 without `EXECUTABLE_OUTPUT_PATH`). Commands are platform-neutral unless marked.
-"WSL" means the verbatim-CI recipe in `skills/wsl_ci_repro.md` — fresh clone at
+"WSL" means the verbatim-CI recipe in `skills/internal/wsl_ci_repro.md` — fresh clone at
 the CI ref, never a working-tree copy.
 
 ## What CI runs (per-PR + nightly)
@@ -66,8 +66,8 @@ pre-push check for AOT regressions outside tests/language — don't skip it.**
 | CI step | Local mirror | Notes |
 |---|---|---|
 | Interpreter sweep | `<daslang> dastest/dastest.das -- --color --failures-only --max-file-time 30 --timeout 1800 --test tests` | Fails if any completed test file exceeds 30 seconds. |
-| JIT sweep | `<daslang> dastest/dastest.das -jit -- --jit-opt-level=3 --color --failures-only --max-file-time 30 --isolated-mode --batch 4 --timeout 1800 --test tests` | isolated-PARALLEL (2×hw-thread workers, 4 files/batch, ~3× vs sequential, identical pass/fail set; CI's retry drops `--batch` for one-process-per-test). Windows-local `clang-cl` link failures are env noise — the catchable class is LLVM verifier errors; full end-to-end JIT needs WSL/mac. See `skills/make_pr.md` §2.5 for the 2-test smoke version |
-| Small C++ tests | `ctest --test-dir build --build-config Release -L small --output-on-failure` | drop `--build-config` on single-config generators. **Run this after touching `tests-cpp/`** — and remember MSVC tolerates C++ that clang/gcc reject (the doctest bit-field incident); see `skills/writing_cpp_tests.md` |
+| JIT sweep | `<daslang> dastest/dastest.das -jit -- --jit-opt-level=3 --color --failures-only --max-file-time 30 --isolated-mode --batch 4 --timeout 1800 --test tests` | isolated-PARALLEL (2×hw-thread workers, 4 files/batch, ~3× vs sequential, identical pass/fail set; CI's retry drops `--batch` for one-process-per-test). Windows-local `clang-cl` link failures are env noise — the catchable class is LLVM verifier errors; full end-to-end JIT needs WSL/mac. See `skills/internal/make_pr.md` §2.5 for the 2-test smoke version |
+| Small C++ tests | `ctest --test-dir build --build-config Release -L small --output-on-failure` | drop `--build-config` on single-config generators. **Run this after touching `tests-cpp/`** — and remember MSVC tolerates C++ that clang/gcc reject (the doctest bit-field incident); see `skills/internal/writing_cpp_tests.md` |
 | AOT sweep (full) | `cmake --build build --config Release --target test_aot`, then `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --max-file-time 30 --timeout 1800 --test tests` | nightly CI + manual `workflow_dispatch` only — this local mirror is the only pre-push gate for it |
 | AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (optionally `--target run_tests_aot_subset` to also sweep tests/language) | what per-PR CI lanes actually build (part of ALL) |
 | Debug lanes | `cmake --build build --config Debug --target daslang`, then the sweep against `bin/Debug/daslang.exe` — safe in-checkout: Debug coexists with Release by design (`bin/Debug/`, `_debug.shared_module` suffix) | Debug bypasses the fused interpreter permutations — a fix that lands only in the fused path passes Release everywhere and trips Debug; conversely fused-path bugs need Release. If you touched `src/simulate/simulate_fusion_*`, run both configs |
@@ -91,7 +91,7 @@ self-binder freshness check (`git diff --exit-code -- modules/dasClangBind/src/`
 and `test_const_preproc.das`. A local msys2 mirror is possible but rarely worth
 it — the 80/20 for "compiles under MSVC, breaks under clang" is a clang
 syntax-only pass on your changed C++ (see clang-cl below). If you regenerated
-dasClangBind bindings, run the self-binder locally per `skills/clang_bind_build.md`.
+dasClangBind bindings, run the self-binder locally per `skills/internal/clang_bind_build.md`.
 
 ## build.yml — build_windows_clangcl (nightly)
 
@@ -146,7 +146,7 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 
 | CI step | Local mirror | Notes |
 |---|---|---|
-| dasgen freshness | `<daslang> utils/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; see `skills/visitor_gen_bind.md` |
+| dasgen freshness | `<daslang> utils/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; see `skills/internal/visitor_gen_bind.md` |
 | Run examples | `cmake --build build --config Release --target run_examples` | |
 | Utils tests | `cmake --build build --config Release --target run_utils_tests` | |
 | Tutorial dry-runs | `cmake --build build --config Release --target dry_run_tutorials` | catches compile rot in `tutorials/` — run after daslib API changes |
@@ -157,9 +157,9 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | rarely built locally; catches static-registration / no-dynamic-modules divergence |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | run after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
 | AST verify sweep — **not a PR gate** | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only` — only an `AST verify` line is a failure; compile errors are expected (many tests assert one) | Runs on `extended_checks.yml`'s 04:00 cron, not per PR: ~23 min, one daslang process per test file. Force it early with `gh workflow run extended_checks.yml`. Run it locally after touching macro or AST-building code — `skills/das_macros.md` |
-| Authored-doc code blocks — **not a PR gate** | `<daslang> utils/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | Nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run it locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes that docs quote — `skills/doc_sweep.md` |
+| Authored-doc code blocks — **not a PR gate** | `<daslang> utils/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | Nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run it locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes that docs quote — `skills/internal/doc_sweep.md` |
 | MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI but runs anywhere; MCP signature changes break it silently — run after editing `utils/mcp/` |
-| dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/abi_break_sweep.md` |
+| dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/internal/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
 ## doc.yml — the five gates
@@ -169,7 +169,7 @@ Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
 das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
 locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
 `DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
-workflow: `skills/make_pr.md` §4; conventions: `skills/documentation_rst.md`.
+workflow: `skills/internal/make_pr.md` §4; conventions: `skills/internal/documentation_rst.md`.
 
 **There is no LaTeX or PDF gate.** The docs are HTML only — no `latex_documents`
 in `conf.py`, no texlive in CI, no PDFs on the release. So a unicode character

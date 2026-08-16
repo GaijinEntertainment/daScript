@@ -283,7 +283,7 @@ jobs:
 
     - name: "Verify authored-doc code blocks (nightly only)"
       # doc-verify compiles every das code block of the authored RST corpus
-      # (skills/doc_sweep.md). Nightly-only per policy: doc rot is not a
+      # (skills/internal/doc_sweep.md). Nightly-only per policy: doc rot is not a
       # per-PR gate. Skipped on windows: the checker spawns one daslang per
       # page via popen and is exercised on the posix cells.
       if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.target != 'windows'

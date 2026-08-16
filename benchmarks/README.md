@@ -1,6 +1,6 @@
 # Benchmark Index
 
-> **Keep up to date:** When adding, removing, or renaming benchmark files under `benchmarks/`, update this file. See `skills/writing_benchmarks.md` for the rule.
+> **Keep up to date:** When adding, removing, or renaming benchmark files under `benchmarks/`, update this file. See `skills/internal/benchmarks_in_repo.md` for the rule.
 
 Every `.das` benchmark file in this directory tree is listed below, grouped by subdirectory.
 

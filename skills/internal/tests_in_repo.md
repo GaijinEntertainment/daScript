@@ -13,7 +13,7 @@ It builds+runs on the NIGHTLY CI cron and in `preflight --full` — per-PR CI on
 `tests/language` subset (`test_aot_subset`) as a compile gate, so a missing registration
 passes PR CI and fails the nightly. Creating a new test directory ⇒ register it in
 `tests/aot/CMakeLists.txt` — for a plain suite that is one entry in `set(DAS_AOT_SUITES …)`;
-see `skills/aot_testing.md` § "Registering a New Test Directory" for the irregular cases —
+see `skills/internal/aot_testing.md` § "Registering a New Test Directory" for the irregular cases —
 or the nightly/preflight fails with `error[50101]: AOT link failed`.
 
 If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put

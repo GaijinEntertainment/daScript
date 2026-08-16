@@ -1,6 +1,6 @@
 # Tutorial Source Files (REQUIRED)
 
-The companion skill is `skills/documentation_rst.md` for the RST side. **This file owns the `.das` source side**: where it lives, how it's named, what its header looks like, and the install hook.
+The companion skill is `skills/internal/documentation_rst.md` for the RST side. **This file owns the `.das` source side**: where it lives, how it's named, what its header looks like, and the install hook.
 
 ## Where tutorials live
 
@@ -95,15 +95,15 @@ Each tutorial is **one self-contained `[export] def main()` script** that runs e
 
 ## Macro tutorials are split
 
-Anything under `tutorials/macros/` follows a special two-file pattern: numbered usage file (`NN_topic.das`) requires a non-numbered module file (`topic_mod.das`). Module files have no number prefix so `require` resolution works. See `skills/documentation_rst.md` § "Macro tutorial RST conventions" for the doc side.
+Anything under `tutorials/macros/` follows a special two-file pattern: numbered usage file (`NN_topic.das`) requires a non-numbered module file (`topic_mod.das`). Module files have no number prefix so `require` resolution works. See `skills/internal/documentation_rst.md` § "Macro tutorial RST conventions" for the doc side.
 
 ## RST companion (REQUIRED)
 
-Every shipped tutorial has a paired RST page under `doc/source/reference/tutorials/`. The full conventions (label pattern, `.. seealso::` block, toctree placement) live in `skills/documentation_rst.md` § "Tutorial RST conventions". The short version:
+Every shipped tutorial has a paired RST page under `doc/source/reference/tutorials/`. The full conventions (label pattern, `.. seealso::` block, toctree placement) live in `skills/internal/documentation_rst.md` § "Tutorial RST conventions". The short version:
 
 1. Create `doc/source/reference/tutorials/<area>_NN_<topic>.rst` (use a sibling tutorial's RST as the template — same pattern as `sql_03_last_row_id.rst` or `01_hello_world.rst`).
 2. Add the new entry to the matching toctree section in `doc/source/reference/tutorials.rst`.
-3. Run the Sphinx workflow from `skills/documentation_rst.md` to verify zero new warnings.
+3. Run the Sphinx workflow from `skills/internal/documentation_rst.md` to verify zero new warnings.
 
 ## CMake install hook
 
@@ -124,7 +124,7 @@ If a tutorial pulls in non-`.das` data files (like `tutorials/dasPUGIXML/books.x
 
 ## Development workflow
 
-From `skills/documentation_rst.md` § "Tutorial development workflow" — repeated here because it's load-bearing:
+From `skills/internal/documentation_rst.md` § "Tutorial development workflow" — repeated here because it's load-bearing:
 
 1. **Throwaway test file** during development to validate behavior — `dastest --test test_<topic>.das`. Always check `$LASTEXITCODE`.
 2. **Do NOT stage or commit the test file.** Tutorials are self-demonstrating — running the tutorial file itself is the test.

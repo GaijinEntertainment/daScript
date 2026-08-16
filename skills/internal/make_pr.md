@@ -2,7 +2,7 @@
 
 Before creating a pull request, complete ALL of the following steps in order. Do not skip steps. If any step fails, fix the issue before proceeding.
 
-**Shortcut:** `daslang utils/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
+**Shortcut:** `daslang utils/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/internal/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
 
 ## 0. Sync with origin/master and rebase
 
@@ -61,7 +61,7 @@ instrument restored or the reason stated — never shipped silent.
 
 When the change warrants a full review round (non-trivial arcs), the round itself —
 grounding, change-derived risk dimensions, parallel surfacers, the falsification-gate
-prover — is `skills/review_round.md`; the auditor instances above run as part of its
+prover — is `skills/internal/review_round.md`; the auditor instances above run as part of its
 surfacing phase, and this step's discovered set feeds its grounding.
 
 ### 0a2. Style hygiene audit — mandatory run, non-blocking findings
@@ -91,7 +91,7 @@ rm -rf build                                            # sanctioned only on the
 # (find_package(OpenSSL) then resolves it via OPENSSL_ROOT_DIR and skips the source build);
 # unset → it builds into build/openssl, which the rm -rf just deleted.
 #   setx DASLANG_OPENSSL_DIR "%LOCALAPPDATA%\daslang\openssl"   (build OpenSSL there once)
-# Configure with CI's release modules ON (mirror ci/release_modules.txt — see skills/preflight.md):
+# Configure with CI's release modules ON (mirror ci/release_modules.txt — see skills/internal/preflight.md):
 cmake -S . -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLED=OFF \
   -DDAS_PUGIXML_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_GLFW_DISABLED=OFF
 cmake --build build --config Release -j 64              # full clean build; pass timeout: 0
@@ -111,7 +111,7 @@ minutes before producing a non-representative result.
 
 Because runners are no longer free, local preflight *is* the test rig: commit your work, run `daslang utils/preflight/main.das -- --full`, then push (typically one batched PR). (The lint/format commands below remain useful for debugging a single gate ahead of the full run.)
 
-**The full preflight runs ONCE per PR — never a second full run.** If the run FAILS: fix every failure, validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the failing test slice, a scratch probe — whatever proves that fix, minutes not tens of minutes), say so in your summary, and let CI validate the complete tip. Fix commits after the run (including the fixes for its own findings) do NOT trigger a re-run; neither do Copilot/CI fix rounds later (`skills/babysit.md`).
+**The full preflight runs ONCE per PR — never a second full run.** If the run FAILS: fix every failure, validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the failing test slice, a scratch probe — whatever proves that fix, minutes not tens of minutes), say so in your summary, and let CI validate the complete tip. Fix commits after the run (including the fixes for its own findings) do NOT trigger a re-run; neither do Copilot/CI fix rounds later (`skills/internal/babysit.md`).
 
 CI's `extended_checks` job runs the same lint utility on every `.das` file changed vs `origin/master` and **exits non-zero on any warning** (`./bin/daslang ./utils/lint/main.das -- <files> --quiet` → exit code 2 on ≥1 warning). One STYLE/LINT/PERF warning anywhere in your diff fails CI. Local lint must be clean before push — there is no "minor warning, will ignore" tier here.
 
@@ -187,7 +187,7 @@ The candidate files are auto-stripped from the corpus before comparison, so it's
 
 Skip this step for PRs that only touch tests, fixtures, or generated files.
 
-See `skills/detect_dupe.md` for the full workflow including B1 baseline / CI gate modes.
+See `skills/internal/detect_dupe.md` for the full workflow including B1 baseline / CI gate modes.
 
 ## 1.6. AST verify — mandatory when the diff touches macros or AST building
 
@@ -207,7 +207,7 @@ Expect **zero** `AST verify` lines — the tree is clean tree-wide, so any repor
 a bug in whatever built the node, not a pre-existing wart. The two invariants (a
 node carries the location of the construct it stands for; a node has exactly one
 parent) and the repair tools are in `skills/das_macros.md`. The full nightly sweep
-is not a PR gate (`skills/preflight.md`), which is exactly why this local run
+is not a PR gate (`skills/internal/preflight.md`), which is exactly why this local run
 matters.
 
 ## 1.7. Workaround audit — read every changed file for hacks
@@ -257,7 +257,7 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 
 **Expected:** empty output (no verifier errors). The LLVM IR generation succeeded.
 
-**Windows local caveat:** `clang-cl` may report `unable to execute command: program not executable` when linking the JIT'd `.dll`. That's a local Windows env issue (linker discovery), **not the JIT codegen** — IR was already generated and verified before the link step. Treat the `clang-cl` link failure as a known-local artifact; the only signal you care about for this gate is *no verifier errors*. For full end-to-end JIT validation, use WSL/Linux (`skills/wsl_ci_repro.md`) where clang's link path works.
+**Windows local caveat:** `clang-cl` may report `unable to execute command: program not executable` when linking the JIT'd `.dll`. That's a local Windows env issue (linker discovery), **not the JIT codegen** — IR was already generated and verified before the link step. Treat the `clang-cl` link failure as a known-local artifact; the only signal you care about for this gate is *no verifier errors*. For full end-to-end JIT validation, use WSL/Linux (`skills/internal/wsl_ci_repro.md`) where clang's link path works.
 
 **What this catches:** struct-layout drift (i32 vs i64 fields in JIT mirror), mixed-width arithmetic (i64 × i32), missing intrinsic lowering after a runtime-side widening. The two suggested tests cover array indexing + table operations; widen the smoke list to `tests/soa/test_soa_basic.das` and `tests/language/typeAlias.das` if you touched generic-instance lowering or capture frames.
 
@@ -265,8 +265,8 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 
 If the PR changes the type system, generic binding rules, AST node layout, or widely-instantiated daslib generics (`builtin.das`, `safe_addr.das`, …), two CI gates have no overlap with the standard test suite:
 
-1. **Sequence smoke** — the only pre-merge lane that compiles GLFW-gated `.das` (dasOpenGL helpers etc.). Build the runtime module targets and run `examples/games/sequence/ci_smoke_test.ps1` (`.sh` on POSIX) — exact commands in `skills/preflight.md`.
-2. **Externals sweep** — the external ABI canaries (dasImguiImplot, dasImguiNodeEditor, and the rest of the daspkg-index) build against daslang master in `nightly_daspkg_index.yml`; an ABI break reds that sweep on an unrelated-looking step (dispatch it from your branch for a pre-merge check). Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
+1. **Sequence smoke** — the only pre-merge lane that compiles GLFW-gated `.das` (dasOpenGL helpers etc.). Build the runtime module targets and run `examples/games/sequence/ci_smoke_test.ps1` (`.sh` on POSIX) — exact commands in `skills/internal/preflight.md`.
+2. **Externals sweep** — the external ABI canaries (dasImguiImplot, dasImguiNodeEditor, and the rest of the daspkg-index) build against daslang master in `nightly_daspkg_index.yml`; an ABI break reds that sweep on an unrelated-looking step (dispatch it from your branch for a pre-merge check). Follow `skills/internal/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
 
 Skip for changes that can't alter what external/module-gated code sees (tests-only, docs-only, tool-local).
 
@@ -289,7 +289,7 @@ bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --fai
 Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 
 **If test_aot doesn't build:**
-- Check if new test directories need registering in `tests/aot/CMakeLists.txt` (see `skills/aot_testing.md`)
+- Check if new test directories need registering in `tests/aot/CMakeLists.txt` (see `skills/internal/aot_testing.md`)
 - Check for AOT hash mismatches (`error[50101]`) — compare hash comments in generated `.cpp` with runtime output
 - Fix the build before proceeding
 
@@ -308,7 +308,7 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 - RST files in `doc/source/` (handwritten tutorials, reference pages, TOCs)
 - `doc/reflections/das2rst.das` or `daslib/rst.das` / `daslib/rst_comment.das`
 
-Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs five gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
+Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs five gates (`skills/internal/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
 
 **Which substeps to run** — match what changed, not "all in order":
 
@@ -389,7 +389,7 @@ Add all changed/new files in `doc/` and `doc/reflections/` to the commit. For sq
 git ls-files --others --exclude-standard doc/source/stdlib/   # must be empty
 ```
 
-See `skills/documentation_rst.md` for full details on doc conventions, tutorial RST, and cross-references.
+See `skills/internal/documentation_rst.md` for full details on doc conventions, tutorial RST, and cross-references.
 
 ## 5. Format all changed `.das` files
 
@@ -476,14 +476,14 @@ Where to look: <entry points, risky spots>.
 ### 6a. Enter the Copilot review loop
 
 Creating the PR does not complete the workflow. Continue immediately with
-`skills/babysit.md` and enforce its review-round invariant:
+`skills/internal/babysit.md` and enforce its review-round invariant:
 
 1. Request Copilot review for the current PR tip if no Copilot review targets that exact commit.
 2. For every review round, give every Copilot comment an accept/reject reply and resolve every corresponding conversation.
 3. Verify the unresolved-thread count is zero after the round; replying without resolving is incomplete.
 4. After **every push** to the PR branch, re-request Copilot review. This includes formatting, documentation, CI-only, and other supposedly trivial fixes; there are no push exceptions.
 5. Treat Copilot as dry only when its latest review targets the current tip, produced no new comments, and no review threads remain unresolved.
-6. Triage every comment per `skills/review_triage.md` — the verdict tests, the fix-now vs ledgered disposition, and the prose-only round rule live there.
+6. Triage every comment per `skills/internal/review_triage.md` — the verdict tests, the fix-now vs ledgered disposition, and the prose-only round rule live there.
 
 Never merge solely because CI is green. CI green + Copilot reviewed current tip + zero unresolved conversations is the merge gate.
 
@@ -518,15 +518,15 @@ created it.
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |
-| Type-system/generics | sequence smoke (`skills/preflight.md`) + externals sweep (`skills/abi_break_sweep.md`) | Only for type-system / AST-layout / daslib-generics changes |
+| Type-system/generics | sequence smoke (`skills/internal/preflight.md`) + externals sweep (`skills/internal/abi_break_sweep.md`) | Only for type-system / AST-layout / daslib-generics changes |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests. PR CI only builds the tests/language subset (`test_aot_subset`) — this local full gate + the nightly cron are the only full-AOT checks |
-| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx html | Any daslib/src-builtin/RST change triggers all five gates — `skills/preflight.md` |
+| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx html | Any daslib/src-builtin/RST change triggers all five gates — `skills/internal/preflight.md` |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | Body follows the two-layer template (step 6): short reviewer prose + fixed-heading `<details>` ledger |
 | Copilot round | Reply to every comment, resolve every thread, verify unresolved = 0 | A review round is not complete until all three are done |
 | Push after PR creation | Re-request Copilot review | Mandatory after every push; latest review must target current tip |
-| Review acceptance | `skills/review_triage.md` | Verdict tests + disposition + round outcomes |
-| Babysit | Follow `skills/babysit.md` | Merge only when CI is green and Copilot is dry on current tip |
+| Review acceptance | `skills/internal/review_triage.md` | Verdict tests + disposition + round outcomes |
+| Babysit | Follow `skills/internal/babysit.md` | Merge only when CI is green and Copilot is dry on current tip |
 | Post-land sweep | `git ls-files --others --exclude-standard` | Delete session debris (`_`-prefixed probes/dumps, `__pycache__`, ad-hoc logs); keep configs/manifests/user assets |

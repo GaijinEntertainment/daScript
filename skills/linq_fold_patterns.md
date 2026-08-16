@@ -675,13 +675,19 @@ Common cases that fall back:
 - **Mixed-source operators** like `union(a, b)`, `except(a, b)`,
   `intersect(a, b)`, `concat(a, b)` after the first source has
   been transformed (e.g. `each(a)._select(F).union(b)`).
-- **Joins other than decs-decs equi-join**: `_left_join` /
-  `_right_join` / `_full_outer_join` / `_cross_join` don't splice;
-  array-source `_join` also falls back. Only the decs-decs primitive-key
-  `_join` shape catalogued above splices (via `plan_decs_join`);
-  tuple keys, non-primitive keys, mixed array/decs sources, or chain ops
-  beyond a single trailing `_where` / `_select` all cascade to
-  `join_impl`.
+- **Joins other than an equi-`_join`**: `_left_join` / `_right_join` /
+  `_full_outer_join` / `_cross_join` never splice. The equi-`_join`
+  rows above do splice on every source whose adapter answers
+  `can_join()` — array, table, JSON, XML and decs-decs — through the
+  one `join_general` row (each adapter's `emit_join_hook` supplies the
+  emit and gates its srcB shape). What still cascades to `join_impl`:
+  a non-primitive key (tuple / struct — only `int*` / `uint*` /
+  `float` / `double` / `bool` / `string` hash inline), a decs lead
+  whose srcB is not itself a `from_decs_template` bridge, a JSON / XML
+  srcB that is not array-shaped, `_group_join` on a decs / JSON / XML
+  source, and chain ops beyond the row's slots (leading `_where`,
+  trailing `_where` / `_select`, `count`, and the `_group_by`
+  cross-arm).
 - **Aggregations on lazy groupings**: `_group_by_lazy(K)._select(F)`
   with a non-bucket-reducing `_select`.
 - **Selector-based `to_table(key, elementSelector)`** — the 3-arg form

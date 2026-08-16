@@ -21,7 +21,7 @@ namespace das {
     DAS_API void das_setenv ( const char * name, const char * value );
 
     // every environment variable daslang core reads, one accessor each.
-    // documented in skills/environment_variables.md
+    // documented in skills/internal/environment_variables.md
 
     DAS_API const char * get_dasenv_gc_stage_report ();
     DAS_API const char * get_dasenv_gc_break_on_id ();

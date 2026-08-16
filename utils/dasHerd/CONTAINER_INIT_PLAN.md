@@ -197,7 +197,7 @@ everything the gate admits deletes safely, so the banner needs no
 
 Home: tests/language (already AOT-registered, runs in the per-PR
 `test_aot_subset` and the jit lane — no new lane work). Written per
-skills/writing_tests.md + skills/tests_in_repo.md at implementation
+skills/writing_tests.md + skills/internal/tests_in_repo.md at implementation
 time. Four files:
 
 1. **container_init_traits.das** — trait truth table.

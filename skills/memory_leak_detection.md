@@ -12,7 +12,7 @@ it adds nothing you will not find here, so stay in this file.
 
 | Symptom | Tool |
 |---|---|
-| daslang run exits 0 but prints `GC COMPILE LEAK` / `GC APP LEAK` | **#3 gc_node** (`skills/gc_migration.md`) |
+| daslang run exits 0 but prints `GC COMPILE LEAK` / `GC APP LEAK` | **#3 gc_node** |
 | Script leaks a daslang `new Foo()` / `array<T>` / table, want per-alloc call stack | **#1 `--das-profiler-leaks`** (`skills/profiler.md`) |
 | Long-running run keeps growing, or want per-context heap dump at exit | **#2 `-track-allocations -heap-report`** (single dash) |
 | Know a specific smart_ptr id is misbehaving, want debug-break on every addRef/delRef | **#4 `--track-smart-ptr <hexId>`** |
@@ -153,8 +153,7 @@ DAS_GC_BREAK_ON_ID=1234 bin/daslang path/to/script.das
 
 **Common causes:** daslang code that creates AST nodes at runtime
 (`clone_type`, `new TypeDecl`, `qmacro`) without wrapping in
-`ast_gc_guard() { ... }`. See `skills/gc_migration.md` for the full
-migration background and fix patterns.
+`ast_gc_guard() { ... }`.
 
 **Don't:** ignore GC leak reports. A non-zero count at exit usually means
 ownership is wrong somewhere, and the symptom can cascade into broken AOT
@@ -324,7 +323,6 @@ Common non-leaks that look like leaks:
 - `skills/profiler.md` — the full guide for #1 (ships in the SDK).
 - This file is the master index; the docs-site rendering of it adds nothing extra.
 - `skills/jobque_debugging.md` — full workflow for #5.
-- `skills/gc_migration.md` — background for #3 and `ast_gc_guard`.
 - `include/daScript/misc/handle_registry.h` — dasHV handle infrastructure (#6).
 - `include/daScript/misc/gc_node.h` — gc_node header (`DAS_GC_BREAK_ON_ID`).
 - `include/daScript/misc/smart_ptr.h` — `ptr_ref_count`, `ref_count_track` (#4).

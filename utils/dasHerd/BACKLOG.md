@@ -230,7 +230,7 @@ The review-capacity payoff. Design decided (AGENT_REVIEW_WORKFLOWS.md):
 - Hard signals (CI red = truth) summon; soft signals (Copilot verdicts =
   advice) rank. Attention ranks by deviation from the declared bundle.
 - Escalation policy attaches at arm time per PR/bundle.
-- With it: flip auto-Copilot-review off on GitHub; rework skills/babysit.md
+- With it: flip auto-Copilot-review off on GitHub; rework skills/internal/babysit.md
   (it assumes Copilot feedback arrives on every PR).
 - 26 "agent needs me" (blocked-at-prompt heuristics) folds into the same
   attention machinery.

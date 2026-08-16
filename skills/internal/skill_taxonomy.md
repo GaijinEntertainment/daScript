@@ -13,7 +13,7 @@ Read this before adding, moving, or shipping any skill, and before any skills cl
 
 There is no shipping list. The gate (`ci/check_shipped_skills.py`) enforces the split:
 no shipped file links into `internal/`, no unmarked repo-only path in a shipped file
-(the `repo-only` line/heading marker is the escape — `skills/writing_skills.md`),
+(the `repo-only` line/heading marker is the escape — `skills/internal/writing_skills.md`),
 `daslang/` purity.
 
 ## One fact, one home

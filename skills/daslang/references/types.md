@@ -127,8 +127,10 @@ enum private Chars : uint8 { ch_a = 'A' }  // storage: int/int8/int16/uint/uint8
 
 Values are reached with a dot — `Numbers.one`, never `Numbers one`. An enum name is its own
 strong type; out-of-range values truncate to the storage type. `require daslib/enum_trait`
-enables `for (x in type<Chars>) { ... }` over every value. Enum and bitfield bodies take one
-entry per line — unlike struct and tuple bodies, they reject `;` separators.
+enables `for (x in type<Chars>) { ... }` over every value. Enum and bitfield bodies separate
+entries with a newline **or** a comma, so a short one fits on one line — `enum E { A, B }`.
+Unlike struct and tuple bodies they reject `;`: `enum E { A; B }` is
+`error[30151] syntax error, unexpected ';', expecting '}'`. (probe-verified 2026-08-16)
 
 ## Bitfields
 

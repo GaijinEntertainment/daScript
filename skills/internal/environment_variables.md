@@ -92,7 +92,7 @@ If a variable is genuinely warranted:
 3. **Document it in the same commit.** A knob that exists only in the source is a knob nobody can
    use and nobody can remove.
 
-In `.das` code, `[EnvConfig]` (daslib/clargs, see `skills/clargs_usage.md`) gives all three for
+In `.das` code, `[EnvConfig]` (daslib/clargs, see `skills/daslang/references/cli-and-config.md`) gives all three for
 the price of one struct field: the initializer is the typed default, garbage warns and keeps it,
 the loader runs once, and the declaration carries the doc line. A module that grows more than a
 knob or two graduates to a **registry module**: one file holding every `[EnvConfig]` declaration,
