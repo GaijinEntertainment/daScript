@@ -61,6 +61,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/design_philosophy.md` | The long-form **why** behind daslang — origins, the deliberate trade-offs, the performance model, and why the language is shaped the way it is |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
+| `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language — the house rulebook |
 | `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
 | `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, etc.) |
 | `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
@@ -69,12 +70,16 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
 | `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree — run/lint/test from a standalone `daslang` or MCP; the junction pattern + `project_root` MCP arg |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
+| `skills/imgui_application.md` | Building any dasImgui application — harness lifecycle (`init`/`update`/`shutdown`), the headless arm, heap/GC ownership contract |
+| `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table |
 | `skills/imgui_ui_debugging.md` | Any dasImgui UI/interaction bug: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix from logic or a screenshot alone |
 | `skills/daslang/references/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII, builder, XPath, struct round-trip) |
 | `skills/daslang/references/files-and-paths.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
 | `skills/writing_tests.md` | Writing tests with the bundled `dastest` framework |
 | `skills/tdd_audit.md` | Auditing any diff for test coverage — the branch-test rule: every new/changed reachable branch has a test that fails without it |
+| `skills/review_md.md` | Creating or editing any folder-scoped `REVIEW.md` checklist — the opening contract, the template; the shared constitution is `REVIEW_COMMON.md` at the SDK root |
+| `skills/writing_benchmarks.md` | Writing/running benchmark `.das` files (`--bench`, `run`, `Asserter`) |
 | `skills/memory_leak_detection.md` | Diagnosing leaks (`--das-profiler-leaks`, `--track-smart-ptr`, `GC APP LEAK`, `HandleRegistry`) |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leaks |
 | `skills/daslang/references/queries.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |

@@ -1818,25 +1818,32 @@ install(FILES ${PROJECT_SOURCE_DIR}/GETTING_STARTED.md DESTINATION ${DAS_INSTALL
 install(FILES ${PROJECT_SOURCE_DIR}/CHANGELIST.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 
-# Skills shipped to the SDK — the manifest install/skills.list names which
-# files from skills/ get copied into the install tree under skills/. Keeps
-# top-level skills/ as the single source of truth (no install/skills/ mirror).
-# ENCODING UTF-8: without it file(STRINGS) treats non-ASCII bytes as separators,
-# so a stray em-dash in a comment splits the line and the tail is read as a
-# filename, failing the check below with a nonsense path.
-file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW ENCODING UTF-8)
-set(SHIPPED_SKILLS "")
-foreach(LINE IN LISTS SHIPPED_SKILLS_RAW)
-    string(STRIP "${LINE}" LINE)
-    if(LINE AND NOT LINE MATCHES "^#")
-        set(SKILL_PATH "${PROJECT_SOURCE_DIR}/skills/${LINE}")
-        if(NOT EXISTS "${SKILL_PATH}")
-            message(FATAL_ERROR "install/skills.list references missing file: skills/${LINE}")
-        endif()
-        list(APPEND SHIPPED_SKILLS "${SKILL_PATH}")
-    endif()
-endforeach()
-install(FILES ${SHIPPED_SKILLS} DESTINATION ${DAS_INSTALL_DOCDIR}/skills)
+# Skills shipped to the SDK — the FOLDER is the shipping decision: every
+# skills/*.md ships, skills/daslang/ (the standalone language skill) ships,
+# skills/internal/ never ships. Content rules (no unmarked repo paths, no links
+# into internal/, daslang/ purity) are enforced per PR by
+# ci/check_shipped_skills.py; the bundle's presence is asserted by
+# ci/smoke_test_bundle.sh. Pattern order matters: first match wins, so the
+# EXCLUDE clauses must precede the inclusive *.md pattern.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
+    DESTINATION ${DAS_INSTALL_DOCDIR}/skills
+    FILES_MATCHING
+    # "$"-anchored: an unanchored "/skills/daslang" would also swallow
+    # skills/daslang_live.md (prefix match on the full path)
+    REGEX "/skills/internal$" EXCLUDE
+    REGEX "/skills/daslang$" EXCLUDE
+    PATTERN "*.md"
+)
+# The language bundle — SKILL.md + references/, minus its README (editing rules
+# for this repo's maintainers, meaningless in the SDK).
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
+    DESTINATION ${DAS_INSTALL_DOCDIR}/skills/daslang
+    FILES_MATCHING
+    REGEX "/daslang/README\\.md$" EXCLUDE
+    PATTERN "*.md"
+)
+# The review constitution ships with the review skills that route to it.
+install(FILES ${PROJECT_SOURCE_DIR}/REVIEW_COMMON.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
@@ -1929,6 +1936,15 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/lsp/plugin/.claude-plugin/plugin.json
 install(FILES ${PROJECT_SOURCE_DIR}/.claude/skills/daslang-lsp/.claude-plugin/plugin.json
     DESTINATION .claude/skills/daslang-lsp/.claude-plugin
 )
+# Same prefix-root rationale: an agent session started at the SDK root picks up
+# the language skill and the dragon rule-document auditor with no configuration.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
+    DESTINATION .claude/skills/daslang
+    FILES_MATCHING
+    REGEX "/daslang/README\\.md$" EXCLUDE
+    PATTERN "*.md"
+)
+install(FILES ${PROJECT_SOURCE_DIR}/.claude/agents/dragon.md DESTINATION .claude/agents)
 
 # Install dascov (code coverage)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/dascov/main.das DESTINATION utils/dascov)

@@ -178,9 +178,9 @@ one.)
 
 Read `skills/internal/writing_skills.md` first — it carries the full checklist. The three things that matter most:
 
-1. **Decide the audience before writing.** Skills named in `install/skills.list` are copied verbatim into the SDK bundle, where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**. A skill that mixes SDK-usable content with repo plumbing serves neither audience and is painful to split later. Ship it and push repo bits into a `(repo-only)` section, or keep the whole file repo-only and leave it off the list.
-2. **Never fix an audience mismatch by shipping `src/` or `tests/`.** Mark the line `repo-only` instead (works on a line, or on a heading to cover a whole section). `python3 ci/check_shipped_skills.py <bundle> install/skills.list` enforces this per-PR via `ci/smoke_test_bundle.sh`; it also catches `bin/Release/…` paths, `daslang.exe` invocations, machine-local paths, dead relative links, and references to skills that aren't shipped.
-3. **Register it in all the places.** `skills/<name>.md`, plus a row in the top-level `CLAUDE.md` table; if shipped, also `install/skills.list` **and** a row in `install/CLAUDE.md`. A skill with no trigger row is a skill nobody opens.
+1. **The folder IS the audience decision.** `skills/*.md` ships with the SDK — where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**; `skills/internal/` never ships; `skills/daslang/` is the standalone language skill. Decide before writing (`skills/internal/skill_taxonomy.md`); a file that mixes SDK-usable content with repo plumbing serves neither audience.
+2. **Never fix an audience mismatch by shipping `src/` or `tests/`.** Mark the line `repo-only` instead (works on a line, or on a heading to cover a whole section). `python3 ci/check_shipped_skills.py <bundle>` enforces this per-PR via `ci/smoke_test_bundle.sh`; it also catches `bin/Release/…` paths, `daslang.exe` invocations, machine-local paths, dead relative links, references to skills the bundle doesn't carry, and `skills/daslang/` purity (no marker escape there).
+3. **Register it.** Every skill gets a row in the top-level `CLAUDE.md` table; a shipped skill additionally gets one in `install/CLAUDE.md` (the gate fails the bundle without it). A skill with no trigger row is a skill nobody opens.
 
 ## daslang Language
 

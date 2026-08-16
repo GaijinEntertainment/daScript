@@ -7,8 +7,8 @@
 #   1. `cmake --install` is ADDITIVE. Un-ship a file and the old copy stays in the prefix,
 #      so a gate can pass against a bundle that still contains the thing you removed.
 #      The prefix has to be removed first.
-#   2. install/skills.list is read at CONFIGURE time (file(STRINGS) in CMakeLists.txt).
-#      Editing it and running only `cmake --install` installs the OLD list. Reconfigure.
+#   2. install rules are baked at CONFIGURE time. Adding/moving a skill and running only
+#      `cmake --install` installs from the OLD rules. Reconfigure first.
 #
 # Usage:
 #   bash ci/reinstall_bundle.sh [prefix] [build-dir]
@@ -46,7 +46,7 @@ if [[ -e "$PREFIX" ]]; then
     fi
 fi
 
-echo "==> reconfigure (install/skills.list is read at configure time)"
+echo "==> reconfigure (install rules are baked at configure time)"
 cmake -B "$BUILD" > /dev/null
 
 echo "==> wipe $PREFIX (cmake --install is additive)"
@@ -54,7 +54,7 @@ rm -rf "$PREFIX"
 
 echo "==> install"
 cmake --install "$BUILD" --prefix "$PREFIX" --config Release --strip > /dev/null
-echo "    $(find "$PREFIX" -type f | wc -l) files, $(ls "$PREFIX"/skills/*.md 2>/dev/null | wc -l) skills"
+echo "    $(find "$PREFIX" -type f | wc -l) files, $(find "$PREFIX"/skills -name '*.md' 2>/dev/null | wc -l) skill files"
 
 echo "==> smoke test (includes the shipped-skills gate)"
 bash ci/smoke_test_bundle.sh "$PREFIX"

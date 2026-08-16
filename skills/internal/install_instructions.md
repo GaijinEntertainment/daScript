@@ -1,121 +1,44 @@
 # Maintaining Install AI Instructions
 
-When updating or creating AI instruction files (`CLAUDE.md` + skills) for the installed SDK, follow this guide. These files ship with the install and help AI assistants write daslang code and use the SDK correctly.
+Read this before updating `install/CLAUDE.md` or changing what the SDK ships for AI
+assistants. The shipping decision itself is the folder (`skills/` root and
+`skills/daslang/` ship, `skills/internal/` never does) — that law and the move/split
+rules live in `skill_taxonomy.md`; the content rules a shipped file must satisfy (and
+the `repo-only` marker mechanics) live in `writing_skills.md`. This file carries only
+what neither does: the SDK-side registry and the sync duties between the two CLAUDE.md
+heads.
 
-## File layout
-
-`install/CLAUDE.md` is the SDK-facing main instructions file (audience-curated counterpart to top-level `CLAUDE.md`). The skills tree is **not** mirrored under `install/skills/` — there is a single source of truth at `skills/`, and `install/skills.list` is a manifest naming which skills get copied to the SDK at install time.
+## What ships where
 
 | Source (repo) | Installed to | Purpose |
 |---|---|---|
 | `install/CLAUDE.md` | `CLAUDE.md` (root) | Main AI instructions for SDK users |
-| `install/skills.list` | (not installed) | Manifest naming which `skills/*.md` to ship |
-| `skills/<name>.md` | `skills/<name>.md` | Each skill listed in `install/skills.list` |
-| `GETTING_STARTED.md` | `GETTING_STARTED.md` (root) | First-run walkthrough (run a program, editor + AI tooling) |
-| `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
-| `utils/lsp/` (supervisor + subtools + plugin manifest) | `utils/lsp/` + `.claude/skills/daslang-lsp/` | LSP server for Claude Code (the `.claude/skills` copy auto-loads for sessions started at the SDK root) |
-| `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector |
+| `skills/*.md` + `skills/daslang/` | `skills/` | Shipped skills + the language bundle (minus `daslang/README.md`) |
+| `skills/daslang/` (again) | `.claude/skills/daslang` | Auto-pickup for agent sessions started at the SDK root |
+| `.claude/agents/dragon.md` | `.claude/agents/` | The rule-document auditor |
+| `REVIEW_COMMON.md` | `REVIEW_COMMON.md` (root) | The review-checklist constitution `review_md.md` routes to |
+| `GETTING_STARTED.md` | `GETTING_STARTED.md` (root) | First-run walkthrough |
+| `utils/mcp/`, `utils/lsp/` | same paths | MCP / LSP servers (the `.claude/skills/daslang-lsp` manifest auto-loads the LSP) |
 
-The current ship list lives in [install/skills.list](../install/skills.list) — alphabetical, `#` comments allowed.
+The install rules live in the root `CMakeLists.txt` (search for "the FOLDER is the
+shipping decision"); `ci/check_shipped_skills.py <bundle>` is the per-PR content gate,
+run from `ci/smoke_test_bundle.sh`.
 
-## Adding or removing a shipped skill
+## Registry duties
 
-1. **Adding:** put the skill at `skills/<name>.md` (or use an existing one). Add a single line `<name>.md` to `install/skills.list` in alphabetical order. Add a row to the `install/CLAUDE.md` skill table with the SDK-facing description.
-2. **Removing:** delete the line from `install/skills.list` and the row from `install/CLAUDE.md`. Decide whether to keep the skill at `skills/<name>.md` (repo-only) or delete it entirely.
-
-The CMake install rule (in root `CMakeLists.txt`) reads the manifest with `file(STRINGS ...)` and `install(FILES ...)` for each named basename. Missing files trigger `FATAL_ERROR` at configure time, so a typo in `install/skills.list` fails loudly.
-
-**Closure invariant.** A shipped skill may only reference `skills/<other>.md` when that other skill also ships — otherwise the SDK carries a dead link. The rule cuts both ways: a genuinely repo-only skill (`tests_in_repo.md`, `tutorials.md`, `documentation_rst.md`, `preflight.md`, `make_pr.md`, …) stays **off** the list, and a shipped skill pointing at one either gets reworded or marks the line `repo-only` (see below) rather than dragging it in. Enforced per-PR by the same `ci/check_shipped_skill_refs.awk` as the path rule — it takes the ship list via `-v shipped=`, so a skill sitting on disk but absent from `install/skills.list` is still caught.
-
-**Repo-internal paths must be marked `repo-only`.** A shipped skill that says "see
-`src/ast/ast_infer_type.cpp`" is a dead end in the SDK: `src/`, `tests/`, `benchmarks/`
-and `modules/*/src` are never bundled. Shipping them is not the answer — saying so is,
-so the reader skips the line instead of hunting a path that isn't there. Add the token
-`repo-only` either to the line itself (one-off prose mentions) or to the heading of a
-section that is entirely repo internals — a heading marker exempts that section only
-and resets at the next heading, so a mid-file internals section can't leak its
-exemption through the rest of the page. Enforced per-PR by
-`ci/check_shipped_skill_refs.awk`, run from `ci/smoke_test_bundle.sh` (the
-`bundle_smoke` job in `build.yml`). Fenced code blocks are exempt: they quote tool
-output verbatim and that text must stay accurate. `tests/` is not yet in the pattern —
-that class is still being sorted into inline-the-snippet vs quarantine.
-
-**Keep `install/skills.list` ASCII-only, comments included.** `file(STRINGS)` treats non-ASCII bytes as separators, so an em-dash inside a comment splits that line and the tail is read as a skill filename — the `FATAL_ERROR` then names a nonsense path. The call passes `ENCODING UTF-8` to blunt this, but plain ASCII is the reliable answer.
-
-## What belongs in install instructions
-
-**Include (SDK-user-facing):**
-
-- daslang language reference (gen2 syntax, all rules)
-- Running scripts (`bin/daslang path/to/script.das`)
-- AOT generation, JIT execution, project files
-- Debugging tips (exit codes, crash diagnosis)
-- Memory management, move semantics, smart pointers
-- AST macros, structure macros, qmacro/quote (advanced but language-level)
-- Error handling (`try/recover`, `panic`, `assert`)
-- Standard library modules (daslib)
-- C++ integration (embedding, binding types/functions/enums)
-- Code formatting tool usage
-- Install directory layout (bin/, lib/, daslib/, include/, examples/)
-- MCP server usage (starting, configuring, available tools)
-
-**Exclude (repo-dev-only):**
-
-- Build system details (CMake, MSVC, generate_*.bat)
-- GitHub operations, PR workflow
-- Repo-internal test infrastructure (registering test directories in CMake, AOT test build wiring)
-- Documentation generation (RST, Sphinx, das2rst)
-- Benchmark framework, perf/style lint rule authoring
-- Repo-internal source paths (`src/`, `tests/`, `doc/reflections/`)
-- "Updating instructions with new knowledge" meta-notes
-- CI/CD configuration
-
-## Path conventions in shipped content
-
-- Use **cross-platform paths** without OS-specific extensions: `bin/daslang` not `bin/daslang.exe`
-- Use **relative paths from install root**: `bin/daslang`, `daslib/linq.das`, `examples/hello_world.das`
-- Never reference repo-internal paths like `bin/Release/daslang.exe`, `src/builtin/...`, `tests/...`
-
-## Keeping content in sync
-
-Since the skills tree is single-sourced, most updates only touch one file. The exception is the two CLAUDE.md heads:
-
-1. **Language knowledge changes** (gen2 syntax, gotchas, new keywords) — update BOTH `CLAUDE.md` AND `install/CLAUDE.md`. The two heads carry near-identical syntax content.
-2. **Repo-dev-only changes** (build system, CI, test conventions) — update top-level `CLAUDE.md` only.
-3. **Skill table edits** — update BOTH if the skill ships, top-level only if it doesn't.
-4. **Skill content edits** — update `skills/<name>.md` only. If the skill ships, the same content reaches SDK users automatically via the manifest.
-
-## CMake install rules
-
-Install rules live in the root `CMakeLists.txt` near line 1763. The shape:
-
-```cmake
-install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
-
-# Skills via manifest
-file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW)
-set(SHIPPED_SKILLS "")
-foreach(LINE IN LISTS SHIPPED_SKILLS_RAW)
-    string(STRIP "${LINE}" LINE)
-    if(LINE AND NOT LINE MATCHES "^#")
-        set(SKILL_PATH "${PROJECT_SOURCE_DIR}/skills/${LINE}")
-        if(NOT EXISTS "${SKILL_PATH}")
-            message(FATAL_ERROR "install/skills.list references missing file: skills/${LINE}")
-        endif()
-        list(APPEND SHIPPED_SKILLS "${SKILL_PATH}")
-    endif()
-endforeach()
-install(FILES ${SHIPPED_SKILLS} DESTINATION ${DAS_INSTALL_DOCDIR}/skills)
-```
-
-`DAS_INSTALL_DOCDIR` is the install root (`.`), so `CLAUDE.md` lands at the top level and `skills/` as a subdirectory.
+- A skill moving between root and `internal/` changes what ships — move the file, then
+  fix BOTH CLAUDE.md tables: the top-level one always has a row; `install/CLAUDE.md`
+  has a row exactly for shipped root skills. The gate fails the bundle when a shipped
+  skill has no `install/CLAUDE.md` row.
+- The two CLAUDE.md heads share the language half by construction (the fails-silently
+  digest, the idiom table, the bundle pointer) — an edit to that half lands in BOTH
+  files, same wording. Repo-dev content (build, CI, PR workflow) goes to the top-level
+  head only.
+- Skill content edits touch `skills/<name>.md` only; shipping is automatic.
 
 ## Verification
 
-After modifying install instructions, install to a scratch prefix and verify the layout. Replace `<prefix>` with whatever directory you prefer (e.g. `~/daslang-test`, `/tmp/daslang`).
-
-1. Rebuild: `cmake --build build --config Release --target daslang`
-2. Install: `cmake --install build --config Release --prefix <prefix>`
-3. Verify `<prefix>/CLAUDE.md` exists and reads as the SDK-facing version (not the top-level repo one).
-4. Verify `<prefix>/skills/` contains exactly the basenames listed in `install/skills.list` and no others. Cross-check: `ls <prefix>/skills/ | sort` should match `grep -v '^#' install/skills.list | grep -v '^$' | sort`.
-5. Spot-check a couple of shipped skills for repo-internal-path leakage (`bin/Release`, `src/builtin/`, `tests/...`).
+1. Install: `cmake --install build --config Release --prefix <prefix>`
+2. `<prefix>/CLAUDE.md` reads as the SDK-facing head; `<prefix>/skills/` has no
+   `internal/`, and `<prefix>/skills/daslang/SKILL.md` + `references/` exist.
+3. `python3 ci/check_shipped_skills.py <prefix>` exits 0.
