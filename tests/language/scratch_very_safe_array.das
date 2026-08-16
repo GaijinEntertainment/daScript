@@ -7,7 +7,9 @@ options very_safe_context
 // ladder: reserve 16..4096 of array<int> - every generation a 16-multiple
 // eager expectation: cap*4 (only the final generation lives)
 // deferred expectation: cap*8 - 64 (the whole ladder lives)
-// windows: `before` is the arm's first statement, at capacity 0; ladders are fixed_array (stack)
+// windows: a window holds only set_scratch (allocates nothing) and reserves - any
+// resize/clear stays OUTSIDE, since first-in-context they can lazily allocate
+// instrument state under the CI Coverage rig; ladders are fixed_array (stack)
 
 require dastest/testing_boost public
 
@@ -110,16 +112,20 @@ def test_scratch_lifecycle(t : T?) {
         t |> equal(grew, uint64(long_capacity(g_deleted)) * 8ul - 64ul)   // deferred again
     }
     t |> run("clear keeps the bit - the recycled-queue pattern") @(t : T?) {
-        let before = heap_bytes_allocated()
+        // setup stays OUTSIDE the window: under the CI Coverage rig, first-in-context
+        // resize/clear can lazily allocate instrument state (+144 bytes each, linux
+        // directory sweep) - the window holds only the ladder, the actual instrument
         unsafe(g_cleared |> set_scratch(true))
         g_cleared |> reserve(16l)
         g_cleared |> resize(16l)
         g_cleared |> clear()   // size=0 only; capacity and flags untouched
         t |> equal(is_scratch(g_cleared), true)
+        let before = heap_bytes_allocated()
         for (c in fixed_array(32l, 64l, 128l, 256l, 512l, 1024l, 2048l, 4096l)) {
             g_cleared |> reserve(c)
         }
         let grew = heap_bytes_allocated() - before
-        t |> equal(grew, uint64(long_capacity(g_cleared)) * 4ul)   // still eager
+        // still eager; -64 = the pre-window 16-cap buffer, freed at the first regrow
+        t |> equal(grew, uint64(long_capacity(g_cleared)) * 4ul - 64ul)
     }
 }
