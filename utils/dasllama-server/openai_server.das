@@ -1647,7 +1647,6 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    g_media_rows += n_media
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
                            media_at = media_at, n_media = n_media,
                            media_non_causal = n_media > 0l)   // image rows only on this route: the gemma image span is non-causal
@@ -1661,6 +1660,9 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
         service_unavailable(srv, writer, "the server is at capacity ({cur_sched().max_queue} requests queued) — retry shortly")
         return
     }
+    g_media_rows += n_media   // after submit: a 503-rejected request counts nothing (an image
+                              // request reaches here once — it parks at the encode boundary
+                              // BEFORE this function and re-enters only as the resume)
     g_slots[g_cur].last_used = ref_time_ticks()
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     to_log(LOG_INFO, "[req {rid}] {prefix}: prompt={np} tok, stream={streaming}, max_new={max_new}\n")

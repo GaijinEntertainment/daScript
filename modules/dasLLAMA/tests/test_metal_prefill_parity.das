@@ -332,7 +332,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     t |> success(metal_prefill_stats().prefills - pfs0 == 2l,
                         "{kdt} head + span both served on the GPU")
                     log_gen_texts(trs, "span/{kdt}", cpu_s, gpu_s)
-                t |> success(same(cpu_s, gpu_s), "{kdt} span turn matches the all-CPU control")
+                    t |> success(same(cpu_s, gpu_s), "{kdt} span turn matches the all-CPU control")
                     delete cpu_s
                     delete gpu_s
                 }
