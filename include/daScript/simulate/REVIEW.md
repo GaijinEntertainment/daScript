@@ -8,6 +8,5 @@
   `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`); code that runs once per
   capacity change rather than once per evaluated node (table grow/rehash, array resize) is
   not in scope. A hot-path addition is a defect.** A load, branch, or counter on that path
-  taxes every program on every step; an addition ledgered under `ARCHITECTURE.md`'s
-  sanctioned hot-path additions still fires this rule, and the author answers "yes,
-  ledgered."
+  taxes every program on every step; a correctness-required addition is ledgered under
+  `ARCHITECTURE.md`'s sanctioned hot-path additions.

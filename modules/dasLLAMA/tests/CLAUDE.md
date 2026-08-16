@@ -230,13 +230,14 @@ with `-jit` — no runner, no arms, no models.
 
 ## Out-of-folder test files (the checklist's placement ledger)
 
-Every dasLLAMA `[test]` file outside this folder, each with its reason:
+Every `[test]` file requiring a `dasllama/*` module outside this folder, each with its reason:
 - `utils/dasllama-server/test_openai_server*.das` — require the server by bare same-dir name
   (the hyphenated directory is unreachable by path require).
 - `utils/dasllama-server/test_exchange_client.das` — requires its subject by relative path,
   but coordinates its fixed test port with the serving-leg suites' ports in that directory
   (see its `TEST_PORT` note).
-- `utils/dasllama-ladder/test_ladder_server.das`, `test_ladder_store.das` — require the
-  ladder server by bare same-dir name; governed by that folder's own `REVIEW.md`.
 - `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` — the bench self-check, requiring
   `matmul_variants` by bare same-dir name.
+
+The ladder tests (`utils/dasllama-ladder/test_*.das`) require no engine module and answer to
+that folder's own `REVIEW.md` — not dasLLAMA tests, not ledger entries.

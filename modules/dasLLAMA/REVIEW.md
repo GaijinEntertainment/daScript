@@ -9,7 +9,8 @@ location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
 `performance/REVIEW.md`.
 Three kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
-or media change `REVIEW_VISION.md`. This file's rules bind the rest of the engine.
+or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
+lands, answers to `modules/dasLLVM/REVIEW.md`. This file's rules bind the rest of the engine.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -55,12 +56,11 @@ backend** — the instrument is the scaling ratio across the size ladder, and su
 defect. A change to the cell's own corpus input ships the same rows or a statement that the
 bytes are unchanged.
 
-**Weakening `tests/test_env_registry.das` is a defect.** It enforces the rest of the knob
-contract: no raw environment access outside `dasllama_env.das` (declare an `[EnvConfig]` field
-and read `g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no
-re-declared env helper, and a checked-in `ENVIRONMENT.md` matching what the declarations
-render (regenerate with `harness/gen_env_doc.das`). Sanctioned forms are `ARCHITECTURE.md`
-§2.9.
+**A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
+`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
+`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.** A new pre-tokenizer
+family or backend ships its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture; a
+corpus case asserts exact reference ids AND lossless round-trip.
 
 **An override announces itself where it changes the outcome.** An override is a gate escape,
 policy override, or threshold recalibration. Where one changes what a run measures, mints, or
@@ -134,9 +134,10 @@ is a defect of the change, not of the docs.
 harnesses and benchmarks require engine files directly.** A split that spreads facade-reachable
 requires instead of fixing the re-export is a defect.
 
-**A NEW `[EnvConfig]` area struct is wired into `env_markdown()` AND `registered_env_names()`
-in the same change.** Both lists are hand-maintained, and a struct in neither is invisible to
-every test.
+**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
+struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
+a struct the renderer emits but the registry does not is caught by
+`tests/test_env_registry.das`.
 
 **A new module file is registered in `.das_module` in the same change.**
 
@@ -167,9 +168,11 @@ concern's shared file (its own file when none exists)** — never sideways into 
 
 **Tool wire text — building or parsing — is produced only in `dasllama_tools.das`.**
 
-**Nothing outside `dasllama_audio_io.das` requires `audio` (the miniaudio decode module).**
+**No engine file (`dasllama/`) other than `dasllama_audio_io.das` requires `audio` (the
+miniaudio decode module).** Benchmarks, harnesses, and tests decode their own fixtures.
 
-**Nothing outside `dasllama_vision_io.das` requires `stbimage`.**
+**No engine file (`dasllama/`) other than `dasllama_vision_io.das` requires `stbimage`.**
+Benchmarks, harnesses, and tests decode their own fixtures.
 
 **Engine, HTTP, or writer logic never lands in `dasllama_scheduler.das`** — engine logic in
 engine files, HTTP in the server, writer logic in the writer's own file.

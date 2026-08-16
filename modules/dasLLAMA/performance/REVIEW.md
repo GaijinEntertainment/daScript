@@ -39,6 +39,6 @@ added to it is a defect.
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
-names** — `mode` `paranoid`, `noise` `ok`, the current `dasllama_version`, and a `race` entry
-for every family in `kernels` whose grid holds more than one variant; a partial or hand-edited
-copy is a defect.
+names** — `mode` `paranoid`, `noise` `ok`, the current `dasllama_version`, and every `race`
+entry's `winner` equal to that family's `kernels` value; a partial or hand-edited copy is a
+defect.
