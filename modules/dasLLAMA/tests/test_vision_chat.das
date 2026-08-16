@@ -95,7 +95,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
             tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
             delete chat
-            // The tower legs (metal-media chunk 2). The caption is the FLOOR, not token parity
+            // The tower legs. The caption is the FLOOR, not token parity
             // (freeform token cells are banned; the soft-token numeric bars live in the tier-1 GPU
             // and gemma4uv-metal gates) - here the contract is engage evidence plus "still cats"
             // with the knob off.

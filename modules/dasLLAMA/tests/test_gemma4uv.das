@@ -206,7 +206,7 @@ def test_gemma4uv_tier1(t : T?) {
     }
 }
 
-// The GPU tier-1 ATTEMPT (metal-media chunk 2): the same oracle dumps through the Metal tower.
+// The GPU tier-1 gate: the same oracle dumps through the Metal tower.
 // The f16-staged GEMMs cannot promise the CPU 2e-4, so the bar is the scale-relative rung
 // (TIER1_TOL + 4e-3 * token rms) with the CPU constant untouched; the log states which rung
 // each fixture actually held. Engage evidence is the encodes counter, per fixture.

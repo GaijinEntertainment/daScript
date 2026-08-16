@@ -150,6 +150,31 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
 
 ---
 
+## The ASR cell (`--asr`)
+
+Transcription wall time per corpus clip — what a user waits on when they feed audio. Same
+process/tune/identity discipline as the cells above; the reference tools are measured
+adjacent by `gen_bench_records`, never in this process.
+
+```sh
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
+  --asr -m "Whisper large" -r 3 --for-debug-purposes            # the q8-CPU serving default
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
+  --asr -m "Whisper large" --ngl 1 -r 3 --for-debug-purposes    # the f32 Metal tower rail
+```
+
+- One `asr:<clip>.wav` key per corpus bucket: best-of-`-r` transcribe ms, the clip seconds,
+  the LAST rep's transcript (under fast-math a token flip is what moves the timing), and
+  `encode_ms` (the encoder split, sampled in its own untimed rep off the asr_prof rail).
+- Two backends, one flag: without `--ngl` the row is the serving default (q8 encoder GEMMs,
+  `backend = "cpu"`); with `--ngl` the tower serves the f32 rail on Metal
+  (`backend = "metal"`, `set_asr_fp32`) — decoders and Conformer frontends stay CPU by
+  declared intent, and every measured gpu row must show tower-engage counters and a non-zero
+  `encode_ms` or the leg exits non-zero. A Conformer row under `--ngl` therefore FAILS by
+  design: that family has no GPU tower lane to measure.
+- `exec_fmt` on the row states the quant mode the encoder actually ran, so a number can
+  never silently describe a format nobody serves.
+
 ## The tokenizer cell (`--tok`)
 
 Encode/decode throughput of a GGUF's tokenizer, from the same rig — no weights are loaded, so the

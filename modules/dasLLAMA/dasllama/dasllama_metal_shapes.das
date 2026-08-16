@@ -46,14 +46,14 @@ enum MetalDecodeDecline {
                         // forward-only and NOT re-derivable — no watermark repair exists)
 }
 
-// The tower/embedder driver's decline set (metal-media chunk 2) — same contract as the
-// prefill/decode enums: the FIRST failing clause, .none = supported, names asserted as
-// strings by the support-matrix tower arm.
+// The tower/embedder driver's decline set — same contract as the prefill/decode enums: the
+// FIRST failing clause, .none = supported, names asserted as strings by the image suite's
+// mtower cells. Conformer families (canary/parakeet/gemma4a) never DECLINE — their
+// hand-written forwards have no seam, so their evidence is frozen counters, not a reason.
 enum MetalTowerDecline {
     none                // supported — the tower encode runs on the GPU
     knob                // DASLLAMA_METAL_TOWER=0 — the A/B rail
     quant_mode          // a q8-loaded tower: the f32/bf16 lane only (the q8 tower lane is its own slice)
-    graph               // a Conformer family (canary/parakeet/gemma4a) — hand-written forwards, out of scope
     shape               // a dim violating the GEMM grids (m%32 / ndim%64 / kdim%32) or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time

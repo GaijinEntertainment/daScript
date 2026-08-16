@@ -976,8 +976,8 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
 // without writing, which the sentinel whole-slab compare asserts. QK arms keep npos == np32:
 // the tensor twin stages K pad rows RAW (no zero guard — the base has one), so pads must not
 // exist for the pair to agree.
-def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int) {
-    let tag = "attn_qk_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window}"
+def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0) {
+    let tag = "attn_qk_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
     var err : string
     var pso = (tensor
         ? pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
@@ -1012,7 +1012,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
             let mBase = m / 32 * 32
             for (nb in range(np32 / 64)) {
                 let nBase = nb * 64
-                let skip = (nBase > qoff + mBase + 31
+                let skip = ((uend > 0 ? nBase >= uend : nBase > qoff + mBase + 31)
                     || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
                 continue if (skip)
                 for (pos in range(nBase, nBase + 64)) {
@@ -1031,7 +1031,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     }
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
         npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
-        window = uint(window))
+        window = uint(window), uend = uint(uend))
     var bq = buf_upload(dev, qv)
     var bk = buf_upload(dev, kv)
     var batt = buf_fill(dev, heads * mp * np32, -1000.0)
@@ -1061,8 +1061,8 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
 // MetalAttnAVMm[T]: xb[m x qd] = P · V with the normalized-P slab causally zero past
 // qoff+m and past npos. The tensor twin zero-guards V rows >= npos — the npos < np32 arm
 // fills the pad rows with garbage to prove the guard is live.
-def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int) {
-    let tag = "attn_av_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos}"
+def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0) {
+    let tag = "attn_av_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos} u={uend}"
     var err : string
     var pso = (tensor
         ? pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
@@ -1080,7 +1080,7 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     for (h in range(heads)) {
         for (m in range(mp)) {
             for (pos in range(np32)) {
-                let live = pos <= qoff + m && pos < npos
+                let live = (uend > 0 ? pos < uend : pos <= qoff + m) && pos < npos
                 attf[(h * mp + m) * np32 + pos] = live ? float((h * 31 + m * 7 + pos * 3) % 13 - 6) * 0.25 : 0.0
             }
         }
@@ -1111,7 +1111,8 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
         }
     }
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
-        npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp))
+        npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
+        uend = uint(uend))
     var batt = buf_upload(dev, attf)
     var bv = buf_upload(dev, vv)
     var bxb = buf_fill(dev, mp * qd, -1000.0)
@@ -1158,7 +1159,7 @@ def test_metal_gemm_kernels(t : T?) {
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
 
-                // ===== the dense f32 tower stamp (metal-media chunk 2) =====
+                // ===== the dense f32 tower stamp =====
                 f32_mulmm_gate(t, dev, queue, true, 32, 32, 384, 384)      // whisper-tiny qkv/o, exact stage
                 f32_mulmm_gate(t, dev, queue, false, 32, 32, 384, 1536)    // tiny fc1, rounded stage
                 f32_mulmm_gate(t, dev, queue, false, 32, 32, 1536, 384)    // tiny fc2
@@ -1203,6 +1204,14 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 64)
                 attn_av_mm_gate(t, dev, queue, false, 2, 128, 1, 32, 64, 64, 32)  // vBase=64 tile
                 attn_av_mm_gate(t, dev, queue, true, 2, 128, 1, 32, 64, 64, 32)
+                // the uniform-span (uend) arms: every query row attends [0, uend) — base AND
+                // tensor twins (the _t twins' only span coverage; they feint without Metal-4)
+                attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 0, 0, uend = 128)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, uend = 128)
+                attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 256, 224, 128, uend = 192)   // span past the window floor
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, uend = 192)
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 96, 0, uend = 96)
+                attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)

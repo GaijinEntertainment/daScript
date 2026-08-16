@@ -4746,7 +4746,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
 
     // an active whole-prefill override may claim the entire stack (false = decline, fall back to
     // the CPU loop). Contract: a claiming override must honor s.attn_uniform_end — metal serves
-    // the span through AttnArgs.uend; vulkan still declines it (followup #23's other half).
+    // the span through AttnArgs.uend; vulkan declines it.
     var stack_done = false
     g_prefill_logits_done = false
     if (!empty(g_prefill_override_name)) {

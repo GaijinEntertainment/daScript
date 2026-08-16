@@ -946,7 +946,7 @@ def test_metal_misc_kernels(t : T?) {
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
                 geglu_gate(t, dev, queue, 800)
 
-                // ===== tower primitives (metal-media chunk 2) =====
+                // ===== tower primitives =====
                 layernorm_gate(t, dev, queue, 384, 4, 1.0e-5, false)    // whisper-tiny d; strided tail
                 layernorm_gate(t, dev, queue, 896, 2, 1.0e-5, false)    // qwen3a d
                 layernorm_gate(t, dev, queue, 1280, 2, 1.0e-5, false)   // whisper-large d

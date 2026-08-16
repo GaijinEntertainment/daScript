@@ -15,19 +15,25 @@ lands, answers to `modules/dasLLVM/REVIEW.md`. This file's rules bind the rest o
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
 body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]`
-metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work. A bump with neither the
-kernel roster nor sidecar interchangeability changed is a defect — equal versions mean an equal
-kernel roster and an interchangeable sidecar set (the exchange keys validity on version and
-box).
+metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work.
+
+**A `DASLLAMA_VERSION` bump with neither the kernel roster nor sidecar interchangeability
+changed is a defect** — equal versions mean an equal kernel roster and an interchangeable
+sidecar set (the exchange keys validity on version and box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
 this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
 struct; if no it is shape — a block stride, a lane width, an unroll factor, a format selector —
 and it must not reach the kernel as a uniform, a kargs field, or a helper parameter.
 
-**A kernel body contains no indirection.** No function pointers, no vtables.
+**The EMITTED shader contains no indirection.** No function pointers, no vtables. A
+`class template` / `def abstract` / `def override` splice is compile-time and conforms —
+check the emission, not the das spelling.
 
-**A predicate answering "can this run" must not also answer "is this ready".**
+**The `*_decline_caps` predicates take only the model and the call shape; window-setup state
+is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A caps
+parameter derived from a live `Session` is a defect unless it describes the CALL (its row
+count, its span shape), not the session's setup progress.
 
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
@@ -43,12 +49,12 @@ value feeds logic is marked `// clock: control`. The rails, and where free-hand 
 legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
-or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. A region entry is a KERNEL
-`*_encode` / `*_decode` / step driver; the tokenizer encode/decode path is out of scope.
-Covered means an annotated entry reaches it: the contracts arm down the call graph, so an
-interior function carries nothing of its own. A new entry point, including a kernel-backend
-override or a batch donor, carries its annotation itself; a rename is not new — annotations
-follow the name in the same change.
+or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts (`ARCHITECTURE.md` §2.11 has the
+coverage model). A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the
+tokenizer encode/decode path is out of scope.
+
+**A new entry point — a kernel-backend override, a batch donor, a step driver — carries its
+annotation itself; a rename is not new** (annotations follow the name in the same change).
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
 `dasllama_bpe.das` / `dasllama_pretok.das` ships before/after `--tok` rows for the affected
@@ -163,8 +169,17 @@ format family kept whole.**
 **A kernel body lands in its tier or backend kernel file** — never in `dasllama_math.das` or a
 lens/dispatch macro file.
 
-**A family quirk lands in the family file; a piece two families need moves UP into the
-concern's shared file (its own file when none exists)** — never sideways into a sibling.
+**A family quirk lands in the family file — or, when it is platform-specific, in that
+platform's backend file; a piece two families need moves UP into the concern's shared file
+(its own file when none exists)** — never sideways into a sibling.
+
+**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
+tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
+decides the question for a whole file, because a shipped file mixes them.
+
+**A harness that prints output for another tool to compare fails loudly when it has nothing to
+print.** A run that ends without its comparison lines — wrong flags, failed load — exits
+non-zero.
 
 **Tool wire text — building or parsing — is produced only in `dasllama_tools.das`.**
 

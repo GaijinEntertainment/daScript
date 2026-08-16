@@ -8,7 +8,7 @@ whole directory.** A change reaches a test when it alters what code does at runt
 the test file, a shared helper, or engine code the test exercises; an identifier- or
 comment-only edit reaches none.
 
-**A test file `run.das` lists runs only through `run.das`, scoped with `--arm` (the runner
+**A test file listed in `run.das` runs only through `run.das`, scoped with `--arm` (the runner
 refuses `--full`); dastest invoked directly on such a file is a defect. Every other test in
 this folder runs under dastest.**
 
@@ -52,25 +52,26 @@ bit; a platform-fixed predicate's observable is the argv it gates or the mode it
 moved or edited registration's observable is reachability.** Feed the function and check the
 bytes; "the model still runs" is not that test.
 
-**Every test that compares logits also logs decoded text for both sides.** A red, or a
-suspicious green, must be readable as text in the log, not only as an id or float difference.
+**Every test that compares generated tokens, ids, or logits logs the decoded text for both
+sides.** A red, or a suspicious green, must be readable as text in the log, not only as an id
+or float difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
 **A kernel-unit arm compares its kernel against a CPU oracle.** A GPU-vs-GPU arm is allowed only
 for cross-dispatch bit-identity no CPU oracle can witness, and then its output buffers are
-prefilled with a sentinel; an in-place output plane instead pairs its compare with a liveness
-check.
+prefilled with a sentinel.
 
-**A harness that prints output for another tool to compare fails loudly when it has nothing to
-print.** A run that ends without its comparison lines — wrong flags, failed load — exits
-non-zero.
+**A kernel-unit arm whose output plane is its input plane pairs its compare with a liveness
+check** — an in-place kernel that never ran leaves the input, which can wrongly satisfy a
+tolerant compare.
 
-**Every ASR family has a token-for-token oracle cell, and every oracle cell logs its transcript
-as an `eyeball:` line.** An id-only comparison is a defect.
+**Every ASR family has a token-for-token oracle cell — one comparing a transcript against a
+reference leg, external dump or CPU control alike — and every such cell logs its transcript as
+an `eyeball:` line.** An id-only comparison is a defect.
 
-**A real image fixture or mmproj a vision test loads has its `../performance/fetch_models.das`
-entry.**
+**A real model file, mmproj, or image fixture a test in this folder loads has its
+`../performance/fetch_models.das` entry** (or a documented convert recipe beside it).
 
 **A vision test that needs no model builds its image procedurally and pins its expectations
 in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via

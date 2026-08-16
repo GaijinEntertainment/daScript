@@ -338,7 +338,7 @@ def test_metal_support_matrix(t : T?) {
                 delete pfd
 
                 // a non-causal media span ENGAGES the metal chains (AttnArgs.uend carries the
-                // bound); the retired non_causal_span clause records nothing
+                // bound); a span no longer declines (the knob is on)
                 var pfd1 <- metal_prefill_declines()
                 let pf1 = metal_prefill_stats().prefills
                 with_job_que() {
@@ -357,9 +357,39 @@ def test_metal_support_matrix(t : T?) {
                 }
                 var pfd2 <- metal_prefill_declines()
                 t |> success((pfd2?["non_causal_span"] ?? 0l) == (pfd1?["non_causal_span"] ?? 0l),
-                    "the retired non_causal_span clause records nothing")
+                    "a span no longer declines (the knob is on)")
                 t |> success(metal_prefill_stats().prefills - pf1 == 1l,
                     "the span call ENGAGES the metal prefill")
+                // the OFF leg in the same arm: the knob declines the span, and on a BLOB model
+                // the declined span has no CPU arm — the loud blob-only panic, never silence
+                set_metal_prefill_span(false)
+                var span_off_tripped = false
+                try {
+                    with_job_que() {
+                        setup_dasllama_jobque()
+                        var sp2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                        var rows2 : array<float>
+                        rows2 |> reserve(12l * trg.config.dim)
+                        rows2 |> resize(12l * trg.config.dim)
+                        select_prefill_override("metal")
+                        set_metal_prefill_min_npos(1l)
+                        eval_embd(trg, sp2, rows2, 12l, true)
+                        set_metal_prefill_min_npos(64l)
+                        select_prefill_override("")
+                        delete rows2
+                        delete sp2
+                    }
+                } recover {
+                    span_off_tripped = true
+                }
+                set_metal_prefill_span(true)
+                set_metal_prefill_min_npos(64l)
+                select_prefill_override("")
+                var pfd3 <- metal_prefill_declines()
+                t |> success(span_off_tripped, "knob off: the declined blob span panics loudly")
+                t |> success((pfd3?["non_causal_span"] ?? 0l) > (pfd2?["non_causal_span"] ?? 0l),
+                    "knob off: the non_causal_span decline is recorded")
+                delete pfd3
                 delete pfd1
                 delete pfd2
             }

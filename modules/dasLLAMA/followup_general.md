@@ -369,3 +369,9 @@
     - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven, possibly
       post-PR (the chunk 2 non-goal note); the f32 lane already beats the q8-CPU default
       for whisper-class, so this is upside, not a gap.
+    - **Audio mmproj provenance**: `qwen2audio-mmproj-f32.gguf` and
+      `voxtral-mini-mmproj-f32.gguf` are locally-converted fixtures with no
+      `performance/fetch_models.das` entry — the tests that load them (encoder oracles, the
+      blocks-parity cells, the erf-GELU census carrier) skip honestly without them, but the
+      files are not re-fetchable from the manifest. Mint the entries (or a documented
+      convert recipe) rather than inventing provenance.

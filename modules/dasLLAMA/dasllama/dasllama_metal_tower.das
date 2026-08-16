@@ -15,38 +15,32 @@ require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_prefill   // pf_enc_bf16_mm + the attention trio — the crowned builders
 
-// The tower/embedder Metal driver (metal-media chunk 2): one-shot feed-forward encodes — no
-// session, no KV, no mirror. Slice I serves the gemma4uv vision embedder; the whisper-class
-// audio towers join in slice J. Contract mirrors the prefill driver: decline-and-return-false,
-// the CPU chain is always the correct fallback, engage evidence is COUNTER DELTAS
-// (metal_tower_stats), never "the model ran".
+// The tower/embedder Metal driver: one-shot feed-forward encodes — no session, no KV, no mirror.
+// Serves the gemma4uv embedder and the whisper-class audio block loop.
+// Declines by returning false; the CPU chain is always the correct fallback.
+// Engage evidence is counter deltas (metal_tower_stats), never "the model ran".
 
 var private g_tw_failed = false
-var private g_tw_ready = false
 var private g_tw_pool : MetalBufferPool
 var private g_tw_env_tower = true
 var private g_tw_ones : MetalBuffer?      // [TW_ONES_DIM] ones — the weightless-rms weight bind
 let private TW_ONES_DIM = 8192
 
-var private g_tw_encodes = 0l
-var private g_tw_rows = 0l
-var private g_tw_blocks = 0l
-var private g_tw_declines : table<string; int64>
-
-//! Engage/decline counters: `encodes` = GPU tower encodes served, `rows` = rows produced,
-//! `blocks` = transformer blocks run (n_layer per whisper-class encode; 0 for gemma4uv),
-//! `declines` = total declined calls. Model-level gates assert DELTAS on these.
+//! Engage/decline counters (the counts live in dasllama_metal_common, the counting home):
+//! `encodes` = GPU tower encodes served, `rows` = rows produced, `blocks` = transformer blocks
+//! run (n_layer per whisper-class encode; 0 for gemma4uv), `declines` = total declined calls.
+//! Model-level gates assert DELTAS on these.
 def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64> {
     var dtot = 0l
-    for (v in values(g_tw_declines)) {
+    for (v in values(g_tower_declines_by_reason)) {
         dtot += v
     }
-    return (encodes = g_tw_encodes, rows = g_tw_rows, blocks = g_tw_blocks, declines = dtot)
+    return (encodes = g_tower_encodes, rows = g_tower_rows, blocks = g_tower_blocks, declines = dtot)
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalTowerDecline` value names.
 def metal_tower_declines : table<string; int64> {
-    return <- clone_to_move(g_tw_declines)
+    return <- clone_to_move(g_tower_declines_by_reason)
 }
 
 //! Test A/B seat: pin the tower driver on/off in-process (the env knob's setter twin).
@@ -54,30 +48,33 @@ def set_metal_tower(on : bool) {
     g_tw_env_tower = on
 }
 
+[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private tw_decline(why : MetalTowerDecline) : bool {
-    let key = "{why}"
-    g_tw_declines[key] = (g_tw_declines?[key] ?? 0l) + 1l
+    note_tower_decline("{why}")
     if (why != MetalTowerDecline.knob) {   // knob = policy; capability declines honor required mode
-        require_or_panic("tower", key)
+        require_or_panic("tower", "{why}")
     }
     return false
 }
 
-def private metal_tower_init : bool {
-    if (g_tw_ready && g_pso_ln != null) {   // the PSO check re-arms after metal_kernels_release
-        return true
+//! Release the tower's own GPU objects (the ones buffer + the scratch pool) — the tests'
+//! leak-gate rail, beside metal_decode_shutdown. The borrowed and registry PSOs are owned by
+//! their homes; lazily re-initializes on the next served encode.
+def metal_tower_shutdown {
+    if (g_tw_ones != null) {
+        metal_release(g_tw_ones)
+        g_tw_ones = null
     }
-    if (g_tw_failed || !metal_common_init()) {
+    pool_drain(g_tw_pool)
+    g_tw_failed = false
+}
+
+[cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
+def private metal_tower_init : bool {
+    if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init()) {
         return false
     }
-    var ok = true
-    g_pso_ln = compile_pso(metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, ok)
-    g_pso_f32mm = compile_pso(metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, ok)
-    g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
-    g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
-    g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
-    if (!ok) {
-        g_tw_failed = true
+    if (g_pso_ln == null) {   // the registry owns the tower PSOs (metal_decode_init compiles them)
         return false
     }
     if (g_tw_ones == null) {
@@ -89,13 +86,13 @@ def private metal_tower_init : bool {
             }
         }
     }
-    g_tw_ready = true
     return true
 }
 
 // The gemma4uv chain on the driver: rows arrive as the CPU im2col output (s.x0), pad rows of
 // the GPU buffers stay zero so the GEMM pins their outputs at 0; LN/posadd grids cover the
 // LOGICAL rows only. One command buffer, one wait, one readback.
+[hot_path]
 def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; npos, n_cols : int64; var out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -105,8 +102,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
             || d > int64(TW_ONES_DIM) || t.patch_w % 4l != 0l || t.proj_w % 8l != 0l || t.pos_w % 4l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
-    // per-encode so the borrowed prefill PSOs re-arm after a metal_prefill_shutdown
-    if (!metal_tower_init() || !metal_prefill_pso_init()) {
+    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
     let mp = (npos + 31l) / 32l * 32l
@@ -125,13 +121,10 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
             }
         }
     }
-    var u_pdim = uniform_u32(uint(t.patch_dim))
-    var u_d = uniform_u32(uint(d))
+    var u_pdim = uniform_u32(uint(t.patch_dim))   // also the patch GEMM's k
+    var u_d = uniform_u32(uint(d))                // also the patch GEMM's n and the proj GEMM's k
     var u_eps = uniform_f32(GEMMA4UV_LN_EPS)
     var u_rms_eps = uniform_f32(t.rms_eps)
-    var u_kpatch = uniform_u32(uint(t.patch_dim))
-    var u_nd = uniform_u32(uint(d))
-    var u_kproj = uniform_u32(uint(d))
     var u_nproj = uniform_u32(uint(t.proj_dim))
     var u_ncols = uniform_u32(uint(n_cols))
     var u_pe = uniform_u32(uint(t.pos_entries))
@@ -143,9 +136,9 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         // the patch GEMM: per-plane format (gemma-4's shipped mmproj is MIXED)
         if (t.patch_bf16) {
             var bwblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped)
-            pf_enc_bf16_mm(enc, bwblob, uint64(t.patch_w * 2l), bx0, bx1, u_kpatch, u_nd, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(t.patch_w * 2l), bx0, bx1, u_pdim, u_d, mp, d)
         } else {
-            enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx1, 0ul, u_kpatch, u_nd, mp, d)
+            enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx1, 0ul, u_pdim, u_d, mp, d)
         }
         enc_add_bias_rows(enc, bx1, 0ul, bblob, uint64(t.patch_b * 4l), u_d, u_tot, npos * d)
         enc_ln(enc, bx1, bblob, uint64(t.ln2_w * 4l), bblob, uint64(t.ln2_b * 4l), bx1, u_d, u_eps, npos)
@@ -154,9 +147,9 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         pf_enc_rms(enc, bx1, 0ul, g_tw_ones, bx1, u_d, u_rms_eps, npos)
         if (t.proj_bf16) {
             var bwblob2 = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped)
-            pf_enc_bf16_mm(enc, bwblob2, uint64(t.proj_w * 2l), bx1, bout, u_kproj, u_nproj, mp, t.proj_dim)
+            pf_enc_bf16_mm(enc, bwblob2, uint64(t.proj_w * 2l), bx1, bout, u_d, u_nproj, mp, t.proj_dim)
         } else {
-            enc_f32_mm(enc, bblob, uint64(t.proj_w * 4l), bx1, bout, 0ul, u_kproj, u_nproj, mp, t.proj_dim)
+            enc_f32_mm(enc, bblob, uint64(t.proj_w * 4l), bx1, bout, 0ul, u_d, u_nproj, mp, t.proj_dim)
         }
     }
     var served = false
@@ -164,8 +157,8 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         unsafe {
             memcpy(addr(out[0]), metal_buffer_contents(bout), uint64(npos * t.proj_dim * 4l))
         }
-        g_tw_encodes++
-        g_tw_rows += npos
+        g_tower_encodes++
+        g_tower_rows += npos
         served = true
     }
     pool_release(g_tw_pool, bx0, uint64(mp * t.patch_dim * 4l))
@@ -175,9 +168,6 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_eps, 4ul)
     pool_release(g_upool, u_rms_eps, 4ul)
-    pool_release(g_upool, u_kpatch, 4ul)
-    pool_release(g_upool, u_nd, 4ul)
-    pool_release(g_upool, u_kproj, 4ul)
     pool_release(g_upool, u_nproj, 4ul)
     pool_release(g_upool, u_ncols, 4ul)
     pool_release(g_upool, u_pe, 4ul)
@@ -189,8 +179,9 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
 }
 
 // The whisper-class block loop as ONE command buffer; the attention trio rides uend = npos (the
-// chunk-1 non-causal span). Frontend and tail stay CPU; f32 towers only. Pad-row garbage is
+// non-causal uniform span). Frontend and tail stay CPU; f32 towers only. Pad-row garbage is
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
+[hot_path]
 def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -203,8 +194,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     if (d % 64l != 0l || t.n_ff % 64l != 0l || hs % 64l != 0l || t.layers_off % 4l != 0l || t.layer_stride % 4l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
-    // per-encode so the borrowed prefill PSOs re-arm after a metal_prefill_shutdown
-    if (!metal_tower_init() || !metal_prefill_pso_init()) {
+    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
     let mp = (npos + 31l) / 32l * 32l
@@ -278,9 +268,9 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         unsafe {
             memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
         }
-        g_tw_encodes++
-        g_tw_rows += npos
-        g_tw_blocks += t.n_layer
+        g_tower_encodes++
+        g_tower_rows += npos
+        g_tower_blocks += t.n_layer
         served = true
     }
     pool_release(g_tw_pool, bx, bytes_row)

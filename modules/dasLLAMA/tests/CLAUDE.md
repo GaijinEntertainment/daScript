@@ -44,7 +44,8 @@ arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12
 arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
 not degrade a later forced-feed decode — Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`. Prefill parity: `base s16
-kq cont span dim qkv` (span = the non-causal media eval shape, head + embd span, per codec). Support matrix: `cells-q8 window cells-s16 mode kq dim8b dim70b` + the
+kq cont span dim qkv` (span = the non-causal media eval shape, head + embd span, per codec).
+Support matrix: `cells-q8 window cells-s16 mode kq dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
 per-path cells; fam-gemma2 also carries the sliding-window masking parity row;
@@ -71,12 +72,13 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal mtower`; the gemma4uv-metal arm is the GPU tower
-driver's parity/counter/knob gate and `mtower` the whisper-class tower-blocks gate — whisper
-tiny + large-v3-turbo transcript-exact and qwen3a f32-rail transcript equality, CPU vs GPU,
-with geometry-derived counter deltas, plus the q8-decline (the serving default never
-dispatches), required-mode panic, and Conformer-absence (parakeet) cells (all Apple builds;
-`--arm gemma4uv` selects gemma4uv-metal too by substring); the voxtral arm re-saves a
+canary-dec gemma4a gemma4uv gemma4uv-metal mtower`; `gemma4uv-metal` is the GPU tower
+driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (`--arm
+gemma4uv` selects it too — arm filters match by substring); `mtower` is the whisper-class
+tower-blocks gate, Apple builds only — whisper tiny + large-v3-turbo transcript-exact and
+qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
+the q8-decline (the serving default never dispatches), required-mode panic, and
+Conformer-absence (parakeet) cells; the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
@@ -119,10 +121,12 @@ serializers and call parsers for harmony/gemma4/mistral/llama_json against verba
 `test_program_roots.das` — model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
-`test_audio.das` — the audio tower structure/oracle gates (ultravox/voxtral/omni shapes, the
-mtmd all-ones encode oracles — those pin the tower knob OFF; the hook would silently flip them
-to GPU) plus `test_encoder_blocks_gpu`: qwen2audio + voxtral 32-layer CPU-vs-GPU blocks parity
-on the depth-scaled bars, counter deltas asserted.
+`test_audio.das` — model-free: the audio front-end units (gelu-erf, hann window, mel
+filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle gates
+(ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles — those pin the tower knob
+OFF; the hook would silently flip them to GPU) and `test_encoder_blocks_gpu`, the qwen2audio +
+voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas —
+Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral mmprojs.
 `test_asr_verbs.das` — model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, parakeet's SPM detokenizer over a toy vocab, and
 the `fetch_models.das` provenance-manifest invariants.
@@ -140,24 +144,27 @@ bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
 `test_gemma4uv.das` — the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
 (f32-mmproj-minted — the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
 mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
-On Apple builds the CPU gate pins the tower knob off, and a second test runs the GPU tier-1
-ATTEMPT: same dumps, scale-relative rung (2e-4 + 4e-3·token-rms), rung reached logged, engage
-proven per fixture by the encodes counter.
+On Apple builds the CPU gate pins the tower knob off, and a second test gates the GPU tier-1
+encode against the same dumps on a scale-relative bar (2e-4 + 4e-3·token-rms) — exceeding it
+is a red, the bar each fixture actually held is logged either way, and engage is proven per
+fixture by the encodes counter.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
 agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
-`test_cpu_prefill_tripwire.das` — the CPU-prefill guard vs the span: the non-causal span is
-EXEMPT (CPU is its only correct arm) while an undeclared causal prefill still panics; same
-stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it cannot
-live in test_attn_span — that file arms it in `[init]`). Metal-capable builds only; no suite arm.
+`test_cpu_prefill_tripwire.das` — the CPU-prefill guard: an undeclared prefill trips, span
+and causal alike (the metal rail serves spans, so a CPU-served one is a silent fallback);
+same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
+cannot live in test_attn_span — that file arms it in `[init]`). Metal-capable builds only;
+no suite arm.
 `test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
 `DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
 span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
 arm defaults to instruct, and freeform token-parity cells are banned (see below). On Apple
 builds the turn also carries the tower legs: the default caption's image encode must show an
-encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU embedder — same
-caption floor, zero dispatches, the knob decline counted.
+encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU embedder and
+must clear the same caption bar — the caption names the cats and is a description, not a
+fragment — with zero tower dispatches and the knob decline counted.
 
 ## Model loads — never the image rail (REVIEW: "A suite loads decoders with `load_model_`, never the image rail")
 

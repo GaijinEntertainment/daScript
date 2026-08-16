@@ -64,7 +64,8 @@ bin/daslang -jit examples/dasLLAMA/dictate.das -- <asr-model.bin>
 - **Audio-in chat (omni)**: Qwen2-Audio, Qwen2.5-Omni, Qwen3-Omni-30B-A3B, Ultravox v0.5,
   Voxtral-Mini-3B, Gemma-4 E-series audio.
 - **Image-in chat**: Gemma-4 dense via its `gemma4uv` vision mmproj (12B is the tested
-  pair) — dynamic resolution, one image per turn, CPU. Library API
+  pair) — dynamic resolution, one image per turn; on Apple builds the embedder and the
+  image span serve on Metal by default (CPU otherwise). Library API
   (`create_chat(model, embedder)` + `add_user_image`), `ask --image`, and the OpenAI
   server: `image_url` data-URI parts under `--image-mmproj`, encoded off the tick thread.
 - **Speech-to-text**: the whole Whisper family (tiny → large-v3-turbo, stock whisper.cpp bins),

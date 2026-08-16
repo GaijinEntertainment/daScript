@@ -1713,6 +1713,11 @@ def private pf_skip_moe_reduce : bool {
 
 //! Prefills below this npos decline to the CPU path (submit+readback overhead outweighs the win).
 //! Set 1 to force every prefill onto the GPU (tests).
+//! Test A/B seat: pin the span serving on/off in-process (DASLLAMA_METAL_SPAN's setter twin).
+def public set_metal_prefill_span(on : bool) {
+    g_pf_env_span = on
+}
+
 def public set_metal_prefill_min_npos(v : int64) {
     g_min_npos = v
 }

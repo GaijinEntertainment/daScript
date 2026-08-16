@@ -245,8 +245,7 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
 
 // One catalog model's timed buckets -> a BenchModel cell, appended to `jsonModels`. The gpu
 // arm (--ngl) rides the f32 tower rail; a row that never dispatches the tower (Conformer
-// families, or a regression) FAILS the leg — a "metal" row that silently measured the CPU
-// would sandbag the whole board.
+// families, or a regression) FAILS the leg.
 def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu : bool) : bool {
     let model_path = asr_model_path(spec)
     var m <- (empty(spec.das_mmproj)
@@ -325,9 +324,9 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 }
 
 // The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
-// selects the gpu leg: the f32 tower rail on the Metal tower driver (the q8 default has no GPU
-// lane by design); decoders and Conformer paths stay CPU (declared intent), and every measured
-// row must show tower engagement or the leg exits non-zero.
+// selects the gpu leg: the f32 tower rail on the Metal tower driver; decoders and Conformer
+// paths stay CPU (declared intent), and every measured row must show tower engagement or the
+// leg exits non-zero.
 def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : bool) : bool {
     allow_cpu_prefill()   // ASR decoders/Conformer paths are CPU by protocol — disarm the tripwire
     if (gpu) {
@@ -456,9 +455,9 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
 def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu : bool) : bool {
+    // the metal arm serves the whole turn on the driver with the tripwire ARMED, so a CPU
+    // fallback reds the row instead of sandbagging it
     if (gpu) {
-        // the metal arm: blob flavor via the rail, span + chunks served by the driver — the
-        // tripwire stays ARMED so a CPU fallback reds the row instead of sandbagging it
         set_metal_mode(MetalMode.required)
     } else {
         allow_cpu_prefill()   // the CPU arm is CPU by intent — disarm the Metal-build tripwire
@@ -1195,7 +1194,7 @@ def main() : int {
     let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, cfg.ngl != 0) ? 0 : 1
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu) ? 0 : 1
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {

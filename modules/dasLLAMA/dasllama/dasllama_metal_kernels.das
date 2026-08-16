@@ -3576,6 +3576,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_pso(MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, ok)
+    g_pso_ln = compile_pso(metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, ok)
+    g_pso_f32mm = compile_pso(metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, ok)
+    g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
+    g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
+    g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
     g_pso_softcap = compile_pso(metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, ok)
     g_pso_suppress = compile_pso(metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, ok)
     g_pso_attn16 = compile_pso(MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, ok)

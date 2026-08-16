@@ -184,6 +184,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the whisper-class block loop) — no session, no KV, no mirror; registers the gemma4uv and encoder_blocks hooks | kernel bodies, decoder state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan — the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
@@ -202,6 +203,17 @@ that a question answered for one backend has an obvious address in the other. Th
   metal_common → dasllama_common → metal_gemm would cycle.
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** — vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
+- **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
+  posadd) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
+  releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
+  `enc_add_bias_rows`, the attention trio via `enc_qk_mm`/`enc_av_mm`) come up through
+  `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
+  public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
+  scratch pool) release through `metal_tower_shutdown`.
+- **The tower driver is a Metal-only role** — Vulkan has no tower twin; audio/vision encodes
+  on the Vulkan tier stay CPU. Likewise the non-causal media span: Metal serves it through
+  `AttnArgs.uend`; the Vulkan resident prefill declines it (`followup_general.md` #23's
+  remaining half).
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class — "the builder needs the driver module" is never a placement reason. Prefill's

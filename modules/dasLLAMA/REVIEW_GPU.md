@@ -2,7 +2,7 @@
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list with the master's.** `REVIEW_COMMON.md` (repo root) binds this file
-too.
+too. Architecture doc: `ARCHITECTURE.md`.
 
 **A claim about a shape constant is checked against the emitted shader, not the das source.**
 Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is literal there.
@@ -11,9 +11,9 @@ Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is
 ignores a field; shifting the other's fields to different slots is a defect.
 
 **Kernel twins share a template.** Same-body single/batch or format twins stamp one
-`class template`: a `@template_constant` axis carries body divergence, a `@template_gate` field
-a stamp-varying binding. A copy-pasted twin, or a dummy-bound field where a gate serves, is a
-defect.
+`class template`: body divergence rides a stamp axis (`@template_constant`, or an overridden
+method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
+copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
 
 **Every weight, bias, or lookup-table field on a `[metal_dispatch]` / `[vk_dispatch]` kernel
 class declares `@role = "weight"` explicitly.** An un-roled weight-shaped field is a defect even
@@ -34,8 +34,9 @@ a builder parameter the `grid=`/`tg=` spec consumes host-side never arrives at t
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**A backend-only capability goes in that backend's matching role file.** A new grab-bag file for
-it is a defect.
+**A backend-only capability goes in that backend's matching role file.** A capability with no
+matching role gets its own role file AND its `ARCHITECTURE.md` §1 role-table line in the same
+change; anything else is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `<gpu>_common`'s init.** A module creating its
 own is a defect.
@@ -49,9 +50,11 @@ through its init/release pair — `metal_decode_init` / `metal_kernels_release` 
 races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
 `<gpu>_common`'s.
 
-**A Metal decline reason is a `MetalDecodeDecline` / `MetalPrefillDecline` value in
-`dasllama_metal_shapes.das`; decline counting lives in `dasllama_metal_common.das`.** A
-string-typed metal decline, or a counter beside the decline site, is a defect.
+**A Metal decline reason is an enum value in `dasllama_metal_shapes.das`, one enum per
+driver.** A string-typed metal decline is a defect.
+
+**Decline counting lives in `dasllama_metal_common.das`.** A counter beside the decline site
+is a defect.
 
 **A diff that changes how Metal and Vulkan differ — adding or removing an asymmetry — lands its
 `ARCHITECTURE.md` §1.5 edit in the same change.** §1.5 is the closed list; an asymmetry it does
@@ -63,9 +66,11 @@ not carry does not exist.
 **A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its size
 is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized wrong.
 
-**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one kq
-model, with `--kv` matching the armed mirror codec** — the vulkan arm is `DASLLAMA_GPU=1`,
-never `--ngl`. The driver declines codec-mismatched sessions silently, so the log must show
+**A change to a driver that serves a whole decoder forward on device (`dasllama_metal_decode`
+/ `dasllama_metal_prefill` / `dasllama_gpu_resident` and its Vulkan chain) ships with
+`harness/parity.das` GPU-vs-CPU runs on one q8 and one kq model, with `--kv` matching the
+armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never
+`--ngl`, and its driver declines codec-mismatched sessions silently, so that log must show
 `resident driver armed`.
 
 **A kernel that reads or writes the K/V mirrors is stamped from a

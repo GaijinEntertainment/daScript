@@ -88,16 +88,21 @@ def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
-//! The GPU-tower parity block (metal-media chunk 2): bars derived from the f16-staging model,
-//! LOGGED on green so a drifting margin is visible before it reds. rel_elem is SCALE-relative
-//! (max abs diff over the CPU tensor rms). `depth` = 0 is the shallow form (embedder-scale
-//! bars); depth = L asserts the depth-scaled bars (rel_l2/norm <= 3e-3*sqrt(L), cos within
-//! 1e-4) and only LOGS rel_elem — the worst single element rides attention near-ties, which
-//! diverge O(1) under staging noise while the tensor stays structurally identical.
-def tower_parity(t : T?; tag : string; cpu, gpu : array<float>; depth : int64 = 0l) {
+// the shared statistic core of the two tower_parity forms below
+struct TowerParityStats {
+    max_ad : double
+    rms : double
+    rel_elem : double
+    rel_l2 : double
+    cos : double
+    norm_dev : double
+}
+
+def private tower_parity_stats(t : T?; tag : string; cpu, gpu : array<float>; var st : TowerParityStats) : bool {
     t |> equal(long_length(cpu), long_length(gpu), "{tag}: length")
-    return if (long_length(cpu) != long_length(gpu) || empty(cpu))
-    var max_ad = 0.0lf
+    if (long_length(cpu) != long_length(gpu) || empty(cpu)) {
+        return false
+    }
     var l2n = 0.0lf
     var na = 0.0lf
     var nb = 0.0lf
@@ -105,29 +110,82 @@ def tower_parity(t : T?; tag : string; cpu, gpu : array<float>; depth : int64 = 
     for (cv, gv in cpu, gpu) {
         let a = double(cv)
         let b = double(gv)
-        max_ad = max(max_ad, abs(a - b))
+        st.max_ad = max(st.max_ad, abs(a - b))
         l2n += (a - b) * (a - b)
         na += a * a
         nb += b * b
         dot += a * b
     }
-    let rms = sqrt(na / double(long_length(cpu)))
-    let rel_elem = max_ad / max(rms, 1e-30lf)
-    let rel_l2 = sqrt(l2n) / max(sqrt(na), 1e-30lf)
-    let cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
-    let norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
-    to_log(LOG_INFO, "{tag}: rel_elem={rel_elem} rel_l2={rel_l2} cos={cos} norm_dev={norm_dev} n={long_length(cpu)}\n")
-    if (depth > 0l) {
-        let bar = 3e-3lf * sqrt(double(depth))
-        t |> success(rel_l2 <= bar, "{tag}: rel_l2 <= 3e-3*sqrt({depth})")
-        t |> success(cos >= 1.0lf - 1e-4lf, "{tag}: cos >= 1-1e-4")
-        t |> success(norm_dev <= bar, "{tag}: norm_dev <= 3e-3*sqrt({depth})")
-        return
+    st.rms = sqrt(na / double(long_length(cpu)))
+    st.rel_elem = st.max_ad / max(st.rms, 1e-30lf)
+    st.rel_l2 = sqrt(l2n) / max(sqrt(na), 1e-30lf)
+    st.cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
+    st.norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
+    to_log(LOG_INFO, "{tag}: rel_elem={st.rel_elem} rel_l2={st.rel_l2} cos={st.cos} norm_dev={st.norm_dev} maxdiff={st.max_ad} rms={st.rms} n={long_length(cpu)}\n")
+    return true
+}
+
+//! The GPU-tower parity block, embedder-scale bars (derived from the f16-staging model, LOGGED
+//! on green so a drifting margin is visible before it reds). rel_elem is SCALE-relative (max
+//! abs diff over the CPU tensor rms).
+def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
+    var st = TowerParityStats()
+    return if (!tower_parity_stats(t, tag, cpu, gpu, st))
+    t |> success(st.rel_elem <= 8e-3lf, "{tag}: rel_elem <= 8e-3")
+    t |> success(st.rel_l2 <= 4e-3lf, "{tag}: rel_l2 <= 4e-3")
+    t |> success(st.cos >= 1.0lf - 1e-5lf, "{tag}: cos >= 1-1e-5")
+    t |> success(st.norm_dev <= 4e-3lf, "{tag}: norm_dev <= 4e-3")
+}
+
+//! The deep-tower form: depth-scaled bars (rel_l2/norm <= 3e-3*sqrt(n_layers), cos within
+//! 1e-4). rel_elem is LOGGED, never asserted — the worst single element rides attention
+//! near-ties, which diverge O(1) under staging noise while the tensor stays structurally
+//! identical.
+def tower_parity_deep(t : T?; tag : string; cpu, gpu : array<float>; n_layers : int64) {
+    var st = TowerParityStats()
+    return if (!tower_parity_stats(t, tag, cpu, gpu, st))
+    let bar = 3e-3lf * sqrt(double(n_layers))
+    t |> success(st.rel_l2 <= bar, "{tag}: rel_l2 <= 3e-3*sqrt({n_layers})")
+    t |> success(st.cos >= 1.0lf - 1e-4lf, "{tag}: cos >= 1-1e-4")
+    t |> success(st.norm_dev <= bar, "{tag}: norm_dev <= 3e-3*sqrt({n_layers})")
+}
+
+// Machine-local whisper-model root; override with DASLLAMA_WHISPER_DIR.
+def whisper_dir() : string {
+    let env = g_env_test.whisper_dir
+    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
+}
+
+// minimal RIFF/WAVE reader for the 16-bit PCM mono fixtures (jfk.wav and kin)
+def read_wav_pcm16_mono(path : string) : array<float> {
+    var out : array<float>
+    let f = fopen(path, "rb")
+    if (f == null) {
+        return <- out
     }
-    t |> success(rel_elem <= 8e-3lf, "{tag}: rel_elem <= 8e-3")
-    t |> success(rel_l2 <= 4e-3lf, "{tag}: rel_l2 <= 4e-3")
-    t |> success(cos >= 1.0lf - 1e-5lf, "{tag}: cos >= 1-1e-5")
-    t |> success(norm_dev <= 4e-3lf, "{tag}: norm_dev <= 4e-3")
+    fmap(f) $(var bytes : array<uint8>#) {
+        let n = long_length(bytes)
+        var o = 12l
+        while (o + 8l <= n) {
+            let id = rd_u32(bytes, o)
+            let sz = int64(rd_u32(bytes, o + 4l))
+            if (id == 0x61746164u) {
+                let cnt = min(sz, n - o - 8l) / 2l
+                out |> resize(cnt)
+                for (i in range64(cnt)) {
+                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
+                    if (v >= 32768) {
+                        v -= 65536
+                    }
+                    out[i] = float(v) / 32768.0
+                }
+                break
+            }
+            o += 8l + sz + (sz & 1l)
+        }
+    }
+    fclose(f)
+    return <- out
 }
 
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to

@@ -11,9 +11,8 @@ require dasllama/dasllama_env
 
 // The CPU-prefill tripwire — this file deliberately never calls allow_cpu_prefill()
 // (test_attn_span arms it in [init], which is why this cell cannot live there): on a
-// Metal-capable build a >32-row undeclared batched prefill panics, the non-causal media
-// span INCLUDED — the metal rail serves spans now, so a CPU-served span is as silent a
-// fallback as any other.
+// Metal-capable build a >32-row undeclared batched prefill panics, media span included —
+// the metal rail serves spans, so a CPU-served one is a silent fallback like any other.
 
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
@@ -46,7 +45,7 @@ def test_cpu_prefill_tripwire(t : T?) {
             } recover {
                 span_tripped = true
             }
-            t |> success(span_tripped, "an undeclared {NROWS}-row SPAN prefill panics (the exemption is gone)")
+            t |> success(span_tripped, "an undeclared {NROWS}-row SPAN prefill panics like any other")
             var tripped = false
             try {
                 var s2 <- make_run_state(tr.config)

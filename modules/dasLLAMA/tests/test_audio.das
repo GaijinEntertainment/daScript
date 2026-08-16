@@ -259,7 +259,7 @@ def test_encoder_blocks_gpu(tst : T?) {
             t |> equal(s1.encodes - s0.encodes, 1l, "exactly the GPU leg dispatched")
             t |> equal(s1.blocks - s0.blocks, 32l, "blocks delta = n_layer")
             t |> equal(s1.rows - s0.rows, 1500l, "rows delta = n_ctx")
-            tower_parity(t, "qwen2audio blocks 32L", cpu_out, enc.out, 32l)
+            tower_parity_deep(t, "qwen2audio blocks 32L", cpu_out, enc.out, 32l)
             delete cpu_out
             delete enc
             delete tw
@@ -295,7 +295,7 @@ def test_encoder_blocks_gpu(tst : T?) {
             let s1 = metal_tower_stats()
             t |> equal(s1.encodes - s0.encodes, 1l, "exactly the GPU leg dispatched")
             t |> equal(s1.blocks - s0.blocks, tw.n_layer, "blocks delta = n_layer")
-            tower_parity(t, "voxtral blocks {tw.n_layer}L", cpu_out, enc.out, tw.n_layer)
+            tower_parity_deep(t, "voxtral blocks {tw.n_layer}L", cpu_out, enc.out, tw.n_layer)
             delete cpu_out
             delete enc
             delete tw

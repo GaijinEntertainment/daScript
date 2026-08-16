@@ -14,7 +14,6 @@ require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model — the census's m
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
-require dasllama/dasllama_gguf      // rd_u32/rd_u16 — the cov_tower wav reader
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
@@ -173,44 +172,12 @@ def private census_zoo(t : T?) {
     cov_tower(t)
 }
 
-// minimal RIFF/WAVE reader for the 16-bit PCM mono fixture (jfk.wav) — test_whisper's twin
-def private read_wav_pcm16_mono(path : string) : array<float> {
-    var out : array<float>
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return <- out
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let n = long_length(bytes)
-        var o = 12l
-        while (o + 8l <= n) {
-            let id = rd_u32(bytes, o)
-            let sz = int64(rd_u32(bytes, o + 4l))
-            if (id == 0x61746164u) {
-                let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(cnt)
-                for (i in range64(cnt)) {
-                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
-                    if (v >= 32768) {
-                        v -= 65536
-                    }
-                    out[i] = float(v) / 32768.0
-                }
-                break
-            }
-            o += 8l + sz + (sz & 1l)
-        }
-    }
-    fclose(f)
-    return <- out
-}
-
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
 // borrowed trio) go non-zero — a whisper tiny f32 chunk plus a small gemma4uv canvas
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(true)
-        let wpath = path_join(empty(g_env_test.whisper_dir) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : g_env_test.whisper_dir, "ggml-tiny.bin")
+        let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
             var inscope w = WhisperModel()
@@ -231,7 +198,7 @@ def private cov_tower(t : T?) {
         if (model_available(t, apath)) {
             var atw <- load_audio_tower(apath)
             var mel = MelChunk(n_mel = atw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
-            mel.data |> resize(int(atw.n_mel * AUDIO_CHUNK_FRAMES))
+            mel.data |> resize(atw.n_mel * AUDIO_CHUNK_FRAMES)
             for (i in range(length(mel.data))) {
                 mel.data[i] = sin(float(i) * 0.0137) * 0.8
             }
@@ -306,6 +273,7 @@ def test_metal_kernel_coverage(tst : T?) {
                 to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")
             }
             delete cov
+            metal_tower_shutdown()
             metal_decode_shutdown()
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
