@@ -130,9 +130,13 @@ The image TURN on a vision decoder — what a user actually waits on when they a
 One process, one tune-key demand, one image-identity stamp, same as the ASR cell:
 
 ```sh
-bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
-  -m <decoder.gguf> --image-mmproj <mmproj.gguf> --image <picture.jpg> -r 5 --for-debug-purposes
+modules/dasLLAMA/performance/_rig/lcpp_bench \
+  -m <decoder.gguf> --image-mmproj <mmproj.gguf> --image <picture.jpg> -r 5
 ```
+
+The released exe (built above) is the protocol — its winners are baked, so the cell cannot
+tune or drift mid-run. The `-jit` script form with `--for-debug-purposes` is a debug
+instrument only: its rows stamp `debug-jit` and never reach a board or a doc.
 
 - Three keys per row. `img:enc` is the embedder alone in ms (best of `-r`), `img:pp` the SPLICED
   prefill in tok/s (head tokens + soft-token rows + tail tokens — every position the turn holds),
@@ -157,11 +161,12 @@ process/tune/identity discipline as the cells above; the reference tools are mea
 adjacent by `gen_bench_records`, never in this process.
 
 ```sh
-bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
-  --asr -m "Whisper large" -r 3 --for-debug-purposes            # the q8-CPU serving default
-bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- \
-  --asr -m "Whisper large" --ngl 1 -r 3 --for-debug-purposes    # the f32 Metal tower rail
+modules/dasLLAMA/performance/_rig/lcpp_bench --asr -m "Whisper large" -r 3          # the q8-CPU serving default
+modules/dasLLAMA/performance/_rig/lcpp_bench --asr -m "Whisper large" --ngl 1 -r 3  # the f32 Metal tower rail
 ```
+
+Same executable rule as the image cell: the released exe, never the `-jit` script —
+`--for-debug-purposes` rows are debug instruments, not measurements.
 
 - One `asr:<clip>.wav` key per corpus bucket: best-of-`-r` transcribe ms, the clip seconds,
   the LAST rep's transcript (under fast-math a token flip is what moves the timing), and
