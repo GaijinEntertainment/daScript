@@ -5,6 +5,7 @@ options _cyclomatic_complexity = 0  // same — the arm ladders follow the kerne
 
 require dastest/testing_boost public
 require dasllama/dasllama_convert   // dequant_k6_plane_superblock_at — the embed-k6 reference
+require dasllama/dasllama_audio     // layernorm + the shipped gelu flavors — the tower oracles
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
@@ -489,6 +490,295 @@ def private geglu_gate(t : T?; dev, queue; total : int) {
     delete want
 }
 
+// LayerNorm w+b vs the shipped CPU layernorm (dasllama_audio) — the tower/embedder norm.
+// The bias fixture keeps |b| >= 0.1 so a bias-blind kernel cannot pass.
+def private layernorm_gate(t : T?; dev, queue; dim, nrows : int; eps : float; inplace : bool) {
+    let tag = "layernorm dim={dim} nrows={nrows} eps={eps} inplace={inplace}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var x : array<float>
+    var w : array<float>
+    var b : array<float>
+    x |> resize(nrows * dim)
+    w |> resize(dim)
+    b |> resize(dim)
+    for (i in range(nrows * dim)) {
+        x[i] = 0.23 * float(i % 31) - 3.1
+    }
+    if (nrows > 0 && dim > 0) {
+        for (i in range(dim)) {   // one constant row exercises the zero-variance eps path
+            x[(nrows - 1) * dim + i] = 1.75
+        }
+    }
+    for (i in range(dim)) {
+        w[i] = 0.5 + 0.04 * float(i % 13)
+        b[i] = -0.7 + 0.05 * float(i % 17)
+    }
+    var want : array<float>
+    want |> resize(nrows * dim)
+    unsafe {
+        for (r in range(nrows)) {
+            layernorm(addr(want[r * dim]), addr < float const? >(x[r * dim]),
+                addr < float const? >(w[0]), addr < float const? >(b[0]), int64(dim), eps)
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var bw = buf_upload(dev, w)
+    var bb = buf_upload(dev, b)
+    var by = inplace ? bx : buf_fill(dev, nrows * dim, 0.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_layernorm_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, bb, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_buffer(enc, bdim, 0ul, 4)
+        metal_set_buffer(enc, beps, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(bb)
+    if (!inplace) {
+        metal_release(by)
+    }
+    metal_release(bdim)
+    metal_release(beps)
+    metal_release(pso)
+    delete x
+    delete w
+    delete b
+    delete want
+}
+
+// 1-operand tanh-GELU: bulk range vs the CPU tanh formula, saturation exact at |x| >= 50
+// (Metal tanh NaNs there; the exp identity must saturate), and the form-delta cell pinning
+// the substitution size vs the CPU LUT and erf flavors over the tower's real range.
+def private gelu1_gate(t : T?; dev, queue; total : int) {
+    let tag = "gelu1 total={total}"
+    var err : string
+    var pso = pipeline_from_source(dev, MetalGelu1_metal_ew1_msl, MetalGelu1_metal_ew1_msl_entry, MetalGelu1_metal_ew1_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var g : array<float>
+    g |> resize(total)
+    for (i in range(total)) {
+        g[i] = 0.21 * float(i % 43) - 4.3
+    }
+    if (total >= 8) {   // the saturation + zero probes ride the tail slots
+        g[total - 1] = 50.0
+        g[total - 2] = -50.0
+        g[total - 3] = 100.0
+        g[total - 4] = -100.0
+        g[total - 5] = 0.0
+        g[total - 6] = 1e-30
+        g[total - 7] = -1e-30
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        let vv = g[i]
+        want[i] = 0.5 * vv * (1.0 + tanh(0.7978845608028654 * (vv + 0.044715 * vv * vv * vv)))
+    }
+    var bg = buf_upload(dev, g)
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bg, 0ul, 0)
+        metal_set_buffer(enc, btot, 0ul, 1)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran && total >= 8) {
+        t |> equal(buf_mismatch_approx(bg, want, tag), 0)
+        var back : array<float>
+        back |> resize(total)
+        unsafe {
+            memcpy(addr(back[0]), metal_buffer_contents(bg), total * 4)
+        }
+        t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")
+        t |> success(back[total - 2] == 0.0 && back[total - 4] == 0.0, "{tag}: negative saturation exact")
+        var nan_found = false
+        for (v in back) {
+            if (v != v) {
+                nan_found = true
+            }
+        }
+        t |> success(!nan_found, "{tag}: no NaN anywhere")
+        delete back
+    }
+    metal_release(bg)
+    metal_release(btot)
+    metal_release(pso)
+    delete g
+    delete want
+}
+
+// The form-delta cell: the GPU lane's analytic tanh-GELU vs the CPU flavors, pinned bounds
+// over the tower's real range — the quantitative basis of "tolerance-gated, not bit-exact".
+def private gelu_form_delta(t : T?) {
+    let n = 65536
+    var xs : array<float>
+    var lut : array<float>
+    var erfv : array<float>
+    xs |> resize(n)
+    lut |> resize(n)
+    erfv |> resize(n)
+    for (i in range(n)) {
+        xs[i] = -10.0 + 20.0 * float(i) / 65535.0
+        lut[i] = xs[i]
+        erfv[i] = xs[i]
+    }
+    gelu_tanh_lut(lut, int64(n))   // the SHIPPED whisper flavor (f16-LUT round trip)
+    gelu_erf(erfv, int64(n))       // the SHIPPED mtmd-family flavor
+    var max_lut = 0.0
+    var max_erf = 0.0
+    for (i in range(n)) {
+        let x = xs[i]
+        let analytic = 0.5 * x * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))
+        max_lut = max(max_lut, abs(analytic - lut[i]))
+        max_erf = max(max_erf, abs(analytic - erfv[i]))
+    }
+    to_log(LOG_INFO, "gelu_form_delta over [-10,10]: |analytic-lut| max {max_lut}, |analytic-erf| max {max_erf}\n")
+    // measured 3.90625e-3 = the f16 HALF-ULP at the range edge (|x|~10, spacing 2^-7): the LUT
+    // quantizes its INPUT, so the delta is absolute half-ulp * gelu' ~ 1, not relative
+    t |> success(max_lut <= 4.5e-3, "gelu analytic-vs-LUT substitution bounded (measured {max_lut})")
+    t |> success(max_erf <= 1e-3, "gelu analytic-vs-erf substitution bounded (measured {max_erf})")
+    delete xs
+    delete lut
+    delete erfv
+}
+
+// Weightless rms via MetalRmsNorm + a ones vector at the meta eps — the gemma4uv chain's idiom.
+def private rms_weightless_gate(t : T?; dev, queue; dim, nrows : int; eps : float) {
+    let tag = "rms_weightless dim={dim} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var x : array<float>
+    var ones : array<float>
+    x |> resize(nrows * dim)
+    ones |> resize(dim)
+    for (i in range(nrows * dim)) {
+        x[i] = 0.19 * float(i % 37) - 2.9
+    }
+    for (i in range(dim)) {
+        ones[i] = 1.0
+    }
+    var want : array<float>
+    want |> resize(nrows * dim)
+    for (r in range(nrows)) {
+        var ss = 0.0
+        for (i in range(dim)) {
+            let vv = x[r * dim + i]
+            ss += vv * vv
+        }
+        let inv = 1.0 / sqrt(ss / float(dim) + eps)
+        for (i in range(dim)) {
+            want[r * dim + i] = x[r * dim + i] * inv
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var bw = buf_upload(dev, ones)
+    var by = buf_fill(dev, nrows * dim, 0.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_rmsnorm_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, beps, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(beps)
+    metal_release(pso)
+    delete x
+    delete ones
+    delete want
+}
+
+// The gemma4uv 2-axis position add — bit-EXACT vs the CPU's (row + ex) + ey order; the
+// split-exponent fixture makes any reassociation visible, the non-square grid any axis swap.
+def private pos_add_gate(t : T?; dev, queue; npos, dim, ncols, pos_entries : int) {
+    let tag = "posadd2d npos={npos} ncols={ncols}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = npos * dim
+    var x : array<float>
+    var tbl : array<float>
+    x |> resize(total)
+    tbl |> resize(2 * pos_entries * dim)
+    for (i in range(total)) {
+        x[i] = 1.0e3 + 0.37 * float(i % 29)          // large exponent
+    }
+    for (i in range(pos_entries * dim)) {
+        tbl[i] = 1.0e-3 * float(i % 41 + 1)          // x-table rows: tiny exponent
+        tbl[pos_entries * dim + i] = 9.0e2 + 0.21 * float(i % 19)   // y-table rows: large again
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (p in range(npos)) {
+        for (i in range(dim)) {
+            let ex = tbl[(p % ncols) * dim + i]
+            let ey = tbl[(pos_entries + p / ncols) * dim + i]
+            want[p * dim + i] = (x[p * dim + i] + ex) + ey
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var btbl = buf_upload(dev, tbl)
+    var bdim = buf_u32(dev, uint(dim))
+    var bcols = buf_u32(dev, uint(ncols))
+    var bpe = buf_u32(dev, uint(pos_entries))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, btbl, 0ul, 1)
+        metal_set_buffer(enc, bdim, 0ul, 2)
+        metal_set_buffer(enc, bcols, 0ul, 3)
+        metal_set_buffer(enc, bpe, 0ul, 4)
+        metal_set_buffer(enc, btot, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bx, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(btbl)
+    metal_release(bdim)
+    metal_release(bcols)
+    metal_release(bpe)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete tbl
+    delete want
+}
+
 def private suppress_row_gate(t : T?; dev, queue; total, nids : int) {
     let tag = "suppress_row total={total} nids={nids}"
     var err : string
@@ -623,9 +913,9 @@ def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
 
 [test]
 def test_metal_misc_kernels(t : T?) {
-    t |> run("decode elementwise/misc kernels == direct CPU oracles") <| @(t : T?) {
+    t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return
@@ -644,6 +934,24 @@ def test_metal_misc_kernels(t : T?) {
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
                 geglu_gate(t, dev, queue, 800)
+
+                // ===== tower primitives (metal-media chunk 2) =====
+                layernorm_gate(t, dev, queue, 384, 4, 1.0e-5, false)    // whisper-tiny d; strided tail
+                layernorm_gate(t, dev, queue, 896, 2, 1.0e-5, false)    // qwen3a d
+                layernorm_gate(t, dev, queue, 1280, 2, 1.0e-5, false)   // whisper-large d
+                layernorm_gate(t, dev, queue, 3840, 3, 1.0e-5, false)   // gemma4uv n_embd
+                layernorm_gate(t, dev, queue, 6912, 3, 1.0e-5, false)   // gemma4uv patch_dim - widest row
+                layernorm_gate(t, dev, queue, 1280, 1, 1.0e-5, false)   // single-row grid
+                layernorm_gate(t, dev, queue, 100, 2, 1.0e-5, false)    // smaller than a simdgroup stride
+                layernorm_gate(t, dev, queue, 1280, 2, 1.0e-3, false)   // non-default eps: the uniform is live
+                layernorm_gate(t, dev, queue, 1280, 2, 1.0e-5, true)    // IN PLACE - the gemma4uv production shape
+                gelu1_gate(t, dev, queue, 800)     // %64 != 0 tail guard
+                gelu1_gate(t, dev, queue, 1000)
+                gelu1_gate(t, dev, queue, 5120)    // whisper-large n_ff
+                gelu_form_delta(t)
+                rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
+                pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
+                pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard

@@ -138,6 +138,11 @@ var g_pso_addrms : MetalComputePipeline?
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
 var g_pso_geglu : MetalComputePipeline?
+// ===== tower primitives (metal-media chunk 2; compiled in the tower driver's init) =====
+var g_pso_ln : MetalComputePipeline?
+var g_pso_gelu1 : MetalComputePipeline?
+var g_pso_posadd : MetalComputePipeline?
+var g_pso_f32mm : MetalComputePipeline?
 var g_pso_softcap : MetalComputePipeline?
 var g_pso_suppress : MetalComputePipeline?
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind

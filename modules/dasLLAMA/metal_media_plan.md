@@ -202,7 +202,15 @@ slice, possibly post-PR).
 - Knob: `DASLLAMA_METAL_TOWER` (MetalEnv bool, default on, [init] snapshot — the SPAN seat)
   + in-process `set_metal_tower(on)` for tests.
 
-## Kernel specs (slice H)
+## Kernel specs (slice H) — DONE 2026-08-16
+
+Four kernels + four PSO globals landed; all gates green in the 7-file kernels suite.
+Controls discriminated: LN drop-bias RED, posadd axis-swap RED (non-square only, as
+designed), f32mm weight-row shift RED, gelu constant RED at 1e-2 granularity (finer is
+below the gate's 1e-4 bar — stated; the form-delta cell owns the form). Two measured
+corrections: the LUT-substitution bound is the f16 HALF-ULP at the range edge (3.90625e-3
+deterministic; pinned 4.5e-3 with the measurement in the comment), and the #3724 guard
+caught the gate's own 106 MB fixture (reserve added).
 
 1. **`MetalLayerNorm`** — `MetalRmsNorm` skeleton (one tg/row, `simd_sum` + partial[32] +
    broadcast), two-pass mean then population variance (f32 tree-sum; CPU doubles — the
