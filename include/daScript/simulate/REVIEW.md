@@ -3,13 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **No new work in a `SimNode::eval*` method — the ones in `simulate_nodes.h`, `runtime_*.h`,
-  and their AOT twins in `aot.h` — or in the dispatchers `Context::callOrFastcall` /
-  `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`); code that runs once per
-  capacity change rather than once per evaluated node (table grow/rehash, array resize) is
-  not in scope. A hot-path addition is a defect.** A load, branch, or counter on that path
-  taxes every program on every step; a correctness-required addition is ledgered under
-  `ARCHITECTURE.md`'s sanctioned hot-path additions.
+- **No new work in a `SimNode::eval*` method (`simulate_nodes.h`, `runtime_*.h`), in the
+  dispatchers `Context::callOrFastcall` / `callWithCopyOnReturn` / `invoke` / `invokeEx`
+  (`simulate.h`), or in any `aot.h` function or template that generated code executes per
+  evaluated expression; on any of these surfaces, code that runs once per capacity change
+  rather than once per evaluated expression is not in scope. A hot-path addition is a
+  defect.** A load, branch, or counter on that path taxes every program on every evaluated
+  expression; a correctness-required addition is ledgered under `ARCHITECTURE.md`'s
+  sanctioned hot-path additions.
 
 - **A field added, removed, or reordered in a `debug_info.h` struct: the PR description
   states a per-consumer verdict (updated / no change needed / rebuild required) for the

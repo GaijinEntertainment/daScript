@@ -3426,15 +3426,17 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
+        // das_copy, not raw `=`: a derived-pointer init has no implicit conversion into the base-typed
+        // element (das classes emit as unrelated C++ structs) — same memcpy idiom as preVisitExprMakeStructField
         if (init._type.canCopy) {
-            write(*ss, "{tabs()}{mkaName(expr)}({index},__context__) = ");
+            write(*ss, "{tabs()}das_copy(({mkaName(expr)}({index},__context__)),(");
         } else {
             write(*ss, "{tabs()}das_move({mkaName(expr)}({index},__context__),");
         }
     }
     def override visitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
         if (init._type.canCopy) {
-            write(*ss, ";\n");
+            write(*ss, "));\n");
         } else {
             write(*ss, ");\n");
         }

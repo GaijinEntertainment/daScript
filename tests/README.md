@@ -683,6 +683,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | lambda_in_generic_module_vis.das | Functions outlined from generic instances (lambda/generator/local fn/nested) keep the generic's origin module for name resolution | |
 | lambda_to_iter.das | Lambda as iterator via `each(lam)` for int& and struct | |
 | line_info.das | `testCallLine()` line info correctness (6 in script, 0 with AOT) | |
+| test_literal_nontrivial_elements.das | Array literals with non-trivial elements across tiers — moved-in iterator elements, fixed-array elements, comprehension moved into a ctor argument | |
+| test_ctor_literal_pointer_upcast.das | `array<Base?>(new Derived(), ...)` ctor literal upcasts elements to the declared type | |
 | failed_local_classes_failed.das | no_local_class_members restriction | **expect** `31300:1` |
 | lock_array.das | `lock`/`lock_data` on arrays — read-only iteration, mutable data access | |
 | loop_ret.das | Loop early return fills unique entries (random + tuple) | |
