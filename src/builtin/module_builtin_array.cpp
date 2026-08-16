@@ -149,6 +149,24 @@ namespace das {
         if ( arr.data && name ) context->heap->mark_comment(arr.data, name);
     }
 
+    void builtin_array_set_scratch ( Array & arr, bool value, Context * ) {
+        arr.scratch = value;
+    }
+
+    bool builtin_array_is_scratch ( const Array & arr ) {
+        return arr.scratch;
+    }
+
+    void builtin_array_scratch_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at ) {
+        if ( newSize<0 ) return; // no point of displaying errors, if reserve fails
+        array_reserve_scratch( *context, pArray, newSize, stride, at );
+    }
+
+    void builtin_array_scratch_reserve_i64 ( Array & pArray, int64_t newSize, int stride, Context * context, LineInfoArg * at ) {
+        if ( newSize<0 ) return; // no point of displaying errors, if reserve fails
+        array_reserve_scratch( *context, pArray, uint64_t(newSize), stride, at );
+    }
+
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
         // the public 'clear' is a builtin.das generic (finalize banner); this is its raw half
@@ -235,5 +253,19 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_tag)>(*this, lib, "tag_array",
             SideEffects::modifyExternal, "builtin_array_tag")
                 ->args({"array","name","context"});
+        // scratch: the owner promises no interior alias escapes a grow, so growth may free
+        // the old buffer eagerly even in a verySafeContext (set once on internal containers)
+        addExtern<DAS_BIND_FUN(builtin_array_set_scratch)>(*this, lib, "set_scratch",
+            SideEffects::modifyArgument, "builtin_array_set_scratch")
+                ->args({"array","value","context"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_array_is_scratch)>(*this, lib, "is_scratch",
+            SideEffects::none, "builtin_array_is_scratch")
+                ->arg("array");
+        addExtern<DAS_BIND_FUN(builtin_array_scratch_reserve)>(*this, lib, "__builtin_array_scratch_reserve",
+            SideEffects::modifyArgument, "builtin_array_scratch_reserve")
+                ->args({"array","newSize","stride","context","at"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_array_scratch_reserve_i64)>(*this, lib, "__builtin_array_scratch_reserve_i64",
+            SideEffects::modifyArgument, "builtin_array_scratch_reserve_i64")
+                ->args({"array","newSize","stride","context","at"})->unsafeOperation = true;
     }
 }

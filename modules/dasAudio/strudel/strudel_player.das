@@ -285,6 +285,7 @@ def private init_track(var track : StrudelTrack?; startTime : double) {
     track.sched.startTime = startTime
     track.sched.lastQueryEnd = (g_wall_time - startTime) * g_cps
     track.sched.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
+    unsafe(mark_pools_scratch(track.sched))
     if (g_sf2 != null) {
         init_reverb(track.sched)
     }

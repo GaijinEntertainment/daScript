@@ -513,7 +513,7 @@ def bench_dot() : string {
     var inscope w : array<float>
     var inscope x : array<float>
     var inscope o : array<float>
-    w |> resize(DOT_WALK_ROWS * N)   // 128 MB — DRAM-streaming, like a decode GEMV
+    w |> reserve_resize(DOT_WALK_ROWS * N)   // 128 MB — DRAM-streaming, like a decode GEMV
     x |> resize(N)
     o |> resize(DOT_WALK_ROWS)
     for (i in range64(DOT_WALK_ROWS * N)) {
@@ -1719,7 +1719,7 @@ def bench_quantize() : string {
     let npos = DOT_WALK_ROWS / 2l   // 4096 rows × 16 KB = 64 MB read + 17 MB written per walk
     let nb = N / 32l
     var inscope src : array<float>
-    src |> resize(npos * N)
+    src |> reserve_resize(npos * N)
     for (i in range64(npos * N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
@@ -2341,7 +2341,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             }
         }
         if (!mt_ran) {
-            tune_detail("METAL_TWIN: no Metal device — tensor race skipped\n")
+            tune_detail("METAL_TWIN: no Metal device - tensor race skipped\n")
         }
         metal_crowns = join(mt_wins, ",")
         delete mt_wins

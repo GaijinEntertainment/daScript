@@ -3933,8 +3933,8 @@ def private mtp_verify_logits(t : Model; var s : Session; npos : int64) {
     let dim = c.dim
     let vocab = c.vocab_size
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    s.mtp_norm_b |> scratch_resize(npos * dim)
-    s.mtp_logits_b |> scratch_resize(npos * vocab)
+    s.mtp_norm_b |> overwrite_resize(npos * dim)
+    s.mtp_logits_b |> overwrite_resize(npos * vocab)
     rms_batch(s.mtp_norm_b, s.x_b, t, t.rms_final_off, dim, npos)
     copy_floats(s.mtp_norm_b, 0l, s.mtp_h0, 0l, dim)   // = h_pos; a reject re-seeds the draft head from it
     mm_b_f(s, s.mtp_logits_b, t, cls_fmt, t.wcls_off, s.mtp_norm_b, dim, vocab, npos)
@@ -3958,9 +3958,9 @@ def private mtp_prefill_warm(t : Model; var s : Session; tokens : array<int64>; 
     let c = t.config
     let dim = c.dim
     if (npos > 1l) {
-        s.mtp_xb_save |> scratch_resize(npos * dim)
+        s.mtp_xb_save |> overwrite_resize(npos * dim)
         copy_floats(s.x_b, 0l, s.mtp_xb_save, 0l, npos * dim)
-        s.mtp_cat_b |> scratch_resize((npos - 1l) * 2l * dim)
+        s.mtp_cat_b |> overwrite_resize((npos - 1l) * 2l * dim)
         for (p in range64(npos - 1l)) {
             embed_row(t, tokens[p + 1l], unsafe(addr(s.x[0])))
             rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
@@ -4617,7 +4617,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
 // batched-prefill scratch sizing, shared by token and embedding entries. grow-only no-init:
 // contents are stage output (fully overwritten); `delete` on grow skips the realloc's old-block
 // copy + zero-fill (~5ms saved on a first 512-row prefill).
-def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
+def overwrite_resize(@scratch var a : array<auto(numT)>; need : int64) {
     if (long_length(a) < need) {
         delete a
         a |> reserve(need)
@@ -4625,7 +4625,7 @@ def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     a |> resize_no_init(need)
 }
 
-// scratch_resize's zero-init twin, for scratch a consumer may read before writing. Capacity
+// overwrite_resize's zero-init twin, for scratch a consumer may read before writing. Capacity
 // precedes growth (the max_unreserved_size guard) via ensure_capacity, whose doubling keeps the
 // context-scaled att_b amortized — an exact reserve re-allocates on every chunk of a long prefill.
 def zeroed_resize(@scratch var a : array<auto(numT)>; need : int64) {
@@ -4674,16 +4674,16 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
     let maxn = max(xdim, hidden)
     // no-init: every array here is stage output, fully overwritten before read — zero-fill was ~5ms waste
-    s.x_b |> scratch_resize(npos * dim)
-    s.xb_b |> scratch_resize(npos * xdim)
-    s.xb2_b |> scratch_resize(npos * dim)
-    s.q_b |> scratch_resize(npos * qd)
-    s.k_b |> scratch_resize(npos * kv_dim)
-    s.v_b |> scratch_resize(npos * kv_dim)
-    s.hb_b |> scratch_resize(npos * hidden)
-    s.hb2_b |> scratch_resize(npos * hidden)
-    s.xqb |> scratch_resize(npos * maxn)
-    s.xsb |> scratch_resize(npos * maxn / 32l)
+    s.x_b |> overwrite_resize(npos * dim)
+    s.xb_b |> overwrite_resize(npos * xdim)
+    s.xb2_b |> overwrite_resize(npos * dim)
+    s.q_b |> overwrite_resize(npos * qd)
+    s.k_b |> overwrite_resize(npos * kv_dim)
+    s.v_b |> overwrite_resize(npos * kv_dim)
+    s.hb_b |> overwrite_resize(npos * hidden)
+    s.hb2_b |> overwrite_resize(npos * hidden)
+    s.xqb |> overwrite_resize(npos * maxn)
+    s.xsb |> overwrite_resize(npos * maxn / 32l)
     if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
         s.xbsb |> zeroed_resize(npos * maxn / 16l)
     }

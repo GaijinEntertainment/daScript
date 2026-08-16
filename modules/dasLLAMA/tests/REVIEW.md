@@ -1,23 +1,37 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
-doc: `CLAUDE.md` (this folder's — the suite map, arm lists, and runner mechanics live there).
-Planned work: `../THINKING.md` (deferred remote legs).
+doc: `CLAUDE.md` (this folder's). Planned work: `../THINKING.md`.
 
-**Every PR runs the model-free tests here, plus each suite the change reaches — never the whole
-directory.** A change reaches a suite through a suite file, a shared helper's behavior, or engine
-code the suite exercises; a comment- or prose-only change reaches none. Suites run only through
-`run.das`, `--arm`-scoped (it refuses `--full`); dastest run directly on a suite file is a defect.
-Every other test, vulkan included, runs under dastest.
+**Every PR runs the model-free tests here, plus every test here the change reaches — never the
+whole directory.** A change reaches a test when it alters what code does at runtime — through
+the test file, a shared helper, or engine code the test exercises; an identifier- or
+comment-only edit reaches none.
+
+**A test file `run.das` lists runs only through `run.das`, scoped with `--arm` (the runner
+refuses `--full`); dastest invoked directly on such a file is a defect. Every other test in
+this folder runs under dastest.**
 
 **Every test RUN runs under `-jit`** — never the interpreter, never AOT. A compile-only CI lane
 passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
 for the guard, is a defect.
 
-**dasLLAMA `[test]` files live here**, except a test whose subject lives beside it under `utils/`
-(the serving legs and the exchange client, which require their sibling by bare name) and the one
-bench self-check `benchmarks/matmul/test_matmul_par.das`; no dasLLAMA test appears in any
-`CMakeLists.txt`.
+**A `[test]` file that requires any `dasllama/*` module lives in this folder.** Out-of-folder
+instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
+
+**No dasLLAMA test appears in any `CMakeLists.txt`.**
+
+**A suite-less file's `CLAUDE.md` entry is accurate in the same change** — added when the file
+is added, corrected when what it covers is renamed or re-scoped.
+
+**Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
+`options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
+
+**Weakening `test_env_registry.das` is a defect.** It enforces the knob contract: no raw
+environment access outside `dasllama_env.das` (declare an `[EnvConfig]` field and read
+`g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no re-declared
+env helper, and a checked-in `ENVIRONMENT.md` matching what the declarations render
+(regenerate with `harness/gen_env_doc.das`).
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect.
@@ -33,12 +47,10 @@ test loads first.
 **A suite loads decoders with `load_model_`, never the image rail** (towers and embedders load
 through their family loaders). Image-rail coverage belongs to the image suites alone.
 
-**Every new or changed piece of functionality — a function or a registration, its signature,
-body, or wiring — ships its test in the same change: feed the function, check the bytes; "the
-model still runs" is not that test.** The folder's sharpenings of `REVIEW_COMMON.md`'s
-constitutional rule: a signature widening with an unchanged body counts (the new receivers are
-the new bit); a platform-fixed predicate's observable is the argv it gates or the mode it
-selects; a moved or edited registration's observable is reachability.
+**A signature widening with an unchanged body ships its test — the new receivers are the new
+bit; a platform-fixed predicate's observable is the argv it gates or the mode it selects; a
+moved or edited registration's observable is reachability.** Feed the function and check the
+bytes; "the model still runs" is not that test.
 
 **Every test that compares logits also logs decoded text for both sides.** A red, or a
 suspicious green, must be readable as text in the log, not only as an id or float difference.
@@ -57,7 +69,7 @@ non-zero.
 **Every ASR family has a token-for-token oracle cell, and every oracle cell logs its transcript
 as an `eyeball:` line.** An id-only comparison is a defect.
 
-**A real image fixture or mmproj a vision test loads has its `performance/fetch_models.das`
+**A real image fixture or mmproj a vision test loads has its `../performance/fetch_models.das`
 entry.**
 
 **A vision test that needs no model builds its image procedurally and pins its expectations
@@ -75,11 +87,7 @@ well as red.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** — the wire-shape pins, the render pins, and a live server leg gated on the family's
-smallest GGUF (the file homes are `CLAUDE.md`'s suite map). A family whose vocab lacks the
-markers has no format to test; with no small-enough local model the remote leg goes to
-`THINKING.md`.
+smallest GGUF (the file homes are `CLAUDE.md`'s "Model-free / no-arm tests" and
+"Out-of-folder test files" notes). A family whose vocab lacks the markers has no format to
+test; with no small-enough local model the remote leg goes to `../THINKING.md`.
 
-**A change reaching `dasllama_tokenizer.das`, `dasllama_spm.das`, `dasllama_bpe.das`, or
-`dasllama_pretok.das` records a `tests/test_tokenizer.das` run with its cases EXECUTED, not
-skipped.** A new pre-tokenizer family or backend ships its `corpus_case` arm naming the
-`ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless round-trip.

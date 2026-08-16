@@ -102,8 +102,9 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Model-free / no-arm tests
 
 Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
-New suite-less files register on this note (REVIEW: "A new file under `tests/` registers
-in `tests/CLAUDE.md`"); suite members register in their suite's arm list via `run.das` instead.
+New suite-less files register on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is
+accurate in the same change"); suite members register in their suite's arm list via `run.das`
+instead.
 Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs
@@ -122,7 +123,7 @@ synthetic log files from a per-process temp dir. Requires `run` by bare same-dir
 `test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
-`grow_resize` geometric reuse, `scratch_resize` grow-only no-init) fed directly, including
+`grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
 `test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
@@ -143,7 +144,7 @@ span length from the geometry) and the greedy caption, logged in full. NOT token
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
 arm defaults to instruct, and freeform token-parity cells are banned (see below).
 
-## Model loads — never the image rail (REVIEW: "A test suite loads DECODERS with load_model_")
+## Model loads — never the image rail (REVIEW: "A suite loads decoders with `load_model_`, never the image rail")
 
 Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box
@@ -226,3 +227,17 @@ exist for it. Counting cells stay token-exact.
 and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
 with `-jit` — no runner, no arms, no models.
+
+## Out-of-folder test files (the checklist's placement ledger)
+
+Every `[test]` file requiring a `dasllama/*` module outside this folder, each with its reason:
+- `utils/dasllama-server/test_openai_server*.das` — require the server by bare same-dir name
+  (the hyphenated directory is unreachable by path require).
+- `utils/dasllama-server/test_exchange_client.das` — requires its subject by relative path,
+  but coordinates its fixed test port with the serving-leg suites' ports in that directory
+  (see its `TEST_PORT` note).
+- `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` — the bench self-check, requiring
+  `matmul_variants` by bare same-dir name.
+
+The ladder tests (`utils/dasllama-ladder/test_*.das`) require no engine module and answer to
+that folder's own `REVIEW.md` — not dasLLAMA tests, not ledger entries.

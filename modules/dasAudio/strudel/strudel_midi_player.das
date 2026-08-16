@@ -297,6 +297,10 @@ def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : 
     state.ticks_per_qn = midi.ticks_per_qn
     state.tempo_usec = 500000
     state.ticks_per_sec = double(state.ticks_per_qn) * 1000000.0lf / double(state.tempo_usec)
+    unsafe {   // voice pools are thread-local internals — eager grow under very_safe_context
+        state.voices |> set_scratch(true)
+        state.csf2_voices |> set_scratch(true)
+    }
     for (ch in state.channels) {
         ch = MidiChannelState()
         channel_init_cc(ch)
@@ -845,6 +849,16 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     var pending_adds : array<MidiTrackCmd>
     let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
     var output : array<float>
+    unsafe {   // thread-local internals — eager grow under very_safe_context
+        g_sf2_meta |> set_scratch(true)
+        g_reverb_send_buf |> set_scratch(true)
+        g_reverb_out_buf |> set_scratch(true)
+        g_chorus_send_buf |> set_scratch(true)
+        g_chorus_out_buf |> set_scratch(true)
+        tracks |> set_scratch(true)
+        pending_adds |> set_scratch(true)
+        output |> set_scratch(true)
+    }
     output |> resize(chunkSamples)
     var running = true
     while (running) {

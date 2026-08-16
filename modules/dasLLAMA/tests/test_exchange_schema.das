@@ -67,11 +67,15 @@ def test_corpus_sidecars(t : T?) {
                     report(t, name, validate_sidecar(text, errors), errors)
                     delete errors
                     t |> success(info.kernel_count > 0, "{name} has kernels")
-                    t |> equal(info.dasllama_version, 0, "{name} predates the release counter")
                     t |> success(!empty(info.identity.platform) && !empty(info.identity.cpu), "{name} box identity parses")
-                    // pre-counter sidecars are shape-valid history, but the exchange must refuse them
+                    // the release counter decides submission grade: pre-counter sidecars are
+                    // shape-valid history the exchange must refuse; stamped ones must clear it
                     var serrors : array<string>
-                    t |> success(!validate_sidecar_submission(text, serrors), "{name} is not submission-grade")
+                    if (info.dasllama_version == 0) {
+                        t |> success(!validate_sidecar_submission(text, serrors), "{name} is not submission-grade")
+                    } else {
+                        report(t, "{name} submission-grade", validate_sidecar_submission(text, serrors), serrors)
+                    }
                     delete serrors
                 }
             }

@@ -565,6 +565,9 @@ def private decode_ogg_block(data : array<uint8>; byte_offset, byte_len : int; v
 def private sf3_decode_samples(data : array<uint8>; smpl_offset, smpl_size : int; var sf2 : SF2File) : bool {
     if (smpl_offset < 0 || smpl_size <= 0) return false
     var pcm : array<int16>
+    // the whole decoded soundfont accumulates here (tens of MB) - eager grow under
+    // very_safe_context; the bit is cleared before the move-out below
+    unsafe(pcm |> set_scratch(true))
     for (s in sf2.samples) {
         let base = length(pcm)
         var frames = 0
@@ -591,6 +594,7 @@ def private sf3_decode_samples(data : array<uint8>; smpl_offset, smpl_size : int
         s.loop_start = uint(base + clamp(loop_lo, 0, frames))
         s.loop_end = uint(base + clamp(loop_hi, 0, frames))
     }
+    unsafe(pcm |> set_scratch(false))   // sample_data is aliased by playing voices - hand off an ordinary array
     sf2.sample_data <- pcm
     return !empty(sf2.sample_data)
 }
