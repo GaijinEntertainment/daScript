@@ -8,6 +8,11 @@ Very safe context
 .. index::
     single: Very Safe Context
 
+.. das-doc: given struct Voice { id : int }
+.. das-doc: given var data : array<uint8>
+.. das-doc: given var pos : int
+.. das-doc: given var size : int
+
 Daslang prioritizes runtime performance and development speed over absolute safety.
 Outside of ``unsafe`` blocks the language enforces safety checks that prevent common programming errors,
 but certain fundamentally unsafe patterns cannot be eliminated without sacrificing performance.

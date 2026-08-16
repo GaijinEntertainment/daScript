@@ -145,6 +145,10 @@ namespace das
 
         void setE ( const Expression * e, SimNode * n ) {
             e2v[e] = n;
+            // under gc/debugger the node's own LineInfo copy carries the expression's
+            // frame position (the GC locals gate and LineInfoArg externs read it via
+            // &node->debugInfo); the AST's `at` stays honest
+            if ( n && context.thisHelper ) context.thisHelper->stampSimNode(e, n->debugInfo);
         }
 
         SimNode * getE ( const Expression * e ) {
@@ -1455,6 +1459,9 @@ namespace das
             }
         }
         pInvoke->debugInfo = at;
+        // same as sv_simulateCall: the keep-alive wrapper takes setE, the invoke node's
+        // own debugInfo is the handoff the invoked frame reads
+        if ( context.thisHelper ) context.thisHelper->stampSimNode(expr, pInvoke->debugInfo);
         int nArg = (int) expr->arguments.size();
         if ( expr->isInvokeMethod ) nArg --;
         if ( nArg ) {
@@ -3457,6 +3464,9 @@ namespace das
                 needTypeInfo = true;
         }
         pCall->debugInfo = expr->at;
+        // stamp here as well as setE: a wrapped call (keep-alive, NewArray) hands the
+        // WRAPPER to setE, but &pCall->debugInfo is what reaches the callee's prologue
+        if ( context.thisHelper ) context.thisHelper->stampSimNode(expr, pCall->debugInfo);
         if ( func->builtIn) {
             pCall->fnPtr = nullptr;
         } else if ( func->index>=0 ) {
@@ -3817,9 +3827,10 @@ namespace das
                         gfun.debugInfo->flags &= ~ (FuncInfo::flag_init | FuncInfo::flag_shutdown);
                     }
                     if ( debuggerOrGC ) {
-                        // stamp BEFORE building sim nodes and locals info: the sim `at`
-                        // copies inherit the frame positions, and the intervals feed the
-                        // locals gate (see LocalVariableInfo::openPos)
+                        // number the body BEFORE building sim nodes and locals info: the
+                        // positions stamp each expression's sim node as it is built (see
+                        // SimulateVisitor::setE), and the intervals feed the locals gate
+                        // (see LocalVariableInfo::openPos). the AST's `at` is never written
                         gfun.debugInfo->spaceId = frameSpaceId(pfun->index);
                         helper.currentSpaceId = gfun.debugInfo->spaceId;
                         helper.stampFramePositions(pfun->body, gfun.debugInfo->spaceId);
@@ -3847,6 +3858,10 @@ namespace das
                     lookupFunctionTable.push_back(pfun);
                 });
             }
+            // stamping off past the last function - global inits and annotation simulate
+            // build nodes outside any position space
+            helper.exprFramePos.clear();
+            helper.currentTaggedSpace = 0;
         }
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {

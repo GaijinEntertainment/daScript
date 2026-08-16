@@ -25,17 +25,18 @@ namespace das {
     };
 
     // numbers the FINAL tree in dense preorder; a local's interval opens after its own
-    // init subtree and closes with its scope
+    // init subtree and closes with its scope. positions land in a side map, never in the
+    // AST's `at` - SimulateVisitor stamps them onto each expression's own sim node copy
     class FramePositionStamp : public Visitor {
     public:
-        FramePositionStamp ( das_hash_map<Variable *, FramePosInterval> & vfp, uint32_t spaceId )
-            : intervals(vfp), taggedSpace(LINEINFO_FRAME_POS_TAG | spaceId) {}
+        FramePositionStamp ( das_hash_map<Variable *, FramePosInterval> & vfp,
+                das_hash_map<const Expression *, uint32_t> & efp )
+            : intervals(vfp), positions(efp) {}
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             pos ++;
-            expr->at.last_line = taggedSpace;
-            expr->at.last_column = pos;
+            positions[expr] = pos;
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
@@ -75,9 +76,9 @@ namespace das {
         }
     public:
         das_hash_map<Variable *, FramePosInterval> & intervals;
+        das_hash_map<const Expression *, uint32_t> & positions;
         vector<vector<Variable *>> scopes;
         vector<Variable *> bodyVars;
-        uint32_t taggedSpace = 0;
         uint32_t pos = 0;
         bool sawLabel = false;
     };
@@ -107,7 +108,9 @@ namespace das {
         // this function's consumers (its own appendLocalVariables + per-block appends
         // during its simulate) all run before the next stamp - no need to keep the rest
         varFramePos.clear();
-        FramePositionStamp stamp(varFramePos, spaceId);
+        exprFramePos.clear();
+        currentTaggedSpace = LINEINFO_FRAME_POS_TAG | spaceId;
+        FramePositionStamp stamp(varFramePos, exprFramePos);
         body->visit(stamp);
         if ( stamp.sawLabel ) {
             // a labeled body (generator lowering) admits jumps into intervals - keep every
@@ -116,6 +119,14 @@ namespace das {
             // reach this valve - it guards future label-emitting transforms
             for ( auto v : stamp.bodyVars ) varFramePos[v] = { 0u, ~0u };
         }
+    }
+
+    void DebugInfoHelper::stampSimNode ( const Expression * expr, LineInfo & nodeAt ) {
+        if ( !currentTaggedSpace ) return;
+        auto it = exprFramePos.find(expr);
+        if ( it == exprFramePos.end() ) return;
+        nodeAt.last_line = currentTaggedSpace;
+        nodeAt.last_column = it->second;
     }
 
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, ExpressionPtr body ) {
