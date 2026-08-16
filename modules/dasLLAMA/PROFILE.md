@@ -130,7 +130,7 @@ The image TURN on a vision decoder — what a user actually waits on when they a
 One process, one tune-key demand, one image-identity stamp, same as the ASR cell:
 
 ```sh
-modules/dasLLAMA/performance/_rig/lcpp_bench \
+modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench \
   -m <decoder.gguf> --image-mmproj <mmproj.gguf> --image <picture.jpg> -r 5
 ```
 
@@ -161,8 +161,8 @@ process/tune/identity discipline as the cells above; the reference tools are mea
 adjacent by `gen_bench_records`, never in this process.
 
 ```sh
-modules/dasLLAMA/performance/_rig/lcpp_bench --asr -m "Whisper large" -r 3          # the q8-CPU serving default
-modules/dasLLAMA/performance/_rig/lcpp_bench --asr -m "Whisper large" --ngl 1 -r 3  # the f32 Metal tower rail
+modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench --asr -m "Whisper large" -r 3          # the q8-CPU serving default
+modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench --asr -m "Whisper large" --ngl 1 -r 3  # the f32 Metal tower rail
 ```
 
 Same executable rule as the image cell: the released exe, never the `-jit` script —
