@@ -2,10 +2,12 @@ options gen2
 
 // pr-babysit - the GitHub mechanics of the babysit loop (skills/babysit.md keeps the policy).
 // --request-review asks Copilot to review the PR tip; --watch blocks until something needs
-// action. Exit codes: 0 ready to merge, 1 request/api failure, 2 CI red, 3 review to triage,
-// 5 watch timeout. Bot reviewers never appear in requested_reviewers or reviewRequests and
-// Copilot converts a request into a review within seconds, so the only trustworthy signal
-// is the review arriving in /pulls/N/reviews with commit_id == the requested tip.
+// action; --list-unresolved / --resolve <id> are the review-thread rails (resolve is
+// GraphQL-only - REST has no thread resolution). Exit codes: 0 ready to merge, 1 request/api
+// failure, 2 CI red, 3 review to triage, 5 watch timeout. Bot reviewers never appear in
+// requested_reviewers or reviewRequests and Copilot converts a request into a review within
+// seconds, so the only trustworthy signal is the review arriving in /pulls/N/reviews with
+// commit_id == the requested tip.
 
 require strings
 require math
@@ -29,6 +31,12 @@ struct Config {
 
     @clarg_doc = "Block until action is needed: CI red (2), review to triage (3), ready to merge (0), timeout (5)"
     watch : bool
+
+    @clarg_doc = "List unresolved review threads, GraphQL id and path per line"
+    list_unresolved : bool
+
+    @clarg_doc = "Resolve a review thread by GraphQL id (repeatable)"
+    resolve : array<string>
 
     @clarg_doc = "Watch poll interval, seconds"
     interval : int = 30
@@ -75,15 +83,44 @@ def private bot_review_shas(cfg : Config; var ok : bool&) : array<string> {
         "--jq", ".[] | select(.user.type==\"Bot\") | .commit_id"], ok)
 }
 
-def private unresolved_count(cfg : Config) : int {
+// "<id> <path>" per unresolved thread; paginated - an undercounted page must never read as zero
+def private unresolved_threads(cfg : Config; var ok : bool&) : array<string> {
     let slash = find(cfg.repo, "/")
     let owner = slice(cfg.repo, 0, slash)
     let name = slice(cfg.repo, slash + 1)
-    let query = "query \{ repository(owner: \"{owner}\", name: \"{name}\") \{ pullRequest(number: {cfg.pr}) \{ reviewThreads(first: 100) \{ nodes \{ isResolved \} \} \} \} \}"
-    let out = gh_line(["api", "graphql", "-f", "query={query}", "--jq",
-        "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)] | length"])
-    let n = try_to_int(out)
-    return n |> is_ok ? n |> unwrap : -1
+    var threads : array<string>
+    var cursor = ""
+    ok = true
+    while (true) {
+        let after = empty(cursor) ? "" : ", after: \"{cursor}\""
+        let query = "query \{ repository(owner: \"{owner}\", name: \"{name}\") \{ pullRequest(number: {cfg.pr}) \{ reviewThreads(first: 100{after}) \{ pageInfo \{ hasNextPage endCursor \} nodes \{ id isResolved path \} \} \} \} \}"
+        var page_ok = false
+        let lines <- gh_lines(["api", "graphql", "-f", "query={query}", "--jq",
+            "(.data.repository.pullRequest.reviewThreads.pageInfo | (.hasNextPage|tostring) + \" \" + (.endCursor // \"\")), (.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id + \" \" + (.path // \"\"))"], page_ok)
+        if (!page_ok || empty(lines)) {
+            ok = page_ok && !empty(lines)
+            break
+        }
+        threads |> reserve(length(threads) + length(lines) - 1)
+        for (i in range(1, length(lines))) {
+            threads |> push(lines[i])
+        }
+        break if (!(lines[0] |> starts_with("true ")))
+        cursor = slice(lines[0], find(lines[0], " ") + 1)
+    }
+    return <- threads
+}
+
+def private unresolved_count(cfg : Config) : int {
+    var ok = false
+    let threads <- unresolved_threads(cfg, ok)
+    return ok ? length(threads) : -1
+}
+
+def private resolve_thread(thread_id : string) : bool {
+    let mutation = "mutation \{ resolveReviewThread(input: \{ threadId: \"{thread_id}\" \}) \{ thread \{ id \} \} \}"
+    var out : string
+    return gh(["api", "graphql", "-f", "query={mutation}"], out) == 0
 }
 
 def private request_review(cfg : Config) : int {
@@ -172,9 +209,28 @@ def main() : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "pr-babysit")
     return rc if (rc >= 0)
-    if (!cfg.request_review && !cfg.watch) {
-        to_log(LOG_ERROR, "pr-babysit: pick --request-review and/or --watch\n")
+    if (!cfg.request_review && !cfg.watch && !cfg.list_unresolved && empty(cfg.resolve)) {
+        to_log(LOG_ERROR, "pr-babysit: pick --request-review, --watch, --list-unresolved, and/or --resolve\n")
         return 1
+    }
+    for (tid in cfg.resolve) {
+        if (!resolve_thread(tid)) {
+            to_log(LOG_ERROR, "pr-babysit: failed to resolve thread {tid}\n")
+            return 1
+        }
+        to_log(LOG_INFO, "pr-babysit: resolved {tid}\n")
+    }
+    if (cfg.list_unresolved) {
+        var ok = false
+        let threads <- unresolved_threads(cfg, ok)
+        if (!ok) {
+            to_log(LOG_ERROR, "pr-babysit: cannot read review threads\n")
+            return 1
+        }
+        for (t in threads) {
+            to_log(LOG_INFO, "{t}\n")
+        }
+        to_log(LOG_INFO, "pr-babysit: {length(threads)} unresolved\n")
     }
     if (cfg.request_review) {
         let rrc = request_review(cfg)

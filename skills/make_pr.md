@@ -483,8 +483,7 @@ Creating the PR does not complete the workflow. Continue immediately with
 3. Verify the unresolved-thread count is zero after the round; replying without resolving is incomplete.
 4. After **every push** to the PR branch, re-request Copilot review. This includes formatting, documentation, CI-only, and other supposedly trivial fixes; there are no push exceptions.
 5. Treat Copilot as dry only when its latest review targets the current tip, produced no new comments, and no review threads remain unresolved.
-6. Accept bug claims only when they have a realistic shipped path, plausible scale, and meaningful impact. Reject theoretical overflow/impossible-state guards.
-7. Never create a prose-only review changeset. Reply, resolve, and let the PR land unless the text is factually wrong or materially misleading; minor prose may ride along with an already-required substantive fix.
+6. Triage every comment per `skills/review_triage.md` — the verdict tests, the fix-now vs ledgered disposition, and the prose-only round rule live there.
 
 Never merge solely because CI is green. CI green + Copilot reviewed current tip + zero unresolved conversations is the merge gate.
 
@@ -528,6 +527,6 @@ created it.
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | Body follows the two-layer template (step 6): short reviewer prose + fixed-heading `<details>` ledger |
 | Copilot round | Reply to every comment, resolve every thread, verify unresolved = 0 | A review round is not complete until all three are done |
 | Push after PR creation | Re-request Copilot review | Mandatory after every push; latest review must target current tip |
-| Review acceptance | Require realistic reachability, scale, and impact | Reject theoretical defensive programming; prose-only round → resolve and land |
+| Review acceptance | `skills/review_triage.md` | Verdict tests + disposition + round outcomes |
 | Babysit | Follow `skills/babysit.md` | Merge only when CI is green and Copilot is dry on current tip |
 | Post-land sweep | `git ls-files --others --exclude-standard` | Delete session debris (`_`-prefixed probes/dumps, `__pycache__`, ad-hoc logs); keep configs/manifests/user assets |

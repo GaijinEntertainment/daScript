@@ -109,6 +109,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
 | `skills/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
 | `skills/babysit.md` | Babysitting an open PR through CI failures and Copilot/human review feedback after the PR is created (the post-open loop) |
+| `skills/review_triage.md` | Triaging ANY review comment on a PR (Copilot, bot, or human) — the verdict tests, the fix-now vs ledgered disposition, what the user is asked versus told |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
 | `skills/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
