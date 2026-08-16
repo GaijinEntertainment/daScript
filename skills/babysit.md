@@ -100,8 +100,10 @@ An accept's reply states what changed and why; reject-reply content is
 **Resolve** is GraphQL-only — REST has no thread resolution — and the tool carries it:
 `--list-unresolved` prints each open thread's id and path,
 `--resolve <id>` (repeatable) resolves them. **Resolve every thread you replied on,
-including rejections** — the discussion is closed; the reply explains why. The end state,
-zero unresolved, is what `--watch` exit `0`/`3` already distinguishes.
+including rejections** — GitHub collapses resolved threads, so the human reviewer scrolls
+past only what still needs action; an unresolved pile of answered comments makes the PR
+unreadable. The end state, zero unresolved, is what `--watch` exit `0`/`3` already
+distinguishes.
 
 ## 6. Re-request Copilot review
 
