@@ -33,10 +33,8 @@ let DEFAULT_FRAME_WAIT_SEC : float = 10.0f           // upper bound on "first fr
 
 let READY_POLL_INTERVAL_MS : uint = 100u             // ms between /status polls — wait_until_ready and reload convergence
 let READY_POLL_REQUEST_TIMEOUT_SEC : int = 2         // per-poll http timeout for the readiness probe: fail-fast-and-retry so one slow round-trip on a loaded runner (the host serves /status off the main loop, so a stalled frame delays it) doesn't burn the whole budget on a single 10s DEFAULT_REQUEST_TIMEOUT_SEC block
-let FRAME_POLL_INTERVAL_MS : uint = 100u             // ms between snapshot polls — 10 req/sec; under libhv's Windows
-                                                     // event-loop cap (~16 req/sec) that previously stalled the test
-                                                     // sweep on heavy imgui_demo harnesses (see tests.yml comment).
-                                                     // ~1.5 polls/frame at 60fps — snappy; most calls finish in 1-2.
+let FRAME_POLL_INTERVAL_MS : uint = 50u              // ms between snapshot polls — 20 req/sec, ~3 polls/frame at
+                                                     // 60fps; most calls finish in 1-2 iterations
 
 // ===== Centralized recording timing =====
 

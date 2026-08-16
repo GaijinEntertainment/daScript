@@ -14,9 +14,8 @@ require daslib/json_boost public
 //! `imgui_playwright`. Builds a temp directory with known files (alpha.png /
 //! beta.jpg / gamma.txt + a subdir), drives the dialog there via the editable
 //! path bar, then verifies the multi-extension filter (Images shows png+jpg,
-//! hides txt), the Modified (date) column, and New Folder creation. Round-trips
-//! are kept lean (≈11) to stay under the Windows libhv 16-POST-per-subprocess
-//! ceiling. Cleans up the fixture. Headless on ubuntu/macOS like the rest.
+//! hides txt), the Modified (date) column, and New Folder creation. Cleans up
+//! the fixture. Headless on ubuntu/macOS like the rest.
 
 let FIXTURE_NAME = "das_fd_dialog_test"
 

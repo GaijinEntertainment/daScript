@@ -71,9 +71,9 @@ focused, value-changed), read from the snapshot.
   are necessary (don't fire the next input mid-animation) but not sufficient (the widget effect may
   still be a frame out). Always follow with an effect gate when a later step depends on the effect.
 - **`await_quiescent` is coarse and risky.** It waits for the *whole app* to go idle, not for a
-  specific effect — and a focus-setting click can leave input active so quiescence is never reached,
-  which floods the host with `await` POSTs and stalls libhv on Windows (this regressed CI once).
-  Prefer a targeted effect gate (`wait_for_*` / `ne_wait_*`) over `await_quiescent`.
+  specific effect — and a focus-setting click can leave input active so quiescence is never
+  reached, burning the wait's full timeout before failing. Prefer a targeted effect gate
+  (`wait_for_*` / `ne_wait_*`) over `await_quiescent`.
 
 ### Don't let a wait silently pass (wait-gate holes)
 

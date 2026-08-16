@@ -7,8 +7,8 @@
 `tests/dasImgui` is not a home.
 
 **A change that can affect runtime behavior — any `.das`, `bind/`, or `src/` file — runs the
-suite before the PR: `preflight --only imgui`** (raw command and exclude lists: module
-`CLAUDE.md` § Tests; local Windows adds the high-POST excludes listed there).
+suite before the PR: `preflight --only imgui`** (raw command and exclude list: module
+`CLAUDE.md` § Tests).
 `nightly_imgui.yml` is the suite's only CI lane, so the local run is the only pre-merge gate.
 
 **Tests are kept multiplatform** — no hardcoded platform-specific paths, separators, or
