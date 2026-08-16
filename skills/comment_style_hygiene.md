@@ -140,6 +140,12 @@ rename first, then see what's left to say.
 synonyms for one idea ("timeout" / "deadline" / "budget") are three chances to
 misread; pick the accurate one and sweep the rest.
 
+**One mechanism, one family word.** When one mechanism surfaces as several public
+names — a verb and its variants, a flag and the helpers that set it for one call —
+one word runs through every member (`push` / `push_clone` / `push_from`). A member
+named out of a second vocabulary makes the reader hunt for a difference that isn't
+there.
+
 **Diagnostics name the concrete thing.** If the code knows which one — which operator,
 which type, which file — the message says which one; a category without an instance
 reads as "trust us". User-facing messages carry no vocabulary that exists only inside

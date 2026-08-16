@@ -9,7 +9,8 @@ location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
 `performance/REVIEW.md`.
 Three kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
-or media change `REVIEW_VISION.md`. This file's rules bind the rest of the engine.
+or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
+lands, answers to `modules/dasLLVM/REVIEW.md`. This file's rules bind the rest of the engine.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -36,13 +37,6 @@ ships the measured pair — peak footprint and wall-clock — and an explicit st
 carrying it is a defect; a new shared concern gets its own file, not more of
 `dasllama_common.das`.
 
-**`tests/test_program_roots.das` is the enforcer for program-root discipline — every root's
-`options stack = 524288` and every model-loading root's prefill intent — and weakening it is a
-defect here.** The contract it enforces: a model-loading root declares `allow_cpu_prefill()` on
-the arms that hit the CPU-prefill guard (`set_metal_mode` with a runtime value declares
-nothing — `MetalMode.off` leaves the guard armed) and logs, once, which configuration it ended
-on; the guard panics, and a panic takes every live stream down. Roots live outside this folder.
-
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
 a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
 value feeds logic is marked `// clock: control`. The rails, and where free-hand timing is
@@ -50,9 +44,11 @@ legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
 or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. A region entry is a KERNEL
-`*_encode` / `*_decode` / step driver; the tokenizer encode/decode path is out of scope. A new
-function is a defect only when no annotated region entry reaches it — a new entry point,
-including a kernel-backend override or a batch donor, carries an annotation itself.
+`*_encode` / `*_decode` / step driver; the tokenizer encode/decode path is out of scope.
+Covered means an annotated entry reaches it: the contracts arm down the call graph, so an
+interior function carries nothing of its own. A new entry point, including a kernel-backend
+override or a batch donor, carries its annotation itself; a rename is not new — annotations
+follow the name in the same change.
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama_spm.das` /
 `dasllama_bpe.das` / `dasllama_pretok.das` ships before/after `--tok` rows for the affected
@@ -60,10 +56,11 @@ backend** — the instrument is the scaling ratio across the size ladder, and su
 defect. A change to the cell's own corpus input ships the same rows or a statement that the
 bytes are unchanged.
 
-**No raw environment access outside `dasllama_env.das` — declare a knob there instead.** A knob
-is an `[EnvConfig]` field, read as `g_env_*.<field>`; `get_env_variable` / `has_env_variable` /
-`set_env_variable` / literal-name `env_config_*` elsewhere is a defect. Sanctioned forms are
-`ARCHITECTURE.md` §2.9.
+**A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
+`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
+`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.** A new pre-tokenizer
+family or backend ships its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture; a
+corpus case asserts exact reference ids AND lossless round-trip.
 
 **An override announces itself where it changes the outcome.** An override is a gate escape,
 policy override, or threshold recalibration. Where one changes what a run measures, mints, or
@@ -79,9 +76,11 @@ feeding no board.
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
 `PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts.
 
-**A timing figure that reaches a doc, a ledger, or a PR without a cell behind it is a defect.**
-The cell states its quant mode and stamps box and engine provenance, so a number can never
-silently describe a format nobody serves or a kernel set nobody ships.
+**A timing figure describing served output — tok/s, latency, a model-level comparison — that
+reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cell states its
+quant mode and stamps box and engine provenance, so a number can never silently describe a
+format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
+delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -123,38 +122,32 @@ reads is not written — the mint decides, not the load. A flavor takes its file
 `image_path_for` and its tag through `register_image_family_tag`; carrying another flavor's
 planes is a defect.
 
-**A change to user-facing API checks every tutorial and document that touches it.** User-facing
-means anything a consumer outside this repo calls or types — exported facade functions, CLI
-flags, environment knobs, file formats, defaults — plus the in-repo rig and tool surface: any
-output another tool parses, a console-only diagnostic not being one. The check covers the
-tutorial `.das` sources, their `.rst` pages, and `BRINGUP.md` / `PROFILE.md` /
-`METHODOLOGY.md` / `ARCHITECTURE.md`; one still showing the old call, flag, or default is a
-defect of the change, not of the docs.
-
-**A changed default is restated everywhere the old default was stated.** Every docstring, help
-string, and doc line that named the old value names the new one in the same diff.
+**A change to user-facing API updates every place it is shown.** User-facing means anything a
+consumer outside this repo calls or types — exported facade functions, CLI flags, environment
+knobs, file formats, defaults — plus the in-repo rig and tool surface: any output another tool
+parses, a console-only diagnostic not being one. A tutorial source, `.rst` page, docstring,
+help string, `README.md`, or checked-in document still showing the old call, flag, or default
+is a defect of the change, not of the docs.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
 `dasllama/dasllama_transformer`) by code outside the module; engine internals, in-module tests,
 harnesses and benchmarks require engine files directly.** A split that spreads facade-reachable
 requires instead of fixing the re-export is a defect.
 
-**A NEW `[EnvConfig]` area struct is wired into `env_markdown()` AND `registered_env_names()`
-in the same change, and `ENVIRONMENT.md` is regenerated.** Those two lists are hand-maintained.
+**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
+struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
+a struct the renderer emits but the registry does not is caught by
+`tests/test_env_registry.das`.
 
-**A new module file is registered in `.das_module` in the same change** (membership of the
-`ADD_MODULE_DAS` list in `CMakeLists.txt` is `ARCHITECTURE.md` §1's to define).
+**A new module file is registered in `.das_module` in the same change.**
 
-**`ENVIRONMENT.md` and `dasllama_unicode.das`'s RANGES/WS tables are generated; hand-editing
-either is a defect.** `ENVIRONMENT.md` regenerates via `harness/gen_env_doc.das` in the same
-change as whatever moved its inputs (`tests/test_env_registry.das` fails on drift); the
-unicode tables retranscode from llama.cpp's unicode-data.cpp.
+**`dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
+`unicode-data.cpp`; hand-editing them is a defect.**
 
 **Placement truth — what each file holds, the seams, the carve-outs — lives in
 `ARCHITECTURE.md` §1 and nowhere else; a diff that adds a file, moves code between files, or
 changes what a file owns lands the §1 edit that keeps the charters true, in the same change.**
-A file inventory restated in this checklist is a defect of the checklist. A new file under
-`tests/` registers in `tests/CLAUDE.md`.
+A file inventory restated in this checklist is a defect of the checklist.
 
 **A tensor format conversion lands in `dasllama_convert.das`.**
 
@@ -175,8 +168,11 @@ concern's shared file (its own file when none exists)** — never sideways into 
 
 **Tool wire text — building or parsing — is produced only in `dasllama_tools.das`.**
 
-**Nothing outside `dasllama_audio_io.das` calls the audio decode library; nothing outside
-`dasllama_vision_io.das` calls stbimage.**
+**No engine file (`dasllama/`) other than `dasllama_audio_io.das` requires `audio` (the
+miniaudio decode module).** Benchmarks, harnesses, and tests decode their own fixtures.
+
+**No engine file (`dasllama/`) other than `dasllama_vision_io.das` requires `stbimage`.**
+Benchmarks, harnesses, and tests decode their own fixtures.
 
 **Engine, HTTP, or writer logic never lands in `dasllama_scheduler.das`** — engine logic in
 engine files, HTTP in the server, writer logic in the writer's own file.
@@ -187,6 +183,3 @@ registrations, GPU tiers, every module requiring the engine back; it sits in
 
 **An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.
-
-**Every environment knob lives in `dasllama_env.das`** — all `[EnvConfig]` area structs and
-their `g_env_*` globals; `tests/test_env_registry.das` enforces both directions.

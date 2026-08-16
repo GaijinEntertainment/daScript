@@ -495,7 +495,10 @@ manifest and check its winners against the stored rows' `tune` stamps before tru
 release shipped beside it; a `DAS_TUNE_MANIFEST` run checks that file; a plain script checks
 that every `[tune]` row stamps a manifest winner. An invocation no arm covers refuses — or
 worse, measures on fallback kernels — which is why every measuring entry point calls the gate
-before its first timed rep.
+before its first timed rep. Two rig shapes fall outside "measuring entry point" by the
+property itself, ledgered here: a kernel A/B lab dispatches its variants through its own arms
+(never the `[tune]` selection), and `lcpp_bench.das`'s `--tok` cell dispatches no kernels at
+all — neither can measure a fallback silently.
 
 **The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
 run that requires the engine — a probe, a one-off script, a REPL experiment — re-execs into a
@@ -540,7 +543,7 @@ Three consequences the code is shaped around:
   quantized x; gate/up share another. Resident arming classifies each member's consumer form
   and DECLINES a mixed group rather than serving one member wrong scales.
 
-### 2.8 Every program root declares the same stack budget
+### 2.8 Every program root declares its stack budget and its prefill intent
 
 `options stack` is main-module-only: it does not unify up from required modules, so no library in
 the forward chain can declare the depth it needs. Every program that drives the engine — each test,
@@ -554,6 +557,14 @@ the limit is discovered by crashing — and the program that crashes is whicheve
 rarest. A measurement rig sized below a test suite is the worst case of this, because the suite
 stays green while the rig dies. The cost of the uniform number is reserved address space per
 context; the cost of per-root numbers is a runtime crash found by the least-covered program.
+
+The second declaration is prefill intent. A model-loading root declares `allow_cpu_prefill()`
+on the arms that hit the CPU-prefill guard — `set_metal_mode` with a runtime value declares
+nothing, since `MetalMode.off` leaves the guard armed — and logs, once, which configuration it
+ended on. The guard panics, and a panic takes every live stream down, so an undeclared root is
+a serving outage waiting on its first long prompt. Both halves of root discipline are enforced
+by `tests/test_program_roots.das`; weakening that test is a review defect
+(`tests/REVIEW.md`).
 
 ### 2.9 Environment knobs
 
