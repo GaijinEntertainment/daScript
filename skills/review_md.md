@@ -2,8 +2,8 @@
 
 Read this before creating any `REVIEW.md`, editing one, or reviewing a diff that changes
 one. A `REVIEW.md` is a folder-scoped review checklist: when a PR touches files under its
-folder, the review applies every entry (`skills/make_pr.md` step 0a discovers these after the
-master rebase — placing the file IS the registration).
+folder, the review applies every entry (discovery is a folder walk over the changed set —
+placing the file IS the registration).
 
 ## The contract — one file, shared
 

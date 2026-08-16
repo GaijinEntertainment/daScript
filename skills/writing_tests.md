@@ -6,7 +6,7 @@ below applies wherever you write tests — in your own project or in the daslang
 Working inside the daslang repository? Its own harness is a separate concern and no part
 of it applies to an SDK install, so none of it is shipped here — AOT registration for new
 test directories, the `tests/.das_test` gating filter and deep-engine model-test rules are
-all covered by `skills/tests_in_repo.md` (repo-only).
+all covered by `skills/internal/tests_in_repo.md` (repo-only).
 
 ## Test file structure
 

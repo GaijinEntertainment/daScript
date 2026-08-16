@@ -82,8 +82,9 @@ prefix keyword `private`; `[_macro, private]` is an error.
 `AstLintMacro` / `AstInferMacro` class), with one method
 `apply(prog : ProgramPtr; mod : Module?) : bool`. The annotation picks the phase:
 `[pre_infer_macro]`, `[infer_macro]` (return `true` to re-infer), `[dirty_infer_macro]`,
-`[optimization_macro]`, `[lint_macro]` (per module), `[global_lint_macro]` (once, after all
-modules), `[pre_simulate_macro]`.
+`[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
+`[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`,
+`[post_compile_macro]` (after gc-root collection).
 
 Inside any macro `compiling_module()` is the module being compiled now (`mod` is the module owning
 the macro). Walk its declarations with
@@ -148,7 +149,8 @@ var twice = new ExprOp2(at = at, op := "+", left = sum, right = clone_expression
 ```
 
 The few compiler types still refcounted as `smart_ptr` do use `var inscope` / `<-`: `ProgramPtr`,
-`ContextPtr`, `FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it).
+`FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it). `ContextPtr`
+is a C++-side typedef only — `var c : ContextPtr` does not compile. (probe-verified 2026-08-16)
 
 A `Variable` you emit **must** have `_type` set — `new TypeDecl(baseType = Type.autoinfer)` lets
 inference fill it. Give an emitted `ExprVar` a `_type` too when it flows into a generic call:
@@ -284,9 +286,10 @@ Visibility is never an annotation: write `def private helper`, `struct private F
 
 ## Gotchas
 
-- **Annotation and field-annotation names cannot be grammar keywords or type tokens.**
-  `[myanno(default = "x")]` is a syntax error, and so is `@range = 5` — pick a synonym (`kind`,
-  `fallback`, `span`). (probe-verified 2026-08-16)
+- **Annotation-argument names allow exactly three keywords — `type`, `in`, `default` — plus
+  plain names.** `[myanno(default = "x", type = "y", in = "z")]` compiles and the macro reads
+  all three; any other keyword or type token is `error[30151]` — `@range = 5` fails, pick a
+  synonym (`span`). (probe-verified 2026-08-16)
 - **A generated `var x : $t(st)` with no initializer trips
   `error[31016] uninitialized variable is unsafe`** for any struct type — field initializers do
   not exempt it. Add `= default<$t(st)>` when the type is default-constructible; for a bound

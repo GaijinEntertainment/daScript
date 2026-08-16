@@ -130,7 +130,7 @@ branches and tests is a real result; "tests pass" is not an audit.
   "The rule" section carries the same text for the shipped bundle and follows
   `REVIEW_COMMON.md` when it changes.
 - The per-PR audit is the `tdd-auditor` agent (`.claude/agents/tdd-auditor.md`), launched
-  in `skills/make_pr.md` step 0a beside the REVIEW.md auditors — one instance for the
+  in `skills/internal/make_pr.md` step 0a beside the REVIEW.md auditors — one instance for the
   whole diff, so code no REVIEW.md reaches is covered too.
 - Repo test placement (AOT registration, the `tests/.das_test` gate) is
-  `skills/tests_in_repo.md`.
+  `skills/internal/tests_in_repo.md`.
