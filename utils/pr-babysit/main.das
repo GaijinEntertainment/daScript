@@ -1,13 +1,11 @@
 options gen2
 
 // pr-babysit - the GitHub mechanics of the babysit loop (skills/babysit.md keeps the policy).
-// --request-review asks Copilot to review the PR tip; --watch blocks until something needs
-// action; --list-unresolved / --resolve <id> are the review-thread rails (resolve is
-// GraphQL-only - REST has no thread resolution). Exit codes: 0 ready to merge, 1 request/api
-// failure, 2 CI red, 3 review to triage, 5 watch timeout. Bot reviewers never appear in
-// requested_reviewers or reviewRequests and Copilot converts a request into a review within
-// seconds, so the only trustworthy signal is the review arriving in /pulls/N/reviews with
-// commit_id == the requested tip.
+// Exit codes: 0 ready to merge, 1 request/api failure, 2 CI red, 3 review to triage,
+// 5 watch timeout. Thread resolution is GraphQL-only - REST has none. Bot reviewers never
+// appear in requested_reviewers or reviewRequests and Copilot converts a request into a
+// review within seconds, so the only trustworthy signal is the review arriving in
+// /pulls/N/reviews with commit_id == the requested tip.
 
 require strings
 require math
@@ -39,7 +37,7 @@ struct Config {
     resolve : array<string>
 
     @clarg_doc = "Watch poll interval, seconds"
-    interval : int = 30
+    interval_sec : int = 30
 
     @clarg_doc = "Watch timeout, minutes"
     timeout_min : int = 45
@@ -71,13 +69,12 @@ def private gh_lines(args : array<string>; var ok : bool&) : array<string> {
     return <- lines
 }
 
-// "<bucket> <name>" per check, one gh call per poll
+// "<bucket> <name>" per check
 def private check_lines(cfg : Config; var ok : bool&) : array<string> {
     return <- gh_lines(["pr", "checks", "{cfg.pr}", "--repo", cfg.repo,
         "--json", "name,bucket", "--jq", ".[] | .bucket + \" \" + .name"], ok)
 }
 
-// commit_id per bot review - Copilot's REST author type is Bot
 def private bot_review_shas(cfg : Config; var ok : bool&) : array<string> {
     return <- gh_lines(["api", "repos/{cfg.repo}/pulls/{cfg.pr}/reviews", "--paginate",
         "--jq", ".[] | select(.user.type==\"Bot\") | .commit_id"], ok)
@@ -98,7 +95,7 @@ def private unresolved_threads(cfg : Config; var ok : bool&) : array<string> {
         let lines <- gh_lines(["api", "graphql", "-f", "query={query}", "--jq",
             "(.data.repository.pullRequest.reviewThreads.pageInfo | (.hasNextPage|tostring) + \" \" + (.endCursor // \"\")), (.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id + \" \" + (.path // \"\"))"], page_ok)
         if (!page_ok || empty(lines)) {
-            ok = page_ok && !empty(lines)
+            ok = false
             break
         }
         threads |> reserve(length(threads) + length(lines) - 1)
@@ -153,12 +150,12 @@ def private request_review_graphql(cfg : Config) : bool {
 }
 
 def private watch(cfg : Config) : int {
-    let polls = max(1, (cfg.timeout_min * 60) / max(1, cfg.interval))
-    var last_line = ""
+    let polls = max(1, (cfg.timeout_min * 60) / max(1, cfg.interval_sec))
+    var last_state = ""
     var escalated = false
     for (poll in range(polls)) {
         if (poll != 0) {
-            sleep(uint(cfg.interval * 1000))
+            sleep(uint(cfg.interval_sec * 1000))
         }
         let head = head_sha(cfg)
         var checks_ok = false
@@ -181,19 +178,18 @@ def private watch(cfg : Config) : int {
         }
         let reviewed = reviews |> has_value(head)
         let state = "tip {slice(head, 0, 9)}: {length(fails)} failed, {pending} pending, reviewed={reviewed}, unresolved={unresolved}"
-        if (state != last_line) {
+        if (state != last_state) {
             to_log(LOG_INFO, "pr-babysit: {state}\n")
-            last_line = state
+            last_state = state
         }
-        let v = watch_verdict(length(fails), pending, reviewed, unresolved)
-        if (v == WatchVerdict.ci_red) {
+        let verdict = watch_verdict(length(fails), pending, reviewed, unresolved)
+        if (verdict == WatchVerdict.ci_red) {
             to_log(LOG_ERROR, "pr-babysit: CI red - {join(fails, ", ")}\n")
             return 2
         }
-        return 3 if (v == WatchVerdict.review_to_triage)
-        return 0 if (v == WatchVerdict.ready_to_merge)
-        // half the budget with no review on a tip we requested: REST accepted but did not
-        // re-trigger - fire the GraphQL rail once and keep watching
+        return 3 if (verdict == WatchVerdict.review_to_triage)
+        return 0 if (verdict == WatchVerdict.ready_to_merge)
+        // REST accepted but never re-triggered
         if (cfg.request_review && !escalated && !reviewed && poll >= polls / 2) {
             escalated = true
             let sent = request_review_graphql(cfg)
@@ -233,8 +229,8 @@ def main() : int {
         to_log(LOG_INFO, "pr-babysit: {length(threads)} unresolved\n")
     }
     if (cfg.request_review) {
-        let rrc = request_review(cfg)
-        return rrc if (rrc != 0)
+        let request_rc = request_review(cfg)
+        return request_rc if (request_rc != 0)
     }
     return cfg.watch ? watch(cfg) : 0
 }
