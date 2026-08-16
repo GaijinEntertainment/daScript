@@ -5,10 +5,10 @@
 
 **Tests go under `modules/dasImgui/tests`.** Every dasImgui test file in the diff is under it;
 `tests/dasImgui` (repo root) is not a home. A dasImgui test file, wherever the diff puts it,
-answers to the `tests/` subfolder's checklist.
+also answers to the `tests/` subfolder's checklist (`modules/dasImgui/tests/REVIEW.md`).
 
-**A change that can affect runtime behavior — any `.das`, `bind/`, or `src/` file — runs the
-suite before the PR on the author's host OS: `preflight --only imgui`** (raw command and
-exclude list: module `CLAUDE.md` § Tests).
-`.github/workflows/nightly_imgui.yml` is the suite's only CI lane, so the local run is the
-only pre-merge gate.
+**A diff whose hunks change executable content in any `.das`, `bind/`, or `src/` file runs
+the suite before the PR on the author's host OS: `preflight --only imgui`** (the per-OS
+exclude split: module `CLAUDE.md` § Tests). Hunks touching only comments or doc strings do
+not fire this rule. No per-PR CI lane runs the suite (`.github/workflows/nightly_imgui.yml`
+is nightly-only), so the local run is the only pre-merge gate.

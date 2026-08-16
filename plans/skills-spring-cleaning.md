@@ -201,6 +201,30 @@ Listed by agent C, deleted from nowhere yet — each needs a probe before enteri
    green; 7-auditor round applied. OPEN: babysit #3755; the ledgered pre-existing
    checklist findings below go to Boris one at a time.
 
+## Checklist round outcomes (2026-08-16, rulings 1-4 EXECUTED + dragon-converged)
+
+- benchmarks/REVIEW.md MOVED to modules/dasLLAMA/benchmarks/ + regroomed (3 rules; the two
+  event-triggered lab rules moved to REVIEW_GPU.md where their triggers fire).
+- simulate REVIEW.md: hot-path rule is folder-wide property-triggered; pin obligation folded
+  into the debug_info rule; NEW tests-cpp/REVIEW.md (routing) + tests-cpp/small/REVIEW.md
+  (the pin rule, timeless form).
+- dasImgui REVIEW.md: executable-content trigger, Windows parenthetical deleted per the
+  no-code-on-top-of-bug ruling (libhv root fix = Boris, own session, memory-tracked),
+  tree-sitter rule deleted; NEW modules/dasImgui/tests/REVIEW.md (multiplatform rule).
+- dasLLVM REVIEW.md: two scanner-enforced env rules deleted, version rule split (emitter
+  enumeration → ARCHITECTURE.md §1.2), llvm_tune_internals routing line.
+- REVIEW_GPU.md: gained the two lab rules + full definition-in-place/path-qualification
+  pass. ALL files exited dragon all-OK.
+
+**Lint/test candidates harvested by the dragons** (for the lint backlog, Boris rules):
+twin-binding-stability dastest; device/queue-creation call-site check; raw Vulkan
+pipeline-create call-site lint; raw encoder-bind outside enc_* lint; f16 mirror-clamp
+dastest cell (deletes its rule); debug_info PR-verdict-lines CI assertion; pin-watched-set
+touch assertion; JIT timed-phase inventory dastest; sidecar mint-and-validate round-trip
+dastest; env-knob §3-inventory scanner extension; computed-name env-read non-literal-arg
+scanner extension; preflight changed-set auto-escalation for the imgui gate; machine-local
+path-literal style lint for test files.
+
 ## Ledgered checklist findings (pre-existing, NOT this PR — Boris rules each)
 
 - benchmarks/REVIEW.md: structurally homeless (all four rules' triggers live under

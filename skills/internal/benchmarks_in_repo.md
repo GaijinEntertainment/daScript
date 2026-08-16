@@ -14,8 +14,9 @@ one-line description, under the table for its directory, plus a new section head
 directory is new. Helper modules (`_`-prefixed, skipped by dastest) are listed too, marked
 as not a benchmark.
 
-`benchmarks/REVIEW.md` binds anything that produces record-grade timing — record rigs,
-A/B labs, and what may enter `PERF_LEDGER.md`.
+`modules/dasLLAMA/benchmarks/REVIEW.md` binds anything that produces record-grade timing —
+record rigs, A/B labs, and what may enter `PERF_LEDGER.md`. Root `benchmarks/` has no
+checklist; its one invariant is the README index rule above.
 
 ## Capturing output
 

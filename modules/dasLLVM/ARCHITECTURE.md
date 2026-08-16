@@ -43,6 +43,12 @@ cached` line prints unconditionally beside the split announce, and per-partition
 
 ### 1.2 The codegen tier
 
+Code that EMITS machine code — the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` —
+is IR generation, target-machine setup, the `[llvm_code]` generator bodies, and the jit call
+ABI: the generated function signatures, name scheme, prologue, and the externs the install
+phase binds. The authoritative file set is `EMITTER_FILES` in
+`tests-cpp/small/test_jit_emitter_pin.cpp` (repo root).
+
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
 pipeline and the DLL path's codegen-side target machine. `write_exe` and AOT-object emission
 (`emit_object_only`) deliberately stay at codegen level 3: shipped artifacts are not
