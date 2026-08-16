@@ -18,9 +18,12 @@ namespace das
     DAS_THREAD_LOCAL(jmp_buf *) g_throwBuf;
     DAS_THREAD_LOCAL(string) g_throwMsg;
 
-    void das_throw(const char * msg) {
+    void das_stash_throw(const char * msg) {
+        *g_throwMsg = msg ? msg : "";
+    }
+
+    void das_throw_stashed() {
         if ( *g_throwBuf ) {
-            *g_throwMsg = msg;
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Walign-mismatch"  // mingw jmp_buf alignment
@@ -30,8 +33,13 @@ namespace das
 #pragma clang diagnostic pop
 #endif
         } else {
-            DAS_FATAL_ERROR("unhanded das_throw, %s\n", msg);
+            DAS_FATAL_ERROR("unhandled das_throw (no active das_trycatch): %s\n", g_throwMsg->c_str());
         }
+    }
+
+    void das_throw(const char * msg) {
+        das_stash_throw(msg);
+        das_throw_stashed();
     }
 
 #if defined(_MSC_VER)
