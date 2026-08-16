@@ -164,6 +164,30 @@ splitting the idiom table at ~line 425.
 - Transient until phase 4: install/CLAUDE.md points at `skills/daslang/` before the CMake
   rules ship it; the old gate may flag it until the rework lands.
 
+## Wave-3 residuals (homeless facts from the daslib_modules/das_macros cuts)
+
+Listed by agent C, deleted from nowhere yet — each needs a probe before entering the bundle
+(bundle rule) or a placement edit (root skill). Place during wave 4/5:
+- `notify` vs `notify_and_release` (lambda-captured channel holds an extra ref) +
+  child-script channel ops need `require daslib/jobque_boost` and `compile_file` +
+  `make_file_access("")` → home: `skills/jobque_debugging.md` (root, no probe needed —
+  behavioral claims carried from the deleted text, verify against daslib/jobque_boost).
+- `logger_install_hook()` — process-wide debug agent diverting print/to_log; mandatory for
+  stdio-transport processes; one install covers `new_thread` workers → bundle
+  modules-and-stdlib logger row (probe: grep daslib/log.das + a compile probe).
+- `move(dest, src)` = refcount-aware smart_ptr move vs `<-` memcpy+memset → bundle
+  references/memory.md (probe).
+- `return <- expr` on a `&` ref parameter zeroes the CALLER's variable → candidate for the
+  CLAUDE.md fails-silently digest + references/memory.md (probe REQUIRED before either).
+- Module existence rows with no bundle mention: `daslib/flat_hash_table.das`
+  (`TFlatHashTable`), `daslib/soa.das` (`[soa]`), `daslib/ansi_colors.das`,
+  `daslib/temp_strings.das` → bundle modules-and-stdlib table (grep-verify).
+- Lint-message audit implied by the no-catalog doctrine: the deleted tables carried fix
+  guidance (e.g. PERF030's three escape routes) possibly richer than the current error
+  strings — sweep `daslib/*_lint.das` messages against the deleted tables (git history) and
+  upgrade any message that lost information. Boris also wants a LINT LOG follow-up: per-run
+  capture of findings on freshly written code, to judge the idiom table empirically.
+
 ## Phases
 
 1. ✅ Charter + census + rulings (this file).
