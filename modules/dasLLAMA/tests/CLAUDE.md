@@ -122,7 +122,7 @@ synthetic log files from a per-process temp dir. Requires `run` by bare same-dir
 `test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
-`grow_resize` geometric reuse, `scratch_resize` grow-only no-init) fed directly, including
+`grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
 `test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's

@@ -79,6 +79,45 @@ a borrow checker, neither of which is practical for the language's performance g
 
 Some of these issues can also be caught by linting or optional runtime checks.
 
+The protection has a real cost. Every growth episode abandons its old buffers: a container that
+doubles its way to N bytes leaves about N more bytes of garbage behind, and nothing can reuse that
+memory until the next ``heap_collect``. Code that grows containers all the time — a serializer, an
+audio voice pool — pays this on every run.
+
+---------------------------------------------
+Opting out per container: ``scratch``
+---------------------------------------------
+
+A trusted container whose interior is never aliased across a grow does not need the protection.
+Two ``unsafe`` primitives turn it off for exactly that container, leaving the rest of the context
+very safe:
+
+``set_scratch(container, true)`` marks an ``array`` or a ``table`` once. From then on its growth
+frees the old buffer eagerly, exactly as in a normal context. The mark survives table rehash,
+``move``, and ``clear``; ``delete`` resets it. Use it on containers user code can never reach —
+internal pools and queues — set at the place that constructs them. ``is_scratch(container)``
+reads the mark back.
+
+.. code-block:: das
+
+    var pool : array<Voice>
+    unsafe(pool |> set_scratch(true))   // internal pool: nothing aliases its interior
+
+``scratch_reserve`` / ``scratch_ensure_capacity`` / ``scratch_resize`` grow through the eager path
+once, without marking anything. Use them at a trusted growth site when the container itself is
+later handed to user code — the handed-off array carries no special state. ``scratch_reserve``
+reserves the exact size (no power-of-two rounding); ``scratch_ensure_capacity`` doubles like
+``ensure_capacity``; ``scratch_resize`` reserves exactly and then resizes, so a shrink never
+reallocates.
+
+.. code-block:: das
+
+    unsafe(data |> scratch_ensure_capacity(pos + size))   // eager grow of a write buffer
+    data |> resize_no_init(pos + size)                    // within capacity - never grows
+
+Both primitives require ``unsafe`` on purpose: in a sandbox that withholds ``unsafe`` from user
+code, only trusted library and host code can opt a container out.
+
 ---------------------------------
 Iteration and container moves
 ---------------------------------

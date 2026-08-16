@@ -126,6 +126,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_orbit_gain.das
         tests/strudel/test_reverb.das
         tests/strudel/test_scales.das
+        tests/strudel/test_scratch_pools.das
         tests/strudel/test_setters.das
         tests/strudel/test_signals.das
         tests/strudel/test_synthesis.das

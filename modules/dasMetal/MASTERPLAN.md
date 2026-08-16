@@ -921,7 +921,7 @@ gates green. Attribution rail: g_skip modes keep logits OFF so knockout deltas s
 "alloc 5ms" was forward_prefill_alloc's batched-scratch GROWTH cost on the first prefill at a
 new npos (~70 MB across 10 arrays at 512 rows): das `resize` zero-fills the grown span AND the
 realloc copies the old block. Both are pure waste here — the scratch is stage output, fully
-written before any read. Fix = `scratch_resize` (dasllama_common): grow-only, contents-
+written before any read. Fix = `overwrite_resize` (dasllama_common): grow-only, contents-
 DISCARDING (`delete` on grow skips the realloc's old-block copy), `resize_no_init` (skips the
 zero-fill). Measured (3B pp512, per-bucket profile): alloc 4969us -> 55us; embed +0.2ms
 (absorbs the first-touch page faults); framing TOTAL 5728 -> 1075us. A new `alloc` prof bucket
