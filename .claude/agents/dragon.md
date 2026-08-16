@@ -64,6 +64,7 @@ comments is mechanical.
 | NO QUOTES | Quotes or cites another rule document. Rules stand alone. Cross-checklist coupling is done by ROUTING ("a diff touching X applies that checklist too"), never by restating or quoting. Citing the document's OWN architecture doc by section is allowed; another folder's architecture doc is not — restate the criterion in place and cite nothing. |
 | DEAD RULE | Cannot fire from this document's folder — the diff that would trigger it is never reviewed here. Better absent than dead: drop it, and say where it could live if the invariant is real. |
 | AMBIGUITY | The trigger reads two ways (unconditional head + conditional tail; an unnamed referent like "both files"; a term colliding with a nearby name). Spell the single reading. |
+| TIMELESSNESS | The statement is one time falsifies: a countable claim (N files, N lines), a state-of-the-tree assertion, an enumeration standing in for a property that accretes, a forward promise ("slated", "will"), a moment-pinned word ("currently", "today", "not yet"), duplicated text whose sync obligation is unstated. The comment carries the timeless form — the property, not the census. Carve-outs: `probe-verified <date>` tags, version stamps, and a duplicate that states its sync obligation are provenance and routing, not findings. |
 
 Whole-document verdicts:
 
