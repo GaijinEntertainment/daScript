@@ -72,8 +72,10 @@ missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
 canary-dec gemma4a gemma4uv gemma4uv-metal mtower`; the gemma4uv-metal arm is the GPU tower
-driver's parity/counter/knob gate and `mtower` the whisper-class tower-blocks gate
-(transcript-exact CPU vs GPU + geometry-derived counter deltas; both Apple builds;
+driver's parity/counter/knob gate and `mtower` the whisper-class tower-blocks gate — whisper
+tiny + large-v3-turbo transcript-exact and qwen3a f32-rail transcript equality, CPU vs GPU,
+with geometry-derived counter deltas, plus the q8-decline (the serving default never
+dispatches), required-mode panic, and Conformer-absence (parakeet) cells (all Apple builds;
 `--arm gemma4uv` selects gemma4uv-metal too by substring); the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
@@ -117,6 +119,10 @@ serializers and call parsers for harmony/gemma4/mistral/llama_json against verba
 `test_program_roots.das` — model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
 prefill intent.
+`test_audio.das` — the audio tower structure/oracle gates (ultravox/voxtral/omni shapes, the
+mtmd all-ones encode oracles — those pin the tower knob OFF; the hook would silently flip them
+to GPU) plus `test_encoder_blocks_gpu`: qwen2audio + voxtral 32-layer CPU-vs-GPU blocks parity
+on the depth-scaled bars, counter deltas asserted.
 `test_asr_verbs.das` — model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, parakeet's SPM detokenizer over a toy vocab, and
 the `fetch_models.das` provenance-manifest invariants.

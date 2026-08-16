@@ -308,12 +308,52 @@ enc_add_bias_rows grew a bias offset (tower biases live inside the model blob).
 - The CPU tier-1 gate now pins the tower off explicitly — the facade's require graph
   registers the hook, so an unpinned "CPU" gate would silently measure the GPU.
 
+## Slice J — blocks driver + battery DONE 2026-08-16 (bench legs = slice K, docs = L)
+
+metal_tower_blocks: encoder_blocks' loop as one command buffer; the attention trio rides
+uend = npos (chunk 1's span machinery IS the tower attention); q8 towers decline
+(quant_mode — the serving default untouched); capability declines honor MetalMode.required
+(knob = policy). Pad-row garbage contained by kernel geometry (comment in the driver).
+- **The form-matched-GELU correction (measured, replaces H's substitution design)**: the
+  single tanh-form GPU GELU redded qwen2audio's 32-layer parity at 4e-2 rel_l2 /
+  cos 0.99921 — a ~1e-3/element form delta amplifies COHERENTLY through a deep residual
+  stream. MetalGelu1 is retired for two form-matched flavors picked per t.gelu_tanh:
+  MetalGeluErf (A&S 7.1.26; measured 2.5e-7 vs the CPU's double erf) and MetalGeluLut
+  (clamps + f16 round-trips in kernel; measured 1.2e-7 = one f32 ulp). Post-fix:
+  qwen2audio 32L rel_l2 2.2e-3, voxtral 32L 1.9e-3 (depth bar 1.7e-2, ~8x headroom).
+- tower_parity gained the depth arm (rel_l2/norm <= 3e-3*sqrt(L), cos 1e-4; rel_elem
+  LOGGED not asserted — attention near-ties diverge O(1)); the parity mel fixture is
+  varied (all-ones is degenerate: every attention weight near-tied).
+- Gates green: mtower arm — whisper tiny (4L) AND large-v3-turbo (32L) transcript-EXACT
+  CPU vs GPU on jfk, qwen3a f32-rail transcript equality (conv2d frontend CPU + blocks
+  GPU), q8-decline cell (zero dispatches, quant_mode counted, CPU still serves),
+  required-mode panic cell, parakeet Conformer-absence cell (counters frozen — no seam);
+  test_encoder_blocks_gpu (qwen2audio + voxtral 32L parity + counters); census cov_tower
+  row added (whisper tiny f32 chunk + gemma4uv 96px canvas). P9 CONFIRMED (3 families
+  transcript-identical). Controls: ln2-reads-ln1 poison -> transcript degrades to garbage,
+  exactly the transcript cell reds; the gelu-form red-then-green is the parity cell's
+  recorded control.
+- Deviations from the battery text: no separate matrix `tower` arm — the tower's
+  engage/decline axes are family-shaped, so all cells live in the mtower arm + test_audio
+  (where the family modules already are); ultravox text-equality is served by the
+  qwen2audio-core parity + voxtral cells (the ultravox chat surface would add a decoder
+  load for no new tower coverage); the whisper-cli pinned-id list is DEFERRED until minted
+  from whisper-cli itself (never invented) — transcript equality CPU-vs-GPU is the bar.
+- Existing-test pins that rode along: test_audio's three mtmd oracles + test_gemma4uv's
+  CPU tier-1 pin the knob OFF (the umbrella hook would silently flip them to GPU).
+- J-qwen3a (the conv2d frontend, ~89% of that family's encode) — OPEN, judged separately.
+- Lens finding (reported): the kernel-access classifier's intrinsic table lacks scalar
+  converts (float16(x) on a buffer-derived scalar mis-banks as whole-buffer); the
+  [never_inline] escape on MSL helper bodies is the workaround, and the block-annotation
+  inline asymmetry is filed as daScript #3752.
+
 ## Sequencing (each gate green before the next)
 
 G stage-probe baselines (whisper-large + qwen3a; predictions P5 judged) ->
 H kernels + unit gates (controls recorded) -> statistic helper ->
 I gemma4uv driver + gates (tier-1 ladder decides the GEMM lane J inherits) — DONE ->
-J tower driver, whisper tiny first, then large + the other four; matrix `tower` arm ->
+J tower driver, whisper tiny first, then large + the other four — DONE (cells in mtower,
+not a matrix arm; see the slice J deviations note) ->
 census row -> K bench legs + the A/B numbers (only after every gate is green) ->
 L docs, ENVIRONMENT.md regen, CLAUDE.md arm lists (same commit as the arms).
 

@@ -890,6 +890,93 @@ def test_whisper_metal_tower(tst : T?) {
             to_log(LOG_INFO, "whisper tiny mtower GPU: '{gpu.text}'\n")
             t |> success(!empty(gpu.text), "non-empty transcript")
             t |> success(cpu.text == gpu.text, "transcript-exact CPU vs GPU")
+            // the deep instrument: large-v3-turbo's 32-layer encoder (f16 file, f32 mint)
+            let lpath = path_join(whisper_dir(), "ggml-large-v3-turbo.bin")
+            if (model_available(t, lpath)) {
+                set_metal_tower(false)
+                let lc = whisper_transcribe_text(lpath, samples, cached = false)
+                set_metal_tower(true)
+                let s3 = metal_tower_stats()
+                let lg = whisper_transcribe_text(lpath, samples, cached = false)
+                let s4 = metal_tower_stats()
+                t |> equal(s4.encodes - s3.encodes, 1l, "large: one GPU chunk")
+                t |> equal(s4.blocks - s3.blocks, 32l, "large: blocks delta = n_layer (32)")
+                to_log(LOG_INFO, "whisper large mtower CPU: '{lc.text}'\n")
+                to_log(LOG_INFO, "whisper large mtower GPU: '{lg.text}'\n")
+                t |> success(!empty(lg.text), "large: non-empty transcript")
+                t |> success(lc.text == lg.text, "large: transcript-exact CPU vs GPU")
+            }
+            // THE consequential cell: the q8 SERVING DEFAULT declines (quant_mode) and never
+            // dispatches - the default path is untouched by this arc
+            var inscope w8 = WhisperModel()
+            var inscope stg8 <- stage_whisper_model(path, true)
+            mint_whisper_model(stg8, w8)
+            t |> success(w8.enc.q8, "the q8 flavor is on the q8 rail")
+            let sq0 = metal_tower_stats()
+            var q8_text = ""
+            with_job_que() {
+                setup_dasllama_jobque()
+                var s8 <- create_session(w8)
+                transcribe(w8, s8, samples) $(seg) {
+                    q8_text += seg.text
+                }
+                delete s8
+            }
+            let sq1 = metal_tower_stats()
+            t |> equal(sq1.encodes, sq0.encodes, "q8 default never dispatches the tower")
+            t |> equal(sq1.declines - sq0.declines, 1l, "q8 default records the quant_mode decline")
+            t |> success(key_exists(metal_tower_declines(), "quant_mode"), "the decline reason is quant_mode")
+            t |> success(!empty(q8_text), "q8 default still transcribes (CPU serves)")
+            // required-mode contract: a capability decline (quant_mode) under MetalMode.required
+            // panics instead of silently CPU-serving; the knob decline is POLICY and never does
+            set_metal_mode(MetalMode.required)
+            var tripped = false
+            try {
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    var s9 <- create_session(w8)
+                    transcribe(w8, s9, samples) $(seg) {
+                        pass
+                    }
+                    delete s9
+                }
+            } recover {
+                tripped = true
+            }
+            set_metal_mode(MetalMode.when_available)
+            t |> success(tripped, "required mode: the q8 tower decline panics")
+            delete samples
+        }
+    }
+}
+
+// Conformer families have NO seam - their hand-written encoders never reach encoder_blocks, so
+// the tower counters must not move AT ALL (engagement absence, not a decline).
+[test]
+def test_parakeet_tower_absence(tst : T?) {
+    tst |> run("parakeet: a Conformer transcribe never touches the tower rail") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            set_metal_tower(true)
+            let s0 = metal_tower_stats()
+            let g = parakeet_transcribe_text(path, samples, cached = false)
+            let s1 = metal_tower_stats()
+            t |> success(!empty(g.text), "transcript non-empty")
+            t |> equal(s1.encodes, s0.encodes, "no tower encodes")
+            t |> equal(s1.declines, s0.declines, "no tower declines either - the seam is never reached")
             delete samples
         }
     }
@@ -1383,6 +1470,68 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
         delete samples
+    }
+}
+
+// The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
+// vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
+// default declines by design (the matrix `tower` arm owns that cell).
+[test]
+def test_qwen3a_metal_tower(tst : T?) {
+    tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "qwen3a") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var lang = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_qwen3a_q8(false)
+                var inscope tw <- load_qwen3a_tower(mmp_path)
+                t |> success(!tw.core.q8, "tower core is on the f32 rail")
+                nlayer = tw.core.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s, "", samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s2, "", samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                set_qwen3a_q8(true)
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            to_log(LOG_INFO, "qwen3a mtower CPU: {cpu_text}\n")
+            to_log(LOG_INFO, "qwen3a mtower GPU: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU (near-tie escape: convert to forced-feed if a legitimate tie flips)")
+            delete samples
+        }
     }
 }
 

@@ -265,6 +265,42 @@ def test_encoder_blocks_gpu(tst : T?) {
             delete tw
         }
     }
+    tst |> run("voxtral tower: GPU blocks vs CPU encoder") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "voxtral-mini-mmproj-f32.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            var tw <- load_audio_tower(path)
+            var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+            mel.data |> resize(int(tw.n_mel * AUDIO_CHUNK_FRAMES))
+            for (i in range(length(mel.data))) {
+                mel.data[i] = sin(float(i) * 0.0137) * 0.8 + sin(float(i) * 0.00291) * 0.5
+            }
+            var enc <- make_encoder_state(tw)
+            set_metal_tower(false)
+            var cpu_out : array<float>
+            let s0 = metal_tower_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                audio_encode(tw, enc, mel)
+                cpu_out := enc.out
+                set_metal_tower(true)
+                audio_encode(tw, enc, mel)
+            }
+            let s1 = metal_tower_stats()
+            t |> equal(s1.encodes - s0.encodes, 1l, "exactly the GPU leg dispatched")
+            t |> equal(s1.blocks - s0.blocks, tw.n_layer, "blocks delta = n_layer")
+            tower_parity(t, "voxtral blocks {tw.n_layer}L", cpu_out, enc.out, tw.n_layer)
+            delete cpu_out
+            delete enc
+            delete tw
+        }
+    }
 }
 
 [test]

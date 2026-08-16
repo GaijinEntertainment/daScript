@@ -57,6 +57,9 @@ def set_metal_tower(on : bool) {
 def private tw_decline(why : MetalTowerDecline) : bool {
     let key = "{why}"
     g_tw_declines[key] = (g_tw_declines?[key] ?? 0l) + 1l
+    if (why != MetalTowerDecline.knob) {   // knob = policy; capability declines honor required mode
+        require_or_panic("tower", key)
+    }
     return false
 }
 
