@@ -582,8 +582,12 @@ def test_whisper_tower_fp32_knob(t : T?) {
                 msegs |> push_clone(seg)
             }
             t |> equal(length(segs), length(msegs), "segment count")
-            to_log(LOG_INFO, "whisper-tiny q8-default jfk eyeball: '{segs[0].text}'\n")
-            to_log(LOG_INFO, "whisper-tiny f32/q8 jfk eyeball: '{msegs[0].text}'\n")
+            t |> success(!empty(segs), "q8-default produced segments")
+            t |> success(!empty(msegs), "f32/q8 produced segments")
+            if (!empty(segs) && !empty(msegs)) {   // an empty run reds above instead of crashing here
+                to_log(LOG_INFO, "whisper-tiny q8-default jfk eyeball: '{segs[0].text}'\n")
+                to_log(LOG_INFO, "whisper-tiny f32/q8 jfk eyeball: '{msegs[0].text}'\n")
+            }
             var mismatches = 0
             var total = 0
             for (a, b in segs, msegs) {

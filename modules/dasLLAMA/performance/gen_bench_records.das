@@ -796,8 +796,9 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
                          var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
     let t0 = ref_time_ticks()
     let leg_tag = empty(leg) ? "" : " {leg}"
+    let log_leg = "asr{leg_tag}"
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr{leg_tag}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr{leg}")}))
+    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg)}))
     var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
     if (leg == "accel") {
@@ -810,15 +811,15 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
     var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
         let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das asr rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "rc" => JV(rc)}))
-        failed |> push("{spec.display} das asr")
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
+        failed |> push("{spec.display} das {log_leg}")
         return
     }
     absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
-    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das {log_leg} ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
