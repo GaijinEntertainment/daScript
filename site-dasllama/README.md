@@ -21,6 +21,11 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
   preview matches production, and the deploy re-runs it anyway
 - `robots.txt` — static
 
+The public home URL is `https://dasllama.io/`. All pages link home with `/`, each page
+declares an absolute canonical URL, and `utils/dasllama-ladder/caddy.snippet` permanently
+redirects `/index.html` to `/`. The sitemap and Atom feed also use the root URL so crawlers
+never receive competing home-page identities.
+
 Shared css is NOT duplicated here: `forge.css`, `nav-dropdown.css` and
 `dasllama-table.css` live in `site/files/` (single source) and are staged into this
 site's `files/` at deploy. `dasllama-table.css` is the shared measurement-table language

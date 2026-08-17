@@ -5,6 +5,10 @@
 #
 # Paste inside the `dasllama.io { ... }` block, ahead of `root`/`file_server`.
 
+# Keep the home page on one canonical URL. The static file remains index.html,
+# but requests that name explicitly are permanently redirected to the site root.
+redir /index.html / 308
+
 # The submit routes, and ONLY these, carry the large-body allowance: a record
 # store or tune sidecar is an MB-scale JSON document. The service enforces its
 # own (smaller) per-kind caps on top — the proxy cap exists because libhv
