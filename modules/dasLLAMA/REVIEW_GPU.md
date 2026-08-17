@@ -76,12 +76,13 @@ matching the armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is
 `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines codec-mismatched sessions silently,
 so that log must show `resident driver armed`.
 
-**A kernel that reads or writes the K/V mirrors is stamped from a
-`[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16
-instances.** A single-codec mirror kernel is legal only when a codec-templated sibling serves
+**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs is stamped
+from a `[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16
+instances** — the rail serves both codecs, so a missing instance silently drops one codec's
+GPU path. A single-codec mirror kernel is legal only when a codec-templated sibling serves
 the other codec and its arming gate keys on `kv16`.
 
-**An f16 instance's mirror stores clamp to the f16 finite range.**
+**An f16 store into any GPU-resident K/V clamps to the f16 finite range (±65504).**
 
 **Every resident override — a decode/prefill hook the whole-model residency rail registers in
 common's override registries — gates sessions on the armed mirror codec and on the flat
