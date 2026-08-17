@@ -199,7 +199,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 
 ## SDK Directory Layout
 
-- `bin/` — Compiler and tool binaries: `daslang`, `daslang-live`, `gen1_to_gen2`, plus prebuilt tool exes (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `benchctl.exe`, `dastest.exe` — the `.exe` suffix on every platform) and shared-module / tree-sitter libraries on Windows. Each tool also keeps its source form under `utils/`, so `bin/daslang utils/<tool>/main.das` always works. **Name trap:** `bin/gen1_to_gen2` is the gen1→gen2 syntax *converter*, not a code formatter. The formatter is `das-fmt` — the MCP `format_file` tool, `bin/das-fmt.exe`, or `bin/daslang utils/das-fmt/dasfmt.das`
+- `bin/` — Compiler and tool binaries: `daslang`, `daslang-live`, `gen1_to_gen2`, plus prebuilt tool exes (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `benchctl.exe`, `dastest.exe` — the `.exe` suffix on every platform) and shared-module / tree-sitter libraries on Windows. Each tool also keeps its source form in the bundle — `bin/daslang utils/<tool>/main.das`, except das-fmt (`utils/das-fmt/dasfmt.das`) and dastest (`dastest/dastest.das`). **Name trap:** `bin/gen1_to_gen2` is the gen1→gen2 syntax *converter*, not a code formatter. The formatter is `das-fmt` — the MCP `format_file` tool, `bin/das-fmt.exe`, or `bin/daslang utils/das-fmt/dasfmt.das`
 - `lib/` — Static and shared libraries for C++ embedding
 - `include/daScript/` — C++ headers for embedding
 - `daslib/` — Standard library modules (.das files)
@@ -215,6 +215,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 - `utils/find-dupe/` — Claude-based judge for detect-dupe reports (needs `ANTHROPIC_API_KEY`; also the `judge_duplicates`/`find_dupe` MCP tools)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
+- `utils/aot/` — AOT generation driver (`bin/daslang utils/aot/main.das -- -aot <in.das> <out.cpp>`; `-ctx` emits a standalone context dir — the integration tutorial scaffolds invoke it)
 - `utils/fix-lint-errors/` — Auto-fixer for mechanical lint findings (`--dry-run` to preview)
 - `utils/benchctl/` — Benchmark result database + statistical comparison (needs the sqlite module)
 - `utils/dasllama-server/` — OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle)

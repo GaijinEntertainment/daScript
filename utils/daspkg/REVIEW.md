@@ -3,9 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**Run the unit suite on every change:** `bin/daslang dastest/dastest.das -- --test
-utils/daspkg/test_daspkg.das` — fast, no network, interpreted. A daspkg change without a green
-unit run is a defect.
+**Run the unit suite on every change to a `.das` file in this folder:** `bin/daslang
+dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` — fast, no network, interpreted.
+Such a change without a green unit run is a defect.
 
 **The integration suite — `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg_git.das` — runs on any edit to `commands.das`, `index.das`, or
@@ -19,12 +19,11 @@ directory), and no per-PR CI runs these suites.
 **A new command or flag lands with its test cell, its `print_usage` line, and its README table
 row in the same change.**
 
-**daspkg ships as a prebuilt exe: it stays in `DAS_UTILS_SHIPPED_EXES` (`utils/CMakeLists.txt`)
-and `main.das` stays `daslang -exe`-compilable** — a change that breaks the exe build breaks the
-release bundle.
+**daspkg ships as a prebuilt exe: it stays in `DAS_UTILS` and `DAS_UTILS_SHIPPED_EXES`
+(`utils/CMakeLists.txt`)** — dropping either entry breaks the release bundle.
 
-**A release always mints the tune sidecar.** A bundle that ships an exe without a sidecar
-beside it is a defect.
+**A `cmd_release` bundle always mints the tune sidecar.** A `cmd_release` bundle that ships an
+exe without a sidecar beside it is a defect.
 
 **`--quick` is the only path that inherits a prior sidecar, and it refuses an incomplete one**
 — incomplete meaning missing any scope key the exe's deps JSON reports, the same completeness

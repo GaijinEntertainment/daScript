@@ -99,6 +99,20 @@ class GateFixture(unittest.TestCase):
         rc, out = self.run_gate()
         self.assertEqual(rc, 0, out)
 
+    def test_utils_internal_path_fires(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nrun `daslang utils/internal/preflight/main.das` first\n")
+        self.assert_fires("not in bundle", "utils/internal/preflight/main.das")
+
+    def test_utils_daslang_path_fires_watchdog_passes(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee utils/daslang/main.cpp for the gc hook\n")
+        self.assert_fires("not in bundle", "utils/daslang/main.cpp")
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nrun `python utils/watchdog/watchdog.py`\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
     def test_missing_skill_ref(self):
         write(self.bundle, "skills/good.md", "# Good\n\nsee skills/nope.md\n")
         self.assert_fires("skill not shipped", "nope.md")

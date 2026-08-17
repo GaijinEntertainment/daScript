@@ -168,7 +168,7 @@ FILE(GLOB DAS_AOT_DASLIB_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/daslib
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     # DAS_AOT_EXTRA_DEPENDS lets a caller add inputs (e.g. the entry file's own
     # require graph) that this macro can't discover; empty for normal callers.
-    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/internal/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
+    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
     set(all_outputs "")
     # Per-batch arg buffer; chunked to keep each invocation under Windows'
     # 32K command-line limit when worktree paths are long.
@@ -230,7 +230,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
 
     set(_commands "")
     foreach(i ${_batches})
-        list(APPEND _commands COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/internal/aot/main.das -- ${_batches_${i}} ${CROSS_PLATFORM})
+        list(APPEND _commands COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das -- ${_batches_${i}} ${CROSS_PLATFORM})
     endforeach()
 
     ADD_CUSTOM_COMMAND(
@@ -1129,13 +1129,12 @@ src/simulate/fs_file_info.cpp
 )
 
 
-# das formatter
-SET(DASCRIPT_FMT_SRC
+SET(GEN1_TO_GEN2_SRC
         ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/fmt.cpp
         ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/formatter.cpp
         ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/helpers.cpp
         ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp
-        CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
+        CACHE INTERNAL "GEN1_TO_GEN2_SRC"
 )
 
 # MSVC first so clang-cl (CXX_COMPILER_ID==Clang but MSVC driver) takes /EHsc, not -fexceptions
@@ -1260,7 +1259,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${SIMULATE_FUSION_SRC}
     ${PARSER_GENERATED_SRC}
     ${PARSER_SRC}
-    ${DASCRIPT_FMT_SRC}
+    ${GEN1_TO_GEN2_SRC}
     src/ast/ast_parse.cpp
     src/ast/ast_optimize.cpp
     src/ast/ast_const_folding.cpp
@@ -1846,8 +1845,12 @@ install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 
-# Install utility scripts. utils/internal/ never installs — the folder is the
-# audience decision (utils/REVIEW.md).
+# utils/internal/ never installs — the folder is the audience decision
+# (utils/REVIEW.md).
+
+# Install aot tool (the AOT generation driver the integration scaffolds invoke)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
+
 # Install fix-lint-errors tool (mechanical lint auto-fixer)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
 

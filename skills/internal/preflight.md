@@ -46,7 +46,7 @@ the CI ref, never a working-tree copy.
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
-| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | five doc gates |
+| `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
 
 > A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains + the full build matrix (Release cells add the full AOT sweep; Debug cells ride along — `matrix` isn't available in a job-level `if`, so they can't be excluded); `bundle_smoke` and `build_linux_gcc` are gated off `schedule`.
@@ -162,10 +162,11 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/internal/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
-## doc.yml — the five gates
+## doc.yml — the gates
 
-Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
-`daslib/**` means **any daslib edit** runs all five. CI stops at the FIRST
+Only triggered when `doc/**`, `daslib/**`, `src/builtin/**`,
+`modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**`
+changed — but `daslib/**` means **any daslib edit** runs them all. CI stops at the FIRST
 das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
 locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
 `DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
@@ -178,10 +179,12 @@ that pdflatex lacked a glyph for is no longer a build concern anywhere.
 | # | Gate | Local mirror |
 |---|---|---|
 | 1 | das2rst runs clean (positional handmade-doc validation panics on count mismatch) | `<daslang> -documentation doc/reflections/das2rst.das` — repeat until no panic; the host policy keeps per-box transforms inert |
-| 2 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
-| 3 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
-| 4 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
-| 5 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
+| 2 | imgui2rst regenerates clean | `<daslang> modules/dasImgui/utils/imgui2rst.das` |
+| 3 | vulkan2rst regenerates clean | `<daslang> modules/dasVulkan/utils/vulkan2rst.das` |
+| 4 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
+| 5 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
+| 6 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
+| 7 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
 
 Tool discovery: preflight probes PATH, then `~/Library/Python/*/bin` +
 `~/.local/bin` for sphinx-build. A `.. video::` whose recording is missing from

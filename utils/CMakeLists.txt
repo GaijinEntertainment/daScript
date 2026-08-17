@@ -17,7 +17,7 @@ add_custom_target(check_dasgen
 )
 
 # Build daslang utilities as standalone executables using -exe mode.
-# Each utility with a main.das is compiled via daslang -exe and the
+# Each utility's entry .das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
 # Requires LLVM for -exe compilation.
@@ -40,22 +40,21 @@ elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
 endif()
 
 # Entries are paths relative to utils/; the exe/target name is the basename.
-# utils/internal/ entries are in-tree build helpers and never install; the
-# shipped exe set is DAS_UTILS_SHIPPED_EXES below. mcp/lsp never build as exe:
-# their python keep-alive dev setup means an exe form would never be dogfooded.
+# mcp/lsp never build as exe: their python keep-alive dev setup means an exe
+# form would never be dogfooded.
 set(DAS_UTILS
+    aot
     dascov
     daspkg
     das-fmt
     detect-dupe
     lint
-    internal/aot
     internal/hygiene
     internal/jit
 )
 
 if(NOT DAS_SQLITE_DISABLED)
-    list(APPEND DAS_UTILS benchctl)
+    list(APPEND DAS_UTILS benchctl)   # same gate on DAS_UTILS_SHIPPED_EXES below
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies. jit is a compiler-
@@ -79,7 +78,8 @@ endif()
 
 foreach(util_path ${DAS_UTILS})
     get_filename_component(util ${util_path} NAME)
-    # das-fmt's entry point is dasfmt.das; every other tool uses main.das
+    # dasfmt.das is das-fmt's published entry point — external CIs and the
+    # shipped pre-commit hook invoke it by name, so it does not rename to main.das
     if(util STREQUAL "das-fmt")
         set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util_path}/dasfmt.das)
     else()
@@ -130,14 +130,14 @@ foreach(util_path ${DAS_UTILS})
 endforeach()
 add_dependencies(all_utils_exe dastest_exe)
 
-# Ship the external tool exes with the SDK. Single-config generators only:
-# UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on multi-config, which install() cannot
-# resolve — and release bundles are cut on single-config (Ninja) lanes. Each
-# tool's exe-or-not decision is recorded in that tool's REVIEW.md.
+# Single-config generators only: UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on
+# multi-config, which install() cannot resolve — and release bundles are cut on
+# single-config (Ninja) lanes. Each tool's exe-or-not decision is recorded in
+# that tool's REVIEW.md.
 if(NOT _DAS_UTILS_MULTI_CONFIG)
     set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
     if(NOT DAS_SQLITE_DISABLED)
-        list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)
+        list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)   # same gate on DAS_UTILS above
     endif()
     foreach(util ${DAS_UTILS_SHIPPED_EXES})
         install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe DESTINATION ${DAS_INSTALL_BINDIR})
@@ -165,6 +165,7 @@ SET(DAS_UTILS_TO_TEST
     find-dupe/tests
     internal/hygiene
     internal/ast-fuzz
+    internal/requirefix
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

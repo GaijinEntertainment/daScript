@@ -33,7 +33,7 @@ Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_te
 
 4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it — source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every ``quote`lowered`N`` in it.
 
-5. **The failing function has a `[tune]` family in its static call graph.** Generation and runtime must agree on the tune gate (`llvm_tune::tune_aot_gate` — `tune_frozen` at generation, `policies.aot && !jit` at runtime); a driver missing `tune_frozen` compiles in the STAMPED world (manifest/fallback stamps + full variants registries — the registries take function addresses, which flips `fastCall` on call sites) while the runtime compiles gated to the reference tier. There are TWO generation drivers that both need the policy: `utils/daslang/main.cpp` (`-aot`) **and** `utils/internal/aot/main.das` (what the cmake AOT rules actually invoke) — the .das one was missed when #3423 introduced the policy (fixed in #3450). Diagnostic tell: a hand-run `bin/daslang -aot <file>` records hashes matching the runtime while the cmake-generated `.cpp` doesn't.
+5. **The failing function has a `[tune]` family in its static call graph.** Generation and runtime must agree on the tune gate (`llvm_tune::tune_aot_gate` — `tune_frozen` at generation, `policies.aot && !jit` at runtime); a driver missing `tune_frozen` compiles in the STAMPED world (manifest/fallback stamps + full variants registries — the registries take function addresses, which flips `fastCall` on call sites) while the runtime compiles gated to the reference tier. There are TWO generation drivers that both need the policy: `utils/daslang/main.cpp` (`-aot`) **and** `utils/aot/main.das` (what the cmake AOT rules actually invoke) — the .das one was missed when #3423 introduced the policy (fixed in #3450). Diagnostic tell: a hand-run `bin/daslang -aot <file>` records hashes matching the runtime while the cmake-generated `.cpp` doesn't.
 
 If none apply, you have a real desync. Continue.
 
@@ -92,7 +92,7 @@ Then capture from both directions:
 bin/Release/daslang.exe -dry-run tests/<area>/<failing_test>.das > /tmp/runtime.txt 2>&1
 
 # AOT-generation dump (the recorded path):
-bin/Release/daslang.exe utils/internal/aot/main.das -- -aot tests/<area>/<failing_test>.das /tmp/aot.cpp > /tmp/aot.txt 2>&1
+bin/Release/daslang.exe utils/aot/main.das -- -aot tests/<area>/<failing_test>.das /tmp/aot.cpp > /tmp/aot.txt 2>&1
 ```
 
 If the AOT-tool side surfaces only `[I] Aot to ...` without log_nodes output, that path runs `compile_and_simulate` from [`daslib/aot_cpp.das`](../daslib/aot_cpp.das), which discards logs. Use `daslang.exe -dry-run` on the same file as a **second runtime path** and diff the two — both runtime paths going through `simulate()` should produce identical hashes for the same source. If they DON'T, the issue is non-deterministic codegen (your bug) and the diff pinpoints it. If they DO match, the AOT-recorded value differs from both — search for special handling along the AOT-generation pipeline (e.g. `is_in_aot()`, `set_aot()`, `policies.aot_module`).

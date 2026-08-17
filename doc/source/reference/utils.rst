@@ -21,6 +21,7 @@ built-in leak-detection mechanism.
    utils/fix_lint_errors.rst
    utils/daspkg.rst
    utils/benchctl.rst
+   utils/aot.rst
    utils/mcp.rst
    utils/lsp.rst
    utils/detect_dupe.rst

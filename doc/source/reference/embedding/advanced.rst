@@ -256,7 +256,7 @@ Benefits:
 
 Pipeline:
 
-1. Compile-time: ``daslang utils/internal/aot/main.das -- -ctx script.das output_dir/``
+1. Compile-time: ``daslang utils/aot/main.das -- -ctx script.das output_dir/``
 2. This generates ``script.das.h`` and ``script.das.cpp``.
 3. Build both alongside your host application.
 4. At runtime, create the ``Standalone`` context and call functions

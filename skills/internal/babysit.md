@@ -50,8 +50,9 @@ The two heavy Windows toolchain builds (`build_windows_mingw`, `build_windows_cl
 **Manual re-request is mandatory.** `review_on_push: true` on the default-branch ruleset fires nothing after PR open — Copilot auto-reviews exactly once, at open. Every subsequent round needs an explicit request (Section 6). CI itself *does* auto-run on every PR commit via the `pull_request` trigger, so it gates honestly without any manual nudge.
 
 **Watching is a tool call, not a polling script.** Run
-`daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` in the background and react to its
-exit code: `2` = CI red (failing checks named), `3` = a review targets the tip and threads
+`daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` BARE in the background —
+never piped (`| tail` etc.): a pipeline reports the last command's exit code, and the exit
+code IS the verdict. React to it: `2` = CI red (failing checks named), `3` = a review targets the tip and threads
 are unresolved — triage it, `0` = CI green + reviewed tip + zero unresolved — ready to
 merge, `5` = nothing actionable within the timeout. The tool owns the GitHub mechanics
 (job-granular check reads that see matrix reds, the bot-reviewer blind spots, thread

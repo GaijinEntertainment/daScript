@@ -1,5 +1,5 @@
 options gen2
-// LLVM object AOT driver. Sibling of utils/internal/aot/main.das: instead of emitting C++ AOT stubs, it
+// LLVM object AOT driver. Sibling of utils/aot/main.das: instead of emitting C++ AOT stubs, it
 // emits one native .o per input through the LLVM JIT backend. Each object self-registers its
 // functions into the AOT library at load (das_aot_register), so linkCppAot binds them as
 // SimNode_Jit -- the same role the C++ AOT .cpp plays, with no interpreter penalty.
@@ -60,7 +60,7 @@ def aot_object_one(input : string, output : string, gen2 : bool, gen2_make : boo
             // no_global_variables is a lint-only style rule that the JIT path would otherwise apply
             // fatally to modules with legit globals (daslib/debugger.das) even though JIT handles them.
             cop.no_lint = true
-            cop.tune_frozen = true            // AOT is a cross-box artifact (see utils/internal/aot/main.das)
+            cop.tune_frozen = true            // AOT is a cross-box artifact (see utils/aot/main.das)
             // Off so no wrapper is spliced that turns a runtime extern argument into a compile-time
             // constant for the folder to execute -- fatal when the host stubs its C++ externs in the
             // AOT tool. Must match the host runtime's policies so both make the same inline/fold

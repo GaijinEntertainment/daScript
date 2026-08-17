@@ -79,7 +79,7 @@ macro(DAS_TUTORIAL_AOT input mode out_var target_name)
         DEPENDS "${_abs_input}"
         COMMENT "AOT: ${_input_name} (${mode})"
         COMMAND $<TARGET_FILE:DAS::daslang>
-                "${DAS_SDK_ROOT}/utils/internal/aot/main.das"
+                "${DAS_SDK_ROOT}/utils/aot/main.das"
                 -- ${mode} "${_abs_input}" "${_out_arg}"
     )
     set(${out_var} "${_out_src}")

@@ -14,8 +14,8 @@ require strings
 
 let TEST_PORT = 18131   // 18097/18099/18101/18120/18121 are the openai-server suites'
 
-// The exchange client against a FAKE exchange whose response shapes mirror
-// utils/internal/dasllama-ladder (its contract is pinned by that dir's own suite): lookup parse,
+// The exchange client against a FAKE exchange whose response shapes mirror the repo's
+// dasllama-ladder service (its contract is pinned by that dir's own suite): lookup parse,
 // the accept-policy pick, the full fetch-and-apply gate (hash/schema/version), the
 // origin/applied_box stamps and their staleness consequences, the privacy strip, and
 // both submit rails. All server state lives in the server thread's context (dashv rule).

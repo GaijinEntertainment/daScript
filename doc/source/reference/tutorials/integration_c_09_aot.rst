@@ -20,7 +20,7 @@ AOT workflow
 ============
 
 1. **Generate** C++ from the script:
-   ``daslang.exe utils/internal/aot/main.das -- -aot script.das script.das.cpp``
+   ``daslang.exe utils/aot/main.das -- -aot script.das script.das.cpp``
 2. **Compile** the generated ``.cpp`` into the host executable (CMake handles this)
 3. **Set policies**: ``DAS_POLICY_AOT = 1`` before compilation
 4. **Simulate**: the runtime links AOT functions automatically

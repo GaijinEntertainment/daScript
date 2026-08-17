@@ -169,7 +169,7 @@ Adding AOT compilation
 
 AOT (Ahead-of-Time) compilation translates daslang functions into C++ source
 code at build time for near-native performance.  The SDK includes the AOT
-tool scripts in ``utils/internal/aot/main.das``.
+tool scripts in ``utils/aot/main.das``.
 
 To add AOT to your CMake project, define a macro that runs ``daslang`` as a
 build tool:
@@ -190,7 +190,7 @@ build tool:
            DEPENDS "${_abs}"
            COMMENT "AOT: ${_name}"
            COMMAND $<TARGET_FILE:DAS::daslang>
-                   "${DAS_SDK_ROOT}/utils/internal/aot/main.das"
+                   "${DAS_SDK_ROOT}/utils/aot/main.das"
                    -- -aot "${_abs}" "${_out_src}"
        )
        set(${out_var} "${_out_src}")
@@ -211,7 +211,7 @@ Then use it:
 
 The command invoked is::
 
-   daslang.exe <sdk>/utils/internal/aot/main.das -- -aot my_script.das output.cpp
+   daslang.exe <sdk>/utils/aot/main.das -- -aot my_script.das output.cpp
 
 The ``-aot`` flag generates a ``.cpp`` file with C++ implementations of all
 daslang functions plus self-registration code.  At runtime, when

@@ -13,7 +13,7 @@
 //
 // Build stages (handled by CMake in this project):
 //   1. Compile daslang.exe (the compiler tool)
-//   2. Run: daslang.exe utils/internal/aot/main.das -- -aot script.das script.das.cpp
+//   2. Run: daslang.exe utils/aot/main.das -- -aot script.das script.das.cpp
 //      This transpiles daslang → C++ source
 //   3. Compile the generated .cpp into the host executable
 //   4. At runtime, call compileDaScript with policies.aot = true

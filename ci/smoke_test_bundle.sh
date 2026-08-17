@@ -34,14 +34,10 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # Two exe naming conventions exist:
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
 #     daslang-live, gen1_to_gen2): platform-natural suffix (.exe on Windows,
-#     none on Linux/macOS). These are the ONLY binaries the bundle contains,
-#     because only `add_executable` targets can carry an install(TARGETS) rule.
+#     none on Linux/macOS).
 #   * DASEXE_SUFFIX — for binaries built via `daslang -exe`: ALWAYS `.exe` on
 #     every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe` to the
-#     output path"). The external-tool exes in DAS_UTILS_SHIPPED_EXES install
-#     into bin/ via install(PROGRAMS) on single-config generators; the internal
-#     build helpers (utils/internal/) never ship. Shipped tools also keep their
-#     source form in the bundle, which is what COMPILE_TESTS covers.
+#     output path").
 # Use `-f` (file-exists) rather than `-x` (executable bit) — Windows Git-Bash
 # doesn't see the +x bit on Linux ELF binaries even when this script runs
 # locally on a Linux-bundle for cross-platform repro.
@@ -63,13 +59,15 @@ cd "$BUNDLE"
 # without executing. This is what catches install-rule misses: a missing peer
 # `.das` file surfaces as `error[20605]: missing prerequisite …`.
 #
-# Add a row when a new util ships a .das entry point. The list is intentionally
-# explicit (no glob) so removing a util is a deliberate one-line change.
+# Add a row when a new util ships a .das entry point — every shipped tool keeps
+# its source form in the bundle, exe or not. The list is intentionally explicit
+# (no glob) so removing a util is a deliberate one-line change.
 # EVERY installed .das entry point belongs here. The list was previously missing
 # five of them, which is how `utils/mcp/setup.das` shipped absent from the bundle
 # through 0.6.4 while both the installed README and skills/mcp_tools.md documented
 # running it: nothing ever compiled it, so nothing noticed.
 COMPILE_TESTS=(
+    "aot|utils/aot/main.das"
     "benchctl|utils/benchctl/main.das"
     "das-fmt|utils/das-fmt/dasfmt.das"
     "dascov|utils/dascov/main.das"
@@ -196,6 +194,23 @@ else
     echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, and no skills/internal/)"
     FAIL=$((FAIL + 1))
 fi
+# No installed file may name a utils/internal/ path -- that class is a shipped
+# tutorial/scaffold invoking a tool the bundle does not carry (found live: the
+# AOT integration scaffolds). skills/ is excluded here: its own gate above owns
+# skills content, with repo-only marker semantics this raw grep cannot honor.
+# mcp_supervisor.py is excluded: it PROBES for the in-repo das-herd behind an
+# exists-check, so the literal is functional and inert in a bundle.
+printf '  %-30s ' "no utils/internal references"
+INTERNAL_REFS="$(grep -rIl 'utils/internal' "$BUNDLE" --exclude-dir=skills --exclude=mcp_supervisor.py 2>/dev/null || true)"
+if [[ -z "$INTERNAL_REFS" ]]; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL"
+    printf '%s\n' "$INTERNAL_REFS" | sed 's/^/    /'
+    FAIL=$((FAIL + 1))
+fi
+
 printf '  %-30s ' "references resolve in bundle"
 # Skipped rather than failed when no python3 is present, so this script stays
 # runnable on a bare box.
