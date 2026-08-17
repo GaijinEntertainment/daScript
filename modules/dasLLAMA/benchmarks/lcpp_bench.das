@@ -278,13 +278,22 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         var text = ""
         var enc_ms = 0.0lf
         var tw_enc0 = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
+        var wd_win0 = 0l   // nolint:LINT002,LINT019 — same
         static_if (typeinfo builtin_module_exists(das_metal)) {
             tw_enc0 = metal_tower_stats().encodes
+            wd_win0 = metal_wdec_stats().windows
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (gpu && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
+                leg_ok = false
+            }
+            // the decoder half's twin: every whisper window cross-KV-serves on the gpu leg, so
+            // a flat windows counter means the wdec driver never engaged (the tower check above
+            // cannot see it, and exec_fmt cannot either)
+            if (gpu && m.kind == AsrKind.whisper && metal_wdec_stats().windows == wd_win0) {
+                print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the wdec driver (windows delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
             }
         }
@@ -347,6 +356,8 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
         static_if (typeinfo builtin_module_exists(das_metal)) {
             set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
             set_metal_tower(true)
+            set_metal_wdec(true)        // explicit intent, like the CPU arm's pins: a stray
+            set_metal_wdec_step(true)   // DASLLAMA_METAL_WDEC=0 must not yield a CPU-decoder "metal" row
         } else {
             print("lcpp_bench --asr: --ngl needs a Metal build (no das_metal on this platform)\n")
             return false
