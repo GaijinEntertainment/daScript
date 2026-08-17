@@ -1,7 +1,7 @@
 # Doc sweep — verifying authored RST code blocks (repo-only)
 
 Read this before running the each-release documentation sweep, before adding or editing
-`.. das-doc:` markers on a doc page, and before extending `utils/doc-verify/`. Repo-only:
+`.. das-doc:` markers on a doc page, and before extending `utils/internal/doc-verify/`. Repo-only:
 it is about `doc/source/`, the checker tool, and the audit procedure.
 
 The problem it solves: authored RST pages carry hand-written das code blocks that nothing
@@ -20,8 +20,8 @@ as a lean binary — the probe catches both.
 ## Running
 
 ```bash
-bin/daslang utils/doc-verify/main.das                      # full corpus, report.json + exit code
-bin/daslang utils/doc-verify/main.das -- --page 53_clargs  # one page (substring filter —
+bin/daslang utils/internal/doc-verify/main.das                      # full corpus, report.json + exit code
+bin/daslang utils/internal/doc-verify/main.das -- --page 53_clargs  # one page (substring filter —
                                                            #   suffix with .rst to disambiguate)
 ```
 

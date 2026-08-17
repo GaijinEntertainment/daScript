@@ -37,7 +37,8 @@ REPO_PATH = re.compile(
     r"|doc/source/[A-Za-z0-9_./+*-]*[A-Za-z0-9_+*-]"
     r"|benchmarks/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|history/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
-    r"|utils/daScript/[A-Za-z0-9_./+-]*"
+    r"|utils/daslang/[A-Za-z0-9_./+-]*"
+    r"|utils/internal/[A-Za-z0-9_./+-]*"
     r"|modules/[A-Za-z0-9_-]+/(?:src|tests|tutorial|harness)[A-Za-z0-9_./+-]*"
     r")")
 # NOT banned: utils/lint/tests/ -- CMake installs it (the SDK self-checks its linter).
@@ -47,7 +48,7 @@ REPO_PATH = re.compile(
 # where command lines live.
 PLATFORM_BIN = re.compile(r"bin/(?:Release|Debug|RelWithDebInfo|MinSizeRel)/")
 # Only an INVOCATION, not a prose mention. cpp_integration.md says "shared across
-# `daslang.exe` and every module DLL", which is fine; `daslang.exe utils/aot/main.das`
+# `daslang.exe` and every module DLL", which is fine; `daslang.exe utils/internal/aot/main.das`
 # is not. The discriminator is the next token: a flag, or a real file with an extension.
 EXE_CMD = re.compile(
     r"(?<![\w/])(daslang|daslang-live|das-fmt|gen1_to_gen2|dastest)\.exe"

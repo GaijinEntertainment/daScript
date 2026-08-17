@@ -118,9 +118,9 @@ Full enum draft: `D:/daslang-error-audit/design/new_enum_draft.h`. To copy into
    - inverted logic at ast_simulate.cpp:3874 (`stt.size()==1` triggers "unknown structure" — should be `>1`)
    - 7 sites in `ds_lexer.lpp` saying "curly braces"/"square braces" but tagged `mismatching_parens` — retag accordingly
 4. Update consumer files (only matters if they reference enum names by-symbol; none currently observed but check during edit):
-   - `utils/daScript/main.cpp`
+   - `utils/daslang/main.cpp`
    - `utils/daslang-live/main.cpp`
-   - `utils/dasFormatter/`
+   - `utils/gen1-to-gen2/`
    - `include/daScript/simulate/runtime_string.h` (the `reportError` formatter — unchanged behavior)
 5. `include/daScript/ast/ast_infer_type.h:5` declares CompilationError values used in inference; verify still resolve.
 6. Regenerate parsers (CMake handles `.ypp`/`.lpp` automatically when sources touched).
@@ -187,4 +187,4 @@ After Phase C-E land:
 
 7. **Parser-side `expect` directive.** Stays numeric (`expect 30305:3`). No syntax change. The 111-test sweep handles renumbering.
 
-8. **Backwards compatibility for code that reads `CompilationError::xxx` by-symbol.** All four consumer files (`utils/daScript/main.cpp`, `utils/daslang-live/main.cpp`, `utils/dasFormatter/`, `runtime_string.h`) currently flow numeric codes through; no symbol references observed. Re-verify during Phase C.
+8. **Backwards compatibility for code that reads `CompilationError::xxx` by-symbol.** All four consumer files (`utils/daslang/main.cpp`, `utils/daslang-live/main.cpp`, `utils/gen1-to-gen2/`, `runtime_string.h`) currently flow numeric codes through; no symbol references observed. Re-verify during Phase C.

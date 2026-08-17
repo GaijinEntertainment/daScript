@@ -4,10 +4,10 @@ staged the same way the deploy does: forge.css / nav-dropdown.css / dasllama-tab
 github-star.js come from ../site/files (single source of truth in the repo), everything
 else from here.
 
-/api/* is proxied to a locally running ladder service (utils/dasllama-ladder on :8201),
+/api/* is proxied to a locally running ladder service (utils/internal/dasllama-ladder on :8201),
 mirroring the Caddy vhost — start one with real data to preview the live pages:
 
-    bin/Release/daslang.exe utils/dasllama-ladder/main.das -- --db ladder.db \
+    bin/Release/daslang.exe utils/internal/dasllama-ladder/main.das -- --db ladder.db \
         --official-dir modules/dasLLAMA/performance/records
     py -3 serve.py            # http://127.0.0.1:8932/
 """

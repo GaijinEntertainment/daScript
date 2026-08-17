@@ -21,7 +21,7 @@ require strings
 // sidecar instead of paying ~20 quiet-box minutes; after a local tune, offer/submit it back.
 // Registered as llvm_tune's scope resolver by dasllama-server ([init] — before the guard);
 // lcpp_bench uses only the submit half. The service contract lives in
-// utils/dasllama-ladder/README.md §1.1; validation is exchange_schema, shared with the service.
+// utils/internal/dasllama-ladder/README.md §1.1; validation is exchange_schema, shared with the service.
 
 //! The baked-in exchange; `exchange_url` in the app config or `DASLLAMA_EXCHANGE_URL` override it.
 let public EXCHANGE_URL_DEFAULT = "https://dasllama.io"

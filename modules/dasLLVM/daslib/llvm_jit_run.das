@@ -25,7 +25,7 @@ require jit
 module llvm_jit_run shared private
 
 //! JIT codegen driver shared by the `jit_llvm` simulate-macro (llvm_macro) and
-//! the `utils/jit` tool. `run_jit` performs the whole compile->IR->optimize->
+//! the `utils/internal/jit` tool. `run_jit` performs the whole compile->IR->optimize->
 //! emit(.dll/.exe/.wasm) sequence for an already-simulated program+context, so
 //! callers do not need to inject the `just_in_time` module at runtime.
 

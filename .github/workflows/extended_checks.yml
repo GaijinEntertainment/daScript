@@ -287,7 +287,7 @@ jobs:
       # per-PR gate. Skipped on windows: the checker spawns one daslang per
       # page via popen and is exercised on the posix cells.
       if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.target != 'windows'
-      run: $BIN/daslang ./utils/doc-verify/main.das -- --daslang $BIN/daslang
+      run: $BIN/daslang ./utils/internal/doc-verify/main.das -- --daslang $BIN/daslang
 
     - name: "Build standalone executables"
       run: |
@@ -442,13 +442,13 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/review-md/test_scan.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_scan.das
 
     - name: "Test pr-babysit verdict core"
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/pr-babysit/test_watch_verdict.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/pr-babysit/test_watch_verdict.das
 
     - name: "Test dasllama-server"
       # The model-gated server suites run --compile-only: this lane has no GGUF
@@ -485,7 +485,7 @@ jobs:
       run: |
         set -eux
         for suite in test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints; do
-          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-playground/$suite.das
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasweb-playground/$suite.das
         done
 
     - name: "Test dasllama-ladder"
@@ -496,7 +496,7 @@ jobs:
       run: |
         set -eux
         for suite in test_ladder_store test_ladder_config test_ladder_server; do
-          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-ladder/$suite.das
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasllama-ladder/$suite.das
         done
 
     - name: "Test dasweb-buildd"
@@ -507,7 +507,7 @@ jobs:
       run: |
         set -eux
         for suite in test_buildd_config test_buildd_core test_buildd_client; do
-          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-buildd/$suite.das
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasweb-buildd/$suite.das
         done
 
     - name: "Test dasweb-verify (curated sample compile check)"
@@ -520,8 +520,8 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-verify/test_verify_core.das
-        $BIN/daslang ./utils/dasweb-verify/main.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasweb-verify/test_verify_core.das
+        $BIN/daslang ./utils/internal/dasweb-verify/main.das
 
     # Self-binders for dasClangBind + dasLLVM bindings live on the mingw
     # worker (build.yml build_windows_mingw) — see comment on the linux
@@ -538,10 +538,10 @@ jobs:
       # Compile-only sweep of the das surface no default local build compiles:
       # dasOpenGL's GLFW-gated files and the imgui-consuming tools
       # (jobque-timeline, the dasHerd UI root). Single source of truth with the
-      # local mirror: utils/preflight's ci-das gate reads the same list file.
+      # local mirror: utils/internal/preflight's ci-das gate reads the same list file.
       run: |
         set -eux
-        $BIN/daslang utils/preflight/main.das -- --only ci-das
+        $BIN/daslang utils/internal/preflight/main.das -- --only ci-das
 
     - name: "Coverage"
       if: matrix.target == 'linux'

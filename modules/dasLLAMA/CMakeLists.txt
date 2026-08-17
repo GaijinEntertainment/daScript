@@ -76,4 +76,9 @@ IF(NOT DAS_LLAMA_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/tune_for_this_box.md
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
+    # the exchange surface utils/dasllama-server requires (client + its schema types)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/exchange_client.das
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/exchange_schema.das
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
+    )
 ENDIF()

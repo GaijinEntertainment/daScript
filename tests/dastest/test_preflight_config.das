@@ -4,7 +4,7 @@ options no_aot
 require dastest/testing_boost
 require daslib/fio
 require ../../dastest/worker_policy.das
-require ../../utils/preflight/config.das
+require ../../utils/internal/preflight/config.das
 
 [test]
 def test_preflight_config(tt : T?) {

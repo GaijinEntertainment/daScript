@@ -261,5 +261,5 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
 - `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` — the bench self-check, requiring
   `matmul_variants` by bare same-dir name.
 
-The ladder tests (`utils/dasllama-ladder/test_*.das`) require no engine module and answer to
+The ladder tests (`utils/internal/dasllama-ladder/test_*.das`) require no engine module and answer to
 that folder's own `REVIEW.md` — not dasLLAMA tests, not ledger entries.

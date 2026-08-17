@@ -9,7 +9,7 @@ add_custom_target(check_format
 )
 
 add_custom_target(check_dasgen
-    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/dasgen/gen_bind.das
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/internal/dasgen/gen_bind.das
     COMMAND git diff --exit-code -- ${PROJECT_SOURCE_DIR}/include/daScript/builtin/
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -39,22 +39,23 @@ elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
     set(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
 endif()
 
+# Entries are paths relative to utils/; the exe/target name is the basename.
+# utils/internal/ entries are in-tree build helpers and never install; the
+# shipped exe set is DAS_UTILS_SHIPPED_EXES below. mcp/lsp never build as exe:
+# their python keep-alive dev setup means an exe form would never be dogfooded.
 set(DAS_UTILS
-    aot
     dascov
     daspkg
+    das-fmt
     detect-dupe
-    hygiene
-    jit
     lint
+    internal/aot
+    internal/hygiene
+    internal/jit
 )
 
 if(NOT DAS_SQLITE_DISABLED)
     list(APPEND DAS_UTILS benchctl)
-endif()
-
-if(NOT DAS_HV_DISABLED)
-    list(APPEND DAS_UTILS mcp)
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies. jit is a compiler-
@@ -76,8 +77,14 @@ else()
     set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin)
 endif()
 
-foreach(util ${DAS_UTILS})
-    set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util}/main.das)
+foreach(util_path ${DAS_UTILS})
+    get_filename_component(util ${util_path} NAME)
+    # das-fmt's entry point is dasfmt.das; every other tool uses main.das
+    if(util STREQUAL "das-fmt")
+        set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util_path}/dasfmt.das)
+    else()
+        set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util_path}/main.das)
+    endif()
 
     # jit and lint are compiler-drivers: their standalone exes recompile
     # arbitrary daslang at runtime (lint compiles each target to walk its AST),
@@ -117,10 +124,25 @@ add_custom_target(dastest_exe DEPENDS ${UTIL_BIN_DIR}/dastest.exe)
 
 
 add_custom_target(all_utils_exe ALL)
-foreach(util ${DAS_UTILS})
+foreach(util_path ${DAS_UTILS})
+    get_filename_component(util ${util_path} NAME)
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
 add_dependencies(all_utils_exe dastest_exe)
+
+# Ship the external tool exes with the SDK. Single-config generators only:
+# UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on multi-config, which install() cannot
+# resolve — and release bundles are cut on single-config (Ninja) lanes. Each
+# tool's exe-or-not decision is recorded in that tool's REVIEW.md.
+if(NOT _DAS_UTILS_MULTI_CONFIG)
+    set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
+    if(NOT DAS_SQLITE_DISABLED)
+        list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)
+    endif()
+    foreach(util ${DAS_UTILS_SHIPPED_EXES})
+        install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe DESTINATION ${DAS_INSTALL_BINDIR})
+    endforeach()
+endif()
 
 # Prewarm the JIT dll cache for the whole test tree, except module-gated folders and gc
 # (mirrors tests/.das_test: gc stays interp-only under -jit — heap_collect can't see
@@ -141,8 +163,8 @@ SET(DAS_UTILS_TO_TEST
     lint
     detect-dupe
     find-dupe/tests
-    hygiene
-    ast-fuzz
+    internal/hygiene
+    internal/ast-fuzz
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})
@@ -153,12 +175,12 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
     )
 ENDFOREACH()
 
-# gen1_to_gen2 (utils/dasFormatter, the gen1->gen2 syntax converter) carries its own
+# gen1_to_gen2 (utils/gen1-to-gen2, the gen1->gen2 syntax converter) carries its own
 # --tests self-check suite. It's a C++ target (not a daslang -exe util), so invoke
 # the binary directly rather than through dastest. Previously uncovered by CI, which
 # let the make-literal verify-compile tests rot unnoticed. (issue #3094)
 LIST(APPEND _run_utils_tests
-    COMMAND ${CMAKE_COMMAND} -E echo "Running tests gen1_to_gen2 dasFormatter --tests"
+    COMMAND ${CMAKE_COMMAND} -E echo "Running tests gen1_to_gen2 --tests"
     COMMAND $<TARGET_FILE:gen1_to_gen2> --tests
     DEPENDS gen1_to_gen2
 )

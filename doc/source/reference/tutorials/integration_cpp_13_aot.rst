@@ -53,7 +53,7 @@ which runs ``daslang.exe`` with the AOT tool script at build time:
 
 .. code-block:: bash
 
-   daslang.exe utils/aot/main.das -- -aot script.das output.cpp
+   daslang.exe utils/internal/aot/main.das -- -aot script.das output.cpp
 
 This produces a ``.cpp`` file containing C++ implementations of all
 daslang functions, plus a self-registration block:
@@ -107,7 +107,7 @@ to automate both generation and compilation:
 
 The ``DAS_AOT`` macro:
 
-* Runs ``daslang.exe utils/aot/main.das -- -aot 13_aot.das output.cpp``
+* Runs ``daslang.exe utils/internal/aot/main.das -- -aot 13_aot.das output.cpp``
   as a custom build command
 * Puts the generated file in an ``_aot_generated/`` subdirectory
 * Creates a dependency on ``daslang`` so it's built first
@@ -294,7 +294,7 @@ generation macro using the ``DAS::daslang`` imported target:
            DEPENDS "${_abs}"
            COMMENT "AOT: ${_name}"
            COMMAND $<TARGET_FILE:DAS::daslang>
-                   "${DAS_SDK_ROOT}/utils/aot/main.das"
+                   "${DAS_SDK_ROOT}/utils/internal/aot/main.das"
                    -- -aot "${_abs}" "${_out_src}"
        )
        set(${out_var} "${_out_src}")

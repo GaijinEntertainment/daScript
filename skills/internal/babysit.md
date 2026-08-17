@@ -50,7 +50,7 @@ The two heavy Windows toolchain builds (`build_windows_mingw`, `build_windows_cl
 **Manual re-request is mandatory.** `review_on_push: true` on the default-branch ruleset fires nothing after PR open — Copilot auto-reviews exactly once, at open. Every subsequent round needs an explicit request (Section 6). CI itself *does* auto-run on every PR commit via the `pull_request` trigger, so it gates honestly without any manual nudge.
 
 **Watching is a tool call, not a polling script.** Run
-`daslang utils/pr-babysit/main.das -- --pr <N> --watch` in the background and react to its
+`daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` in the background and react to its
 exit code: `2` = CI red (failing checks named), `3` = a review targets the tip and threads
 are unresolved — triage it, `0` = CI green + reviewed tip + zero unresolved — ready to
 merge, `5` = nothing actionable within the timeout. The tool owns the GitHub mechanics
@@ -111,7 +111,7 @@ distinguishes.
 
 After all replies + resolves + any push, re-request (every push requires one — Section 0).
 ```
-daslang utils/pr-babysit/main.das -- --pr <N> --request-review --watch
+daslang utils/internal/pr-babysit/main.das -- --pr <N> --request-review --watch
 ```
 This requests the review and blocks until something needs action — the same exit codes as
 Section 1, plus `1` when the request itself fails. The tool owns the request transport and
@@ -135,13 +135,13 @@ Copilot dry is not the exit: the loop ends only when human reviewers are done to
 
 | Step | Tool/Command | Fix policy |
 |---|---|---|
-| Watch PR | `daslang utils/pr-babysit/main.das -- --pr <N> --watch` | React to the exit code: 2 CI red, 3 triage review, 0 ready to merge, 5 timeout |
+| Watch PR | `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` | React to the exit code: 2 CI red, 3 triage review, 0 ready to merge, 5 timeout |
 | CI fail | `gh pr checks`, `gh run view --log-failed` | Fix own, fix obvious pre-existing, ask about unclear |
 | Triage comments | `gh api .../pulls/<PR>/comments` | Verdict + disposition + reply per `skills/internal/review_triage.md` |
 | Terminal state | a judged round that produced no push (zero comments, or all rejected/ledgered + resolved) | Never merge on "Copilot ran out" via accept-and-repush cycles |
 | Re-run gates | Focused tests + directly applicable format/generator/doc checks | Full preflight once before initial PR push; CI handles complete reruns after review fixes |
 | Amend/push | `git commit --amend --no-edit`, `git push --force-with-lease` | Keep squashed branch squashed |
 | Reply | `mcp__github__add_reply_to_pull_request_comment` | Every addressed comment gets a reply |
-| Resolve | `daslang utils/pr-babysit/main.das -- --pr <N> --list-unresolved` / `--resolve <id>` | Every addressed thread gets resolved; end state is zero unresolved |
-| Re-request | `daslang utils/pr-babysit/main.das -- --pr <N> --request-review --watch` | Mandatory after every push, after prior threads are resolved |
+| Resolve | `daslang utils/internal/pr-babysit/main.das -- --pr <N> --list-unresolved` / `--resolve <id>` | Every addressed thread gets resolved; end state is zero unresolved |
+| Re-request | `daslang utils/internal/pr-babysit/main.das -- --pr <N> --request-review --watch` | Mandatory after every push, after prior threads are resolved |
 | Merge gate | Compare latest Copilot `commit_id` to PR `headRefOid` | CI green + matching reviewed tip + zero unresolved threads |

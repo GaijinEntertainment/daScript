@@ -11,7 +11,7 @@
 #
 # The MP4s are NOT in git: they ship as assets on the rolling ``docs-assets``
 # GitHub release and are staged into ``doc/source/_static/tutorials/`` by
-# ``utils/docs_assets/fetch`` before sphinx runs. The directive verifies the
+# ``utils/internal/docs-assets/fetch`` before sphinx runs. The directive verifies the
 # staged file exists, so a missing recording fails a ``-W`` build loudly
 # instead of shipping a broken player.
 #
@@ -39,7 +39,7 @@ class VideoDirective(Directive):
     """``.. video:: scene_name.mp4`` — embed a tutorial recording.
 
     One argument: the mp4 filename under ``doc/source/_static/tutorials/``
-    (staged there from the docs-assets release by utils/docs_assets/fetch).
+    (staged there from the docs-assets release by utils/internal/docs-assets/fetch).
     """
 
     required_arguments = 1
@@ -54,7 +54,7 @@ class VideoDirective(Directive):
         if not os.path.exists(staged):
             return [self.state.document.reporter.warning(
                 'video: %s is not staged under _static/tutorials/ — run '
-                'utils/docs_assets/fetch (or upload it to the docs-assets '
+                'utils/internal/docs-assets/fetch (or upload it to the docs-assets '
                 'release)' % name, line=self.lineno)]
         prefix = '../' * env.docname.count('/')
         return [nodes.raw('', _VIDEO_HTML.format(name=name, prefix=prefix),

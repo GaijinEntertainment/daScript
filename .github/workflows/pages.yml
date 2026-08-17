@@ -62,7 +62,7 @@ jobs:
       with:
         # Every emsdk pin snapshots LLVM main (not a release tag). 5.0.3
         # (clang 23.0.0git, 2026-03-13 snapshot) repeatedly broke on
-        # utils/dasFormatter/ds_parser.cpp — bus-errors one run, EOF-
+        # utils/gen1-to-gen2/ds_parser.cpp — bus-errors one run, EOF-
         # inside-`#ifndef` parse errors the next. We pinned to 4.0.23
         # (clang 22.0.0git, 2026-01-09 snapshot) but the same intermittent
         # parser failures still surfaced (~1 in 4 deploys); see run
@@ -188,7 +188,7 @@ jobs:
       # missing from _static/tutorials/, so staging must precede sphinx.
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: bash utils/docs_assets/fetch.sh
+      run: bash utils/internal/docs-assets/fetch.sh
 
     - name: "Build Sphinx HTML"
       run: |

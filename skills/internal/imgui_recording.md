@@ -7,7 +7,7 @@ This page is the recipe. Read it before writing or revising any `record_*.das` d
 **async rule applies** (every interaction must be gated on its observable effect, never a frame/sleep
 guess; `hold_through_voice`/`verify_click_effect` are the recording-side enforcement of exactly that).
 
-Recording is NOT in CI — drivers are manually-driven artifact producers. The pipeline is three tools (below); the deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release (`gh release upload docs-assets <scene>.mp4 --clobber`) — MP4s are NOT committed to git; docs builds stage them via `utils/docs_assets/fetch.{sh,ps1}` before sphinx runs.
+Recording is NOT in CI — drivers are manually-driven artifact producers. The pipeline is three tools (below); the deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release (`gh release upload docs-assets <scene>.mp4 --clobber`) — MP4s are NOT committed to git; docs builds stage them via `utils/internal/docs-assets/fetch.{sh,ps1}` before sphinx runs.
 
 ## The three hard requirements (REQUIRED)
 
@@ -231,7 +231,7 @@ Each tutorial RST cites its video via the local `video` directive (`doc/source/t
 
 It emits `<video controls preload="metadata" playsinline>` — starts paused, native play/pause + scrubber + volume + fullscreen, audio on, no autoplay, no loop. Change player chrome once in `tutorial_video.py`, not per page.
 
-The docs builds (`doc.yml`, `pages.yml`) stage the `docs-assets` release MP4s via `utils/docs_assets/fetch.{sh,ps1}` before sphinx, and sphinx runs with `-W`, so an RST citing an `.mp4` missing from the release fails the build — upload the `.mp4` to `docs-assets` ahead of (or with) the RST cite. A voiced `.mp4` (video + voice + music) is typically ~0.5–1.5 MB for a 30–75 s clip (buttons ≈ 1.4 MB, toggles ≈ 0.7 MB, selectable_hover ≈ 0.6 MB); a silent quick-convert is much smaller. Far outside that is suspicious — too small = failed encode. Size is NOT a frame-drop signal: the synchronous writer never drops, so trust `dropped == 0` from `record_stop`, not the byte count.
+The docs builds (`doc.yml`, `pages.yml`) stage the `docs-assets` release MP4s via `utils/internal/docs-assets/fetch.{sh,ps1}` before sphinx, and sphinx runs with `-W`, so an RST citing an `.mp4` missing from the release fails the build — upload the `.mp4` to `docs-assets` ahead of (or with) the RST cite. A voiced `.mp4` (video + voice + music) is typically ~0.5–1.5 MB for a 30–75 s clip (buttons ≈ 1.4 MB, toggles ≈ 0.7 MB, selectable_hover ≈ 0.6 MB); a silent quick-convert is much smaller. Far outside that is suspicious — too small = failed encode. Size is NOT a frame-drop signal: the synchronous writer never drops, so trust `dropped == 0` from `record_stop`, not the byte count.
 
 ## Manual ffmpeg conversion (no soundtrack)
 

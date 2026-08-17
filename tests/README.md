@@ -1043,7 +1043,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 
 ## type_lattice/
 
-> GENERATED per-type conformance harness (do not hand-edit) — regen via `daslang utils/dasgen/gen_type_conformance.das`. Each file exercises one basic type through sizeof/alignof, zero-init, `default<>`, ctor+equality, copy, pass/return by value, `v[i]`, swizzles, struct field layout, array element, archive round-trip, print, and (where operators exist) arithmetic. Runs in all CI tiers (interp/jit/AOT) to pin cross-tier parity for the 16/8-bit type-lattice arc.
+> GENERATED per-type conformance harness (do not hand-edit) — regen via `daslang utils/internal/dasgen/gen_type_conformance.das`. Each file exercises one basic type through sizeof/alignof, zero-init, `default<>`, ctor+equality, copy, pass/return by value, `v[i]`, swizzles, struct field layout, array element, archive round-trip, print, and (where operators exist) arithmetic. Runs in all CI tiers (interp/jit/AOT) to pin cross-tier parity for the 16/8-bit type-lattice arc.
 
 | File | Description | Expects errors |
 |---|---|---|

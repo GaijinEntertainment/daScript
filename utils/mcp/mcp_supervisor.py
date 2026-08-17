@@ -361,7 +361,7 @@ def write_mcp_json(repo_root: str) -> bool:
     if os.path.exists(os.path.join(repo_root, "utils", "dasHerd", "mcp_main.das")):
         prev_herd = servers.get("dasherd", {})
         herd_entry = {"command": _daslang_binary(repo_root),
-                      "args": ["utils/dasHerd/mcp_main.das"]}
+                      "args": ["utils/internal/das-herd/mcp_main.das"]}
         if isinstance(prev_herd, dict) and "defer_loading" in prev_herd:
             herd_entry["defer_loading"] = prev_herd["defer_loading"]
         servers["dasherd"] = herd_entry

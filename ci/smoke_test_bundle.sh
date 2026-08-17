@@ -36,14 +36,12 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 #     daslang-live, gen1_to_gen2): platform-natural suffix (.exe on Windows,
 #     none on Linux/macOS). These are the ONLY binaries the bundle contains,
 #     because only `add_executable` targets can carry an install(TARGETS) rule.
-#   * DASEXE_SUFFIX — for binaries built via `daslang -exe` (aot, benchctl,
-#     dascov, daspkg, dastest, detect-dupe, hygiene, jit, lint, mcp): ALWAYS
-#     `.exe` on every platform (utils/CMakeLists.txt: "daslang -exe appends
-#     `.exe` to the output path"). utils/CMakeLists.txt builds these with
-#     add_custom_command into <repo>/bin, so install(TARGETS) cannot reach them
-#     and NONE of them ship — the bundle runs each from source instead
-#     (`daslang utils/<name>/main.das`), which is what COMPILE_TESTS covers.
-#     The suffix is kept here for the `dasexe` row kind below.
+#   * DASEXE_SUFFIX — for binaries built via `daslang -exe`: ALWAYS `.exe` on
+#     every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe` to the
+#     output path"). The external-tool exes in DAS_UTILS_SHIPPED_EXES install
+#     into bin/ via install(PROGRAMS) on single-config generators; the internal
+#     build helpers (utils/internal/) never ship. Shipped tools also keep their
+#     source form in the bundle, which is what COMPILE_TESTS covers.
 # Use `-f` (file-exists) rather than `-x` (executable bit) — Windows Git-Bash
 # doesn't see the +x bit on Linux ELF binaries even when this script runs
 # locally on a Linux-bundle for cross-platform repro.
@@ -72,20 +70,19 @@ cd "$BUNDLE"
 # through 0.6.4 while both the installed README and skills/mcp_tools.md documented
 # running it: nothing ever compiled it, so nothing noticed.
 COMPILE_TESTS=(
-    "aot|utils/aot/main.das"
     "benchctl|utils/benchctl/main.das"
     "das-fmt|utils/das-fmt/dasfmt.das"
     "dascov|utils/dascov/main.das"
+    "dasllama-convert|utils/dasllama-convert/main.das"
+    "dasllama-server|utils/dasllama-server/main.das"
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
-    "hygiene|utils/hygiene/main.das"
-    "jit|utils/jit/main.das"
+    "jobque-timeline|utils/jobque-timeline/main.das"
     "lint|utils/lint/main.das"
     "mcp|utils/mcp/main.das"
     "mcp-cpp|utils/mcp/cpp_main.das"
     "mcp-setup|utils/mcp/setup.das"
-    "requirefix|utils/requirefix/main.das"
     # In-tree module das layers — these catch the missing-payload class (the
     # dasImgui merge shipped binaries + descriptor but zero .das for a while:
     # the descriptor resolved to files the bundle did not carry).
@@ -98,16 +95,23 @@ COMPILE_TESTS=(
 #   find-dupe — require chain needs the `anthropic/anthropic` daspkg package
 #               fetched at runtime + ANTHROPIC_API_KEY.
 
-# Prebuilt exes `cmake --install` drops into bin/. Only cmake add_executable
-# targets qualify (see the DASEXE_SUFFIX note above — the `daslang -exe` utils are
-# custom-command outputs and never install), so every row here is kind `cpp`;
-# `dasexe` stays supported for the day one of them gains an install(PROGRAMS) rule.
+# Prebuilt exes `cmake --install` drops into bin/. `cpp` rows are add_executable
+# targets (platform-natural suffix); `dasexe` rows are the DAS_UTILS_SHIPPED_EXES
+# set from utils/CMakeLists.txt (always `.exe`), installed on single-config
+# generators — which is every generator the release bundles are cut on.
 # Presence-checked only — we don't run them with `--help` because daslang itself
 # intercepts `--help` and prints its own usage even after the `--` separator,
 # swallowing the script's CLI surface.
 EXE_PRESENCE_TESTS=(
     "gen1_to_gen2|cpp"
     "daslang-live|cpp"
+    "benchctl|dasexe"
+    "dascov|dasexe"
+    "das-fmt|dasexe"
+    "daspkg|dasexe"
+    "dastest|dasexe"
+    "detect-dupe|dasexe"
+    "lint|dasexe"
 )
 
 # Stdio launch test for the mcp JSON-RPC server (run from source via daslang —

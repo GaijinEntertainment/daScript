@@ -19,6 +19,10 @@ directory), and no per-PR CI runs these suites.
 **A new command or flag lands with its test cell, its `print_usage` line, and its README table
 row in the same change.**
 
+**daspkg ships as a prebuilt exe: it stays in `DAS_UTILS_SHIPPED_EXES` (`utils/CMakeLists.txt`)
+and `main.das` stays `daslang -exe`-compilable** — a change that breaks the exe build breaks the
+release bundle.
+
 **A release always mints the tune sidecar.** A bundle that ships an exe without a sidecar
 beside it is a defect.
 

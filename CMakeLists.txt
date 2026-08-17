@@ -168,7 +168,7 @@ FILE(GLOB DAS_AOT_DASLIB_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/daslib
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     # DAS_AOT_EXTRA_DEPENDS lets a caller add inputs (e.g. the entry file's own
     # require graph) that this macro can't discover; empty for normal callers.
-    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
+    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/internal/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
     set(all_outputs "")
     # Per-batch arg buffer; chunked to keep each invocation under Windows'
     # 32K command-line limit when worktree paths are long.
@@ -230,7 +230,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
 
     set(_commands "")
     foreach(i ${_batches})
-        list(APPEND _commands COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das -- ${_batches_${i}} ${CROSS_PLATFORM})
+        list(APPEND _commands COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/internal/aot/main.das -- ${_batches_${i}} ${CROSS_PLATFORM})
     endforeach()
 
     ADD_CUSTOM_COMMAND(
@@ -319,10 +319,10 @@ MACRO(DAS_LLVM_AOT_LIB input_files genList mainTarget)
         if(_batch_n EQUAL 32 OR _llvm_aot_idx EQUAL _llvm_aot_total)
             ADD_CUSTOM_COMMAND(
                 OUTPUT  ${_batch_objs}
-                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/jit/main.das ${_das_llvm_aot_codegen}
+                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das ${_das_llvm_aot_codegen}
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                 COMMENT "LLVM-AOT compiling ${_batch_n} files"
-                COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}
+                COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}
             )
             set(_batch_rels "")
             set(_batch_srcs "")
@@ -837,7 +837,7 @@ FLEX(src/parser/ds_lexer.lpp)
 FLEX(src/parser/ds2_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 BISON(src/parser/ds2_parser.ypp)
-BISON(utils/dasFormatter/ds_parser.ypp)
+BISON(utils/gen1-to-gen2/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
 # 1st parser
@@ -1131,10 +1131,10 @@ src/simulate/fs_file_info.cpp
 
 # das formatter
 SET(DASCRIPT_FMT_SRC
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/fmt.cpp
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/formatter.cpp
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/helpers.cpp
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp
+        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/fmt.cpp
+        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/formatter.cpp
+        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/helpers.cpp
+        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp
         CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
 )
 
@@ -1151,9 +1151,9 @@ endif()
 
 # flex/bison output (the gen1_to_gen2 converter's own copy) is not ours to clean
 IF(MSVC)
-  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp PROPERTIES COMPILE_FLAGS "/W0")
+  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp PROPERTIES COMPILE_FLAGS "/W0")
 ELSE()
-  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp PROPERTIES COMPILE_FLAGS "-w")
+  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp PROPERTIES COMPILE_FLAGS "-w")
   # fmt's vendored format-inl.h noreturn helper: GCC needs -Wno-error, clang -Wno-invalid-noreturn
   IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set_source_files_properties(src/misc/format.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
@@ -1386,7 +1386,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 endif()
 
 SET(DAS_DASCRIPT_MAIN_SRC
-    ${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
+    ${PROJECT_SOURCE_DIR}/utils/daslang/main.cpp
     ${DAS_MODULES_NEED_INC}
     ${DAS_MODULES_DECLARE_INC}
     ${DAS_MODULES_PULL_INC}
@@ -1558,7 +1558,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
         FILES_MATCHING PATTERN "*.das"
     )
 
-    add_executable(gen1_to_gen2 ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
+    add_executable(gen1_to_gen2 ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/main.cpp)
     TARGET_LINK_LIBRARIES(gen1_to_gen2 libDaScriptDyn ${SRC_LIBRARIES})
     ADD_DEPENDENCIES(gen1_to_gen2 libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
     target_include_directories(gen1_to_gen2 PRIVATE ${NEED_MODULES_PATH})
@@ -1579,7 +1579,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     #  set_target_properties(daslangOsx PROPERTIES
     #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.6"
     #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daslang 0.6"
-    #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
+    #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daslang/MacOSXBundleInfo.plist.in)
     #ENDIF()
 
     # C++ test infrastructure (doctest under tests-cpp/, plus big-test executables).
@@ -1846,26 +1846,10 @@ install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 
-# Install utility scripts
-install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
-
-# Install jit tool (LLVM JIT CLI — .das to shared lib or standalone -exe)
-install(FILES ${PROJECT_SOURCE_DIR}/utils/jit/main.das DESTINATION utils/jit)
-
+# Install utility scripts. utils/internal/ never installs — the folder is the
+# audience decision (utils/REVIEW.md).
 # Install fix-lint-errors tool (mechanical lint auto-fixer)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
-
-# Install requirefix tool (require-statement fixer + its module)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/requirefix/main.das
-    ${PROJECT_SOURCE_DIR}/utils/requirefix/requirefix.das
-    ${PROJECT_SOURCE_DIR}/utils/requirefix/test_requirefix.das
-    DESTINATION utils/requirefix
-)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/requirefix/testdata/
-    DESTINATION utils/requirefix/testdata
-    FILES_MATCHING PATTERN "*.das"
-)
 
 # Install MCP server (stdio transport, no dasHV dependency)
 #   main.das        — full server entry point
@@ -1962,10 +1946,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/lint/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install hygiene (comment/doc hygiene checker)
-file(GLOB DAS_HYGIENE_FILES ${PROJECT_SOURCE_DIR}/utils/hygiene/*.das)
-install(FILES ${DAS_HYGIENE_FILES} DESTINATION utils/hygiene)
-
 # Install detect-dupe (cross-file duplicate-function detector)
 file(GLOB DAS_DETECT_DUPE_FILES ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
 install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
@@ -2022,6 +2002,47 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/utils/das-fmt/LICENSE
     ${PROJECT_SOURCE_DIR}/utils/das-fmt/pre-commit
     DESTINATION utils/das-fmt
+)
+
+# Install dasllama-server (OpenAI-compatible LLM server; JIT-only, runs from the
+# SDK's live toolchain — see its deploy-jit.ps1 for the standalone bundle path)
+file(GLOB DAS_LLAMA_SERVER_FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-server/*.das)
+install(FILES ${DAS_LLAMA_SERVER_FILES}
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-server/README.md
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-server/control.html
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-server/tray.ico
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-server/watchdog.json
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-server/deploy-jit.ps1
+    DESTINATION utils/dasllama-server
+)
+
+# Install dasllama-convert (offline GGUF -> .dlim model prep)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-convert/main.das
+    DESTINATION utils/dasllama-convert
+)
+
+# Install watchdog (supervisor for long-running daslang programs; the worked
+# example in the daspkg skill's release_include_from docs)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/watchdog.py
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/dummy_server.py
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/README.md
+    DESTINATION utils/watchdog
+)
+
+# Install jobque-timeline (per-lane jobque trace viewer)
+file(GLOB DAS_JOBQUE_TIMELINE_FILES ${PROJECT_SOURCE_DIR}/utils/jobque-timeline/*.das)
+install(FILES ${DAS_JOBQUE_TIMELINE_FILES}
+    ${PROJECT_SOURCE_DIR}/utils/jobque-timeline/README.md
+    DESTINATION utils/jobque-timeline
+)
+
+# Install vscode-daslang-test (VSCode Test Explorer extension for dastest,
+# ships as source — build per its README)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/vscode-daslang-test/
+    DESTINATION utils/vscode-daslang-test
+    PATTERN "node_modules" EXCLUDE
+    PATTERN "out" EXCLUDE
 )
 
 # Install daspkg examples. Whole-dir install, so exclude everything daspkg

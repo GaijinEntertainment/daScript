@@ -69,7 +69,7 @@ tests/aot/
 | `DAS_AOT_EXT(files, genList, target, tool, extra)` | Core macro — others call this | `extra` alone (no implicit `-aot`; `DAS_AOT` passes `-aot` as the extra) |
 | `DAS_AOT_CTX(files, genList, target, tool)` | AOT with custom context | `-ctx` |
 | `DAS_AOT_STANDALONE(files, genList, target, tool, extra)` | AOT for a standalone binary | `extra` |
-| `DAS_LLVM_AOT_LIB(files, genList, target)` | LLVM-backend AOT — emits native `.o`, not C++; runs `utils/jit/main.das` in batches of 32 | `--aot-object` |
+| `DAS_LLVM_AOT_LIB(files, genList, target)` | LLVM-backend AOT — emits native `.o`, not C++; runs `utils/internal/jit/main.das` in batches of 32 | `--aot-object` |
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
@@ -110,7 +110,7 @@ fixture explicitly in the dir's module list in `tests/aot/CMakeLists.txt` (e.g.
 `AOT_LANGUAGE_MODULE_FILES` for `tests/language/_*.das`; precedent: `_lambda_vis_inner.das` /
 `_lambda_vis_mid.das`).
 
-**Intentionally-non-compiling `expect`-fixtures** (a `[macro]`/annotation that is *supposed* to fail compilation, driven by a sibling test via `compile_file` + asserting the error text — e.g. fail-closed codegen-rejection fixtures): `options no_aot` does NOT save these. `no_aot` skips *emission*, but the AOT generator (`utils/aot/main.das`) still *compiles* the program first, so a file that fails compilation breaks the AOT build before the no-emit skip applies. Put such fixtures in a **`_`-prefixed file inside a non-globbed subdir** (e.g. `tests/spirv/_fail_closed/_fc_*.das`): the `_` prefix keeps dastest/`test_aot` from discovering+running it, and the subdir keeps the non-recursive `tests/<dir>/*.das` AOT glob from trying to stub-generate it. Add an `expect <code>` directive too so the lint sweep skips it (precedent: `tests/spirv/_fail_closed/`, dasSpirv Phase 6.4 fail-closed gate).
+**Intentionally-non-compiling `expect`-fixtures** (a `[macro]`/annotation that is *supposed* to fail compilation, driven by a sibling test via `compile_file` + asserting the error text — e.g. fail-closed codegen-rejection fixtures): `options no_aot` does NOT save these. `no_aot` skips *emission*, but the AOT generator (`utils/internal/aot/main.das`) still *compiles* the program first, so a file that fails compilation breaks the AOT build before the no-emit skip applies. Put such fixtures in a **`_`-prefixed file inside a non-globbed subdir** (e.g. `tests/spirv/_fail_closed/_fc_*.das`): the `_` prefix keeps dastest/`test_aot` from discovering+running it, and the subdir keeps the non-recursive `tests/<dir>/*.das` AOT glob from trying to stub-generate it. Add an `expect <code>` directive too so the lint sweep skips it (precedent: `tests/spirv/_fail_closed/`, dasSpirv Phase 6.4 fail-closed gate).
 
 **AOT-emit trap — raw-pointer indexing by int64 (FIXED, #3391).** `p[i]` where `p : T?` and `i : int64` used to be AOT-ambiguous for the non-`var` pointer form: `das_index<T * const>` had only `int32_t`/`uint32_t` `at`/`safe_at` overloads (the `T *` and `const T * const` specializations got 64-bit overloads in `c40b653d9`; this one was missed). Fixed by adding the int64/uint64 overloads in `include/daScript/simulate/aot.h`; regression test `tests/aot/test_int64_ptr_index.das`. Old workaround (`for (i in range(int(n)))` / `p[int(i)]`) is no longer needed.
 
@@ -299,7 +299,7 @@ Functions with `SideEffects::none` can be **constant-folded** at compile time. I
 
 ### Batch AOT processing
 
-The AOT tool (`utils/aot/main.das`) can process multiple `.das` files in one invocation. CMake's `DAS_AOT_EXT` macro batches files this way for efficiency. **Batch processing can cause hash divergence** if:
+The AOT tool (`utils/internal/aot/main.das`) can process multiple `.das` files in one invocation. CMake's `DAS_AOT_EXT` macro batches files this way for efficiency. **Batch processing can cause hash divergence** if:
 
 - A macro in file A instantiates generic functions that share names/mangled names with instantiations from file B
 - Module-level state from processing file A leaks into file B's compilation context
@@ -307,7 +307,7 @@ The AOT tool (`utils/aot/main.das`) can process multiple `.das` files in one inv
 **Diagnosing batch issues**: If single-file AOT generation produces matching hashes but batch doesn't, use the hash comment diagnostics to find the diverging function. You can test single-file generation with:
 
 ```bash
-daslang.exe utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
+daslang.exe utils/internal/aot/main.das -- -aot path/to/test.das path/to/output.cpp
 ```
 
 ## libDaScriptAot — Standard Library AOT
@@ -379,7 +379,7 @@ All `_aot_generated/` directories are covered by a single broad pattern in `.git
 
 ### The LLVM-AOT rail (`test_llvm_aot`)
 
-There is a third binary beside `test_aot` / `test_aot_subset`. `test_llvm_aot` (LLVM-only, `EXCLUDE_FROM_ALL`, opt-in — not in ALL and not in CI) compiles each `.das` through the **LLVM backend** into a self-registering native `.o` (a `das_aot_register` load ctor), linked straight into the binary; `-use-aot` then binds each function as a `SimNode_Jit` via `linkCppAot`. It is built by `DAS_LLVM_AOT_LIB` (which drives `utils/jit/main.das --aot-object`, not the C++ AOT tool) and run through the `run_tests_llvm_aot` target in `tests/CMakeLists.txt`.
+There is a third binary beside `test_aot` / `test_aot_subset`. `test_llvm_aot` (LLVM-only, `EXCLUDE_FROM_ALL`, opt-in — not in ALL and not in CI) compiles each `.das` through the **LLVM backend** into a self-registering native `.o` (a `das_aot_register` load ctor), linked straight into the binary; `-use-aot` then binds each function as a `SimNode_Jit` via `linkCppAot`. It is built by `DAS_LLVM_AOT_LIB` (which drives `utils/internal/jit/main.das --aot-object`, not the C++ AOT tool) and run through the `run_tests_llvm_aot` target in `tests/CMakeLists.txt`.
 
 **Its corpus is derived, so registering a suite enrols it here too.** `LLVM_AOT_TEST_FILES` is the accumulated `TEST_AOT_ALL_DAS` (every `reg`-flavor suite's test bodies) plus `tests/jit_tests/*.das`, minus `_`-prefixed files and a filter list (`cant_`, `llvm_tune`, `llvm_code`, `llvm_compile_only`, `dll_cache`, `jit_fastpath`, `typeinfo`, and all of `tests/msl/` + `tests/metal/`, which decline the JIT via `lattice_fallback`). Adding a directory to `DAS_AOT_SUITES` therefore silently adds it to the LLVM-AOT corpus — if it can't survive that rail, it needs a filter entry as well.
 

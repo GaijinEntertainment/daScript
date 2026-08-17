@@ -20,7 +20,7 @@
 #   }
 #
 # MP4s are NOT committed -- they ship as assets on the rolling `docs-assets`
-# GitHub release (utils/docs_assets/fetch.ps1 stages them for docs builds):
+# GitHub release (utils/internal/docs-assets/fetch.ps1 stages them for docs builds):
 #   gh release upload docs-assets *.mp4 --clobber
 #
 # Run:

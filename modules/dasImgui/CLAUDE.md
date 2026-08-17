@@ -89,7 +89,7 @@ Run from the repo root (full recipe + curl smoke + recording workflow: `modules/
 Docs live in the main Sphinx tree, published at daslang.io/doc:
 
 - **Stdlib pages**: `doc/source/stdlib/sec_imgui*.rst` + generated pages from `modules/dasImgui/utils/imgui2rst.das` (writes `doc/source/stdlib/generated/`, gitignored). `doc.yml`/`pages.yml` run it before sphinx; locally run it first or `sphinx-build -W` fails on the missing generated toctree entries.
-- **Tutorials**: `doc/source/reference/tutorials/imgui/*.rst`, embedding MP4s from `doc/source/_static/tutorials/` via the `.. video::` directive. MP4s are NOT in git — staged from the `docs-assets` release by `utils/docs_assets/fetch.{sh,ps1}`; sphinx `-W` fails on a missing video, so **upload the MP4 to `docs-assets` before the RST cite lands**.
+- **Tutorials**: `doc/source/reference/tutorials/imgui/*.rst`, embedding MP4s from `doc/source/_static/tutorials/` via the `.. video::` directive. MP4s are NOT in git — staged from the `docs-assets` release by `utils/internal/docs-assets/fetch.{sh,ps1}`; sphinx `-W` fails on a missing video, so **upload the MP4 to `docs-assets` before the RST cite lands**.
 - **Icon catalog**: `generated/imgui_icons.rst` is built by `generate_icon_catalog()` in `utils/imgui2rst.das`; its images are committed PNGs under `doc/source/_static/icons/`, rendered offline by `daslang -project_root . modules/dasImgui/utils/make_icon_doc.das` (drives a real ImGui frame — must run **windowed**, not in CI). Re-run after adding/changing a glyph in `widgets/imgui_icons.das` and commit the PNGs.
 
 ## Recordings
