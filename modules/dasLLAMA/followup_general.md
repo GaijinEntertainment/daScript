@@ -415,3 +415,26 @@
     lands, the check is mechanical: the [metal_dispatch] lens knows every grid= param and
     binding, so "an argument other arguments determine is a defect, except the grid extent
     as the bounds guard" becomes an auto-test; the rule text then shrinks to the sanction.
+
+31. **`pin_kernel_backend` is not load-sticky (2026-08-17).** A model load's internal
+    selection overrode an `arm64-gen` pin mid-cell (portable pins survive — the asymmetry is
+    availability-gated re-selection), which corrupted the wdec attach until the driver moved
+    to the pure read. Decide the contract: the pin survives loads, or its doc states it pins
+    only until the next load — then sweep the A/B seats that assume the stronger reading.
+
+32. **`daspkg --quick` silently downgrades on an incomplete sidecar (2026-08-17).** Finding
+    the scope incomplete, --quick re-mints in NORMAL mode — a quick rebuild can quietly strip
+    the record-grade rig of its paranoid winners (observed: 5 tie-class winner flips, oracle
+    INCOMPARABLE until the LKG restore). Safer contract: refuse and name the LKG restore, or
+    re-mint in the sidecar's previous mode.
+
+33. **Lint/test-cell candidates from the metal-asr review round (2026-08-17).**
+    - `[hot_path]` region contracts are blind across `invoke`d function-pointer seams (the
+      four new GPU hooks) — the PERF026-028 scan cannot traverse them.
+    - The tests/REVIEW CMakeLists rule is a pure grep: a model-free cell walking every
+      CMakeLists.txt for `modules/dasLLAMA/tests/` basenames.
+    - Three `test_metadata.py` cells for site-dasllama: page metadata (title/description/
+      OG/Atom), news-region idempotence (regenerate into tmp, byte-compare), and the `dl-*`
+      prefix ban.
+    - The site dl-* shared-selector parity check (parse both files, intersect selectors,
+      assert identical bodies).
