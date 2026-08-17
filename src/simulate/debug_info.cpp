@@ -811,8 +811,11 @@ namespace das
 
     // One FileInfo per binding name, keyed by the display name so a deserialized location maps
     // back to the same singleton. Intentionally never freed - these outlive every Program, and
-    // no FileAccess owns them.
+    // no FileAccess owns them. The tracker guard keeps these immortals out of the leak report:
+    // without it every process exit in a DAS_TRACK_ALLOC build symbolizes ~3000 of them
+    // (~5s), which starves timing-sensitive child-process tests.
     static LineInfo & cppBindingLineInfoNamed ( const string & display ) {
+        AllocTrackerInternalGuard trackerGuard;
         static das_map<string, LineInfo> * infos = new das_map<string, LineInfo>();
         static mutex * infosMutex = new mutex();
         lock_guard<mutex> guard(*infosMutex);
