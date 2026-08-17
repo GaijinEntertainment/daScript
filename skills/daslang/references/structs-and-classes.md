@@ -46,6 +46,13 @@ rejected with `error[31016]: Uninitialized variable f is unsafe`. Write `var f =
 Note that `x, y : int = 0` *does* count as field initializers. `[safe_when_uninitialized]` on the
 struct permits the bare declaration but does **not** apply the initializers — it zero-fills.
 
+The same rule applies one level down, with its own code and its own annotation: a field whose
+*type* is unsafe-when-uninitialized and that carries no initializer is `error[31030]: Uninitialized
+field a is unsafe` at the struct declaration, and `@safe_when_uninitialized value : T` on that
+field silences it. The two are independent — the field annotation makes the struct declarable, the
+struct annotation makes a bare `var` of it declarable. The field form is the usual answer for a
+generic payload that may or may not be default-constructible. (probe-verified 2026-08-16)
+
 **Clone initializer** — an initializer taking a pointer to an existing instance, so that
 `new Foo(a)` deep-copies `a`:
 

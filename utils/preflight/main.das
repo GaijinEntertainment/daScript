@@ -3,7 +3,7 @@ options indenting = 4
 options persistent_heap
 
 // preflight — run CI's gates locally before pushing. Gate ↔ CI-lane mapping
-// and the manual commands this tool automates: skills/preflight.md.
+// and the manual commands this tool automates: skills/internal/preflight.md.
 //
 // Fast tier (default): format --verify, lint on changed .das, clang
 // frontend (syntax-only) pass on changed C++ — escalates to a full
@@ -422,7 +422,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
     let host = run_argv(host_args)
     if (host.rc != 0) {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "host-flavor lint warnings — fix or nolint each (see skills/make_pr.md §1)", output = host.out)
+            detail = "host-flavor lint warnings — fix or nolint each (see skills/internal/make_pr.md §1)", output = host.out)
     }
     var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal", "--disable-module", "dasVulkan",
                         "utils/lint/main.das", "--"]
@@ -433,7 +433,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
     let mirror = run_argv(mirror_args)
     if (mirror.rc != 0) {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/preflight.md)", output = mirror.out)
+            detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/internal/preflight.md)", output = mirror.out)
     }
     // the exe rail: CI compiles utils/lint into a standalone das-lint and lints AGAIN — the
     // -exe world resolves modules differently (dasAudio et al are not baked in). `-exe`
@@ -636,7 +636,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
     results |> emplace(GateResult(name = "docs/stubs", status = empty(stubs) ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0),
-        detail = empty(stubs) ? "" : "stub docs need real text (skills/make_pr.md §4c)",
+        detail = empty(stubs) ? "" : "stub docs need real text (skills/internal/make_pr.md §4c)",
         output = join(stubs, "\n")))
 
     // gate 3: no Uncategorized sections in generated docs
@@ -887,7 +887,7 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     }
     return run_test_gate("tests-aot",
         [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--max-file-time", "30", "--timeout", "1800", "--test", "tests"],
-        "AOT suite failures (error[50101] → skills/aot_hash_desync_debugging.md)")
+        "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)")
 }
 
 def gate_sequence(ctx : PreflightCtx) : GateResult {

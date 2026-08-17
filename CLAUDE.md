@@ -10,7 +10,7 @@ For the **why** — design principles, three-tier execution model, the macros-as
 
 CMake-based build, supported on Windows / Linux / macOS / iOS / Android / WASM (CI runs the full matrix). Quick start: `cmake --build build --config Release -j 64`, then run `bin/Release/daslang path/to/script.das` (Windows MSVC layout) or `build/daslang ...` (single-config Make/Ninja). Builds are slow (15-25 min clean, 2-10 min incremental) — always pass `timeout: 0` to long `cmake --build` commands, do NOT assume "no output" means failure.
 
-Full reference (per-platform generator commands, build flags, AOT debugging, exit code meanings, runtime crash diagnostics): **`skills/build_and_debug.md`**.
+Full reference (per-platform generator commands, build flags, AOT debugging, exit code meanings, runtime crash diagnostics): **`skills/internal/build_and_debug.md`**.
 
 **Build all of your own modules.** A session runs its tree's binary with shared_modules built
 from THAT tree — never `-load_module` another checkout's build. A module compiled against
@@ -34,7 +34,7 @@ unrelated diagnostic files beside the program.
 
 ## MCP-first search
 
-Before reaching for `Bash`/`Grep`/`Read` to find a symbol or trace usages in this repo, ToolSearch the daslang MCP tool that answers the question and call it. The tools are deferred (schemas not in turn-start context) so the workflow is two calls: `ToolSearch select:mcp__daslang__<tool>` → invoke. (`defer_loading: false` in `.mcp.json` is the documented knob to flip this, but [it's currently broken upstream](https://github.com/anthropics/claude-code/issues/26844) — set it anyway, then operate as if deferred.)
+Before reaching for `Bash`/`Grep`/`Read` to find a symbol or trace usages in this repo, ToolSearch the daslang MCP tool that answers the question and call it. The tools are deferred (schemas not in turn-start context) so the workflow is two calls: `ToolSearch select:mcp__daslang__<tool>` → invoke.
 
 | Question | Tool |
 |---|---|
@@ -50,7 +50,7 @@ Same applies to lint/format: `mcp__daslang__lint` / `format_file`, not shell `bi
 
 Fall back to `Bash`/`Grep`/`Read` only when the MCP tool reports an error or the question is genuinely outside MCP coverage (RST prose, CMake, Python tooling).
 
-**Cross-tree guard (#3392):** when you work in a git worktree, MCP tool results and LSP diagnostics prepend a `CROSS-TREE WARNING` if you query a file **outside the server's own tree** — that answer used the *wrong* tree's module sources AND that binary's compiled-in C++ bindings, so it's likely stale (missing symbols, outdated signatures). Heed it, don't trust cross-tree output: run the session *inside* the worktree (its checked-in `.claude/skills/daslang-lsp` gives correct diagnostics; `daslang utils/mcp/setup.das -- --root <worktree>` bootstraps its MCP tools). A main-tree-rooted session can never give correct diagnostics for a worktree file.
+**Cross-tree guard:** when you work in a git worktree, MCP tool results and LSP diagnostics prepend a `CROSS-TREE WARNING` if you query a file **outside the server's own tree** — that answer used the *wrong* tree's module sources AND that binary's compiled-in C++ bindings, so it's likely stale (missing symbols, outdated signatures). Heed it, don't trust cross-tree output: run the session *inside* the worktree (its checked-in `.claude/skills/daslang-lsp` gives correct diagnostics; `daslang utils/mcp/setup.das -- --root <worktree>` bootstraps its MCP tools). A main-tree-rooted session can never give correct diagnostics for a worktree file.
 
 ## Skill Files (REQUIRED)
 
@@ -59,71 +59,79 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | Skill file | Read BEFORE... |
 |---|---|
 | `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
-| `skills/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
+| `skills/internal/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language — the house rulebook the `style-hygiene-auditor` agent applies to every PR's new code |
 | `skills/writing_tests.md` | Writing or editing any dastest test (ships in the SDK; applies everywhere) |
-| `skills/tests_in_repo.md` | Adding/moving tests **in this repo** — AOT registration for a new `tests/` dir, the `tests/.das_test` gating filter, deep-engine model-test rules. Repo-only; deliberately not shipped |
-| `skills/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` (doctest, leak guards, ctest wiring) |
-| `skills/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
-| `skills/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
-| `skills/tutorial_prose.md` | WRITING or revising any general-reader doc/tutorial prose — the voice/vocabulary/structure rules (ESL-plain, flip-it, no forward promises, term discipline, no glossaries); `documentation_rst.md` is mechanics, this is the words |
-| `skills/cpp_integration.md` | Writing/editing C++ in `src/`, `modules/`, `tutorials/integration/cpp/` |
-| `skills/clang_bind_build.md` | Enabling the `dasClangBind` module / installing or bumping the libclang SDK / running any `bind_*.das` self-binder (`bind_clangbind`, `bind_imgui`, …) to regenerate native bindings |
+| `skills/internal/tests_in_repo.md` | Adding/moving tests **in this repo** — AOT registration for a new `tests/` dir, the `tests/.das_test` gating filter, deep-engine model-test rules. Repo-only; deliberately not shipped |
+| `skills/internal/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` (doctest, leak guards, ctest wiring) |
+| `skills/internal/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
+| `skills/internal/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
+| `skills/internal/tutorial_prose.md` | WRITING or revising any general-reader doc/tutorial prose — the voice/vocabulary/structure rules; `documentation_rst.md` is mechanics, this is the words |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
+| `skills/internal/cpp_codebase_notes.md` | Working on daslang's own C++ — where inference/builtins/errors/parser live, AST function flags, the `cpp_*` MCP search workflow |
+| `skills/internal/clang_bind_build.md` | Enabling `dasClangBind` / bumping the libclang SDK / running any `bind_*.das` self-binder |
 | `skills/daslib_modules.md` | Working with `daslib/` modules or extending the stdlib |
 | `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
-| `skills/writing_benchmarks.md` | Writing/running `benchmarks/` files |
+| `skills/internal/daslang_internals.md` | Reasoning about how the compiler implements something no user-facing doc covers — the collect banner, the `/*option*/` marker, known mangling defects |
+| `skills/writing_benchmarks.md` | Writing/running benchmark `.das` files (`--bench`, `run`, `Asserter`) |
+| `skills/internal/benchmarks_in_repo.md` | Adding or moving a file under `benchmarks/` — layout, the README index rule, output capture |
 | `skills/daspkg.md` | Running daspkg commands, `.das_package` manifests |
-| `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
-| `skills/external_module_debugging.md` | Working on an external daslang module (dasImguiNodeEditor, dasImguiImplot, dasCards, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
-| `skills/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
-| `skills/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the audience decision (SDK vs repo-only), the shipping gate, and the review checklist for what the gate can't check |
-| `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
-| `skills/llvm_tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, per-box manifests, the runtime-tune-and-re-exec model, the AOT/-exe gates, adding a kernel family (`modules/dasLLVM/daslib/llvm_tune.das`) |
-| `skills/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
+| `skills/dynamic_modules.md` | `.das_module` descriptors, `register_native_path`, module resolution |
+| `skills/internal/dynamic_modules_plumbing.md` | Adding a module under this repo's `modules/` tree — static-binary resolution, the `ADD_MODULE_*` CMake macros |
+| `skills/external_module_debugging.md` | Working on an external daslang module locally (dasImguiNodeEditor, dasCards, …) — run/lint/test from a standalone daslang or MCP before push-to-CI; the junction pattern + `project_root` MCP arg |
+| `skills/internal/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
+| `skills/internal/skill_taxonomy.md` | Deciding where a skill lives and whether it ships — the folder taxonomy (root/daslang/internal), one-fact-one-home, and the move/merge rules |
+| `skills/internal/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the content craft: claims verified, commands run, the gate mechanics, the review checklist |
+| `skills/internal/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
+| `skills/tune.md` | The `[tune]` kernel-tuning framework — `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, sidecars, the tune-and-re-exec model, adding a kernel family |
+| `skills/internal/llvm_tune_internals.md` | Maintaining `modules/dasLLVM/daslib/llvm_tune.das` itself — macro-context traps, the AOT/`-exe` gate split, the dasLLAMA tuner |
+| `skills/internal/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
-| `skills/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server for Claude Code / stdio clients) — locked architecture, coordinate conventions, CC wire facts, headless dev rig, protocol tests |
+| `skills/internal/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server) — locked architecture, coordinate conventions, protocol tests |
 | `utils/dasHerd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (any `DASHERD_SESSION_ID` env var set) — the session cooperation contract: inbox/outbox mailbox, declaring participating repositories, Review Bundles, the `dasherd.ps1` CLI |
-| `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — diagnosing/fixing ANY dasImgui UI or interaction bug. The discipline: reproduce + screenshot → make it observable in `imgui_snapshot` (fix the inspection if it isn't) → fix → prove via snapshot + test → 'after' screenshot. UI is hard; **never claim a UI fix works from logic or a screenshot — only from structured snapshot state.** |
+| `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — ANY dasImgui UI/interaction bug: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix from logic or a screenshot alone |
 | `skills/imgui_application.md` | Building any dasImgui application — harness lifecycle (`init`/`update`/`shutdown`, `harness_*` frame calls), the headless arm, heap/GC ownership contract |
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table (`imgui_lint` IMGUI002 points here) |
-| `skills/imgui_playwright.md` | Writing/editing `modules/dasImgui/tests` playwright tests — the async rule (gate on the effect), the `wait_*` family, one-host-per-9090 |
-| `skills/imgui_recording.md` | Recording tutorial videos — `record_*.das` drivers, prepare → record → convert pipeline, `docs-assets` release upload |
-| `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow, plus the C++ `env_cfg` accessor rail. dasLLAMA's own ~130 knobs are generated into `modules/| `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
-| `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |
-| `skills/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` (covers `strings`, `daslib/strings_boost`, `daslib/strings_convert`) |
-| `skills/regex.md` | Writing regular expressions in `.das` code |
-| `skills/glob.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
-| `skills/gc_migration.md` | Migrating external/archived code from `smart_ptr<T>` AST patterns to gc_node (in-tree migration is complete) |
-| `skills/version_update.md` | Bumping the daslang version number |
-| `skills/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` — the archive-vs-stay test, reference-update discipline, area-index notes, the `history/README.md` ledger |
-| `skills/doc_sweep.md` | Running the each-release authored-RST doc sweep, adding/editing `.. das-doc:` markers on a doc page, or extending `utils/doc-verify/` — rule 0, the page-literate model, the full marker vocabulary, authoring rules, regen traps |
+| `skills/internal/imgui_playwright.md` | Writing/editing `modules/dasImgui/tests` playwright tests — the async rule (gate on the effect), the `wait_*` family, one-host-per-9090 |
+| `skills/internal/imgui_recording.md` | Recording tutorial videos — `record_*.das` drivers, prepare → record → convert pipeline, `docs-assets` release upload |
+| `skills/internal/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, the rules a new one must follow, the C++ `env_cfg` rail |
+| `skills/perf_lint.md` | Running the lint suite or suppressing a finding — **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch` |
+| `skills/style_lint.md` | Suppressing a `STYLE*` finding (the per-module `options` knobs) or applying the STYLE037/038 suppress-vs-split policy |
+| `skills/internal/perf_lint_authoring.md` | Adding or changing a rule in `daslib/perf_lint.das` — visitor hooks, the shared enablement policy, fixture + RST registration |
+| `skills/internal/style_lint_authoring.md` | Adding or changing a rule in `daslib/style_lint.das` — detection patterns, fixture + RST registration, the facts that live outside the module |
+| `skills/daslang/references/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` |
+| `skills/daslang/references/strings.md` | Writing regular expressions in `.das` code |
+| `skills/daslang/references/files-and-paths.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
+| `skills/internal/version_update.md` | Bumping the daslang version number |
+| `skills/internal/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` — the archive-vs-stay test, reference-update discipline, area-index notes, the `history/README.md` ledger |
+| `skills/internal/doc_sweep.md` | Running the each-release authored-RST doc sweep, editing `.. das-doc:` markers, or extending `utils/doc-verify/` |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
-| `skills/memory_leak_detection.md` | Any leak report at exit — master index of all six leak-detection mechanisms (gc_node, `--das-profiler-leaks`, `-track-allocations`, smart_ptr tracking, jobque, HandleRegistry) and which to reach for |
-| `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
-| `skills/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") — grounding → change-derived risk dimensions → parallel surfacers + REVIEW auditors → falsification-gate prover → report-then-fix |
-| `skills/review_md.md` | Creating or editing any module `REVIEW.md`, or reviewing a diff to one — the opening contract (diff-checkable criteria only, no numbers, no rationale/history), the verbatim template, `<ARCH-DOC>` selection, the followability finding classes |
-| `skills/tdd_audit.md` | Auditing any diff for test coverage — the constitutional branch-test rule (a new/changed reachable branch needs a test that fails without it), the negative-control procedure, pin and expectation discipline |
-| `skills/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
-| `skills/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against — both-worlds spellings, externals-merge-first ordering, daspkg-index scope |
-| `skills/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
-| `skills/babysit.md` | Babysitting an open PR through CI failures and Copilot/human review feedback after the PR is created (the post-open loop) |
-| `skills/review_triage.md` | Triaging ANY review comment on a PR (Copilot, bot, or human) — the verdict tests, the fix-now vs ledgered disposition, what the user is asked versus told |
+| `skills/memory_leak_detection.md` | Any leak report at exit — master index of the six leak-detection mechanisms and which to reach for |
+| `skills/internal/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
+| `skills/internal/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") |
+| `skills/review_md.md` | Creating or editing any module `REVIEW.md`, or reviewing a diff to one — the opening contract, the template, the followability finding classes |
+| `skills/tdd_audit.md` | Auditing any diff for test coverage — the branch-test rule: every new/changed reachable branch has a test that fails without it |
+| `skills/internal/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
+| `skills/internal/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures that external module repos compile against |
+| `skills/internal/wsl_ci_repro.md` | Reproducing a Linux-only CI failure (sanitizers, POSIX divergence, headless timing) in the WSL CI-mirror distro — verbatim-CI recipe and its traps |
+| `skills/internal/babysit.md` | Babysitting an open PR through CI failures and Copilot/human review feedback after the PR is created (the post-open loop) |
+| `skills/internal/review_triage.md` | Triaging ANY review comment on a PR (Copilot, bot, or human) — the verdict tests, the fix-now vs ledgered disposition, what the user is asked versus told |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
-| `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
-| `skills/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
+| `skills/daslang/references/cli-and-config.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs` |
+| `skills/daslang/references/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII parsing, builder, XPath, struct round-trip) |
-| `skills/sql.md` | SQL via `daslib/sql_linq` + providers (`dasSQLITE` / `dasDuckDB` / `dasPostgreSQL`) — `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]`, the `_sql(...)` LINQ-to-SQL flagship + `_each_sql` / `_sql_update` / `_sql_delete` / `_sql_upsert` / `_create_view` / `_distinct_by`, per-provider capability gates, custom-type adapter rail, `@sql_json` / `@sql_blob` columns, transactions, migrations (`[sql_migration]` + `with_latest_sqlite`, SQLite-only) |
-| `skills/dashv.md` | Any `.das` that serves HTTP, streams SSE, makes outbound HTTP requests, or tests a server — `HvWebServer` (routes `GET`/`POST`/`STREAM`/…), buffered vs streaming responses, handle-first SSE writer ops, the client API (`GET`/`POST`/`request`/`with_http_request`/`get_body_bytes`), the `with_test_server` harness, and the per-context-module-global / `options stack` gotchas. Worked example: `utils/dasllama-server/` |
-| `skills/filesystem.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
-| `skills/detect_dupe.md` | Duplicate-function detection (corpus build, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |
-| `skills/find_dupe.md` | AI-judging a detect-dupe report via Claude (MCP tools `judge_duplicates`/`find_dupe`, CLI under `utils/find-dupe/`); cost guardrails (`--dry-run`, `--max-clusters`, `--positives-only`) |
-| `skills/linq.md` | Filter/map/sort/group/aggregate transforms — preference order: comprehension → linq_boost → plain `for`. Avoid `daslib/functional` for new code |
+| `skills/sql.md` | Any SQL in `.das` — `daslib/sql_linq` + the dasSQLITE/dasDuckDB/dasPostgreSQL providers, `[sql_table]`, the `_sql(...)` LINQ bridge, migrations |
+| `skills/dashv.md` | Any `.das` that serves HTTP, streams SSE, makes outbound requests, or tests a server — `HvWebServer`, the client API, `with_test_server` |
+| `skills/daslang/references/files-and-paths.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
+| `skills/internal/detect_dupe.md` | Duplicate-function detection (corpus build, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |
+| `skills/internal/find_dupe.md` | AI-judging a detect-dupe report via Claude (MCP tools `judge_duplicates`/`find_dupe`, CLI under `utils/find-dupe/`); cost guardrails (`--dry-run`, `--max-clusters`, `--positives-only`) |
+| `skills/daslang/references/queries.md` | Filter/map/sort/group/aggregate transforms — preference order: comprehension → linq_boost → plain `for`. Avoid `daslib/functional` for new code |
 | `skills/decs.md` | Programming with `daslib/decs` / `decs_boost` — entities, components, queries, `[decs_template]`, stages, bulk creation, `from_decs` linq bridge |
-| `skills/aot_hash_desync_debugging.md` | `error[50101]: AOT link failed` — semantic-hash desync diagnostics |
+| `skills/internal/aot_hash_desync_debugging.md` | `error[50101]: AOT link failed` — semantic-hash desync diagnostics |
 
-Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
+Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/internal/documentation_rst.md`.
 
 **Formatter reminder:** Use the MCP `format_file` tool to format `.das` files. It calls `daslib/das_source_formatter` directly. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter — the `gen1_to_gen2` binary — not a code formatter).
 
@@ -131,7 +139,7 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
-**Lint opportunities are reportable findings — don't hold back.** When a bug, review note, or probe reveals a pattern a lint rule could catch (especially one that has bitten more than once), SAY SO in the end-of-turn summary and propose the rule. The lint suite keeps paying for itself precisely because rules keep getting added; candidates go to Boris (rules land in `daslib/*_lint.das`, documented via `skills/perf_lint.md` / `skills/style_lint.md`).
+**Lint opportunities are reportable findings — don't hold back.** When a bug, review note, or probe reveals a pattern a lint rule could catch (especially one that has bitten more than once), SAY SO in the end-of-turn summary and propose the rule. The lint suite keeps paying for itself precisely because rules keep getting added; candidates go to Boris (rules land in `daslib/*_lint.das`; the authoring rail is `skills/internal/perf_lint_authoring.md` / `skills/internal/style_lint_authoring.md`, and the finding's error text must stand on its own — no per-rule doc catalog exists).
 
 **Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
 
@@ -149,7 +157,7 @@ of the checklist, marked like any other finding), the Form hard limits — lives
 `REVIEW_COMMON.md` at the repo root; every checklist opens with a pointer to it from its
 first commit, never a restatement (`skills/review_md.md` carries the opening template). When
 a checklist audit runs for a PR, its scope is every REVIEW.md discovered from the changed set
-(the `skills/make_pr.md` step-0a walk, tool: `utils/review-md/main.das`): each discovered
+(the `skills/internal/make_pr.md` step-0a walk, tool: `utils/review-md/main.das`): each discovered
 checklist is itself audited under the self-review rule, not
 just applied. The implementer is the shared **`review-md-auditor` agent**
 (`.claude/agents/review-md-auditor.md`): one instance owns exactly one checklist, so with
@@ -168,272 +176,106 @@ one.)
 
 ### Writing a new skill
 
-Read `skills/writing_skills.md` first — it carries the full checklist. The three things that matter most:
+Read `skills/internal/writing_skills.md` first — it carries the full checklist. The three things that matter most:
 
-1. **Decide the audience before writing.** Skills named in `install/skills.list` are copied verbatim into the SDK bundle, where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**. A skill that mixes SDK-usable content with repo plumbing serves neither audience and is painful to split later. Ship it and push repo bits into a `(repo-only)` section, or keep the whole file repo-only and leave it off the list.
-2. **Never fix an audience mismatch by shipping `src/` or `tests/`.** Mark the line `repo-only` instead (works on a line, or on a heading to cover a whole section). `python3 ci/check_shipped_skills.py <bundle> install/skills.list` enforces this per-PR via `ci/smoke_test_bundle.sh`; it also catches `bin/Release/…` paths, `daslang.exe` invocations, machine-local paths, dead relative links, and references to skills that aren't shipped.
-3. **Register it in all the places.** `skills/<name>.md`, plus a row in the top-level `CLAUDE.md` table; if shipped, also `install/skills.list` **and** a row in `install/CLAUDE.md`. A skill with no trigger row is a skill nobody opens.
+1. **The folder IS the audience decision.** `skills/*.md` ships with the SDK — where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**; `skills/internal/` never ships; `skills/daslang/` is the standalone language skill. Decide before writing (`skills/internal/skill_taxonomy.md`); a file that mixes SDK-usable content with repo plumbing serves neither audience.
+2. **Never fix an audience mismatch by shipping `src/` or `tests/`.** Mark the line `repo-only` instead (works on a line, or on a heading to cover a whole section). `python3 ci/check_shipped_skills.py <bundle>` enforces this per-PR via `ci/smoke_test_bundle.sh`; it also catches `bin/Release/…` paths, `daslang.exe` invocations, machine-local paths, dead relative links, references to skills the bundle doesn't carry, and `skills/daslang/` purity (no marker escape there).
+3. **Register it.** Every skill gets a row in the top-level `CLAUDE.md` table; a shipped skill additionally gets one in `install/CLAUDE.md` (the gate fails the bundle without it). A skill with no trigger row is a skill nobody opens.
 
-## daslang Language — Gen2 Syntax (REQUIRED)
+## daslang Language
 
-**gen2 is the DEFAULT parser** — every `.das` file parses as gen2 unless it explicitly opts out with `options gen2 = false` (the only gen1 discriminator; the `options gen2` markers around the tree are historical no-ops — NEVER infer gen1 from their absence). All code MUST use gen2 syntax; house style still adds `options gen2` at the top of new files. Key rules:
+Language, runtime and stdlib truth lives in **`skills/daslang/`** — `SKILL.md` plus thirteen
+references (`types`, `functions`, `structs-and-classes`, `closures`, `memory`, `generics`,
+`macros`, `modules-and-stdlib`, `strings`, `files-and-paths`, `json`, `queries`,
+`cli-and-config`). Read the one that covers what you are about to write or review, before you
+write it. Compiler internals no user-facing doc carries — the container collect banner, the
+`/*option*/` policy marker, known mangling defects — are in
+`skills/internal/daslang_internals.md`.
 
-- **Parentheses** on control flow: `if (x > 0)`, `for (i in range(10))`, `while (running)`
-- **Braces** on all blocks: `def foo() { ... }`, `if (x) { ... }`
-- **Construction:** `new Type(field=val)` — NOT `new [[Type() field=val]]`
-- **Enum access:** `EnumName.EnumValue` with dot — NOT `EnumName EnumValue`
-- **Array literals:** `[1, 2, 3]` — NOT `[[int 1; 2; 3]]`. Creates `array<int>`; use `fixed_array(1, 2, 3)` for fixed-size
-- **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`. Move-init: `Foo(a=1, b <- expr)` for non-copyable fields
-- **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
-- **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
-- **`with (module foo/bar) { ... }`:** compile-time resolution scope — names inside resolve as if written in module foo/bar (incl. its PRIVATES + its require graph; the enclosing module's own symbols are NOT visible inside); `_::name` escapes back to the enclosing module; locals stay lexical and win; nested forms don't combine — innermost wins outright; erased after infer, zero runtime. Policy `with_module_is_unsafe` (or `.das_project` `with_module_unsafe(mod, file)`) makes user-written ones require `unsafe`
-- **Named arguments:** bare `foo(pos, name = value)` — named args after positionals, no brackets
-  needed (0.6.4+, #3410–#3415; probe-verified 2026-07-24); works on method calls too
-  (`obj.m(name = v)` / `obj->m(name = v)`). The bracketed form `foo([name = value])` still parses;
-  there, multiple named arguments share one bracket group: `foo(positional, [first = a, second = b])`;
-  separate groups such as `foo([first = a], [second = b])` are a syntax error
-- **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`. **Arrow shorthand for single-expression blocks:** `arr |> sort() $(a, b) => a < b`. Defaulted parameters sitting between the explicit args and a trailing block are padded automatically — don't spell them out
-- **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture). **Inline arrow form:** `@(x) => expr` (capture lambda) and `@@(x) => expr` (no-capture function pointer) — preferred for short transforms passed as arguments: `sometimes(pat, @@(x) => fast(x, 2.0lf))`
-- **Function/method arrow body:** `def add(a, b : int) : int => a + b` — single-expression body, return type optional (`def add(a, b : int) => a + b` infers). Works on class methods too: `def get() : int => count + 2`. The body must START on the `=>` line — `def f() : int64 =>` followed by a newline is `error[30151]` (probe-verified 2026-07-12); wrap a long body by opening `(` on the `=>` line and breaking inside the parens
-- **Generator:** `$() { yield value; }` or `$ { yield value; }`
-- **Tuple `=>`:** `a => b` creates `tuple<auto;auto>`
-- **`typeinfo`:** `typeinfo trait_name(type<T>)` — trait name outside parens
-- **`static_if`:** `static_if (condition) { ... }` — parentheses required
-- **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`
-- **Casts require call-style parens:** `cast<T>(x)` / `upcast<T>(x)` / `reinterpret<T>(x)` — the parenthesized operand is mandatory and self-delimiting, so `reinterpret<uint8?>(p) + 1` means `(reinterpret<uint8?>(p)) + 1`, like the call it looks like. The old juxtaposition form `cast<T> x` is a syntax error (it swallowed trailing `<< >> + - * / % ??` into the operand, silently running the arithmetic on `x`'s original type — stride 0 for `void?`, i.e. dropping the add). Related: pointer arithmetic on `void?` is a compile error (30950); do byte math via `intptr` and reinterpret once
-- **Original-operator access:** `!` before an overloadable access/test operator yields the ORIGINAL operator, never the overload (probe-verified 2026-08-10): `a!.x` raw field, `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`, `a !as x`, `a !?as x`. The variant/coalescing forms also bypass variant macros — use these in generic/generated code that must get builtin semantics regardless of what overloads are in scope. Legacy dot-prefixed spellings (`a. .x` — space required since `a..x` is the interval operator — `a.?.x`, `a.[i]`, `a.?[i]`) remain valid and equivalent; the variant/coalescing operators have no dot-prefixed form
-- **Newlines inside `(...)`, `[...]`, `{...}` are free** — long pipe chains, multi-arg calls, array/table literals can wrap freely. Statement-level (no surrounding bracket) still requires one statement per line, so wrap the RHS in `(...)` if a `let x = a |> b |> c` needs to break across lines. **DANGER — silent, no error:** without the parens, a continuation line starting with a *unary-capable* operator (`+`, `-`) parses as a separate statement — `+ b` is unary plus, pure, so the optimizer **silently deletes it**. `let x = a` ⏎ `+ b` ⏎ `+ c` becomes just `let x = a` (the `+ b`/`+ c` lines vanish) — wrong result, no diagnostic (verified: `x` is `a`, not `a+b+c`). A non-unary operator like `|> f()` can't begin a statement, so it errors loudly instead — it's `+`/`-` that bite silently. Always wrap a multi-line arithmetic RHS in `(...)`. Related: a `def`'s parameter list wraps freely inside its parens, but the return-type annotation must stay on the closing-paren line — a continuation line starting `: type {` is `error[30151]` (probe-verified 2026-08-10)
-- **Inline literals over temp-var-and-push** — for short arrays consumed in one expression, write `stack([a, b, c])` rather than `var xs : array<T>; xs |> emplace(a); xs |> emplace(b); stack(xs)`. Faster in interpreted mode and easier to read; same applies to table literals and other bracketed constructors. Threshold: while it stays readable
+What follows is only what the bundle deliberately does not carry: the shapes that fail
+silently, and this repo's house policy.
 
-### The const model — `let`/`var`, dereference, and why const-stripping miscompiles
+### Fails silently
 
-`const` in das is **purely a type qualifier** — mutability lives entirely in the type, fixed at declaration. There is no separate "const variable" concept, and there is one declaration node (`let`); the `let`/`var` keyword only flags whether `const` is appended to the type.
+Each of these compiles clean and then gives a wrong answer or corrupts memory, with no
+diagnostic in any tier.
 
-- **`let` (and a parameter with no `var`) appends `const` to the declared type — whatever you spelled or left to inference.** So `let a = x` ≡ `let a : auto const = x`; `var a = x` ≡ `var a = x` (nothing appended). `def f(a : T)` ≡ `def f(a : T const)`; `def f(var a : T)` ≡ `def f(a : T)`. `var` means *only* "do not append the trailing `const`." Uniform for every type — `int`, structs, pointers alike. So `let`/`var` on a local and the presence/absence of `var` on a parameter are the **same one mechanism**.
-- **Dereference / index / field access appends the handle's const to the result.** Unlike C++ (where `*p` / `p[i]` yields the pointee type as-is, so a `T* const` still derefs to a mutable `T&`), das flows the const of *the thing you dereference* onto the result. `a : float? const` ⟹ `a[2]` is `float const` (not `float`), `*a` is `float const`, `a.field` is `<field> const`. A `let`/non-`var` handle therefore gives **const access to everything reachable through it**; only a `var` handle yields mutable access. (This is the same rule as "take the param `var` for mutable field access.")
-- **A pointer type has two independent `const` positions:** `float const?` = the **pointee** is const; `float? const` = the **pointer** is const (this is the trailing one that `let`/no-`var` adds). To write *through* a pointer parameter you need **both** non-const → `var x : float?`. Anything less makes `x[i]` a `float const&` and the write fails `error[30952] can't write to a constant value`.
-- **The optimizer trusts the type, so stripping const to write is a lie that miscompiles — not a style nit.** A `const` pointee is a promise to the compiler that *that memory is never written*; the JIT/AOT may then mark the parameter `readonly`, treat a `noalias` write as dead, or DCE the whole call. `var p = reinterpret<float?>(somethingConst); p[i] = …` retypes the `const` away, but the **original** const type already licensed those optimizations — the write silently vanishes, in interp / JIT / AOT alike, with no diagnostic. This is the exact root of the `noalias` write-elision and the forwarded-`const?` elision (issue #3311). **Never take a writable pointer as `T const?` and `reinterpret`-strip it — declare the parameter `var T?`.**
-- **Idiom for a writable pointer kernel (including fork-callable pointer cores):** the output parameter is `var T?` (write `o[i]` directly, no strip); genuinely read-only inputs are `T const?`. Callers pass `addr(arr[0])` straight in — it binds to `var T?` (output) and to `T const?` (input, add-const is implicit), with **no laundering `reinterpret`**. At a local, `let p = addr(x)` is a const handle (`p[i]` is const — can't write); `var p = addr(x)` is writable. A hoisted `var p` captured into a `parallel_for`/`maybe_parallel_for` worker stays writable — capture freezes the *binding*, not the pointee, and `p + off` is still a mutable `T?`.
-
-### Type modifiers
-
-- **`==const`** on a parameter type — exact-constness match, NOT propagation (probe-verified 2026-08-08): the argument's constness must equal the parameter's spelled constness, so a non-`var` parameter (const appended) with `==const` accepts CONST arguments only, and `def foo(var self : Foo ==const)` accepts MUTABLE only — a single `==const` overload never accepts both. Its real use is making a `var`/non-`var` overload PAIR route exactly by caller constness with no add-const overlap (canonical: the `temp_array`/`array_helper` pairs in `daslib/array_boost.das`, `convert_to_expression` in `daslib/ast_boost.das`)
-- **`-const`** removes a `const` from a type expression (with `reinterpret`): `unsafe(reinterpret<MyStruct? -const>(addr(self)))`. **Caveat (see The const model above):** this is the genuine-interior-mutability escape hatch for a const handle you *cannot* re-declare `var` (e.g. a `==const`-propagated `self`), and it carries the same readonly/`noalias`-elision risk the optimizer is licensed to take. For a parameter you control that you simply need to write through, the fix is **`var T?`, not a `-const`/reinterpret strip** — don't reach for `-const` to paper over a missing `var`
-- **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
-- **OR types in params** (`T1 | T2 | …`) — a parameter may list alternative accepted types: `int | float | double`, or heterogeneous forms like `array<int> | table<auto> | auto(NT)`. This is a **generic "OR" type, NOT a runtime tagged variant** — the function is monomorphized per the concrete argument type that matches one alternative, so each instantiation sees that concrete type with no per-call dispatch or unpacking cost. Don't "hoist the union cast out of the loop" — there is no union value; a cast like `float(n)` inside the body is just a trivial concrete cast in each instantiation. Use it to widen an overload set in one signature (e.g. `def fast(n : int | float | double)` accepting bare ints, floats, and doubles at the same call site)
-
-### Fixed arrays (structural since 0.6.3)
-
-`int[10]` is a **structural type** (`Type::tFixedArray`), not a qualifier vector on the element: one node per dimension, element in `firstType`, size in `fixedDim`, outermost first (`int[3][4]` = FA(3, FA(4, int))); ref/const/temporary live on the chain head. Operations act on the **outermost level only** (the one-peel rule).
-
-- **Generic binding:** `auto(TT)` binds the WHOLE array (`TT = int[3][4]`); `auto(TT)[]` peels one level (`TT = int[4]`, parameter constness inherited); `TT - []` in a return/alias removes ONE level — pre-0.6.3 docs saying "removes all dims" describe the deleted flattened world
-- **`safe_addr(arr)` on a fixed array returns a pointer to the FIRST ELEMENT** (C-style decay; multi-dim peels one level: `int[2][3]` → `int[3]?#`) — this is what makes `glGetBooleanv(what, safe_addr(flags4))`-style C interop work
-- **Typedefs compose:** `typedef M4 = float[4]` then `M4[10]` is `float[10][4]` — array-ness survives aliasing and generic substitution (the pre-0.6.3 flattening bugs are gone)
-- **Runtime `TypeInfo` is still flattened** (`dim[]`/`dimSize`) — only the AST is structural. C++ `TypeDecl::isArray()` means "is a fixed array" in both pre- and post-rework daslang (useful for external modules spanning versions)
-- Macro authors: das-side `TypeDecl` fields are `fixedDim`/`fixedDimExpr` (NOT `dim`/`dimExpr` — deleted); typemacro payloads live in `typeMacroExpr`; build chains with `make_fixed_array_type(total, element)` from `daslib/ast_boost` — details in `skills/das_macros.md`
-
-### Important defaults
-
-- No implicit type promotion between VALUES: `float + int` is a compile error — both sides must match. **Bare integer LITERALS are the one exception** (probe-verified 2026-08-08): an unsuffixed int literal adapts to the known numeric target — initializers (`var f : float = 1`), `=`/compound assign, either side of a binary operator (`f + 1`, `d > 1`), and `return` — but NOT call arguments (`take_f(1)` is error[30341] when it wants float), NOT parameter defaults (`def f(a : float = 1)` is error[30161]), NOT `<-`. Float literals never adapt to double (`d + 1.0` is error[30406]; write `1.0lf`). Int targets range-check (`var d : uint8 = 256` errors); float targets accept silently (precision loss above 2^24)
-- No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
-- **`length` and `empty` on a string need no `require`** — both live in the base module, so `length(s)` compiles in a bare file (the rest of the string surface still needs `require strings`). 64-bit forms: `long_length(s)`. The `int`-returning `length` panics past 2^31 rather than wrapping — same always-on guard array/table length already carry
-- `int("123")` does NOT work — use `to_int` from `require strings`. **`to_int` silently returns `0` on garbage** (`to_int("foo")` → `0`, `to_int("12abc")` → `12`). When you need to validate user/external input — including any string that flows into a shell command, file path, or system call — use `try_to_int` / `try_to_float` from `daslib/strings_convert` instead. Those return `Result<T; ConversionError>` distinguishing `invalid_argument` / `out_of_range` / `trailing_garbage`, so `";rm -rf;"` rejects cleanly instead of becoming `0`. Same for `to_float` → `try_to_float`
-- Hex literals are `uint` by default — use `int(0x3F)` for int
-- **16/8-bit type lattice**: `float16` scalar (`half` = builtin alias; literal suffix `1.5h`) + packed vectors `half2/3/4/8`, `short2/3/4/8`, `ushort2/3/4/8`, `byte2/3/4/8/16` (**byte = SIGNED int8**), `ubyte2/3/4/8/16`. Tightly packed (half3 = 6B), element-aligned, pass by value. fp16 family has **closed arithmetic** (per-op promote-to-float-round-back — bit-identical to native fp16); int families are **storage + converts only** (`byte4 + byte4` is a compile error; widen via `int4(b4)`, narrow via ctor = C-truncate or `short4_sat(i4)`-style saturating forms; ordering compares are refused too — `int16 >= int16` is error[30230], though `==`/`!=` work). Exception, SHADER RAIL ONLY: `daslib/shader_lingua_franca` declares `+`, `-` (binary and unary), the four ordering compares, and the 16-bit-lane `shortN` ctors over `int16`/`short2..4`, because GLSL's int16 family HAS closed arithmetic and a port must lower to the same native `OpIAdd`/`OpISub`/`OpSNegate` on `OpTypeInt 16` rather than widening around the gap. It also declares `half4(half2, half2)` — daslang narrows a whole vector (`half4(float4)`) but cannot COMPOSE a half4 out of two half2, which is exactly what a shader unpacking two `unpackHalf2x16` holds — plus the `unpackHalf2x16` stub itself. Core daslang is unchanged — those operators only exist where that module is required. `.s`-hex swizzles on every vector (`v.s3210`, `b16.sf`), `.lo`/`.hi` on 8/16-lane forms; `xyzw` stays ≤4 lanes. Conformance harness: `tests/type_lattice/` (GENERATED — regen via `daslang utils/dasgen/gen_type_conformance.das`). Lattice vectors have NO ExprConst nodes by design (`isFoldable` false; `Program::makeConst` returns null — callers must handle)
-- **A global const initialized from another global const needs its type spelled**: `let B = A` at module scope is `error[30175] … can't be inferred, auto const = auto const&` (the initializer is a reference), so write `let B : int = A`. Any arithmetic on it (`let B = A + 1`) infers fine. Such consts are folded before structure macros apply — a macro reading one back by name (`gv.init ?as ExprConstInt`) sees the folded literal, across modules too (probe-verified 2026-07-22)
-- **`default<T>`** — the default value of `T`: zeros PLUS field initializers/ctor applied (probe-verified 2026-07-31: `struct Foo { x : int = 7 }` → `default<Foo>.x == 7`; NOT the raw zero value). Body of the called function CAN use it.
-- **`type<T>`** vs **`default<T>`** as a witness argument: `type<T>` is a no-stack tag (compile error if body reads it; annotate `[unused_argument(t)]`); `default<T>` is a real default value per the bullet above (body can read/pass it). Pick by whether the body needs to touch the param. If you want to read a `type<T>` param, switch the caller to `default<T>` — don't rewrite the function.
-- **`typedecl(expr)`** — compile-time type-of, usable inside `default<>`: `default<typedecl(field)>`.
-- **Bitfields**: `bitfield Name : uint8 { ... }` (also `uint16`/`uint64`; default `uint`, always unsigned). From an int: `bitfield64(1ul << 13ul)` (also `bitfield8`/`bitfield16`).
-- **Distinct types (nominal newtype, PR #3424)**: `typedef distinct Foo = int` (privacy: `typedef private distinct Foo = int`) — a unique nominal type over any workhorse underlying, ABI-identical and fully erased at runtime (print/RTTI/debugger show the underlying value). No interconversion in either direction; two distincts over the same underlying are unrelated; overloads on `Foo` vs `int` coexist. The only way IN is `Foo(expr)` (exactly one arg of exactly the underlying type, zero-cost relabel); the only way OUT is `*a` (peels one distinct level, yields underlying as ref — const flows from the handle; for distinct-over-pointer it peels the distinct, not the pointer). Only `==`/`!=` are borrowed (same distinct both sides); all other operators are user-defined (`def operator + (a, b : Foo)`). NOT a table key by design. `default<Foo>` / `var a : Foo` zero-init. `distinct` is NOT a keyword (validated in the grammar action — identifiers like linq's `distinct()` are unaffected). C++ side: `DistinctTypeAnnotation` + `MAKE_DISTINCT_TYPE_FACTORY(TYPE,CTYPE)` + `makeType`-registered externs (worked example: `NativeId` in dasUnitTest). Reference: `doc/source/reference/language/distinct.rst`.
-
-### Pass-by-value vs pass-by-reference
-
-- Structs/arrays/tables always pass by reference — no `&` needed.
-- Only **workhorse types** (`int`, `float`, `bool`, `string`, …, `isWorkhorseType` on the C++ side) pass by value.
-- **AST pointers (gc_node) pass by value** — copying the pointer, no refcount, no allocation. `def foo(p : ExpressionPtr)` shares the node; `var p` lets you reassign locally; `var p : ExpressionPtr&` propagates reassignment back. For mutable field access, take the param as `var`.
-- **Lambdas are copyable.** A `lambda<…>` is a fat pointer to a heap-allocated capture frame; `=` and pass-by-value copy the pointer (creates an alias), and `push`/array storage works without `push_clone`. **`delete lam` requires `unsafe`** since other aliases may still be live — same rule as raw pointer / class `delete`. The unsafe-delete rule cascades: `array<lambda<…>>`, structs with a lambda field, tuple/variant containing a lambda — all inherit the unsafe-delete requirement.
-- **`delete` on `array<T?>` (any container of raw pointers) FREES THE POINTEES** — it finalizes and heap-frees every element, then the buffer. On borrowed pointers this is heap corruption: interp reports `deleting <ptr>, which is not a chunk pointer`; Release+JIT corrupts SILENTLY and crashes at some later unrelated alloc/free (probe-verified 2026-07-09). For non-owning pointer containers: struct fields take `@do_not_delete` (canonical: `daslib/aot_cpp.das` `@do_not_delete stack : array<ExprBlock?>` — pointees survive, buffer still freed); locals do `arr |> clear()` before `delete arr` (clear never touches pointees — see the finalize banner below).
-- **The collect banner (E4.5): `erase`/`erase_if`/`clear`/shrinking `resize`/`pop` (arrays) and `erase`/`clear` (tables) COLLECT the elements they drop via `builtin_collect_local`** (the GcPod walk — frees owned array/table heap, cannot execute user code by construction; the no-memset sibling of `builtin_collect_local_and_zero`). Gated on `typeinfo needs_container_finalize`, i.e. `force_inscope_pod && !is_const && is_pod_delete && is_safe_to_delete` — the collect half rides the **inscope-pod** policy (default OFF), same as move-assign/scope-exit collection; container CONSTRUCT (`default_init_containers`, default ON) is a separate knob. `is_pod_delete` (`InferTypes::isPodDelete`) is true only when collection is fully GENERATED and frees owned heap: false for POD structs (nothing to free — zero cost), raw/owning pointers, lambdas, blocks, iterators, temporaries, and any type with a USER finalizer — so the banner never runs user code, clear-then-delete on `array<T?>` stays the borrowed-pointer idiom, and slot-erase of pointer-carrying tuples (the linq-planner shape) never deletes pointees. **delete = ownership teardown (runs user finalizers), erase/clear = release (generated heap-free only)** — the asymmetry is the design.
-- **Strings:** `var s : string` is a writable local copy (no propagation). `var s : string&` propagates. **`:=` on a string clones ONLY when the source is a temp (`#`) string or `options multiple_contexts` is on** (infer promotes it to `clone_string` — source+probe-verified 2026-08-08); otherwise it is the same pointer copy as `=`, and LINT016 flags it. The cross-context copy is explicit `clone_string(s)`.
-- **Residual `smart_ptr` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) still use refcount semantics — variables holding them need `var inscope`. AST types do NOT — see below.
-
-### AST nodes (gc_node) and memory
-
-AST types (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, every `Annotation` subclass) are plain raw pointers tracked by gc_node. The only types still using `smart_ptr` are `Program`, `Context`, `FileAccess`, plus a couple of internal helpers (`DebugAgentPtr`, `VisitorAdapterPtr`).
-
-Quick rules:
-- AST nodes have **unique ownership** — don't insert the same pointer into two parents; use `clone_type` / `clone_expression` / `clone_function` / `clone_variable` / `clone_structure` to duplicate.
-- AST pointers use plain `=` and pass-by-value. **No `var inscope`, no `<-`** for them. `var inscope` is for OWNED locals that should finalize at scope exit (smart_ptr types, plain arrays/structs) — never for gc_node AST pointers.
-- Tools that build AST at runtime (outside the compile pipeline) must wrap their scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
-- **Every node you build carries `at` — the location of the source construct it stands for** — and has exactly ONE parent (`clone_expression` / `clone_type` for a second use). Both are enforced by `daslib/ast_verify`, on by default: `daslang --ast-verify file.das` must be clean, and it is clean tree-wide today, so a report is a bug in whatever built the node. Pass `at` at construction (`new ExprConstInt(at = expr.at, value = 0)`); for a subtree you did not build node-by-node (a `$v()` conversion, a clone from a C++ binding) call `stamp_missing_at(expr, at)` — setting the root's `at` alone leaves the children blank. Run it after ANY macro or AST-building change; details in `skills/das_macros.md`.
-- daslang has garbage collection, but plain `var arr : array<T>` does NOT finalize on scope exit. Either declare with `var inscope` (finalize-at-scope-exit — serves plain arrays/structs as well as the smart_ptr types; Boris-confirmed + compile-verified 2026-07-26), call `delete` explicitly, or move out via `<-`. Per-frame leaks in hot paths usually trace to a local `var arr` never deleted.
-
-Full migration table (when reading older docs that say `var inscope` or `<-` for AST types): **`skills/gc_migration.md`**.
-
-### Context heaps and threading
-
-- **`new Foo()` allocates on the current context's heap** — each context has its own heap
-- **Contexts cannot retain data from other contexts** — only copy. A pointer into context A's heap is invalid in context B
-- **Threads run in separate contexts** — `new_thread() <| @{ ... }` creates a new context. Data must be copied/cloned when crossing thread boundaries
-- `clone_string(s)` clones a string into the current context's heap — required when passing strings across contexts
-- `:=` on strings clones only under `options multiple_contexts` (or from a temp `#` source) — otherwise it copies the pointer exactly like `=` (unsafe across contexts); crossing a context boundary takes explicit `clone_string(s)`
-- **Channel data**: when sending data through channels, the receiving context gets a temporary reference (`#`) — clone/copy what you need before the callback returns
-- **Implication for threaded audio**: parsed data (arrays, structs) created on the main thread cannot be referenced by pointer from the audio thread. Either clone into the audio thread's context, or use C++-side shared memory that lives outside any daScript context
-
-### Unsafe
-
-- **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it. Lint backs this: STYLE024 flags `unsafe` wraps with no descendant needing unsafe; STYLE025 flags blocks where exactly one statement needs unsafe (narrow to expression form); STYLE026 flags nested `unsafe { ... }`
-  - **The expression form does NOT propagate into nested call arguments.** `unsafe(f(addr(x)))` still fails with `error[31000] address of reference requires unsafe` at the inner `addr` — the wrap only authorizes the unsafe op at the *top* of `expr`, not a sub-expression buried in an argument. Wrap the exact unsafe op instead: `f(unsafe(addr(x)))`. The block form `unsafe { f(addr(x)) }` *does* cover the nested op (whole scope), so it's the fallback when several nested ops need it. The one sanctioned exception is `addr<T?>(x)` below — its desugared reinterpret propagates the wrap down to its own generated addr.
-- **`addr<T?>(x)`** — sugar for `reinterpret<T?>(addr(x))` with ONE unsafe gate: `unsafe(addr<T?>(x))` covers both halves (the desugared reinterpret carries `castFlags.fromAddrSugar`; infer preVisit pushes `alwaysSafe` down onto the generated inner addr). Target must be a pointer type — `addr<int>(x)` is `error[30133]`, always a typo for `addr<int?>`. The exact-type form (`addr<int?>(i)` where `addr(i)` is already `int?`) folds to plain `addr` but still demands unsafe via the addr gate. Prefer over the double-wrapped `unsafe(reinterpret<T?>(unsafe(addr(x))))` — STYLE034 flags the long form (pointer targets only; the sugar's own output is exempt)
-- **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
-- **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
-- **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
-- **`reinterpret<T>(expr)`** requires `unsafe` — used for const-stripping on regular pointers: `unsafe(reinterpret<Foo?>(const_ptr))`. Since casts require call-style parens (#3420), the cast is self-delimiting: `reinterpret<float?>(b) + 1` adds on the CAST result's stride (probe-verified 2026-07-24; the old prefix-form operand-swallow trap is gone — that form is now a syntax error)
-- **`typeinfo is_unsafe_when_uninitialized(type<T>)`** — the trait that gates unsafe-ness per type in generic code. Pairs with field-level `@safe_when_uninitialized` and struct-level `[safe_when_uninitialized]` annotations. Canonical use in `daslib/builtin.das`: declare `var x : TT` inside `static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }` — the unsafe block needs `// nolint:STYLE025` on the `unsafe {` line because STYLE025 sees only one statement needing unsafe at any instantiation and can't reason across the static_if branches
-
-### Error handling
-
-- `try/recover` — NOT `try/catch` (`recover` is the keyword)
-- `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
-- **`assert`/`verify` message must be a string CONSTANT** — `assert(cond, "msg")` rejects an interpolated `"...{x}..."` with `error[30117]` "assert comment must be string constant". Use a constant message; when you need the runtime value in the diagnostic, guard instead: `if (!cond) panic("...{x}...")` (`panic` takes an interpolated string).
-- **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
-- **Braceless early-exit:** prefer `if (cond) return X` (or postfix `return X if (cond)`) over `if (cond) { return X }` — STYLE005 (a default-off lint rule; enable via `--enable STYLE005` / lint config) flags the braced single-terminator form as noise
-- **Panic is fatal, not an exception.** daslang has no C++/JS-style exception model. A `panic` (or failed `assert` / `verify`) means the program is broken — the only correct response is to print diagnostics and exit. `try/recover` exists to capture the message before exit so you can log it nicely, NOT to recover-and-continue. Do not write code that relies on continuing after `recover`; do not design APIs around panic-as-control-flow. Corollary: `{ body } finally { cleanup }` deliberately skips `cleanup` on panic (the cleanup can't run safely on a broken program); this is not a bug. Don't try to "fix" it; don't use `finally` for cleanup that needs to run on panic. If you need post-statements that run after a block in the normal path, just put them after the block — panic skips everything, and that's the design.
-
-### Generic function dispatch
-
-- **`_::foo(x)`**: resolves in the **calling** module — caller’s overloads visible. Use in library generics.
-- **Unqualified** `foo(x)`: resolves in the **defining** module — caller’s overloads NOT visible.
-- This is why `:=` and `delete` emit `_::clone` / `_::finalize`
-
-### Recursive flatten / variadic generics (untyped param)
-
-A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) — e.g. a flattening `push_from(dest, src)` — uses an **untyped** source param (`def f(var dest : array<auto(T)>; src)`, NOT `array<auto(TT)>`) plus `static_if (typeinfo is_array(src)) { for (x in src) f(dest, x) } else { <base> }`. **ADD it alongside** the concrete single-level overload (`array<numT>`); the concrete one out-specializes a bare untyped param, so flat sources take the fast/bulk path and the recursive form fires only for deeper nesting — zero change/risk to the existing overload. (Live example: variadic `push_from`/`push_clone_from` in `daslib/builtin.das`.)
-
-- **`array<numT>` and `array<auto(TT)>` are EQUALLY specialized** → two such same-name overloads are *ambiguous* (`error[30341] too many matching functions`). A bare untyped `src` is *less* specialized than `array<numT>`, so the concrete one wins — that's why the recursive param is untyped, not `array<auto(TT)>`. (Whether an alias should out-specialize a non-alias is an open compiler question.)
-- **Compile-time type equality:** there is **no** `typeinfo is_same_type(A, B)` (typeinfo traits take one arg). Use `typeinfo stripped_typename(x) == typeinfo stripped_typename(y)` (pattern from `daslib/algorithm.das`).
-- **`-#` / `==const` on ≥2 same-`numT` array params breaks matching** (rejects a plain `array<int>&`) — use plain `array<numT>` for fixed-arity multi-source params (`f(dest; a : array<numT>; b : array<numT>)`).
-
-### Dot as pseudo-pipe
-
-`a.foo(b)` is sugar for `foo(a, b)` — but **only when `a` is a struct/class value** (chains: `a.foo().bar(x)` ≡ `bar(foo(a), x)`).
-
-- **Works on:** struct / class values (incl. by-ref).
-- **Does NOT work on:** primitives (`let n = 5; n.double()` → "can't get field 'double' of int const&"), tuples/arrays, and **lambda typedefs** — most importantly strudel's `Pattern` type (`typedef Pattern = lambda<...>`); `s("bd").fast(2.0lf)` fails. Pattern chains must use `|>` (or direct call).
-- **When telling someone "use pipe here":** check the receiver type — for structs `.method()` is idiomatic, for lambdas only `|>` works. Don't say "daslang uses pipes instead of method chains" without qualification.
-
-### Table operations
-
-- `table[key]` **inserts** a default entry if missing — use `table?[key] ?? default` for safe lookup. Under `default_init_containers` (policy, default ON) a freshly inserted slot is set to `default<VT>` (infer rewrites the non-store index into `*_table_index_and_init(tab, key)`; direct stores `= / <- / :=` and `addr(tab[k])` keep the raw zeroed slot). Same policy makes `resize` give new array elements `default<T>` — `arr |> resize(n)` on init-carrying element types no longer needs `unsafe`. **It is `default<T>` semantics, not deep-initialize:** a struct gets its field initializers, but a `tuple`/`variant` whose members carry initializers stays zeroed, since `default<>` of a composite is zero
-- `key_exists(table, key)` — check without inserting
-- `table |> insert(key, value)` / `table |> erase(key)`
-- **`tab[k] <- v` moves — it ZEROES `v`.** A sink function taking `var x : T` and move-assigning it into a table (canonical: `register_arch` in dasLLAMA) consumes the caller's value; registering the same value under two keys (an alias) needs a fresh clone per registration, not the same variable passed twice
-- **Indexing a `const`/non-`var` table param with `t[k]` is a compile error outright** (the default-insert needs mutability) — `t?[k] ?? d` is the read form that works there (under a `key_exists` guard when the default is ambiguous)
-- **Never use two `[]` lookups on the same table in one expression** — re-hashing can invalidate references
-- `table[key]` (read or assign) is **safe** — do NOT wrap in `unsafe(...)`. Some legacy daslib code has `unsafe(tab[k])`; do not propagate that pattern
-- **Move-assign table literal:** `tab <- { "k" => v }` works for both `var tab <- { ... }` declarations and `tab <- { ... }` reassignment to existing variables
-- **Table comprehension move-assign:** `tab <- { for(x in range(5)); x => x*x }` — same move-assign rules apply
-- **`table<T>` (one type param) is the set type** — value type elided. `var s : table<int>; s |> insert(5); key_exists(s, 5)`. Distinct from `table<K; V>` (the map form); both shapes coexist. Set-literal init: `let STOP_WORDS : table<string> <- { "a", "an", "the" }` — value-less braces, comma-separated. Use this instead of declaring `var X : table<T>` and populating in an `[init]` function.
-
-### Iterators and `each`
-
-- `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type iterable in `for` loops
-- When the iterator is named `each`, the call can be omitted: `for (v in each(x))` is identical to `for (v in x)`
-- Other iterator names (e.g. `filter`, `map`) cannot be omitted
-- **Iterator element-const variance is pointer-like:** `iterator<T -&>` flows into `iterator<T const -&>` (mut → const), not the reverse. So a generic param declared as `iterator<auto(TT) const>` takes both `each(array<T>)` (yields `iterator<T -&>`) and iterator-comprehension (yields `iterator<T const -&>`) sources via a single instantiation. The `const` qualifier alone is enough — do NOT add `&` (that's a separate ref-form modifier, not what you want for variance)
-- **Generic-mangling pitfall:** instantiations of the same generic that differ only in inner element-const (`iterator<int -&>` vs `iterator<int const -&>`) currently hash-collide in the instance registry, producing `error[50609]: multiple instances of …` when both arise in one module. Workaround at the library level: declare the iterator overload as `iterator<auto(TT) const>` instead of `iterator<auto(TT)>` — both source flavors then converge on a single instance per the variance rule above. Caveat: the constify makes `it` inside the body const, so the body must not move from / mutate / call non-const operators on `it`. linq.das only constifies `all` and `contains` for this reason; the rest stay vulnerable until the mangler is fixed upstream
-
-### String access functions
-
-- **`peek_data(str) $(arr) { ... }`** — safe O(1) per-element read access to string as `array<uint8> const#`. One `strlen` call total. Preferred over `character_at` for iteration.
-- **The view takes the string ops, not just byte loops** — `slice`/`chop`/`find`/`rfind`/`starts_with`/`ends_with`/`strip`/`trim`/the parse family/`write_string` each have an `array<uint8>` twin with the same name and argument order (needles stay `string`), so the PERF031 fix is swapping the receiver. The view carries its length: nothing re-strlens, interior NUL is data, and view parse takes `offset` IN and OUT (start position in; position-after on success; untouched on failure). Materializing a window containing a NUL yields a string that downstream `strlen` ops read as truncated; a view past `INT_MAX` panics. Details: `skills/strings.md`
-- **`modify_data(str) $(var arr) { ... }`** — returns a modified copy; allocates new string, opens as mutable `array<uint8>`. Use for character-level transformations.
-- **`character_at(s, i)`** — O(n) per call (`strlen` + bounds check). Fine for isolated checks, but use `peek_data` in loops or hot paths.
-- Pointer-based string access (`reinterpret<uint8?>`) is for core library implementations only — user code should use `peek_data`/`modify_data` for safety.
-
-### Common gotchas
-
-- Lambda params can shadow function params — use distinct names
-- **`where` and `shared` are reserved words too** — `where` is the comprehension filter keyword and
-  `shared` the module modifier; both are a syntax error as a variable name (`let where = ...`,
-  `let shared = ...`). Rename (`sink_pos`, `shared_node`); hit while writing PERF026-028
-- **`label`, `expect`, `pass`, `explicit`, `capture`, `deref` and `template` are reserved words** (lexer keywords `DAS_LABEL`/`DAS_EXPECT`/`DAS_PASS`/`DAS_EXPLICIT`/`DAS_CAPTURE`/`DAS_DEREF`/`DAS_TEMPLATE` — `pass` is the no-op statement, `explicit` the generic-parameter modifier you see in `array<T> explicit` signatures, `deref` the pointer-deref operator keyword) — using any as a function/parameter/variable name is a syntax error (`capture` reports `unexpected capture, expecting $i or name`; `def deref(...)` is `unexpected deref`, probe-verified 2026-08-08); rename (`tag`, `want`, `cpass`, `declared`, `grab`, `unref`, `pattern`)
-- **`range`/`urange`/`range64`/`urange64` are lexer TYPE tokens** (`DAS_TRANGE` etc., like `int`) — unusable as struct-field, parameter, or annotation-argument names (`@range = ...` is a syntax error); the grammar whitelists them back to a plain name only in call position, which is why `range(10)` works. Rename (`rng`, `span`); grammar-verified 2026-07-23. **The 16/8-bit lattice vector names are type tokens too** — `var half2 <- ...` is `error[30151]` "unexpected half2" (likewise `half3/4/8`, `short2..8`, `ushort2..8`, `byte2..16`, `ubyte2..16`); the error points at the declaration and reads like a parse bug elsewhere. Probe-verified 2026-08-01
-- **`block`/`function`/`lambda`/`iterator` are lexer TYPE tokens too** (`DAS_TBLOCK`/`DAS_TFUNCTION`/`DAS_TLAMBDA`/`DAS_TITERATOR`, `ds2_lexer.lpp:308`) — same rule, and `block` in particular reads as an ordinary noun, so `var block = Foo()` is a syntax error (`error[30151] unexpected block, expecting $i or name`). Rename (`code`, `body`, `fn`); probe-verified 2026-07-31
-- **Literal `{`/`}` in string literals must be escaped `\{`/`\}`** — unescaped `{...}` is interpolation. Bites when embedding shader/C source as inline strings. String literals may span multiple lines (raw newlines are legal); probe-verified 2026-07-11
-- **Character literals accept only `\b \t \n \f \r \\ \'`** — there is no `'\v'` (it is `error[30151] syntax error, unexpected invalid token`), even though the STRING escape `"\v"` works and yields 11. In a char position write the number: `is_white_space(11)`. Probe-verified 2026-08-12
-- String builder requires `unsafe` or `options persistent_heap` if returned
-- Tuple field access: `t._0`, `t._1`, `t._2`
-- **Tuple destructuring binds like `let`**: `let (ok, a) = f()` errors (30704; 30708 in `for`) when a name repeats an alias/local/argument/earlier destructured name — the alias half holds even under `allow_local_variable_shadowing` (aliases are same-scope replacement, not shadowing). `_` is the discard: binds nothing, repeats freely (`let (_, _, c) = t3()`)
-- Annotations: `[export]`, `[test]`; `options no_aot`, `options rtti`
-- **`options` are MODULE-LOCAL for pass-macros** (`[lint_macro]` / `AstPassMacro`). The macro fires once per module in the require chain, reading `prog._options` from THAT module's options table — not the program-root's. So `options _my_lint_off = true` in `foo.das` suppresses YOUR lint in `foo`, but `require foo` from `bar.das` does not inherit the flag — `bar` gets linted unless it sets its own. Don't confuse with runtime options (`gc`, `persistent_heap`, `rtti`, `multiple_contexts`): those are read from the ENTRY program's options at simulate time — a required module's declaration buys consumers NOTHING; only `threadlock_context` is OR-ed across modules (source-verified `ast_parse.cpp`). E.g. `heap_collect` (always an unsafe op, unconditional `unsafeOperation`) panics at runtime with "heap collection is not allowed in this context" unless the ENTRY program declares `options gc` itself (probe-verified 2026-08-08)
-- **A `CodeOfPolicies` field is settable from `options` ONLY if its declaration carries the `/*option*/` marker** (`include/daScript/ast/ast.h`). Without it the field exists, is bound to rtti, and reads plausibly in docs, but `options that_field = true` in a `.das` silently does nothing — only a C++ embedder setting the policy can reach it. Check the marker before believing an option is live; a policy-gated pass with no marker has effectively never run (probe-verified 2026-08-09)
-- **`options stack` is MAIN-MODULE-ONLY — it does NOT unify up from required modules** (probe-verified 2026-07-09: a 1MB `options stack` in a required shared module left the program's context at the 16K default and it still overflowed). A deep library (dasLLAMA's forward chain, llvm_jit) cannot declare its own stack need — every PROGRAM (test file, example, tool) that drives it must carry `options stack = 65536` (or whatever it needs) itself; `llvm_jit.das`'s 4MB works only because those files run as the program root
-- **Visibility is a prefix keyword, not an annotation:** `def private foo()`, `struct private Foo { ... }`, `enum private E { ... }`, `var private x = 0` (grammar: `let|var [shared] [public|private]` — `variable` is not a keyword), `alias private X = Y`. There is **no** `[private]` annotation — it's a grammar error
-- **Module-level `shared private` hides EVERY symbol from direct requirers** — `module foo shared private` is for macro-only modules whose value is their `[init]`/macro side effects (the lens pattern: `dasllama_metal_lens`, `dasllama_vulkan_lens`); a module whose functions others must call needs `shared public` (the shared analyzer `dasllama_kernel_access` is the counter-example). Per-symbol `private` is still worth writing — it keeps a helper out of the module's export surface and states intent — but it is NOT load-bearing for behaviour; `shared private` already hides everything from requirers. Convention in comparable macro modules (`daslib/apply`) is `private` helpers + `public` API
-- **Field/variable annotations use `@name` only:** `@safe_when_uninitialized at : LineInfo`, `@sql_primary_key id : int64`, `@do_not_delete ctx : Context?`. The `[name]` form is reserved for struct/function/global-level annotations and does NOT parse on a struct field
-- `require` uses forward slash: `require daslib/linq` — NOT backslash
-- `require foo public` — re-exports `foo` transitively
-- **`require` path resolution:** bare `require name` resolves a module-root mount (`daslib/x`, a registered module) **or** a *same-directory* `name.das` (this is how `require tutorial_server` picks up `tutorials/dasHV/tutorial_server.das`). To require a file *elsewhere in the tree* by path, use a **file-relative path with the explicit `.das` extension** — `require ../../foo/bar.das`. Dropping the `.das`, or using a non-mounted root-relative path like `require tutorials/x/y`, fails with `error[20605] missing prerequisite … file not found`. **A require path is `NAME` tokens joined by `/` `.` `%` `..` (grammar `require_module_name`) — so it CANNOT contain a hyphen:** a dir like `utils/dasllama-server/` is unreachable by path (the parser stops at the `-`, e.g. `require ../../utils/dasllama-server/x.das` resolves `../../utils/dasllama` and fails). This is why hyphenated-dir tools (`detect-dupe`, `find-dupe`, `dasllama-server`) keep their `[test]` files *inside the dir* and `require` the sibling module by **bare name**. Upshot: a test needing a shared fixture should keep the fixture in its *own* directory (bare same-dir require) rather than reaching across the tree
-- `[export] def main()` defaults to returning `void`, but you can declare it as `def main() : int { ... return rc }` when you need to surface a non-zero process exit code (e.g. CLI tools where callers — MCP wrappers, CI, parent shells — branch on exit). See `dastest/dastest.das` for the canonical pattern. Don't reach for `panic` just to force a non-zero exit; declare `: int` and `return rc` instead.
-- `push` copies (fails for non-copyable types), `emplace` moves (zeros source), `push_clone` clones (preserves source)
-- Non-copyable types (`array<T>`, `table<K;V>`): use `:=`, `push_clone`, or `<-`. (Lambdas are copyable — see above.)
-- Blocks cannot be stored/returned/captured — use lambdas or function pointers
-- Class methods: `def const`, `def abstract const`, `def static`; call syntax `obj.method()` / `obj->method()` ONLY — pipe (`obj |> method()`) does NOT resolve class methods (error[30341]; probe-verified 2026-08-08), and the same holds for `[class_method]` struct methods
-- **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
-- `#pragma optimize` in AOT-generated code must be wrapped in `#ifdef _MSC_VER` — Clang warns on unknown pragmas
-- **Macro-generated `var x : $t(st)`** (no init) trips `error[31016]` "uninitialized variable is unsafe" for **any** struct result/local type — field defaults do **not** exempt it. Fixes: `= default<$t(st)>` when the type is default-constructible; but for handled/backend types `default<>` is `error[50503] unsupported variable type` — then set `td.flags.safeWhenUninitialized = true` on the (cloned) decl type when the uninitialized read is intentional and discarded (canonical: the `[flatten]` return accumulator in `daslib/flatten.das`)
-- `print` is for user-facing scripts only. In `tests/`, `daslib/`, `utils/`: use `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` — same stdout, but level-tagged and filterable. Canonical example: `utils/detect-dupe/main.das`
+- **A continuation line starting `+` or `-` is its own statement**, and unary plus is pure, so
+  the optimizer deletes it: `let x = a` ⏎ `+ b` ⏎ `+ c` leaves `x == a`. Always wrap a
+  multi-line arithmetic RHS in `(...)`.
+- **Stripping `const` in order to write.** The original const type already licensed
+  readonly / `noalias` / DCE, so the write vanishes in interp, JIT and AOT alike. Declare the
+  parameter `var T?`; never `reinterpret` the const away.
+- **`delete` on `array<T?>` frees the POINTEES**, not just the buffer. On borrowed pointers the
+  interpreter reports `deleting <ptr>, which is not a chunk pointer`, while Release+JIT corrupts
+  the heap silently and crashes later at an unrelated allocation. `clear()` the container first,
+  or mark the field `@do_not_delete`.
+- **A lambda copy aliases one capture frame** — deleting a container that holds two copies of
+  the same lambda is a double free.
+- **`:=` on a string copies the pointer** unless the source is a temp (`#`) string or the
+  program declares `options multiple_contexts`. Across a context boundary that is a dangling
+  read; the reliable copy is `clone_string(s)`.
+- **`is` / `as` on handled and AST types is EXACT-type**: `expr is ExprField` is false when
+  `expr` is an `ExprSafeField`, and `as` on the wrong type crashes. Enumerate every concrete
+  type, or use a matcher.
+- **`tab[k]` on a mutable table INSERTS on read.** Read with `tab?[k] ?? d`.
+- **`to_int` / `to_float` return `0` on garbage** (`to_int("12abc")` is `12`). Anything from a
+  user, a file, or the environment goes through `try_to_int` / `try_to_float`.
+- **`<-` into a table slot ZEROES the source.** Registering one value under two keys takes a
+  fresh clone per registration, not the same variable passed twice.
+- **`new WithCtor(field = v)` skips the user constructor** — it is plain field-init, so
+  inherited fields stay zero. Write `new WithCtor(args)` when the constructor must run.
 
 ### Code style — prefer idiomatic forms
 
 | Don't write | Write instead | Why |
 |---|---|---|
 | `string(x.__rtti) == "ExprFoo"` | `x is ExprFoo` | `is` works directly on AST pointers |
-| `get_ptr(x) == null` / `get_ptr(x).field` | `x == null` / `x.field` | AST pointers auto-dereference; `get_ptr` is smart_ptr-era residue |
+| `get_ptr(x) == null` / `get_ptr(x).field` | `x == null` / `x.field` | AST pointers auto-dereference |
 | `string(das_str) == "lit"`, `!empty(string(das_str))` | drop the `string(...)` cast | `das_string` compares with `string` directly; `empty()` works on it |
 | `let v = string(x.name); $i(v)` / `var copy = val; $v(copy)` | `$i(x.name)` / `$v(val)` | qmacro tags accept `das_string`, `let` vars, loop vars directly |
-| 6 qmacro arms differing only in the call target (`if isTry { qmacro(_::try_run_select(…)) } elif … { … }`) | `let fname = (isTry ? "try_run_select" : "run_select") + suffix; qmacro($c(fname)(…))` | `$c(stringVar)` splices a function name; resolution at splice site uses user's `require` chain. Note: `_::$c(…)` is a parse error — drop `_::` |
+| N qmacro arms differing only in the call target | `let fname = ...; qmacro($c(fname)(…))` | `$c(stringVar)` splices a function name. `_::$c(…)` is a parse error — drop `_::` |
 | `if (true) { ... }` | `{ ... }` | bare blocks create lexical scope in gen2 |
-| `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
+| `var inscope r <- expr; return <- r` | `return <- expr` | |
 | `unsafe { (reinterpret<ExprBlock?>(blk)).list }` / `unsafe(reinterpret<T?>(x))` | make param `var` + plain `x.list` | `var` param gives non-const field access without reinterpret |
-| `if (cond) { return X }` (or `{ break }` / `{ continue }`) | `if (cond) return X` or postfix `return X if (cond)` | STYLE005: braces around a single-statement early-exit are noise |
-| `for (i in range(length(arr))) { ... arr[i] ... }` where `i` is used only as `arr[i]` | `for (c in arr) { ... c ... }` | PERF018: direct iteration drops the index variable |
-| `from_JV(v, type<int>, 13)` | `v ?? 13` | STYLE020: json_boost provides `operator ??` for every scalar `from_JV` overload |
-| `var args : table<string; JsonValue?>; args \|> insert("k1", JV(v1)); args \|> insert("k2", JV(v2))` | `var args = JV((k1=v1, k2=v2))` | STYLE021: named-tuple JV form (json_boost.das:638) is one line instead of N |
-| `int(BfT.a) \| int(BfT.b)` (same bitfield, or enum with `operator \|`) | `int(BfT.a \| BfT.b)` | PERF019: collapse two int casts to one. Const-foldable forms only surface under lint policies |
-| `int64(a)` where `a : int64` (or any of the 15 workhorse casts: `int*`/`uint*`/`float`/`double`/`string`/`bitfield*`) | `a` | PERF020: same-type workhorse cast is a no-op `ExprCall`. Match is `baseType`-strict, so widening/narrowing/signedness/float↔int still fire as genuine work. User-named bitfield/enum ctors (`MyBitfield(x)`) and vector ctors (`int2(x,y)`) are out of scope |
-| `foo \|= BfT.m` / `foo &= ~BfT.m` (bitfield `foo`, single named bit) | `foo.m = true` / `foo.m = false` | STYLE022: bitfield-as-field assignment reads bit-name-first, drops the `~` for clears |
-| `uint(bf & BfT.m) != 0u` / `int(bf & BfT.m) == 0` (bitfield `bf`, single named bit) | `bf.m` / `!bf.m` | STYLE023: bitfield-as-field read; drop the int cast + `!= 0` / `== 0` compare |
-| `unsafe(x + y)` / `unsafe { let d = x + y }` where nothing inside requires unsafe | drop the wrap | STYLE024: redundant `unsafe` — flagged when no descendant matches a known inherently-unsafe shape (reinterpret/upcast cast, `delete`, `addr`, table-index, variant-write, ExprCallFunc with `unsafeOperation`). Macro-generated subtrees (`genFlags.generated == true`) skipped per design |
-| `unsafe { stmt1; stmt2; stmt_needing_unsafe }` (only ONE stmt actually needs unsafe) | `stmt1; stmt2; unsafe(<sub-expr>)` | STYLE025: narrow block-form unsafe to expression-form on the single unsafe-needing statement. Silent when ≥2 statements need unsafe (block is justified) |
-| `unsafe { ...; unsafe { ... }; ... }` (nested `unsafe { }` block) | drop the inner wrap | STYLE026: outer `unsafe` already covers the whole inner scope, so the inner block is pure noise. Closure / lambda / generator bodies are NOT nested for this rule — they execute in a separate context where the outer wrap does not propagate |
-| `for (s in A) { B \|> push(s) }` / `push_clone(s)` (iter-var only) | `B \|> push_from(A)` / `push_clone_from(A)` | PERF022: the bulk overload in builtin.das reserves combined capacity up front. Single name `push`/`push_clone` is overloaded between single-element and bulk (ambiguous when destination is `array<T[]>`); the `_from` suffix names the bulk intent. Source must be `array<T>` or C-array — range/iterator sources are not flagged. `emplace` is out of scope (const iter-var can't be moved) |
-| `var a : array<T>; for (x in SRC) { if (COND) { a \|> push(EXPR) } }` (or `table<K;V>` + `insert`/`a[k]=v`) | `var a <- [for (x in SRC); EXPR; where COND]` (or `\{for (...); k => v; where ...\}`) | STYLE027: var with empty default-init followed by a for-loop that only push/insert into it. Accepts depth ≤ 2 nested fors and if-filters at any depth. `emplace` excluded — move-source-zeroing differs from comprehension element-construction. Iterator-comprehension form (`[$f ...]`) NOT suggested |
-| `var t : table<K;V>; t \|> insert(k1, v1); t \|> insert(k2, v2)` (or `t[k] = v` runs, or 2-arg set inserts) | `var t <- { k1 => v1, k2 => v2 }` (set: `var s <- { k1, k2 }`) | STYLE031: ≥ 2 contiguous inserts/`[]=` after an empty table decl collapse to a literal move-assign. Computed keys fine; runs with a duplicate CONST key stay silent (literal duplicates are `error[30706]`, inserts overwrite). `table<string; JsonValue?>` const-key runs get STYLE021's `JV((k1=...))` form instead |
-| `var w : array<T>; w \|> push_from(SRC)` (empty decl + single bulk copy from an `array<T>`) | `var w := SRC` (clone-assign); if then `return <- w`, `return clone_to_move(SRC)` | STYLE032 (the init half) + PERF009-clone (the return half) — they compose. A bulk `push_from`/`push_clone_from` into a fresh-empty array IS a clone-init. Array source only; a C-array source stays silent (`var w := cArray` ≠ `array<T>`). Only the statement immediately after the decl is inspected — a `reserve`/guard between keeps it quiet. PERF009 clone variant: `var x := src; return <- x` → `return clone_to_move(src)`, NOT `return <- src` (would move/destroy the source) |
-| `var X = clone_expression(E); ... $e(X) ...` (only-uses-are-qmacro-splice) | drop the pre-clone, inline `$e(E)` at each splice site | PERF023: `qmacro`/`qmacro_block`/`qmacro_expr`/`qmacro_block_to_array` go through `apply_template` in templates_boost.das, whose substitution visitor calls `clone_expression` on every substitution input. Pre-cloning is wasted work. Detection: post-expansion `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; visitor tracks splice-wrapper depth via preVisitExprCall/visitExprCall counter on `add_ptr_ref`, classifies each candidate `ExprVar` reference as "safe" when depth>0. Fires only when ALL uses are safe AND ≥1 is observed. Multi-clone-of-same-source flagged too — apply_template clones each substitution independently |
-| hand-rolled `is X` / `as X` / null-guard / `ExprRef2Value`-peel ladders in macro code | `qmatch(e, $e(a) + $e(b))` for source-syntax shapes; `match (e) { if (ExprField(name = "key", value = ExprVar(...))) { ... } }` for node-class shapes | both matchers peel `ExprRef2Value` automatically; `\|\|` alternation, `&&` guards, and `match_expr(local)` cover most ladders. Limits + the qmatch↔match division of labor: `skills/das_macros.md` "`match` (daslib/match)" |
-| `unsafe(reinterpret<T?>(unsafe(addr(x))))` (reinterpret-of-addr, pointer target) | `unsafe(addr<T?>(x))` | STYLE034: same AST, one unsafe gate instead of two. Non-pointer puns (`reinterpret<uint64>(addr(x))`) have no `addr<T?>` spelling and stay silent; the sugar's own desugared output is exempt via `castFlags.fromAddrSugar` |
-| `b == T('(')` where `b : T` and T is a non-`int` built-in numeric scalar (also `!=`, ranges, and Yoda forms) | make `b : int`, then write `b == '('` | STYLE035: character literals are `int`; changing the plain variable once removes every repeated numeric cast. The warning is deduplicated at the declaration. |
-| `int64(length(x))` / `uint64(capacity(x))` (also `count`, `find_index`, `fread`, `fwrite`) | `long_length(x)` / `long_capacity(x)` / … | LINT017: the inner call returns `int`, so the 2^31 limit is hit *before* the widening cast — as a wrap, or as the panic guard on array/table/string length — and the cast buys nothing. Pair table is hardcoded (an exists-check is meaningless for user functions, since a macro can add/remove them) and gated on receiver type, which keeps same-named user overloads and the fixed-array `length` generic (no `long_` twin) silent |
-| `memcpy(d, s, int(n))` / `memcmp(d, s, int(n))` where `n` is `int64`/`uint64`/`uint`; also `arr \|> resize(int(n64))` (and `resize_no_init` / `resize_and_init` / `reserve` / `erase`, table `reserve`) | `memcpy(d, s, n)` / `arr \|> resize(n64)` | LINT018: these all carry 64-bit size overloads, so the `int(...)` narrowing is pure loss — above 2^31 it covers the wrong count. Receiver-gated: string `resize` (int-only) and user functions stay silent; only a cast that is the whole argument fires |
-| `for (i in range(int(n64)))` / `urange(uint(u64))` / `interval(int(a64), int(b64))` | `for (i in range64(n64))` / `urange64(u64)` / int64 `interval` | LINT020: the cast truncates the bound above 2^31; `range64`/`urange64` take the 64-bit value and arrays/fixed arrays/pointers index with `int64` natively. Carve-outs: vector components and `string` index 32-bit only, `a[range]` has no range64 form |
-| `let keep = long_length(buf) - consumed * HOP` where every use is `int(max(keep, 0l))`-shaped | narrow once at the declaration, or lift the sinks (`range64`, int64 `resize`) | LINT021: a 64-bit local never consumed as 64-bit is a truncating detour. Transparent under the cast: operators, ternary, `max`/`abs` (top stays unbounded); `min`/`clamp`/`sign` cap the value — deliberate saturation, disqualifies — as does any other call, compare, write, or capture. Known FP: load-bearing 64-bit math under the cast (`int(t / 1000000l)` on a ns timestamp) — `// nolint:LINT021` on the decl line |
-| `cast<T -const>(x)` / `reinterpret<T -#>(x)` / `addr<void? -const>(x)` — any of `-const` `-&` `-[]` `-#` `==const` `==&` on a **concrete** cast target | drop the contract | STYLE036: these are *substitution* contracts — they act only while a generic binds, and infer clears them once consumed, so a flag still set at lint time proves it did nothing. `auto`/unresolved-alias targets are excluded (there substitution hasn't run and the contract is real); a concrete typedef is NOT excluded (`reinterpret<CI? -const>` with `typedef CI = int const` keeps the const) |
+| `if (cond) { return X }` (or `{ break }` / `{ continue }`) | `if (cond) return X` or postfix `return X if (cond)` | STYLE005 |
+| `for (i in range(length(arr))) { ... arr[i] ... }` where `i` is used only as `arr[i]` | `for (c in arr) { ... c ... }` | PERF018 |
+| `from_JV(v, type<int>, 13)` | `v ?? 13` | STYLE020 |
+| per-key `insert("k1", JV(v1))` into `table<string; JsonValue?>` | `var args = JV((k1=v1, k2=v2))` | STYLE021 |
+| `int(BfT.a) \| int(BfT.b)` (same bitfield, or enum with `operator \|`) | `int(BfT.a \| BfT.b)` | PERF019 |
+| `int64(a)` where `a : int64` (any same-type workhorse cast) | `a` | PERF020 |
+| `foo \|= BfT.m` / `foo &= ~BfT.m` (single named bit) | `foo.m = true` / `foo.m = false` | STYLE022 |
+| `uint(bf & BfT.m) != 0u` / `int(bf & BfT.m) == 0` (single named bit) | `bf.m` / `!bf.m` | STYLE023 |
+| `unsafe(x + y)` / `unsafe { ... }` where nothing inside requires unsafe | drop the wrap | STYLE024 |
+| `unsafe { stmt1; stmt2; stmt_needing_unsafe }` (only ONE needs it) | `stmt1; stmt2; unsafe(<sub-expr>)` | STYLE025 |
+| `unsafe { }` nested inside another `unsafe { }` | drop the inner wrap | STYLE026. Closure/lambda/generator bodies DO need their own wrap — the outer one does not propagate into them |
+| `for (s in A) { B \|> push(s) }` / `push_clone(s)` (iter-var only) | `B \|> push_from(A)` / `push_clone_from(A)` | PERF022: reserves the combined capacity once |
+| a for-loop that only pushes/inserts into a fresh-empty array/table | a comprehension: `var a <- [for (x in SRC); EXPR; where COND]` / `\{for (...); k => v; ...\}` | STYLE027. `emplace` loops stay loops — move semantics differ |
+| ≥ 2 `insert`s / `t[k] = v` right after an empty table decl | a literal: `var t <- { k1 => v1, k2 => v2 }` (set: `{ k1, k2 }`) | STYLE031. Duplicate const keys: inserts overwrite, the literal is a compile error — don't rewrite those |
+| `var w : array<T>; w \|> push_from(SRC)` (fresh-empty target) | `var w := SRC`; if then returned, `return clone_to_move(SRC)` | STYLE032 + PERF009. NOT `return <- src` — that would move out of the source |
+| `var X = clone_expression(E); ... $e(X) ...` (only splice uses) | inline `$e(E)` at each splice site | PERF023: the template machinery clones every substitution already |
+| hand-rolled `is X` / `as X` / null-guard ladders in macro code | `qmatch(...)` for source-syntax shapes; `match (e) { if (ExprField(...)) }` for node-class shapes | division of labor: `skills/das_macros.md` |
+| `unsafe(reinterpret<T?>(unsafe(addr(x))))` (pointer target) | `unsafe(addr<T?>(x))` | STYLE034 |
+| `b == T('(')` where `b` is a non-`int` numeric scalar | make `b : int`, compare `b == '('` | STYLE035: character literals are `int` |
+| `dst := src` / `push_clone(src)` on a plain `string` | `dst = src` / `push(src)`; cross-context copy = `clone_string(src)` | LINT016: the clone spelling copies only the pointer |
+| `int64(length(x))` / `uint64(capacity(x))` (also `count`, `find_index`, `fread`, `fwrite`) | `long_length(x)` / `long_capacity(x)` / … | LINT017: the inner call returns `int` — 2^31 is hit before the cast |
+| `memcpy(d, s, int(n))` / `arr \|> resize(int(n64))` with a 64-bit `n` | `memcpy(d, s, n)` / `resize(n64)` — the 64-bit overloads exist | LINT018 |
+| `range(int(n64))` / `urange(uint(u64))` | `range64(n64)` / `urange64(u64)` | LINT020. Vector components and `string` index stay 32-bit |
+| a 64-bit local whose every use sits under `int(...)` | narrow once at the declaration, or lift the sinks to 64-bit | LINT021 |
+| `-const` `-&` `-[]` `-#` `==const` `==&` on a **concrete** cast target | drop the contract | STYLE036: substitution contracts act only while a generic binds — inert on concrete targets |
+| `slice(s, i, j)` / `chop(s, i, n)` in a loop over an outer string | `peek_data(s) $(d)` and slice the view | PERF031: each call re-strlens the whole source — O(n²); every haystack op has a byte-view twin |
 
-| `slice(s, i, j)` / `chop(s, i, n)` in a loop where `s` is defined outside the loop | wrap the loop in `peek_data(s) $(d)` and slice the view — `slice(d, i, j)` — or hoist the slice | PERF031: each call re-strlens the WHOLE source (das strings cache no length) and leaks a temp string — O(n²) loops. The whole haystack surface has a byte-view twin (`slice`/`chop`/`find`/`rfind`/`starts_with`/`ends_with`/`strip`/`trim`/parse/`write_string`), so the fix is swapping the receiver, not hand-walking bytes; a view receiver never fires (the view carries its length). Loop-element receivers stay silent. ON everywhere, this repo included — the byte-view sweep rewrote the in-tree hits onto `peek_data` views |
+For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/daslang/references/files-and-paths.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 
-For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
+**Inline literals over temp-var-and-push:** for a short array consumed in one expression, write `stack([a, b, c])` rather than `var xs : array<T>; xs |> emplace(a); xs |> emplace(b); stack(xs)`. Faster interpreted and easier to read; same for table literals and other bracketed constructors. Threshold: while it stays readable.
+
+**`print` is for user-facing scripts only.** In `tests/`, `daslib/`, `utils/` use `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` — same stdout, but level-tagged and filterable. Canonical example: `utils/detect-dupe/main.das`.
 
 **Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
-**Duplicate-region lint (STYLE040).** Finds runs of statements duplicated elsewhere in the same module that a helper could absorb verbatim, and reports the suggested parameter list. On by default under `daslib/` and `utils/` (measured under 1% of a lint pass), off elsewhere — override with `options _duplicate_regions`. It only fires when the extraction is mechanically valid — no escaping local, no escaping `return`/`break`, no `assume` alias, no moved `inscope` finalization, and a written free variable must be a ref/ref type. A hit is still a prompt to look: a deliberate repetition takes `// nolint:STYLE040`. Thresholds: `options _dupe_min_nodes` (default 20) / `_dupe_min_statements` (default 2). Engine: `daslib/dupe_detect.das`; not the same tool as `utils/detect-dupe/` (that one clusters whole functions across a corpus — see `skills/detect_dupe.md`).
+**Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` — never force a split on an honest shape.
 
-**Complexity/length lint (STYLE037/STYLE038) — suppress an honest shape, never force a split.** A hit is a prompt to look, not an order to refactor. When the function genuinely should not be reduced — a flat one-call-per-item list (PSO compile/release runs, registration tables), an exact-type `is` ladder, a dispatch table, flat CLI-argument handling, a GPU kernel body whose phases are barrier- or register-coupled — put `// nolint:STYLE037` (or `STYLE038`) on the `def` line with a short tail-comment reason and move on. Splitting where it does not belong makes the code worse: single-caller helpers that exist only to lower a number hide control flow, and a wide rewrite of working code is riskier than the number it removes. Split only along a natural seam — genuine duplication, a distinct phase, a self-contained arm — and only when the extracted helper stands on its own. **New code should meet both limits from the start**; the escape is for shapes that are irreducible, not for code that was written oversized. Whole-file density (codegen emitters, parsers, ported code) takes `options _cyclomatic_complexity = N` / `options _function_length = N` instead. Full resolution order: `skills/style_lint.md`.
-
-**Comment and style hygiene.** Do not narrate code with comments — the test for every comment: does it add information the reader would otherwise have to go look for? 1–2 lines preferred, 3 the enforced cap (STYLE014 fires at 4+). No banner comments above documented functions, no multi-paragraph architectural preambles, no `//!` docstrings on private symbols; when in doubt, delete. The full rulebook — comments, naming, and code shape, language-agnostic — is **`skills/comment_style_hygiene.md`**; the `style-hygiene-auditor` agent applies it to every PR's new code (mandatory run in `skills/make_pr.md`, findings persuade rather than block).
+**Comment and style hygiene.** Do not narrate code with comments — the test for every comment: does it add information the reader would otherwise have to go look for? 1–2 lines preferred, 3 the enforced cap (STYLE014 fires at 4+). No banner comments above documented functions, no multi-paragraph architectural preambles, no `//!` docstrings on private symbols; when in doubt, delete. The full rulebook — comments, naming, and code shape, language-agnostic — is **`skills/comment_style_hygiene.md`**; the `style-hygiene-auditor` agent applies it to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
 
 ## Key Directories
 
@@ -441,7 +283,7 @@ Most layout is obvious from `ls`. Non-obvious ones worth knowing:
 
 - `skills/daslang/` — the **distributable, SDK-free daslang language skill** for third-party AI agents (Claude-skill format: `SKILL.md` + `references/`), NOT a repo task skill. Every example is probe-verified; its `README.md` carries the editing rules. When grammar/stdlib/defaults change, update it in the same arc — it replaces a scraped bundle that rotted precisely because nobody owned it
 
-- `daslib/aot_cpp.das` — AOT C++ emitter lives here, NOT in C++ (`src/ast/ast_aot_cpp.cpp` was deleted; only the header remains)
+- `daslib/aot_cpp.das` — the AOT C++ emitter lives here, NOT in C++
 - `tests/aot/CMakeLists.txt` — register new test directories here for AOT compilation. Two AOT binaries: `test_aot_subset` (tests/language only, in ALL — the per-PR CI compile gate) and full `test_aot` (`EXCLUDE_FROM_ALL`, ~1080 AOT TUs — nightly CI + `preflight --full` only, via `--target test_aot`/`run_tests_aot`)
 - `dastest/` — test framework (used by both `tests/` and external repos)
 - `utils/detect-dupe/` (in-repo dupe finder) and `utils/find-dupe/` (Claude-based judge that needs `daspkg install --root utils/find-dupe` + `ANTHROPIC_API_KEY`) — both also exposed as MCP tools
@@ -455,6 +297,6 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 
 **Fresh worktree/clone with no daslang MCP tools?** `.mcp.json`, `sgconfig.yml`, `bin/`, and the tree-sitter grammar lib are all gitignored, so a `git worktree add` (or clone) starts with zero daslang tools. Bootstrap it from any existing daslang binary: `daslang utils/mcp/setup.das -- --root <worktree>` builds a worktree-local binary (+ grammar), copies the platform `sgconfig.yml`, and merges a `daslang` entry into `.mcp.json` (writes no secrets, preserves `github` etc.). `--no-build` wires config to an already-built binary. Restart the session in the worktree to pick it up. Details: **`skills/mcp_tools.md`**.
 
-**Adding a file under `utils/mcp/` that the server requires? Add it to the `install(FILES …)` block in `CMakeLists.txt` in the same commit.** The installed SDK's MCP server runs with no `-project`, so it must be self-contained: every `.das` reachable from `main.das` has to be installed, or the SDK's server dies at startup on `error[20605] missing prerequisite '<mod>'` while the in-tree server keeps working. `tools/` and `subtools/` are globbed, but the top-level files are listed one by one — that list is the trap (it silently missed `mcp_core.das` when it was split out of `protocol_core.das`).
+**Adding a file under `utils/mcp/` that the server requires? Add it to the `install(FILES …)` block in `CMakeLists.txt` in the same commit.** The installed SDK's MCP server runs with no `-project`, so it must be self-contained: every `.das` reachable from `main.das` has to be installed, or the SDK's server dies at startup on `error[20605] missing prerequisite '<mod>'` while the in-tree server keeps working. `tools/` and `subtools/` are globbed, but the top-level files are listed one by one — that list is the trap.
 
 Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.

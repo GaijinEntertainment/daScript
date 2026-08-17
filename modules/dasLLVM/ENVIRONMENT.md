@@ -25,7 +25,7 @@ Loaded once at context init into `g_env_jit`. The force-features pair exists to 
 
 ## Kernel tuning
 
-Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/llvm_tune.md`.
+Loaded once at context init into `g_env_tune`; tuner children inherit the environment at spawn, and in-process overrides go through the tune setters (`set_tune_manifest_runtime_path`, `tune_set_verbosity`, `tune_set_noise_cv`, `tune_set_noise_override`, `tune_set_history_dir`), which arm the child environment too. The framework itself is documented in `skills/tune.md`.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|

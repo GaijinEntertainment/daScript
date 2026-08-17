@@ -1,73 +1,34 @@
-# Writing & Running Benchmarks
+# Writing and running benchmarks
 
-Benchmarks use the same `dastest` framework as tests. Benchmark files live under `benchmarks/` organized by category (e.g. `benchmarks/core/hash/`).
+Benchmarks run on the same `dastest` framework as tests — read `skills/writing_tests.md`
+for the framework itself; this file is what benchmarks add.
 
-## Running benchmarks
-
-```bash
-# Interpreter mode
-bin/Release/daslang.exe dastest/dastest.das -- --bench --test path/to/benchmark.das
-
-# JIT mode (recommended for performance benchmarks)
-bin/Release/daslang.exe -jit dastest/dastest.das -- --bench --test path/to/benchmark.das
-
-# Run all benchmarks in a directory
-bin/Release/daslang.exe -jit dastest/dastest.das -- --bench --test benchmarks/core/hash/
-```
-
-**Key flags:**
-- `--bench` — enables benchmark execution (without this, `[benchmark]` functions are skipped)
-- `-jit` — placed **before** `dastest.das` (before `--`), runs dastest itself in JIT mode, which also JITs the benchmark code
-- `--test` — specifies the file or directory to run (same as for tests)
-- `--bench-names name1,name2` — filter to run only specific benchmark functions
-
-### Capturing benchmark output reliably
-
-The Copilot terminal tool truncates output at ~16KB and mixes it with prior scrollback. **Always pipe benchmark output to a file**, then read the file:
-
-From the repo root, on Windows / PowerShell:
-
-```powershell
-# Run a single benchmark file
-bin\Release\daslang.exe dastest\dastest.das -- --bench --test benchmarks\core\hash\test02.das 2>&1 | Out-File _bench_out.txt -Encoding ascii
-
-# Run a whole directory — run files one at a time to avoid multi-hour waits
-$tests = 2..12
-foreach ($t in $tests) {
-    $f = "benchmarks\core\hash\test{0:D2}.das" -f $t
-    bin\Release\daslang.exe dastest\dastest.das -- --bench --test $f 2>&1 | Out-File _bench_out.txt -Append -Encoding ascii
-}
-```
-
-On Linux / macOS:
+## Running
 
 ```bash
-# Single file
-build/daslang dastest/dastest.das -- --bench --test benchmarks/core/hash/test02.das > _bench_out.txt 2>&1
-
-# Whole directory, one at a time
-for t in $(seq -f "%02g" 2 12); do
-    build/daslang dastest/dastest.das -- --bench --test "benchmarks/core/hash/test${t}.das" >> _bench_out.txt 2>&1
-done
+bin/daslang dastest/dastest.das -- --bench --test path/to/benchmark.das
+bin/daslang -jit dastest/dastest.das -- --bench --test path/to/directory/
 ```
 
-Then read results with `read_file` on `_bench_out.txt` — **not** from terminal output.
+- `--bench` — without it, `[benchmark]` functions are skipped
+- `-jit` goes **before** `dastest.das`: it puts dastest itself in JIT mode, which is what
+  gets the benchmark code JIT-compiled. Use it for any performance number you intend to
+  believe
+- `--bench-names name1,name2` — run only those benchmark functions
 
-**Compilation check without running benchmarks**: run without `--bench` to verify all files compile (fast, ~0.5s):
-```bash
-bin/Release/daslang.exe dastest/dastest.das -- --test benchmarks/core/hash/
-```
-This reports 0 tests (benchmark functions are skipped) but shows any compile errors.
+Dropping `--bench` turns the same command into a fast compile check: it reports 0 tests but
+surfaces every compile error.
 
-**Output format:** Each sub-benchmark prints a line like:
+Each sub-benchmark prints one line, tagged `[INTERP]` or `[JIT]`:
+
 ```
 insert/600000         60 ns/op          84 B/op       1 allocs/op     0 SB/op       0 strings/op
 ```
-Fields: name, nanoseconds per operation, heap bytes per op, heap allocations per op, string heap bytes per op, string allocations per op.
 
-The output shows `[INTERP]` or `[JIT]` after each benchmark name to indicate the execution mode.
+Fields: name, nanoseconds per operation, heap bytes per op, heap allocations per op, string
+heap bytes per op, string allocations per op.
 
-## Benchmark file structure
+## File structure
 
 ```das
 options gen2
@@ -78,150 +39,68 @@ require dastest/testing_boost
 [benchmark]
 def my_benchmark(b : B?) {
     b |> run("sub_name", CHUNK_SIZE) {
-        // code to benchmark — this block runs in a loop
+        // measured — this block runs in a loop
     }
 }
 ```
 
-### Required elements
+`options persistent_heap` matters: benchmarks allocate, and the persistent heap keeps GC
+out of the measurement. `b : B?` is the benchmark context, the counterpart of `t : T?`.
 
-- `options gen2` — always use gen2 syntax
-- `options persistent_heap` — benchmarks often allocate; persistent heap avoids GC during measurement
-- `require dastest/testing_boost` — provides `[benchmark]` annotation and `B` class
-- `[benchmark]` annotation on each benchmark function
-- `b : B?` parameter — the benchmark context (like `t : T?` for tests)
-
-### The `run` method
+## `run`
 
 ```das
-// Simple: each block invocation = 1 logical operation
-b |> run("name", op : block)
-
-// With chunk size: each block invocation does `chunk_size` logical operations
-b |> run("name", chunk_size : int, op : block)
+b |> run("name", op : block)                      // one block call = one operation
+b |> run("name", chunk_size : int, op : block)    // one block call = chunk_size operations
 ```
 
-The `run` method:
-1. Runs the block once as warmup and to estimate timing
-2. Auto-calculates the number of iterations needed for stable measurement
-3. Unrolls fast benchmarks (< 100ns) for accuracy
-4. Measures CPU time, heap allocations, and string allocations
-5. Reports results as per-operation metrics
+`run` calls the block once as warmup, estimates timing, picks an iteration count for a
+stable measurement, unrolls blocks faster than 100 ns, and reports CPU time plus heap and
+string allocations per operation. Pass `chunk_size` when the block loops internally, so
+ns/op stays per logical operation; names take interpolation (`"insert/{HASH_SIZE}"`).
 
-**`chunk_size`**: If the benchmarked block performs N logical operations internally, pass N as chunk_size so that ns/op reflects a single logical operation. Use string interpolation for descriptive names: `"insert/{HASH_SIZE}"`.
+`B` and `T` share the `Asserter` base, so the test assertions work — prefer
+`b |> equal(x, y)` over a hand-rolled `if (x != y) { b->failNow() }`. `b->failNow()` aborts
+the benchmark, `b->fail()` marks it failed and continues; a correctness helper takes
+`b : B?` so it can do either.
 
-### Benchmark helpers
-
-- `b->failNow()` — abort benchmark on correctness failure (e.g. verification step)
-- `b->fail()` — mark as failed but continue
-- Helper functions that verify correctness should take `b : B?` as a parameter
-
-Most of the `T?` (testing) assertions can be used as well:
-
-```
-// Prefer this
-b |> equal(x, y)
-
-// To this
-if (x != y) {
-    b->failNow()
-}
-```
-
-This is because `testing.B` shares the same base class as `testing.T` - `Asserter`.
-
-### Porting from `profile_test` style
-
-Old benchmarks in `examples/profile/` use `_framework.das` with `profile_test()` and a `test()` function. To port:
-
-1. Replace `require _framework` with `require dastest/testing_boost`
-2. Replace `[export] def main` with `[benchmark] def benchmark_name(b : B?)`
-3. Convert `profile_test("name", default<Type>, args)` → `b |> run("name") { ... }`
-4. Move the benchmark loop body into the `run` block (dastest handles iteration automatically)
-5. Extract setup code (data generation, pre-filling) outside `run` — only the measured operation goes inside the block
-6. Use `b->failNow()` instead of `assert` for correctness checks
-
-### Example: hash map benchmark
+## Example
 
 ```das
 options gen2
 options persistent_heap
 
 require dastest/testing_boost
-require daslib/flat_hash_table
-
-typedef FlatHashMap_test = $TFlatHashTable < int; int >
 
 let HASH_SIZE = 600000
 
-[sideeffects]
-def fill_map(hmap : auto(HashMapType); size : int) : auto(HashMapType) {
-    var hashMap : HashMapType
-    static_if (!typeinfo is_table(type<HashMapType>)) {
-        hashMap <- HashMapType()
-    }
-    for (j in range(size)) {
-        unsafe(hashMap[j]) = -j
-    }
-    return <- hashMap
-}
-
-def run_write_bench(b : B?; hmap : auto(HashMapType)) {
-    b |> run("insert/{HASH_SIZE}", HASH_SIZE) {
-        fill_map(hmap, HASH_SIZE)
-    }
-}
-
 def run_read_bench(b : B?; hmap : auto(HashMapType)) {
-    let m = fill_map(hmap, HASH_SIZE)
+    let m = fill_map(hmap, HASH_SIZE)          // setup is outside run — not measured
     b |> run("read/{HASH_SIZE}", HASH_SIZE) {
         for (i in range(HASH_SIZE)) {
-            let v = m?[i] ?? 0
-            if (v != -i) {
-                b->failNow()
-            }
+            b |> equal(m?[i] ?? 0, -i)
         }
     }
 }
 
 [benchmark]
 def builtin_table(b : B?) {
-    run_write_bench(b, default<table<int; int>>)
     run_read_bench(b, default<table<int; int>>)
 }
-
-[benchmark]
-def flat_hashmap(b : B?) {
-    run_write_bench(b, default<FlatHashMap_test>)
-    run_read_bench(b, default<FlatHashMap_test>)
-}
 ```
 
-### Tips
+## Tips
 
-- **Setup outside `run`**: Pre-generate test data (random numbers, pre-filled maps) before calling `b |> run(...)`. Only the code inside the block is measured.
-- **Multiple sub-benchmarks**: A single `[benchmark]` function can call `run` multiple times for related operations (e.g. insert + read).
-- **Generic helpers**: Use `auto(HashMapType)` generics to benchmark multiple implementations with the same helper functions.
-- **`options unsafe_table_lookup = false`**: Add when benchmarking table `[]` access without `unsafe`.
-- **Static struct methods need dot-call**: Custom hash map types (`TCuckooHashTable`, `TFlatHashTable`, `SlotMap`, etc.) define methods like `erase`, `key_exists`, `emplace` as `def static`. These must be called with dot syntax (`hashMap.erase(key)`) — **not** pipe syntax (`hashMap |> erase(key)`), which tries to resolve a free function and fails.
-- **Files starting with `_` are skipped by dastest**: Use `_` prefix for helper modules (`_common.das`, `_slot_map.das`) that should not be run as standalone benchmarks/tests.
-- **Format after writing**: Run the formatter on benchmark files like any other `.das` file.
+- **Setup outside `run`.** Pre-generate data before the call; only the block is measured
+- One `[benchmark]` function may call `run` several times for related operations
+  (insert + read)
+- `auto(HashMapType)`-style generic helpers let one body benchmark several implementations
+- `options unsafe_table_lookup = false` when benchmarking table `[]` without `unsafe`
+- Custom containers (`TCuckooHashTable`, `TFlatHashTable`, `SlotMap`) declare `erase`,
+  `key_exists`, `emplace` as `def static` — call them with dot syntax
+  (`hashMap.erase(key)`); pipe syntax resolves a free function and fails
+- Files starting with `_` are skipped by dastest — use that for shared helper modules
+- Format benchmark files like any other `.das`
 
-## Directory structure
-
-```
-benchmarks/
-  core/           # Core language/runtime benchmarks
-    hash/         # Hash map implementations
-      test02.das  # Sequential insert + read (600K elements)
-      test03.das  # Random insert, clear, re-insert (1M elements)
-```
-
-When adding a new benchmark, choose an appropriate category under `benchmarks/`. Create subdirectories as needed.
-
-## Benchmark index (`benchmarks/README.md`)
-
-The file `benchmarks/README.md` is an index of every `.das` benchmark file. **When you add, remove, or rename a benchmark file, update `benchmarks/README.md`** to keep it in sync:
-
-- Add a row to the correct directory table with the filename and a short description.
-- If creating a new subdirectory, add a new section header and table.
+This repo's own benchmark tree — layout, the index file, output capture:
+`skills/internal/benchmarks_in_repo.md` (repo-only).

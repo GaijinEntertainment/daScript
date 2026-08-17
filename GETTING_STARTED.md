@@ -61,7 +61,7 @@ project root:
 {
   "mcpServers": {
     "daslang": {
-      "command": "bin/Release/daslang.exe",
+      "command": "bin/daslang",
       "args": ["utils/mcp/main.das"],
       "defer_loading": false
     }
@@ -69,8 +69,9 @@ project root:
 }
 ```
 
-(on Linux/macOS point `command` at your binary), or via CLI:
-`claude mcp add daslang -- bin/Release/daslang.exe utils/mcp/main.das`.
+(point `command` at your binary — `bin/Release/daslang.exe` in a Windows
+MSVC source build), or via CLI:
+`claude mcp add daslang -- bin/daslang utils/mcp/main.das`.
 Details: `utils/mcp/README.md`.
 
 ## AI assistants: LSP server
@@ -91,3 +92,15 @@ claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 
 Any stdio LSP client can spawn `python3 utils/lsp/lsp_supervisor.py`
 directly. Details: `utils/lsp/README.md`.
+
+## AI assistants: the language skill
+
+`skills/daslang/` is a standalone, self-contained daslang language
+reference in the Claude-skill format — `SKILL.md` plus per-topic
+references (types, functions, memory, macros, strings, JSON, …), every
+example verified against the compiler. An agent session started at the
+SDK root picks it up automatically (it is mirrored at
+`.claude/skills/daslang`); for any other project, copy or link that
+directory into the project's `.claude/skills/`. The rest of `skills/`
+covers task-specific ground — `CLAUDE.md`'s table says when to read
+which.

@@ -42,6 +42,10 @@ the run with a checked-out base file in place.
   else.
 - Never mutate a test file to change a verdict. The mutation goes in the code under test;
   the test is the instrument.
+- A rejection branch's instrument is a reliably-failing fixture (a `failed_*`/`cant_*`/`invalid_*`
+  file, an `expect NNNNN` directive, a must-panic case) — its control is inverted:
+  remove the guard and the fixture wrongly succeeds. A rejection covered only by
+  happy-path tests is UNTESTED.
 - Time-box: a negative control is one mutation plus one targeted test run. If the only
   candidate run is heavy (a model run, a full suite, special hardware), report the branch
   UNPROVEN with the exact settling command instead of running it.

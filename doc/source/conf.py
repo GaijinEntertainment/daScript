@@ -35,7 +35,8 @@ extensions = [
   'sphinx_sitemap',
   # Parses the markdown skills under skills/ that are pulled in via
   # `.. include:: ... :parser: myst_parser.sphinx_`. Those pages keep ONE source
-  # file, read both by daslang.io and by the SDK bundle (install/skills.list).
+  # file, read both by daslang.io and by the SDK bundle (skills/ ships wholesale,
+  # minus skills/internal/).
   'myst_parser',
   # dasImgui docs (merged in-tree): `.. video::` tutorial recordings staged
   # from the docs-assets release, and the `:icon:` role over _static/icons/.

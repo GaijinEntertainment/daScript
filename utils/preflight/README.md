@@ -2,7 +2,7 @@
 
 Run CI's gates locally before pushing. The CI-lane ↔ gate mapping and the
 manual commands this tool automates live in
-[skills/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/preflight.md).
+[skills/internal/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/internal/preflight.md).
 
 ```bash
 # fast tier (seconds): format --verify, lint changed .das, clang frontend pass

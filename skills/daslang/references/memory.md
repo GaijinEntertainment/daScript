@@ -220,6 +220,11 @@ view |> clear()                 // borrowed view: clear never touches pointees
 unsafe { delete view }          // frees only the buffer
 ```
 
+Getting it wrong reads differently per build, which is what makes it expensive: interpreted, the
+free reports `deleting <ptr>, which is not a chunk pointer` at the delete; optimized and JIT-ed, it
+corrupts the heap silently and crashes later, at an unrelated allocation with nothing pointing back
+to the real cause.
+
 For a struct field holding borrowed pointers, annotate it `@do_not_delete` instead.
 
 ---
@@ -312,11 +317,16 @@ functions — those need their own.
 | a local class variable (`var g = Goo()`) | lifetime issues |
 | variant `.field` write, `set_variant_index` | effectively a reinterpret |
 | `?as` / `?.field` / `?[]` **not** followed by `??` | yields a pointer to a temporary |
+| `let r & = expr` binding a reference to a **non-local** expression | the referent's lifetime is not provable from this frame |
 | returning a reference or a temporary (`#`) value | escaping the frame |
 | `implicit` parameters, `heap_collect` | policy-level escapes |
 
 Reading a variant through `is` + `as` is safe. A table lookup `tab[k]` is safe by default (an
 `unsafe_table_lookup` policy exists, off by default).
+
+The local-reference rule turns on *where the referent lives*, not on the syntax: `let r & = s.a`
+is fine when `s` is a stack local, while the same line with `s` a heap pointer is
+`error[31019] local reference to non-local expression is unsafe`. (probe-verified 2026-08-16)
 
 `addr<T?>(x)` is sugar for `reinterpret<T?>(addr(x))` and takes a **single** `unsafe` covering both
 halves — prefer it to the double-wrapped long form. The target must be a pointer type:

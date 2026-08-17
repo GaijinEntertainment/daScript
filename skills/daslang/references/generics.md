@@ -59,6 +59,14 @@ def make_handle(t : auto(HandleType)) : Handle {
 Contracts modify how a parameter type *matches*. They are consumed during inference and have no
 runtime cost.
 
+**They belong on a parameter, not on a cast.** `-const`, `-&`, `-[]`, `-#` and `==const` act on
+the head of the type expression they sit on, and that is load-bearing only while a generic alias
+is binding. On a concrete cast target they compute nothing you could not have spelled outright —
+`reinterpret<Foo? -const>(p)` is just `reinterpret<Foo?>(p)` — and they never reach a nested
+qualifier: with `typedef CI = int const`, `CI? -const` is still `int const?`. Spell the target
+type you want — and to get a writable pointer, declare the parameter `var T?` rather than
+stripping `const` off a cast (memory.md). (probe-verified 2026-08-16)
+
 | Contract | Accepts |
 |---|---|
 | `Foo` | `Foo` and anything inheriting from `Foo` (a non-`var` parameter also implies `const`) |
@@ -138,6 +146,12 @@ constant. Every trait takes exactly one argument; a few take extra names in angl
 `struct_has_annotation<ann>`, `struct_safe_has_annotation<ann>`,
 `struct_has_annotation_argument<ann; arg>`, `struct_safe_has_annotation_argument<ann; arg>`,
 `struct_get_annotation_argument<ann; arg>`, `variant_index<name>`, `safe_variant_index<name>`
+
+`is_unsafe_when_uninitialized` is how a generic decides whether a bare `var x : TT` is legal for
+the type it bound: guard the declaration with
+`static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }`.
+The `@safe_when_uninitialized` field annotation and the `[safe_when_uninitialized]` struct
+annotation are what flip it (structs-and-classes.md).
 
 The annotation traits are spelled with the `struct_` prefix — plain `has_annotation` does not
 exist. The `safe_` forms return `false` / `-1` instead of raising a compile error, which is what

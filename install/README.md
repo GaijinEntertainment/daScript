@@ -30,7 +30,7 @@
 
 | Directory    | Contents                                              |
 |--------------|-------------------------------------------------------|
-| `bin/`       | Compiler and tool binaries (`daslang`, `daslang-live`, `das-fmt`) |
+| `bin/`       | Compiler and tool binaries (`daslang`, `daslang-live`, `gen1_to_gen2`) |
 | `lib/`       | Static and shared libraries for embedding             |
 | `include/`   | C++ headers for integration                           |
 | `daslib/`    | Standard library modules (`.das` files)               |
@@ -39,7 +39,7 @@
 | `tutorials/` | Language, integration, and module tutorials           |
 | `dastest/`   | Test framework (usable for testing your own code)     |
 | `utils/`     | Tooling: MCP server for AI assistants (`mcp/`), LSP server for Claude Code (`lsp/`), package manager (`daspkg/`), lint (`lint/`), code formatter (`das-fmt/`), duplicate detector (`detect-dupe/`), coverage (`dascov/`), AOT/JIT helpers |
-| `skills/`    | AI-assistant task instructions (paired with the root `CLAUDE.md`) |
+| `skills/`    | AI-assistant task instructions (paired with the root `CLAUDE.md`); `skills/daslang/` is the standalone language reference, auto-loaded for agent sessions at the SDK root and copyable into any project's `.claude/skills/` |
 | `tree-sitter-daslang/` | Tree-sitter grammar, shared library, and highlighting queries |
 
 ## Quick Start

@@ -1,0 +1,232 @@
+# Preflight — CI lane ↔ local mirror
+
+Read this before pushing a non-trivial PR, or when a CI lane goes red and you
+need to reproduce it. Every CI failure during the fixed-array rework (PR #3095)
+was an **oracle mismatch** — a gate CI enforces that no local step mirrored —
+not a wrong change. This file maps every PR-triggered lane to its exact local
+mirror, or says honestly that there isn't one.
+
+**`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
+runs the fast tier (format + lint + clang frontend pass on changed C++ —
+escalating to a full src+tests-cpp sweep when a header changed; seconds);
+`-- --full` adds the untracked-files gate, dasgen freshness, the CI-only-das
+compile sweep, the doc gates, ctest, the interp/JIT/AOT suites, and the
+sequence smoke. `--list-gates` shows the menu; `--only <names>` /
+`--skip <names>` select subsets. Gates whose host tool or module is missing
+report `SKIP` with an install/rebuild hint. The tables below remain the
+reference for what each gate mirrors and for running any step by hand.
+
+The **untracked gate** has no CI lane to mirror — it is PR-time hygiene:
+`git ls-files --others --exclude-standard` must print nothing, so every
+leftover file forces one durable decision — commit it, delete it, or ignore it
+(a `.gitignore` pattern when every clone mints one, `.git/info/exclude` for
+box-local keeps). Session goo that would otherwise ride into a PR or linger
+for weeks fails the run instead.
+
+A complete `--full` run is Release-only and fails immediately for a Debug
+host. Debug may be used for intentional subset diagnosis with `--only` or
+`--skip`; it must never be substituted when a Windows MCP process locks the
+Release runtime DLL. Stop the worktree's `utils/mcp/main.das` host and rebuild
+Release instead — the MCP watcher restarts it.
+
+**Conventions.** `<daslang>` = your compiler binary: `bin/Release/daslang.exe`
+(Windows MSVC multi-config), `bin/daslang` (Ninja single-config — what CI's
+extended_checks uses on all three OSes), or `build/daslang` (Make/Ninja
+without `EXECUTABLE_OUTPUT_PATH`). Commands are platform-neutral unless marked.
+"WSL" means the verbatim-CI recipe in `skills/internal/wsl_ci_repro.md` — fresh clone at
+the CI ref, never a working-tree copy.
+
+## What CI runs (per-PR + nightly)
+
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
+| `build.yml` (nightly) | the `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (the two toolchain long-poles, gated OFF per-PR CI — alt-toolchain, lowest per-PR signal) **plus the full build matrix — its Release cells (sanitizers included) run the full AOT sweep** ("Slow Release Tests"). A break in any of these surfaces within ~24 h, not at PR time. |
+| `nightly_imgui.yml` | the `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite (`modules/dasImgui/tests`, ~151 daslang-live-subprocess tests, fully headless) on ubuntu + macos — see its section below |
+| `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
+| `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
+| `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
+| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | five doc gates |
+| `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+
+> A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains + the full build matrix (Release cells add the full AOT sweep; Debug cells ride along — `matrix` isn't available in a job-level `if`, so they can't be excluded); `bundle_smoke` and `build_linux_gcc` are gated off `schedule`.
+
+## build.yml — the build matrix
+
+Per-lane steps: build → JIT test sweep (isolated-parallel; it mints the dll
+cache itself — the old separate "Prewarm JIT cache" step is gone) →
+interpreter sweep →
+`ctest -L small`. The full AOT sweep runs on the NIGHTLY cron and on manual
+`workflow_dispatch` runs only (Release
+lanes incl. sanitizers + mingw/clang-cl); per-PR lanes just build
+`test_aot_subset` (tests/language, part of ALL) as a compile+link gate and run
+no AOT tests. **`preflight --full`'s full AOT gate is therefore the only
+pre-push check for AOT regressions outside tests/language — don't skip it.**
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| Interpreter sweep | `<daslang> dastest/dastest.das -- --color --failures-only --max-file-time 30 --timeout 1800 --test tests` | Fails if any completed test file exceeds 30 seconds. |
+| JIT sweep | `<daslang> dastest/dastest.das -jit -- --jit-opt-level=3 --color --failures-only --max-file-time 30 --isolated-mode --batch 4 --timeout 1800 --test tests` | isolated-PARALLEL (2×hw-thread workers, 4 files/batch, ~3× vs sequential, identical pass/fail set; CI's retry drops `--batch` for one-process-per-test). Windows-local `clang-cl` link failures are env noise — the catchable class is LLVM verifier errors; full end-to-end JIT needs WSL/mac. See `skills/internal/make_pr.md` §2.5 for the 2-test smoke version |
+| Small C++ tests | `ctest --test-dir build --build-config Release -L small --output-on-failure` | drop `--build-config` on single-config generators. **Run this after touching `tests-cpp/`** — and remember MSVC tolerates C++ that clang/gcc reject (the doctest bit-field incident); see `skills/internal/writing_cpp_tests.md` |
+| AOT sweep (full) | `cmake --build build --config Release --target test_aot`, then `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --max-file-time 30 --timeout 1800 --test tests` | nightly CI + manual `workflow_dispatch` only — this local mirror is the only pre-push gate for it |
+| AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (optionally `--target run_tests_aot_subset` to also sweep tests/language) | what per-PR CI lanes actually build (part of ALL) |
+| Debug lanes | `cmake --build build --config Debug --target daslang`, then the sweep against `bin/Debug/daslang.exe` — safe in-checkout: Debug coexists with Release by design (`bin/Debug/`, `_debug.shared_module` suffix) | Debug bypasses the fused interpreter permutations — a fix that lands only in the fused path passes Release everywhere and trips Debug; conversely fused-path bugs need Release. If you touched `src/simulate/simulate_fusion_*`, run both configs |
+| Sanitizer lanes (linux Release asan/tsan/ubsan) | WSL: `CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_USE_SANITIZER=<asan\|tsan\|ubsan>`, then the JIT sweep on `tests/language` | not mirrorable on Windows/mac. CI applies LSan suppressions (`format_error`, `uriParseSingleUriA`, `uriMakeOwner`) — see the workflow's Test step |
+| linux_arm / darwin lanes | mac: same commands as linux. From Windows: not mirrorable | ARM-specific reds (LLVM SelectionDAG, alignment) are CI-only signals |
+
+## build.yml — bundle_smoke (linux)
+
+Release-modules build → `cmake --install --prefix ./daslang_bundle --strip` →
+`bash ci/smoke_test_bundle.sh ./daslang_bundle`. WSL-mirrorable verbatim; run
+it when touching CMake `install(...)` rules, `ci/release_modules.txt`, or
+module loading. This is the lane that catches install-layout regressions.
+
+## build.yml — build_windows_mingw (nightly)
+
+**Runs nightly, not per-PR** — the cron `schedule` fires it, so it won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch, manually dispatch `build.yml` (note: a manual dispatch runs the *full* workflow, not just this job).
+
+msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT
+sweeps, plus two things no other lane runs: the `bind_clangbind.das`
+self-binder freshness check (`git diff --exit-code -- modules/dasClangBind/src/`)
+and `test_const_preproc.das`. A local msys2 mirror is possible but rarely worth
+it — the 80/20 for "compiles under MSVC, breaks under clang" is a clang
+syntax-only pass on your changed C++ (see clang-cl below). If you regenerated
+dasClangBind bindings, run the self-binder locally per `skills/internal/clang_bind_build.md`.
+
+## build.yml — build_windows_clangcl (nightly)
+
+**Runs nightly, not per-PR** — same as mingw above; manually dispatch `build.yml` to exercise it on a branch (a manual dispatch runs the full workflow).
+
+The preflight `cpp-syntax` gate mirrors this lane's frontend: a clang-cl `/Zs`
+pass (parse + semantic analysis + template instantiation — no codegen) on your
+changed C++, escalating to ALL ~160 src+tests-cpp TUs (~15-30 s) when any core
+header changed, since a header edit can break template instantiation in TUs
+the diff never touched. What it cannot catch — link-stage divergence and
+codegen-only issues — is rare, arrives batched in one CI log, and is cheap to
+fix post-CI.
+
+A full local mirror is possible but **destructive in the main checkout**: all
+build dirs of one source tree share `bin/`, `lib/`, and the
+`modules/<X>/*.shared_module` outputs (only Debug gets a `_debug` suffix), so
+CI's verbatim configure+build below overwrites your MSVC Release binaries and
+Release shared modules. Run it in a separate clone or worktree only:
+
+```powershell
+# SEPARATE clone/worktree only — clobbers bin/Release + Release .shared_modules otherwise
+# CI drives clang-cl directly with Ninja — NOT the VS generator / "ClangCL" toolset
+# (deliberate: the VS generator produced spurious MSB8066 -1 false reds; see the job header in build.yml).
+cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+cmake --build build-clangcl --parallel
+```
+
+Manual single-file check (what the gate automates):
+
+```powershell
+# from a VS dev prompt (clang-cl on PATH)
+clang-cl /Zs /EHsc /std:c++17 -Iinclude -I3rdparty/fmt/include -I3rdparty/uriparser/include -Itests-cpp/3rdparty -Ibuild/include <changed>.cpp
+```
+
+(mac/WSL equivalent: `clang -fsyntax-only -std=c++17 ...`.) `-Ibuild/include`
+matters — the configure-generated `modules/external_*.inc` headers live there,
+and TUs like `src/simulate/fs_file_info.cpp` include them.
+
+## extended_checks.yml
+
+**The defining divergence: CI configures with ALL release modules ON** —
+`ci/release_modules.txt` flips `DAS_HV/LLVM/AUDIO/PUGIXML/SQLITE/GLFW_DISABLED=OFF`.
+A typical local dev build has several OFF, so module-gated `.das` and C++
+(dasOpenGL helpers, dasHV-dependent daslib code) is compiled by CI and by
+nothing on your machine. For any change to daslib generics or the type system,
+mirror the configure:
+
+```bash
+cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLED=OFF \
+  -DDAS_PUGIXML_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_GLFW_DISABLED=OFF
+```
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| dasgen freshness | `<daslang> utils/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; see `skills/internal/visitor_gen_bind.md` |
+| Run examples | `cmake --build build --config Release --target run_examples` | |
+| Utils tests | `cmake --build build --config Release --target run_utils_tests` | |
+| Tutorial dry-runs | `cmake --build build --config Release --target dry_run_tutorials` | catches compile rot in `tutorials/` — run after daslib API changes |
+| Standalone exes | `cmake --build build --config Release --target all_utils_exe`, plus `<daslang> -exe -output bin/das-fmt utils/das-fmt/dasfmt.das` and `... bin/das-lint utils/lint/main.das` | `-exe` needs dasLLVM + lld-link on PATH |
+| Sequence smoke | Windows: `pwsh examples/games/sequence/ci_smoke_test.ps1 "$(pwd)"`; linux/mac: `bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"` | build the runtime modules first: `cmake --build build --config Release --target dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio dasModulePUGIXML dasModuleStbImage`. **This is the only pre-merge lane that compiles GLFW-gated `.das` like dasOpenGL** — run it for type-system / daslib-generics changes |
+| Formatter `--verify` | preflight's `format` gate runs it exactly (tracked files via `--files-from`); manual: `<daslang> utils/das-fmt/dasfmt.das -- --path ./ --verify` | CI's second verify pass runs an `-exe`-compiled `bin/das-fmt.exe` built from `dasfmt.das`; the v1→v2 syntax converter is a separate binary, `gen1_to_gen2` (`utils/dasFormatter/`) |
+| Lint changed `.das` | preflight's `lint` gate — THREE rails, mirroring CI exactly: host-flavor interp, the LINUX-lane mirror (`--disable-module dasMetal --disable-module dasVulkan` — CI's verdict is rendered ONLY by the linux lane, where platform `static_if` halves compile out and their requires/args read unused), and the `-exe`-compiled `das-lint` (different module resolution). Manual single-rail form: `git diff --name-only origin/master..HEAD -- '*.das' \| xargs <daslang> utils/lint/main.das -- --quiet` | zero warnings on ALL rails; a mirror-only STYLE030/LINT012 takes the both-worlds `nolint:...,LINT019` spelling |
+| daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | rarely built locally; catches static-registration / no-dynamic-modules divergence |
+| Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | run after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
+| AST verify sweep — **not a PR gate** | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only` — only an `AST verify` line is a failure; compile errors are expected (many tests assert one) | Runs on `extended_checks.yml`'s 04:00 cron, not per PR: ~23 min, one daslang process per test file. Force it early with `gh workflow run extended_checks.yml`. Run it locally after touching macro or AST-building code — `skills/das_macros.md` |
+| Authored-doc code blocks — **not a PR gate** | `<daslang> utils/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | Nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run it locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes that docs quote — `skills/internal/doc_sweep.md` |
+| MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI but runs anywhere; MCP signature changes break it silently — run after editing `utils/mcp/` |
+| dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/internal/abi_break_sweep.md` |
+| Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
+
+## doc.yml — the five gates
+
+Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
+`daslib/**` means **any daslib edit** runs all five. CI stops at the FIRST
+das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
+locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
+`DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
+workflow: `skills/internal/make_pr.md` §4; conventions: `skills/internal/documentation_rst.md`.
+
+**There is no LaTeX or PDF gate.** The docs are HTML only — no `latex_documents`
+in `conf.py`, no texlive in CI, no PDFs on the release. So a unicode character
+that pdflatex lacked a glyph for is no longer a build concern anywhere.
+
+| # | Gate | Local mirror |
+|---|---|---|
+| 1 | das2rst runs clean (positional handmade-doc validation panics on count mismatch) | `<daslang> -documentation doc/reflections/das2rst.das` — repeat until no panic; the host policy keeps per-box transforms inert |
+| 2 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
+| 3 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
+| 4 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
+| 5 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
+
+Tool discovery: preflight probes PATH, then `~/Library/Python/*/bin` +
+`~/.local/bin` for sphinx-build. A `.. video::` whose recording is missing from
+`doc/source/_static/tutorials/` is a `-W` warning like any other, so preflight
+stages the docs-assets release once per tree and says so in the gate detail when
+staging failed and the build then red.
+
+## wasm_build.yml
+
+`wasm_build`: emsdk build of `web/` + a Node hello-world. `wasm_cross`:
+cross-compiles utility mains to wasm32 via dasLLVM and runs them under
+wasmtime, with emscripten **pinned to 5.0.3** (newer clang crashes on
+`utils/dasFormatter/ds_parser.cpp` diagnostics). At risk when touching the
+parser (`.ypp` → huge generated `.cpp`), `web/`, or the dasLLVM cross-compile
+pipeline. Local mirror = emsdk in WSL following the workflow verbatim; for
+most changes, let CI carry this lane.
+
+## build_eastl.yml
+
+Builds daslang against EASTL (`cmake/das_config_eastl/` shadow config) and a
+second time with `DAS_NO_FILEIO=1`, where a shadow `<filesystem>` header
+`#error`s on any stray include. At risk when adding `#include <filesystem>`
+outside fio, new vsnprintf/locale dependencies, or touching
+`cmake/das_config*`. WSL-mirrorable with the workflow's exact commands;
+otherwise just keep `<filesystem>` includes inside the fio layer.
+
+## nightly_imgui.yml
+
+**Runs nightly, not per-PR** — the cron `schedule` (03:00 UTC) fires it, so it
+won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch
+(imgui-touching PRs), manually dispatch `nightly_imgui.yml` itself.
+
+The dasImgui playwright suite (`modules/dasImgui/tests`, ~151 tests; ubuntu + macos,
+fully headless): each test spawns a `daslang-live` subprocess hosting a feature
+app from `modules/dasImgui/examples/` and drives it over the HTTP live API. The
+`tests/.das_test` gate keeps the directory out of per-PR `--test tests/` full
+sweeps; targeting the folder directly (as the nightly and the mirror below do)
+bypasses the gate.
+
+Local mirror (also automated as `preflight --full`'s `imgui` gate — nightly CI
+is this suite's only lane, so that gate is its only pre-push check):
+
+```bash
+cmake --build build --config Release --target daslang daslang-live
+bin/Release/daslang dastest/dastest.das -- --test modules/dasImgui/tests --headless \
+  --isolated-mode --isolated-mode-threads 4 --timeout 600 \
+  --exclude glfw_synth --exclude key_hud --exclude embedded_terminal
+```

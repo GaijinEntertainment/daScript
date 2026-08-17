@@ -92,7 +92,7 @@ var inscope db <- open_result._value     // SqlRunner has [finalize]; must be in
 db |> create_table(type<Car>)            // ... use freely; closes when `db` goes out of scope
 ```
 
-`SqlRunner` is a `smart_ptr`-style scoped resource (one of the residual types still using refcount semantics — see `skills/gc_migration.md`). Variables holding it need `var inscope` and move-binding (`<-`), not plain `=`. Inside an existing transaction or a `with_sqlite` block, the runner is just passed by value to helpers — no extra ceremony.
+`SqlRunner` is a `smart_ptr`-style scoped resource (one of the residual types still using refcount semantics). Variables holding it need `var inscope` and move-binding (`<-`), not plain `=`. Inside an existing transaction or a `with_sqlite` block, the runner is just passed by value to helpers — no extra ceremony.
 
 `open_sqlite(path)` is the strict form and panics on failure. The third form `with_latest_sqlite(path)` (from `sqlite/sqlite_migrate`) combines `with_sqlite` + `apply_recommended_pragmas` + `migrate_to_latest` into one call — the preferred app-startup form when migrations are in play.
 
@@ -132,7 +132,7 @@ Field annotations:
 | `@sql_default_fn = "FN"` | Whitelisted SQL built-in (`CURRENT_TIMESTAMP` / `CURRENT_DATE` / `CURRENT_TIME`); emits ` DEFAULT FN` |
 | field initializer (`x : T = literal`) | Becomes ` DEFAULT <literal>` for bool / int / float / string. Mutually exclusive with `@sql_default_fn` |
 | `@sql_computed = "expr"` | Generated column (DEFAULT VIRTUAL); add `@sql_stored = true` for STORED. Excluded from INSERT/UPDATE bind paths |
-| `@sql_json` | TEXT-backed; serialized via `daslib/json` + `daslib/json_boost`. **Queryable**: `_sql` walker descends `_.JsonCol.path.subpath` into `json_extract(...)`. See [tutorials/sql/28-json.das](../tutorials/sql/28-json.das) and `skills/json.md` |
+| `@sql_json` | TEXT-backed; serialized via `daslib/json` + `daslib/json_boost`. **Queryable**: `_sql` walker descends `_.JsonCol.path.subpath` into `json_extract(...)`. See [tutorials/sql/28-json.das](../tutorials/sql/28-json.das) and `skills/daslang/references/json.md` |
 | `@sql_blob` | BLOB-backed; serialized via `daslib/archive`. **Opaque** to `_sql` — descending into a `@sql_blob` column is a compile error |
 | `@safe_when_uninitialized` | Required on `Option<T>` fields and on raw `array<uint8>` BLOB fields under `strict_smart_pointers`; lets the row-reader build a default-init row |
 
@@ -457,7 +457,7 @@ let in_berlin <- _sql(db |> select_from(type<Account>)
 // SQL: SELECT "Id", "Profile" FROM "Accounts" WHERE json_extract("Profile", '$.Addr.City') = ?
 ```
 
-Both forms panic on bad stored data — malformed JSON trips `read_json`, corrupt archive bytes trip `mem_archive_load`. `try_select_from` / `try_query` only catch sqlite3-level prepare/step errors; they do NOT convert adapter panics to `Err`. See `skills/json.md` for JSON value modeling. See [tutorials/sql/28-json.das](../tutorials/sql/28-json.das) for the full surface.
+Both forms panic on bad stored data — malformed JSON trips `read_json`, corrupt archive bytes trip `mem_archive_load`. `try_select_from` / `try_query` only catch sqlite3-level prepare/step errors; they do NOT convert adapter panics to `Err`. See `skills/daslang/references/json.md` for JSON value modeling. See [tutorials/sql/28-json.das](../tutorials/sql/28-json.das) for the full surface.
 
 ## Views — `[sql_view]` + `_create_view`
 
@@ -787,4 +787,4 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 
 - Tutorials — every shipped feature has a runnable file under `tutorials/sql/` (45 files).
 - Implementation — `daslib/sql_boost.das`, `daslib/sql_linq.das`, `daslib/sql_provider.das` (neutral core); `modules/dasSQLITE/daslib/sqlite_boost.das`, `sqlite_provider.das`, `sqlite_migrate.das` (SQLite provider).
-- Related skills — `skills/json.md` (`@sql_json` columns), `skills/linq.md` (`_sql` is LINQ-shaped), `skills/das_macros.md` (`[sql_table]` / `_sql` are macros), `skills/gc_migration.md` (`SqlRunner` is one of the residual smart_ptr types).
+- Related skills — `skills/daslang/references/json.md` (`@sql_json` columns), `skills/daslang/references/queries.md` (`_sql` is LINQ-shaped), `skills/das_macros.md` (`[sql_table]` / `_sql` are macros).

@@ -168,7 +168,7 @@ The :code:`.mp4` is what RSTs reference; it ships on the rolling docs-assets Git
 
 If you want to iterate without re-recording the host's state, drive a
 manually-launched host via :code:`mcp__daslang__live_command` instead
-(see "Verifying a recording" in :code:`skills/imgui_recording.md`). The
+(see "Verifying a recording" in :code:`skills/internal/imgui_recording.md`). The
 driver script is for the canonical artifact pass.
 
 Stop conditions

@@ -82,8 +82,9 @@ prefix keyword `private`; `[_macro, private]` is an error.
 `AstLintMacro` / `AstInferMacro` class), with one method
 `apply(prog : ProgramPtr; mod : Module?) : bool`. The annotation picks the phase:
 `[pre_infer_macro]`, `[infer_macro]` (return `true` to re-infer), `[dirty_infer_macro]`,
-`[optimization_macro]`, `[lint_macro]` (per module), `[global_lint_macro]` (once, after all
-modules), `[pre_simulate_macro]`.
+`[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
+`[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`,
+`[post_compile_macro]` (after gc-root collection).
 
 Inside any macro `compiling_module()` is the module being compiled now (`mod` is the module owning
 the macro). Walk its declarations with
@@ -129,6 +130,9 @@ tracked by the compiler's node GC, not a `smart_ptr`:
 - Assign with plain `=` (`func.body = blk`, `td.firstType = elem`); pass by value. **No `var
   inscope`, no `<-`** for AST pointers, and no `move_new` / `add_ptr_ref`.
 - No `get_ptr(x)` — the value already is a pointer. `x == null`, `x.field`, `x is ExprVar` work.
+- **`is` / `as` on a node are EXACT-type tests, not "kind of".** `expr is ExprField` is `false`
+  when `expr` is an `ExprSafeField`, and `as` on the wrong type crashes. Enumerate every concrete
+  node class you mean, or use a matcher (below) instead of a hand-written ladder.
 - **Unique ownership**: a node lives under exactly one parent. To reuse a subtree, clone it —
   `clone_type`, `clone_expression` (deep), `clone_function`, `clone_variable`, `clone_structure`
   (not the generic `clone_to_move`).
@@ -145,11 +149,17 @@ var twice = new ExprOp2(at = at, op := "+", left = sum, right = clone_expression
 ```
 
 The few compiler types still refcounted as `smart_ptr` do use `var inscope` / `<-`: `ProgramPtr`,
-`ContextPtr`, `FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it).
+`FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it). `ContextPtr`
+is a C++-side typedef only — `var c : ContextPtr` does not compile. (probe-verified 2026-08-16)
 
 A `Variable` you emit **must** have `_type` set — `new TypeDecl(baseType = Type.autoinfer)` lets
 inference fill it. Give an emitted `ExprVar` a `_type` too when it flows into a generic call:
 `clone_expression` copies `_type` faithfully, so a null propagates to every clone.
+
+Fixed arrays are a chain of `TypeDecl` nodes, one per dimension, element in `firstType`,
+outermost first — the size lives in `fixedDim` (`fixedDimExpr` while it is still an expression),
+never in a `dim` field. Build a chain with `make_fixed_array_type(total, element)` from
+`daslib/ast_boost` rather than by hand. A type macro's payload arrives in `typeMacroExpr`.
 
 ## Reification — building AST from source patterns
 
@@ -190,6 +200,12 @@ var fun <- qmacro_function("madd") <| $ ( a, b ) {
 Splice inputs are cloned for you — `$e(...)` clones each substitution independently, so
 pre-cloning with `clone_expression` is wasted work even when one source feeds several slots.
 `describe(node)` renders any AST node back to source, the workhorse for debugging macro output.
+
+`$c(name)` is what collapses a family of near-identical `qmacro` arms into one — pick the callee
+name as a string, then splice it. It cannot be qualified: `_::$c(name)(...)` is
+`error[30151] syntax error, unexpected $c, expecting name`, so drop the `_::`. The spliced name
+resolves at the splice site, in the user's require chain, which is what `_::` would have bought.
+(probe-verified 2026-08-16)
 
 ## Matching AST — `qmatch`
 
@@ -270,8 +286,16 @@ Visibility is never an annotation: write `def private helper`, `struct private F
 
 ## Gotchas
 
-- **Annotation argument names cannot be grammar keywords.** `[myanno(default = "x")]` is a syntax
-  error; pick a synonym (`kind`, `fallback`).
+- **Annotation-argument names allow exactly three keywords — `type`, `in`, `default` — plus
+  plain names.** `[myanno(default = "x", type = "y", in = "z")]` compiles and the macro reads
+  all three; any other keyword or type token is `error[30151]` — `@range = 5` fails, pick a
+  synonym (`span`). (probe-verified 2026-08-16)
+- **A generated `var x : $t(st)` with no initializer trips
+  `error[31016] uninitialized variable is unsafe`** for any struct type — field initializers do
+  not exempt it. Add `= default<$t(st)>` when the type is default-constructible; for a bound
+  native type, where `default<>` is `error[50503] unsupported variable type`, set
+  `flags.safeWhenUninitialized = true` on the (cloned) declaration type instead, and only where
+  the uninitialized read is intentional.
 - **`options` are module-local for pass macros.** The macro fires once per module in the require
   chain and reads *that* module's options table; an option set in one file does not cascade.
 - **Each macro module compiles into its own context**, so compile-time globals one macro mutates

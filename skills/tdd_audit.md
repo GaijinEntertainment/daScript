@@ -30,6 +30,13 @@ Enumerate from the diff, not from the whole file:
 Reachable means a public entry point can drive it. An unreachable branch is a different
 finding (dead code), not a missing test.
 
+**A rejection branch wants a reliably-failing fixture.** For a branch whose job is to
+refuse — a compile error, a rejected input, a guard that panics — the distinguishing test
+is a fixture that must FAIL, and passes the suite by failing: a `failed_*`/`cant_*`/`invalid_*`
+file, an `expect NNNNN` directive, a must-panic case. Its negative control is inverted:
+remove the guard and the fixture wrongly succeeds. A rejection covered only by
+happy-path tests is untested — the guard can vanish and everything stays green.
+
 ## The audit procedure
 
 For each branch, in order of preference:
@@ -118,10 +125,12 @@ branches and tests is a real result; "tests pass" is not an audit.
 
 ## Where this runs in the daslang repo (repo-only)
 
-- The rule is constitutional: every `REVIEW.md` carries it verbatim in its opening
-  (template: `skills/review_md.md`).
+- The rule is constitutional: `REVIEW_COMMON.md` (repo root) is its home, and every
+  `REVIEW.md` opens with a pointer there (template: `skills/review_md.md`). This skill's
+  "The rule" section carries the same text for the shipped bundle and follows
+  `REVIEW_COMMON.md` when it changes.
 - The per-PR audit is the `tdd-auditor` agent (`.claude/agents/tdd-auditor.md`), launched
-  in `skills/make_pr.md` step 0a beside the REVIEW.md auditors — one instance for the
-  whole diff, so folders with no checklist (`daslib/`, `src/`, `utils/`) are covered too.
+  in `skills/internal/make_pr.md` step 0a beside the REVIEW.md auditors — one instance for the
+  whole diff, so code no REVIEW.md reaches is covered too.
 - Repo test placement (AOT registration, the `tests/.das_test` gate) is
-  `skills/tests_in_repo.md`.
+  `skills/internal/tests_in_repo.md`.

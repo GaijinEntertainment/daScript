@@ -243,7 +243,7 @@ scheduler 12/12, server 17/17 live (post-work stats assertions), page via mock+p
   behavior; `write_toml` gets daslib tests; README route table + demo/bench sections.
 - **Claude Design pass** over the final contents in the Forge system, then apply.
 - One PR (server + daslib/toml writer + scheduler counters + dasllama_math getter + page +
-  demo script + tests + README), per `skills/make_pr.md`.
+  demo script + tests + README), per `skills/internal/make_pr.md`.
 
 ---
 

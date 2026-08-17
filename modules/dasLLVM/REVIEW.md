@@ -16,14 +16,16 @@
 - **Work added to or split out of a timed phase prints its own `LLVM JIT time:` number, or
   the phase's number covers it and the phase's line still prints.**
 
-- **A change to code that EMITS machine code — IR generation, target-machine setup, an
-  `[llvm_code]` generator body, the jit call ABI (the generated function signatures, name
-  scheme, prologue, and the externs the install phase binds) — bumps
+- **A change to code that EMITS machine code — any file in
+  `tests-cpp/small/test_jit_emitter_pin.cpp`'s `EMITTER_FILES` set (repo root) — bumps
   `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`). A change that only SELECTS
   among existing generators' `[llvm_code]` arguments — the `[tune]` stamping — needs no
-  bump: stamped arguments fold into the cache keys per function. The emitter-edit trigger
-  is enforced by `tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); weakening that
-  test is a defect.
+  bump: stamped arguments fold into the cache keys per function. What counts as emitting is
+  `ARCHITECTURE.md` §1.2.
+
+- **Weakening `tests-cpp/small/test_jit_emitter_pin.cpp` (repo root) is a defect** — it is
+  what enforces the bump trigger: a change to an `EMITTER_FILES` file bumps
+  `LLVM_JIT_CODEGEN_VERSION`.
 
 - **A new environment or config input to the cache key folds inside `jit_env_salt`
   (`daslib/llvm_jit_run.das`), never directly into either cache key — the DLL key or the
@@ -32,7 +34,8 @@
   (AOT hashes) are key material, not salt.
 
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`** — the
-  family's reference.
+  family's reference. A change to the framework itself — `daslib/llvm_tune.das` or its
+  tests — is reviewed with `skills/internal/llvm_tune_internals.md`.
 
 - **A diff that adds a new top-level section, or a new value shape inside one, to the tune
   sidecar (`<app>.tune.json`, written by `daslib/llvm_tune.das`) updates
@@ -51,13 +54,6 @@
   knob. Set-but-inert stays silent; an exposure-only diff defers the announce to its
   consumer, same change. A knob added, or given a new effect, without its announce is a
   defect.
-
-- **An environment knob is an `[EnvConfig]` field in `daslib/llvm_env.das`, read as a `g_env_jit` /
-  `g_env_tune` field.** The load-once/arm-children mechanism is `ARCHITECTURE.md` §3.
-
-- **An ambient name — an environment variable the module reads but does not own — goes
-  through `env_value_of` / `env_is_set`, with an `ambient_rows` entry backing every literal
-  name; a `set_env_variable` names only a declared knob.**
 
 - **A computed-name env read — `get_env_variable(expr)` / `has_env_variable(expr)` outside
   `daslib/llvm_env.das` — is a defect only review catches: spell the name as a literal

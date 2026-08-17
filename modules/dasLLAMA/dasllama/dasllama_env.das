@@ -651,7 +651,7 @@ struct public CoreEnv {
     home : string = ""
 
     @clarg_default_doc = "conservative default"
-    @clarg_doc = "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md."
+    @clarg_doc = "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/internal/environment_variables.md."
     jobque_threads : Option<int>
 
     @clarg_default_doc = "2 on darwin (engine [init]), else 0"

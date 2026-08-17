@@ -129,6 +129,18 @@ Any other stdio LSP client can spawn it directly as
 architecture notes are in :ref:`utils_lsp`.
 
 
+AI assistants: the language skill
+=================================
+
+``skills/daslang/`` (in the repository and in every SDK bundle) is a
+standalone daslang language reference in the Claude-skill format ---
+``SKILL.md`` plus per-topic references (types, functions, memory,
+macros, strings, JSON, ...), every example verified against the
+compiler.  An agent session started at an SDK root picks it up
+automatically; for any other project, copy or link the directory into
+the project's ``.claude/skills/``.
+
+
 Next steps
 ==========
 

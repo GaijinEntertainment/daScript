@@ -16,7 +16,7 @@ name: nightly daspkg index
 # The scheduled run always sweeps master (GitHub runs cron from the default
 # branch). workflow_dispatch from a non-default branch deliberately sweeps
 # THAT branch — an on-demand externals check for ABI-touching PRs (see
-# skills/abi_break_sweep.md); the step summary names the ref it swept.
+# skills/internal/abi_break_sweep.md); the step summary names the ref it swept.
 
 on:
   schedule:

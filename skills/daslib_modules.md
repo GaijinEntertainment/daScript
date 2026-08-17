@@ -1,101 +1,38 @@
-# Standard Library Module Conventions
+# daslib module conventions
 
-## Base + boost pattern
+Read before working inside `daslib/` or adding a module to it. What each module *offers* is
+`skills/daslang/references/modules-and-stdlib.md`; how to format the file is
+`skills/das_formatting.md`. This file is only the conventions a contributor must match.
 
-Many modules come in pairs: `daslib/foo.das` (core) + `daslib/foo_boost.das` (macro layer):
+## Base + boost
 
-- **Base module** (`linq.das`, `json.das`, `regex.das`, etc.): pure functional API, runtime functions, iterator implementations
-- **Boost module** (`linq_boost.das`, `json_boost.das`, etc.): macro-based sugar, compile-time optimizations, pipe-syntax rewrites
-- Most boost modules re-export their base publicly (`require daslib/foo public`), so `require daslib/foo_boost` alone suffices — do NOT add a separate `require daslib/foo`. **Check the boost module's own `require` line before assuming it**: `profiler_boost` requires `daslib/profiler` **non**-publicly, and `templates_boost` has no `daslib/templates` require at all (it re-exports `daslib/quote public`).
-- Several `*_boost` modules have no `daslib/<base>.das` sibling. Some extend a builtin or native module instead (`strings_boost` → builtin `strings`, `jobque_boost` → `jobque`, `math_boost` → `math`, `uriparser_boost`); others have no base at all (`array_boost`, `async_boost`, `bitfield_boost`, `class_boost`, `macro_boost`, `md_boost`, `sort_boost`, `typemacro_boost`, `with_boost`).
-- `regex.das` also has `require strings public`, so `require daslib/regex` (or `require daslib/regex_boost`) makes `slice`, `starts_with`, etc. available
-- Example: `linq.das` provides `where_`, `select`, `order_by` functions (the filter is `where_` with a trailing underscore — `where` is the reserved comprehension keyword; same for `having_`); the `_fold` macro that rewrites chains into array-form passes lives in `daslib/linq_fold.das`, which `linq_boost.das` re-exports publicly
+Many modules come in pairs: `daslib/foo.das` (runtime functions, iterators, the pure API) plus
+`daslib/foo_boost.das` (macro sugar, compile-time rewrites). Most boost modules re-export their base
+with `require daslib/foo public`, so requiring the boost alone suffices — but **check the boost
+module's own require line before assuming it**: `profiler_boost` requires `daslib/profiler`
+*non*-publicly, and `templates_boost` has no `daslib/templates` at all (it re-exports
+`daslib/quote`). Several `*_boost` modules have no base sibling either — some extend a builtin
+(`strings_boost` → `strings`, `jobque_boost` → `jobque`, `math_boost` → `math`), others stand alone
+(`array_boost`, `class_boost`, `sort_boost`, `with_boost`, …).
 
-## Iterator implementation pattern
+## Naming
 
-Many daslib functions follow this convention for iterator-based operations:
+- A name that collides with a keyword takes a trailing underscore — `where_`, `having_` in `linq`.
+- A module whose short verbs would collide unqualified prefixes all of them: `logger_init`,
+  `logger_flush`, never a bare `flush`.
+- `//!` doc-comments go on public symbols only — see `skills/comment_style_hygiene.md`.
 
-- `foo_impl` — internal generator function (yields values)
-- `foo` — public function returning `iterator<T>` (calls `_impl`)
-- `foo_to_array` — convenience wrapper returning `array<T>` (pipes through `to_array`)
-- Inplace `foo` on arrays — overload taking `var arr : array<T>` and modifying in place
+## Iterator functions
 
-### The `each` iterator convention
+- `foo_impl` is the private generator, `foo` the public wrapper returning `iterator<T>`,
+  `foo_to_array` the `to_array` convenience, plus an in-place overload taking `var arr : array<T>`
+  wherever the operation has one.
+- Name it **`each`** when the type should work as `for (v in x)`: only that name is auto-inserted by
+  the compiler, and it wants `[unsafe_outside_of_for]`
+  (`skills/daslang/references/closures.md`).
 
-- `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type usable in `for` loops
-- When the iterator is named **`each`**, the compiler allows omitting the call: `for (v in each(x))` is identical to `for (v in x)`. This does NOT apply to other iterator names.
-- Prefer the short form `for (v in x)` over `for (v in each(x))` in user-facing code
+## Modules outside daslib
 
-## Key daslib modules
-
-- `daslib/linq.das` — LINQ-style queries (`where_`, `select`, `order_by`, `group_by`, `zip`, etc.)
-- `daslib/linq_boost.das` — pipe/dot-syntax `_<op>` shorthand macros; re-exports `linq` and `linq_fold` publicly
-- `daslib/linq_fold*.das` — the 7-file `_fold` family (`linq_fold` + `_common` / `_array` / `_decs` / `_json` / `_table` / `_sql`) where the array-form rewrite actually lives
-- `daslib/match.das` / `daslib/ast_match.das` — pattern matching on variants and types; the `ast_` companion matches AST node shapes
-- `daslib/templates_boost.das` — template/reification infrastructure for AST macros; `apply_template` rewrites AST nodes
-- `daslib/functional.das` — lazy iterator adapters and higher-order function utilities (filter, map, reduce, fold, scan, enumerate, chain, pairwise, iterate, find, find_index, partition, tap, for_each, flat_map, sorted, repeat, cycle, islice, echo, sum, any, all). Uses lambdas/functions for generator-returning functions (blocks cannot be captured into generators). Non-generator functions (reduce, fold, for_each, find, find_index, partition) also accept blocks.
-- `daslib/strings_boost.das` — string manipulation helpers
-- `daslib/json.das` / `daslib/json_boost.das` — JSON parsing/generation. Core: `JsValue` variant (7 types: `_object`, `_array`, `_string`, `_number`, `_longint`, `_bool`, `_null`), `JsonValue` struct wrapper, `read_json`, `write_json`, `JV()` constructors, `JVNull()`. Boost: safe access (`?.`, `?[]`, `??`), `from_JV`/`JV` generic struct↔JSON conversion, `%json~...%%` reader macro, `BetterJsonMacro` (`is`/`as` on `JsonValue?`). Settings: `set_no_trailing_zeros`, `set_no_empty_arrays`, `set_allow_duplicate_keys`. `try_fixing_broken_json` repairs LLM output. Key gotcha: `js?.value` accesses `JsonValue.value` field (returns `JsValue`), not a JSON key named "value" — use `js?["value"]` for that.
-- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions. Re-exports `strings` publicly (`require strings public`), so `require daslib/regex` makes `slice`, `starts_with`, etc. available. Core: recursive-descent parser building `ReNode` AST, function-pointer-driven backtracking matcher. `Regex` struct, `regex_compile(pattern, case_insensitive=false, dot_all=false)`, `regex_match(re, str, offset=0)` → end position or -1, `regex_search(re, str, offset=0)` → `int2(start, end)` or `int2(-1,-1)` (finds first match anywhere), `regex_group(re, group_num, str)` → captured substring, `regex_group_by_name(re, name, str)` → named group substring, `re[index]` → `range` for group by int index (1-based), `re["name"]` → `range` for named group (returns `range(0,0)` if not found), `regex_foreach(re, str, block)` iterates all matches passing `range` values, `regex_replace(re, str, block)` replaces matches via block, `regex_replace(re, str, replacement)` replaces matches with template string (`$0`/`$&` for whole match, `$1`-`$9` for numbered groups, `${name}` for named groups, `$$` for literal `$`), `regex_split(re, str)` → `array<string>` of substrings between matches, `regex_match_all(re, str)` → `array<range>` of all match ranges, `is_valid(re)` checks compilation. Supports: `.` (any char except newline — use `dot_all=true` to also match `\n`), `^` (BOL), `$` (EOL), `+` `*` `?` quantifiers (greedy), `+?` `*?` `??` quantifiers (lazy), `{n}` `{n,}` `{n,m}` counted quantifiers (greedy), `{n}?` `{n,}?` `{n,m}?` counted quantifiers (lazy), `(...)` capturing groups, `(?:...)` non-capturing groups, `(?P<name>...)` named capturing groups, `(?=...)` positive lookahead, `(?!...)` negative lookahead, `|` alternation, `[abc]` `[a-z]` `[^...]` character sets, `\w` `\W` `\d` `\D` `\s` `\S` classes, `\b` `\B` word boundaries, `\t` `\n` `\r` `\f` `\v` escapes, `\xHH` hex escapes. ASCII only (256-bit CharSet). Flags: `case_insensitive=true` for case-insensitive matching (ASCII only), `dot_all=true` for dot matching newline. Boost: `%regex~pattern%%` reader macro (compile-time, no double-escaping); flags via `%regex~pattern~flags%%` where `i`=case-insensitive, `s`=dotAll. Key gotchas: `{` must be escaped as `\{` in daslang strings for counted quantifiers (`"\\d\{3}"`), but reader macro takes literal text (`%regex~\d{3}%%`). `regex_match` always matches from position 0 (or offset) — it does NOT search for the pattern; use `regex_search` for first occurrence or `regex_foreach`/`regex_match_all` to find all occurrences. Nested groups have limited support — prefer sequential groups. `-` is only special inside `[...]` character sets. Quantifiers on lookaheads are not allowed.
-- `daslib/interfaces.das` — interface-based polymorphism. `[interface]` marks a class as an interface (function-only fields), `[implements(IFoo)]` generates a proxy class and `get`IFoo`` getter on the implementing struct. `InterfaceAsIs` variant macro enables `is`/`as`/`?as` operators for interface types. Supports **interface inheritance** (`class IChild : IParent`), **default method implementations** (non-abstract methods in interface classes are inherited by the proxy), **completeness checking** (compile error if abstract methods are missing), and **const-only interfaces** (when all methods have `def const`, `as`/`?as`/`is` work on const pointers via interior mutability — uses an `==const` parameter type plus `unsafe(addr<T? -const>(self))` for lazy proxy caching). Method naming convention: `def IFoo`bar()` on the implementing struct. Tests (repo-only): `tests/interfaces/` (5 files, 84 tests).
-- `daslib/flat_hash_table.das` — template-based open-addressing hash table (`TFlatHashTable`) with methods: `empty`, `length`, `clear`, `grow`, `rehash`, `reserve`, `key_index`, `key_exists`, `get`, `erase`, `foreach`, `keys`, `values`, `operator[]`, `operator?[]`
-- `daslib/soa.das` — Structure-of-Arrays macro. Annotate a struct with `[soa]` to generate a parallel SOA layout (`Foo`SOA``) where every field becomes `array<FieldType>`. Provides `[]` indexing via `SOA_INDEX` proxy (rewrites `soa[i].field` → `soa.field[i]` at compile time). Generated functions: `length`, `capacity`, `push` (clone semantics, preserves source), `push_clone`, `emplace` (move semantics, destroys source), `erase`, `pop`, `clear`, `resize`, `reserve`, `swap`, `from_array`, `to_array`. Handles non-copyable fields (e.g. `array<int>`) correctly: `push`/`push_clone`/`from_array` use clone per-field, `emplace` uses move per-field. For-loop macro expands `for (it in soa)` into per-field array iteration. Tests (repo-only): `tests/soa/` (4 files, 126 tests).
-- `daslib/logger.das` — Structured JSON Lines logger for daslang tools. Writes one JSON object per line (ts/level/cat/msg/fields) to `{get_das_root()}/logs/<name>.log`. API is prefixed (`logger_init`, `logger_info`, `logger_warning`, `logger_set_min_level`, `logger_set_category_level`, `logger_flush`, `logger_close`, `logger_install_hook`) so short verbs like `flush`/`info` don't collide unqualified. Reuses runtime `LOG_TRACE`..`LOG_CRITICAL`. Dotted-prefix category filtering (`mcp.live.foo` matches an override on `mcp.live`). `logger_install_hook()` registers a process-wide debug agent that diverts `print()`/`to_log()` into the log — critical for stdio-transport processes (MCP, language servers) where any stdout write corrupts protocol framing. One install covers main + every `new_thread` worker.
-- `daslib/ansi_colors.das` — ANSI terminal color/style helpers. `init_ansi_colors()` auto-detects from `--color`/`--no-color` flags and `TERM`/`NO_COLOR` env vars. Color functions: `red_str`, `green_str`, `yellow_str`, `blue_str`, `magenta_str`, `cyan_str`. Style functions: `bold_str`, `dim_str`, `underline_str`, `reset_str`. All return plain text when `use_tty_colors` is false
-- `daslib/builtin.das` — core builtins like `to_array`, `to_table`
-
-`daslib/` holds ~146 modules; the list above is the ones whose conventions this file explains. Others carry their own skill and are found through the `CLAUDE.md` skill table rather than here: `clargs.das`, `fio.das`, `decs.das` / `decs_boost.das` / `decs_state.das`, the `sql*.das` family (incl. `sql_linq.das`), `perf_lint.das` / `style_lint.das` / `lint_config.das`. Three more are worth knowing by name because other rules point at them: `strings_convert.das` (the `try_to_int` / `try_to_float` rail for untrusted input), and `result.das` / `option.das` (the `Result` / `Option` types clargs and others return). Also frequently reached for: `algorithm.das`, `enum_trait.das`, `contracts.das`, `apply.das`, `toml.das`, `temp_strings.das`.
-
-> **Modules under `modules/`** (as opposed to `daslib/`) need `.das_module` descriptors for the dynamic binary. Pure-das modules use `register_native_path`, C++ modules use `register_dynamic_module`. See `skills/dynamic_modules.md`.
-
-## Structure macro development patterns
-
-When building `[structure_macro]` annotations that generate companion types and operations (like `[soa]`, `[decs]`):
-
-### Generating functions with `qmacro_function`
-
-The most maintainable pattern for generating typed functions is `qmacro_function` with reification:
-
-```das
-def make_length(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-    var stypeT = make_soa_type(st, stype, true)   // build TypeDeclPtr
-    let firstFieldName = string(st.fields[0].name)
-    var fn = qmacro_function("length") $(st : $t(stypeT)) : int {
-        return length(st.$f(firstFieldName))
-    }
-    fn.flags.generated = true
-    return <- fn
-}
-```
-
-`TypeDeclPtr` and `FunctionPtr` are gc_node AST pointers, so they take plain `var x = ...` — **not** `var inscope ... <-`, which fails with `error[30918] can't delete ast_core::Function?`. Set the flag as a field (`fn.flags.generated = true`); the `fn.flags |= FunctionFlags.generated` spelling compiles but is what STYLE022 flags.
-
-Key techniques:
-- **`$t(typeDeclPtr)`** in function signatures — sets parameter/return types dynamically
-- **`$f(stringVar)`** for field access — `st.$f(name)` becomes `st.x` when `name="x"`
-- **`$c(stringVar)`** for call names — `$c(callName)(arr, val)` calls the function named by `callName`
-- **`$b(arrayOfExprPtr)`** for body splicing — build an array of expressions per-field, then inline them all
-
-### Handling non-copyable fields
-
-When generating per-field operations on user structs, fields may be non-copyable (`array<T>`, `table<K;V>`, lambdas):
-
-- **Clone semantics** (preserves source): use `push_clone` per field — safe for `push`, `push_clone`, `from_array`
-- **Move semantics** (consumes source): use `emplace` per field — for `emplace` where source destruction is expected
-- **Clone-assign**: use `:=` instead of `=` for per-field assignment — `to_array` needs this
-- **Test non-copyable fields explicitly**: always include a test struct with at least one `array<T>` field to catch copy errors
-
-### Registration: `add_function` vs `add_generic`
-
-- **`add_function`** — registers a concrete, fully-typed function. Used when all types are known at macro expansion time.
-- **`add_generic`** — registers a generic function template that gets instanced at each call site. Use when the function needs to participate in overload resolution or when type inference is needed (e.g., `push` may need to resolve to the correct clone/copy overload depending on field types).
-
-## Channels and cross-context communication
-
-- `with_channel(N) $(ch) { ... }` — creates a channel expecting `N` notify calls before `for_each_clone` unblocks
-- **`notify` vs `notify_and_release`**: when a lambda captures a channel, the reference count is incremented; `notify_and_release` decrements the entry count AND releases that extra reference, setting the variable to `null`. When passing a channel as a plain argument (e.g. via `invoke_in_context`), no lambda capture occurs — no extra reference is added — so use plain `notify`
-- `notify_and_release` sets the channel/status variable to `null` after release
-- `push_clone(ch, value)` — push a clone of `value` into the channel
-- `for_each_clone(ch) $(val : T#) { ... }` — drain channel; data arrives as temporary type `T#`
-- `invoke_in_context(context, "func", ch)` — can pass `Channel?` directly to a child context
-- Child scripts that use channel operations need `require daslib/jobque_boost`; compile with `compile_file` + `make_file_access("")` so the child can resolve daslib modules from disk
+A module under `modules/` (rather than `daslib/`) needs a `.das_module` descriptor for the dynamic
+binary — pure-das modules use `register_native_path`, C++ modules `register_dynamic_module`. See
+`skills/dynamic_modules.md`.

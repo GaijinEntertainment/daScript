@@ -136,7 +136,7 @@ upload the `.mp4` to `docs-assets` ahead of the RST cite to keep CI passing.
 For a new tutorial `foo`:
 
 1. Write `modules/dasImgui/examples/tutorial/foo.das` and
-   `modules/dasImgui/tests/record_foo.das` (see `skills/imgui_recording.md` for the
+   `modules/dasImgui/tests/record_foo.das` (see `skills/internal/imgui_recording.md` for the
    driver template).
 2. `daslang.exe -project_root . modules/dasImgui/tests/record_foo.das` —
    produces `doc/source/_static/tutorials/foo.apng`
@@ -159,7 +159,7 @@ can be deleted; nothing references it.
 
 Detailed driver-authoring guidance, pacing constants, menu-interaction
 gotchas, and visual aid recipes live in
-[`skills/imgui_recording.md`](../../skills/imgui_recording.md).
+[`skills/internal/imgui_recording.md`](../../../skills/internal/imgui_recording.md).
 
 ## Notes
 

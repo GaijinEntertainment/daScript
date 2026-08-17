@@ -175,10 +175,20 @@ run_check "mcp.das (empty stdin)" bash -c \
 # demands the line be marked `repo-only` instead.
 echo
 echo "Shipped skills:"
+# nothing lists the shipped skills any more, so the layout itself is the assertion
+printf '  %-30s ' "bundle layout"
+if [[ -f "$BUNDLE/skills/daslang/SKILL.md" && -d "$BUNDLE/skills/daslang/references" \
+      && ! -d "$BUNDLE/skills/internal" && -f "$BUNDLE/.claude/skills/daslang/SKILL.md" \
+      && -f "$BUNDLE/REVIEW_COMMON.md" && -f "$BUNDLE/.claude/agents/dragon.md" ]]; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, and no skills/internal/)"
+    FAIL=$((FAIL + 1))
+fi
 printf '  %-30s ' "references resolve in bundle"
-# The ship list is read from the REPO manifest, not the bundle, so a skill sitting on disk
-# but missing from install/skills.list is still caught. Skipped rather than failed when no
-# python3 is present, so this script stays runnable on a bare box.
+# Skipped rather than failed when no python3 is present, so this script stays
+# runnable on a bare box.
 # Probe by EXECUTING, not by `command -v`: Windows ships a WindowsApps python3 shim that
 # is on PATH but exits "Permission denied" until the user installs from the Store.
 PY=""
@@ -187,8 +197,7 @@ for cand in python3 python py; do
 done
 if [[ -z "$PY" ]]; then
     echo "SKIP (no python3)"
-elif SKILL_REFS="$("$PY" "$CI_DIR/check_shipped_skills.py" "$BUNDLE" \
-                        "$CI_DIR/../install/skills.list" 2>&1)"; then
+elif SKILL_REFS="$("$PY" "$CI_DIR/check_shipped_skills.py" "$BUNDLE" 2>&1)"; then
     echo "OK"
     PASS=$((PASS + 1))
 else

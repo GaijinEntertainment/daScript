@@ -66,7 +66,11 @@ generator (they become the generator's parameters and fold into the JIT DLL
 cache key). `suffix="..."` overrides the auto-derived variant name;
 `requires="feat"` is a fallback-eligibility hint (a comma-separated AND of
 `|`-separated OR alternatives, matched against the host CPU features plus the
-`DAS_JIT_*_FORCE_FEATURES` overrides).
+`DAS_JIT_*_FORCE_FEATURES` overrides). `tune_requires_ok(expr)` evaluates
+such an expression on its own, and `tune_pick_fallback(chain)` runs the same
+rule over a `;`-chain of `suffix` / `suffix:requires` entries — that is how a
+library whose permutations are *generated*, with no row to hang `requires=`
+on, still gets a per-ISA default.
 
 ### `[tune(gen="key", fallback="suffix")]`
 
@@ -132,7 +136,11 @@ warning **names the missing kernels**. `version_of=` (optional,
 `"module/CONST"`) pins the scope to a library version: the sidecar's
 provenance must record that int constant's current value (under the
 lowercased constant name; `version_key=` overrides), so bumping the constant
-on kernel work invalidates every box's winners. The pin rides the same
+on kernel work invalidates every box's winners. The annotation names that
+module by string only, so the declaring module must `require` it as well
+(suppress the unused-require lint), and the scope's tuner must stamp the
+value with `tune_provenance_note` — an unstamped pin re-tunes on every
+start. The pin rides the same
 completeness check everywhere it runs — the policy rail, `daspkg release
 --quick`'s inherit gate, resolver adoption. The winners themselves live in the ONE
 per-app file — every library's tuner **upserts its own keys** and preserves
@@ -197,6 +205,16 @@ even when the sidecar is complete (a re-tune; the flag is stripped from the
 re-exec so the child converges). `DAS_TUNE_POLICY` overrides the declared
 value — `DAS_TUNE_POLICY=fallback` is the CI kill switch.
 
+Two further escapes exist for a run that must not mint. `--jit-opt-level=0`
+flips the *injected default* to `fallback`, because winners raced under O3
+codegen mean nothing at O0; a declared `[tune_policy]` is left alone, and
+`DAS_TUNE_POLICY` still overrides either way. `tune_suppress_mint("KNOB")`
+is the runtime twin, called from a library `[init]`: it suppresses the
+`auto` / `restart` mint process-wide, so untuned scopes keep their fallback
+stamps and the process runs. The name passed is the override the caller acts
+for, and it is printed verbatim in the suppression line. An explicit `--tune`
+outranks both.
+
 ```{note}
 
 Tuning cannot happen mid-compile: the tuner is a separate daslang process,
@@ -204,7 +222,8 @@ and adopting its winners means new compile-time stamps regardless. That is
 why `auto` tunes at runtime and re-execs into a fresh compile rather than
 stamping in place — which also keeps the winners cross-module-safe (a
 required library's kernels are stamped at their own `[tune]` time, not
-mutated after the fact).
+mutated after the fact). Re-exec is why an `auto` application's `main` must
+return `void` or `int`.
 ```
 
 ## Standalone builds
@@ -231,13 +250,24 @@ A frozen artifact must not demand or run tuning:
   bodies on the generic-CPU rail; a kernel-free exe stays
   generic/redistributable.
 
+One more compile is inert for a different reason: under the host's
+`-documentation` policy — a documentation or reflection root — every tune
+annotation and the policy rail are off. Ask with `is_building_documentation()`.
+
 `daspkg release` applies "untuned does not start" to artifacts at **build
 time**: the `-exe` build's release-deps JSON reports every scope with
-per-key completeness (`tune_scopes_status`); daspkg runs the tuners of
-incomplete scopes, rebuilds so the exe bakes the measured winners, and ships
-the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the
-exe — the `"runtime"` knob section travels with the artifact, and the file
-documents the baked winners).
+per-key completeness (`tune_scopes_status`), and every scope that declares a
+tuner **re-mints on every release** — a frozen exe never tunes, so an
+unmeasured winner would ship forever. `--quick` is the only mode that
+inherits an existing sidecar, and only a complete, fresh one; an incomplete
+or stale sidecar mints even under `--quick`. A tuner that *refuses* (the
+noise gate, a failed validation) fails the release outright rather than
+shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
+measured winners, and ships the sidecar beside the exe as
+`<bundle>.tune.json` (touched newer than the exe — the `"runtime"` knob
+section travels with the artifact, and the file documents the baked
+winners). The sidecar it measures against is the source-side one beside the
+app script; the bundle gets a byte-identical copy.
 
 ## Sidecar location and staleness
 
@@ -257,17 +287,19 @@ absent (stamps fall back, the policy rail re-tunes), and the first
 outlive the binary that made them. A sidecar carrying another box's
 identity is stale too — measurements are a property of the box — unless
 `provenance.applied_box` names this box, which is how a scope resolver (below)
-adopts a compatible sibling box's mint deliberately. The identity compare runs
-through `box_match_key`, which folds the volatile Windows `os_build` UBR, so a
-monthly cumulative update does not re-tune while a real OS-version change does.
+adopts a compatible sibling box's mint deliberately. That identity is the
+five-field `platform|arch|model_id|os_build|cpu` string `tune_box_identity()`
+builds, and the compare runs through `box_match_key`, which folds the volatile
+Windows `os_build` UBR, so a monthly cumulative update does not re-tune while a
+real OS-version change does.
 A scope declaring `version_of=` adds a third axis: a sidecar minted at another
 library version reads incomplete for that scope alone.
 
 Every "untuned" refusal **names its reason** via `tune_sidecar_verdict`
 (`TuneSidecarReason`) — `absent` (no sidecar at the path), `stale_binary`
 (both dates), `foreign_box` (both identities), `unreadable` (not a tune
-sidecar), `version` (both values), `missing` (the kernel names); a bare
-"untuned" no longer leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
+sidecar), `version` (both values), `missing` (the kernel names), so a bare
+"untuned" never leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
 points at a file that reads untuned, the compile prints one loud warning per
 scope instead of silently stamping fallbacks — an explicit manifest disables
 the policy rail, so nothing else would say so, and a measurement run believing
@@ -276,7 +308,8 @@ model exists to prevent.
 
 Two seams let a supervisor or a network service participate:
 
-- `tune_set_scope_resolver(fn)` — registered from an `[init]`, consulted by
+- `tune_set_scope_resolver(fn)` — registered from an `[init]` (which must run
+  before the guard at the top of `main`), consulted by
   the auto/restart policy guards before spawning a scope's tuner. A resolver
   that can satisfy the scope another way (dasLLAMA's exchange client downloads
   a matching per-box sidecar from dasllama.io) returns true; completeness is
@@ -412,6 +445,20 @@ deliberately no fast race mode: a short race cannot resolve sub-2% twins,
 so its winners are lottery tickets; the debugging concession is accepting
 an existing sidecar, never racing cheaply.
 
+## Adding a kernel family
+
+1. Write the reference `def` with an **explicit return type**, and register
+   its generator key under `[llvm_code]` (`llvm/daslib/llvm_jit_code.das`).
+2. Add the `[tune_perm]` grid, then `tune(gen=, fallback=)`; any
+   `[tune_companion]` rows go between the two.
+3. A library that already declares a `[tune_scope]` absorbs the new family
+   automatically — same sidecar, same tuner. Otherwise declare one scope on a
+   dummy struct in that module.
+4. Teach the harness to bench `<name>_variants()` and record the winner with
+   `tune_manifest_set("<name>", winner)`. A demanded kernel with no sidecar
+   entry re-tunes the whole scope on every start, so a family the harness does
+   not sweep yet still needs its shipped fallback recorded.
+
 ## Writing a harness
 
 A tuner is an ordinary `[export] def main` compiled with
@@ -433,8 +480,9 @@ UPSERTS: other functions' entries and other sections survive. A following
 ## Sidecar format
 
 A sectioned JSON object — perm winners under `"kernels"`, library runtime
-knobs under `"runtime"` (owned by the library that reads them), and
-`"provenance"` (who wrote it) refreshed on every write:
+knobs under `"runtime"` (owned by the library that reads them), the race
+tables behind each multi-variant winner under `"race"`, and `"provenance"`
+(who wrote it) refreshed on every write:
 
 ```json
 

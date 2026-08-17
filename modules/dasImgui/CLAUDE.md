@@ -9,7 +9,7 @@ The old standalone repo (borisbat/dasImgui) is archived with full history. `dasp
 - Module source: `modules/dasImgui/` (`bind/`, `src/`, `widgets/`, `examples/`, `utils/`)
 - Tests: `modules/dasImgui/tests/` — nightly CI lane `.github/workflows/nightly_imgui.yml`; see `modules/dasImgui/tests/README.md`
 - Docs: stdlib section `doc/source/stdlib/sec_imgui.rst` (+ generated pages), tutorials `doc/source/reference/tutorials/imgui/*.rst` (see Documentation below)
-- Skills: **repo root** `skills/imgui_*.md` (see table below)
+- Skills: `skills/imgui_*.md` (repo root) and `skills/internal/imgui_*.md` (see table below)
 - Recordings: intermediates in `doc/source/_static/tutorials/` (gitignored); MP4 deliverables on the rolling `docs-assets` GitHub release (see Recordings below)
 
 ## Skill files (REQUIRED)
@@ -17,8 +17,8 @@ The old standalone repo (borisbat/dasImgui) is archived with full history. `dasp
 | Skill file | Read BEFORE... |
 |---|---|
 | `skills/imgui_ui_debugging.md` | Diagnosing/fixing ANY UI or interaction bug (also mandated by the root CLAUDE.md) |
-| `skills/imgui_playwright.md` | Writing/editing any `modules/dasImgui/tests/test_*.das` or `record_*.das` driver — the **async rule** (gate on the effect, not a frame/sleep guess), the `wait_*` family, one-host-per-9090 |
-| `skills/imgui_recording.md` | Writing/editing any `record_*.das` driver — pacing constants, workflow, APNG→MP4 conversion |
+| `skills/internal/imgui_playwright.md` | Writing/editing any `modules/dasImgui/tests/test_*.das` or `record_*.das` driver — the **async rule** (gate on the effect, not a frame/sleep guess), the `wait_*` family, one-host-per-9090 |
+| `skills/internal/imgui_recording.md` | Writing/editing any `record_*.das` driver — pacing constants, workflow, APNG→MP4 conversion |
 | `skills/imgui_migration.md` | Migrating v1 daslang+imgui code (`require imgui/imgui_boost`, raw `NewFrame()`/`Begin()`) to v2. Read when you hit IMGUI001 / IMGUI002 |
 | `skills/imgui_application.md` | Structuring a long-running dasImgui app (init/update/shutdown lifecycle, heap ownership) |
 
@@ -35,7 +35,7 @@ The raw binding under `src/` is GENERATED. After changing the binding surface or
 git diff -- modules/dasImgui/src/     # commit the changes
 ```
 
-Needs the dasClangBind/libclang stack — read `skills/clang_bind_build.md` first. CI freshness gate: `build.yml`'s mingw nightly worker runs the self-binder and fails on a dirty `modules/dasImgui/src/`.
+Needs the dasClangBind/libclang stack — read `skills/internal/clang_bind_build.md` first. CI freshness gate: `build.yml`'s mingw nightly worker runs the self-binder and fails on a dirty `modules/dasImgui/src/`.
 
 **imgui version pin:** v1.92.6-docking, fetched via CMake FetchContent at build time. Bumping it means re-running the self-binder and committing the regenerated `src/`.
 
@@ -81,7 +81,7 @@ Run from the repo root (full recipe + curl smoke + recording workflow: `modules/
 
 - One daslang-live subprocess per test file; add `--isolated-mode --isolated-mode-threads 4` to parallelize. **`--headless` is required** — without it the spawned subprocesses pop real GLFW windows and flake on focus/port-reuse.
 - Nightly-only in CI (`.github/workflows/nightly_imgui.yml`, ubuntu + macos): this dir lies outside `tests/`, so `--test tests/` full sweeps never include it — run the folder directly (recipe above) or via preflight's `imgui` gate. CI excludes `glfw_synth`, `key_hud`, `embedded_terminal`. Windows CI is deliberately absent (runner fastfail 0xC0000409); local Windows excludes only the headless-impossible pair (`glfw_synth`, `key_hud`) — `embedded_terminal` (ConPTY, Windows-only) runs only there, and preflight's `imgui` gate applies exactly this split.
-- **Process cleanup between runs:** a killed dastest leaves a daslang-live child holding port 9090; sweep `daslang`/`daslang-live`/`dastest`/`imguiApp`/`imguiAppHeadless` processes before re-running — **by PATH, never bare by name** (a bare name-kill also murders the dasHerd watcher and every other tree's daslang; observed 2026-07-29). Sweep command: `skills/imgui_playwright.md`.
+- **Process cleanup between runs:** a killed dastest leaves a daslang-live child holding port 9090; sweep `daslang`/`daslang-live`/`dastest`/`imguiApp`/`imguiAppHeadless` processes before re-running — **by PATH, never bare by name** (a bare name-kill also murders the dasHerd watcher and every other tree's daslang; observed 2026-07-29). Sweep command: `skills/internal/imgui_playwright.md`.
 - Families: `test_<feature>.das` (`with_imgui_app` playwright tests), `failed_imgui_*.das` (lint negative smokes), `record_<scene>.das` (recording drivers — NOT in CI).
 
 ## Documentation
@@ -94,9 +94,9 @@ Docs live in the main Sphinx tree, published at daslang.io/doc:
 
 ## Recordings
 
-Three hard requirements for any recording (see `skills/imgui_recording.md`): (1) **do what it teaches** — every stage performs the real interaction it narrates, never just points; (2) **self-verify every step** — clicks go through `hold_through_voice`, value changes through `force_set_verified`, and a no-op interaction aborts loudly at teardown; (3) **pace by the voice** — dwell is the voiceover wav length, not hand-tuned sleeps. Captions/voice must be **ASCII**.
+Three hard requirements for any recording (see `skills/internal/imgui_recording.md`): (1) **do what it teaches** — every stage performs the real interaction it narrates, never just points; (2) **self-verify every step** — clicks go through `hold_through_voice`, value changes through `force_set_verified`, and a no-op interaction aborts loudly at teardown; (3) **pace by the voice** — dwell is the voiceover wav length, not hand-tuned sleeps. Captions/voice must be **ASCII**.
 
-Soundtracked pipeline (`modules/dasImgui/utils/prepare_recording.das` / `convert_recording.das`): prepare → record (`daslang -project_root . modules/dasImgui/tests/record_X.das`) → eyeball the `.apng` → convert to `.mp4` → `gh release upload docs-assets X.mp4 --clobber`. Full mechanics: `modules/dasImgui/tests/README.md` + `skills/imgui_recording.md`.
+Soundtracked pipeline (`modules/dasImgui/utils/prepare_recording.das` / `convert_recording.das`): prepare → record (`daslang -project_root . modules/dasImgui/tests/record_X.das`) → eyeball the `.apng` → convert to `.mp4` → `gh release upload docs-assets X.mp4 --clobber`. Full mechanics: `modules/dasImgui/tests/README.md` + `skills/internal/imgui_recording.md`.
 
 When debugging recordings or live-API behaviour: stop stale `daslang-live`/`imguiApp` processes first; probe ground truth via `mcp__daslang__live_command` (`screenshot`, `imgui_snapshot`, `imgui_mouse_status`, `help`); **always full-restart daslang-live between recording iterations** — interactive probes leave state that contaminates the next recording.
 

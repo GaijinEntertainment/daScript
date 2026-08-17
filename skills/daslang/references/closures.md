@@ -184,6 +184,12 @@ unsafe {                                        // required by the ref capture
 A lambda cannot capture a block — blocks are neither copyable nor movable
 (`error[30129] can't capture variable blk`). Pass a lambda or a function pointer instead.
 
+**Capture freezes the binding, not what it points at.** A copy-captured `var p : T?` is still a
+mutable pointer inside the frame: `p[i] = v` writes through to the original memory, and `p + off`
+is still a mutable `T?`. Copy capture only means the frame owns its own *copy of the pointer*.
+That is what makes a hoisted pointer usable from worker lambdas handed to a parallel-for.
+(probe-verified 2026-08-16)
+
 **An enclosing `unsafe` does not reach into a lambda body.** The body is a separate function, so
 unsafe operations inside it need their own wrap; a *block* body, which runs in the same frame, is
 covered by the outer wrap.
@@ -296,7 +302,8 @@ var g <- generator<int> {
 // yields 0, 9, 1, 9, 2, 9
 ```
 
-The older `generator<int>() <| $ { ... }` spelling still parses; write the brace form.
+The older block-literal spellings — `generator<int>() <| $ { ... }`, `generator<int>() <| $() { ... }`
+— still parse. Write the brace form.
 
 ---
 
@@ -317,6 +324,15 @@ delete it                      // always safe on a sequenced-out iterator
 
 `for` loops close and finalize the iterator automatically, so an explicit `delete` is only needed
 for one you stopped driving early.
+
+**The element type says whether the loop variable writes through.** `each(array<T>)` yields
+`iterator<T&>`, so `for (x in it) { x++ }` mutates the array; an iterator comprehension
+(`[iterator for (...); expr]`) and a plain `generator<T>` yield `iterator<T>` — a value per step,
+not a reference into any source. Spell `generator<T&>` when a generator must yield references. A generic parameter written `iterator<auto(TT) const>` constifies the element, which
+accepts both flavors through one instantiation — at the cost of a body that may not move from or
+mutate the elements. The parameter must still be `var`: a non-`var` iterator parameter is const as
+a *handle* and cannot be iterated at all (`error[30939] can't iterate over const iterator`).
+(probe-verified 2026-08-16)
 
 ### Making a type iterable
 
@@ -378,6 +394,9 @@ for (n in type<Numbers>) { ... }                     // every value of the enume
 - A lambda copy aliases the capture frame — deleting a container that holds two copies of one
   lambda is a double free.
 - A lambda body does not inherit an enclosing `unsafe`; a block body does.
+- **A lambda or block parameter silently shadows an enclosing function parameter of the same
+  name** — no warning, and the body sees the inner one. Give them distinct names.
+  (probe-verified 2026-08-16)
 - Capturing a non-copyable value with no capture list becomes a move, and is rejected until you
   write `unsafe` or an explicit `clone(...)`.
 - A generator body must end with `return false`, and `finally` on a loop body runs per iteration.

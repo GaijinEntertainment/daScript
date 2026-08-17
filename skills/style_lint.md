@@ -1,223 +1,47 @@
-# Style Lint Rules (`daslib/style_lint.das`)
+# Style lint (`STYLE*`)
 
-## Overview
+Read this before suppressing a `STYLE*` finding, and for the STYLE037/038 resolution policy.
+`daslib/style_lint.das` is a `[lint_macro]` AST pass that reports non-idiomatic shapes as
+error code 31209. How to run lint, and the shared `.lint_config` / `DAS_LINT_DISABLE` /
+`--enable` / `--disable` rail, are in `skills/perf_lint.md`; the per-rule knobs are below.
 
-The `style_lint` module detects non-idiomatic patterns in daslang code at compile time. It uses a `[lint_macro]` AST pass that walks the compiled program looking for known style issues and reports them as `CompilationError::runtime_macro_style` (error code 31209).
+There is no per-rule catalog here: every finding's error text states the pattern and the
+rewrite on its own. A finding you cannot act on from its message alone is a defect of the
+message — fix the text in `daslib/style_lint.das`, don't document around it.
 
-## Architecture
+Suppress one finding with `// nolint:STYLEnnn` on the line. Per-module `options` knobs:
+`_comment_hygiene` (STYLE014/015), `_ascii_strings` (STYLE039), `_cyclomatic_complexity`
+(STYLE037), `_function_length` (STYLE038), `_duplicate_regions` plus `_dupe_min_nodes` /
+`_dupe_min_statements` (STYLE040), and `_enable_default_off_rules` to force default-off rules on.
 
-- **Module:** `daslib/style_lint.das` — `module style_lint shared private`
-- **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true, build_lint_macro_disabled(prog), [comment_hygiene = <options _comment_hygiene>])`; the policy table comes from `daslib/lint_config` (default-off seeds + `.lint_config` + `$DAS_LINT_DISABLE`). Comment hygiene defaults on for sources under `daslib/` (`comment_hygiene_for`), and `options _comment_hygiene` overrides that default
-- **Visitor:** `class StyleLintVisitor : AstVisitor` — walks the AST with source-line inspection
-- **Error reporting:** `macro_style_warning(compiling_program(), at, message)` — reports as error code 31209
-- **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
-- **Tests:** `utils/lint/tests/` — one file per rule
+## STYLE037 / STYLE038 — suppress an honest shape, never force a split
 
-## Rules
+Both metric rules spell their escapes the same way: `// nolint:STYLE03x` on the `def` line, or a
+per-module `options _cyclomatic_complexity = N` / `options _function_length = N` (`0` disables).
 
-| ID | Pattern | Suggestion |
-|---|---|---|
-| STYLE001 | `foo() <| $(a) { ... }` | Remove `<|` pipe; use `foo() $(a) { ... }` |
-| STYLE002 | `foo() <| $() { ... }` | Remove pipe and `$()`; use `foo() { ... }` |
-| STYLE003 | `foo() $() { ... }` | Remove redundant `$()`; use `foo() { ... }` |
-| STYLE005 | `if (cond) { return val }` (and `{ break }` / `{ continue }`) | Use braceless `if (cond) return val` or postfix `return val if (cond)`. **Default-OFF** — the one rule seeded into `disabled_codes` by `seed_default_disabled` (`daslib/lint_config.das`); re-enable with `--enable STYLE005`, a `.lint_config` `STYLE005 = true`, or module-local `options _enable_default_off_rules = true`. Discriminator: `blk.at != inner.at` ⇔ user-written braces (synthetic blocks share LineInfo with the inner stmt). |
-| STYLE006 | `string(x.__rtti) == "ExprFoo"` | Use `x is ExprFoo` |
-| STYLE010 | `if (true) { ... }` | Use a bare block `{ ... }` |
-| STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
-| STYLE012 | `var a : array<T>; a \|> push(x); a \|> emplace(<-y)` (≥ 2 contiguous `push`/`emplace`), plus the **chain form**: ≥ 2 contiguous `push`/`emplace` into the same pure access chain (`rs.nums`, `fo[13].bar.far` — ExprVar root, field links, const-int/uint/string or simple-var indexes) | Plain var: array literal `var a <- [x, <-y]`, or typed constructor `var a <- array<T>(x, y)` when an explicit element type is needed (polymorphic upcasts, interface pointers). Chain `v.field` rooted at a var declared in the immediately preceding let: ctor provably leaves the field empty → fold into the constructor `var rs <- RegStruct(nums <- [10, 20], ...)`; ctor entry or struct-field initializer already fills it → silent (deliberate append); anything else (deeper chains, unrooted, pointer roots) → literal move-assign `chain <- [x, y]` with a nolint hint for intentional appends. Exactly-2-arg calls only — the 3-arg `push(a, v, at_index)` positional insert never collapses. `push_clone` excluded; single `push` stays silent — often more readable |
-| STYLE013 | `var a = Foo(); a.x = 1; a.y = 2` (or `var a : Foo` for `[safe_when_uninitialized]` structs), OR `var a = new Foo(); a.x = 1; a.y = 2` (zero-arg `new`-allocated pointer), ≥ 2 contiguous field assignments | Use a named-argument constructor: `var a = Foo(x = 1, y = 2)` for the value form, or `var a = new Foo(x = 1, y = 2)` for the `new`-allocated pointer form. Suggestion includes the actual struct name and field list. Skipped when init is non-empty (`Foo(x=1)` then `a.y = 2` stays silent), when assignments are not contiguous, for `inscope`/generated/generic-instantiation vars, and for null-pointer init (`var a : Foo?` followed by `a.x = ...` is a guaranteed NPE — different bug, different rule) |
-| STYLE014 | `//` or `//!` comment block of more than 3 contiguous lines at module/public scope | Trim to a 1-line WHY (move design notes to a `.md` doc, not source). Module-leading docstring (block before any AST decl in the file) is always allowed. Suppress per-block with `//!@nolint` on first line of a `//!` block (also stripped from generated RST), or `// nolint:STYLE014` on first line of a `//` block. **Enabled by default for modules whose source is under `daslib/`; elsewhere opt in with `options _comment_hygiene = true`.** An explicit module-local `false` overrides the path default. |
-| STYLE015 | `//` or `//!` comment block of more than 1 contiguous line inside a `def private` | Private symbols don't surface in any doc generator, so multi-line prose there is dead weight. Trim to one line, or suppress on first line with `// nolint:STYLE015`. **Enabled by default under `daslib/`; elsewhere opt in with `options _comment_hygiene = true`.** |
-| STYLE016 | adjacent `if (a) { return X }` / `if (b) { return X }` (or else-chained form) with the same payload | Combine with `\|\|`. Detection covers both `(a) two adjacent ExprIfThenElse statements` and `(b) if/else if chain`. Bare `break`/`continue` payloads count as equal; `return` payloads are structurally compared. |
-| STYLE017 | `if (cond) return true; else return false` (and the inverse) | Use `return cond` / `return !cond`. Two AST shapes: if-else with bool-literal returns, and `if (cond) { return b1 }` followed immediately by `return b2` (b1 != b2). |
-| STYLE018 | `b == true` / `b == false` / `b != true` / `b != false` (and Yoda forms) | Use `b` / `!b` directly. Skipped when both sides are bool literals (e.g. `true == true`). |
-| STYLE019 | `min(max(x, lo), hi)` (and the `max(min(x, hi), lo)` mirror) | Use `clamp(x, lo, hi)` from math module. Inner/outer must resolve to math::min/max specifically, not user overloads. |
-| STYLE020 | `from_JV(v, type<T>, defV)` resolving to a json_boost scalar overload | Use `v ?? defV`. Detection walks `expr.func.fromGeneric` to the root (two levels for json_boost's `[template(ent)]` generics) and matches root.name/root._module against `from_JV` / `json_boost`. Uses `expr._type` for the supported-scalar check (robust under pre- and post-instantiation arg shapes). Vector/table/struct/enum/bitfield overloads stay silent — no matching `??`. |
-| STYLE021 | `var v : table<string; JsonValue?>` followed by ≥ 2 contiguous `v \|> insert(<const string>, ...)` | Use the named-tuple JV form: `var v = JV((k1=val1, k2=val2, ...))` (`daslib/json_boost.das:638`). Computed keys disqualify the chain — those runs fall through to STYLE031 (a table literal accepts computed keys, `JV((...))` does not). `JsonValue` is matched as the das **struct** from module `json` (`tPointer`→`tStructure`, name + module) — the original `tHandle`+annotation check could never match a das struct, so the rule was dead code from landing until 2026-06-12. |
-| STYLE022 | `foo \|= BfT.m` / `foo &= ~BfT.m` where `foo._type.baseType == tBitfield` and the RHS resolves to exactly one named bit | Use `foo.m = true` / `foo.m = false` (bitfield-as-field assignment). RHS is matched in two shapes: `ExprField(value=ExprVar(BfT), name="m")` under lint policies, and `ExprConstBitfield(<single-bit mask>)` under normal compile policies (single-bit mask mapped back to bit name via `TypeDecl.argNames`). The `&=` form requires explicit `~`; bare `foo &= BfT.m` stays silent (different semantics). Multi-bit RHS (`Mode.read \| Mode.write`) and dynamic RHS skipped. **Note**: only safe when the AOT C++ side has `__bit_set` overloads matching the underlying integer type — `include/daScript/simulate/aot.h` provides `Bitfield&`, `Bitfield8/16/64&`, and raw `uint8/16/32/64_t&` overloads (the raw-integer set covers handle-bound bitfield fields like `Function::flags`, which is `uint32_t` on the C++ side). |
-| STYLE023 | `int_cast(bf & BfT.m) !=/== 0` where `bf._type.baseType == tBitfield`, the cast is one of `int`/`uint`/`int64`/`uint64`, and the RHS of `&` resolves to one named bit | Use `bf.m` (for `!= 0`) or `!bf.m` (for `== 0`). Matches both operand orders (`cast != 0` and `0 != cast`). Single-bit detection mirrors STYLE022 (both `ExprField` and `ExprConstBitfield` shapes); multi-bit masks and dynamic RHS skipped. Triggers on any of the four `ExprConst{Int,UInt,Int64,UInt64}` zero literals so signed/unsigned and 32/64-bit cast forms all fire. |
-| STYLE024 | Redundant `unsafe` wrap — `unsafe(expr)` (parser flag `userSaidItsSafe` on the inner expression) **or** `unsafe { ... }` block whose body contains no statement matching a known inherently-unsafe AST shape | Drop the wrap. Unsafe-ness is accumulated, not re-walked: `preVisitExpression` pushes an `UnsafeFrame` per node and `visitExpression` pops it, folding the child count into the parent (cached in `unsafeExprs`). Node-kind overrides call `mark_unsafe_in_stack()` for `ExprCast` with `upcastCast`/`reinterpretCast`, `ExprDelete`, `ExprAddr` (`@@<fn>`), `ExprRef2Ptr` (`addr(x)`), `ExprAsVariant`, `ExprSafeAsVariant` (`?as` — marked unconditionally like `as`, since `?as` on a non-pointer variant requires unsafe and operand pointer-ness is erased by `autoDereference` at lint time), `ExprAt` on a `table<>` value or raw pointer (unknown subexpr type also marks — bias to keeping the wrap), `ExprSafeAt` (`?[]`) on a table/array value or on a pointer with any pointee EXCEPT vector/fixed-array (mirrors `unsafe_pointer_safe_index` — a scalar-pointee `p?[i]` requires unsafe; the vector/fixed-array pointee forms don't), `ExprField` whose value is variant-typed, `ExprReturn` returning a reference/temporary, `ExprNew` whose ctor is null or `unsafeOperation`, and `ExprCall`/`ExprOp1`/`ExprOp2`/`ExprOp3` whose func passes `call_func_needs_unsafe` (`func.flags.unsafeOperation`, or `moreFlags.unsafeOutsideOfFor` outside a for-loop source). Subtrees with `genFlags.generated == true` are skipped entirely — macro-synthesized AST is excluded from the rule. Note: the parser-flag form (`unsafe(expr)`) only survives folding under `no_optimizations + no_infer_time_folding`, so const-foldable inner expressions (e.g. `unsafe(1 + 2)`) only fire under the lint runner (`utils/lint/main.das`). Block-form fires under regular compile too. |
-| STYLE025 | `unsafe { stmt1; stmt2; ...; stmtN }` block where exactly **one** statement's `UnsafeFrame` count is non-zero; the rest are mundane | Narrow to `unsafe(<sub-expr>)` on the one statement that needs it. Silent when ≥ 2 statements need unsafe (block scope is justified). 0-needing-statements falls through to STYLE024 (drop the block). |
-| STYLE026 | Nested `unsafe { ... }` — an `unsafe` block appears inside another open `unsafe` block, with no closure/lambda/generator boundary between them | Drop the inner wrap. Tracked by `unsafe_block_stack` — one slot per closure level, pushed on function entry and `blockFlags.isClosure` entry, popped on exit. `preVisitExprUnsafe` flags any entry where `stack[top] > 0`. Closure bodies push a fresh 0-slot because they execute in a separate context where the outer caller's `unsafe { }` does not propagate. |
-| STYLE027 | `var a : array<T>` / `var a : table<K;V>` with empty default-init, immediately followed by an `ExprFor` whose body — recursively, with at most one additional nested `ExprFor` (depth ≤ 2) — consists ONLY of `push`/`push_clone` (array) or `insert(k,v)` / `a[k] = v` (table) calls into `a`, optionally wrapped in `if (cond) { ... }` filters at any depth | Use a comprehension. Array: `a <- [for (x in SRC); EXPR; where COND]`. Table: `a <- {for (x in SRC); KEY => VAL; where COND}`. Drop the `where COND` when there is no filter. `emplace` is intentionally excluded (move-source-zeroing semantics differs from comprehension element-construction); generator/iterator comprehension (`[$f for x in src; ...]`) is also out of scope. |
-| STYLE028 | `self->method(args)` inside a class method (`current_function.flags.isClassMethod`). Detected on `ExprInvoke` with `isInvokeMethod=true` plus source-line inspection at `expr.at.column`: arrow-form column points at `-` of `->`, dot-form at `.`, bare call at the identifier's first char. After type inference `self->m`, `self.m`, and compiler-promoted bare `m` all share the same AST shape (`arguments[0]=ExprField(value=ExprTypeDecl, name=method)` per `ast_infer_type.cpp`'s `makeInvokeMethod` promotion sites, ~:5883/:5914/:6190, + ast_generate.cpp:270), so AST alone can't discriminate — column-byte check (`-` then `>`) plus `strip_right(slice(line, 0, col))` ending in `self` (with a non-identifier char before, so `myself`/`_self` don't qualify) confirms the user wrote `self->`. | Drop `self->`; call `method(args)` directly. The compiler auto-promotes bare `method(args)` inside a class method to the same invoke. `self.method(args)` is also accepted when an explicit receiver reads better. Free-function `obj->method(args)` is out of scope — only `self` receivers fire. Generic instantiations skipped via `current_function.fromGeneric != null`. |
-| STYLE029 | Non-public `require X` whose only use is ONE module that X re-exports | Require that module directly and drop X. Skipped when ≥ 2 of X's re-exports are used (aggregation facade is legitimate), or when X provides any macro or an `[init]`. Require analysis runs only when STYLE029/STYLE030 are enabled by lint policy. |
-| STYLE030 | Non-public `require X` that is entirely unused — no symbol from X (or anything it re-exports) is referenced | Drop the require. Skipped when X provides any macro or a lifecycle-hook function (`[init]`/`[finalize]`/`[before_reload]`/`[after_reload]`/`[live_command]` — those act by being required alone), when it only re-exports builtins used through it, or when X (or its public re-export closure) exports a function matching an unresolved call inside an uninstanced generic body. Suppress a deliberate keep with `// nolint:STYLE030`. |
-| STYLE031 | `var t : table<K;V>` (or `table<K>` set) with empty default-init, followed by ≥ 2 contiguous statements that are `t \|> insert(k, v)` (exact 3-arg map / 2-arg set form) or `t[k] = v` at-assigns (map only; `=`/`:=`/`<-` all count, mixing with inserts is fine) | Use a table literal move-assign `var t <- { k1 => v1, k2 => v2 }` (set: `var s <- { k1, k2 }`). Runs containing a **duplicate constant key** stay silent — sequential inserts overwrite (last wins) but a literal rejects duplicates at compile time (error 30706). Computed keys are allowed (a runtime-duplicate in a literal is last-wins, identical to inserts). `table<string; JsonValue?>` runs that STYLE021 fires on are skipped — `JV((k1=...))` is the stronger suggestion; computed-key JV runs still get STYLE031. |
-| STYLE032 | `var w : array<T>` empty default-init whose **immediately-following** statement is a single `w \|> push_from(src)` or `push_clone_from(src)`, where `src` is itself an `array<T>` | Use `var w := src` (clone-assign). A bulk copy/clone into a fresh-empty array IS a clone-init. **Array source with matching element type** (shared `bulk_src_matches_dest` predicate) — a C-array (`tFixedArray`) source, or a nested source that flattens (`array<array<T>>` into a flat `array<T>`, binding the recursive-flatten overload), stays silent (`var w := cArray` / `var w := nested` would not typecheck). Skipped on a non-empty initializer, an intervening statement (only `idx+1` is inspected — `reserve`/guard between decl and `push_from` keeps it quiet), or a single-element `push` (different name; STYLE012 covers ≥2 `push`/`emplace`). When `w` is then immediately `return <- w`, the post-rewrite `var w := src; return <- w` triggers the **PERF009 clone variant** → `return clone_to_move(src)`. The two rules compose. |
-| STYLE033 | A run of **≥ 2** `push_from(src)` / `push_clone_from(src)` (array sources, exactly 2-arg) on the same target — either after an empty `var c : array<T>` decl, or into an already-live array | The N ≥ 2 generalization of STYLE032. **Fresh-empty** target → concatenation: `var c <- concat(s1, s2, ...)` (**needs `require daslib/linq`**). **Existing** target → one same-name variadic call, but only when the element type can clone from const because the variadic overloads take const sources. Single-source runs stay STYLE032. Caps mirror library arities: concat 8, variadic push 4. C-arrays, nested flattening sources, and mutable-only-copy element types stay silent. |
-| STYLE034 | `reinterpret<T?>(addr(x))` where `T?` is a pointer type and the cast did not originate from `addr<T?>(x)` sugar | Use `addr<T?>(x)`; one `unsafe()` covers the combined operation. Non-pointer reinterpret targets stay silent. |
-| STYLE036 | A type contract (`-const`, `-&`, `-[]`, `-#`, `==const`, `==&`) on an already-resolved `cast<>` / `reinterpret<>` / `upcast<>` / `addr<T?>` target | Drop it — it does nothing. These are substitution contracts, consumed (and cleared) by infer when a generic binds; a concrete target has nothing to consume them, so a flag still set at lint time proves it was inert. Excludes `auto`/unresolved-alias targets, where substitution has not run yet (`reinterpret<ARGT -const>` in linq.das genuinely strips const) — that exclusion took the daslib hit count from 179 to 5. A *concrete* typedef is not excluded: `reinterpret<CI? -const>` with `typedef CI = int const` keeps the const, so it fires correctly. Generated subtrees skipped, and so are instantiated generics — the instance's resolved copy carries the source's auto-target contract inertly by construction (builtin's `lock` was the canary). |
-| STYLE035 | A plain non-`int` numeric variable compared with the same built-in numeric cast of `'<char>'` using `==`, `!=`, `<`, `<=`, `>`, or `>=` (either operand order) | Change the variable to `int` and compare directly with the character literal. Covers `int8/16/64`, `uint/8/16/64`, `float`, and `double`; reports at the declaration, so repeated comparisons produce one warning. Fields, indexes, calls, user-defined constructors, `int` variables, and numeric casts such as `uint(40)` stay silent. |
-| STYLE037 | Function or block-argument closure whose cyclomatic complexity exceeds the limit (`STYLE037_DEFAULT_MAX`; per-module override `options _cyclomatic_complexity = N`, `0` disables) | Split it into smaller functions (closure: extract into a named function). Score = 1 per scope, +1 per `if`/`elif` (incl. postfix `return X if (cond)`), `for`, `while`, ternary `?:`, `try/recover`, `match` arm, comprehension loop and its `where`. NOT counted: `&&`/`\|\|`, `??`/`?.`/`?[`/`?as`, `static_if`, generated control flow. Suppress with `// nolint:STYLE037` on the `def` line. |
-| STYLE038 | Function longer than the physical-line limit (`STYLE038_DEFAULT_MAX_LINES` = 80; per-module override `options _function_length = N`, `0` disables) | Split it into smaller functions. Length is `def` line through body's closing brace, comments and blanks included. **Functions only** — a closure's span always sits inside its host's, so the host trips first and a closure check could only double-report. Suppress with `// nolint:STYLE038` on the `def` line. Pairs with STYLE037: complexity catches condition-dense functions, length catches straight-line monsters (emitters, giant literals) that branch little. |
-| STYLE040 | A run of ≥ 2 statements (≥ 20 AST nodes) duplicated elsewhere in the same module, where a helper could absorb it verbatim | Extract a helper; the message carries the suggested parameter list. **On by default under `daslib/` and `utils/`**, off elsewhere (an unrelated PR must not inherit findings it did not create); override per module with `options _duplicate_regions`, or everywhere with `STYLE040 = true` in `.lint_config`. Measured overhead is under 1% of a lint pass on the tree's largest modules. Thresholds per module: `options _dupe_min_nodes` (default 20 AST nodes) / `_dupe_min_statements` (default 2); suppress a deliberate repetition with `// nolint:STYLE040`. Engine: `daslib/dupe_detect.das`. |
-| STYLE041 | `var flag = false` whose writes are terminal `flag = true` sites inside ONE later top statement, read only as `if (flag) break/continue` plumbing there, then consumed by a single immediately-following `if (flag) return X` (payload: void / literal const incl. a unary op over one / const argument / const global; a braced body may prefix report-ish calls over entry-scope names) | Return directly at each set site (move the body there when it carries reports) and drop the flag. Fail-closed twice: the structural walker classifies only the statement skeleton, then a reference-count reconciliation (`preVisitExprVar` + capture-name poison in `preVisitExprMakeBlock`) kills any candidate with an unclassified reference — callback bodies (the legitimate walk-abort idiom), `!flag` / `flag && x` reads, argument passes, reads after the consume. Init-true separator flags and cross-block decl/consume never match. Reported at the declaration; suppress with `// nolint:STYLE041` there. |
-| STYLE039 | Non-ASCII byte (≥ 0x80) in a string literal — error messages and emitted strings flow into logs and consoles that are not UTF-8 aware, where an em-dash or `×` becomes mojibake | Spell it out in ASCII (`-` for an em-dash, `(x4)` for `(×4)`, `->` for `→`). Detection: `preVisitExprConstString` scans the literal's bytes (interpolation chunks are `ExprConstString` nodes, so `"a — {x}"` fires too); first offending byte reported, `generated` nodes skipped. **Tri-state gate**: a module-local `options _ascii_strings` wins in either direction; else `.lint_config` `STYLE039 = true` turns it on everywhere (`= false` disables via the ordinary disabled-codes rail); else the default — ON only for sources under `daslib/` or `modules/` (the shared `is_shipped_library_source` predicate in `daslib/lint_config.das`, the ONE place lint rules key off source paths — `is_daslib_source` is the STYLE014/015 twin). Suppress an intended character (box drawing, localized text, a unicode demo) with `// nolint:STYLE039` on the line, or `options _ascii_strings = false` for a whole intentionally-non-ASCII module. Fixture caveat: tiny functions returning literals auto-inline into callers and the string builder const-folds them into new chunks located at the call site — lint fixtures need `options auto_inline_functions = false` so a `nolint` stays on the literal's line. |
+**New code should just follow the limits.** Design functions under both from the start; the
+escapes exist for irreducible shapes, not as a license to write oversized code and silence the
+warning.
 
-Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
+For EXISTING code a hit is a prompt to look, not an order to refactor. Never rewrite a working
+function — let alone a file's worth — to get under a number: mechanical extract-a-helper splits
+hide control flow behind single-caller helpers, and a wide refactor of working code is riskier
+than the count it removes. Options 1 and 2 are peers; pick by whether a natural seam exists.
 
-## Detection Strategies
+1. **Split along a natural seam** — a self-contained arm, a repeated pattern that collapses into
+   one helper, a distinct phase of a multi-phase function, genuinely duplicated logic. The
+   extracted helper must stand on its own; if its only virtue is that the caller's number went
+   down, do not extract it.
+2. **Suppress, with a short tail-comment reason**, when the shape is irreducible by design:
+   exact-type `is` ladders over handled AST types, visitor and dispatch tables, flat CLI-argument
+   handling, flat one-call-per-item lists (PSO compile/release runs, registration tables), and GPU
+   kernel bodies whose phases are coupled by barriers, simdgroup ops or register residency and
+   cannot cross a function boundary without changing the shader. Leaving a known-honest warning to
+   accumulate just trains everyone to ignore the rule.
+3. **Raise or disable the limit per module** when a whole file is legitimately dense — codegen
+   emitters, parsers, ported code.
 
-### Source-line inspection (STYLE001-003)
-
-The `<|` pipe and `$()` are desugared during parsing — in the compiled AST, `foo() <| $(a) { body }` and `foo() $(a) { body }` produce identical `ExprCall` nodes. The visitor uses `get_file_source_line()` to read the original source text and check for `<|` or `$` between the call and the block argument.
-
-**Generators:** `generator<T>() <| $ { ... }` is fully lowered before the lint pass — `ExprMakeGenerator` becomes `ExprMakeStruct` + builtin `each` call. Detection uses `preVisitExprMakeStruct` with column-precise source line check: verifies the `ExprMakeStruct` at position starts with `generator<` in the source, then checks for `<|` pipe after it.
-
-**`defer` special case:** The `defer` macro erases its call node before the lint pass runs, so `preVisitExprCall` never sees `defer <| $() { ... }`. Instead, `preVisitFunction` invokes `check_defer_pipe`, which scans each source line of the function body for `defer` followed by `<|` and a block opener (`$(`, `$ `, `${`, `@`, `{`). This is why STYLE001/002 on `defer` fire from a different code path than on ordinary calls.
-
-### Pure AST (STYLE005-006, STYLE010-011)
-
-- **STYLE005:** `ExprIfThenElse` with no `if_false`, single-statement body that is `ExprReturn`/`ExprBreak`/`ExprContinue`. Skips already-postfix forms by checking `ifte.at.line != stmt.at.line`.
-- **STYLE006:** `ExprOp2("==")` where one side is `string(x.__rtti)` pattern.
-- **STYLE010:** `ExprIfThenElse` with `cond is ExprConstBool && cond.value && if_false == null`. Runs in the same `preVisitExprIfThenElse` override as STYLE005; `if_flags.isStatic` branches are skipped so `static_if (true)` doesn't trigger. Works because the lint visitor runs before constant-folding would collapse the `if`.
-- **STYLE011:** Tracks uninitialized variables from `preVisitExprLetVariable` (excluding `generated` and `inScope`). In `preVisitExprBlockExpression`, checks if the next statement is `ExprCopy`/`ExprClone`/`ExprMove` whose left side references a tracked variable.
-- **STYLE012:** Two dispatch points. (a) Plain-var arm — in `preVisitExprBlockExpression`, when `expr is ExprLet`, locates the let's index inside `blk.list` (pointer equality via `smart_ptr ==`). For each variable `v` in the let that is `var a : array<T>` with no init (also excluding `generated`, `inScope`, and generic-host instantiations), walks forward through `blk.list` counting contiguous `ExprCall` statements where `call.func.fromGeneric.name` is `"push"` or `"emplace"` (exactly 2 args — 3-arg positional insert excluded) and `arguments[0]` (unwrapping `ExprRef2Value`) resolves to `v`. Stops at the first non-matching statement. Emits when count ≥ 2 — a single `push` is often the more readable form, so the rule targets "I forgot how to init an array" bugs rather than every possible rewrite. `push_clone` is deliberately excluded because there is no clean array-literal equivalent. (b) Chain arm — `check_style012_chain_runs` from `preVisitExprBlock` scans each block for contiguous runs of 2-arg `push`/`emplace` calls (receiver type `tArray`, non-generated) whose receivers are structurally equal pure chains: `chain_equal` compares var identity at root and var-indexes, field names, and const index values; `peel_chain_adapter` strips typer-synthesized `ExprRef2Value`/`ExprPtr2Ref`. Runs need ≥ 1 chain link (plain vars stay with arm (a)). A depth-1 `v.field` chain whose root is declared in the immediately preceding `ExprLet` classifies via `ctor_field_state`: provably empty (struct value, no struct-field initializer, init null or `ExprMakeStruct` without where-block not mentioning the field) → constructor-fold message; provably initialized (MakeStruct entry or struct-field initializer) → silent, deliberate append; unknown (pointer root, non-MakeStruct init) and all deeper or unrooted chains → generic literal-move-assign message with a nolint hint for intentional appends.
-- **STYLE027:** Same dispatch as STYLE012 (from `preVisitExprBlockExpression` when `expr is ExprLet`). Anchors on `ExprLet` whose variable has `init == null`, `_type.baseType in (tArray, tTable)`, empty `dim`, and not `generated`/`inScope`. Requires the immediately following block statement to be an `ExprFor` (not `genFlags.generated`). Then `for_loop_matches_comprehension(forE, v, isArray, for_budget=1)` recursively verifies the body: `ExprBlock` with exactly one stmt, where the stmt is either a Leaf (`is_named_target_call(call, v, 2, "push"|"push_clone")` for arrays; `is_named_target_call(call, v, 3, "insert")` or `is_at_assign_of(stmt, v)` for tables), an `ExprIfThenElse` with `if_false==null` + `if_flags.isStatic==false` + single-stmt then-branch (recurse), or a nested `ExprFor` (recurse with budget − 1). Any `genFlags.generated` subtree short-circuits to false so lowered comprehensions don't re-flag. `is_at_assign_of` peels `ExprCopy`/`ExprClone`/`ExprMove` whose LHS is `ExprAt` with subexpr resolving (after one `ExprRef2Value` peel) to `ExprVar(target)`. `emplace` is intentionally excluded by name from the leaf matchers; the budget cap forbids depth-3+ nested fors.
-- **STYLE032:** Same dispatch as STYLE012 (from `preVisitExprBlockExpression` when `expr is ExprLet`). Anchors on an `ExprLet` whose variable has `init == null`, `_type.baseType == tArray`, not `generated`/`inScope`; skipped under a generic-host function. Reads `blk.list[idx+1]` (the immediately-following statement only) and matches `is_array_clone_init_call`: `fromGeneric.name in ("push_from", "push_clone_from")`, exactly 2 args, arg[0] (after one `ExprRef2Value` peel) is `ExprVar(target)`, and `bulk_src_matches_dest(arguments[1], target)` holds — the source is an `array<E>` whose element type E equals the target's element type (`describe(src._type.firstType) == describe(dest._type.firstType)`). That last gate excludes both a C-array source (`tFixedArray`) and a **nested** source that flattens (`array<array<E>>` into a flat `array<E>` — the recursive-flatten `push_from` overload added in `#3230`, which is not a `:=` clone). The single-statement-after design means it composes with PERF009 rather than trying to absorb the `return <- w` case itself.
-- **STYLE033:** Two entry points sharing the bulk-clone matcher. **Fresh case** lives in `check_style032_clone_init` — instead of inspecting only `idx+1`, it counts the contiguous run of `is_array_clone_init_call` matches from `idx+1`: `count == 1` → STYLE032 (`:= src`), `2 <= count <= MAX_CONCAT_ARITY` (8) → STYLE033 concat. **Existing case** is a separate block scan `check_style033_existing_runs`, dispatched from `preVisitExprBlock` alongside `check_style012_chain_runs`. `bulk_from_call_target(stmt, var fname)` extracts the target `Variable?` + the call name from each 2-arg `push_from`/`push_clone_from` statement that passes `bulk_src_matches_dest` — the shared predicate (also used by `is_array_clone_init_call`) requiring `arguments[1]` to be an `array<E>` whose element type E **equals the target's element type** (via `describe(src._type.firstType) == describe(dest._type.firstType)`). This excludes a nested-array source (`array<array<E>>` into a flat `array<E>`) that binds the recursive-flatten `push_from(Arr, src)` overload (builtin.das) — a flatten, not a clone, so neither rule's rewrite would be valid. (Note: `fromGeneric.name` is a `das_string`, so it's compared against literals — `name == "push_from"` — never bound to a `let`.) maximal same-target same-name runs of `2 <= count <= MAX_VARIADIC_PUSH_ARITY` (4) fire the variadic-collapse suggestion, UNLESS `run_preceded_by_empty_array_decl` (the run's first statement is preceded by an empty `array<T>` let of that target) — that fresh case is owned by the STYLE032 path, so the scan skips it (no double-fire). Both caps are module-level `let` constants mirroring the library arities (linq `concat` → 8, `#3224`; builtin variadic `push_from`/`push_clone_from` → 4, `#3230`) so a suggestion always has a matching overload. The existing-run scan matches **plain-`ExprVar` receivers only** — chain receivers (`obj.arr |> …`) are a planned follow-up (STYLE012-style chain form via `is_pure_chain` + chain-equality).
-- **STYLE033 implementation note:** The existing-array scan now handles both plain variables and pure chain receivers, and requires `firstType.canCloneFromConst` because variadic overloads accept const sources. This gate keeps mutable-only-copy element types silent.
-- **STYLE035:** `preVisitExprOp2` accepts the six comparison operators and maps built-in scalar numeric cast names to their `Type` base. It requires a plain `ExprVar` operand of that same non-`int` type. The other operand's preserved `LineInfo` source span must contain a quoted character literal; this source check is necessary because normal compilation folds `T('a')` to a typed `ExprConst`, erasing the AST distinction from `T(97)`. The warning is emitted at `Variable.at`, which points to the requested type change and lets location dedup collapse repeated comparisons on the same variable to one issue. Complex expressions and user-defined constructors are excluded.
-- **STYLE031:** Same dispatch as STYLE012 (from `preVisitExprBlockExpression` when `expr is ExprLet`). Anchors on `ExprLet` variables with `init == null`, `_type.baseType == tTable`, not `generated`/`inScope`/generic hosts. Set flavor detected via `secondType == null || secondType.baseType == tVoid` and switches the insert matcher to exact 2-arg form. Walks forward over contiguous statements matching `is_table_insert_of` (fromGeneric name `"insert"`, exact arity, arg[0] → the variable after one `ExprRef2Value` peel) or `is_at_assign_of` (reused from STYLE027; map flavor only), extracting each key (`arguments[1]` / `ExprAt.index`). `const_key_repr` produces a type-tagged stringification of `ExprConst{String,Int,UInt,Int64,UInt64,Float,Double,Bool,Enumeration}.value` keys ("" for computed keys — note `is` on handled types is exact-type, so each const class is matched explicitly; `describe()` is not usable here because the keys flow from const visitor params and describe requires a pointee-mutable `Expression?`); a repeated repr sets `dup_const_key` and silences the variable (literal = compile error 30706, inserts = silent overwrite). Before emitting, a JV-table check re-walks the run with STYLE021's `is_insert_of_const_key` and defers to STYLE021 when it would fire (≥ 2).
-- **STYLE013:** Same dispatch as STYLE012 (from `preVisitExprBlockExpression` when `expr is ExprLet`). Filters via `is_struct_or_struct_ptr` — accepts `_type.baseType == Type.tStructure` (value case) OR `tPointer` whose `firstType.baseType == tStructure` (pointer case), both with empty `dim`. Excludes `generated`/`inScope`/generic instantiations. `is_default_struct_init` accepts the let if (a) `init == null` AND the variable is struct-valued (null-init pointers are deliberately NOT flagged — `var a : Foo?` followed by `a.x = ...` is a guaranteed NPE, a different bug); (b) `init is ExprMakeStruct` with no `_block` and no `MakeFieldDecl`s in any row (zero-arg `Foo()`); or (c) `init is ExprNew` with `length(arguments) == 0` (zero-arg `new Foo()` or `new Foo`). Walks forward through `blk.list` counting contiguous `ExprCopy`/`ExprClone`/`ExprMove` statements; `is_field_assign_of` checks LHS as `ExprField(value=<peel ExprRef2Value>?ExprVar(v))` — the peel handles pointer auto-deref `ptr.field` which lowers to `ExprField(value=ExprRef2Value(ExprVar(ptr)))`. Emits one warning per variable when count ≥ 2; message includes the actual struct name and the field-name list collected from the matched assignment run, plus a per-flavor "Foo(...)" vs "new Foo(...)" suggestion.
-- **STYLE037:** Counter stack `complexity_stack : array<int>` mirrors `unsafe_block_stack` — pushed with base 1 in `preVisitFunction` and for non-generated `isClosure` blocks in `preVisitExprBlock`, popped + checked in `visitFunction` / `visitExprBlock`. Bumps live in `preVisitExprIfThenElse` (after the `isStatic || generated` guard), `preVisitExprOp3`, and new `preVisitExprWhile`/`preVisitExprFor`/`preVisitExprTryCatch` overrides (each skips `genFlags.generated`). Match arms count because `MatchMacro` emits plain `ExprIfThenElse` without setting `generated`. Comprehension `for`/`where` nodes are ALSO unflagged (`generateComprehension` marks only the wrapper closure block generated) — that's why generated closures bill the host instead of getting their own scope: the optimizer may inline the wrapper into the host body, and the count must not depend on that (macro mode vs the runner's `no_optimizations`). Lambda/generator/local-function bodies lower to `flags.generated` carrier functions, but their bodies are verbatim user AST, so the emit gates admit them via `is_user_authored_body` (`daslib/lint_config.das`) — every rule reaches them EXCEPT the metric rules: STYLE037/038 keep carriers unmetered (a `` _lambda_... `` name means nothing to the reader). Generic instantiations all share the template's `fn.at`, so `reported_locations` dedup keeps it to one warning. Threshold resolved once per entry point via `max_complexity_for(prog)`.
-- **STYLE040:** Post-visit pass (`st040_check_duplicates`, like st029) delegating to `daslib/dupe_detect.das`. That engine builds a **preorder index** of every own-module function body — one record per AST node with `{payload hash, merkle hash, size, nchild}` — so a node's subtree is exactly the interval `[id, id+size)`, its first child is `id+1` and the next sibling is `c + size[c]`; every containment / overlap / nesting question is then an integer interval test with no child-list storage. Discovery buckets equal-`merkle` statements, extends sibling runs (O(1) per step via sibling hashes), and processes candidates widest-first with a claim set so the largest region wins. **Hashes only pick candidates**; each pair is confirmed by `subtree_equal`, an exact lockstep walk comparing `__rtti`, `payload_key` text and memoized `describe(type)` text under a variable bijection — so no hash collision can produce a finding. `payload_key` is the single reader of per-node payload (names, ops, literal values, flag bitfields) used by BOTH hashing and verification, so the two cannot drift; classes absent from `KNOWN_CLASSES` are opaque and never match, making an omission a recall loss rather than a false positive. Three gate families keep the extraction valid: statement eligibility (monotone counters snapshotted per statement reject escaping `return`/`goto`/`yield`/`label`, an unenclosed `break`/`continue`, a `defer` residue `nada()`, a scoped/finalizable declaration, an `assume` alias, and macro-generated statements), escaping locals (anything declared inside the region must have `last_use < region.hi`, checked against the `decls` list — the declaring node cannot carry the vid because one `let` may declare several), and free-variable parameters (spellable + hand-nameable type, `max_params` cap, and a written free variable must be `isRef || isRefType` or the write would not survive the call). Three invariants documented in the engine's module docstring are load-bearing: the Merkle combine must not be FNV's `(h ^ v) * prime` (it annihilates to 0 when accumulator == child hash, silently swallowing the subtree), the in-flight statement must be a `PendFrame` **stack** (a scalar is clobbered by the statements of any contained block, dropping the outer statement from its block's list and making non-adjacent statements look adjacent), and `preVisitExpression` re-entries for the same node (every `ExprConst*` fires twice, once per class level) must be marked so a node never becomes a phantom child of itself.
-- **STYLE014/STYLE015:** Post-visit pass — `scan_long_comment_blocks(prog)` runs after the visitor finishes. Walks `prog.getThisModule` only (transitively-required modules are skipped). Per native function/structure (filters: `_module == mod`, not `generated`, not `fromGeneric`, not `moreFlags.isTemplate` for fns / not `flags.isTemplate` for structs, not a name with `<` — the angle-bracket heuristic catches template-instantiated structs whose `at` points to the template's source file). Records `(file, start, end, is_private)` per function and the per-file `first_decl_line` / `max_line`. Then for each unique file, walks source line-by-line via `get_file_source_line`, accumulates contiguous `//` / `//!` lines into a block, and on block end checks: (a) skip if block starts before `first_decl_line` (module-leading docstring), (b) skip if first line contains `@nolint`, (c) find smallest enclosing function range — if private and block size > 1, emit STYLE015; otherwise if size > 3, emit STYLE014. The existing `// nolint:STYLE014` / `// nolint:STYLE015` per-line mechanism (matched by `is_suppressed`) catches the `//` form on the first line of the block; the `//!@nolint` form is matched directly via `find(first_line_text, "@nolint") >= 0` because the `is_suppressed` machinery looks for `:STYLEnnn` after `nolint`.
-
-## STYLE037 / STYLE038 resolution policy — do NOT mass-rewrite to satisfy the number
-
-Applies to both metric rules — cyclomatic complexity (STYLE037) and function length
-(STYLE038). Their escapes are spelled the same way: `// nolint:STYLE03x` on the `def`
-line, or a per-module `options _cyclomatic_complexity = N` / `options _function_length = N`
-(`0` disables).
-
-**New code should just follow the rules.** Design new functions under both limits from
-the start — the escapes below exist for real irreducible shapes, not as a license to
-write oversized code and suppress the warning. Reach for them in new code only with a
-true reason (the same irreducible shapes listed under 2).
-
-For EXISTING code, a hit is a prompt to look, not an order to refactor. Never rewrite a
-working function (let alone a file's worth of them) just to get under the limit:
-mechanical extract-a-helper splits that hide control flow behind single-caller helpers
-make the code *worse*, and a wide refactor of working code is riskier than the
-complexity or length it removes.
-
-**Suppression is a first-class answer, not a last resort.** If the function honestly
-should not be reduced, say so on the `def` line and move on — a forced split where one
-does not belong is the worse outcome, and leaving a known-honest warning to accumulate
-just trains everyone to ignore the rule. 1 and 2 below are peers: pick by whether a
-natural seam exists, not by trying 1 first and settling for 2.
-
-1. **Split when there is a natural seam** — a self-contained arm (a character-class
-   matcher inside a glob loop), a repeated pattern collapsible into one helper (a
-   strip-modifiers loop copy-pasted across arms), a distinct phase of a multi-phase
-   function (collect → scan), or genuinely duplicated logic worth deduplicating (two
-   near-identical kernel bodies that should share stages). The extracted helper must
-   make sense as a function on its own; if its only virtue is "the caller's number went
-   down", don't extract it.
-2. **`// nolint:STYLE037` / `// nolint:STYLE038` on the `def` line** (with a short
-   tail-comment reason) when the shape is irreducible by design: exact-type `is` ladders
-   over handled AST types, visitor/dispatch tables, flat CLI-argument handling, flat
-   one-call-per-item lists (PSO compile/release runs, registration tables), and GPU
-   kernel bodies whose phases are coupled by barriers, simdgroup ops or register
-   residency and cannot cross a function boundary without changing the shader.
-3. **`options _cyclomatic_complexity = N` / `options _function_length = N`** per module
-   when a whole file is legitimately dense (codegen emitters, parsers, ported code);
-   `= 0` disables that rule for the module entirely.
-
-**A refactor that grows an already-over-cap function is not automatically wrong.** Folding
-N scalar parameters into one struct adds N unpack lines to the body; if every field is
-used several times, inlining `ka.field` at each use is noisier, not shorter. Take the
-growth, and either suppress (2) or ledger the real seam — don't abandon the refactor to
-protect a number, and don't suppress a function you have just argued is reducible.
-
-## How to Add a New Rule
-
-### 1. Choose a rule ID
-
-Rules are numbered: `STYLE001`, `STYLE002`, etc. Pick the next available number.
-
-### 2. Add detection logic to `StyleLintVisitor`
-
-Override the appropriate visitor method(s):
-
-| What you're looking for | Override method |
-|---|---|
-| Function call patterns | `preVisitExprCall` |
-| Binary operator patterns | `preVisitExprOp2` |
-| Field access patterns | `preVisitExprField` |
-| If/else patterns | `preVisitExprIfThenElse` |
-| Source-level syntax | Use `get_file_source_line()` or `source_line_between()` |
-
-### 3. Report the warning
-
-```das
-style_warning("STYLExxx: description; suggested fix", expr.at)
-```
-
-Call it bare — the compiler promotes a bare method call inside a class method, and `self->style_warning(...)` trips STYLE028, this file's own rule.
-
-### 4. Write the test file
-
-Create `utils/lint/tests/styleXXX_rule_name.das` with a bad example and a good example. Open it with the house header — nearly every fixture in that directory carries it, because inline splices rewrite the source shapes a fixture asserts:
-
-```das
-options gen2
-options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
-```
-
-Test through the standalone runner:
-
-```bash
-bin/daslang utils/lint/main.das -- utils/lint/tests/styleXXX_rule_name.das --style-only
-```
-
-A rule that should ship silent is registered in `seed_default_disabled` (`daslib/lint_config.das`) — that is the only place a default-off rule is declared (currently just STYLE005). Its fixture then needs `--enable <CODE>` (or `options _enable_default_off_rules = true` in the fixture) to fire at all.
-
-### 5. Update documentation
-
-Add the rule to `doc/source/reference/language/lint.rst` — one file covers LINT, PERF and STYLE — with a brief example (repo-only).
-
-### 6. Suppression
-
-Individual warnings can be suppressed with `// nolint:STYLExxx` on the same line.
-
-## Public API
-
-```das
-// Compile-time mode: reports warnings during compilation
-def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int
-def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_codes : table<string>; comment_hygiene : bool = false) : int
-
-// Collection mode: appends warnings to array
-def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; comment_hygiene : bool = false) : int
-def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; disabled_codes, enabled_codes : table<string>; comment_hygiene : bool = false) : int
-
-// Structured mode: LintIssue records (rule code + position) instead of display strings
-def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintIssue>; disabled_codes, enabled_codes : table<string>; comment_hygiene : bool = false) : int
-```
-
-The unfiltered pairs are thin wrappers; every real caller (the MCP subtool, `utils/lint/main.das`,
-the LSP) uses a filtered overload, and the LSP needs `style_lint_collect_issues` because `LintIssue`
-(defined in `daslib/lint_config.das`) carries the position a diagnostic has to be placed at.
-
-There is no `postfix_conditionals` parameter — check sites do not pass one. STYLE005 is gated by the
-shared lint policy (`seed_default_disabled` in `daslib/lint_config.das`), not by a function argument.
-
-## MCP Integration
-
-The MCP `lint` tool is split: `utils/mcp/tools/lint_tool.das` is a `run_mcp_subtool` popen wrapper, so compile-time macro state doesn't leak across MCP calls; `utils/mcp/subtools/lint_tool.das` does the work, calling `paranoid_collect` / `perf_lint_collect` / `style_lint_collect` with the shared `disabled_codes` / `enabled_codes` tables and the `_comment_hygiene` option. Style warnings appear in lint results automatically.
-
-## Standalone Usage
-
-```bash
-bin/daslang utils/lint/main.das -- file1.das [dir ...] \
-  [--quiet] [--silent] [--style-only|--perf-only|--paranoid-only] \
-  [--comment-hygiene] [--disable CODE,...] [--enable CODE,...] [--workers N]
-```
-
-## Known Limitations
-
-- **STYLE001-003 source detection**: Uses `get_file_source_line()` which reads one line at a time. Multi-line call expressions are handled by scanning from the call's line to the block's line.
-- **`[lint_macro]` errors vs `expect`**: works (both for `expect 31208:N` and `expect 31209:N`). The earlier limitation note here was stale; STYLE016/017/018/019 tests under `utils/lint/tests/` validate exact warning counts via dastest exactly the same way PERF tests do.
+**A refactor that grows an already-over-cap function is not automatically wrong.** Folding N
+scalar parameters into one struct adds N unpack lines; if every field is used several times,
+inlining `ka.field` at each use is noisier, not shorter. Take the growth and either suppress or
+ledger the real seam — but never suppress a function you have just argued is reducible.

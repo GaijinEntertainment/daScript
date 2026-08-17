@@ -6,7 +6,7 @@ require daslib/fio
 require daslib/clargs
 require scan
 
-// Lists every REVIEW.md whose folder the changed set touches (skills/make_pr.md step 0a).
+// Lists every REVIEW.md whose folder the changed set touches (skills/internal/make_pr.md step 0a).
 // The changed set is `git diff --name-only <base>` — committed and working-tree changes
 // alike.
 
