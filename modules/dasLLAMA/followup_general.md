@@ -359,7 +359,7 @@
       standard image-API prefix; rename ours or accept the squat deliberately.
 
 26. **ASR perf follow-ups after the Metal tower — MOSTLY RESOLVED by metal-media chunk 3
-    (2026-08-16, `metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
+    (2026-08-16, `history/dasLLAMA/metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
     the q8-native decode step on Metal, part/comb attention, f16 KV — decode beats the
     q8-CPU rail 1.6x and serves by default above the `n_text_state >= 1024` floor); J-qwen3a
     SHIPPED (the conv2d frontend pads into the tile GEMM — encode 6.3x on the stage probe
