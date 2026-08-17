@@ -78,10 +78,10 @@ gemma4uv` selects it too — arm filters match by substring); `mtower` is the wh
 tower-blocks gate, Apple builds only — whisper tiny + large-v3-turbo transcript-exact and
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
 the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
-Conformer-absence (parakeet) cells; the arm also carries the DECODER half's gate
-(test_whisper_metal_cross_kv — GPU cross-KV on the q8 serving default: transcript equality,
-window counters, knob/quant_mode declines, required-mode, shutdown re-arm; the tower cell pins
-`set_metal_wdec(false)` because its required-mode policy leg transcribes an f32 decoder); the voxtral arm re-saves a
+Conformer-absence (parakeet) cells; the arm's DECODER half is `test_whisper_metal_cross_kv` —
+GPU cross-KV on the q8 serving default, transcript-exact against the CPU chain with
+window/step counter deltas and the decline, required-mode, step-floor and shutdown-re-arm
+contract; the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
@@ -126,8 +126,8 @@ server tools) declares `options stack = 524288`, and every model-loading root de
 prefill intent.
 `test_audio.das` — model-free: the audio front-end units (gelu-erf, hann window, mel
 filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle gates
-(ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles — those pin the tower knob
-OFF; the hook would silently flip them to GPU) and `test_encoder_blocks_gpu`, the qwen2audio +
+(ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles — CPU-claim cells, tower knob
+pinned OFF per the fixtures section) and `test_encoder_blocks_gpu`, the qwen2audio +
 voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas —
 Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` — suite-less, model-gated: the whisper/parakeet/canary/gemma4a/omni oracle
@@ -184,6 +184,12 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 `test_model_image_vulkan`).
 
 ## Blob-only Metal fixtures (the two-model pattern)
+
+**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
+that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after.** The
+hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
+quant_mode decline that panics under required mode — either way the cell stops measuring what
+its name says.
 
 The Metal drivers serve ONLY blob-form models (`convert_model_to_metal_blob` /
 metal-flavor images), and CPU inference on a blob model PANICS. Every CPU-vs-GPU arm
