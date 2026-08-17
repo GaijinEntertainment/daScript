@@ -400,3 +400,11 @@
     stay counter-only. Touches the tower conv frontends' bare-false contract, the wdec
     decline notes (partly landed in the review round), and the required-mode asymmetry the
     round ledgered. Decide the policy once, then sweep the drivers to it.
+
+29. **The f32-fallback REVIEW rule's form defects — parked for REVIEW.das (2026-08-17).**
+    The rule as landed has a stale name census (misses `matmul`, `gemm_f32_jo`, `mm_fblob*`,
+    `enc_f32_mm`), a twin-existence clause not decidable from a diff, and a self-exempting
+    inline `unless`. The dragon's proposed repair — a `// f32: <reason>` marker on every
+    f32-matmul call line, mechanically checkable like `// clock: control` — is sound but
+    parked: the coming executable-checklist mechanism (REVIEW.das) is the better home for a
+    rule that is really a lint. Revisit when that lands.
