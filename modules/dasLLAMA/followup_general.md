@@ -408,3 +408,10 @@
     f32-matmul call line, mechanically checkable like `// clock: control` — is sound but
     parked: the coming executable-checklist mechanism (REVIEW.das) is the better home for a
     rule that is really a lint. Revisit when that lands.
+
+30. **REVIEW_GPU's derived-uniform clause — parked for REVIEW.das (2026-08-17).** The
+    "no value reaches an encoder twice" rule condemns the file's own standing shape (the
+    grid extent re-bound as the device-side tail guard) and cannot say so. Once REVIEW.das
+    lands, the check is mechanical: the [metal_dispatch] lens knows every grid= param and
+    binding, so "an argument other arguments determine is a defect, except the grid extent
+    as the bounds guard" becomes an auto-test; the rule text then shrinks to the sanction.
