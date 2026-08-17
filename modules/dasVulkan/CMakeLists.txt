@@ -65,13 +65,10 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         ADD_MODULE_DAS(vulkan daslib vulkan_lint)
         ADD_MODULE_DAS(vulkan daslib spirv_vulkan_shader)
         ADD_MODULE_DAS(vulkan daslib vulkan_assets)
+        ADD_MODULE_DAS(vulkan daslib vulkan_gltf)
         ADD_MODULE_DAS(vulkan daslib vulkan_live)
         ADD_MODULE_DAS(vulkan daslib vulkan_imgui_driver)
         ADD_MODULE_DAS(vulkan daslib vulkan_imgui_app)
-        # static half only — no ADD_MODULE_LIB shared twin: in a superbuild the DLL
-        # flavor comes from this module's own standalone build (daspkg); the twin is
-        # dead weight an embedded host never loads (and the imgui-family externals
-        # can't even link theirs without a dllexport matrix)
         ADD_DAS_STATIC_MODULE_LIB(libDasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
 
         MACRO(SETUP_VULKAN vulkan_mod_lib)
@@ -96,6 +93,19 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         SETUP_VULKAN(libDasModuleVulkan)
         IF(APPLE)
             TARGET_LINK_LIBRARIES(libDasModuleVulkan PUBLIC "-framework Cocoa" "-framework QuartzCore")
+        ENDIF()
+
+        # Shared twin: the default daslang/daslang-live host is the DYNAMIC flavor —
+        # it loads modules/dasVulkan/dasModuleVulkan.shared_module per .das_module
+        # registration, so the static half above is invisible to it (that one serves
+        # daslang_static and embedders). Self-contained link unit; no export matrix
+        # needed — nothing links against dasModuleVulkan.
+        IF(NOT EMSCRIPTEN)
+            ADD_DAS_SHARED_MODULE_LIB(dasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
+            SETUP_VULKAN(dasModuleVulkan)
+            IF(APPLE)
+                TARGET_LINK_LIBRARIES(dasModuleVulkan PRIVATE "-framework Cocoa" "-framework QuartzCore")
+            ENDIF()
         ENDIF()
 
         # Install the boost daslib so daspkg / DLL consumers resolve it from the

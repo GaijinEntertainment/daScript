@@ -1,0 +1,64 @@
+name: dasVulkan checks
+
+# Per-PR gate for dasVulkan changes, paths-filtered so PRs that never touch the
+# module pay nothing. Carries the two cheap correctness gates: the generator
+# skip-ratchet (an emitter change must not silently shrink the bound surface)
+# and the module-wide lint. The full render suite is nightly_vulkan.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/dasVulkan/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ratchet_and_lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: "Build daslang + dasVulkan (in-tree)"
+        # dasModulePUGIXML feeds the generator (vk.xml); dasModuleVulkan at
+        # --parallel 2 — the ~55 generated template-heavy TUs OOM a 7 GB runner
+        # at full parallelism. No lavapipe here: nothing in this job renders.
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=ON \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target daslang dasModulePUGIXML
+          cmake --build ./build --parallel 2 --target dasModuleVulkan
+          sccache --show-stats
+
+      - name: "Skip ratchet: the generator's skip tail must match the committed report"
+        run: |
+          set -eux
+          mkdir -p /tmp/vk_regen_src /tmp/vk_regen_daslib
+          ./bin/daslang modules/dasVulkan/generator/generate.das -- \
+            --out /tmp/vk_regen_src \
+            --boost-out /tmp/vk_regen_daslib \
+            --skip-report /tmp/vk_skip_report.txt
+          diff -u modules/dasVulkan/generator/skip_report.txt /tmp/vk_skip_report.txt
+          diff -u modules/dasVulkan/generator/copyability_report.txt /tmp/copyability_report.txt
+
+      - name: "Lint: every dasVulkan .das must be clean"
+        run: |
+          set -eux
+          ./bin/daslang utils/lint/main.das -- modules/dasVulkan -q -j 0

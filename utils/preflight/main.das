@@ -401,8 +401,9 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 }
 
 // CI's lint verdict is rendered ONLY by the linux lane (extended_checks gates the step on
-// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal/dasVulkan — platform
-// static_if halves compile out, so their requires/args read unused there and nowhere else),
+// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal — platform static_if
+// halves compile out, so their requires/args read unused there and nowhere else; dasVulkan
+// is in-tree and present on linux, so it is NOT disabled),
 // and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
 // A host-flavor pass alone is structurally blind to both — so this gate runs three rails.
 // LINT019 is OFF on all three (mirrors CI): a changed-set ledger cannot see consumers
@@ -424,7 +425,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "host-flavor lint warnings — fix or nolint each (see skills/internal/make_pr.md §1)", output = host.out)
     }
-    var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal", "--disable-module", "dasVulkan",
+    var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal",
                         "utils/lint/main.das", "--"]
     mirror_args |> push_from(files)
     mirror_args |> push("--quiet")
