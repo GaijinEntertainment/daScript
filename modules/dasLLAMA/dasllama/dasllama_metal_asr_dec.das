@@ -69,8 +69,11 @@ var private g_wd_us_encode = 0l
 //! `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them.
 def metal_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64> {
     var dtot = 0l
-    for (v in values(g_wdec_declines_by_reason)) {
-        dtot += v
+    for (k, v in keys(g_wdec_declines_by_reason), values(g_wdec_declines_by_reason)) {
+        // policy notes (small, step_knob) describe SERVED windows — only refusals count
+        if (k != "{MetalWdecDecline.small}" && k != "{MetalWdecDecline.step_knob}") {
+            dtot += v
+        }
     }
     return (windows = g_wdec_windows, steps = g_wdec_steps, tokens = g_wdec_tokens, declines = dtot)
 }
@@ -105,8 +108,8 @@ def set_metal_wdec_step_min_d(n : int64) {
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private wd_decline(why : MetalWdecDecline) : bool {
     note_wdec_decline("{why}")
-    // knob and small = policy (the enum documents both); capability declines honor required mode
-    if (why != MetalWdecDecline.knob && why != MetalWdecDecline.small) {
+    // knob/small/step_knob = policy (the enum documents them); capability declines honor required
+    if (why != MetalWdecDecline.knob && why != MetalWdecDecline.small && why != MetalWdecDecline.step_knob) {
         require_or_panic("wdec", "{why}")
     }
     return false
@@ -320,8 +323,11 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
         g_wd_window_key = intptr(unsafe(addr(ds)))
         g_wd_window_live = true
         g_wd_window_step = g_wd_step_env && d >= g_wd_step_min_d
-        if (g_wd_step_env && !g_wd_window_step) {
-            wd_decline(MetalWdecDecline.small)   // policy class: the window still cross-KV-serves
+        ds.gpu_kv_gen = 0l   // nothing GPU-decoded in this window yet
+        if (!g_wd_step_env) {
+            wd_decline(MetalWdecDecline.step_knob)   // policy: cross-KV still serves
+        } elif (!g_wd_window_step) {
+            wd_decline(MetalWdecDecline.small)   // policy: the window still cross-KV-serves
         }
         served = true
     }
@@ -381,9 +387,17 @@ def private wd_mm(enc : MetalComputeEncoder?; boff : uint64; bx, by : MetalBuffe
 [hot_path]
 def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_wd_window_live || !g_wd_window_step || g_wd_window_key != intptr(unsafe(addr(ds)))) {
+        // an evicted GPU-decoded window: the CPU chain would read kcache rows the GPU owns
+        if (ds.gpu_kv_gen != 0l && ds.n_past > 0l) {
+            panic("dasLLAMA wdec: the GPU decoder window was evicted mid-window - ONE live decoder window per process (a second DecoderState may not interleave whisper_cross_kv/whisper_decode_batch)")
+        }
         return false   // declined at cross_kv, or the step half is off — the CPU chain reads ds.kx/vx
     }
-    if (n > WD_ROW_CAP) {   // the GPU owns this window's KV — a CPU fallback here would decode blind
+    if (n > WD_ROW_CAP) {
+        if (ds.n_past == 0l) {   // first batch: nothing GPU-owned yet — release the claim, the CPU serves the window
+            g_wd_window_live = false
+            return false
+        }
         panic("dasLLAMA wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap mid-window")
     }
     let d = w.n_text_state
@@ -502,6 +516,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     g_wd_us_encode += int64(encode_ms * 1000.0lf)
     g_wdec_steps++
     g_wdec_tokens += n
+    ds.gpu_kv_gen = 1l   // the GPU now owns rows of this window's self-KV (see the eviction panic)
     return true
 }
 

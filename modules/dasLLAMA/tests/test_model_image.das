@@ -1069,7 +1069,20 @@ def test_whisper_metal_cross_kv(tst : T?) {
             t |> equal(sm1.windows - sm0.windows, 1l, "under the floor: cross-KV still serves")
             t |> equal(sm1.steps, sm0.steps, "under the floor: the step never serves")
             t |> success(key_exists(metal_wdec_declines(), "small"), "the floor decline is recorded")
+            t |> equal(sm1.declines - sm0.declines, 0l, "a policy note is not a decline")
             t |> success(small_text == cpu_text, "under the floor: the CPU decode transcript")
+            // the STEP KNOB: cross-KV serves, the step stays CPU, and the reason is readable
+            set_metal_wdec_step_min_d(0l)
+            set_metal_wdec_step(false)
+            let sk0 = metal_wdec_stats()
+            let sk_text = wdec_transcribe(w8, samples)
+            let sk1 = metal_wdec_stats()
+            set_metal_wdec_step(true)
+            t |> equal(sk1.windows - sk0.windows, 1l, "step knob off: cross-KV still serves")
+            t |> equal(sk1.steps, sk0.steps, "step knob off: the step never serves")
+            t |> success(key_exists(metal_wdec_declines(), "step_knob"), "the step-knob note is recorded")
+            t |> equal(sk1.declines - sk0.declines, 0l, "the step-knob note is policy, not a decline")
+            t |> success(sk_text == cpu_text, "step knob off: the CPU decode transcript")
             delete samples
         }
     }

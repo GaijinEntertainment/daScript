@@ -966,6 +966,8 @@ struct SampledTok {
 //! (``[hs][T]``) and pre-scaled by hs^-0.25 so attention scores are one gemm per head.
 struct DecoderState {
     n_past : int64
+    gpu_kv_gen : int64      // 0 until the GPU decode step serves this window's KV (the Metal
+                            // driver stamps it; a mid-window eviction then panics loud)
     kcache : array<float>   // [L][H][hs][Tmax]
     vcache : array<float>   // [L][H][Tmax][hs]
     kx : array<float>       // [L][H][hs][Ta] cross keys (from the encoder output, per window)
