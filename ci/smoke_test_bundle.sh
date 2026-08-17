@@ -86,6 +86,12 @@ COMPILE_TESTS=(
     "mcp-cpp|utils/mcp/cpp_main.das"
     "mcp-setup|utils/mcp/setup.das"
     "requirefix|utils/requirefix/main.das"
+    # In-tree module das layers — these catch the missing-payload class (the
+    # dasImgui merge shipped binaries + descriptor but zero .das for a while:
+    # the descriptor resolved to files the bundle did not carry).
+    "imgui-example|modules/dasImgui/examples/features/button_repeat.das"
+    "vulkan-example|modules/dasVulkan/examples/smoke.das"
+    "vulkan-tutorial|modules/dasVulkan/tutorials/01_triangle/triangle_tut.das"
 )
 
 # Tools intentionally NOT in COMPILE_TESTS:

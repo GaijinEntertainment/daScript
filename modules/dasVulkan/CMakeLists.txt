@@ -126,6 +126,18 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         INSTALL(FILES ${DAS_VULKAN_DASLIB}
             DESTINATION ${DAS_INSTALL_MODULESDIR}/dasVulkan/daslib
         )
+        # SDK payload: examples and the tutorial ladder (offscreen tutorials,
+        # their shaders and oracles, the windowed viewers). The .das_test gating
+        # files ride along so folder skips (window/ needs glfw, recording/ needs
+        # audio) behave the same in an installed SDK. Assets are NOT here — the
+        # tutorials read the repo-shared tutorials/_assets, which installs with
+        # the root tutorial tree.
+        INSTALL(DIRECTORY ${DAS_VULKAN_DIR}/examples/
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/dasVulkan/examples
+            FILES_MATCHING PATTERN "*.das")
+        INSTALL(DIRECTORY ${DAS_VULKAN_DIR}/tutorials/
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/dasVulkan/tutorials
+            FILES_MATCHING PATTERN "*.das" PATTERN ".das_test")
     ELSE()
         # DASLANG_DIR must point to the daslang SDK root
         if(NOT DEFINED DASLANG_DIR)
