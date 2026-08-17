@@ -30,11 +30,11 @@ def main {
     let frame_ms = 1000 / fps
     let dur_s = float(n_frames) / float(fps)
 
-    // Captions stay canonical; voice text is respelled phonetically per skills/recording.md
+    // Captions stay canonical; voice text is respelled phonetically per skills/internal/vulkan_recording.md
     // (dasVulkan -> "das Vulkan", SPIR-V -> "Spear V" per Khronos, digits -> words for the ear).
     // Periods (not commas) force the TTS to pause between beats.
     say(30, "dasVulkan tutorial 3 -- SDF ray march",
-            "das Vulkan tutorial three. The SDF ray march.")
+            "das Vulkan tutorial three. The S D F ray march.")
     say(360, "No vertices. No textures. Just math",
             "No vertices. No textures. The whole scene is math.")
     say(720, "daslang to SPIR-V",

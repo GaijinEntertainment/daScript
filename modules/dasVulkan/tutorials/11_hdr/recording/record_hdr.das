@@ -29,14 +29,14 @@ def main {
     let frame_ms = 1000 / fps
     let dur_s = float(n_frames) / float(fps)
 
-    // Captions stay canonical; voice text respelled phonetically per skills/recording.md.
+    // Captions stay canonical; voice text respelled phonetically per skills/internal/vulkan_recording.md.
     say(30,  "dasVulkan tutorial 11 -- HDR + bloom",
              "das Vulkan tutorial eleven. H D R plus bloom.")
     say(330, "HDR scene. R 16 G 16 B 16 A 16 SFLOAT. emissive cubes",
              "H D R scene. R sixteen G sixteen B sixteen A sixteen S float. Emissive cubes punch above one.")
     say(570, "Karis 5-level bloom pyramid. downsample plus tent upsample",
              "Karis five level bloom pyramid. Downsample plus tent upsample. Additive blend.")
-    say(810, "ACES tonemap. composite to sRGB",
+    say(765, "ACES tonemap. composite to sRGB",
              "A C E S tone map. Composite to s R G B.")
 
     var inscope ctx <- build_hdr_context()

@@ -26,7 +26,7 @@ require daslib/strings_boost
 struct public Line {
     frame   : int       // frame index the caption appears on (matches capture_apng's frame model)
     caption : string    // on-screen text (canonical -- dasVulkan / SPIR-V / dasSpirv stay as written)
-    voice   : string    // spoken sentence (phonetic respellings -- see skills/recording.md)
+    voice   : string    // spoken sentence (phonetic respellings -- see skills/internal/vulkan_recording.md)
     wav     : string    // path to the rendered voiceover wav (filled by prepare_voiceover)
     dur_s   : float     // wav duration in seconds (filled by prepare_voiceover)
 }
@@ -35,7 +35,7 @@ var private g_lines : array<Line>
 
 //! Register a caption + voice anchor at `frame`. The caption is what shows on screen (terse,
 //! for the eye); the voice is what's spoken (natural sentence, ASCII-only, with phonetic
-//! respellings for brand names -- see skills/recording.md). Defaults voice to caption.
+//! respellings for brand names -- see skills/internal/vulkan_recording.md). Defaults voice to caption.
 def public say(frame : int; caption : string) {
     g_lines |> push(Line(frame = frame, caption = caption, voice = caption))
 }
