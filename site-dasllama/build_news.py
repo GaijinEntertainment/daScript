@@ -4,7 +4,7 @@ Build the dasllama.io news feed from _news/*.md.
 
 Rewrites index.html between the `<!-- news:begin -->` / `<!-- news:end -->` markers and
 regenerates feed.xml (Atom) and sitemap.xml next to it. Entries live ON the home page —
-there are no per-entry pages; feed entries link to the entry's anchor on index.html.
+there are no per-entry pages; feed entries link to the entry's anchor on the home page.
 
 The generated output is CHECKED IN (unlike daslang.io's blog, which builds into _site
 only): the preview rig serves the repo tree directly, and the site must preview exactly
@@ -117,7 +117,7 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
     md = markdown.Markdown(extensions=['fenced_code'])
     items = []
     for e in entries:
-        link = f'{site_url}/index.html#n-{e["slug"]}'
+        link = f'{site_url}/#n-{e["slug"]}'
         body = md.convert(e['body_md']) if e['body_md'] else ''
         md.reset()
         items.append(
@@ -147,7 +147,7 @@ def write_feed(root: Path, entries: list[dict], site_url: str) -> None:
 
 def write_sitemap(root: Path, entries: list[dict], site_url: str) -> None:
     newest = entries[0]['date'] if entries else None
-    urls = [('index.html', newest), ('ladder.html', None), ('sidecars.html', None)]
+    urls = [('', newest), ('ladder.html', None), ('sidecars.html', None)]
     body = '\n'.join(
         f'<url><loc>{site_url}/{page}</loc>'
         + (f'<lastmod>{lastmod}</lastmod>' if lastmod else '')
