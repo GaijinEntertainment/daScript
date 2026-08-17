@@ -266,6 +266,21 @@ IF(COMMAND ADD_MODULE_CPP)
     # v2 glob dirs; keep in sync with .das_module.
     ADD_MODULE_DAS(imgui daslib imgui_boost)
 
+    # SDK payload: everything the .das_module mounts, the runtime font, and the
+    # examples. Without the das layer an installed SDK's `require imgui/...`
+    # resolves the descriptor to files that do not exist (the shared_module and
+    # .das_module install via the shared-twin macro, the sources do not).
+    FOREACH(_dasdir widgets text markdown commands terminal daslib)
+        FILE(GLOB _dasdir_files ${DAS_IMGUI_DIR}/${_dasdir}/*.das)
+        INSTALL(FILES ${_dasdir_files}
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/${_dasdir})
+    ENDFOREACH()
+    INSTALL(FILES ${DAS_IMGUI_DIR}/font/JetBrainsMono-Regular.ttf
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/font)
+    INSTALL(DIRECTORY ${DAS_IMGUI_DIR}/examples/
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/examples
+        FILES_MATCHING PATTERN "*.das")
+
     # Static halves only — no ADD_MODULE_LIB shared twins. In a superbuild the DLL
     # flavor comes from this module's own standalone build (daspkg); the twins would
     # need the whole dllexport/dllimport matrix (IMGUI_API across the pair, glfw
