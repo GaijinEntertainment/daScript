@@ -218,6 +218,11 @@ that a question answered for one backend has an obvious address in the other. Th
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class — "the builder needs the driver module" is never a placement reason. Prefill's
   prefill-only classes are convergence debt, not precedent.
+- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** —
+  deleted in the metal-asr review round (2026-08-17, the `bbatkin/metal-asr` PR; the kernel is
+  in git history). The chunked part/comb pair replaced it during bring-up (1470→709 ms on the
+  turbo decode) and its `float[1504]` tgmem bound was the only reason for the driver's old
+  ta/n_text_ctx≤1504 shape cap, which left with it.
 - **Ledgered kernel-binding asymmetries** — a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` /
   `MetalMoeMulMmMx4T`) keep the pre-family compact kargs slots while their base classes bind the

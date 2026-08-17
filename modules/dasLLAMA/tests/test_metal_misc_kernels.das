@@ -937,125 +937,6 @@ def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int; t0, tstride : i
     delete want
 }
 
-// The whisper-decoder fused attention vs a direct CPU walk (scores -> max-sub softmax -> the
-// weighted V sum, q bias folded at load): simd/exp reassociation -> the shared 1e-4 bar.
-// Negative controls recorded 2026-08-16: dropping the qb fold (attn), the bias (both bias
-// kernels), and t0 (the append leg) each redded with dumps.
-def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; causal : bool) {
-    let tag = "wdec_attn n={n} dim={dim} hh={hh} len0={len0} causal={causal}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_wdec_attn_msl, metal_wdec_attn_msl_entry, metal_wdec_attn_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hs = dim / hh
-    let scale = 1.0 / sqrt(float(hs))
-    var q : array<float>
-    var qb : array<float>
-    var kvh : array<uint16>
-    var vvh : array<uint16>
-    var kv : array<float>
-    var vv : array<float>
-    q |> resize(n * dim)
-    qb |> resize(dim)
-    kvh |> resize(hh * tstride * hs)
-    vvh |> resize(hh * tstride * hs)
-    kv |> resize(hh * tstride * hs)
-    vv |> resize(hh * tstride * hs)
-    for (i in range(n * dim)) {
-        q[i] = 0.11 * float(i % 37) - 1.7
-    }
-    for (i in range(dim)) {
-        qb[i] = 0.07 * float(i % 11) - 0.3
-    }
-    for (i in range(hh * tstride * hs)) {   // the K/V memory is f16: the oracle reads the round-trip
-        kvh[i] = uint16(f32_to_f16(0.09 * float(i % 41) - 1.9))
-        vvh[i] = uint16(f32_to_f16(0.13 * float(i % 29) - 1.1))
-        kv[i] = f16_to_f32(uint(kvh[i]))
-        vv[i] = f16_to_f32(uint(vvh[i]))
-    }
-    var want : array<float>
-    want |> resize(n * dim)
-    var scores : array<float>
-    scores |> resize(tstride)
-    for (h in range(hh)) {
-        for (r in range(n)) {
-            let len = causal ? len0 + r : len0
-            var mx = -3.0e38
-            for (tt in range(len)) {
-                var s = 0.0
-                for (j in range(hs)) {
-                    s += (q[r * dim + h * hs + j] + qb[h * hs + j]) * kv[(h * tstride + tt) * hs + j]
-                }
-                scores[tt] = s * scale
-                mx = max(mx, scores[tt])
-            }
-            var tot = 0.0
-            for (tt in range(len)) {
-                scores[tt] = exp(scores[tt] - mx)
-                tot += scores[tt]
-            }
-            for (j in range(hs)) {
-                var acc = 0.0
-                for (tt in range(len)) {
-                    acc += scores[tt] * vv[(h * tstride + tt) * hs + j]
-                }
-                want[r * dim + h * hs + j] = acc / tot
-            }
-        }
-    }
-    var bq = buf_upload(dev, q)
-    var bk = buf_upload(dev, kvh)
-    var bv = buf_upload(dev, vvh)
-    var by = buf_fill(dev, n * dim, -444.0)
-    var bqb = buf_upload(dev, qb)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhs = buf_u32(dev, uint(hs))
-    var bts = buf_u32(dev, uint(tstride))
-    var blen = buf_u32(dev, uint(len0))
-    var bca = buf_u32(dev, causal ? 1u : 0u)
-    var bsc = buf_f32(dev, scale)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_wdec_attn_msl_tgmem, 0)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bqb, 0ul, 4)
-        metal_set_buffer(enc, bdim, 0ul, 5)
-        metal_set_buffer(enc, bhs, 0ul, 6)
-        metal_set_buffer(enc, bts, 0ul, 7)
-        metal_set_buffer(enc, blen, 0ul, 8)
-        metal_set_buffer(enc, bca, 0ul, 9)
-        metal_set_buffer(enc, bsc, 0ul, 10)
-        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-    }
-    metal_release(bq)
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(by)
-    metal_release(bqb)
-    metal_release(bdim)
-    metal_release(bhs)
-    metal_release(bts)
-    metal_release(blen)
-    metal_release(bca)
-    metal_release(bsc)
-    metal_release(pso)
-    delete q
-    delete qb
-    delete kvh
-    delete vvh
-    delete kv
-    delete vv
-    delete want
-    delete scores
-}
-
 // The chunked twin pair vs the SAME oracle: Part writes per-chunk (m, s, y) partials, Comb
 // merges by log-sum-exp — the pair must land on the single-pass answer (1e-4, exp reassoc).
 // Negative control recorded 2026-08-16: an off-by-one oracle len redded all three cells.
@@ -1632,9 +1513,6 @@ def test_metal_misc_kernels(t : T?) {
                 cross_vx_gate(t, dev, queue, 12, 16, 2, 0, 12, true)       // ceil grid + the folded bias
                 cross_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, true)        // the KV APPEND shape: t0>0 into a wider slab
                 cross_vx_gate(t, dev, queue, 1, 16, 2, 0, 20, false, 16, 48)   // the fused-QKV column pick (soff, 3d row)
-                wdec_attn_gate(t, dev, queue, 1, 128, 2, 24, 24, false)    // cross shape: fixed len
-                wdec_attn_gate(t, dev, queue, 3, 128, 2, 24, 7, true)      // causal prompt rows: len0 + r
-                wdec_attn_gate(t, dev, queue, 1, 128, 2, 300, 259, false)  // len above one tg pass (128 threads)
                 wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 600, 600, false)   // 3 chunks, full last chunk boundary
                 wdec_attn_pc_gate(t, dev, queue, 3, 128, 2, 300, 259, true)    // causal rows crossing a chunk edge
                 wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 256, 256, false)   // exactly one chunk

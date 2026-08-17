@@ -261,8 +261,8 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     let hs = d / hh
     let ta = w.enc.n_ctx
     let nl = w.n_text_layer
-    // mm n-tile, fused-attention hs unroll, and the tgmem score window gate the whole chain
-    if (d % 64l != 0l || hs % 4l != 0l || ta > 1504l || w.n_text_ctx > 1504l) {
+    // mm n-tile + attention hs unroll gate the chain; the 256-chunk pair needs no ta/ctx cap
+    if (d % 64l != 0l || hs % 4l != 0l) {
         return wd_decline(MetalWdecDecline.shape)
     }
     if (!metal_wdec_init() || !wdec_attach(w)) {

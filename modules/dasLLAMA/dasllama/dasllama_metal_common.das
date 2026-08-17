@@ -173,7 +173,6 @@ var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major r
 var g_pso_cross_vx_h : MetalComputePipeline?  // the f16-store twin — the resident K/V memory
 var g_pso_im2col3 : MetalComputePipeline?     // the whisper conv-frontend im2col (k=3, same pad)
 var g_pso_im2col2d : MetalComputePipeline?    // the qwen3a conv2d im2col (k=3, s=2, p=1)
-var g_pso_wdec_attn : MetalComputePipeline?  // whisper decode: fused single-query attention
 var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax partial
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add

@@ -3586,7 +3586,6 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_cross_vx_h = compile_pso(metal_cross_vx_h_msl, metal_cross_vx_h_msl_entry, metal_cross_vx_h_msl_fastmath, ok)
     g_pso_im2col3 = compile_pso(metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, ok)
     g_pso_im2col2d = compile_pso(metal_im2col2d_msl, metal_im2col2d_msl_entry, metal_im2col2d_msl_fastmath, ok)
-    g_pso_wdec_attn = compile_pso(metal_wdec_attn_msl, metal_wdec_attn_msl_entry, metal_wdec_attn_msl_fastmath, ok)
     g_pso_wdec_attn_part = compile_pso(metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, ok)
     g_pso_wdec_attn_comb = compile_pso(metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, ok)
     g_pso_bias_add_res = compile_pso(metal_bias_add_res_msl, metal_bias_add_res_msl_entry, metal_bias_add_res_msl_fastmath, ok)
@@ -4269,7 +4268,6 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_cross_vx_h)
     release_pso(g_pso_im2col3)
     release_pso(g_pso_im2col2d)
-    release_pso(g_pso_wdec_attn)
     release_pso(g_pso_wdec_attn_part)
     release_pso(g_pso_wdec_attn_comb)
     release_pso(g_pso_bias_add_res)
@@ -5094,112 +5092,6 @@ class MetalBiasGeluLut {
     }
 }
 
-// The whisper-decoder fused attention, one threadgroup per (head, row): tgmem scores ->
-// two-pass softmax -> coalesced per-j weighted V sum. K/V share [hh][tstride][hs], UNSCALED
-// (`scale` = the whole hs^-0.5); causal rows attend len0 + r, cross rows a fixed len0.
-[metal_dispatch(name = "enc_wdec_attn", pso = "g_pso_wdec_attn", tgmem = "metal_wdec_attn_msl_tgmem", tg = 128, grid = "heads, nrows", params = "heads : int64, nrows : int64")]
-class MetalWdecAttn {
-    @ssbo @binding = 0 @role = "read" q : array<float>                 // [n x dim] query rows (unscaled, pre-bias)
-    @ssbo @binding = 1 @role = "read" @off = "koff" kk : array<float16>  // [hh][tstride][hs] f16 (whisper.cpp's KV precision)
-    @ssbo @binding = 2 @role = "read" @off = "voff" vv : array<float16>  // [hh][tstride][hs] f16
-    @ssbo @binding = 3 @role = "write" y : array<float>                // [n x dim]
-    @ssbo @binding = 4 @role = "weight" @off = "qboff" qb : array<float>   // [dim] q bias, folded at load
-    @uniform @binding = 5 dim : uint
-    @uniform @binding = 6 hs : uint
-    @uniform @binding = 7 tstride : uint
-    @uniform @binding = 8 len0 : uint
-    @uniform @binding = 9 causal : uint
-    @uniform @binding = 10 scale : float
-    @workgroup scores : float[1504]
-    @workgroup partial : float[32]
-    @workgroup red_sh : float
-
-    [metal_kernel(name="metal_wdec_attn_msl")]
-    def metal_wdec_attn {   // nolint:STYLE038 — the phases are barrier-coupled, the kernel body is the shape
-        let h = gl_WorkGroupID.x
-        let r = gl_WorkGroupID.y
-        let lid = gl_LocalInvocationID.x
-        let len = causal != 0u ? len0 + r : len0
-        let qbase = r * dim + h * hs
-        let kbase = h * tstride * hs
-        var t = lid
-        while (t < len) {
-            var s = 0.0
-            var j = 0u
-            while (j < hs) {
-                s += (q[qbase + j] + qb[h * hs + j]) * float(kk[kbase + t * hs + j])
-                s += (q[qbase + j + 1u] + qb[h * hs + j + 1u]) * float(kk[kbase + t * hs + j + 1u])
-                s += (q[qbase + j + 2u] + qb[h * hs + j + 2u]) * float(kk[kbase + t * hs + j + 2u])
-                s += (q[qbase + j + 3u] + qb[h * hs + j + 3u]) * float(kk[kbase + t * hs + j + 3u])
-                j += 4u
-            }
-            scores[t] = s * scale
-            t += gl_WorkGroupSize.x
-        }
-        barrier()
-        var mx = -3.0e38
-        t = lid
-        while (t < len) {
-            mx = max(mx, scores[t])
-            t += gl_WorkGroupSize.x
-        }
-        var bm = 16u   // the max butterfly (Apple simdgroups are width 32, asserted at driver init)
-        while (bm >= 1u) {
-            mx = max(mx, simd_shuffle_xor(mx, bm))
-            bm /= 2u
-        }
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = mx
-        }
-        barrier()
-        if (lid == 0u) {
-            var tm = -3.0e38
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tm = max(tm, partial[sgi])
-                sgi++
-            }
-            red_sh = tm
-        }
-        barrier()
-        let m = red_sh
-        var ss = 0.0
-        t = lid
-        while (t < len) {
-            let e = exp(scores[t] - m)
-            scores[t] = e
-            ss += e
-            t += gl_WorkGroupSize.x
-        }
-        ss = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            red_sh = 1.0 / tot
-        }
-        barrier()
-        let inv = red_sh
-        var j = lid
-        while (j < hs) {
-            var acc = 0.0
-            var tt = 0u
-            while (tt < len) {
-                acc += scores[tt] * float(vv[kbase + tt * hs + j])
-                tt++
-            }
-            y[r * dim + h * hs + j] = acc * inv
-            j += gl_WorkGroupSize.x
-        }
-    }
-}
 
 // The shared 32x64 GEMM tile stage: every mul_mm-family kernel (dense, MoE, attention, KV-quant)
 // stages A into ta (4 k-tiles x 8 row-tiles of 8x8) and B into tb (4 k-tiles x 4 token-tiles),
