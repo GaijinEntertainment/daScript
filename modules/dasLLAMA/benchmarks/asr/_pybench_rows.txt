@@ -1,7 +1,7 @@
-LOAD	onnx-community/whisper-large-v3-turbo	1117.950
-BENCH	onnx-whisper-turbo-int8	jfk.wav	11.000	1	2311.877	4.758
-BENCH	onnx-whisper-turbo-int8	jfk.wav	11.000	2	2310.441	4.761
-SKIP	onnx-whisper-turbo-int8	jfk3.wav	single-window adapter: 33s > 30s
-SKIP	onnx-whisper-turbo-int8	gb1.wav	single-window adapter: 199s > 30s
-SKIP	onnx-whisper-turbo-int8	hp0.wav	single-window adapter: 273s > 30s
-SKIP	onnx-whisper-turbo-int8	hp0x2.wav	single-window adapter: 547s > 30s
+LOAD	onnx-community/whisper-tiny	384.937
+BENCH	onnx-whisper-tiny-int8	jfk.wav	11.000	1	502.438	21.893
+BENCH	onnx-whisper-tiny-int8	jfk.wav	11.000	2	408.559	26.924
+SKIP	onnx-whisper-tiny-int8	jfk3.wav	single-window adapter: 33s > 30s
+SKIP	onnx-whisper-tiny-int8	gb1.wav	single-window adapter: 199s > 30s
+SKIP	onnx-whisper-tiny-int8	hp0.wav	single-window adapter: 273s > 30s
+SKIP	onnx-whisper-tiny-int8	hp0x2.wav	single-window adapter: 547s > 30s

@@ -362,9 +362,10 @@
     (2026-08-16, `metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
     the q8-native decode step on Metal, part/comb attention, f16 KV — decode beats the
     q8-CPU rail 1.6x and serves by default above the `n_text_state >= 1024` floor); J-qwen3a
-    SHIPPED (the conv2d frontend pads into the tile GEMM — encode 6.3x, the q8 serving
-    default included); the whisper conv frontend rides the GPU too (37x). gb1
-    large-v3-turbo lands ~4.1 s vs whisper-cli's 5.61. What remains:
+    SHIPPED (the conv2d frontend pads into the tile GEMM — encode 6.3x on the stage probe
+    (`harness/asr_stage_probe.das`, no board cell), the q8 serving default included); the
+    whisper conv frontend rides the GPU too (37x, same probe). gb1 large-v3-turbo lands
+    4.04 s vs whisper-cli's 5.54 (both celled, `records/m1.json`). What remains:
     - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven — the encoder
       blocks still ride the f32 lane under `--ngl` (the one remaining fp32-forced half).
     - **Audio mmproj provenance**: `qwen2audio-mmproj-f32.gguf` and

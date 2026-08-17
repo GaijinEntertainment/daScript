@@ -120,8 +120,10 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
 - **`dasllama_gguf.das`** — the GGUF container: KV/tensor descriptors, the byte-level reader, the
   mapping. Codecs live in `dasllama_convert`; this file finds bytes, it does not decode them.
 - **`dasllama_layout.das`** — disk-format → compute-layout transforms at LOAD scope: the blob
-  transform, the CPU repack walkers, the GPU tier gathers, and the refusal half (`can this model
-  take the blob form`) split out so the image writer can commit without loading.
+  transform, the CPU repack walkers, the GPU tier gathers, the per-region q8→Metal-34B
+  un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), and the refusal
+  half (`can this model take the blob form`) split out so the image writer can commit without
+  loading.
 - **`dasllama_tokenizer.das`** — the tokenizer facade: backend selection off the GGUF metadata and
   the one encode/decode/piece surface models and the chat layer call. Re-exports both backends, so
   a consumer requires this file and never picks a backend by hand.
@@ -184,7 +186,8 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the whisper-class block loop) — no session, no KV, no mirror; registers the gemma4uv and encoder_blocks hooks | kernel bodies, decoder state |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) — no session, no KV, no mirror; registers the gemma4uv, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
+| the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan — the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
@@ -232,7 +235,9 @@ that a question answered for one backend has an obvious address in the other. Th
 - **`dasllama_gpu_tier.das`** — the device-cooperation SPI: hook types, install/unset slots,
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
   resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
-  integrates as a whole-forward driver through common's override registries.
+  integrates as a whole-forward driver through common's override registries (the ASR-decoder
+  driver is the one exception: whisper is not a `Model`, so its hooks are family registries in
+  `dasllama_whisper`, same decline contract).
 - **`dasllama_gpu_resident.das`** — the WHOLE-MODEL residency rail: bake the device layout offline
   into the flavor image, upload a model's stacks to the tier, and drive decode/prefill entirely on
   device. It is device-AGNOSTIC — it holds no device call and requires no GPU module, reaching the

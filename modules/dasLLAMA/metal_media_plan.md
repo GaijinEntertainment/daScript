@@ -711,8 +711,9 @@ cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated
   the CPU-row wdec pin proven); GPU row jfk 449 ms / jfk3 925 / **gb1 4.05 s (xRT 49)** /
   hp0 5.84 / **hp0x2 11.24 s (xRT 48.6)** — anti-sandbag passed, transcripts full and
   correct. From chunk 2's close (9.32/25.2) another 2.3x; vs the q8-CPU default 4.16x e2e;
-  vs whisper-cli's 5.61 s gb1 (beam-5) we are 1.39x FASTER greedy. NOTE: the catalog has no
-  Qwen3-ASR-0.6B row (the family's board exposure is the Omni-30B row) — adding one is a
+  vs whisper-cli's 5.61 s gb1 (beam-5) we are 1.39x FASTER greedy. NOTE (superseded in this same
+  arc): the catalog gained its Qwen3-ASR-0.6B row (cpu + accel legs; no metal leg — the AuT
+  blocks decline q8, so a --ngl row would sandbag) — adding one was a
   board-curation call, not a slice item; the qwen3a 6.3x claim stands on the stage probe.
 
 ## Open design decisions (named before O starts)
