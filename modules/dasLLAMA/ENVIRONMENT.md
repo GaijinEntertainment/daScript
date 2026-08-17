@@ -69,7 +69,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |
 | `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes (gemma4uv; the whisper-class towers as they land) on the Metal tower driver; 0 pins the CPU tower. |
 | `DASLLAMA_METAL_WDEC` | flag | on | Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder. |
-| `DASLLAMA_METAL_WDEC_STEP` | flag | off | Serve the whisper DECODE STEP on the GPU too (needs wdec). Default off: the step is correct and gated but slower than the q8 CPU decoder until its tuning round lands (metal_media_plan.md slice O). |
+| `DASLLAMA_METAL_WDEC_STEP` | flag | on | Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the driver's floor) keep the CPU rail — the per-dispatch latency floor beats them. |
 | `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |
 | `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
 | `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |

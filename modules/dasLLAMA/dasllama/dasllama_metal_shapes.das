@@ -63,7 +63,10 @@ enum MetalTowerDecline {
 // as strings by the decoder gates. The driver is Q8-NATIVE: an f32-forced decoder declines.
 enum MetalWdecDecline {
     none                // supported — the decoder-side work runs on the GPU
-    knob                // DASLLAMA_METAL_WDEC=0 — the A/B rail
+    knob                // DASLLAMA_METAL_WDEC=0 — the A/B rail (policy: never panics)
+    small               // the decode STEP only: n_text_state under the serving floor — the
+                        // per-dispatch latency beats small decoders (policy: never panics;
+                        // cross-KV still serves)
     quant_mode          // an f32-loaded decoder: the q8 lane only (f32 is the CPU oracle rail)
     shape               // a dim violating the GEMM grids or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)

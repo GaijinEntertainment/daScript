@@ -566,12 +566,30 @@ not an architecture wall. Today: our GPU decode ≈ 1.9 s wall vs the CPU q8 dec
 closes exactly that gap). Their default is beam-5 (2457 sampled tokens vs our greedy 523) —
 quality regimes differ in their favor on the same wall.
 
-SHIPPED POSTURE: the step half sits behind `DASLLAMA_METAL_WDEC_STEP` (default OFF,
-window-captured so engines never mix mid-window; `set_metal_wdec_step` is the test seat and
-the gate cell pins it on) — the serving default keeps N0+N's 5.9 s with zero regression.
-OPEN DECISION (Boris): flip the step on as-is (all-Metal, frees the CPU, ~+0.4 s on turbo
-gb1), gate it by geometry, or fund the tuning round (attention chunking, GEMV row-groups
-under tune, f16 KV mirrors) toward the proven 1.6 ms/step first.
+## Slice O2 record — the tuning round DONE 2026-08-16 (format parity, then the real term)
+
+Boris's method call: verify FORMATS and SHAPES against whisper.cpp before calling anything
+"tuning". The comparison: shapes identical (same model), weights identical (Q8_0 34B blocks
+both sides); ONE format difference — their KV/cross memory is f16, ours was f32. The round,
+each step measured on turbo gb1 (GPU-busy, 517 steps):
+- f16 resident K/V (format parity; the f32 ds.kx/vx readbacks stay for the CPU fallback):
+  1612 → 1470 ms (−9%), transcript intact.
+- `DASLLAMA_METAL_GEMV_TG` sweep 2/4/8/16 → 1470/1470/1480/1498 — the default 4 is right,
+  the row-group was NOT the term.
+- Knockout attribution: the chain minus attention runs 1.68 ms/step — attention was ~41%
+  at ~145 µs/dispatch (20 threadgroups = the occupancy wall).
+- **The part/comb chunked attention (256-t online-softmax partials + log-sum-exp merge, the
+  sq_attn house pattern): 1470 → 709 ms — 1.37 ms/step, UNDER whisper-cli's single-row
+  1.63 ms.** e2e stage probe: decode_total 966 ms (CPU q8 was 1537) — the GPU decoder now
+  WINS 1.6x, and the gb1 bucket sum is **5.33 s vs whisper-cli's 5.61** (greedy vs their
+  beam-5; our conv is still CPU — slice P).
+
+SHIPPED POSTURE: `DASLLAMA_METAL_WDEC_STEP` default ON with a serving floor
+`n_text_state >= 1024` (measured: d=1280 wins 1.6x, d=384 tiny still loses to its CPU —
+the `small` decline is policy-class, cross-KV still serves; `set_metal_wdec_step_min_d` is
+the test seat). The lcpp `--asr` CPU rows pin the driver OFF (a CPU row means CPU — the
+bench-level hook-flip trap). Gates: the pc pair's unit cells with a recorded control, the
+floor legs in the wdec model gate, f16 fixtures in the attention gates.
 
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650

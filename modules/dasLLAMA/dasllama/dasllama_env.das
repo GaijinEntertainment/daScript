@@ -173,8 +173,8 @@ struct public MetalEnv {
     @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder."
     wdec : bool = true
 
-    @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Default off: the step is correct and gated but slower than the q8 CPU decoder until its tuning round lands (metal_media_plan.md slice O)."
-    wdec_step : bool = false
+    @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the driver's floor) keep the CPU rail — the per-dispatch latency floor beats them."
+    wdec_step : bool = true
 
     @clarg_doc = "Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair."
     attn_d : bool = true

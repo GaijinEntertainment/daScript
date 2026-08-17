@@ -14,6 +14,7 @@ require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcri
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
+require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_gemma4uv   // --image: the vision embedder + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -336,6 +337,11 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : 
         } else {
             print("lcpp_bench --asr: --ngl needs a Metal build (no das_metal on this platform)\n")
             return false
+        }
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!gpu) {   // the CPU row means CPU: the wdec driver (default-on) would silently GPU-serve the q8 decode
+            set_metal_wdec(false)
         }
     }
     apply_box_profile_runtime()

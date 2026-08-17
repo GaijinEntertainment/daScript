@@ -951,10 +951,14 @@ def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; 
     let scale = 1.0 / sqrt(float(hs))
     var q : array<float>
     var qb : array<float>
+    var kvh : array<uint16>
+    var vvh : array<uint16>
     var kv : array<float>
     var vv : array<float>
     q |> resize(n * dim)
     qb |> resize(dim)
+    kvh |> resize(hh * tstride * hs)
+    vvh |> resize(hh * tstride * hs)
     kv |> resize(hh * tstride * hs)
     vv |> resize(hh * tstride * hs)
     for (i in range(n * dim)) {
@@ -963,9 +967,11 @@ def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; 
     for (i in range(dim)) {
         qb[i] = 0.07 * float(i % 11) - 0.3
     }
-    for (i in range(hh * tstride * hs)) {
-        kv[i] = 0.09 * float(i % 41) - 1.9
-        vv[i] = 0.13 * float(i % 29) - 1.1
+    for (i in range(hh * tstride * hs)) {   // the K/V memory is f16: the oracle reads the round-trip
+        kvh[i] = uint16(f32_to_f16(0.09 * float(i % 41) - 1.9))
+        vvh[i] = uint16(f32_to_f16(0.13 * float(i % 29) - 1.1))
+        kv[i] = f16_to_f32(uint(kvh[i]))
+        vv[i] = f16_to_f32(uint(vvh[i]))
     }
     var want : array<float>
     want |> resize(n * dim)
@@ -998,8 +1004,8 @@ def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; 
         }
     }
     var bq = buf_upload(dev, q)
-    var bk = buf_upload(dev, kv)
-    var bv = buf_upload(dev, vv)
+    var bk = buf_upload(dev, kvh)
+    var bv = buf_upload(dev, vvh)
     var by = buf_fill(dev, n * dim, -444.0)
     var bqb = buf_upload(dev, qb)
     var bdim = buf_u32(dev, uint(dim))
@@ -1042,6 +1048,159 @@ def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; 
     metal_release(pso)
     delete q
     delete qb
+    delete kvh
+    delete vvh
+    delete kv
+    delete vv
+    delete want
+    delete scores
+}
+
+// The chunked twin pair vs the SAME oracle: Part writes per-chunk (m, s, y) partials, Comb
+// merges by log-sum-exp — the pair must land on the single-pass answer (1e-4, exp reassoc).
+// Negative control recorded 2026-08-16: an off-by-one oracle len redded all three cells.
+def private wdec_attn_pc_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; causal : bool) {
+    let tag = "wdec_attn_pc n={n} dim={dim} hh={hh} len0={len0} causal={causal}"
+    var err : string
+    var pp = pipeline_from_source(dev, metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, err)
+    t |> success(pp != null, "{tag}: part pipeline: {err}")
+    return if (pp == null)
+    var pc = pipeline_from_source(dev, metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, err)
+    t |> success(pc != null, "{tag}: comb pipeline: {err}")
+    if (pc == null) {
+        metal_release(pp)
+        return
+    }
+    let hs = dim / hh
+    let scale = 1.0 / sqrt(float(hs))
+    let maxlen = causal ? len0 + n - 1 : len0
+    let nch = (maxlen + 255) / 256
+    var q : array<float>
+    var qb : array<float>
+    var kvh : array<uint16>
+    var vvh : array<uint16>
+    var kv : array<float>
+    var vv : array<float>
+    q |> resize(n * dim)
+    qb |> resize(dim)
+    kvh |> resize(hh * tstride * hs)
+    vvh |> resize(hh * tstride * hs)
+    kv |> resize(hh * tstride * hs)
+    vv |> resize(hh * tstride * hs)
+    for (i in range(n * dim)) {
+        q[i] = 0.11 * float(i % 37) - 1.7
+    }
+    for (i in range(dim)) {
+        qb[i] = 0.07 * float(i % 11) - 0.3
+    }
+    for (i in range(hh * tstride * hs)) {
+        kvh[i] = uint16(f32_to_f16(0.09 * float(i % 41) - 1.9))
+        vvh[i] = uint16(f32_to_f16(0.13 * float(i % 29) - 1.1))
+        kv[i] = f16_to_f32(uint(kvh[i]))
+        vv[i] = f16_to_f32(uint(vvh[i]))
+    }
+    var want : array<float>
+    want |> resize(n * dim)
+    var scores : array<float>
+    scores |> resize(tstride)
+    for (h in range(hh)) {
+        for (r in range(n)) {
+            let len = causal ? len0 + r : len0
+            var mx = -3.0e38
+            for (tt in range(len)) {
+                var sacc = 0.0
+                for (j in range(hs)) {
+                    sacc += (q[r * dim + h * hs + j] + qb[h * hs + j]) * kv[(h * tstride + tt) * hs + j]
+                }
+                scores[tt] = sacc * scale
+                mx = max(mx, scores[tt])
+            }
+            var tot = 0.0
+            for (tt in range(len)) {
+                scores[tt] = exp(scores[tt] - mx)
+                tot += scores[tt]
+            }
+            for (j in range(hs)) {
+                var acc = 0.0
+                for (tt in range(len)) {
+                    acc += scores[tt] * vv[(h * tstride + tt) * hs + j]
+                }
+                want[r * dim + h * hs + j] = acc / tot
+            }
+        }
+    }
+    var bq = buf_upload(dev, q)
+    var bk = buf_upload(dev, kvh)
+    var bv = buf_upload(dev, vvh)
+    var bqb = buf_upload(dev, qb)
+    var bpms = buf_fill(dev, nch * hh * n * 2, -888.0)
+    var bpy = buf_fill(dev, nch * hh * n * hs, -888.0)
+    var by = buf_fill(dev, n * dim, -444.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhs = buf_u32(dev, uint(hs))
+    var bts = buf_u32(dev, uint(tstride))
+    var blen = buf_u32(dev, uint(len0))
+    var bca = buf_u32(dev, causal ? 1u : 0u)
+    var bsc = buf_f32(dev, scale)
+    var bhh = buf_u32(dev, uint(hh))
+    var bn = buf_u32(dev, uint(n))
+    var bnch = buf_u32(dev, uint(nch))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pp)
+        metal_set_threadgroup_memory_length(enc, metal_wdec_attn_part_msl_tgmem, 0)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv, 0ul, 2)
+        metal_set_buffer(enc, bpms, 0ul, 3)
+        metal_set_buffer(enc, bpy, 0ul, 4)
+        metal_set_buffer(enc, bqb, 0ul, 5)
+        metal_set_buffer(enc, bdim, 0ul, 6)
+        metal_set_buffer(enc, bhs, 0ul, 7)
+        metal_set_buffer(enc, bts, 0ul, 8)
+        metal_set_buffer(enc, blen, 0ul, 9)
+        metal_set_buffer(enc, bca, 0ul, 10)
+        metal_set_buffer(enc, bsc, 0ul, 11)
+        metal_set_buffer(enc, bhh, 0ul, 12)
+        metal_set_buffer(enc, bn, 0ul, 13)
+        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), uint(nch)), uint3(128u, 1u, 1u))
+        metal_memory_barrier(enc)
+        metal_set_pipeline(enc, pc)
+        metal_set_buffer(enc, bpms, 0ul, 0)
+        metal_set_buffer(enc, bpy, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, bhs, 0ul, 4)
+        metal_set_buffer(enc, bnch, 0ul, 5)
+        metal_set_buffer(enc, bhh, 0ul, 6)
+        metal_set_buffer(enc, bn, 0ul, 7)
+        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(bqb)
+    metal_release(bpms)
+    metal_release(bpy)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(bhs)
+    metal_release(bts)
+    metal_release(blen)
+    metal_release(bca)
+    metal_release(bsc)
+    metal_release(bhh)
+    metal_release(bn)
+    metal_release(bnch)
+    metal_release(pp)
+    metal_release(pc)
+    delete q
+    delete qb
+    delete kvh
+    delete vvh
     delete kv
     delete vv
     delete want
@@ -1336,6 +1495,9 @@ def test_metal_misc_kernels(t : T?) {
                 wdec_attn_gate(t, dev, queue, 1, 128, 2, 24, 24, false)    // cross shape: fixed len
                 wdec_attn_gate(t, dev, queue, 3, 128, 2, 24, 7, true)      // causal prompt rows: len0 + r
                 wdec_attn_gate(t, dev, queue, 1, 128, 2, 300, 259, false)  // len above one tg pass (128 threads)
+                wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 600, 600, false)   // 3 chunks, full last chunk boundary
+                wdec_attn_pc_gate(t, dev, queue, 3, 128, 2, 300, 259, true)    // causal rows crossing a chunk edge
+                wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 256, 256, false)   // exactly one chunk
                 bias_add_res_gate(t, dev, queue, 3, 128)
                 bias_gelu_lut_gate(t, dev, queue, 2, 640)
                 suppress_row_gate(t, dev, queue, 2000, 37)

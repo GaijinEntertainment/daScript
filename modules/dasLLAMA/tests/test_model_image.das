@@ -991,8 +991,10 @@ def test_whisper_metal_cross_kv(tst : T?) {
             var inscope stg8 <- stage_whisper_model(path, true)
             mint_whisper_model(stg8, w8)
             // GPU leg: the q8 serving default's cross-KV AND decode steps land on the driver
+            // (the step floor drops to 0 — tiny sits under the serving floor by design)
             set_metal_wdec(true)
             set_metal_wdec_step(true)
+            set_metal_wdec_step_min_d(0l)
             let s0 = metal_wdec_stats()
             let gpu_text = wdec_transcribe(w8, samples)
             let s1 = metal_wdec_stats()
@@ -1056,7 +1058,16 @@ def test_whisper_metal_cross_kv(tst : T?) {
             t |> equal(metal_wdec_stats().windows - sr0.windows, 1l, "post-shutdown window re-arms and serves")
             t |> success(metal_wdec_stats().steps - sr0.steps >= 20l, "post-shutdown decode re-arms too")
             t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
-            set_metal_wdec_step(false)   // the step half is opt-in until its tuning round (slice O)
+            // the serving FLOOR: at the default min_d, tiny cross-KV-serves but never steps,
+            // and the small decline is recorded as policy
+            set_metal_wdec_step_min_d(1024l)
+            let sm0 = metal_wdec_stats()
+            let small_text = wdec_transcribe(w8, samples)
+            let sm1 = metal_wdec_stats()
+            t |> equal(sm1.windows - sm0.windows, 1l, "under the floor: cross-KV still serves")
+            t |> equal(sm1.steps, sm0.steps, "under the floor: the step never serves")
+            t |> success(key_exists(metal_wdec_declines(), "small"), "the floor decline is recorded")
+            t |> success(small_text == cpu_text, "under the floor: the CPU decode transcript")
             delete samples
         }
     }

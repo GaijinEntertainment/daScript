@@ -182,6 +182,7 @@ def private cov_tower(t : T?) {
         set_metal_tower(true)
         set_metal_wdec(true)
         set_metal_wdec_step(true)
+        set_metal_wdec_step_min_d(0l)   // the census carrier is tiny — under the serving floor
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
