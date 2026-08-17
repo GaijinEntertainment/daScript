@@ -171,6 +171,9 @@ below are the checklist's own).
 **A disk-order → compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
+**When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides; a
+diff that adds or moves such a function lands the charter line with it.**
+
 **A KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`, its
 format family kept whole.**
 
