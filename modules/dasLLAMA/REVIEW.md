@@ -24,8 +24,8 @@ sidecar set (the exchange keys validity on version and box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
 this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
-struct; if no it is shape — a block stride, a lane width, an unroll factor, a format selector —
-and it must not reach the kernel as a uniform, a kargs field, or a helper parameter.
+struct; if no it is shape and must not reach the kernel as a uniform, a kargs field, or a
+helper parameter.
 
 **The EMITTED shader contains no indirection.** No function pointers, no vtables. A
 `class template` / `def abstract` / `def override` splice is compile-time and conforms —
