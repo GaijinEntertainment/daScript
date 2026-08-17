@@ -96,6 +96,8 @@ reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cel
 quant mode and stamps box and engine provenance, so a number can never silently describe a
 format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
 delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
+A **stage-level figure** — a speedup of one engine stage, not a served turn — names the
+harness and flags that produced it, on the same line.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
