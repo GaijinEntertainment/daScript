@@ -10,7 +10,7 @@ queue), and dasVulkan exposes the GPU primitives, so the bridge is pure das.
 
 ## The bridge lives in dasVulkan
 
-Two opt-in modules ship with [dasVulkan](https://github.com/borisbat/dasVulkan):
+Two opt-in modules ship with the in-tree dasVulkan (`modules/dasVulkan`):
 
 - **`vulkan/vulkan_imgui_driver`** — the 100%-daslang ImGui→Vulkan renderer backend (the bridge):
   pipeline, the 1.92 dynamic-texture queue, and the per-frame draw-data replay (upload
@@ -31,16 +31,8 @@ Two opt-in modules ship with [dasVulkan](https://github.com/borisbat/dasVulkan):
 
 ## Running
 
-The example depends on the external [dasVulkan](https://github.com/borisbat/dasVulkan) module,
-declared in `.das_package` (dasImgui ships in-tree with daslang — nothing to install for it).
-Install it once with `daspkg` (clones + builds the native module into `modules/`):
-
-```
-cd examples/vulkan_imgui_cube
-daslang ../../utils/daspkg/main.das -- install
-```
-
-Then run it — drag the slider to change the spin speed, press **P** to save a screenshot
+dasVulkan and dasImgui both ship in-tree with daslang — nothing to install, a bare build suffices.
+Run it — drag the slider to change the spin speed, press **P** to save a screenshot
 (`screenshot.png`, captured by `vulkan_live`), close the window to exit:
 
 ```

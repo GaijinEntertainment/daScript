@@ -28,15 +28,7 @@ watertight-traversal edges.
 
 ## Running
 
-The example depends on [dasVulkan](https://github.com/borisbat/dasVulkan), declared in
-`.das_package` (dasImgui ships in-tree — nothing to install for it). Install once:
-
-```
-cd examples/vulkan/one_source_path_tracer
-daslang ../../../utils/daspkg/main.das -- install
-```
-
-Then:
+dasVulkan and dasImgui both ship in-tree with daslang — nothing to install, a bare build suffices:
 
 ```
 daslang -project_root . main.das          # interpreter CPU tiers

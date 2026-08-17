@@ -55,8 +55,6 @@ _smoke*.cpp
 _smoke*.o
 
 modules/dasSFML/libsfml/
-# external-module detached worktree (see CLAUDE.md "Build all of your own modules")
-modules/dasVulkan/
 # site/doc/ is the Sphinx HTML output deployed by .github/workflows/pages.yml.
 # Source for site/* (forge.css, blog/_posts/*.md, _news/*.md, etc.) IS tracked;
 # the build-time output (blog/*.html, news/*.html, files/wasm/, etc.) is

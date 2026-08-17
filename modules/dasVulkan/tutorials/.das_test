@@ -1,0 +1,27 @@
+options gen2
+options indenting = 4
+
+require daslib/rtti
+
+// dastest folder filter for the tutorials tree. Each tutorial's pixel-oracle gate needs only
+// vulkan + dasSpirv and always runs (lavapipe in CI, real GPU locally). Two driver kinds live in
+// per-tutorial subdirs and are skipped in CI because the lavapipe CI daslang build does not load
+// their modules (it is built -DDAS_GLFW_DISABLED=ON and without stbimage/audio/dasHV):
+//   window/    -- the live GLFW window viewer (show_*.das); needs the glfw module.
+//   recording/ -- capture -> APNG -> ffmpeg mp4 + strudel bed (silent), and the voiced sibling
+//                 (Kokoro + drawtext captions, needs dasHV via dasOPENAI). The framework gates per
+//                 folder, not per file, so the recording folder is skipped when ANY of stbimage /
+//                 audio / dashv is missing rather than breaking the silent path's compile by trying
+//                 to load a voiced file whose dep chain we can't satisfy.
+// All three are active locally where the full daslang build is present.
+[export, pinvoke]
+def can_visit_folder(folder_name : string; var result : bool?) {
+    if (folder_name == "window") {
+        *result = has_module("glfw")
+        return
+    }
+    if (folder_name == "recording") {
+        *result = has_module("stbimage") && has_module("audio") && has_module("dashv")
+        return
+    }
+}

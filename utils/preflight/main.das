@@ -401,8 +401,9 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 }
 
 // CI's lint verdict is rendered ONLY by the linux lane (extended_checks gates the step on
-// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal/dasVulkan — platform
-// static_if halves compile out, so their requires/args read unused there and nowhere else),
+// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal — platform static_if
+// halves compile out, so their requires/args read unused there and nowhere else; dasVulkan
+// is in-tree and present on linux, so it is NOT disabled),
 // and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
 // A host-flavor pass alone is structurally blind to both — so this gate runs three rails.
 // LINT019 is OFF on all three (mirrors CI): a changed-set ledger cannot see consumers
@@ -424,7 +425,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "host-flavor lint warnings — fix or nolint each (see skills/internal/make_pr.md §1)", output = host.out)
     }
-    var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal", "--disable-module", "dasVulkan",
+    var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal",
                         "utils/lint/main.das", "--"]
     mirror_args |> push_from(files)
     mirror_args |> push("--quiet")
@@ -589,7 +590,7 @@ def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
 }
 
 def docs_skip_all(reason : string; var results : array<GateResult>&) {
-    skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-html"], reason, results)
+    skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/vulkan2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-html"], reason, results)
 }
 
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the doc.yml gates in CI order; splitting hides the sequence
@@ -624,6 +625,20 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
             output = r1b.out))
     }
 
+    // gate 1c: vulkan2rst — dasVulkan's stdlib pages, same rail as imgui2rst
+    t0 = ref_time_ticks()
+    let r1c = run_argv([ctx.daslang, "modules/dasVulkan/utils/vulkan2rst.das"])
+    let vulkan_pages_ok = r1c.rc == 0
+    if (!vulkan_pages_ok && find(r1c.out, "missing prerequisite") >= 0) {
+        results |> emplace(GateResult(name = "docs/vulkan2rst", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "daslang lacks dasVulkan — rebuild with -DDAS_VULKAN_DISABLED=OFF", output = r1c.out))
+    } else {
+        results |> emplace(GateResult(name = "docs/vulkan2rst", status = vulkan_pages_ok ? GateStatus.Pass : GateStatus.Fail,
+            seconds = seconds_since(t0),
+            detail = vulkan_pages_ok ? "" : "vulkan2rst failed — the generated vulkan stdlib pages are stale/missing",
+            output = r1c.out))
+    }
+
     // gate 2: no `// stub` in handmade docs
     t0 = ref_time_ticks()
     var stubs : array<string>
@@ -654,7 +669,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
     results |> emplace(GateResult(name = "docs/uncategorized", status = empty(uncategorized) ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0),
-        detail = empty(uncategorized) ? "" : "add the function(s) to a group_by_regex in doc/reflections/das2rst.das",
+        detail = empty(uncategorized) ? "" : "add the function(s) to a group_by_regex in the generator that owns the page (das2rst / imgui2rst / vulkan2rst)",
         output = join(uncategorized, "\n")))
 
     // gate 4: no untracked generated RST
@@ -676,6 +691,10 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
     if (!imgui_pages_ok) {
         skip_sphinx_gates("generated imgui pages unavailable (see docs/imgui2rst) — sphinx -W would red on their toctree refs", results)
+        return
+    }
+    if (!vulkan_pages_ok) {
+        skip_sphinx_gates("generated vulkan pages unavailable (see docs/vulkan2rst) — sphinx -W would red on their toctree refs", results)
         return
     }
     rmdir_rec("doc/sphinx-build")
@@ -986,7 +1005,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
-        GateInfo(name = "docs", full_only = true, doc = "the six doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, docs/untracked, sphinx html)"),
+        GateInfo(name = "docs", full_only = true, doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, uncategorized, docs/untracked, sphinx html)"),
         GateInfo(name = "tests-cpp", full_only = true, doc = "ctest -L small"),
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),

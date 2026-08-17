@@ -175,6 +175,14 @@ jobs:
         DAS_TRACE_MODULE_LOAD: 1
       run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
 
+    - name: "Run vulkan2rst"
+      # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
+      # from its own generator; it introspects the loaded boost modules via RTTI
+      # and never creates a Vulkan instance, so this needs no GPU.
+      env:
+        DAS_TRACE_MODULE_LOAD: 1
+      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
+
     - name: "Stage tutorial recordings (docs-assets release)"
       # The `.. video::` directive fails the -W sphinx build on any recording
       # missing from _static/tutorials/, so staging must precede sphinx.

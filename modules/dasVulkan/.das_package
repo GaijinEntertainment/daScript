@@ -1,0 +1,19 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasVulkan")
+    package_description("Vulkan bindings for daslang, generated from vk.xml")
+    package_author("borisbat")
+    package_license("MIT")
+    package_source("github.com/borisbat/dasVulkan")
+    package_tag("graphics")
+    package_tag("vulkan")
+    package_tag("gpu")
+}
+
+[export]
+def build() {
+    cmake_build()
+}

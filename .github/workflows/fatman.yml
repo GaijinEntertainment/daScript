@@ -50,10 +50,9 @@ jobs:
       - name: "Clone external modules into modules/ (master; no .daspkg_standalone marker => the modules glob includes their both-worlds CMakeLists)"
         run: |
           set -eux
-          # dasImgui is in-tree (modules/dasImgui) — only its dependents are external
+          # dasImgui and dasVulkan are in-tree — only the imgui dependents are external
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
-          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasVulkan.git         modules/dasVulkan
 
       - name: "Configure (externals absorbed by the modules glob)"
         run: |

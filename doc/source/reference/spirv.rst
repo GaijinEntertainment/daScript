@@ -16,8 +16,8 @@ leaves the optimizing to the driver. Validity is enforced by ``spirv-val`` over 
 suite produces; every emitted opcode has a test (an opcode census plus the LCOV dispatch gate).
 
 This page is the language/API reference. For runnable, screenshot-backed walkthroughs (compute,
-raymarch, textured mesh, shadow mapping, …) see the **dasVulkan tutorials**, which run the emitted
-blobs on a real driver.
+raymarch, textured mesh, shadow mapping, …) see the :ref:`dasVulkan tutorials <tutorials_vulkan>`,
+which run the emitted blobs on a real driver.
 
 
 Overview
@@ -318,5 +318,6 @@ Tutorials
 =========
 
 Runnable, screenshot-backed tutorials — compute, fullscreen raymarching, textured meshes, shadow
-mapping, compute particles, and more — live in the **dasVulkan** repository's ``tutorials/``
-directory, where the emitted SPIR-V runs on a real Vulkan driver (and on lavapipe in CI).
+mapping, compute particles, and more — are the :ref:`dasVulkan tutorials <tutorials_vulkan>`, whose
+sources live in-tree under ``modules/dasVulkan/tutorials/``, where the emitted SPIR-V runs on a real
+Vulkan driver (and on lavapipe in CI).

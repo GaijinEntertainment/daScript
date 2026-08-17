@@ -11,6 +11,7 @@ on:
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
       - 'modules/dasImgui/**'
+      - 'modules/dasVulkan/**'
   pull_request:
     paths:
       - 'doc/**'
@@ -18,6 +19,7 @@ on:
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
       - 'modules/dasImgui/**'
+      - 'modules/dasVulkan/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -46,7 +48,7 @@ jobs:
           mesa-common-dev libglu1-mesa-dev libgl1-mesa-dev libglfw3-dev \
           libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
 
-    - name: "Build: Daslang (for das2rst + imgui2rst)"
+    - name: "Build: Daslang (for das2rst + imgui2rst + vulkan2rst)"
       run: |
         set -eux
         mkdir build
@@ -56,6 +58,7 @@ jobs:
           -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=ON \
           -DDAS_GLFW_DISABLED=OFF \
+          -DDAS_VULKAN_DISABLED=OFF \
           -DDAS_BUILD_DOCUMENTATION=ON \
           -G Ninja
         cmake --build ./build --target daslang
@@ -68,6 +71,12 @@ jobs:
       # from its own generator — the imgui modules carry macro-generated
       # surfaces das2rst's reflection pass can't group.
       run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+
+    - name: "Run vulkan2rst"
+      # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
+      # from its own generator — it introspects the loaded boost modules via RTTI
+      # and never creates a Vulkan instance, so this needs no GPU and no lavapipe.
+      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
 
     - name: "Stage tutorial recordings (docs-assets release)"
       # The `.. video::` directive fails the -W sphinx build on any recording
@@ -89,7 +98,9 @@ jobs:
         set -eux
         if grep -rl '^Uncategorized$' doc/source/stdlib/generated/; then
           echo "ERROR: Found Uncategorized sections in generated docs."
-          echo "Add the function(s) to a group_by_regex() in doc/reflections/das2rst.das."
+          echo "Add the function(s) to a group_by_regex() in the generator that owns"
+          echo "the page: doc/reflections/das2rst.das, modules/dasImgui/utils/imgui2rst.das,"
+          echo "or modules/dasVulkan/utils/vulkan2rst.das."
           exit 1
         fi
 

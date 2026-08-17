@@ -312,22 +312,22 @@ Global modules
 ==============
 
 By default, packages install per-project into ``{root}/modules/``.
-Large packages with native builds (e.g. dasVulkan) can be installed
+Large packages with native builds (e.g. dasVideo) can be installed
 **globally** -- once under ``{das_root}/modules/`` -- and shared across
-all projects using that daScript SDK.  In-tree modules (e.g. dasImgui)
-need no install at all: daspkg reports them as *part of this daslang
-tree -- nothing to install*.
+all projects using that daScript SDK.  In-tree modules (e.g. dasImgui,
+dasVulkan) need no install at all: daspkg reports them as *part of this
+daslang tree -- nothing to install*.
 
 .. code-block:: bash
 
    # install globally
-   daspkg install --global dasVulkan
+   daspkg install --global dasVideo
 
    # list / update / upgrade / remove / build / check globally
    daspkg list --global
-   daspkg update --global dasVulkan
-   daspkg upgrade --global dasVulkan
-   daspkg remove --global dasVulkan
+   daspkg update --global dasVideo
+   daspkg upgrade --global dasVideo
+   daspkg remove --global dasVideo
    daspkg build --global
    daspkg check --global
 

@@ -1,0 +1,159 @@
+name: Nightly dasVulkan
+
+# The dasVulkan render/compute suite: full integration + tutorial pixel-oracle
+# tests on lavapipe (software Vulkan) on Linux, and a build + loader-discovery
+# smoke on macOS (GitHub's macOS runners expose only AppleParavirtGPU, which
+# cannot run the render suite — stock MoltenVK crashes in device init there).
+# Windows has no lane: needs lavapipe/SwiftShader wiring (module ROADMAP).
+# Nightly + on-demand only; the per-PR gate is vulkan_checks.yml (paths-filtered).
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration_linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install lavapipe (software Vulkan) + tools"
+        # The lavapipe ICD JSON path is not stable across distro versions, so
+        # discover it after install rather than hardcoding it (a missing
+        # VK_DRIVER_FILES path disables default ICD discovery entirely ->
+        # ERROR_INCOMPATIBLE_DRIVER). Export the found path for later steps.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1 vulkan-tools
+          LVP=$(find /usr -iname 'lvp_icd*.json' 2>/dev/null | head -1)
+          if [ -n "$LVP" ]; then
+            echo "lavapipe ICD: $LVP"
+            echo "VK_DRIVER_FILES=$LVP" >> "$GITHUB_ENV"
+          else
+            echo "WARNING: lavapipe ICD not found; relying on default loader discovery"
+          fi
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: "Build daslang + dasVulkan (in-tree)"
+        # dasModuleStbImage: the texture tutorials' oracles (tut 8/10) load real
+        # JPG/HDR maps. dasModulePUGIXML: the generator's vk.xml parser (the
+        # skip-ratchet re-run). dasModuleVulkan is the shared twin the dynamic
+        # daslang host loads; built at --parallel 2 because its ~55 generated
+        # template-heavy TUs OOM a 7 GB runner at full parallelism.
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=ON \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target daslang dasModuleStbImage dasModulePUGIXML
+          cmake --build ./build --parallel 2 --target dasModuleVulkan
+          sccache --show-stats
+          ls -la modules/dasVulkan/*.shared_module
+
+      - name: "Skip ratchet: the generator's skip tail must match the committed report"
+        # Re-run the generator against the vendored vk.xml into scratch dirs and
+        # diff against the committed reports. An emitter change that silently
+        # GROWS the skip tail fails here; a justified change regenerates the
+        # report in the same commit. The copyability report rides the same regen.
+        run: |
+          set -eux
+          mkdir -p /tmp/vk_regen_src /tmp/vk_regen_daslib
+          ./bin/daslang modules/dasVulkan/generator/generate.das -- \
+            --out /tmp/vk_regen_src \
+            --boost-out /tmp/vk_regen_daslib \
+            --skip-report /tmp/vk_skip_report.txt
+          diff -u modules/dasVulkan/generator/skip_report.txt /tmp/vk_skip_report.txt
+          diff -u modules/dasVulkan/generator/copyability_report.txt /tmp/copyability_report.txt
+
+      - name: "Lint: every dasVulkan .das must be clean"
+        # window/ (needs glfw) and recording/ (needs audio) files skip via the
+        # folder .das_test gates because this build carries neither module.
+        run: |
+          set -eux
+          ./bin/daslang utils/lint/main.das -- modules/dasVulkan -q -j 0
+
+      - name: "Verify lavapipe is visible to the loader"
+        # No `|| true` — a missing driver should fail loudly here rather than
+        # let every test report the same error.
+        run: vulkaninfo --summary | grep -iE "deviceName|llvmpipe|apiVersion"
+
+      - name: "Run integration tests (offscreen, lavapipe)"
+        # Shaders are daslang, lowered to SPIR-V by dasSpirv at compile time —
+        # no committed .spv. MUST NOT run under sudo: the loader ignores
+        # VK_DRIVER_FILES for elevated processes.
+        run: |
+          set -eux
+          ./bin/daslang dastest/dastest.das -- \
+            --test modules/dasVulkan/tests/integration \
+            --timeout 600 \
+            --isolated-mode \
+            --isolated-mode-threads 4
+
+      - name: "Run tutorial pixel-oracle gates (offscreen, lavapipe)"
+        run: |
+          set -eux
+          ./bin/daslang dastest/dastest.das -- \
+            --test modules/dasVulkan/tutorials \
+            --timeout 600 \
+            --isolated-mode \
+            --isolated-mode-threads 4
+
+  build_macos:
+    # Build + loader-discovery smoke only (see the header comment). Exercises the
+    # APPLE branch: dasVULKAN.metal.mm, Cocoa/QuartzCore, MoltenVK via Homebrew.
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install Vulkan loader + MoltenVK + bison"
+        # macOS ships bison 2.3, too old for daslang's grammar.
+        run: |
+          brew install vulkan-loader molten-vk bison
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: "Build daslang + dasVulkan (in-tree)"
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=ON \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target daslang
+          cmake --build ./build --parallel 2 --target dasModuleVulkan
+          sccache --show-stats
+
+      - name: "Loader-discovery smoke (no render)"
+        # Proves das_volkInitialize finds the Homebrew loader.
+        run: |
+          set -eux
+          ./bin/daslang modules/dasVulkan/examples/smoke.das | tee /tmp/smoke.out
+          grep -i "Vulkan instance version" /tmp/smoke.out

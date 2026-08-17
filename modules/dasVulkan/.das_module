@@ -1,0 +1,27 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    if (das_is_dll_build()) {
+        register_dynamic_module("{project_path}/dasModuleVulkan.shared_module", "Module_dasVULKAN")
+    }
+    let boost_paths = [
+        "vulkan_runtime", "vulkan_ctors", "vulkan_handles", "vulkan_structs", "vulkan_commands", "vulkan_cmds",
+        "vulkan_boost", "vulkan_window", "vulkan_reflect", "vulkan_lint_data", "vulkan_lint",
+        "spirv_vulkan_shader", "vulkan_assets",
+        // glTF 2.0 PBR renderer over daslang's modules/dasGLTF loader. Opt-in -- needs dasGLTF
+        // (in the daslang tree) + dasStbImage present.
+        "vulkan_gltf",
+        // daslang-live commands (screenshot / stats / recording) -- mirror of opengl_live.
+        "vulkan_live",
+        // The dasVulkan<->dasImgui bridge: a 100%-daslang Dear ImGui renderer backend. Opt-in --
+        // only compiles when required, and only then needs dasImgui present.
+        "vulkan_imgui_driver",
+        // Windowed Dear ImGui app harness on Vulkan (mirror of dasImgui's imgui_harness). Opt-in.
+        "vulkan_imgui_app"
+    ]
+    for (p in boost_paths) {
+        register_native_path("vulkan", "{p}", "{project_path}/daslib/{p}.das")
+    }
+}

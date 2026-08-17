@@ -16,8 +16,8 @@ Full reference (per-platform generator commands, build flags, AOT debugging, exi
 from THAT tree — never `-load_module` another checkout's build. A module compiled against
 different daScript headers can load cleanly, pass tests, and still be subtly wrong: ABI drift
 surfaces as behavior or performance skew, not necessarily a crash — and it poisons every
-measurement made through it. External-module repos (dasVulkan etc.) get a detached worktree
-under `<tree>/modules/<name>` with `_build` configured `-DDASLANG_DIR=<tree>`.
+measurement made through it. External-module repos (dasImguiNodeEditor etc.) get a detached
+worktree under `<tree>/modules/<name>` with `_build` configured `-DDASLANG_DIR=<tree>`.
 
 ## Workspace Hygiene
 
@@ -96,6 +96,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table (`imgui_lint` IMGUI002 points here) |
 | `skills/internal/imgui_playwright.md` | Writing/editing `modules/dasImgui/tests` playwright tests — the async rule (gate on the effect), the `wait_*` family, one-host-per-9090 |
 | `skills/internal/imgui_recording.md` | Recording tutorial videos — `record_*.das` drivers, prepare → record → convert pipeline, `docs-assets` release upload |
+| `skills/internal/vulkan_recording.md` | Recording dasVulkan tutorial videos — `record_*.das` drivers under `modules/dasVulkan/tutorials/*/recording/`, the capture → voiceover → mux pipeline, `docs-assets` release upload |
 | `skills/internal/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, the rules a new one must follow, the C++ `env_cfg` rail |
 | `skills/perf_lint.md` | Running the lint suite or suppressing a finding — **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch` |
 | `skills/style_lint.md` | Suppressing a `STYLE*` finding (the per-module `options` knobs) or applying the STYLE037/038 suppress-vs-split policy |

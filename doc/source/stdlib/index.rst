@@ -42,5 +42,6 @@ THE SOFTWARE.
    sec_ai.rst
    sec_strudel.rst
    sec_imgui.rst
+   sec_vulkan.rst
 
 
