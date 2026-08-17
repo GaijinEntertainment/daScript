@@ -19,7 +19,7 @@ for the guard, is a defect.
 **A `[test]` file that requires any `dasllama/*` module lives in this folder.** Out-of-folder
 instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
-**No dasLLAMA test appears in any `CMakeLists.txt`.**
+**A test file in this folder is registered in no `CMakeLists.txt`.**
 
 **A suite-less file's `CLAUDE.md` entry is accurate in the same change** — added when the file
 is added, corrected when what it covers is renamed or re-scoped.
@@ -56,9 +56,9 @@ bytes; "the model still runs" is not that test.
 naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless
 round-trip.**
 
-**Every test that compares generated tokens, ids, or logits logs the decoded text for both
-sides.** A red, or a suspicious green, must be readable as text in the log, not only as an id
-or float difference.
+**Every test that compares generated tokens, ids, or logits logs the decoded text for BOTH
+sides as `eyeball:` lines.** A red, or a suspicious green, must be readable as text in the
+log, not only as an id or float difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
@@ -66,13 +66,13 @@ or float difference.
 for cross-dispatch bit-identity no CPU oracle can witness, and then its output buffers are
 prefilled with a sentinel.
 
-**A kernel-unit arm whose output plane is its input plane pairs its compare with a liveness
-check** — an in-place kernel that never ran leaves the input, which can wrongly satisfy a
-tolerant compare.
+**A kernel-unit arm whose output plane is its input plane pairs its compare with an assert
+that the output differs from the input at a known index, unless the CPU oracle it compares
+against differs from the input by construction** — an in-place kernel that never ran leaves
+the input, which can wrongly satisfy a tolerant compare.
 
-**Every ASR family has a token-for-token oracle cell — one comparing a transcript against a
-reference leg, external dump or CPU control alike — and every such cell logs its transcript as
-an `eyeball:` line.** An id-only comparison is a defect.
+**Every ASR family has a token-for-token oracle cell** — one comparing a transcript against a
+reference leg, external dump or CPU control alike (the logging rule above covers its text).
 
 **A real model file, mmproj, or image fixture a test in this folder loads has its
 `../performance/fetch_models.das` entry**, or a convert script checked in beside that

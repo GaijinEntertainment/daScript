@@ -3,10 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
-**`tests/` and `performance/` carry their own checklists, and they govern by KIND, not
-location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
-`tests/REVIEW.md`; an exchange, provenance-manifest, or measuring-rig change answers to its
-`performance/REVIEW.md`.
+**`tests/`, `benchmarks/`, and `performance/` carry their own checklists, and they govern by
+KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
+module's `tests/REVIEW.md`; a bench-rig or lab change answers to `benchmarks/REVIEW.md`; an
+exchange, provenance-manifest, or measuring-rig change answers to its `performance/REVIEW.md`.
+A kind-routed file applies BOTH its checklist and this one.
 Kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
@@ -57,7 +58,8 @@ value feeds logic is marked `// clock: control`. The rails, and where free-hand 
 legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
-or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. Covered means an annotated entry
+any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only
+reaching entry (a one-time transform is covered by being declared cold). Covered means an annotated entry
 reaches it: the contracts arm down the call graph, so an interior function carries nothing of
 its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
 encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
@@ -176,8 +178,8 @@ below are the checklist's own).
 **When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides; a
 diff that adds or moves such a function lands the charter line with it.**
 
-**A KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`, its
-format family kept whole.**
+**A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
+its format family kept whole.** GPU twins land in their backend kernel file.
 
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
