@@ -181,6 +181,7 @@ def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(true)
         set_metal_wdec(true)
+        set_metal_wdec_step(true)
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {

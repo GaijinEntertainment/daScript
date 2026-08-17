@@ -1043,6 +1043,18 @@ def register_whisper_cross_kv_gpu(fn : WhisperCrossKvGpuFn) {
     g_wh_cross_kv_gpu_set = true
 }
 
+//! GPU override for one decode batch: fills ``ds.logits`` (last row) and owns the GPU-side KV;
+//! the seam advances ``ds.n_past`` on true. A false at the window's FIRST batch falls back
+//! cleanly (the CPU chain reads ds.kx/vx); the driver never mixes engines mid-window.
+typedef WhisperDecodeGpuFn = function<(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool>
+var private g_wh_decode_gpu : WhisperDecodeGpuFn
+var private g_wh_decode_gpu_set = false
+
+def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
+    g_wh_decode_gpu = fn
+    g_wh_decode_gpu_set = true
+}
+
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
@@ -1280,6 +1292,10 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     }
     if (p0 + n > tmax) {
         panic("whisper_decode_batch: {p0}+{n} tokens exceed n_text_ctx {tmax}")
+    }
+    if (g_wh_decode_gpu_set && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
+        ds.n_past += n
+        return
     }
 
     // token embedding + learned absolute position rows

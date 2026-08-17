@@ -856,42 +856,65 @@ def private cross_kx_gate(t : T?; dev, queue; ta, dim, hh : int; off_layer : boo
     delete want
 }
 
-def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int) {
-    let tag = "cross_vx ta={ta} dim={dim} hh={hh}"
+// The Vx form doubles as the KV APPEND: the offset leg writes n rows at t0 into a wider
+// tstride slab (sentinel-checked whole), the bias leg folds a per-column bias, and soff picks
+// a column block out of a fused-QKV row (src bound at a byte offset with the fused row stride).
+def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int; t0, tstride : int; hasb : bool; soff_cols : int = 0; src_stride : int = 0) {
+    let tag = "cross_vx ta={ta} dim={dim} hh={hh} t0={t0} hasb={hasb} soff={soff_cols}"
     var err : string
     var pso = pipeline_from_source(dev, metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let hs = dim / hh
+    let sstride = src_stride > 0 ? src_stride : dim
     let total = ta * dim
+    let sentinel = -555.0
     var src : array<float>
-    src |> resize(total)
-    for (i in range(total)) {
+    src |> resize(ta * sstride)
+    for (i in range(ta * sstride)) {
         src[i] = 0.5 * float(i % 89) - 11.0
     }
+    var bias : array<float>
+    bias |> resize(dim)
+    for (i in range(dim)) {
+        bias[i] = 0.125 * float(i % 13) - 0.5
+    }
+    let slab = hh * tstride * hs
     var want : array<float>
-    want |> resize(total)
+    want |> resize(slab)
+    for (i in range(slab)) {
+        want[i] = sentinel
+    }
     for (h in range(hh)) {
         for (tt in range(ta)) {
             for (j in range(hs)) {
-                want[h * ta * hs + tt * hs + j] = src[tt * dim + h * hs + j]
+                let v = src[tt * sstride + soff_cols + h * hs + j] + (hasb ? bias[h * hs + j] : 0.0)
+                want[h * tstride * hs + (t0 + tt) * hs + j] = v
             }
         }
     }
     var bsrc = buf_upload(dev, src)
-    var bvx = buf_fill(dev, total, -555.0)
-    var bdim = buf_u32(dev, uint(dim))
+    var bvx = buf_fill(dev, slab, sentinel)
+    var bb = buf_upload(dev, bias)
+    var bdim = buf_u32(dev, uint(sstride))
     var bhs = buf_u32(dev, uint(hs))
     var bta = buf_u32(dev, uint(ta))
+    var bt0 = buf_u32(dev, uint(t0))
+    var bts = buf_u32(dev, uint(tstride))
+    var bhb = buf_u32(dev, hasb ? 1u : 0u)
     var btot = buf_u32(dev, uint(total))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bsrc, 0ul, 0)
+        metal_set_buffer(enc, bsrc, uint64(soff_cols * 4), 0)
         metal_set_buffer(enc, bvx, 0ul, 1)
-        metal_set_buffer(enc, bdim, 0ul, 2)
-        metal_set_buffer(enc, bhs, 0ul, 3)
-        metal_set_buffer(enc, bta, 0ul, 4)
-        metal_set_buffer(enc, btot, 0ul, 5)
+        metal_set_buffer(enc, bb, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, bhs, 0ul, 4)
+        metal_set_buffer(enc, bta, 0ul, 5)
+        metal_set_buffer(enc, bt0, 0ul, 6)
+        metal_set_buffer(enc, bts, 0ul, 7)
+        metal_set_buffer(enc, bhb, 0ul, 8)
+        metal_set_buffer(enc, btot, 0ul, 9)
         metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -900,12 +923,232 @@ def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int) {
     }
     metal_release(bsrc)
     metal_release(bvx)
+    metal_release(bb)
     metal_release(bdim)
     metal_release(bhs)
     metal_release(bta)
+    metal_release(bt0)
+    metal_release(bts)
+    metal_release(bhb)
     metal_release(btot)
     metal_release(pso)
     delete src
+    delete bias
+    delete want
+}
+
+// The whisper-decoder fused attention vs a direct CPU walk (scores -> max-sub softmax -> the
+// weighted V sum, q bias folded at load): simd/exp reassociation -> the shared 1e-4 bar.
+// Negative controls recorded 2026-08-16: dropping the qb fold (attn), the bias (both bias
+// kernels), and t0 (the append leg) each redded with dumps.
+def private wdec_attn_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; causal : bool) {
+    let tag = "wdec_attn n={n} dim={dim} hh={hh} len0={len0} causal={causal}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_wdec_attn_msl, metal_wdec_attn_msl_entry, metal_wdec_attn_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hs = dim / hh
+    let scale = 1.0 / sqrt(float(hs))
+    var q : array<float>
+    var qb : array<float>
+    var kv : array<float>
+    var vv : array<float>
+    q |> resize(n * dim)
+    qb |> resize(dim)
+    kv |> resize(hh * tstride * hs)
+    vv |> resize(hh * tstride * hs)
+    for (i in range(n * dim)) {
+        q[i] = 0.11 * float(i % 37) - 1.7
+    }
+    for (i in range(dim)) {
+        qb[i] = 0.07 * float(i % 11) - 0.3
+    }
+    for (i in range(hh * tstride * hs)) {
+        kv[i] = 0.09 * float(i % 41) - 1.9
+        vv[i] = 0.13 * float(i % 29) - 1.1
+    }
+    var want : array<float>
+    want |> resize(n * dim)
+    var scores : array<float>
+    scores |> resize(tstride)
+    for (h in range(hh)) {
+        for (r in range(n)) {
+            let len = causal ? len0 + r : len0
+            var mx = -3.0e38
+            for (tt in range(len)) {
+                var s = 0.0
+                for (j in range(hs)) {
+                    s += (q[r * dim + h * hs + j] + qb[h * hs + j]) * kv[(h * tstride + tt) * hs + j]
+                }
+                scores[tt] = s * scale
+                mx = max(mx, scores[tt])
+            }
+            var tot = 0.0
+            for (tt in range(len)) {
+                scores[tt] = exp(scores[tt] - mx)
+                tot += scores[tt]
+            }
+            for (j in range(hs)) {
+                var acc = 0.0
+                for (tt in range(len)) {
+                    acc += scores[tt] * vv[(h * tstride + tt) * hs + j]
+                }
+                want[r * dim + h * hs + j] = acc / tot
+            }
+        }
+    }
+    var bq = buf_upload(dev, q)
+    var bk = buf_upload(dev, kv)
+    var bv = buf_upload(dev, vv)
+    var by = buf_fill(dev, n * dim, -444.0)
+    var bqb = buf_upload(dev, qb)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhs = buf_u32(dev, uint(hs))
+    var bts = buf_u32(dev, uint(tstride))
+    var blen = buf_u32(dev, uint(len0))
+    var bca = buf_u32(dev, causal ? 1u : 0u)
+    var bsc = buf_f32(dev, scale)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_wdec_attn_msl_tgmem, 0)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_buffer(enc, bqb, 0ul, 4)
+        metal_set_buffer(enc, bdim, 0ul, 5)
+        metal_set_buffer(enc, bhs, 0ul, 6)
+        metal_set_buffer(enc, bts, 0ul, 7)
+        metal_set_buffer(enc, blen, 0ul, 8)
+        metal_set_buffer(enc, bca, 0ul, 9)
+        metal_set_buffer(enc, bsc, 0ul, 10)
+        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(by)
+    metal_release(bqb)
+    metal_release(bdim)
+    metal_release(bhs)
+    metal_release(bts)
+    metal_release(blen)
+    metal_release(bca)
+    metal_release(bsc)
+    metal_release(pso)
+    delete q
+    delete qb
+    delete kv
+    delete vv
+    delete want
+    delete scores
+}
+
+def private bias_add_res_gate(t : T?; dev, queue; nrows, dim : int) {
+    let tag = "bias_add_res nrows={nrows} dim={dim}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_bias_add_res_msl, metal_bias_add_res_msl_entry, metal_bias_add_res_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = nrows * dim
+    var x : array<float>
+    var y : array<float>
+    var b : array<float>
+    x |> resize(total)
+    y |> resize(total)
+    b |> resize(dim)
+    for (i in range(total)) {
+        x[i] = 0.3 * float(i % 23) - 2.0
+        y[i] = 0.17 * float(i % 31) - 1.0
+    }
+    for (i in range(dim)) {
+        b[i] = 0.05 * float(i % 7) - 0.1
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        want[i] = x[i] + (y[i] + b[i % dim])
+    }
+    var bx = buf_upload(dev, x)
+    var by = buf_upload(dev, y)
+    var bb = buf_upload(dev, b)
+    var bdim = buf_u32(dev, uint(dim))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, by, 0ul, 1)
+        metal_set_buffer(enc, bb, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bb)
+    metal_release(bdim)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete y
+    delete b
+    delete want
+}
+
+def private bias_gelu_lut_gate(t : T?; dev, queue; nrows, dim : int) {
+    let tag = "bias_gelu_lut nrows={nrows} dim={dim}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_bias_gelu_lut_msl, metal_bias_gelu_lut_msl_entry, metal_bias_gelu_lut_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = nrows * dim
+    var x : array<float>
+    var b : array<float>
+    x |> resize(total)
+    b |> resize(dim)
+    for (i in range(total)) {
+        x[i] = 0.02 * float(i % 512) - 5.0   // spans the LUT clamp on both sides
+    }
+    for (i in range(dim)) {
+        b[i] = 0.03 * float(i % 17) - 0.25
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        want[i] = x[i] + b[i % dim]
+    }
+    gelu_tanh_lut(want, int64(total))   // the CPU LUT form — the form-matched oracle
+    var bx = buf_upload(dev, x)
+    var bb = buf_upload(dev, b)
+    var bdim = buf_u32(dev, uint(dim))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bb, 0ul, 1)
+        metal_set_buffer(enc, bdim, 0ul, 2)
+        metal_set_buffer(enc, btot, 0ul, 3)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(bb)
+    metal_release(bdim)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete b
     delete want
 }
 
@@ -1086,8 +1329,15 @@ def test_metal_misc_kernels(t : T?) {
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
                 cross_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
                 cross_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
-                cross_vx_gate(t, dev, queue, 96, 128, 2)
-                cross_vx_gate(t, dev, queue, 12, 16, 2)           // ceil grid guard
+                cross_vx_gate(t, dev, queue, 96, 128, 2, 0, 96, false)     // the cross_kv shape (t0=0, tstride=ta)
+                cross_vx_gate(t, dev, queue, 12, 16, 2, 0, 12, true)       // ceil grid + the folded bias
+                cross_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, true)        // the KV APPEND shape: t0>0 into a wider slab
+                cross_vx_gate(t, dev, queue, 1, 16, 2, 0, 20, false, 16, 48)   // the fused-QKV column pick (soff, 3d row)
+                wdec_attn_gate(t, dev, queue, 1, 128, 2, 24, 24, false)    // cross shape: fixed len
+                wdec_attn_gate(t, dev, queue, 3, 128, 2, 24, 7, true)      // causal prompt rows: len0 + r
+                wdec_attn_gate(t, dev, queue, 1, 128, 2, 300, 259, false)  // len above one tg pass (128 threads)
+                bias_add_res_gate(t, dev, queue, 3, 128)
+                bias_gelu_lut_gate(t, dev, queue, 2, 640)
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard

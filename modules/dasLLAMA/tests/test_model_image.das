@@ -990,18 +990,22 @@ def test_whisper_metal_cross_kv(tst : T?) {
             var inscope w8 = WhisperModel()
             var inscope stg8 <- stage_whisper_model(path, true)
             mint_whisper_model(stg8, w8)
-            // GPU leg: the q8 serving default's cross-KV lands on the driver, one window per clip
+            // GPU leg: the q8 serving default's cross-KV AND decode steps land on the driver
             set_metal_wdec(true)
+            set_metal_wdec_step(true)
             let s0 = metal_wdec_stats()
             let gpu_text = wdec_transcribe(w8, samples)
             let s1 = metal_wdec_stats()
             t |> equal(s1.windows - s0.windows, 1l, "jfk is one cross-KV window")
+            t |> success(s1.steps - s0.steps >= 20l, "the decode batches served on the GPU")
+            t |> success(s1.tokens - s0.tokens >= s1.steps - s0.steps, "token rows cover the steps")
             // OFF leg: knob decline counted, CPU serves, transcript identical
             set_metal_wdec(false)
             let cpu_text = wdec_transcribe(w8, samples)
             let s2 = metal_wdec_stats()
             set_metal_wdec(true)
             t |> equal(s2.windows, s1.windows, "OFF leg never serves")
+            t |> equal(s2.steps, s1.steps, "OFF leg never steps")
             t |> equal(s2.declines - s1.declines, 1l, "OFF leg records the knob decline")
             t |> success(key_exists(metal_wdec_declines(), "knob"), "the decline reason is knob")
             to_log(LOG_INFO, "whisper tiny cross-kv CPU eyeball: '{cpu_text}'\n")
@@ -1050,7 +1054,9 @@ def test_whisper_metal_cross_kv(tst : T?) {
             let sr0 = metal_wdec_stats()
             let rearm_text = wdec_transcribe(w8, samples)
             t |> equal(metal_wdec_stats().windows - sr0.windows, 1l, "post-shutdown window re-arms and serves")
+            t |> success(metal_wdec_stats().steps - sr0.steps >= 20l, "post-shutdown decode re-arms too")
             t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
+            set_metal_wdec_step(false)   // the step half is opt-in until its tuning round (slice O)
             delete samples
         }
     }

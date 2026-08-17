@@ -531,6 +531,48 @@ Hook-flip pins landed: q8_gate + tower_fp32_knob (test_whisper), the tower cell
 (test_model_image — its required-mode policy leg transcribes an f32 decoder, which wdec
 would panic).
 
+## Slice O record — the decode step serves on the GPU DONE 2026-08-16 (perf verdict OPEN)
+
+The step driver landed q8-native and CORRECT on the first live run (predicted 60% first-run
+failure — happy miss): `register_whisper_decode_gpu` at the `whisper_decode_batch` seam, one
+command buffer per batch (CPU embed in, full-vocab logits readback out), window-granular
+ownership (a decline at cross_kv leaves the whole window to the CPU chain, which reads the
+ds.kx/vx readback; mid-window GPU failure PANICS — a silent fallback would decode blind on
+the GPU-only caches). Transcripts byte-identical CPU-vs-GPU on tiny and turbo (gb1 + jfk);
+engage evidence = steps/tokens counter deltas, strict-hazard runs clean.
+
+New machinery: the fused single-query attention `MetalWdecAttn` (tgmem scores, two-pass
+softmax, per-j coalesced V sum; q bias folded at load; one kernel serves self (causal,
+len0+r) and cross (fixed len)); `MetalCrossVx` grew the KV-APPEND form (t0/tstride/soff/
+folded bias — the same shuffle serves cross-KV residency and the per-step append, and the
+fused-QKV column pick); `MetalBiasAddRes` + `MetalBiasGeluLut` (form-matched LUT flavor);
+the attach lays q/k/v contiguous so n=1 QKV rides ONE row-parallel GEMV over 3d rows; the
+tied-embedding logits ride the tuned `enc_gemv` (te region padded to 64 rows — the row-group
+grid truncates odd-vocab tails). Unit gates for all five with negative controls recorded.
+
+**The optimization ledger (turbo gb1, 517 steps, GPU-busy via the metal_wdec_times lens):**
+M-pad-32 GEMM tiles 2593 ms → concurrent encoder + hz oracle 2523 (−3%: the chain's
+barriers are ~93% REAL — RAW-dependency floor) → row-parallel GEMVs 1647 (−35%) →
+dispatch-count fusion batch 1612 (flat: the removed elementwise ops were not the cost).
+Host encode is 22–35 ms TOTAL — everything is GPU-timeline latency: ~65 serialized
+barrier-segments/step × ~42 µs.
+
+**FINDING F3 — the calibration that frames the verdict:** whisper-cli (same box, turbo q8
+Metal, gb1) prints decode 1.63 ms/single-step and 0.50 ms/beam-5-batched-step at the SAME
+graph node count — sub-2 ms/step is PROVEN reachable, so our 3.1 ms is kernel-level slack,
+not an architecture wall. Today: our GPU decode ≈ 1.9 s wall vs the CPU q8 decoder's 1.54 s
+(tiny: 1.5 s vs 0.48 — small decoders lose hard to the latency floor). Their encode is
+3.38 s vs our 3.0 s GPU blocks — we already win encode; their conv rides the GPU (slice P
+closes exactly that gap). Their default is beam-5 (2457 sampled tokens vs our greedy 523) —
+quality regimes differ in their favor on the same wall.
+
+SHIPPED POSTURE: the step half sits behind `DASLLAMA_METAL_WDEC_STEP` (default OFF,
+window-captured so engines never mix mid-window; `set_metal_wdec_step` is the test seat and
+the gate cell pins it on) — the serving default keeps N0+N's 5.9 s with zero regression.
+OPEN DECISION (Boris): flip the step on as-is (all-Metal, frees the CPU, ~+0.4 s on turbo
+gb1), gate it by geometry, or fund the tuning round (attention chunking, GEMV row-groups
+under tune, f16 KV mirrors) toward the proven 1.6 ms/step first.
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`

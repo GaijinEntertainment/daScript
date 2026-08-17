@@ -5,6 +5,7 @@ require dasllama/dasllama_asr
 require dasllama/dasllama_audio
 require dasllama/dasllama_math
 require dasllama/dasllama_common   // forward_profile_reset/report — the decoder-engine buckets
+require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec_step — the all-Metal probe arm
 require audio
 require math   // the parakeet mel worker resolves log at the instantiation site
 require daslib/clargs
@@ -43,6 +44,10 @@ struct ProbeArgs {
     @clarg_name = "fp32-tower"
     @clarg_doc = "Pin fp32 on the tower half only (set_asr_tower_fp32) — the GPU serving mode"
     fp32_tower : bool
+
+    @clarg_name = "wdec-step"
+    @clarg_doc = "Arm the GPU whisper decode step (set_metal_wdec_step) — the all-Metal probe arm"
+    wdec_step : bool
 
     @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only: f16 (default) | f32 | q8"
     kv : string
@@ -112,6 +117,11 @@ def main() : int {
     }
     set_asr_fp32(cfg.fp32)
     set_asr_tower_fp32(cfg.fp32_tower)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (cfg.wdec_step) {
+            set_metal_wdec_step(true)
+        }
+    }
     if (cfg.kv == "f16") {
         set_asr_kv(KVDtype.f16)
     } elif (cfg.kv == "f32") {

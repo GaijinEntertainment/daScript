@@ -81,6 +81,8 @@ def note_tower_decline(key : string) {
 
 // the whisper ASR-decoder driver's counters (dasllama_metal_asr_dec; counting home here)
 var g_wdec_windows = 0l                      // cross-KV windows served
+var g_wdec_steps = 0l                        // decode batches served
+var g_wdec_tokens = 0l                       // token rows across the served batches
 var g_wdec_declines_by_reason : table<string; int64>
 
 [cold_path]
@@ -166,7 +168,10 @@ var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
 var g_pso_f32mm : MetalComputePipeline?
 var g_pso_cross_kx : MetalComputePipeline?   // whisper cross-KV: K transpose+prescale shuffle
-var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major re-tile
+var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major re-tile (+ the KV append)
+var g_pso_wdec_attn : MetalComputePipeline?  // whisper decode: fused single-query attention
+var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
+var g_pso_bias_gelu_lut : MetalComputePipeline?  // whisper decode: bias + LUT-form GELU
 var g_pso_softcap : MetalComputePipeline?
 var g_pso_suppress : MetalComputePipeline?
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
