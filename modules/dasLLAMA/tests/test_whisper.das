@@ -19,6 +19,7 @@ require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
 require dasllama/dasllama_env
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
+require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
@@ -269,6 +270,10 @@ def test_qwen3a_tower(t : T?) {
             return
         }
         // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
+        // and to the CPU conv chain — the documented ~1e-4 reorder bars are CPU claims
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)
+        }
         set_qwen3a_q8(false)
         var inscope tw <- load_qwen3a_tower(path)
         set_qwen3a_q8(true)
@@ -294,6 +299,9 @@ def test_qwen3a_tower(t : T?) {
         t |> success(abs(enc.out[1] + 0.015482) < 5e-3, "tok0[1]")
         t |> success(abs(enc.out[2] + 0.032934) < 5e-3, "tok0[2]")
         t |> success(abs(enc.out[3] - 0.023813) < 5e-3, "tok0[3]")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
     }
 }
 

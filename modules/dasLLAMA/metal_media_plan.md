@@ -610,6 +610,29 @@ tiny = 0 with the carve-out named), mtower 28/0 transcript-exact with the GPU co
 chain. qwen2audio/voxtral (nm=128, d fits) now conv-serve through the same hook — the
 blocks-parity suite re-run gates them.
 
+## Slice Q record — the qwen3a conv2d frontend on the GPU DONE 2026-08-16
+
+`MetalIm2col2d` (k=3 s=2 p=1, conv2d_s2's exact walk, K-padded rows + strided source) + the
+f32 TILE GEMM via a driver-owned PADDED weight buffer (`q3a_wpad_attach`: out-channels
+480 → ncp 512 for the ndim%64 grid, conv1's K 9 → 32 for kdim%32, biases zero-padded —
+minted once per tower, ~18 MB). One command buffer per WINDOW (all chunks × three stages);
+the shuffle/conv_out tail stays CPU; strided readback slices nch of ncp per row. Hook
+`register_qwen3a_conv_gpu` — and because the conv planes are f32 regardless of the q8 tower,
+this serves the **q8 SERVING DEFAULT** with no mode change.
+
+FIRST-CUT LESSON (measured, kept as the record): a naive one-thread-per-output conv GEMM
+only bought 24% — O(rows·cout·kdim) traffic with zero weight reuse; the fix was never a
+custom kernel but PADDING the shapes into the existing tile GEMM's grid.
+
+**Measured (qwen3a gb1, q8 default): conv 8617 → 347 ms (25x); encode 9838 → 1559 ms
+(6.3x) — now blocks 794 (q8-CPU) + mel 382 + conv 347 + proj 20. P13 (≤2 s) beaten.**
+followup #26's J-qwen3a closes.
+
+Gates: im2col2d unit cells (K pad, strided source, odd grid; control: the dropped pad shift
+redded 18 cells); the mtmd-oracle cell (`test_qwen3a_tower`) pins the CPU conv — its ~1e-4
+reorder bars are CPU claims (the hook-flip discipline); the q8-vs-f32 transcript A/B and the
+mtower qwen3a cell ride the knob symmetrically.
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`

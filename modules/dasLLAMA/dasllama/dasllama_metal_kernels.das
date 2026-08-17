@@ -3585,6 +3585,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
     g_pso_cross_vx_h = compile_pso(metal_cross_vx_h_msl, metal_cross_vx_h_msl_entry, metal_cross_vx_h_msl_fastmath, ok)
     g_pso_im2col3 = compile_pso(metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, ok)
+    g_pso_im2col2d = compile_pso(metal_im2col2d_msl, metal_im2col2d_msl_entry, metal_im2col2d_msl_fastmath, ok)
     g_pso_wdec_attn = compile_pso(metal_wdec_attn_msl, metal_wdec_attn_msl_entry, metal_wdec_attn_msl_fastmath, ok)
     g_pso_wdec_attn_part = compile_pso(metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, ok)
     g_pso_wdec_attn_comb = compile_pso(metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, ok)
@@ -4267,6 +4268,7 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_cross_vx)
     release_pso(g_pso_cross_vx_h)
     release_pso(g_pso_im2col3)
+    release_pso(g_pso_im2col2d)
     release_pso(g_pso_wdec_attn)
     release_pso(g_pso_wdec_attn_part)
     release_pso(g_pso_wdec_attn_comb)
@@ -5010,6 +5012,46 @@ class MetalIm2col3 {
         var v = 0.0
         if (sp >= 0 && sp < int(srclen)) {
             v = chmajor != 0u ? src[c * srclen + uint(sp)] : src[uint(sp) * nch + c]
+        }
+        col[gid] = v
+    }
+}
+
+// The qwen3a conv2d im2col (k=3, s=2, p=1, one [iw x ih] block, `sstride` floats per source
+// pixel): output row (oy*ow+ox) carries `kd` columns — cin*9 real ones in (ic, kh, kw) order
+// (conv2d_s2's walk) then zero pad, so the tile GEMM's kdim%32 holds at any cin.
+[metal_dispatch(name = "enc_im2col2d", pso = "g_pso_im2col2d", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalIm2col2d {
+    @ssbo @binding = 0 @role = "read" @off = "soff" src : array<float>   // [ih x iw x sstride], c fastest
+    @ssbo @binding = 1 @role = "write" col : array<float>                // [oh*ow x kd]
+    @uniform @binding = 2 iw : uint
+    @uniform @binding = 3 ih : uint
+    @uniform @binding = 4 cin : uint
+    @uniform @binding = 5 ow : uint
+    @uniform @binding = 6 kd : uint
+    @uniform @binding = 7 sstride : uint
+    @uniform @binding = 8 total : uint
+
+    [metal_kernel(name="metal_im2col2d_msl")]
+    def metal_im2col2d {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / kd
+        let k = gid % kd
+        var v = 0.0
+        if (k < cin * 9u) {
+            let ic = k / 9u
+            let kh = (k % 9u) / 3u
+            let kw = k % 3u
+            let oy = r / ow
+            let ox = r % ow
+            let iy = int(oy * 2u + kh) - 1
+            let ix = int(ox * 2u + kw) - 1
+            if (iy >= 0 && iy < int(ih) && ix >= 0 && ix < int(iw)) {
+                v = src[(uint(iy) * iw + uint(ix)) * sstride + ic]
+            }
         }
         col[gid] = v
     }

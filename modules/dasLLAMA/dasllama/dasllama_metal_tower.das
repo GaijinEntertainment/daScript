@@ -10,6 +10,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-class block loop
+require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
@@ -65,6 +66,12 @@ def metal_tower_shutdown {
         metal_release(g_tw_ones)
         g_tw_ones = null
     }
+    if (g_tw_q3a_wpad != null) {
+        metal_release(g_tw_q3a_wpad)
+        g_tw_q3a_wpad = null
+    }
+    g_tw_q3a_key = 0ul
+    g_tw_q3a_len = 0l
     pool_drain(g_tw_pool)
     g_tw_failed = false
 }
@@ -383,10 +390,196 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     return served
 }
 
+// The qwen3a conv frontend needs PADDED weights for the tile GEMM (n_ch=480 fails ndim%64,
+// conv1's kdim=9 fails %32): a driver-owned buffer minted once per tower — out-channels
+// padded to ncp=pad64(n_ch), conv1's K padded to 32, biases padded with zeros.
+var private g_tw_q3a_wpad : MetalBuffer?
+var private g_tw_q3a_key = 0ul
+var private g_tw_q3a_len = 0l
+
+[cold_path]
+def private q3a_wpad_attach(t : Qwen3aTower) : bool {
+    let base = intptr(plane_at(t.cblob, 0l))
+    let blen = length(t.cblob)
+    if (g_tw_q3a_wpad != null && base == g_tw_q3a_key && blen == g_tw_q3a_len) {
+        return true
+    }
+    if (g_tw_q3a_wpad != null) {
+        metal_release(g_tw_q3a_wpad)
+        g_tw_q3a_wpad = null
+    }
+    let nch = t.n_ch
+    let ncp = (nch + 63l) & ~63l
+    let k2 = 9l * nch
+    let total = ncp * 32l + 2l * ncp * k2 + 3l * ncp
+    g_tw_q3a_wpad = metal_new_buffer(g_dev, uint64(total * 4l))
+    if (g_tw_q3a_wpad == null) {
+        return false
+    }
+    unsafe {
+        var p = reinterpret<float?>(metal_buffer_contents(g_tw_q3a_wpad))
+        for (i in range64(total)) {
+            p[i] = 0.0
+        }
+        for (oc in range64(nch)) {   // c1: [ncp][32], 9 real K columns
+            for (k in range64(9l)) {
+                p[oc * 32l + k] = t.cblob[t.c1_w_off + oc * 9l + k]
+            }
+        }
+        let o2 = ncp * 32l
+        let o3 = o2 + ncp * k2
+        for (oc in range64(nch)) {   // c2/c3: [ncp][9*nch], dense K
+            for (k in range64(k2)) {
+                p[o2 + oc * k2 + k] = t.cblob[t.c2_w_off + oc * k2 + k]
+                p[o3 + oc * k2 + k] = t.cblob[t.c3_w_off + oc * k2 + k]
+            }
+        }
+        let o4 = o3 + ncp * k2
+        for (oc in range64(nch)) {   // padded biases
+            p[o4 + oc] = t.cblob[t.c1_b_off + oc]
+            p[o4 + ncp + oc] = t.cblob[t.c2_b_off + oc]
+            p[o4 + 2l * ncp + oc] = t.cblob[t.c3_b_off + oc]
+        }
+    }
+    g_tw_q3a_key = base
+    g_tw_q3a_len = blen
+    return true
+}
+
+// one conv2d stage: padded im2col + the f32 tile GEMM + padded bias + erf-GELU
+def private q3a_stage(enc : MetalComputeEncoder?; bsrc : MetalBuffer?; soff : uint64; bcol, bout : MetalBuffer?; yoff : uint64;
+                      u_iw, u_ih, u_cin, u_ow, u_kd, u_ss, u_ti, u_kdim, u_ncp, u_tm : MetalBuffer?;
+                      ti, tm, mp, ncp : int64; woff, boff : uint64) {
+    enc_im2col2d(enc, bsrc, soff, bcol, u_iw, u_ih, u_cin, u_ow, u_kd, u_ss, u_ti, ti)
+    enc_f32_mm(enc, g_tw_q3a_wpad, woff, bcol, bout, yoff, u_kdim, u_ncp, mp, ncp)
+    enc_add_bias_rows(enc, bout, yoff, g_tw_q3a_wpad, boff, u_ncp, u_tm, tm)
+    enc_gelu_erf(enc, bout, yoff, u_tm, tm)
+}
+
+// The qwen3a conv2d frontend for one WINDOW: every chunk's three conv stages in one command
+// buffer (the conv planes are f32 regardless of the q8 tower, so this serves the q8 SERVING
+// DEFAULT too); the shuffle/conv_out tail stays CPU. BEST-EFFORT: declines are a silent false.
+[hot_path]
+def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var y3all : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower || !metal_tower_init() || !q3a_wpad_attach(t)) {
+        return false
+    }
+    let nm = t.core.n_mel
+    let nch = t.n_ch
+    let ncp = (nch + 63l) & ~63l
+    let k2 = 9l * nch
+    if (k2 % 32l != 0l) {   // the dense-K stages ride the tile GEMM unpadded
+        return false
+    }
+    let xin_n = QWEN3A_CHUNK * nm
+    let y3_n = 16l * QWEN3A_TOK_PER_CHUNK * nch
+    let y3_rows = 16l * QWEN3A_TOK_PER_CHUNK   // 208 per chunk
+    let mp3 = (y3_rows + 31l) / 32l * 32l      // the stage-3 GEMM pads to 224 rows
+    y3all |> reserve_resize(n_chunks * y3_n)   // nolint:PERF026 — the caller's @scratch y3all; grows once, reused across windows
+    let o2 = ncp * 32l
+    let o3 = o2 + ncp * k2
+    let o4 = o3 + ncp * k2
+    let bytes_xin = uint64(n_chunks * xin_n * 4l)
+    let bytes_col = uint64(max(3200l * 32l, 800l * k2) * 4l)
+    let bytes_y1 = uint64(3200l * ncp * 4l)
+    let bytes_y2 = uint64(800l * ncp * 4l)
+    let bytes_y3 = uint64(n_chunks * mp3 * ncp * 4l)
+    var bxin = pool_acquire(g_tw_pool, g_dev, bytes_xin)
+    var bcol = pool_acquire(g_tw_pool, g_dev, bytes_col)
+    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
+    var by2 = pool_acquire(g_tw_pool, g_dev, bytes_y2)
+    var by3 = pool_acquire(g_tw_pool, g_dev, bytes_y3)
+    unsafe {   // the per-chunk [ih][iw] extract from the window's mel-major plane, straight into the mapped slab
+        var p = reinterpret<float?>(metal_buffer_contents(bxin))
+        for (ci in range64(n_chunks)) {
+            for (ih in range64(nm)) {
+                for (iw in range64(QWEN3A_CHUNK)) {
+                    p[ci * xin_n + ih * QWEN3A_CHUNK + iw] = win.data[ih * win.n_len + ci * QWEN3A_CHUNK + iw]
+                }
+            }
+        }
+    }
+    var u_iw100 = uniform_u32(uint(QWEN3A_CHUNK))
+    var u_ih128 = uniform_u32(uint(nm))
+    var u_c1 = uniform_u32(1u)
+    var u_ow50 = uniform_u32(50u)
+    var u_iw50 = uniform_u32(50u)
+    var u_ih64 = uniform_u32(64u)
+    var u_ow25 = uniform_u32(25u)
+    var u_iw25 = uniform_u32(25u)
+    var u_ih32 = uniform_u32(32u)
+    var u_ow13 = uniform_u32(uint(QWEN3A_TOK_PER_CHUNK))
+    var u_nch = uniform_u32(uint(nch))
+    var u_ncp = uniform_u32(uint(ncp))
+    var u_kd32 = uniform_u32(32u)
+    var u_k2 = uniform_u32(uint(k2))
+    var u_ti1 = uniform_u32(uint(3200l * 32l))
+    var u_ti2 = uniform_u32(uint(800l * k2))
+    var u_ti3 = uniform_u32(uint(y3_rows * k2))
+    var u_tm1 = uniform_u32(uint(3200l * ncp))
+    var u_tm2 = uniform_u32(uint(800l * ncp))
+    var u_tm3 = uniform_u32(uint(y3_rows * ncp))
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        for (ci in range64(n_chunks)) {
+            q3a_stage(enc, bxin, uint64(ci * xin_n * 4l), bcol, by1, 0ul,
+                u_iw100, u_ih128, u_c1, u_ow50, u_kd32, u_c1, u_ti1, u_kd32, u_ncp, u_tm1,
+                3200l * 32l, 3200l * ncp, 3200l, ncp, 0ul, uint64(o4 * 4l))
+            q3a_stage(enc, by1, 0ul, bcol, by2, 0ul,
+                u_iw50, u_ih64, u_nch, u_ow25, u_k2, u_ncp, u_ti2, u_k2, u_ncp, u_tm2,
+                800l * k2, 800l * ncp, 800l, ncp, uint64(o2 * 4l), uint64((o4 + ncp) * 4l))
+            q3a_stage(enc, by2, 0ul, bcol, by3, uint64(ci * mp3 * ncp * 4l),
+                u_iw25, u_ih32, u_nch, u_ow13, u_k2, u_ncp, u_ti3, u_k2, u_ncp, u_tm3,
+                y3_rows * k2, y3_rows * ncp, mp3, ncp, uint64(o3 * 4l), uint64((o4 + 2l * ncp) * 4l))
+        }
+    }
+    var served = false
+    if (ran) {
+        unsafe {   // strided readback: the GPU rows carry ncp floats, y3all wants the nch slice
+            let src = reinterpret<float const?>(metal_buffer_contents(by3))
+            var dst = addr(y3all[0])
+            for (ci in range64(n_chunks)) {
+                for (r in range64(y3_rows)) {
+                    memcpy(dst + (ci * y3_rows + r) * nch, src + (ci * mp3 + r) * ncp, nch * 4l)
+                }
+            }
+        }
+        g_tower_convs += n_chunks
+        served = true
+    }
+    pool_release(g_tw_pool, bxin, bytes_xin)
+    pool_release(g_tw_pool, bcol, bytes_col)
+    pool_release(g_tw_pool, by1, bytes_y1)
+    pool_release(g_tw_pool, by2, bytes_y2)
+    pool_release(g_tw_pool, by3, bytes_y3)
+    pool_release(g_upool, u_iw100, 4ul)
+    pool_release(g_upool, u_ih128, 4ul)
+    pool_release(g_upool, u_c1, 4ul)
+    pool_release(g_upool, u_ow50, 4ul)
+    pool_release(g_upool, u_iw50, 4ul)
+    pool_release(g_upool, u_ih64, 4ul)
+    pool_release(g_upool, u_ow25, 4ul)
+    pool_release(g_upool, u_iw25, 4ul)
+    pool_release(g_upool, u_ih32, 4ul)
+    pool_release(g_upool, u_ow13, 4ul)
+    pool_release(g_upool, u_nch, 4ul)
+    pool_release(g_upool, u_ncp, 4ul)
+    pool_release(g_upool, u_kd32, 4ul)
+    pool_release(g_upool, u_k2, 4ul)
+    pool_release(g_upool, u_ti1, 4ul)
+    pool_release(g_upool, u_ti2, 4ul)
+    pool_release(g_upool, u_ti3, 4ul)
+    pool_release(g_upool, u_tm1, 4ul)
+    pool_release(g_upool, u_tm2, 4ul)
+    pool_release(g_upool, u_tm3, 4ul)
+    return served
+}
+
 [init]
 def dasllama_metal_tower_register {
     g_tw_env_tower = g_env_metal.tower
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_conv_gpu(@@metal_conv_frontend)
+    register_qwen3a_conv_gpu(@@metal_q3a_convs)
 }

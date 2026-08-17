@@ -14,6 +14,7 @@ require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model — the census's m
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
+require dasllama/dasllama_qwen3a    // the cov_tower conv2d carrier
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
 require daslib/jobque_boost
@@ -215,6 +216,26 @@ def private cov_tower(t : T?) {
             }
             delete aenc
             delete atw
+        }
+        // the qwen3a conv2d carrier: one padded window drives the im2col2d + padded tile GEMMs
+        let qpath = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        if (model_available(t, qpath)) {
+            var inscope qtw <- load_qwen3a_tower(qpath)
+            var qmel = WhisperMel(n_mel = qtw.core.n_mel, n_len = 900l)
+            qmel.data |> resize(qtw.core.n_mel * 900l)
+            for (i in range(length(qmel.data))) {
+                qmel.data[i] = cos(float(i) * 0.0091) * 0.7
+            }
+            var qenc <- make_encoder_state(qtw.core)
+            var qcs = Qwen3aConvState()
+            var qrows : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                qwen3a_encode_all(qtw, qenc, qcs, qmel, qrows)
+            }
+            delete qrows
+            delete qcs
+            delete qenc
         }
         let mpath = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
         if (model_available(t, mpath)) {

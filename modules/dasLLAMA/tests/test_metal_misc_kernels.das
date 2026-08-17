@@ -1372,6 +1372,85 @@ def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; ch
     delete want
 }
 
+// The 2D conv im2col (k=3 s=2 p=1) vs the CPU conv2d_s2 walk — bit-exact scatter with the
+// zero pad edges, the K pad (kd > cin*9) and the strided source (sstride > cin, the padded
+// GEMM rows). Negative control recorded 2026-08-16: dropping the -1 pad shift redded every cell.
+def private im2col2d_gate(t : T?; dev, queue; iw, ih, cin, kd, sstride : int) {
+    let tag = "im2col2d iw={iw} ih={ih} cin={cin} kd={kd} ss={sstride}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_im2col2d_msl, metal_im2col2d_msl_entry, metal_im2col2d_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ow = (iw - 1) / 2 + 1
+    let oh = (ih - 1) / 2 + 1
+    let rows = oh * ow
+    let total = rows * kd
+    var src : array<float>
+    src |> resize(ih * iw * sstride)
+    for (i in range(ih * iw * sstride)) {
+        src[i] = 0.31 * float(i % 47) - 6.0
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (oy in range(oh)) {
+        for (ox in range(ow)) {
+            let r = oy * ow + ox
+            for (k in range(kd)) {
+                var v = 0.0
+                if (k < cin * 9) {
+                    let ic = k / 9
+                    let kh = (k % 9) / 3
+                    let kw = k % 3
+                    let iy = oy * 2 + kh - 1
+                    let ix = ox * 2 + kw - 1
+                    if (iy >= 0 && iy < ih && ix >= 0 && ix < iw) {
+                        v = src[(iy * iw + ix) * sstride + ic]
+                    }
+                }
+                want[r * kd + k] = v
+            }
+        }
+    }
+    var bsrc = buf_upload(dev, src)
+    var bcol = buf_fill(dev, total, -222.0)
+    var biw = buf_u32(dev, uint(iw))
+    var bih = buf_u32(dev, uint(ih))
+    var bcin = buf_u32(dev, uint(cin))
+    var bow = buf_u32(dev, uint(ow))
+    var bkd = buf_u32(dev, uint(kd))
+    var bss = buf_u32(dev, uint(sstride))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsrc, 0ul, 0)
+        metal_set_buffer(enc, bcol, 0ul, 1)
+        metal_set_buffer(enc, biw, 0ul, 2)
+        metal_set_buffer(enc, bih, 0ul, 3)
+        metal_set_buffer(enc, bcin, 0ul, 4)
+        metal_set_buffer(enc, bow, 0ul, 5)
+        metal_set_buffer(enc, bkd, 0ul, 6)
+        metal_set_buffer(enc, bss, 0ul, 7)
+        metal_set_buffer(enc, btot, 0ul, 8)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bcol, want, tag), 0)
+    }
+    metal_release(bsrc)
+    metal_release(bcol)
+    metal_release(biw)
+    metal_release(bih)
+    metal_release(bcin)
+    metal_release(bow)
+    metal_release(bkd)
+    metal_release(bss)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
 def private suppress_row_gate(t : T?; dev, queue; total, nids : int) {
     let tag = "suppress_row total={total} nids={nids}"
     var err : string
@@ -1564,6 +1643,9 @@ def test_metal_misc_kernels(t : T?) {
                 im2col3_gate(t, dev, queue, 20, 16, 20, 1, true)    // conv1 shape: chmajor, s1, same len
                 im2col3_gate(t, dev, queue, 10, 32, 20, 2, false)   // conv2 shape: row-major, s2, halved rows
                 im2col3_gate(t, dev, queue, 7, 16, 13, 2, true)     // odd tail + the right pad edge
+                im2col2d_gate(t, dev, queue, 10, 12, 1, 32, 1)      // conv1 shape: cin 1, K padded 9->32
+                im2col2d_gate(t, dev, queue, 10, 8, 4, 36, 8)       // dense K, strided source (padded rows)
+                im2col2d_gate(t, dev, queue, 5, 6, 4, 36, 4)        // odd grid, tight source
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard

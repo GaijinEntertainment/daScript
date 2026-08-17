@@ -481,8 +481,21 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     asr_prof_add("q3a.conv.mm", tc)
 }
 
+// The GPU conv-frontend hook (registered by dasllama_metal_tower at [init]): serves the three
+// conv2d stages for EVERY chunk of one window, filling `y3all` ([n_chunks x 16*13*n_ch], the
+// conv3 outputs), or declines with false — the CPU conv2d_s2 chain stays the fallback.
+typedef Qwen3aConvGpuFn = function<(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var y3all : array<float>) : bool>
+var private g_q3a_conv_gpu : Qwen3aConvGpuFn
+var private g_q3a_conv_gpu_set = false
+
+def register_qwen3a_conv_gpu(fn : Qwen3aConvGpuFn) {
+    g_q3a_conv_gpu = fn
+    g_q3a_conv_gpu_set = true
+}
+
 //! Scratch for the qwen3a conv frontend (sized on first use, reused across windows/calls).
 struct Qwen3aConvState {
+    @scratch y3all : array<float>  // GPU conv path: all chunks' conv3 outputs [n_chunks x 16*13*n_ch]
     @scratch xin : array<float>    // chunk input [100·128] as [ih][iw][1]
     col : array<float>
     y1 : array<float>
@@ -528,26 +541,32 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
         cs.xs |> grow_resize(need / 32l)
     }
 
-    // conv frontend per chunk -> rows of s.x
+    // conv frontend per chunk -> rows of s.x; the GPU hook serves every chunk's three conv
+    // stages in one pass, the shuffle/conv_out/pos tail stays CPU either way
     var tstage = ref_time_ticks()
+    let gpu_convs = g_q3a_conv_gpu_set && invoke(g_q3a_conv_gpu, t, win, n_chunks, cs.y3all)
     cs.xin |> resize(QWEN3A_CHUNK * nm)
     for (ci in range64(n_chunks)) {
-        // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
-        for (ih in range64(nm)) {
-            for (iw in range64(QWEN3A_CHUNK)) {
-                cs.xin[ih * QWEN3A_CHUNK + iw] = win.data[ih * win.n_len + ci * QWEN3A_CHUNK + iw]
+        if (!gpu_convs) {
+            // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
+            for (ih in range64(nm)) {
+                for (iw in range64(QWEN3A_CHUNK)) {
+                    cs.xin[ih * QWEN3A_CHUNK + iw] = win.data[ih * win.n_len + ci * QWEN3A_CHUNK + iw]
+                }
             }
+            conv2d_s2(cs.y1, cs.col, cs.xin, t.cblob, t.c1_w_off, t.c1_b_off, QWEN3A_CHUNK, nm, 1l, nch)   // 50×64
+            conv2d_s2(cs.y2, cs.col, cs.y1, t.cblob, t.c2_w_off, t.c2_b_off, 50l, 64l, nch, nch)           // 25×32
+            conv2d_s2(cs.y3, cs.col, cs.y2, t.cblob, t.c3_w_off, t.c3_b_off, 25l, 32l, nch, nch)           // 13×16
         }
-        conv2d_s2(cs.y1, cs.col, cs.xin, t.cblob, t.c1_w_off, t.c1_b_off, QWEN3A_CHUNK, nm, 1l, nch)   // 50×64
-        conv2d_s2(cs.y2, cs.col, cs.y1, t.cblob, t.c2_w_off, t.c2_b_off, 50l, 64l, nch, nch)           // 25×32
-        conv2d_s2(cs.y3, cs.col, cs.y2, t.cblob, t.c3_w_off, t.c3_b_off, 25l, 32l, nch, nch)           // 13×16
+        let y3base = gpu_convs ? ci * 16l * QWEN3A_TOK_PER_CHUNK * nch : 0l
         // features per output frame ow: v[h + 16·c] = y3[oh=h][ow][c]
         let feat = 16l * nch
         cs.feat |> resize(QWEN3A_TOK_PER_CHUNK * feat)
         for (ow in range64(QWEN3A_TOK_PER_CHUNK)) {
             for (h in range64(16l)) {
                 for (ch in range64(nch)) {
-                    cs.feat[ow * feat + h + 16l * ch] = cs.y3[(h * QWEN3A_TOK_PER_CHUNK + ow) * nch + ch]
+                    let y3i = (h * QWEN3A_TOK_PER_CHUNK + ow) * nch + ch
+                    cs.feat[ow * feat + h + 16l * ch] = gpu_convs ? cs.y3all[y3base + y3i] : cs.y3[y3i]
                 }
             }
         }
