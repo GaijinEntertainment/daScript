@@ -271,9 +271,9 @@ IF(COMMAND ADD_MODULE_CPP)
     # resolves the descriptor to files that do not exist (the shared_module and
     # .das_module install via the shared-twin macro, the sources do not).
     FOREACH(_dasdir widgets text markdown commands terminal daslib)
-        FILE(GLOB _dasdir_files ${DAS_IMGUI_DIR}/${_dasdir}/*.das)
-        INSTALL(FILES ${_dasdir_files}
-            DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/${_dasdir})
+        INSTALL(DIRECTORY ${DAS_IMGUI_DIR}/${_dasdir}/
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/${_dasdir}
+            FILES_MATCHING PATTERN "*.das")
     ENDFOREACH()
     INSTALL(FILES ${DAS_IMGUI_DIR}/font/JetBrainsMono-Regular.ttf
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/font)
