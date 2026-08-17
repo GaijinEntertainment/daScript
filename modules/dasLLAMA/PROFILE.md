@@ -171,12 +171,14 @@ Same executable rule as the image cell: the released exe, never the `-jit` scrip
 - One `asr:<clip>.wav` key per corpus bucket: best-of-`-r` transcribe ms, the clip seconds,
   the LAST rep's transcript (under fast-math a token flip is what moves the timing), and
   `encode_ms` (the encoder split, sampled in its own untimed rep off the asr_prof rail).
-- Two backends, one flag: without `--ngl` the row is the serving default (q8 encoder GEMMs,
-  `backend = "cpu"`); with `--ngl` the tower serves the f32 rail on Metal
-  (`backend = "metal"`, `set_asr_fp32`) — decoders and Conformer frontends stay CPU by
-  declared intent, and every measured gpu row must show tower-engage counters and a non-zero
-  `encode_ms` or the leg exits non-zero. A Conformer row under `--ngl` therefore FAILS by
-  design: that family has no GPU tower lane to measure.
+- Three legs: the plain row pins BOTH GPU drivers off (`set_metal_wdec(false)` +
+  `set_metal_tower(false)`, `backend = "cpu"` — a CPU row means CPU); `--accel` adds the
+  Accelerate tier (`backend = "accel"`); `--ngl` serves the f32 tower on Metal
+  (`set_asr_tower_fp32` — the tower half only, the decoder stays q8) plus the whisper
+  decoder driver, all four knobs pinned on (`backend = "metal"`). A whisper gpu row must
+  show tower-engage counters, a wdec windows delta, and a non-zero `encode_ms` or the leg
+  exits non-zero. A Conformer row under `--ngl` therefore FAILS by design: that family has
+  no GPU tower lane to measure.
 - `exec_fmt` on the row states the quant mode the encoder actually ran, so a number can
   never silently describe a format nobody serves.
 

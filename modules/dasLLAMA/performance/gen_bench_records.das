@@ -466,32 +466,38 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
 // The ASR twin of oracle_cell: re-measure one stored audio row and gate it against itself. No
 // reference tools run — this is the das side against its own record, like the LLM legs. The ms
 // metrics gate through the same oracle_compare, mirrored (for a duration, worse is HIGHER).
-def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; threads : int;
+def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; leg : string; cfg : Args; threads : int;
                             cellPath, exe : string; var board : array<string>) : OracleVerdict {
     let path = asr_model_path(spec)
+    let leg_tag = empty(leg) ? "asr" : "asr {leg}"
     if (!stat(path).is_valid) {
-        let miss = "FAIL {spec.display} das asr - model file missing: {path}"
+        let miss = "FAIL {spec.display} das {leg_tag} - model file missing: {path}"
         to_log(LOG_ERROR, "gen_bench_records: ORACLE {miss}\n")
         board |> push(miss)
         return OracleVerdict.fail
     }
-    to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das asr\n")
-    logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display)}))
-    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das {leg_tag}\n")
+    logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display), "leg" => JV(leg_tag)}))
+    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "1"])
+    }
     var out = ""
     let rc = run_and_stream(args, out)
     var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
-        board |> push("FAIL {spec.display} das asr - cell did not measure (rc={rc}, see the log)")
+        board |> push("FAIL {spec.display} das {leg_tag} - cell did not measure (rc={rc}, see the log)")
         return OracleVerdict.fail
     }
     remove(cellPath)
     var verdict = OracleVerdict.fail
-    var detail = "no das run in the fresh cell records"
+    var detail = "no das {stored.backend} run in the fresh cell records"
     for (c in cell) {
         for (r in c.runs) {
-            if (r.engine != "das" || empty(r.workload)) {
+            if (r.engine != "das" || empty(r.workload) || r.backend != stored.backend) {
                 continue
             }
             var lines : array<string>
@@ -500,7 +506,7 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; 
             delete lines
         }
     }
-    let line = "{oracle_verdict_str(verdict)} {spec.display} das asr: {detail}"
+    let line = "{oracle_verdict_str(verdict)} {spec.display} das {leg_tag}: {detail}"
     let level = verdict == OracleVerdict.fail ? LOG_ERROR : (verdict == OracleVerdict.warn ? LOG_WARNING : LOG_INFO)
     to_log(level, "gen_bench_records: ORACLE {line}\n")
     board |> push(line)
@@ -607,12 +613,32 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 if (!found) {
                     continue
                 }
+                // stored row -> the rig leg that produced it, like the LLM map below; a row no
+                // leg produces (a foreign backend, a stale flavor) is skipped loudly, not raced
+                var asrLeg = ""
+                if (sr.backend == "cpu" && sr.flavor == "tuned") {
+                    asrLeg = ""
+                } elif (sr.backend == "cpu" && sr.flavor == "accel") {
+                    asrLeg = "accel"
+                } elif (sr.backend == "metal" && sr.flavor == "tuned") {
+                    asrLeg = "metal"
+                } else {
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} {sr.backend}/{sr.flavor} - no rig leg produces it\n")
+                    continue
+                }
                 cells++
                 if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das asr", board, fails, warns)) {
                     continue
                 }
                 settle(cfg)
-                let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, exe, board)
+                var va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
+                if (va == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
+                    // same contract as the LLM legs below: the solo re-run's verdict stands
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
+                    board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
+                    sleep(uint(cfg.oracle_retry_settle * 1000))
+                    va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
+                }
                 if (va == OracleVerdict.fail) {
                     fails++
                     if (!cfg.oracle_keep_going) {
@@ -762,27 +788,38 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
+// the families the metal das leg serves end to end (tower + decoder); the Conformer and
+// GGUF-tower rows would trip the --ngl anti-sandbag (their towers keep the CPU by design)
+def private is_metal_served_family(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
+
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
-                         var models : array<BenchModel>; var failed : array<string>) {
+                         var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr")}))
-    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    let leg_tag = empty(leg) ? "" : " {leg}"
+    let log_leg = "asr{leg_tag}"
+    to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr{leg_tag}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg)}))
+    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "1"])
+    }
     var out = ""
     let rc = run_and_stream(args, out)
     var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
         let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das asr rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "rc" => JV(rc)}))
-        failed |> push("{spec.display} das asr")
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
+        failed |> push("{spec.display} das {log_leg}")
         return
     }
     absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
-    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das {log_leg} ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
@@ -806,7 +843,7 @@ def private asr_ref_available(tool : string) : bool {
 // cli tools fork per clip; onnx/nemo run ONE process over all clips (python load amortized).
 def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; cfg : Args; threads : int;
                          hw : HardwareInfo; box, date, store : string;
-                         var models : array<BenchModel>; var failed : array<string>) {
+                         var models : array<BenchModel>; var failed : array<string>; gpu : bool = false) {
     if (!asr_ref_available(ref.tool)) {
         to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} - tool not on this box\n")
         return
@@ -825,7 +862,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     }
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
-        backend = "cpu",
+        backend = gpu ? "metal" : "cpu",
         flavor = "stock",
         workload = asr_workload(spec),
         box = box,
@@ -914,7 +951,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             var rtext = ""
             let ms = (ref.tool == "mtmd"
                 ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
-                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
+                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd, gpu))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
@@ -1160,12 +1197,28 @@ def main : int {
             }
             settle_das(cfg)
             asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
+            static_if (typeinfo builtin_module_exists(das_accelerate)) {
+                settle_das(cfg)
+                asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "accel")
+            }
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                if (is_metal_served_family(spec)) {   // GPU-served families only: the anti-sandbag would refuse the rest
+                    settle_das(cfg)
+                    asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "metal")
+                }
+            }
             for (rf in spec.refs) {
                 if (!key_exists(toolVersions, rf.tool)) {
                     toolVersions |> insert(rf.tool, asr_ref_available(rf.tool) ? asr_tool_versions(rf.tool) : "")
                 }
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
+                static_if (typeinfo builtin_module_exists(das_metal)) {
+                    if (rf.tool == "whisper-cli" && is_metal_served_family(spec)) {   // the metal das row's like-for-like pair
+                        settle(cfg)
+                        asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
+                    }
+                }
             }
             let wasr = dlim_wipe(asr_model_path(spec))   // same lifecycle for the audio images
             if (wasr.removed > 0) {

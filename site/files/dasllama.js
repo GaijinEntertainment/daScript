@@ -418,12 +418,13 @@
       return all.filter(function (r) {
         return (!filters.model || r.model === filters.model) &&
                (!filters.box || r.box === filters.box) &&
+               (!filters.lane || r.lane === filters.lane) &&
                (!filters.tool || r.tool === filters.tool) &&
                r.audio_s > 0;
       }).sort(function (a, b) { return b.speed - a.speed; })
         .map(function (r) {
           var d = xrt(r.audio_s, r.das_ms), f = xrt(r.audio_s, r.ref_ms);
-          return { label: r.model, sub: r.boxName + ' · ' + r.tool + ' · ' + r.wav,
+          return { label: r.model, sub: r.boxName + ' · ' + r.lane + ' · ' + r.tool + ' · ' + r.wav,
                    das: d, ref: f, dasText: xrtText(d), refText: xrtText(f),
                    ratio: r.speed, r: r };
         });
@@ -487,6 +488,16 @@
     'onnx': 'ONNX Runtime', 'nemo': 'NeMo', 'llama-mtmd-cli': 'llama-mtmd-cli'
   };
 
+  // Audio lanes mirror the LLM LANES: each names the das backend and the reference backend it
+  // is measured against. cpu + accel das rows pair the CPU reference (whisper-cli -ng, greedy,
+  // no flash); the gpu das row pairs the tool's own GPU mode (greedy, its flash default).
+  // Rows from before the split carry no backend and read as 'cpu'.
+  var AUDIO_LANES = [
+    { backend: 'cpu',   das: 'tuned', ref: 'cpu',   label: 'cpu' },
+    { backend: 'cpu',   das: 'accel', ref: 'cpu',   label: 'cpu + accel' },
+    { backend: 'metal', das: 'tuned', ref: 'metal', label: 'gpu' }
+  ];
+
   function buildAudioRows(recs, workload) {
     var out = [];
     recs.forEach(function (m) {
@@ -494,16 +505,22 @@
       var boxes = {};
       runs.forEach(function (r) { boxes[r.box] = true; });
       Object.keys(boxes).forEach(function (bx) {
-        var dasHits = runs.filter(function (r) { return r.box === bx && r.engine === 'das'; });
+        AUDIO_LANES.forEach(function (L) {
+        var dasHits = runs.filter(function (r) {
+          return r.box === bx && r.engine === 'das' && (r.backend || 'cpu') === L.backend &&
+            (r.flavor || 'tuned').indexOf(L.das) === 0;
+        });
         if (!dasHits.length) return;
         var das = newest(dasHits);
-        runs.filter(function (r) { return r.box === bx && r.engine !== 'das'; }).forEach(function (ref) {
+        runs.filter(function (r) {
+          return r.box === bx && r.engine !== 'das' && (r.backend || 'cpu') === L.ref;
+        }).forEach(function (ref) {
           Object.keys(das.tests || {}).forEach(function (k) {
             if (k.indexOf('asr:') !== 0 || !ref.tests || !ref.tests[k]) return;
             var dm = das.tests[k].ms, rm = ref.tests[k].ms;
             if (!(dm > 0) || !(rm > 0)) return;        // no reference → no row
             out.push({
-              model: m.arch || m.gguf, box: bx,
+              model: m.arch || m.gguf, box: bx, lane: L.label,
               boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
               tool: ENGINE_LABEL[ref.engine] || ref.engine,
               wav: k.slice(4), audio_s: das.tests[k].audio_s || 0,
@@ -517,6 +534,7 @@
               das: das, ref: ref
             });
           });
+        });
         });
       });
     });
@@ -541,6 +559,8 @@
             cls: 'dl-td-model' },
           { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
             cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
+          { key: 'lane', label: 'category', get: function (r) { return r.lane; },
+            cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2' },
           { key: 'tool', label: 'reference', get: function (r) { return r.tool; },
             cell: function (r) { return esc(r.tool); }, cls: 'dl-dim2' },
           { key: 'threads', label: 'threads', num: true, dim: true,
@@ -567,6 +587,7 @@
         filterDefs: [
           { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
           { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+          { field: 'lane', title: 'category', all: 'all categories', get: function (r) { return r.lane; } },
           { field: 'tool', title: 'reference', all: 'all references', get: function (r) { return r.tool; } }
         ],
         receipt: pairReceipt,

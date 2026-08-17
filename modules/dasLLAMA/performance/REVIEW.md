@@ -10,24 +10,31 @@ A tune-sidecar emission change lives in the dasLLVM tune rail and answers to
 tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require
 added to it, is a defect.
 
-**A change to what `write_bench_records` (`profile_common.das`) emits keeps
-`modules/dasLLAMA/tests/test_exchange_schema.das` green in the same change.**
+**A field added to what `write_bench_records` (`profile_common.das`) writes is added to
+`exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
+it does not know, so an unvalidated field ships silently.
+
+**Weakening `modules/dasLLAMA/tests/test_exchange_schema.das` or
+`modules/dasLLAMA/tests/test_bench_records_schema.das` — both round-trip the real
+`write_bench_records` output — is a defect.**
 
 **`exchange_client.das` is the single exchange client — every HTTP call to the sidecar exchange
 (lookup, download, submit) goes through it.** A second HTTP path is a defect.
 
-**Everything downloaded from the exchange passes the client-side gate — content sha, schema,
-`DASLLAMA_VERSION` — before anything reads it.**
+**Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
+submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
+from going back up is a defect** — `utils/dasllama-server/test_exchange_client.das` enforces
+all three.
 
-**Every submission goes through `exchange_strip_private`; exchange-sourced and foreign-box
-sidecars are never submitted.** A submission around the strip is a defect.
+**Every submission goes through `exchange_strip_private`.** A submission path around it is a
+defect even where the strip itself is intact.
 
 **A lookup failure never kills a boot.** A boot path that fails when the exchange lookup
 fails is a defect.
 
-**`fetch_models.das` is the model-provenance manifest** — an entry is the HF repo + revision
-pin, canonical bytes + sha256, or a conversion recipe. A model referenced anywhere without
-its entry is a defect.
+**`fetch_models.das` is the model-provenance manifest; a model referenced anywhere without
+its entry is a defect.** A downloaded entry carries the source URL, canonical bytes, and
+sha256; a converted entry carries its conversion recipe.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.

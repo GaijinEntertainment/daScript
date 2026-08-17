@@ -358,20 +358,83 @@
     - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint — a name squat on the
       standard image-API prefix; rename ours or accept the squat deliberately.
 
-26. **ASR perf follow-ups after the Metal tower (metal-media chunk 2, 2026-08-16).** With the
-    whisper-class block loop GPU-served (~31x the CPU f32 block rate; large-v3-turbo f32-GPU
-    beats the q8-CPU serving default 1.82x end to end), the remaining ASR wall splits into:
-    - **J-qwen3a — the conv2d frontend** (~89% of that family's encode, quant-independent,
-      measured slice G): GPU im2col+mm, or at minimum threading the serial im2col. The
-      blocks-only offload buys qwen3a ~11%; the frontend is the family's actual bottleneck.
-    - **The whisper decoder half**: post-tower gb1 splits encode 4.35 s vs decode 3.50 s +
-      cross_kv 1.65 s — the decoder is now the larger half of a whisper-large transcribe.
-    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven, possibly
-      post-PR (the chunk 2 non-goal note); the f32 lane already beats the q8-CPU default
-      for whisper-class, so this is upside, not a gap.
+26. **ASR perf follow-ups after the Metal tower — MOSTLY RESOLVED by metal-media chunk 3
+    (2026-08-16, `metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
+    the q8-native decode step on Metal, part/comb attention, f16 KV — decode beats the
+    q8-CPU rail 1.6x and serves by default above the `n_text_state >= 1024` floor); J-qwen3a
+    SHIPPED (the conv2d frontend pads into the tile GEMM — encode 6.3x on the stage probe
+    (`harness/asr_stage_probe.das`, no board cell), the q8 serving default included); the
+    whisper conv frontend rides the GPU too (37x, same probe). gb1 large-v3-turbo lands
+    4.04 s vs whisper-cli's 5.54 (both celled, `records/m1.json`). What remains:
+    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven — the encoder
+      blocks still ride the f32 lane under `--ngl` (the one remaining fp32-forced half).
     - **Audio mmproj provenance**: `qwen2audio-mmproj-f32.gguf` and
       `voxtral-mini-mmproj-f32.gguf` are locally-converted fixtures with no
-      `performance/fetch_models.das` entry — the tests that load them (encoder oracles, the
-      blocks-parity cells, the erf-GELU census carrier) skip honestly without them, but the
-      files are not re-fetchable from the manifest. Mint the entries (or a documented
-      convert recipe) rather than inventing provenance.
+      `performance/fetch_models.das` entry — the tests that load them skip honestly without
+      them, but the files are not re-fetchable from the manifest. Mint the entries (or a
+      documented convert recipe) rather than inventing provenance.
+    - **The whisper decode step's small-model floor**: tiny (d=384) loses ~3x to the
+      per-dispatch latency floor and keeps the CPU rail by policy — a graph/ICB replay or
+      megafusion round would move the floor; measured, ledgered, not urgent.
+
+27. **The metal suites should catch a raw (runner-less) invocation (2026-08-17).** Running
+    `dastest -- --test modules/dasLLAMA/tests` directly — without `tests/run.das` — drops the
+    runner's env (`DASLLAMA_CPU_PREFILL=1`, `DASLLAMA_METAL_HAZARD_STRICT=1`,
+    `DAS_TUNE_MANIFEST=m1.tune.json`) and produces phantom reds that read like real
+    regressions: the CPU-truth A/B halves trip the CPU-prefill panic, untuned identities
+    collide with the dlim flavor-lane fixtures, and the combined run even segfaulted. The
+    prohibition exists in `tests/CLAUDE.md` but nothing ENFORCES it — a session that skips
+    the doc burns an hour on fake failures. Add a guard test (or a `_model_tier` setup
+    check) that detects the missing runner markers and fails IMMEDIATELY with "run through
+    modules/dasLLAMA/tests/run.das", instead of letting the suite die deep. Design choice
+    for implementation: refuse outright vs loud-warn; and keep single-file dastest runs
+    OUTSIDE the metal-suite set (test_whisper.das etc.) unaffected.
+
+28. **CPU fallback on anything but tiny should be LOUD (2026-08-17).** The review round's
+    pattern: the GPU drivers decline silently by design (best-effort inside knobs), which is
+    right for tiny — the floor genuinely serves it better on CPU — but on any above-floor
+    model a silent CPU fallback is a performance cliff the user only finds by profiling.
+    Discussion to have: a single loudness policy for the serving paths — e.g. every decline
+    of a model the driver WOULD normally serve (above the floor, right quant, registered
+    family) logs one line naming the reason, while policy-class declines (floor, knob-off)
+    stay counter-only. Touches the tower conv frontends' bare-false contract, the wdec
+    decline notes (partly landed in the review round), and the required-mode asymmetry the
+    round ledgered. Decide the policy once, then sweep the drivers to it.
+
+29. **The f32-fallback REVIEW rule's form defects — parked for REVIEW.das (2026-08-17).**
+    The rule as landed has a stale name census (misses `matmul`, `gemm_f32_jo`, `mm_fblob*`,
+    `enc_f32_mm`), a twin-existence clause not decidable from a diff, and a self-exempting
+    inline `unless`. The dragon's proposed repair — a `// f32: <reason>` marker on every
+    f32-matmul call line, mechanically checkable like `// clock: control` — is sound but
+    parked: the coming executable-checklist mechanism (REVIEW.das) is the better home for a
+    rule that is really a lint. Revisit when that lands.
+
+30. **REVIEW_GPU's derived-uniform clause — parked for REVIEW.das (2026-08-17).** The
+    "no value reaches an encoder twice" rule condemns the file's own standing shape (the
+    grid extent re-bound as the device-side tail guard) and cannot say so. Once REVIEW.das
+    lands, the check is mechanical: the [metal_dispatch] lens knows every grid= param and
+    binding, so "an argument other arguments determine is a defect, except the grid extent
+    as the bounds guard" becomes an auto-test; the rule text then shrinks to the sanction.
+
+31. **`pin_kernel_backend` is not load-sticky (2026-08-17).** A model load's internal
+    selection overrode an `arm64-gen` pin mid-cell (portable pins survive — the asymmetry is
+    availability-gated re-selection), which corrupted the wdec attach until the driver moved
+    to the pure read. Decide the contract: the pin survives loads, or its doc states it pins
+    only until the next load — then sweep the A/B seats that assume the stronger reading.
+
+32. **`daspkg --quick` silently downgrades on an incomplete sidecar (2026-08-17).** Finding
+    the scope incomplete, --quick re-mints in NORMAL mode — a quick rebuild can quietly strip
+    the record-grade rig of its paranoid winners (observed: 5 tie-class winner flips, oracle
+    INCOMPARABLE until the LKG restore). Safer contract: refuse and name the LKG restore, or
+    re-mint in the sidecar's previous mode.
+
+33. **Lint/test-cell candidates from the metal-asr review round (2026-08-17).**
+    - `[hot_path]` region contracts are blind across `invoke`d function-pointer seams (the
+      four new GPU hooks) — the PERF026-028 scan cannot traverse them.
+    - The tests/REVIEW CMakeLists rule is a pure grep: a model-free cell walking every
+      CMakeLists.txt for `modules/dasLLAMA/tests/` basenames.
+    - Three `test_metadata.py` cells for site-dasllama: page metadata (title/description/
+      OG/Atom), news-region idempotence (regenerate into tmp, byte-compare), and the `dl-*`
+      prefix ban.
+    - The site dl-* shared-selector parity check (parse both files, intersect selectors,
+      assert identical bodies).

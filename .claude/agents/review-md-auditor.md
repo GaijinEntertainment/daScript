@@ -60,7 +60,12 @@ exists, a constraint hidden under an unrelated title, a criterion no diff or nam
 settle, a named API set the same change made stale, a carve-out whose description fits two
 disjoint sets. When the diff itself edits the checklist, audit the post-change text. Report
 these as **SELF-REVIEW** findings with the defective rule quoted and a concrete fix direction
-(rewrite, split, or move — never silent tolerance).
+(rewrite, split, or move — never silent tolerance). Tag each one
+`blocking` (it prevented or flipped a verdict on THIS diff — cite the code site), `stale`
+(a factual claim no longer matching the tree), `contradiction` (two rules cannot both be
+satisfied), `structural` (a fused rule hiding an obligation, an enumeration standing in for
+a property), or `formatting` — the orchestrator's acceptance damper
+(`skills/review_md.md`) keys on the tag.
 
 Followability is part of the same dimension (`skills/review_md.md` carries the full
 classes): a dense multi-clause rule the reviewer must re-read; an enumeration of named cases

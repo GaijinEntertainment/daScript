@@ -28,8 +28,10 @@ Three like-for-like comparisons, named by what both sides get:
   AOCL elsewhere). llama.cpp runs *stock* at `-ngl 0 -nopo 1`; `-nopo` stops its op-offload
   from quietly serving "CPU" rows on the GPU — without it, a stock build ships big-batch ops to
   Metal and the row is not a CPU number.
-- **gpu** — both engines in their default GPU configuration at `-ngl 99`. Which backend ran
-  (Metal, Vulkan) is in the row's receipt.
+- **gpu** — each engine in its own GPU serving configuration. LLMs: both sides at `-ngl 99`.
+  ASR: das runs `--ngl 1` (the f32-tower GPU serving mode + the Metal decoder), the reference
+  CLI its own GPU default — whisper-cli keeps its flash-attention default there, while its cpu
+  row runs `-nf`. Which backend ran is in the row's receipt.
 
 A box without an accelerated tier simply shows fewer categories.
 
@@ -153,11 +155,14 @@ configurations still in active development. Measured rows are annotated, not del
 
 ## What is not claimed
 
-- ASR comparisons are CPU-only, and the macOS reference CLIs do get Apple's AMX matrix unit
-  through Accelerate — noted where it applies. llama.cpp has no speech-to-text engine; those
-  references are the dedicated ones (whisper.cpp, parakeet-cli, ONNX Runtime, NeMo).
-- The audio-in comparison is a narrow CPU slice: llama.cpp's audio encoders do not route
-  through BLAS on CPU. GPU builds of the multimodal path are not measured here.
+- ASR rows split into the same cpu / cpu + accel / gpu categories as the LLMs (the ASR
+  accel lever is `flavor: accel` on a cpu row, like the LLM rows), and the macOS reference CLIs get Apple's AMX
+  matrix unit through Accelerate in every CPU mode — noted where it applies. llama.cpp has
+  no speech-to-text engine; those references are the dedicated ones (whisper.cpp,
+  parakeet-cli, ONNX Runtime, NeMo), and the gpu category exists where the reference has a
+  GPU mode (whisper.cpp on Metal).
+- The audio-in comparison stays a CPU slice: llama.cpp's audio encoders do not route through
+  BLAS on CPU, and mtmd GPU builds are not measured here.
 - Community-submitted rows are out of scope for now; the record schema carries a source field
   for them, but no submission path is defined yet.
 

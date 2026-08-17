@@ -3,10 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
-**`tests/` and `performance/` carry their own checklists, and they govern by KIND, not
-location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
-`tests/REVIEW.md`; an exchange, provenance-manifest, or measuring-rig change answers to its
-`performance/REVIEW.md`.
+**`tests/`, `benchmarks/`, and `performance/` carry their own checklists, and they govern by
+KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
+module's `tests/REVIEW.md`; a bench-rig or lab change answers to `benchmarks/REVIEW.md`; an
+exchange, provenance-manifest, or measuring-rig change answers to its `performance/REVIEW.md`.
+A kind-routed file applies BOTH its checklist and this one.
 Kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
@@ -24,8 +25,8 @@ sidecar set (the exchange keys validity on version and box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
 this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
-struct; if no it is shape — a block stride, a lane width, an unroll factor, a format selector —
-and it must not reach the kernel as a uniform, a kargs field, or a helper parameter.
+struct; if no it is shape and must not reach the kernel as a uniform, a kargs field, or a
+helper parameter.
 
 **The EMITTED shader contains no indirection.** No function pointers, no vtables. A
 `class template` / `def abstract` / `def override` splice is compile-time and conforms —
@@ -40,6 +41,13 @@ count, its span shape), not the session's setup progress.
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
 ships the measured pair — peak footprint and wall-clock — and an explicit stated decision.
 
+**A new GEMM/GEMV call site takes the fastest serving lane that exists for its weights; the
+f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matmul_batch`,
+`mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) where a faster-format twin already serves
+the same weights and shape is a defect unless the site is a parity/oracle rail or carries a
+comment naming why f32 is load-bearing there. Weights with no faster twin (unquantized
+planes) are out of scope.
+
 **Platform-specific code lands only in a platform backend file.** A platform-neutral file
 carrying it is a defect; a new shared concern gets its own file, not more of
 `dasllama/dasllama_common.das`.
@@ -50,7 +58,8 @@ value feeds logic is marked `// clock: control`. The rails, and where free-hand 
 legal, are `ARCHITECTURE.md` §2.10.
 
 **Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
-or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts. Covered means an annotated entry
+any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only
+reaching entry (a one-time transform is covered by being declared cold). Covered means an annotated entry
 reaches it: the contracts arm down the call graph, so an interior function carries nothing of
 its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
 encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
@@ -75,10 +84,11 @@ policy override, or threshold recalibration. Where one changes what a run measur
 emits, a printed line names it by env spelling; set-but-inert stays silent, per-site repeats are
 fine. Adding one, or giving one a new effect, without the announce is a defect.
 
-**No new record-grade timing harness is written.** Model-level time is measured by the rigs
-`PROFILE.md` documents — `performance/gen_profile.das` and `performance/gen_bench_records.das` —
-both spawning `benchmarks/lcpp_bench.das`. A tutorial's printed wall-clock is teaching output,
-feeding no board.
+**Record-grade model timing — a self-measured time entering `performance/records/<box>.json`
+or `PERF_LEDGER.md` — comes only from the rigs `PROFILE.md` documents:
+`performance/gen_profile.das` and `performance/gen_bench_records.das`, both spawning
+`benchmarks/lcpp_bench.das`.** Any other producer, new or edited, is a defect. A tutorial's
+printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -89,6 +99,8 @@ reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cel
 quant mode and stamps box and engine provenance, so a number can never silently describe a
 format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
 delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
+A **stage-level figure** — a speedup of one engine stage, not a served turn — names the
+harness and flags that produced it, on the same line.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -164,8 +176,11 @@ below are the checklist's own).
 **A disk-order → compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**A KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`, its
-format family kept whole.**
+**When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides; a
+diff that adds or moves such a function lands the charter line with it.**
+
+**A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
+its format family kept whole.** GPU twins land in their backend kernel file.
 
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**

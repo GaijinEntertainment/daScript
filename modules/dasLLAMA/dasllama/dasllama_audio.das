@@ -1651,6 +1651,11 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     let nm = t.n_mel
     let tc = ref_time_ticks()
     trace_tag(TRACE_TAG_ENC_CONV)
+    if (g_tw_conv_gpu_set && empty(g_audio_ref_dir) && invoke(g_tw_conv_gpu, t, s, mel)) {
+        asr_prof_add("enc.conv", tc)
+        encoder_blocks(t, s, tt)
+        return
+    }
 
     // conv1 k3 s1 same: im2col column (dk, c) — matches the loader's weight permute
     for (i in range64(tin)) {
@@ -1702,6 +1707,18 @@ var private g_tw_blocks_gpu_set = false
 def register_tower_blocks_gpu(fn : TowerBlocksGpuFn) {
     g_tw_blocks_gpu = fn
     g_tw_blocks_gpu_set = true
+}
+
+//! The conv-frontend twin: serves conv1/conv2/pos-add for one mel chunk (s.x filled) or
+//! declines with false — the CPU conv above stays the correct fallback, best-effort inside
+//! the tower knob (a shape misfit like tiny's 3x80 im2col width just keeps the CPU conv).
+typedef TowerConvGpuFn = function<(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool>
+var private g_tw_conv_gpu : TowerConvGpuFn
+var private g_tw_conv_gpu_set = false
+
+def register_tower_conv_gpu(fn : TowerConvGpuFn) {
+    g_tw_conv_gpu = fn
+    g_tw_conv_gpu_set = true
 }
 
 //! The pre-LN transformer block loop over ``npos`` positions of the residual stream in ``s.x``

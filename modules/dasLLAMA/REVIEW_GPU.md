@@ -7,11 +7,12 @@ too. Architecture doc: `ARCHITECTURE.md`.
 **A claim about a shape constant is checked against the emitted shader, not the das source.**
 Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is literal there.
 
-**Kernel twins — same-body single/batch or format variants of one kernel — bind the same
-kargs (kernel-argument struct) type at the same binding numbers**, even where one twin
-ignores a field; shifting the other twin's fields to different slots is a defect.
+**Kernel twins — kernel classes whose bodies differ on one stamp axis — bind the same kargs
+(kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
+field; shifting the other twin's fields to different slots is a defect.
 
-**Kernel twins share a template.** Same-body single/batch or format twins stamp one
+**Kernel twins share a template.** Two kernel classes whose bodies differ on one stamp axis
+are twins, whatever the axis (single/batch, format, single-pass/chunked); they stamp one
 `class template`: body divergence rides a stamp axis (`@template_constant`, or an overridden
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
 copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
@@ -76,12 +77,16 @@ matching the armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is
 `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines codec-mismatched sessions silently,
 so that log must show `resident driver armed`.
 
-**A kernel that reads or writes the K/V mirrors is stamped from a
-`[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16
-instances.** A single-codec mirror kernel is legal only when a codec-templated sibling serves
+**A change to `dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
+`mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.
+
+**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs is stamped
+from a `[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16
+instances** — the rail serves both codecs, so a missing instance silently drops one codec's
+GPU path. A single-codec mirror kernel is legal only when a codec-templated sibling serves
 the other codec and its arming gate keys on `kv16`.
 
-**An f16 instance's mirror stores clamp to the f16 finite range.**
+**An f16 store into any GPU-resident K/V clamps to the f16 finite range (±65504).**
 
 **Every resident override — a decode/prefill hook the whole-model residency rail registers in
 common's override registries — gates sessions on the armed mirror codec and on the flat

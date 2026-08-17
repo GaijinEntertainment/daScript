@@ -1190,6 +1190,15 @@ def asr_catalog() : array<AsrModelSpec> {
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
+        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; its
+        // GPU serve (the conv2d frontend) stands on the stage probe, not these rows — the
+        // metal leg is whisper-only and the cpu/accel rows pin the drivers off
+        AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
+            das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
+            // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
+            refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-ASR-0.6B-bf16.gguf",
+                            exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
+            buckets <- corpus_buckets(), libri_short = "", lang = "auto"),
         // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
         // tokens against the 8192 decoder window — a single-window architectural limit
         // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
@@ -1364,12 +1373,16 @@ def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
 
 //! whisper.cpp parakeet-cli / whisper-cli — one process per clip (load is ~ms; parse_cli_ms
 //! subtracts it regardless). Best over `reps`. Returns the winning command line too — the receipt.
-def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
+def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&; gpu : bool = false) : double {
     var args <- [whisper_cpp_bin(cli), "-m", model_path, "-f", wav_path, "-t", "{threads}"]
     if (cli == "whisper-cli") {
-        args |> push_from(["-bs", "1", "-bo", "1", "-nf"])
+        // greedy both modes (the das side is greedy — same search, only the device axis flips);
+        // the cpu mode also drops flash (-nf), the gpu mode keeps the tool's flash default
+        args |> push_from(gpu ? ["-bs", "1", "-bo", "1"] : ["-bs", "1", "-bo", "1", "-nf"])
     }
-    args |> push("-ng")
+    if (!gpu) {
+        args |> push("-ng")
+    }
     var best = -1.0lf
     cmd_out = argv_line(args)
     for (_rep in range(reps)) {
@@ -1680,7 +1693,8 @@ let private BENCH_ENV_VARS = fixed_array(
     "DASLLAMA_METAL_HAZARD_STRICT", "DASLLAMA_METAL_KQ_B8", "DASLLAMA_METAL_KV_MIRROR_MB",
     "DASLLAMA_METAL_LOGITS", "DASLLAMA_METAL_MULMM", "DASLLAMA_METAL_NCB",
     "DASLLAMA_METAL_PF_CAPTURE", "DASLLAMA_METAL_PIPE_DEBUG", "DASLLAMA_METAL_PREFILL_SKIP",
-    "DASLLAMA_METAL_SCHED", "DASLLAMA_METAL_SPEC", "DASLLAMA_METAL_UNRETAINED",
+    "DASLLAMA_METAL_SCHED", "DASLLAMA_METAL_SPEC", "DASLLAMA_METAL_TOWER",
+    "DASLLAMA_METAL_UNRETAINED", "DASLLAMA_METAL_WDEC", "DASLLAMA_METAL_WDEC_STEP",
     "DASLLAMA_MM_SMALL", "DASLLAMA_MODELS_DIR", "DASLLAMA_MTP_DEBUG", "DASLLAMA_NOISY",
     "DASLLAMA_OS", "DASLLAMA_PIN_BACKEND", "DASLLAMA_PIN_PREFILL", "DASLLAMA_PREFETCH",
     "DASLLAMA_RAM_GB", "DASLLAMA_THREADS", "DASLLAMA_TRIM", "DASLLAMA_TRUTH_REFRESH",

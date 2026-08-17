@@ -446,11 +446,26 @@ def private wt_read_conv_permuted(recs : table<string; WTensorRec>; b : array<ui
     }
 }
 
+// the baked-image family tag for an (enc, dec) quant pair
+def private whisper_tag(enc_q8, dec_q8 : bool) : string {
+    if (enc_q8 && !dec_q8) {
+        panic("dasLLAMA whisper: enc-q8/dec-f32 is not a served combination")
+    }
+    return enc_q8 ? "whisper-q8" : (dec_q8 ? "whisper-f32-q8" : "whisper-f32")
+}
+
 //! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against
 //! whisper.cpp's whisper_model_load). Like ``load_model``, caches a box/knob-specific PREPARED
 //! IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
-    let tag = q8 ? "whisper-q8" : "whisper-f32"
+    return <- load_whisper_model(path, q8, q8)
+}
+
+//! The per-half form: ``enc_q8`` quantizes the encoder (the CPU tower rail; the metal tower
+//! declines it), ``dec_q8`` the decoder. The GPU-tower serving mode is (false, true) —
+//! `set_asr_tower_fp32` routes here through the facade.
+def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
+    let tag = whisper_tag(enc_q8, dec_q8)
     if (path |> ends_with(".dlim")) {
         // named directly — no source bin to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -472,7 +487,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
             return <- t
         }
         var built = WhisperModel()
-        if (stream_whisper_model(path, q8, img, tag, built)) {
+        if (stream_whisper_model(path, enc_q8, dec_q8, img, tag, built)) {
             dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
         }
         return <- built
@@ -480,7 +495,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
     // no persisted image: stream one into memory and serve THAT — a served model is always
     // image-backed, so there is no second, array-owning shape of this struct to maintain
     var built = WhisperModel()
-    stream_whisper_model(path, q8, "", tag, built)
+    stream_whisper_model(path, enc_q8, dec_q8, "", tag, built)
     return <- built
 }
 
@@ -488,6 +503,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
 def private register_whisper_image_tags {
     register_image_family_tag("whisper-q8")
     register_image_family_tag("whisper-f32")
+    register_image_family_tag("whisper-f32-q8")
 }
 
 // One tensor's place in a destination blob — the SAME list drives staged reader and streamed mint.
@@ -516,12 +532,23 @@ def private wjob_read(recs : table<string; WTensorRec>; b : array<uint8> | #;
 
 //! Mint a served model from a staged read WITHOUT touching disk — the off-rail control for suites.
 def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; q8 : bool = false) {
-    cache_via_image_staged(st, out, "", q8 ? "whisper-q8" : "whisper-f32")
+    cache_via_image_staged(st, out, "", whisper_tag(q8, q8))
+}
+
+//! The per-half mint twin — the staged content (which halves ``stage_whisper_model`` quantized)
+//! must match the tag's pair.
+def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; enc_q8, dec_q8 : bool) {
+    cache_via_image_staged(st, out, "", whisper_tag(enc_q8, dec_q8))
 }
 
 //! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live model.
 def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
+    return <- stage_whisper_model(path, q8, q8)
+}
+
+//! The per-half staging twin (see ``load_whisper_model``'s per-half form for the pair's meaning).
+def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
     var st = WhisperStaging()
     let f = fopen(path, "rb")
     if (f == null) {
@@ -536,7 +563,7 @@ def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
         for (j in encJobs) {
             wjob_read(recs, bytes, j, st.enc.fblob, 0l)
         }
-        if (q8) {
+        if (enc_q8) {
             tower_quantize(st.e.enc, st.enc)
         }
         st.dblob |> reserve_resize(sz.dec_len)
@@ -548,7 +575,7 @@ def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
         delete decJobs
     }
     fclose(f)
-    if (q8) {
+    if (dec_q8) {
         whisper_dec_quantize(st)
     }
     return <- st
@@ -654,7 +681,7 @@ def private whisper_dec_compact_offsets(var e : WhisperModel) {
 //! The STREAMED whisper mint — Phase 3 of the audio rail: the big planes transcode from the
 //! source mapping straight into the writer and never materialize. The staging carrier holds
 //! only scalars, the vocab, and the filterbank; peak drops from whole-model to one tensor.
-def private stream_whisper_model(path : string; q8 : bool; img, tag : string; var out : WhisperModel) : bool {
+def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag : string; var out : WhisperModel) : bool {
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA whisper: cannot open model '{path}'")
@@ -666,37 +693,43 @@ def private stream_whisper_model(path : string; q8 : bool; img, tag : string; va
         var encJobs : array<WFillJob>
         var decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
-        if (q8) {   // the streamed meta must carry the compact offsets the eager quantizers write
+        // the streamed meta must carry the compact offsets the eager quantizers write
+        if (enc_q8) {
             tower_compact_offsets(st.e.enc)
+        }
+        if (dec_q8) {
             whisper_dec_compact_offsets(st.e)
         }
         // no selected backend = flat Q8_0 image, same repack gate the eager quantizers take
-        let rep = q8 && select_matmul_backend_for_load()
+        let bk = select_matmul_backend_for_load()
+        let rep_enc = enc_q8 && bk
+        let rep_dec = dec_q8 && bk
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
-        if (q8) {
-            extra += uint64(sz.enc_len + sz.dec_len)                    // quant planes (over-estimate: compact is smaller)
-            extra += uint64((sz.enc_len / 32l + sz.dec_len / 32l) * 4l) // scale planes
-            extra += 4ul * uint64(IMAGE_PAGE)
+        if (enc_q8) {   // quant plane (over-estimate: compact is smaller) + scales + pages
+            extra += uint64(sz.enc_len) + uint64((sz.enc_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
+        }
+        if (dec_q8) {
+            extra += uint64(sz.dec_len) + uint64((sz.dec_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
         }
         wrote = cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
                                                                           var w : ImgWriter; var sections : array<ImgSection>) {
             if (name == "dblob") {
-                return wstream_plane(recs, bytes, decJobs, 0, q8, rep, w, sections, name)
+                return wstream_plane(recs, bytes, decJobs, 0, dec_q8, rep_dec, w, sections, name)
             }
             if (name == "enc.fblob") {
-                return wstream_plane(recs, bytes, encJobs, 0, q8, rep, w, sections, name)
+                return wstream_plane(recs, bytes, encJobs, 0, enc_q8, rep_enc, w, sections, name)
             }
-            if (q8 && name == "dqblob") {
-                return wstream_plane(recs, bytes, decJobs, 1, q8, rep, w, sections, name)
+            if (dec_q8 && name == "dqblob") {
+                return wstream_plane(recs, bytes, decJobs, 1, dec_q8, rep_dec, w, sections, name)
             }
-            if (q8 && name == "dqscales") {
-                return wstream_plane(recs, bytes, decJobs, 2, q8, rep, w, sections, name)
+            if (dec_q8 && name == "dqscales") {
+                return wstream_plane(recs, bytes, decJobs, 2, dec_q8, rep_dec, w, sections, name)
             }
-            if (q8 && name == "enc.qblob") {
-                return wstream_plane(recs, bytes, encJobs, 1, q8, rep, w, sections, name)
+            if (enc_q8 && name == "enc.qblob") {
+                return wstream_plane(recs, bytes, encJobs, 1, enc_q8, rep_enc, w, sections, name)
             }
-            if (q8 && name == "enc.qscales") {
-                return wstream_plane(recs, bytes, encJobs, 2, q8, rep, w, sections, name)
+            if (enc_q8 && name == "enc.qscales") {
+                return wstream_plane(recs, bytes, encJobs, 2, enc_q8, rep_enc, w, sections, name)
             }
             return false   // filters (small) and the q8 planes of an fp32 mint stage normally
         }
@@ -933,6 +966,8 @@ struct SampledTok {
 //! (``[hs][T]``) and pre-scaled by hs^-0.25 so attention scores are one gemm per head.
 struct DecoderState {
     n_past : int64
+    gpu_kv_gen : int64      // 0 until the GPU decode step serves this window's KV (the Metal
+                            // driver stamps it; a mid-window eviction then panics loud)
     kcache : array<float>   // [L][H][hs][Tmax]
     vcache : array<float>   // [L][H][Tmax][hs]
     kx : array<float>       // [L][H][hs][Ta] cross keys (from the encoder output, per window)
@@ -998,11 +1033,39 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
     return <- ds
 }
 
+//! GPU override for the per-window cross-attention memory: fills ``ds.kx``/``ds.vx`` (the CPU
+//! layouts, pre-scaled K) and returns true, or declines with false — the CPU chain below is
+//! always the correct fallback.
+typedef WhisperCrossKvGpuFn = function<(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool>
+var private g_wh_cross_kv_gpu : WhisperCrossKvGpuFn
+var private g_wh_cross_kv_gpu_set = false
+
+def register_whisper_cross_kv_gpu(fn : WhisperCrossKvGpuFn) {
+    g_wh_cross_kv_gpu = fn
+    g_wh_cross_kv_gpu_set = true
+}
+
+//! GPU override for one decode batch: fills ``ds.logits`` (last row) and owns the GPU-side KV;
+//! the seam advances ``ds.n_past`` on true. A false at the window's FIRST batch falls back
+//! cleanly (the CPU chain reads ds.kx/vx); the driver never mixes engines mid-window.
+typedef WhisperDecodeGpuFn = function<(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool>
+var private g_wh_decode_gpu : WhisperDecodeGpuFn
+var private g_wh_decode_gpu_set = false
+
+def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
+    g_wh_decode_gpu = fn
+    g_wh_decode_gpu_set = true
+}
+
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
 [hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
+    if (g_wh_cross_kv_gpu_set && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
+        ds.n_past = 0l
+        return
+    }
     let d = w.n_text_state
     let hh = w.n_text_head
     let hs = d / hh
@@ -1231,6 +1294,10 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     }
     if (p0 + n > tmax) {
         panic("whisper_decode_batch: {p0}+{n} tokens exceed n_text_ctx {tmax}")
+    }
+    if (g_wh_decode_gpu_set && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
+        ds.n_past += n
+        return
     }
 
     // token embedding + learned absolute position rows

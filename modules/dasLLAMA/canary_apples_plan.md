@@ -27,8 +27,9 @@ all corpus clips at every phase boundary.
   quadratic encoder attention scratch `sc[tt×tt]` + `rl[tt×ww]`, ww=2tt−1); parakeet
   6.69 GB at hp0x2 — same disease, and pk_/cn_ are deliberate twins.
 - The results.md ASR pipeline is orphaned (ec09383fa): live surface is
-  `performance/records/<box>.json` → gen_site_records → site; gen_results must learn the
-  store (Phase 4).
+  `performance/records/<box>.json` → gen_site_records → site. RESOLVED by retirement
+  (2026-08-17): gen_results.das and both generated scoreboards are deleted — the site
+  board is the only results surface, so Phase 4 loses its gen_results half.
 
 ## Phases
 
@@ -45,7 +46,7 @@ all corpus clips at every phase boundary.
 3. q-block attention scratch, pk_ then cn_ (two commits): per-lane B-row slabs replacing the
    full sc/rl panels; keep 4-aligned block starts + FMA order (bit-exact); cn_ converges onto
    pk_'s threaded structure. hp0x2 serve-peak before/after.
-4. Board plumbing: gen_results learns the record store (AsrProfile retires same commit);
+4. Board plumbing (gen_results retired 2026-08-17 — the site board is the surface):
    cli refs switch handles to q8_0 bins (engine tags unchanged; exec_fmt stamped);
    setup_asr_rig provisions q8_0 siblings; encode_ms to the store; uniform clip ladder
    (jfk/jfk3/gb1/hp0/hp0x2) LAST, with per-ref curation for >10-min cells.

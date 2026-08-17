@@ -17,6 +17,7 @@ require dasllama/dasllama_config     // DlimConfiguration — the peek/round-tri
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_tower_stats — the gemma4uv-metal arm
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
+require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
@@ -812,6 +813,32 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> equal(count_mismatch_i8(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
         t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
+        // and the MIXED flavor (f32 enc / q8 dec — the GPU-tower serving mode): the decoder
+        // q-planes match the eager pass, the encoder stays unquantized, and the facade's
+        // .dlim route reads the tag back
+        let imgm = image_path_for(path, "whisper-f32-q8")
+        remove(imgm)
+        var inscope stgm <- stage_whisper_model(path, false, true)
+        var inscope wm <- load_whisper_model(path, false, true)
+        t |> success(wm.image_map != null, "mixed cold load serves the image it streamed")
+        t |> success(!wm.enc.q8 && wm.dq8, "mixed flavor: f32 encoder, q8 decoder")
+        t |> equal(count_mismatch_i8(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dqscales, wm.dqscales), 0l, "mixed streamed dqscales element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dblob, wm.dblob), 0l, "mixed streamed dblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.enc.fblob, wm.enc.fblob), 0l, "mixed enc.fblob element-exact (full f32 layout)")
+        var inscope am <- load_asr_model(imgm)
+        t |> success(am.kind == AsrKind.whisper, "facade routes the mixed tag")
+        t |> success(!am.whisper.enc.q8 && am.whisper.dq8, "facade .dlim route lands the mixed halves")
+        // the REJECTED half pair: enc-q8/dec-f32 stages but has no serving mode - the mint panics
+        var inscope stgb <- stage_whisper_model(path, true, false)
+        var inscope wb = WhisperModel()
+        var tag_tripped = false
+        try {
+            mint_whisper_model(stgb, wb, true, false)
+        } recover {
+            tag_tripped = true
+        }
+        t |> success(tag_tripped, "enc-q8/dec-f32 mint panics (not a served combination)")
         delete samples
     }
 }
@@ -837,6 +864,10 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> skip("jfk.wav not present")
                 return
             }
+            // this cell is about the TOWER: pin the decoder-side driver off, or its f32-decoder
+            // quant_mode decline panics the required-mode policy leg (test_whisper_metal_cross_kv
+            // owns the wdec coverage)
+            set_metal_wdec(false)
             set_metal_tower(false)
             let s0 = metal_tower_stats()
             let cpu = whisper_transcribe_text(path, samples, cached = false)
@@ -850,6 +881,7 @@ def test_whisper_metal_tower(tst : T?) {
             t |> equal(chunks, 1l, "jfk is one 30s chunk")
             t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
             t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
+            t |> equal(s2.convs - s1.convs, 0l, "tiny's 3x80 im2col width keeps the CPU conv (the shape carve-out)")
             to_log(LOG_INFO, "whisper tiny mtower CPU eyeball: '{cpu.text}'\n")
             to_log(LOG_INFO, "whisper tiny mtower GPU eyeball: '{gpu.text}'\n")
             t |> success(!empty(gpu.text), "non-empty transcript")
@@ -865,6 +897,7 @@ def test_whisper_metal_tower(tst : T?) {
                 let s4 = metal_tower_stats()
                 t |> equal(s4.encodes - s3.encodes, 1l, "large: one GPU chunk")
                 t |> equal(s4.blocks - s3.blocks, 32l, "large: blocks delta = n_layer (32)")
+                t |> equal(s4.convs - s3.convs, 1l, "large: the conv frontend served on the GPU")
                 to_log(LOG_INFO, "whisper large mtower CPU eyeball: '{lc.text}'\n")
                 to_log(LOG_INFO, "whisper large mtower GPU eyeball: '{lg.text}'\n")
                 t |> success(!empty(lg.text), "large: non-empty transcript")
@@ -926,7 +959,150 @@ def test_whisper_metal_tower(tst : T?) {
             let rearm = whisper_transcribe_text(path, samples, cached = false)
             t |> equal(metal_tower_stats().encodes - sr0.encodes, 1l, "post-shutdown encode re-arms and serves")
             t |> success(rearm.text == cpu.text, "post-shutdown transcript unchanged")
+            set_metal_wdec(true)
             delete samples
+        }
+    }
+}
+
+def private wdec_transcribe(w : WhisperModel; samples : array<float>) : string {
+    var text = ""
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s <- create_session(w)
+        transcribe(w, s, samples) $(seg) {
+            text += seg.text
+        }
+        delete s
+    }
+    return text
+}
+
+// The whisper ASR-decoder driver (arm `mtower`, decoder half): GPU cross-KV on the q8 serving
+// default — transcript equality vs the CPU chain, window-counter deltas, the knob/quant_mode
+// decline classes, required-mode contract, and the shutdown re-arm.
+[test]
+def test_whisper_metal_cross_kv(tst : T?) {
+    tst |> run("whisper tiny q8: GPU cross-KV - transcript + counters + knob + declines") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            var inscope w8 = WhisperModel()
+            var inscope stg8 <- stage_whisper_model(path, true)
+            mint_whisper_model(stg8, w8)
+            // GPU leg: the q8 serving default's cross-KV AND decode steps land on the driver
+            // (the step floor drops to 0 — tiny sits under the serving floor by design)
+            set_metal_wdec(true)
+            set_metal_wdec_step(true)
+            set_metal_wdec_step_min_d(0l)
+            let s0 = metal_wdec_stats()
+            let gpu_text = wdec_transcribe(w8, samples)
+            let s1 = metal_wdec_stats()
+            t |> equal(s1.windows - s0.windows, 1l, "jfk is one cross-KV window")
+            t |> success(s1.steps - s0.steps >= 20l, "the decode batches served on the GPU")
+            t |> success(s1.tokens - s0.tokens >= s1.steps - s0.steps, "token rows cover the steps")
+            // OFF leg: knob decline counted, CPU serves, transcript identical
+            set_metal_wdec(false)
+            let cpu_text = wdec_transcribe(w8, samples)
+            let s2 = metal_wdec_stats()
+            set_metal_wdec(true)
+            t |> equal(s2.windows, s1.windows, "OFF leg never serves")
+            t |> equal(s2.steps, s1.steps, "OFF leg never steps")
+            t |> equal(s2.declines - s1.declines, 1l, "OFF leg records the knob decline")
+            t |> success(key_exists(metal_wdec_declines(), "knob"), "the decline reason is knob")
+            to_log(LOG_INFO, "whisper tiny cross-kv CPU eyeball: '{cpu_text}'\n")
+            to_log(LOG_INFO, "whisper tiny cross-kv GPU eyeball: '{gpu_text}'\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            t |> success(cpu_text == gpu_text, "transcript-exact CPU vs GPU cross-KV")
+            // the f32 ORACLE RAIL declines (quant_mode) — the driver is q8-native
+            var inscope wf = WhisperModel()
+            var inscope stgf <- stage_whisper_model(path)
+            mint_whisper_model(stgf, wf)
+            let sf0 = metal_wdec_stats()
+            let f32_text = wdec_transcribe(wf, samples)
+            let sf1 = metal_wdec_stats()
+            t |> equal(sf1.windows, sf0.windows, "f32 decoder never serves")
+            t |> success(sf1.declines - sf0.declines >= 1l, "f32 decoder records a decline")
+            t |> success(key_exists(metal_wdec_declines(), "quant_mode"), "the decline reason is quant_mode")
+            t |> success(!empty(f32_text), "f32 oracle rail still transcribes (CPU serves)")
+            // required-mode contract: the capability decline panics, the knob decline never does
+            set_metal_mode(MetalMode.required)
+            var tripped = false
+            try {
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    var s9 <- create_session(wf)
+                    transcribe(wf, s9, samples) $(seg) {
+                        pass
+                    }
+                    delete s9
+                }
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "required mode: the f32-decoder decline panics")
+            // the POLICY leg rides the F32 model: its tower SERVES under required, so the only
+            // decline is wdec's knob — policy, never escalated (the q8 model would panic here
+            // on the TOWER's capability decline instead)
+            set_metal_wdec(false)
+            let sp0 = metal_wdec_stats()
+            let pol_text = wdec_transcribe(wf, samples)
+            set_metal_wdec(true)
+            set_metal_mode(MetalMode.when_available)
+            t |> success(!empty(pol_text), "required mode + knob off: the policy decline serves CPU, no panic")
+            t |> equal(metal_wdec_stats().declines - sp0.declines, 1l, "the knob decline is counted, not escalated")
+            // re-arm after the shutdown seat: the weight blob re-uploads on the next window
+            metal_wdec_shutdown()
+            let sr0 = metal_wdec_stats()
+            let rearm_text = wdec_transcribe(w8, samples)
+            t |> equal(metal_wdec_stats().windows - sr0.windows, 1l, "post-shutdown window re-arms and serves")
+            t |> success(metal_wdec_stats().steps - sr0.steps >= 20l, "post-shutdown decode re-arms too")
+            to_log(LOG_INFO, "whisper tiny cross-kv rearm eyeball: '{rearm_text}'\n")
+            t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
+            // the serving FLOOR: at the default min_d, tiny cross-KV-serves but never steps,
+            // and the small decline is recorded as policy
+            set_metal_wdec_step_min_d(1024l)
+            let sm0 = metal_wdec_stats()
+            let small_text = wdec_transcribe(w8, samples)
+            let sm1 = metal_wdec_stats()
+            t |> equal(sm1.windows - sm0.windows, 1l, "under the floor: cross-KV still serves")
+            t |> equal(sm1.steps, sm0.steps, "under the floor: the step never serves")
+            t |> success(key_exists(metal_wdec_declines(), "small"), "the floor decline is recorded")
+            t |> equal(sm1.declines - sm0.declines, 0l, "a policy note is not a decline")
+            to_log(LOG_INFO, "whisper tiny cross-kv floor eyeball: '{small_text}'\n")
+            t |> success(small_text == cpu_text, "under the floor: the CPU decode transcript")
+            // the STEP KNOB: cross-KV serves, the step stays CPU, and the reason is readable
+            set_metal_wdec_step_min_d(0l)
+            set_metal_wdec_step(false)
+            let sk0 = metal_wdec_stats()
+            let sk_text = wdec_transcribe(w8, samples)
+            let sk1 = metal_wdec_stats()
+            set_metal_wdec_step(true)
+            t |> equal(sk1.windows - sk0.windows, 1l, "step knob off: cross-KV still serves")
+            t |> equal(sk1.steps, sk0.steps, "step knob off: the step never serves")
+            t |> success(key_exists(metal_wdec_declines(), "step_knob"), "the step-knob note is recorded")
+            t |> equal(sk1.declines - sk0.declines, 0l, "the step-knob note is policy, not a decline")
+            to_log(LOG_INFO, "whisper tiny cross-kv step-knob eyeball: '{sk_text}'\n")
+            t |> success(sk_text == cpu_text, "step knob off: the CPU decode transcript")
+            // the grouped-arm carrier: on an Apple box with a fresh manifest the natural backend
+            // is grp-mr, so the un-repack's GROUPED arm ran above (negative-controlled: it can go
+            // dead silently when this reads 1)
+            t |> success(active_q8_layout_mr() > 1l, "grp-mr backend active - the grouped blob arm was exercised")
+            delete samples
+        } else {
+            feint("das_metal is not built on this platform; the wdec gates need it\n")
         }
     }
 }
@@ -1506,6 +1682,8 @@ def test_qwen3a_metal_tower(tst : T?) {
             var nlayer = 0l
             var enc_delta = 0l
             var blk_delta = 0l
+            var conv_delta = 0l
+            var enc_rel_rms = 0.0
             with_job_que() {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
@@ -1528,11 +1706,35 @@ def test_qwen3a_metal_tower(tst : T?) {
                 let s1 = metal_tower_stats()
                 enc_delta = s1.encodes - s0.encodes
                 blk_delta = s1.blocks - s0.blocks
+                conv_delta = s1.convs - s0.convs
+                // window-0 encode pair, same f32 core, tower off/on: the element instrument
+                // that SEES the conv bias (transcripts do not - negative-controlled)
+                var inscope mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+                var inscope ecpu <- make_encoder_state(tw.core)
+                var inscope egpu <- make_encoder_state(tw.core)
+                var inscope c1 = Qwen3aConvState()
+                var inscope c2 = Qwen3aConvState()
+                set_metal_tower(false)
+                var inscope w1 <- qwen3a_mel_window(mel, 0l)
+                qwen3a_encode(tw, ecpu, c1, w1)
+                set_metal_tower(true)
+                var inscope w2 <- qwen3a_mel_window(mel, 0l)
+                qwen3a_encode(tw, egpu, c2, w2)
+                var sd = 0.0lf
+                var sa = 0.0lf
+                for (i in range64(long_length(ecpu.out))) {
+                    let df = ecpu.out[i] - egpu.out[i]
+                    sd += double(df * df)
+                    sa += double(ecpu.out[i] * ecpu.out[i])
+                }
+                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
                 set_qwen3a_q8(true)
                 delete dec
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            t |> success(conv_delta >= 1l, "the conv2d frontend served on the GPU ({conv_delta} convs)")
+            t |> success(enc_rel_rms < 1.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
             to_log(LOG_INFO, "qwen3a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "qwen3a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
@@ -1602,10 +1804,11 @@ def test_dlim_flavor_lanes(t : T?) {
         var current <- dlim_current_identities()
         var p = DlimPeek(valid = true, version = IMAGE_VERSION, identity = planar)
         t |> equal(dlim_image_verdict(p, current), "CURRENT", "own planar identity")
-        // the observed cross-context metal identity: blob bake selects portable + its own winners
-        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|metal"
+        // a cross-context GPU identity: winners impossible on any box (mr9/kq9), so it can never
+        // coincide with THIS process's own identity the way a realistic fixture once did
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|metal"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context metal image is FOREIGN, not OTHER")
-        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|{vk_tag}"
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|{vk_tag}"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context vulkan image is FOREIGN")
         // a family tag whose module is not loaded in the judging process: unrecomputable, so
         // FOREIGN — the 2026-08-02 board's step-zero GC reaped every whisper/parakeet image

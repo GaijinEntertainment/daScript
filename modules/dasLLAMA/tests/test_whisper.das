@@ -18,6 +18,8 @@ require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
 require dasllama/dasllama_env
+require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
+require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
@@ -268,6 +270,10 @@ def test_qwen3a_tower(t : T?) {
             return
         }
         // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
+        // and to the CPU conv chain — the documented ~1e-4 reorder bars are CPU claims
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)
+        }
         set_qwen3a_q8(false)
         var inscope tw <- load_qwen3a_tower(path)
         set_qwen3a_q8(true)
@@ -293,6 +299,9 @@ def test_qwen3a_tower(t : T?) {
         t |> success(abs(enc.out[1] + 0.015482) < 5e-3, "tok0[1]")
         t |> success(abs(enc.out[2] + 0.032934) < 5e-3, "tok0[2]")
         t |> success(abs(enc.out[3] - 0.023813) < 5e-3, "tok0[3]")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
     }
 }
 
@@ -492,6 +501,9 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_wdec(false)   // CPU-vs-CPU claim: the GPU cross-KV hook would silently flip the q8 arm
+        }
         var inscope m <- load_asr_model(model_path)     // the asr-surface default: q8 tower
         set_asr_fp32(true)
         var inscope mf <- load_asr_model(model_path)    // knob-pinned fp32 (the oracle route)
@@ -530,6 +542,68 @@ def test_whisper_q8_gate(t : T?) {
         // whole-model deletes: image-backed planes are locked views, only the finalizer may release them
         delete m
         delete mf
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_wdec(true)   // restore: later cells' GPU-serving claims see the default again
+        }
+    }
+}
+
+[test]
+def test_whisper_tower_fp32_knob(t : T?) {
+    t |> run("tiny mixed f32-enc/q8-dec (set_asr_tower_fp32, the GPU serving mode) stays token-identical on jfk") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        if (!model_available(t, model_path)) return
+        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        set_asr_tower_fp32(true)
+        var inscope mm <- load_asr_model(model_path)
+        set_asr_tower_fp32(false)
+        t |> success(!mm.whisper.enc.q8, "tower knob forces the fp32 encoder")
+        t |> success(mm.whisper.dq8, "tower knob leaves the decoder q8")
+        t |> equal(asr_exec_fmt(mm), "f32/q8", "exec fmt stamps the halves")
+        var inscope m <- load_asr_model(model_path)   // the q8/q8 default = the transcript truth
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope s <- create_session(m)
+            var inscope segs : array<TranscribeSegment>
+            transcribe(m, s, samples) $(seg) {
+                segs |> push_clone(seg)
+            }
+            var inscope sm <- create_session(mm)
+            var inscope msegs : array<TranscribeSegment>
+            transcribe(mm, sm, samples) $(seg) {
+                msegs |> push_clone(seg)
+            }
+            t |> equal(length(segs), length(msegs), "segment count")
+            t |> success(!empty(segs), "q8-default produced segments")
+            t |> success(!empty(msegs), "f32/q8 produced segments")
+            if (!empty(segs) && !empty(msegs)) {   // an empty run reds above instead of crashing here
+                to_log(LOG_INFO, "whisper-tiny q8-default jfk eyeball: '{segs[0].text}'\n")
+                to_log(LOG_INFO, "whisper-tiny f32/q8 jfk eyeball: '{msegs[0].text}'\n")
+            }
+            var mismatches = 0
+            var total = 0
+            for (a, b in segs, msegs) {
+                t |> equal(length(a.tokens), length(b.tokens), "token count per segment")
+                for (x, y in a.tokens, b.tokens) {
+                    total++
+                    if (x != y) {
+                        mismatches++
+                    }
+                }
+                t |> success(a.text == b.text, "q8-default/mixed text")
+            }
+            t |> success(mismatches == 0, "q8-default/mixed token-identical ({mismatches}/{total} flips)")
+        }
+        delete m
+        delete mm
     }
 }
 

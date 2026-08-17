@@ -14,6 +14,7 @@ require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcri
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
+require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_gemma4uv   // --image: the vision embedder + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -246,7 +247,7 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
 // One catalog model's timed buckets -> a BenchModel cell, appended to `jsonModels`. The gpu
 // arm (--ngl) rides the f32 tower rail; a row that never dispatches the tower (Conformer
 // families, or a regression) FAILS the leg.
-def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu : bool) : bool {
+def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu, accel : bool) : bool {
     let model_path = asr_model_path(spec)
     var m <- (empty(spec.das_mmproj)
         ? load_asr_model(model_path)
@@ -257,7 +258,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
     var leg_ok = true   // nolint:LINT003,LINT019 — falsified in the apple static_if half; the linux flavor sees it const
-    var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
+    var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu",   // accel is the FLAVOR, like the LLM rows
+        flavor = flavor_stamp(accel ? "accel" : "tuned"),
         exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
@@ -276,13 +278,22 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         var text = ""
         var enc_ms = 0.0lf
         var tw_enc0 = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
+        var wd_win0 = 0l   // nolint:LINT002,LINT019 — same
         static_if (typeinfo builtin_module_exists(das_metal)) {
             tw_enc0 = metal_tower_stats().encodes
+            wd_win0 = metal_wdec_stats().windows
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (gpu && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
+                leg_ok = false
+            }
+            // the decoder half's twin: every whisper window cross-KV-serves on the gpu leg, so
+            // a flat windows counter means the wdec driver never engaged (the tower check above
+            // cannot see it, and exec_fmt cannot either)
+            if (gpu && m.kind == AsrKind.whisper && metal_wdec_stats().windows == wd_win0) {
+                print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the wdec driver (windows delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
             }
         }
@@ -327,15 +338,35 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 // selects the gpu leg: the f32 tower rail on the Metal tower driver; decoders and Conformer
 // paths stay CPU (declared intent), and every measured row must show tower engagement or the
 // leg exits non-zero.
-def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : bool) : bool {
+def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
     allow_cpu_prefill()   // ASR decoders/Conformer paths are CPU by protocol — disarm the tripwire
+    if (accel && gpu) {
+        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
+        return false
+    }
+    if (accel) {
+        static_if (typeinfo builtin_module_exists(das_accelerate)) {
+            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
+        } else {
+            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
+            return false
+        }
+    }
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_asr_fp32(true)   // the tower serves the f32 rail; q8 towers decline (quant_mode)
+            set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
             set_metal_tower(true)
+            set_metal_wdec(true)        // explicit intent, like the CPU arm's pins: a stray
+            set_metal_wdec_step(true)   // DASLLAMA_METAL_WDEC=0 must not yield a CPU-decoder "metal" row
         } else {
             print("lcpp_bench --asr: --ngl needs a Metal build (no das_metal on this platform)\n")
             return false
+        }
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!gpu) {   // a CPU/accel row means CPU: the default-on drivers would silently GPU-serve
+            set_metal_wdec(false)   // the q8 whisper decode
+            set_metal_tower(false)  // the qwen3a-family conv2d (f32 planes serve even under q8 towers)
         }
     }
     apply_box_profile_runtime()
@@ -356,7 +387,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu : 
                 continue
             }
             found = true
-            if (!asr_measure_spec(spec, reps, threads, jsonModels, gpu)) {
+            if (!asr_measure_spec(spec, reps, threads, jsonModels, gpu, accel)) {
                 all_ok = false
             }
         }
@@ -1194,7 +1225,7 @@ def main() : int {
     let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu) ? 0 : 1
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel) ? 0 : 1
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {

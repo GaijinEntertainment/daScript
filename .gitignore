@@ -184,3 +184,4 @@ ZEN2.md
 web/_serve/
 web/build_pt/_deps/freetype_src-build/include/freetype/config/ftoption.h
 utils/watchdog/__pycache__/watchdog.cpython-313.pyc
+modules/dasLLAMA/benchmarks/modules/.daspkg.log

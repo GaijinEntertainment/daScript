@@ -657,6 +657,49 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
     }
 }
 
+// Interleave one PREPARED Q8 region (split planes, f32 scales, possibly grp<mr>-repacked) into
+// the Metal 34B-block stream (f16 scale + 32 quants per block, row-major) — the whisper-decoder
+// upload's per-region step; the region is ONE repack unit (rows/mr groups + a row-major tail).
+def q8_region_to_metal_blob(qp : int8 const?; sp : float const?; n, rows : int64;
+                            repacked : bool; mr, kgroup, wbias : int64; var dst : uint8?) {
+    let nb = n / Q8_BLOCK_ELEMS
+    assert(wbias == 0l || wbias == 128l, "q8_region_to_metal_blob: unknown q8 plane bias")
+    let ng = repacked ? rows / mr : 0l
+    let njobs = is_job_que_available() ? min(int(rows), 4 * (get_total_hw_jobs() + 1)) : 1
+    maybe_parallel_for(0, int(rows), njobs) $(rb, re) {
+        unsafe {
+            for (rr in range64(int64(rb), int64(re))) {
+                let grouped = repacked && rr < ng * mr
+                let g = rr / mr
+                let r = rr % mr
+                for (bi in range64(nb)) {
+                    var blk = dst + (rr * nb + bi) * 34l
+                    let si = grouped ? (g * nb + bi) * mr + r : rr * nb + bi
+                    *reinterpret<uint16?>(blk) = uint16(f32_to_f16(clamp(sp[si], -65504.0, 65504.0)))
+                    if (grouped) {
+                        let gbase = g * mr * n + r * kgroup
+                        var kg = (bi * 32l) / kgroup
+                        var o = 2l
+                        for (_kk in range64(32l / kgroup)) {
+                            let src = gbase + kg * kgroup * mr
+                            for (j in range64(kgroup)) {
+                                blk[o + j] = uint8(int(qp[src + j]) ^ int(wbias))
+                            }
+                            kg++
+                            o += kgroup
+                        }
+                    } else {
+                        let src = rr * n + bi * 32l
+                        for (j in range64(32l)) {
+                            blk[2l + j] = uint8(qp[src + j])
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.

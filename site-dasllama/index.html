@@ -65,8 +65,17 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-08-10-dasllama-io-is-live" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-10</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-08-17-metal-asr" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-17</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Metal support lands in speech-to-text — whisper large-v3-turbo at 49x realtime on an M1 Max.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Speech-to-text now serves on Metal: whisper's cross-attention and decoder run on the GPU
+by default on Apple silicon, and the full-GPU mode powers the new gpu category on the
+board. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in 4.0 s — 49x
+realtime, against 36x for whisper.cpp's Metal path and 12x for our CPU lane. The
+<a href="https://daslang.io/dasllama.html">board</a> now splits ASR into the same cpu / cpu + accel /
+gpu categories the LLM board has.</p></div>
+</article>
+<article class="dio-item" id="n-2026-08-10-dasllama-io-is-live" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-10</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama.io is live — news, the full ladder, and the sidecar exchange.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>Everything measured now lives here, community submissions included.
 <a href="https://daslang.io/dasllama.html">daslang.io/dasllama.html</a> stays the promotional
 scoreboard and carries official measurements only.</p></div>

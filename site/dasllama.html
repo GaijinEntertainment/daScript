@@ -351,7 +351,7 @@ def main() {
         <div class="forge-container">
             <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>speech-to-text</span></div>
             <h2 class="forge-h2">Transcription, clip by clip.</h2>
-            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side.</p>
+            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. Greedy decode everywhere, and the same categories the LLM board has: <em>cpu</em> pairs the reference's CPU mode, <em>cpu&nbsp;+&nbsp;accel</em> adds the box's accelerated math path (the macOS <code>*-cli</code> tools get Apple's AMX either way), and <em>gpu</em> pairs the reference's own GPU mode &mdash; whisper.cpp on Metal against the das Metal drivers.</p>
 
             <div class="dl-filters" id="asr-filters"></div>
             <div class="dl-viewbar">

@@ -3581,6 +3581,15 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
     g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
+    g_pso_cross_kx = compile_pso(metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, ok)
+    g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
+    g_pso_cross_vx_h = compile_pso(metal_cross_vx_h_msl, metal_cross_vx_h_msl_entry, metal_cross_vx_h_msl_fastmath, ok)
+    g_pso_im2col3 = compile_pso(metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, ok)
+    g_pso_im2col2d = compile_pso(metal_im2col2d_msl, metal_im2col2d_msl_entry, metal_im2col2d_msl_fastmath, ok)
+    g_pso_wdec_attn_part = compile_pso(metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, ok)
+    g_pso_wdec_attn_comb = compile_pso(metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, ok)
+    g_pso_bias_add_res = compile_pso(metal_bias_add_res_msl, metal_bias_add_res_msl_entry, metal_bias_add_res_msl_fastmath, ok)
+    g_pso_bias_gelu_lut = compile_pso(metal_bias_gelu_lut_msl, metal_bias_gelu_lut_msl_entry, metal_bias_gelu_lut_msl_fastmath, ok)
     g_pso_softcap = compile_pso(metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, ok)
     g_pso_suppress = compile_pso(metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, ok)
     g_pso_attn16 = compile_pso(MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, ok)
@@ -4254,6 +4263,15 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
+    release_pso(g_pso_cross_kx)
+    release_pso(g_pso_cross_vx)
+    release_pso(g_pso_cross_vx_h)
+    release_pso(g_pso_im2col3)
+    release_pso(g_pso_im2col2d)
+    release_pso(g_pso_wdec_attn_part)
+    release_pso(g_pso_wdec_attn_comb)
+    release_pso(g_pso_bias_add_res)
+    release_pso(g_pso_bias_gelu_lut)
     if (g_pso_f32mm != null) {
         metal_release(g_pso_f32mm)
         g_pso_f32mm = null
@@ -4705,6 +4723,375 @@ class MetalPosAdd2D {
         x[gid] = (x[gid] + ex) + ey
     }
 }
+
+// The whisper cross-KV memory shuffles: one thread per OUTPUT element. Kx transposes the ck GEMM
+// rows [ta x d] into the decoder's head-major [hh][hs][ta], pre-scaled hs^-0.25 (whisper.cpp
+// order — attention then applies no K scale); Vx re-tiles to [hh][ta][hs], no scale.
+[metal_dispatch(name = "enc_cross_kx", pso = "g_pso_cross_kx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCrossKx {
+    @ssbo @binding = 0 @role = "read" src : array<float>              // [ta x d] ck GEMM rows
+    @ssbo @binding = 1 @role = "write" @off = "kxoff" kx : array<float>   // [hh][hs][ta] pre-scaled
+    @uniform @binding = 2 dim : uint
+    @uniform @binding = 3 hs : uint
+    @uniform @binding = 4 ta : uint
+    @uniform @binding = 5 kscale : float
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_cross_kx_msl")]
+    def metal_cross_kx {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let hsta = hs * ta
+        let h = gid / hsta
+        let rem = gid % hsta
+        let j = rem / ta
+        let t = rem % ta
+        kx[gid] = src[t * dim + h * hs + j] * kscale
+    }
+}
+
+// Vx doubles as the decode step's KV APPEND: `ta` is the row EXTENT being written, `t0` the
+// destination position, `tstride` the per-head t capacity ([hh][tstride][hs] layout); `soff`
+// picks a source column block (the fused-QKV row), `hasb` folds a per-column bias on the way.
+[metal_dispatch(name = "enc_cross_vx", pso = "g_pso_cross_vx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCrossVx {
+    @ssbo @binding = 0 @role = "read" @off = "soff" src : array<float>    // [ta x d] source rows
+    @ssbo @binding = 1 @role = "write" @off = "vxoff" vx : array<float>   // [hh][tstride][hs]
+    @ssbo @binding = 2 @role = "weight" @off = "boff" bias : array<float> // [d] (read only when hasb)
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 hs : uint
+    @uniform @binding = 5 ta : uint
+    @uniform @binding = 6 t0 : uint
+    @uniform @binding = 7 tstride : uint
+    @uniform @binding = 8 hasb : uint
+    @uniform @binding = 9 total : uint
+
+    [metal_kernel(name="metal_cross_vx_msl")]
+    def metal_cross_vx {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let tahs = ta * hs
+        let h = gid / tahs
+        let rem = gid % tahs
+        let t = rem / hs
+        let j = rem % hs
+        var v = src[t * dim + h * hs + j]
+        if (hasb != 0u) {
+            v += bias[h * hs + j]
+        }
+        vx[h * tstride * hs + (t0 + t) * hs + j] = v
+    }
+}
+
+// The f16 store twin: the decoder's RESIDENT K/V memory is float16 (format parity with
+// whisper.cpp's KV — half the attention read bytes); the f32 form above keeps the CPU-layout
+// readbacks. Same index math, converted store.
+[metal_dispatch(name = "enc_cross_vx_h", pso = "g_pso_cross_vx_h", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCrossVxH {
+    @ssbo @binding = 0 @role = "read" @off = "soff" src : array<float>
+    @ssbo @binding = 1 @role = "write" @off = "vxoff" vx : array<float16>   // [hh][tstride][hs] f16
+    @ssbo @binding = 2 @role = "weight" @off = "boff" bias : array<float>
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 hs : uint
+    @uniform @binding = 5 ta : uint
+    @uniform @binding = 6 t0 : uint
+    @uniform @binding = 7 tstride : uint
+    @uniform @binding = 8 hasb : uint
+    @uniform @binding = 9 total : uint
+
+    [metal_kernel(name="metal_cross_vx_h_msl")]
+    def metal_cross_vx_h {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let tahs = ta * hs
+        let h = gid / tahs
+        let rem = gid % tahs
+        let t = rem / hs
+        let j = rem % hs
+        var v = src[t * dim + h * hs + j]
+        if (hasb != 0u) {
+            v += bias[h * hs + j]
+        }
+        vx[h * tstride * hs + (t0 + t) * hs + j] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
+    }
+}
+
+// The chunked twin pair: Part computes one 256-t chunk's online-softmax partial per
+// (head, row, chunk) — local max m, exp-sum s, unnormalized weighted-V y — Comb merges the
+// chunks by log-sum-exp. 6-8x the threadgroups of the single-pass form on a 1500-t cross.
+[metal_dispatch(name = "enc_wdec_attn_part", pso = "g_pso_wdec_attn_part", tgmem = "metal_wdec_attn_part_msl_tgmem", tg = 128, grid = "heads, nrows, nch", params = "heads : int64, nrows : int64, nch : int64")]
+class MetalWdecAttnPart {
+    @ssbo @binding = 0 @role = "read" q : array<float>                    // [n x dim] (unscaled, pre-bias)
+    @ssbo @binding = 1 @role = "read" @off = "koff" kk : array<float16>   // [hh][tstride][hs]
+    @ssbo @binding = 2 @role = "read" @off = "voff" vv : array<float16>   // [hh][tstride][hs]
+    @ssbo @binding = 3 @role = "write" pms : array<float>                 // [nch][hh][n][2] (m, s)
+    @ssbo @binding = 4 @role = "write" py : array<float>                  // [nch][hh][n][hs]
+    @ssbo @binding = 5 @role = "weight" @off = "qboff" qb : array<float>  // [dim] q bias, folded at load
+    @uniform @binding = 6 dim : uint
+    @uniform @binding = 7 hs : uint
+    @uniform @binding = 8 tstride : uint
+    @uniform @binding = 9 len0 : uint
+    @uniform @binding = 10 causal : uint
+    @uniform @binding = 11 scale : float
+    @uniform @binding = 12 nheads : uint
+    @uniform @binding = 13 nrows_u : uint
+    @workgroup scores : float[256]
+    @workgroup partial : float[32]
+    @workgroup red_sh : float
+
+    [metal_kernel(name="metal_wdec_attn_part_msl")]
+    def metal_wdec_attn_part {   // nolint:STYLE038 — the phases are barrier-coupled, the kernel body is the shape
+        let h = gl_WorkGroupID.x
+        let r = gl_WorkGroupID.y
+        let c = gl_WorkGroupID.z
+        let lid = gl_LocalInvocationID.x
+        let len = causal != 0u ? len0 + r : len0
+        let tb = c * 256u
+        let te = min(tb + 256u, len)
+        let slot = (c * nheads + h) * nrows_u + r
+        let qbase = r * dim + h * hs
+        let kbase = h * tstride * hs
+        var t = tb + lid
+        while (t < te) {
+            var s = 0.0
+            var j = 0u
+            while (j < hs) {
+                s += (q[qbase + j] + qb[h * hs + j]) * float(kk[kbase + t * hs + j])
+                s += (q[qbase + j + 1u] + qb[h * hs + j + 1u]) * float(kk[kbase + t * hs + j + 1u])
+                s += (q[qbase + j + 2u] + qb[h * hs + j + 2u]) * float(kk[kbase + t * hs + j + 2u])
+                s += (q[qbase + j + 3u] + qb[h * hs + j + 3u]) * float(kk[kbase + t * hs + j + 3u])
+                j += 4u
+            }
+            scores[t - tb] = s * scale
+            t += gl_WorkGroupSize.x
+        }
+        barrier()
+        let nloc = te > tb ? te - tb : 0u
+        var mx = -3.0e38
+        t = lid
+        while (t < nloc) {
+            mx = max(mx, scores[t])
+            t += gl_WorkGroupSize.x
+        }
+        var bm = 16u
+        while (bm >= 1u) {
+            mx = max(mx, simd_shuffle_xor(mx, bm))
+            bm /= 2u
+        }
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = mx
+        }
+        barrier()
+        if (lid == 0u) {
+            var tm = -3.0e38
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tm = max(tm, partial[sgi])
+                sgi++
+            }
+            red_sh = tm
+        }
+        barrier()
+        let m = red_sh
+        var ss = 0.0
+        t = lid
+        while (t < nloc) {
+            let e = exp(scores[t] - m)
+            scores[t] = e
+            ss += e
+            t += gl_WorkGroupSize.x
+        }
+        ss = simd_sum(ss)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            pms[slot * 2u] = nloc > 0u ? m : -3.0e38
+            pms[slot * 2u + 1u] = tot
+        }
+        barrier()
+        var j = lid
+        while (j < hs) {
+            var acc = 0.0
+            var tt = 0u
+            while (tt < nloc) {
+                acc += scores[tt] * float(vv[kbase + (tb + tt) * hs + j])
+                tt++
+            }
+            py[slot * hs + j] = acc
+            j += gl_WorkGroupSize.x
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_wdec_attn_comb", pso = "g_pso_wdec_attn_comb", tg = 64, grid = "heads, nrows", params = "heads : int64, nrows : int64")]
+class MetalWdecAttnComb {
+    @ssbo @binding = 0 @role = "read" pms : array<float>    // [nch][hh][n][2]
+    @ssbo @binding = 1 @role = "read" py : array<float>     // [nch][hh][n][hs]
+    @ssbo @binding = 2 @role = "write" y : array<float>     // [n x dim]
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 hs : uint
+    @uniform @binding = 5 nch : uint
+    @uniform @binding = 6 nheads : uint
+    @uniform @binding = 7 nrows_u : uint
+
+    [metal_kernel(name="metal_wdec_attn_comb_msl")]
+    def metal_wdec_attn_comb {
+        let h = gl_WorkGroupID.x
+        let r = gl_WorkGroupID.y
+        let lid = gl_LocalInvocationID.x
+        var mg = -3.0e38
+        var c = 0u
+        while (c < nch) {
+            mg = max(mg, pms[((c * nheads + h) * nrows_u + r) * 2u])
+            c++
+        }
+        var tot = 0.0
+        c = 0u
+        while (c < nch) {
+            let slot = (c * nheads + h) * nrows_u + r
+            tot += pms[slot * 2u + 1u] * exp(pms[slot * 2u] - mg)
+            c++
+        }
+        let inv = 1.0 / tot
+        var j = lid
+        while (j < hs) {
+            var acc = 0.0
+            c = 0u
+            while (c < nch) {
+                let slot = (c * nheads + h) * nrows_u + r
+                acc += py[slot * hs + j] * exp(pms[slot * 2u] - mg)
+                c++
+            }
+            y[r * dim + h * hs + j] = acc * inv
+            j += gl_WorkGroupSize.x
+        }
+    }
+}
+
+// The whisper conv-frontend im2col (k=3, "same" pad): output row i is 3 x nch columns in
+// (dk, c) order — the loader's weight permute. `chmajor` picks the source layout: conv1 reads
+// the channel-major mel ([c][t]), conv2 the row-major y1 ([t][c]); `stride` is 1 or 2.
+[metal_dispatch(name = "enc_im2col3", pso = "g_pso_im2col3", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalIm2col3 {
+    @ssbo @binding = 0 @role = "read" src : array<float>
+    @ssbo @binding = 1 @role = "write" col : array<float>   // [rows x 3*nch]
+    @uniform @binding = 2 nch : uint
+    @uniform @binding = 3 srclen : uint     // source positions (the pad guard)
+    @uniform @binding = 4 stride : uint
+    @uniform @binding = 5 chmajor : uint
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_im2col3_msl")]
+    def metal_im2col3 {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let w3 = 3u * nch
+        let i = gid / w3
+        let rem = gid % w3
+        let dk = rem / nch
+        let c = rem % nch
+        let sp = int(i * stride + dk) - 1
+        var v = 0.0
+        if (sp >= 0 && sp < int(srclen)) {
+            v = chmajor != 0u ? src[c * srclen + uint(sp)] : src[uint(sp) * nch + c]
+        }
+        col[gid] = v
+    }
+}
+
+// The qwen3a conv2d im2col (k=3, s=2, p=1, one [iw x ih] block, `sstride` floats per source
+// pixel): output row (oy*ow+ox) carries `kd` columns — cin*9 real ones in (ic, kh, kw) order
+// (conv2d_s2's walk) then zero pad, so the tile GEMM's kdim%32 holds at any cin.
+[metal_dispatch(name = "enc_im2col2d", pso = "g_pso_im2col2d", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalIm2col2d {
+    @ssbo @binding = 0 @role = "read" @off = "soff" src : array<float>   // [ih x iw x sstride], c fastest
+    @ssbo @binding = 1 @role = "write" col : array<float>                // [oh*ow x kd]
+    @uniform @binding = 2 iw : uint
+    @uniform @binding = 3 ih : uint
+    @uniform @binding = 4 cin : uint
+    @uniform @binding = 5 ow : uint
+    @uniform @binding = 6 kd : uint
+    @uniform @binding = 7 sstride : uint
+    @uniform @binding = 8 total : uint
+
+    [metal_kernel(name="metal_im2col2d_msl")]
+    def metal_im2col2d {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / kd
+        let k = gid % kd
+        var v = 0.0
+        if (k < cin * 9u) {
+            let ic = k / 9u
+            let kh = (k % 9u) / 3u
+            let kw = k % 3u
+            let oy = r / ow
+            let ox = r % ow
+            let iy = int(oy * 2u + kh) - 1
+            let ix = int(ox * 2u + kw) - 1
+            if (iy >= 0 && iy < int(ih) && ix >= 0 && ix < int(iw)) {
+                v = src[(uint(iy) * iw + uint(ix)) * sstride + ic]
+            }
+        }
+        col[gid] = v
+    }
+}
+
+// bias + residual add in one pass: x[i] += y[i] + b[i % dim]
+[metal_dispatch(name = "enc_bias_add_res", pso = "g_pso_bias_add_res", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalBiasAddRes {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "read" y : array<float>
+    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 total : uint
+
+    [metal_kernel(name="metal_bias_add_res_msl")]
+    def metal_bias_add_res {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        x[gid] += y[gid] + b[gid % dim]
+    }
+}
+
+// bias + the LUT-form GELU in one pass (the form-matched flavor — never substitute forms)
+[metal_dispatch(name = "enc_bias_gelu_lut", pso = "g_pso_bias_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalBiasGeluLut {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>
+    @uniform @binding = 2 dim : uint
+    @uniform @binding = 3 total : uint
+
+    [metal_kernel(name="metal_bias_gelu_lut_msl")]
+    def metal_bias_gelu_lut {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        x[gid] = msl_gelu_lut_form(x[gid] + b[gid % dim])
+    }
+}
+
 
 // The shared 32x64 GEMM tile stage: every mul_mm-family kernel (dense, MoE, attention, KV-quant)
 // stages A into ta (4 k-tiles x 8 row-tiles of 8x8) and B into tb (4 k-tiles x 4 token-tiles),
