@@ -84,10 +84,11 @@ policy override, or threshold recalibration. Where one changes what a run measur
 emits, a printed line names it by env spelling; set-but-inert stays silent, per-site repeats are
 fine. Adding one, or giving one a new effect, without the announce is a defect.
 
-**No new record-grade timing harness is written.** Model-level time is measured by the rigs
-`PROFILE.md` documents — `performance/gen_profile.das` and `performance/gen_bench_records.das` —
-both spawning `benchmarks/lcpp_bench.das`. A tutorial's printed wall-clock is teaching output,
-feeding no board.
+**Record-grade model timing — a self-measured time entering `performance/records/<box>.json`
+or `PERF_LEDGER.md` — comes only from the rigs `PROFILE.md` documents:
+`performance/gen_profile.das` and `performance/gen_bench_records.das`, both spawning
+`benchmarks/lcpp_bench.das`.** Any other producer, new or edited, is a defect. A tutorial's
+printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own

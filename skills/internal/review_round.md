@@ -58,6 +58,10 @@ Spawn in ONE message, all read-only, model `opus`:
   dimension surfacers might miss."
 - **One `review-md-auditor` instance per discovered REVIEW.md** (the agent fans in,
   the orchestrator fans out — each instance owns exactly one checklist).
+- **One `tdd-auditor` instance** over the whole diff, REVIEW.md folders or not
+  (`skills/tdd_audit.md`): every new or changed reachable branch has a test that fails
+  without it, negative controls where reading cannot settle a branch, and the cheat check
+  over the diff's own test edits.
 - **The `style-hygiene-auditor`** over the diff's new code (rulebook:
   `skills/comment_style_hygiene.md`; one instance, or one per file cluster on a large
   diff). Its findings are never blocking — they enter the report as `suggestion` at
@@ -99,7 +103,8 @@ Auditor findings ride through differently: **VIOLATED** verdicts take gate 2 (fr
 cited lines against the quoted rule); **UNPROVEN** verdicts bypass the gates — they are
 requests for evidence (a suite run, a platform check, a stated claim), not hypotheses, and
 reach the report as their own section; **SELF-REVIEW** findings pass through as checklist
-defects.
+defects. The tdd-auditor's **UNTESTED**, **RETUNED** and **WEAKENED** verdicts pass through
+as coverage defects, not hypotheses — they reach the report as their own section.
 
 ## Phase 4 — report, then fix
 
@@ -111,8 +116,9 @@ is visible. Zero confirmed findings is a reportable result — say what was chec
 Fix policy is the repo's standing one, not this skill's: findings are DISCUSSED before fixing
 (fix-vs-workaround is the user's call), accepted fixes land as ONE batch per round, and any
 finding that reveals a lint-able pattern is named as a lint candidate in the summary.
-Checklist self-review findings are accepted through the damper in `skills/review_md.md` —
-verdict-blockers, diff-added-rule defects, and serious latents only; good enough, not clean.
+Checklist self-review findings go through the acceptance damper in `skills/review_md.md` —
+that section alone decides which enter the batch and how each is disposed; its standard is
+good enough, not clean.
 
 ## Mechanics
 

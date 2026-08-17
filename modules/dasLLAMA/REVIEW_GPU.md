@@ -7,11 +7,12 @@ too. Architecture doc: `ARCHITECTURE.md`.
 **A claim about a shape constant is checked against the emitted shader, not the das source.**
 Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is literal there.
 
-**Kernel twins — same-body single/batch or format variants of one kernel — bind the same
-kargs (kernel-argument struct) type at the same binding numbers**, even where one twin
-ignores a field; shifting the other twin's fields to different slots is a defect.
+**Kernel twins — kernel classes whose bodies differ on one stamp axis — bind the same kargs
+(kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
+field; shifting the other twin's fields to different slots is a defect.
 
-**Kernel twins share a template.** Two kernel classes whose bodies differ on one stamp axis are twins, whatever the axis (single/batch, format, single-pass/chunked); they stamp one
+**Kernel twins share a template.** Two kernel classes whose bodies differ on one stamp axis
+are twins, whatever the axis (single/batch, format, single-pass/chunked); they stamp one
 `class template`: body divergence rides a stamp axis (`@template_constant`, or an overridden
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
 copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
@@ -72,11 +73,12 @@ is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that w
 **A change to `dasllama_metal_decode.das`, `dasllama_metal_prefill.das`,
 `dasllama_gpu_resident.das`, `dasllama_vulkan_decode.das`, or `dasllama_vulkan_prefill.das`
 ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one kq model, with `--kv`
-matching the armed mirror codec; a change to `dasllama_metal_asr_dec.das` ships the
-image-suite `mtower` arm run (its CPU-vs-GPU transcript cells are that driver's parity
-instrument).** The Metal arm is `--ngl`; the vulkan arm is
+matching the armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is
 `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines codec-mismatched sessions silently,
 so that log must show `resident driver armed`.
+
+**A change to `dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
+`mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.
 
 **A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs is stamped
 from a `[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16

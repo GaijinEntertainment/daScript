@@ -80,7 +80,7 @@ qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter d
 the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
 Conformer-absence (parakeet) cells; the arm's DECODER half is `test_whisper_metal_cross_kv` —
 GPU cross-KV on the q8 serving default, transcript-exact against the CPU chain with
-window/step counter deltas and the decline, required-mode, step-floor and shutdown-re-arm
+window/step counter deltas and the knob and quant_mode declines, required-mode, step-floor and shutdown-re-arm
 contract; the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
@@ -132,8 +132,8 @@ voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter 
 Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` — suite-less, model-gated: the whisper/parakeet/canary/gemma4a/omni oracle
 cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` — the mixed f32-enc/q8-dec
-serving mode and its `asr_exec_fmt` stamp), and the q8-gate CPU-vs-CPU claims (those pin
-`set_metal_wdec(false)`). Runs under plain dastest.
+serving mode and its `asr_exec_fmt` stamp), and the q8-gate CPU-vs-CPU claims (CPU-claim
+cells, wdec knob pinned OFF per the fixtures section). Runs under plain dastest.
 `test_asr_verbs.das` — model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, parakeet's SPM detokenizer over a toy vocab, and
 the `fetch_models.das` provenance-manifest invariants.
@@ -183,7 +183,7 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 (mint, map, GC, flavors) lives in the image suites alone (`test_model_image`,
 `test_model_image_vulkan`).
 
-## Blob-only Metal fixtures (the two-model pattern)
+## Metal fixtures — driver knobs and the two-model pattern
 
 **A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
 that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after.** The

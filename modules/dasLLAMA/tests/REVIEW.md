@@ -66,13 +66,13 @@ log, not only as an id or float difference.
 for cross-dispatch bit-identity no CPU oracle can witness, and then its output buffers are
 prefilled with a sentinel.
 
-**A kernel-unit arm whose output plane is its input plane pairs its compare with an assert
-that the output differs from the input at a known index, unless the CPU oracle it compares
-against differs from the input by construction** — an in-place kernel that never ran leaves
-the input, which can wrongly satisfy a tolerant compare.
+**A kernel-unit arm whose output plane is its input plane, and whose CPU oracle does not
+differ from the input by construction, pairs its compare with an assert that the output
+differs from the input at a known index** — an in-place kernel that never ran leaves the
+input, which can wrongly satisfy a tolerant compare.
 
 **Every ASR family has a token-for-token oracle cell** — one comparing a transcript against a
-reference leg, external dump or CPU control alike (the logging rule above covers its text).
+reference leg, external dump or CPU control alike.
 
 **A real model file, mmproj, or image fixture a test in this folder loads has its
 `../performance/fetch_models.das` entry**, or a convert script checked in beside that

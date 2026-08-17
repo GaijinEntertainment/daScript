@@ -65,8 +65,8 @@ citation.
 A checklist is applied under time pressure by someone holding a diff. Every audit round
 judges the file against that reader — not only each rule in isolation (the self-review
 rule), but whether the file as a whole can still be applied in one pass. These are the
-finding classes; each is reported like any other finding, and its fix lands in the same
-batch:
+finding classes; each is reported like any other finding, and the damper below decides
+which of them the round edits:
 
 - **Dense multi-clause rule** — one paragraph carrying several independent checks, so the
   reviewer must re-read it to know what to verify. Split it: one rule, one check.
@@ -75,24 +75,24 @@ batch:
 - **Mechanism prose exceeding the rule** — more words on how the code works than on what to
   check. The mechanism moves to `<ARCH-DOC>`; the rule keeps its one sentence of WHY.
 - **Structurally homeless rule** — a rule whose trigger is a change *outside* this folder.
-  Step 0a discovers a checklist only through changed files under its own directory, so a
-  diff elsewhere can never surface the rule — it will never fire. Move it to the checklist
+  Checklist discovery walks the parent directories of the changed files, so a diff
+  elsewhere can never surface the rule — it will never fire. Move it to the checklist
   of the narrowest folder containing its trigger (creating that subfolder's `REVIEW.md` is
   never an objection), or to the skill/CLAUDE.md that governs that code.
 - **Overlapping rules** — two entries whose criteria make the reviewer check the same thing
   twice. Merge into the sharper one.
 
 Size is a symptom, not a criterion: a file where every rule survives these classes is as
-long as its module needs. But "a reviewer reports they can no longer follow the file" is
-itself a finding, and its fix is applying the classes above — never a table of contents.
-
+long as its module needs. But a reviewer who cannot apply the file to the diff in front of
+them has a verdict-blocking finding — cited like any other; its fix is applying the classes
+above, never a table of contents.
 
 ## Accepting self-review findings — the damper
 
 The standard for rule text is GOOD ENOUGH, not clean: text, like code, can be exercised for
 correctness endlessly, so stop when nothing serious remains — the marginal edit costs a
-dragon round and buys polish, not verdicts. A round accepts a self-review finding into its
-edits only when it is one of:
+dragon round and buys polish, not verdicts. A round opens a checklist for edit only when it
+holds a finding of one of these classes:
 
 1. **Verdict-blocking on this diff** — the defect prevented or flipped a verdict while
    auditing the change under review; the auditor cites the code site where rule application
@@ -109,9 +109,10 @@ that matters returns as class 1 with a citation. Disposition: FIX NOW when the r
 forced (one reasonable edit — staleness is the canonical case); ASK the user when the
 repair is a semantic choice (which side of a contradiction wins, a rule deleted because a
 test enforces it, a scope reassignment). Auditors tag each self-review finding
-`blocking | stale | contradiction | structural | formatting` so the disposition is
-mechanical. One checklist-edit batch per round, one dragon pass over the batch; a FRESH
-dragon then re-reads cold, and nothing-serious-remains is the exit.
+`blocking | stale | contradiction | structural | formatting`; the tag locates the defect,
+and the forced-vs-semantic test on its REPAIR decides the disposition. One checklist-edit batch per round, one dragon pass over the batch; a FRESH
+dragon then re-reads cold. Serious findings it returns open one more batch on the same
+terms; the round exits when a fresh cold read returns none.
 
 ## Reviewing a REVIEW.md diff
 

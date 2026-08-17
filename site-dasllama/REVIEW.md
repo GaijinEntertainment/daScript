@@ -14,10 +14,11 @@ standard as shell commands: no pseudo-code presented as code.
 measurement record; anything else is a placeholder and carries an HTML comment naming it as
 one.** A placeholder that could be mistaken for a fact is a defect.
 
-**No performance comparisons on index.html — a claim that ranks engines ("beats",
-"N× faster than") is a defect, the generated news region included.** A measured figure
-copied from a checked-in record is fine, another engine's figure beside ours included;
-comparisons are daslang.io/dasllama.html's job.
+**No engine ranking on index.html — a claim in words that one engine beats another
+("beats", "N× faster than", "fastest") is a defect, the generated news region included.**
+Figures copied from a checked-in record stand side by side, ours and another engine's; the
+arithmetic a reader does is not the page's claim, and ranking in words is
+daslang.io/dasllama.html's job.
 
 **An empty ratio cell always reads "not raced".** Copy or rendering that lets a das-only row
 imply parity with a reference is a defect.

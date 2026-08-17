@@ -10,16 +10,24 @@ A tune-sidecar emission change lives in the dasLLVM tune rail and answers to
 tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require
 added to it, is a defect.
 
-**A change to the fields `write_bench_records` (`profile_common.das`) writes keeps
-`modules/dasLLAMA/tests/test_exchange_schema.das` AND
-`modules/dasLLAMA/tests/test_bench_records_schema.das` green in the same change.**
+**A field added to what `write_bench_records` (`profile_common.das`) writes is added to
+`exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
+it does not know, so an unvalidated field ships silently.
+
+**Weakening `modules/dasLLAMA/tests/test_exchange_schema.das` or
+`modules/dasLLAMA/tests/test_bench_records_schema.das` — both round-trip the real
+`write_bench_records` output — is a defect.**
 
 **`exchange_client.das` is the single exchange client — every HTTP call to the sidecar exchange
 (lookup, download, submit) goes through it.** A second HTTP path is a defect.
 
-**Weakening the exchange download gate or the submission strip
-(`utils/dasllama-server/test_exchange_client.das` enforces both) is a defect** — and a
-submission path around `exchange_strip_private` is one even where the strip itself is intact.
+**Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
+submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
+from going back up is a defect** — `utils/dasllama-server/test_exchange_client.das` enforces
+all three.
+
+**Every submission goes through `exchange_strip_private`.** A submission path around it is a
+defect even where the strip itself is intact.
 
 **A lookup failure never kills a boot.** A boot path that fails when the exchange lookup
 fails is a defect.

@@ -1,10 +1,10 @@
 # dasLLAMA audio and ASR rules
 
-**Routed from `REVIEW.md`: a diff touching `dasllama_asr.das`, `dasllama_audio.das`, or a
-family file (`dasllama_whisper.das`, `dasllama_qwen3a.das`, `dasllama_parakeet.das`,
-`dasllama_canary.das`, `dasllama_gemma4a.das`) applies this list with the master's; a GPU ASR
-file applies `REVIEW_GPU.md` too.** `REVIEW_COMMON.md` (repo root) binds this
-file too.
+**Routed from `REVIEW.md`: a diff touching `dasllama_asr.das`, `dasllama_asr_types.das`,
+`dasllama_audio.das`, `dasllama_audio_io.das`, `dasllama_vad.das`, or an ASR family file —
+one `dasllama_<family>.das` holding a single speech model family — applies this list with
+the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
+`ARCHITECTURE.md`.
 
 **A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade
 only at the union field, the finalize line, the `AsrKind` value, and the one-line arms; a
@@ -15,7 +15,7 @@ dot-product loop beside them is a defect.
 
 **Every mel frontend and every encoder entry point in `dasllama_audio.das` and the family
 files lints at zero.** Reused buffers take `@scratch`, debug and profiling legs
-`[cold_path]`; a nolint where either fits is a defect (region coverage is the master's rule).
+`[cold_path]`; a nolint where either fits is a defect.
 
 **A mel frontend builds on the FFT-plan machinery in `dasllama_audio.das`.** A hand-rolled DFT
 in a family file is a defect.
