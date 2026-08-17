@@ -18,6 +18,7 @@ require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
 require dasllama/dasllama_env
+require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
@@ -491,6 +492,9 @@ def test_whisper_q8_gate(t : T?) {
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_wdec(false)   // CPU-vs-CPU claim: the GPU cross-KV hook would silently flip the q8 arm
         }
         var inscope m <- load_asr_model(model_path)     // the asr-surface default: q8 tower
         set_asr_fp32(true)

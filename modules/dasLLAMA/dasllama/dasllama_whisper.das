@@ -1031,11 +1031,27 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
     return <- ds
 }
 
+//! GPU override for the per-window cross-attention memory: fills ``ds.kx``/``ds.vx`` (the CPU
+//! layouts, pre-scaled K) and returns true, or declines with false — the CPU chain below is
+//! always the correct fallback.
+typedef WhisperCrossKvGpuFn = function<(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool>
+var private g_wh_cross_kv_gpu : WhisperCrossKvGpuFn
+var private g_wh_cross_kv_gpu_set = false
+
+def register_whisper_cross_kv_gpu(fn : WhisperCrossKvGpuFn) {
+    g_wh_cross_kv_gpu = fn
+    g_wh_cross_kv_gpu_set = true
+}
+
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
 [hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
+    if (g_wh_cross_kv_gpu_set && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
+        ds.n_past = 0l
+        return
+    }
     let d = w.n_text_state
     let hh = w.n_text_head
     let hs = d / hh

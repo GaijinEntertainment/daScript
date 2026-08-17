@@ -790,6 +790,125 @@ def private pos_add_gate(t : T?; dev, queue; npos, dim, ncols, pos_entries : int
     delete want
 }
 
+// The whisper cross-KV shuffles — pure scatter (+ one multiply for kx), bit-EXACT vs the CPU
+// walk. The offset leg writes the SECOND layer slot and proves the first stays untouched.
+// Negative controls recorded 2026-08-16: dropped kscale in the kx oracle and swapped t/j in
+// the vx oracle each redded with dumps (the kx mismatch ratio was exactly kscale).
+def private cross_kx_gate(t : T?; dev, queue; ta, dim, hh : int; off_layer : bool) {
+    let tag = "cross_kx ta={ta} dim={dim} hh={hh} off={off_layer}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hs = dim / hh
+    let total = ta * dim
+    let kscale = 1.0 / sqrt(sqrt(float(hs)))
+    var src : array<float>
+    src |> resize(total)
+    for (i in range(total)) {
+        src[i] = 0.25 * float(i % 97) - 3.0
+    }
+    let sentinel = -777.0
+    var want : array<float>
+    want |> resize(2 * total)
+    for (i in range(2 * total)) {
+        want[i] = sentinel
+    }
+    let base = off_layer ? total : 0
+    for (h in range(hh)) {
+        for (j in range(hs)) {
+            for (tt in range(ta)) {
+                want[base + (h * hs + j) * ta + tt] = src[tt * dim + h * hs + j] * kscale
+            }
+        }
+    }
+    var bsrc = buf_upload(dev, src)
+    var bkx = buf_fill(dev, 2 * total, sentinel)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhs = buf_u32(dev, uint(hs))
+    var bta = buf_u32(dev, uint(ta))
+    var bks = buf_f32(dev, kscale)
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsrc, 0ul, 0)
+        metal_set_buffer(enc, bkx, uint64(base * 4), 1)
+        metal_set_buffer(enc, bdim, 0ul, 2)
+        metal_set_buffer(enc, bhs, 0ul, 3)
+        metal_set_buffer(enc, bta, 0ul, 4)
+        metal_set_buffer(enc, bks, 0ul, 5)
+        metal_set_buffer(enc, btot, 0ul, 6)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bkx, want, tag), 0)
+    }
+    metal_release(bsrc)
+    metal_release(bkx)
+    metal_release(bdim)
+    metal_release(bhs)
+    metal_release(bta)
+    metal_release(bks)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
+def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int) {
+    let tag = "cross_vx ta={ta} dim={dim} hh={hh}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hs = dim / hh
+    let total = ta * dim
+    var src : array<float>
+    src |> resize(total)
+    for (i in range(total)) {
+        src[i] = 0.5 * float(i % 89) - 11.0
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (h in range(hh)) {
+        for (tt in range(ta)) {
+            for (j in range(hs)) {
+                want[h * ta * hs + tt * hs + j] = src[tt * dim + h * hs + j]
+            }
+        }
+    }
+    var bsrc = buf_upload(dev, src)
+    var bvx = buf_fill(dev, total, -555.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhs = buf_u32(dev, uint(hs))
+    var bta = buf_u32(dev, uint(ta))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsrc, 0ul, 0)
+        metal_set_buffer(enc, bvx, 0ul, 1)
+        metal_set_buffer(enc, bdim, 0ul, 2)
+        metal_set_buffer(enc, bhs, 0ul, 3)
+        metal_set_buffer(enc, bta, 0ul, 4)
+        metal_set_buffer(enc, btot, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bvx, want, tag), 0)
+    }
+    metal_release(bsrc)
+    metal_release(bvx)
+    metal_release(bdim)
+    metal_release(bhs)
+    metal_release(bta)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
 def private suppress_row_gate(t : T?; dev, queue; total, nids : int) {
     let tag = "suppress_row total={total} nids={nids}"
     var err : string
@@ -965,6 +1084,10 @@ def test_metal_misc_kernels(t : T?) {
                 rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
+                cross_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
+                cross_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
+                cross_vx_gate(t, dev, queue, 96, 128, 2)
+                cross_vx_gate(t, dev, queue, 12, 16, 2)           // ceil grid guard
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard

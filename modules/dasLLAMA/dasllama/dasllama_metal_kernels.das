@@ -3581,6 +3581,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
     g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
+    g_pso_cross_kx = compile_pso(metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, ok)
+    g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
     g_pso_softcap = compile_pso(metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, ok)
     g_pso_suppress = compile_pso(metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, ok)
     g_pso_attn16 = compile_pso(MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, ok)
@@ -4254,6 +4256,8 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
+    release_pso(g_pso_cross_kx)
+    release_pso(g_pso_cross_vx)
     if (g_pso_f32mm != null) {
         metal_release(g_pso_f32mm)
         g_pso_f32mm = null
@@ -4703,6 +4707,58 @@ class MetalPosAdd2D {
         let ex = tbl[(p % ncols) * dim + i]
         let ey = tbl[(pos_entries + p / ncols) * dim + i]
         x[gid] = (x[gid] + ex) + ey
+    }
+}
+
+// The whisper cross-KV memory shuffles: one thread per OUTPUT element. Kx transposes the ck GEMM
+// rows [ta x d] into the decoder's head-major [hh][hs][ta], pre-scaled hs^-0.25 (whisper.cpp
+// order — attention then applies no K scale); Vx re-tiles to [hh][ta][hs], no scale.
+[metal_dispatch(name = "enc_cross_kx", pso = "g_pso_cross_kx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCrossKx {
+    @ssbo @binding = 0 @role = "read" src : array<float>              // [ta x d] ck GEMM rows
+    @ssbo @binding = 1 @role = "write" @off = "kxoff" kx : array<float>   // [hh][hs][ta] pre-scaled
+    @uniform @binding = 2 dim : uint
+    @uniform @binding = 3 hs : uint
+    @uniform @binding = 4 ta : uint
+    @uniform @binding = 5 kscale : float
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_cross_kx_msl")]
+    def metal_cross_kx {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let hsta = hs * ta
+        let h = gid / hsta
+        let rem = gid % hsta
+        let j = rem / ta
+        let t = rem % ta
+        kx[gid] = src[t * dim + h * hs + j] * kscale
+    }
+}
+
+[metal_dispatch(name = "enc_cross_vx", pso = "g_pso_cross_vx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCrossVx {
+    @ssbo @binding = 0 @role = "read" src : array<float>              // [ta x d] cv GEMM rows (bias added)
+    @ssbo @binding = 1 @role = "write" @off = "vxoff" vx : array<float>   // [hh][ta][hs]
+    @uniform @binding = 2 dim : uint
+    @uniform @binding = 3 hs : uint
+    @uniform @binding = 4 ta : uint
+    @uniform @binding = 5 total : uint
+
+    [metal_kernel(name="metal_cross_vx_msl")]
+    def metal_cross_vx {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let tahs = ta * hs
+        let h = gid / tahs
+        let rem = gid % tahs
+        let t = rem / hs
+        let j = rem % hs
+        vx[gid] = src[t * dim + h * hs + j]
     }
 }
 

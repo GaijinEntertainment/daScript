@@ -500,6 +500,37 @@ green: the knob cell (test_whisper — mixed vs q8-default token-identical on jf
 dq planes element-exact streamed-vs-staged, enc.fblob full-layout exact, facade .dlim tag
 route).
 
+## Slice N record — cross-KV on the GPU DONE 2026-08-16
+
+`dasllama_metal_asr_dec.das` (new module; umbrella `?das_metal`, .das_module registered):
+the whisper cross-KV per-window computation on the tower contract — per layer the ck/cv q8
+GEMMs over encoder rows through `enc_gemm_mm_b`, then two NEW shuffle kernels
+(`MetalCrossKx` transpose+prescale, `MetalCrossVx` re-tile; PSOs in the registry pair,
+bit-exact unit gates in the kernels suite with NEGATIVE CONTROLS recorded — the poisoned kx
+oracle's mismatch ratio was exactly kscale). The decoder's dq planes upload ONCE through
+`q8_region_to_metal_blob` (dasllama_layout: un-repacks the CPU backend's grp<mr> interleave
++ interleaves to the 34B blob, so the TUNED q8 GEMM/GEMV families serve every decoder-side
+matmul — slice O rides the same attach). Knob `DASLLAMA_METAL_WDEC` + `set_metal_wdec` +
+`MetalWdecDecline` (q8-NATIVE: the f32 oracle rail declines quant_mode); counters in
+metal_common (windows + declines-by-reason).
+
+**Measured (probe, gb1, turbo, debug-grade): cross_kv 191 → 63 ms (f32-CPU paid 1600) —
+P11 HELD; the mixed serve bucket sum lands at 5.86 s ≈ whisper-cli's 5.80 before slice O.**
+
+FINDING F2 — the alignment trap the gates caught: whisper tiny's ODD vocab (51865) leaves
+`dqlayers_off` only 128-byte-aligned, so binding at CPU element offsets fails the 16B rule;
+the first driver declined `shape` on tiny and the mtower window-delta assert caught it while
+transcript equality stayed vacuously green (both legs CPU). Fix: the attach lays regions out
+at DRIVER-CHOSEN 16B-aligned destinations (`g_wd_boffs`) — the GPU blob owns its layout, CPU
+element offsets stay CPU-only. Gates green after: mtower 28/0 (the new
+`test_whisper_metal_cross_kv`: transcript equality GPU-vs-CPU cross-KV, window deltas,
+knob/quant_mode declines, required-mode both classes, shutdown re-arm), test_whisper 35/0
+(wdec pins on the CPU-claim cells — the hook-flip audit), kernels suite 2/0. The cov_tower
+census chunk went MIXED (f32 enc + q8 dec) so one transcribe covers both drivers.
+Hook-flip pins landed: q8_gate + tower_fp32_knob (test_whisper), the tower cell
+(test_model_image — its required-mode policy leg transcribes an f32 decoder, which wdec
+would panic).
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`

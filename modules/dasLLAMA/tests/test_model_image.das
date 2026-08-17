@@ -17,6 +17,7 @@ require dasllama/dasllama_config     // DlimConfiguration — the peek/round-tri
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_tower_stats — the gemma4uv-metal arm
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
+require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
@@ -853,6 +854,10 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> skip("jfk.wav not present")
                 return
             }
+            // this cell is about the TOWER: pin the decoder-side driver off, or its f32-decoder
+            // quant_mode decline panics the required-mode policy leg (test_whisper_metal_cross_kv
+            // owns the wdec coverage)
+            set_metal_wdec(false)
             set_metal_tower(false)
             let s0 = metal_tower_stats()
             let cpu = whisper_transcribe_text(path, samples, cached = false)
@@ -942,6 +947,110 @@ def test_whisper_metal_tower(tst : T?) {
             let rearm = whisper_transcribe_text(path, samples, cached = false)
             t |> equal(metal_tower_stats().encodes - sr0.encodes, 1l, "post-shutdown encode re-arms and serves")
             t |> success(rearm.text == cpu.text, "post-shutdown transcript unchanged")
+            set_metal_wdec(true)
+            delete samples
+        }
+    }
+}
+
+def private wdec_transcribe(w : WhisperModel; samples : array<float>) : string {
+    var text = ""
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s <- create_session(w)
+        transcribe(w, s, samples) $(seg) {
+            text += seg.text
+        }
+        delete s
+    }
+    return text
+}
+
+// The whisper ASR-decoder driver (arm `mtower`, decoder half): GPU cross-KV on the q8 serving
+// default — transcript equality vs the CPU chain, window-counter deltas, the knob/quant_mode
+// decline classes, required-mode contract, and the shutdown re-arm.
+[test]
+def test_whisper_metal_cross_kv(tst : T?) {
+    tst |> run("whisper tiny q8: GPU cross-KV - transcript + counters + knob + declines") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            var inscope w8 = WhisperModel()
+            var inscope stg8 <- stage_whisper_model(path, true)
+            mint_whisper_model(stg8, w8)
+            // GPU leg: the q8 serving default's cross-KV lands on the driver, one window per clip
+            set_metal_wdec(true)
+            let s0 = metal_wdec_stats()
+            let gpu_text = wdec_transcribe(w8, samples)
+            let s1 = metal_wdec_stats()
+            t |> equal(s1.windows - s0.windows, 1l, "jfk is one cross-KV window")
+            // OFF leg: knob decline counted, CPU serves, transcript identical
+            set_metal_wdec(false)
+            let cpu_text = wdec_transcribe(w8, samples)
+            let s2 = metal_wdec_stats()
+            set_metal_wdec(true)
+            t |> equal(s2.windows, s1.windows, "OFF leg never serves")
+            t |> equal(s2.declines - s1.declines, 1l, "OFF leg records the knob decline")
+            t |> success(key_exists(metal_wdec_declines(), "knob"), "the decline reason is knob")
+            to_log(LOG_INFO, "whisper tiny cross-kv CPU eyeball: '{cpu_text}'\n")
+            to_log(LOG_INFO, "whisper tiny cross-kv GPU eyeball: '{gpu_text}'\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            t |> success(cpu_text == gpu_text, "transcript-exact CPU vs GPU cross-KV")
+            // the f32 ORACLE RAIL declines (quant_mode) — the driver is q8-native
+            var inscope wf = WhisperModel()
+            var inscope stgf <- stage_whisper_model(path)
+            mint_whisper_model(stgf, wf)
+            let sf0 = metal_wdec_stats()
+            let f32_text = wdec_transcribe(wf, samples)
+            let sf1 = metal_wdec_stats()
+            t |> equal(sf1.windows, sf0.windows, "f32 decoder never serves")
+            t |> success(sf1.declines - sf0.declines >= 1l, "f32 decoder records a decline")
+            t |> success(key_exists(metal_wdec_declines(), "quant_mode"), "the decline reason is quant_mode")
+            t |> success(!empty(f32_text), "f32 oracle rail still transcribes (CPU serves)")
+            // required-mode contract: the capability decline panics, the knob decline never does
+            set_metal_mode(MetalMode.required)
+            var tripped = false
+            try {
+                with_job_que() {
+                    setup_dasllama_jobque()
+                    var s9 <- create_session(wf)
+                    transcribe(wf, s9, samples) $(seg) {
+                        pass
+                    }
+                    delete s9
+                }
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "required mode: the f32-decoder decline panics")
+            // the POLICY leg rides the F32 model: its tower SERVES under required, so the only
+            // decline is wdec's knob — policy, never escalated (the q8 model would panic here
+            // on the TOWER's capability decline instead)
+            set_metal_wdec(false)
+            let sp0 = metal_wdec_stats()
+            let pol_text = wdec_transcribe(wf, samples)
+            set_metal_wdec(true)
+            set_metal_mode(MetalMode.when_available)
+            t |> success(!empty(pol_text), "required mode + knob off: the policy decline serves CPU, no panic")
+            t |> equal(metal_wdec_stats().declines - sp0.declines, 1l, "the knob decline is counted, not escalated")
+            // re-arm after the shutdown seat: the weight blob re-uploads on the next window
+            metal_wdec_shutdown()
+            let sr0 = metal_wdec_stats()
+            let rearm_text = wdec_transcribe(w8, samples)
+            t |> equal(metal_wdec_stats().windows - sr0.windows, 1l, "post-shutdown window re-arms and serves")
+            t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
             delete samples
         }
     }

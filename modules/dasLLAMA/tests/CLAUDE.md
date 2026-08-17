@@ -77,8 +77,11 @@ driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (
 gemma4uv` selects it too — arm filters match by substring); `mtower` is the whisper-class
 tower-blocks gate, Apple builds only — whisper tiny + large-v3-turbo transcript-exact and
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
-the q8-decline (the serving default never dispatches), required-mode panic, and
-Conformer-absence (parakeet) cells; the voxtral arm re-saves a
+the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
+Conformer-absence (parakeet) cells; the arm also carries the DECODER half's gate
+(test_whisper_metal_cross_kv — GPU cross-KV on the q8 serving default: transcript equality,
+window counters, knob/quant_mode declines, required-mode, shutdown re-arm; the tower cell pins
+`set_metal_wdec(false)` because its required-mode policy leg transcribes an f32 decoder); the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a

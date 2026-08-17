@@ -58,6 +58,18 @@ enum MetalTowerDecline {
     gpu_error           // dispatch failed at execution time
 }
 
+// The whisper ASR-decoder driver's decline set (cross-KV now, the decode step as it lands) —
+// same contract as the tower enum: FIRST failing clause, .none = supported, names asserted
+// as strings by the decoder gates. The driver is Q8-NATIVE: an f32-forced decoder declines.
+enum MetalWdecDecline {
+    none                // supported — the decoder-side work runs on the GPU
+    knob                // DASLLAMA_METAL_WDEC=0 — the A/B rail
+    quant_mode          // an f32-loaded decoder: the q8 lane only (f32 is the CPU oracle rail)
+    shape               // a dim violating the GEMM grids or a misaligned plane offset
+    device              // metal init failed (no device / PSO build failure)
+    gpu_error           // dispatch failed at execution time
+}
+
 // why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's
 // twin; the support-matrix test asserts these names as strings)
 enum MetalPrefillDecline {

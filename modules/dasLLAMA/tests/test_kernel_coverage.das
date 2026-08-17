@@ -15,6 +15,7 @@ require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
+require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -173,17 +174,19 @@ def private census_zoo(t : T?) {
 }
 
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
-// borrowed trio) go non-zero — a whisper tiny f32 chunk plus a small gemma4uv canvas
+// borrowed trio) AND the decoder-side cross-KV kernels go non-zero — a whisper tiny MIXED
+// chunk (f32 enc = the tower LUT flavor, q8 dec = the wdec driver) plus a small gemma4uv canvas
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(true)
+        set_metal_wdec(true)
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
         var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
             var inscope w = WhisperModel()
-            var inscope stg <- stage_whisper_model(wpath)
-            mint_whisper_model(stg, w)
+            var inscope stg <- stage_whisper_model(wpath, false, true)
+            mint_whisper_model(stg, w, false, true)
             with_job_que() {
                 setup_dasllama_jobque()
                 var ws <- create_session(w)
