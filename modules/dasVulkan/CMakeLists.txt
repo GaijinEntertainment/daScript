@@ -11,6 +11,18 @@ IF(NOT COMMAND ADD_MODULE_CPP)
     project(dasVulkan CXX C)
 ENDIF()
 
+# 64-bit pointers only: the generated binding models non-dispatchable handles as
+# VkDeviceMemory_T*-style pointer types, which Vulkan defines ONLY when
+# sizeof(void*) == 8 (32-bit targets get bare uint64_t handles and no *_T tags).
+# That covers wasm (SIZE_OF_VOID_P=4) and win32 in one gate.
+IF(EMSCRIPTEN OR (CMAKE_SIZEOF_VOID_P LESS 8))
+    IF(NOT DAS_VULKAN_INCLUDED)
+        MESSAGE(STATUS "dasVulkan module skipped (needs 64-bit pointers; wasm/win32 excluded).")
+    ENDIF()
+    SET(DAS_VULKAN_INCLUDED TRUE)
+    SET(DAS_VULKAN_DISABLED TRUE)
+ENDIF()
+
 IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED DAS_VULKAN_DISABLED)))
     SET(DAS_VULKAN_INCLUDED TRUE)
     MESSAGE(STATUS "dasVulkan module included.")

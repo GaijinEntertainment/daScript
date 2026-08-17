@@ -4,6 +4,7 @@ options indenting = 4
 
 require daslib/clargs
 require daslib/fio
+require daslib/module_path
 require vk_model
 require vk_emit
 require vk_emit_boost
@@ -134,7 +135,9 @@ def main() : int {
         print_help(get_command_info(type<Config>), "generate")
         return 0
     }
-    let xml_path = empty(cfg.xml) ? "vendor/Vulkan-Headers/registry/vk.xml" : cfg.xml
+    // default resolves against the module, not the cwd — the in-tree CI runs from the repo root
+    let module_root = dir_name(get_this_module_dir())
+    let xml_path = empty(cfg.xml) ? path_join(module_root, "vendor/Vulkan-Headers/registry/vk.xml") : cfg.xml
     let reg <- parse_vk_xml(xml_path)
     dump_stats(reg)
     if (cfg.stats) {
