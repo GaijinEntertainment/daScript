@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Mirror the CI lint gate locally: every committed .das must lint clean before a push.
+#
+# Install once (from the repo root):
+#     git config core.hooksPath utils/git-hooks
+#
+# Requires two env vars (a full dev daslang build, so window/ + recording/ also lint):
+#     DASLANG       path to your daslang binary  (e.g. /path/to/daScript/bin/Release/daslang.exe)
+#     DASLANG_ROOT  path to your daslang checkout (the dir holding utils/lint/main.das)
+#
+# Claude PowerShell sessions do not inherit these -- set them inline when pushing from one.
+set -euo pipefail
+
+: "${DASLANG:?pre-push: set DASLANG to your daslang binary}"
+: "${DASLANG_ROOT:?pre-push: set DASLANG_ROOT to your daslang checkout root}"
+
+REPO="$(git rev-parse --show-toplevel)"
+echo "pre-push: linting $REPO (paranoid + perf + style) ..."
+"$DASLANG" -load_module "$REPO" "$DASLANG_ROOT/utils/lint/main.das" -- "$REPO" -q -j 0
+echo "pre-push: lint clean."

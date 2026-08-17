@@ -1,0 +1,4 @@
+# normalize line endings — text files are LF in the repo
+* text=auto eol=lf
+*.png binary
+*.xml text eol=lf
