@@ -790,7 +790,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
 // the families the metal das leg serves end to end (tower + decoder); the Conformer and
 // GGUF-tower rows would trip the --ngl anti-sandbag (their towers keep the CPU by design)
-def private asr_metal_leg(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
+def private is_metal_served_family(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
 
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
                          var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
@@ -1201,7 +1201,7 @@ def main : int {
                 asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "accel")
             }
             static_if (typeinfo builtin_module_exists(das_metal)) {
-                if (asr_metal_leg(spec)) {   // GPU-served families only: the anti-sandbag would refuse the rest
+                if (is_metal_served_family(spec)) {   // GPU-served families only: the anti-sandbag would refuse the rest
                     settle_das(cfg)
                     asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "metal")
                 }
@@ -1213,7 +1213,7 @@ def main : int {
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
-                    if (rf.tool == "whisper-cli" && asr_metal_leg(spec)) {   // the metal das row's like-for-like pair
+                    if (rf.tool == "whisper-cli" && is_metal_served_family(spec)) {   // the metal das row's like-for-like pair
                         settle(cfg)
                         asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
                     }

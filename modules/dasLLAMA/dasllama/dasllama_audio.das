@@ -1653,7 +1653,6 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     trace_tag(TRACE_TAG_ENC_CONV)
     if (g_tw_conv_gpu_set && empty(g_audio_ref_dir) && invoke(g_tw_conv_gpu, t, s, mel)) {
         asr_prof_add("enc.conv", tc)
-        diff_stage("after_conv_pos", s.x, tt * d)
         encoder_blocks(t, s, tt)
         return
     }

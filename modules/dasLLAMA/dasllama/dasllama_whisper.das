@@ -446,7 +446,7 @@ def private wt_read_conv_permuted(recs : table<string; WTensorRec>; b : array<ui
     }
 }
 
-// the baked-image family tag for an (enc, dec) quant pair; enc-q8/dec-f32 has no serving mode
+// the baked-image family tag for an (enc, dec) quant pair
 def private whisper_tag(enc_q8, dec_q8 : bool) : string {
     if (enc_q8 && !dec_q8) {
         panic("dasLLAMA whisper: enc-q8/dec-f32 is not a served combination")

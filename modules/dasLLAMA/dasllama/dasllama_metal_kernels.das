@@ -5055,7 +5055,7 @@ class MetalIm2col2d {
     }
 }
 
-// bias + residual add in one pass: x[i] += y[i] + b[i % dim] — the projection tails' pair killer
+// bias + residual add in one pass: x[i] += y[i] + b[i % dim]
 [metal_dispatch(name = "enc_bias_add_res", pso = "g_pso_bias_add_res", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalBiasAddRes {
     @ssbo @binding = 0 @role = "readwrite" x : array<float>

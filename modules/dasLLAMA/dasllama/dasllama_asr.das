@@ -73,7 +73,7 @@ struct AsrSession {
 
 // exact-fp32 knob for oracle rails: flip BEFORE load_asr_model to skip the Q8 fast path
 var private g_asr_force_fp32 = false
-var private g_asr_tower_fp32 = false
+var private g_asr_tower_fp32 = false   // the TOWER half only — the GPU-tower serving mode
 // LLM-decoder ASR sessions' KV dtype. f16 is the DEFAULT (matches llama.cpp's KV — format-to-
 // format comparisons; zen2 gb1 -3%, transcripts near-tie-sane); f32 is the oracle/parity rail
 // (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)

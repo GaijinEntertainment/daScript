@@ -544,10 +544,10 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     // conv frontend per chunk -> rows of s.x; the GPU hook serves every chunk's three conv
     // stages in one pass, the shuffle/conv_out/pos tail stays CPU either way
     var tstage = ref_time_ticks()
-    let gpu_convs = g_q3a_conv_gpu_set && invoke(g_q3a_conv_gpu, t, win, n_chunks, cs.y3all)
+    let conv_served_on_gpu = g_q3a_conv_gpu_set && invoke(g_q3a_conv_gpu, t, win, n_chunks, cs.y3all)
     cs.xin |> resize(QWEN3A_CHUNK * nm)
     for (ci in range64(n_chunks)) {
-        if (!gpu_convs) {
+        if (!conv_served_on_gpu) {
             // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
             for (ih in range64(nm)) {
                 for (iw in range64(QWEN3A_CHUNK)) {
@@ -558,7 +558,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
             conv2d_s2(cs.y2, cs.col, cs.y1, t.cblob, t.c2_w_off, t.c2_b_off, 50l, 64l, nch, nch)           // 25×32
             conv2d_s2(cs.y3, cs.col, cs.y2, t.cblob, t.c3_w_off, t.c3_b_off, 25l, 32l, nch, nch)           // 13×16
         }
-        let y3base = gpu_convs ? ci * 16l * QWEN3A_TOK_PER_CHUNK * nch : 0l
+        let y3base = conv_served_on_gpu ? ci * 16l * QWEN3A_TOK_PER_CHUNK * nch : 0l
         // features per output frame ow: v[h + 16·c] = y3[oh=h][ow][c]
         let feat = 16l * nch
         cs.feat |> resize(QWEN3A_TOK_PER_CHUNK * feat)
@@ -566,7 +566,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
             for (h in range64(16l)) {
                 for (ch in range64(nch)) {
                     let y3i = (h * QWEN3A_TOK_PER_CHUNK + ow) * nch + ch
-                    cs.feat[ow * feat + h + 16l * ch] = gpu_convs ? cs.y3all[y3base + y3i] : cs.y3[y3i]
+                    cs.feat[ow * feat + h + 16l * ch] = conv_served_on_gpu ? cs.y3all[y3base + y3i] : cs.y3[y3i]
                 }
             }
         }

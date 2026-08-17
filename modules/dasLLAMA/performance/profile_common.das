@@ -1190,17 +1190,18 @@ def asr_catalog() : array<AsrModelSpec> {
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
-        // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
-        // tokens against the 8192 decoder window — a single-window architectural limit
-        // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
-        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells, and
-        // the family's GPU conv2d frontend serves the q8 default, so the row shows it directly
+        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; its
+        // GPU serve (the conv2d frontend) stands on the stage probe, not these rows — the
+        // metal leg is whisper-only and the cpu/accel rows pin the drivers off
         AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-ASR-0.6B-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- corpus_buckets(), libri_short = "", lang = "auto"),
+        // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
+        // tokens against the 8192 decoder window — a single-window architectural limit
+        // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
             // mtmd's CPU Conformer encode runs near xRT 1 — same per-rep budget cap as omni's

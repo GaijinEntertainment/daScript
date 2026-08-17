@@ -16,10 +16,11 @@ require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_prefill   // metal_prefill_pso_init — the borrowed-builder bring-up seat
 
-// The whisper ASR-decoder Metal driver, Q8-NATIVE: cross-KV now, the decode step as it lands.
-// Declines by returning false; the CPU chain is always the correct fallback. The decoder's dq
-// planes upload ONCE through the 34B-blob transform (un-repacking the CPU backend's layout),
-// so the tuned q8 GEMM/GEMV families serve every decoder-side matmul.
+// The whisper ASR-decoder Metal driver, Q8-NATIVE: cross-KV and the decode step (above the
+// serving floor). Declines by returning false at window claim; mid-window the GPU owns the
+// KV, so failures panic. The dq planes upload ONCE through the 34B-blob transform
+// (un-repacking the CPU backend's layout) — the tuned q8 GEMM/GEMV families serve every
+// decoder-side matmul.
 
 var private g_wd_failed = false
 var private g_wd_pool : MetalBufferPool
@@ -46,8 +47,8 @@ var private g_wd_bvxr : MetalBuffer?   // cross V resident [nl][hh][ta][hs] (als
 var private g_wd_bkc : MetalBuffer?    // self K cache [nl][hh][tmax][hs]
 var private g_wd_bvc : MetalBuffer?    // self V cache [nl][hh][tmax][hs]
 var private g_wd_sx : MetalBuffer?     // [WD_ROW_CAP x d] residual stream
-var private g_wd_sxb : MetalBuffer?
-var private g_wd_sxb2 : MetalBuffer?
+var private g_wd_sxb : MetalBuffer?    // [WD_ROW_CAP x d] norm/projection staging
+var private g_wd_sxb2 : MetalBuffer?   // [WD_ROW_CAP x d] attention output
 var private g_wd_sq : MetalBuffer?
 var private g_wd_sk : MetalBuffer?
 var private g_wd_sv : MetalBuffer?
@@ -115,8 +116,6 @@ def private wd_decline(why : MetalWdecDecline) : bool {
     return false
 }
 
-//! Release the driver's GPU objects (the weight blob + the scratch pool) — the tests' leak-gate
-//! rail and the model-switch seat; lazily re-attaches on the next served window.
 def private wd_release_one(var b : MetalBuffer?&) {
     if (b != null) {
         metal_release(b)
@@ -146,6 +145,8 @@ def private wd_release_all {
     g_wd_window_live = false
 }
 
+//! Release the driver's GPU objects (the weight blob + the scratch pool) — the tests'
+//! leak-gate rail and the model-switch seat; lazily re-attaches on the next served window.
 def metal_wdec_shutdown {
     wd_release_all()
     pool_drain(g_wd_pool)
@@ -250,7 +251,7 @@ def private wdec_attach(w : WhisperModel) : bool {
 
 // The per-window cross-KV memory on the GPU: per layer the ck/cv q8 GEMMs over the encoder
 // rows, then the kx transpose-prescale and vx re-tile shuffles; one command buffer, readback
-// into the CPU-layout ds.kx/ds.vx (the CPU decoder consumes them until the step driver lands).
+// into the CPU-layout ds.kx/ds.vx (the CPU chain reads them whenever the step declines).
 [hot_path]
 def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     g_wd_window_live = false   // whatever happens below, the previous window is over
