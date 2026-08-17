@@ -2008,7 +2008,7 @@ def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var p
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     var vkptr_ppBuildRangeInfos : array<void?>
     vk_views2_create(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
-    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR??>(array_addr(vkptr_ppBuildRangeInfos))))
+    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos))))
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     vk_views2_destroy(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
@@ -2023,7 +2023,7 @@ def build_acceleration_structures_k_h_r(device : Device; deferredOperation : Def
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     var vkptr_ppBuildRangeInfos : array<void?>
     vk_views2_create(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
-    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR??>(array_addr(vkptr_ppBuildRangeInfos)))), result)
+    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos)))), result)
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     vk_views2_destroy(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)

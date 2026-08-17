@@ -47,9 +47,9 @@ def public say(frame : int; caption, voice : string) {
 //! For each registered say() line, render a wav via Kokoro TTS (skipped if the wav exists on disk
 //! already, so re-runs are cheap) and measure the duration. Wavs land in <apng_dir>/voiceover/.
 def public prepare_voiceover(apng_path : string;
-                              base_url : string = "http://127.0.0.1:8880/v1";
-                              voice_id : string = "bf_emma";
-                              model : string = "kokoro") : bool {
+                             base_url : string = "http://127.0.0.1:8880/v1";
+                             voice_id : string = "bf_emma";
+                             model : string = "kokoro") : bool {
     let vo_dir = path_join(dir_name(apng_path), "voiceover")
     mkdir_rec(vo_dir)
     let client = openai_client(base_url, "")
@@ -100,8 +100,8 @@ def private esc_drawtext(s : string) : string {
 //! index), each caption painted via ffmpeg drawtext over (line.frame/fps .. + line.dur_s + 0.4s).
 //! `font_file` is an ffmpeg-escaped TTF path (the default is Windows-only). prepare_voiceover() first.
 def public convert_to_mp4_voiced(apng_path, music_feature, daslang_exe, out_mp4 : string;
-                                  dur_s : float; fps, bed_db, fade_ms : int;
-                                  font_file : string = "C\\:/Windows/Fonts/arial.ttf") : bool {
+                                 dur_s : float; fps, bed_db, fade_ms : int;
+                                 font_file : string = "C\\:/Windows/Fonts/arial.ttf") : bool {
     let music_wav = path_join(dir_name(apng_path), "{stem(apng_path)}_bed.wav")
     if (!stat(music_wav).is_valid) {
         let margs <- [daslang_exe, music_feature, "--", "--wav", music_wav, "--duration", "{dur_s}"]

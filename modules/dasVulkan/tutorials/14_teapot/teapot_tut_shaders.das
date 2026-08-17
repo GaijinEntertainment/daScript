@@ -261,7 +261,7 @@ def private pcf_shadow(uv : float2; ref : float) : float {
 // same color pass as the mesh-shader teapot. It reads `ubo.vp` (no model — the quad is already in
 // world space), reflects the SAME env the teapot does, and receives its shadow via sampler2DShadow.
 
-var @in  @location = 0 fl_pos   : float3
+var @in @location = 0 fl_pos   : float3
 var @out @location = 0 fl_world : float3
 
 [vulkan_vertex_shader(name="floor_vert_spv")]
@@ -270,7 +270,7 @@ def floor_vs {
     gl_Position = ubo.vp * float4(fl_pos, 1.0)
 }
 
-var @in  @location = 0 ff_world : float3
+var @in @location = 0 ff_world : float3
 var @out @location = 0 floor_color : float4
 
 [vulkan_fragment_shader(name="floor_frag_spv")]
@@ -319,8 +319,8 @@ def floor_fs {
 // the teapot + floor reflect — a scene, not a void. The host uploads the three corner view-rays from
 // the camera basis as a per-vertex attribute; the fragment normalizes it and evaluates env_color.
 
-var @in  @location = 0 sky_clip : float2
-var @in  @location = 1 sky_ray  : float3
+var @in @location = 0 sky_clip : float2
+var @in @location = 1 sky_ray  : float3
 var @out @location = 0 sky_v_ray : float3
 
 [vulkan_vertex_shader(name="sky_vert_spv")]
@@ -329,7 +329,7 @@ def sky_vs {
     gl_Position = float4(sky_clip.x, sky_clip.y, 1.0, 1.0)   // z = w = 1 -> far plane
 }
 
-var @in  @location = 0 sky_f_ray : float3
+var @in @location = 0 sky_f_ray : float3
 var @out @location = 0 sky_color : float4
 
 [vulkan_fragment_shader(name="sky_frag_spv")]

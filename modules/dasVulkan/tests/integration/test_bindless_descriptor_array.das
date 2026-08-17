@@ -38,7 +38,7 @@ def bindless_arr_vert {
     let i = gl_VertexIndex
     var xy = float2(0.0f, 0.0f)
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
-    if (i == 1) { xy = float2( 3.0f, -1.0f) }
+    if (i == 1) { xy = float2(3.0f, -1.0f) }
     if (i == 2) { xy = float2(-1.0f,  3.0f) }
     v_ba_uv = xy * 0.5f + float2(0.5f, 0.5f)
     gl_Position = float4(xy, 0.0f, 1.0f)
@@ -82,7 +82,7 @@ def private finalize(var t : Tex) {
 }
 
 def private create_1x1_texture(device : Device; phys : VkPhysicalDevice; queue : VkQueue;
-                                 cmd_pool : CommandPool; fmt : VkFormat; var texel : array<uint8>) : Tex {
+                               cmd_pool : CommandPool; fmt : VkFormat; var texel : array<uint8>) : Tex {
     let dev = boost_value_to_vk(device)
     var staging_usage : VkBufferUsageFlags
     staging_usage.transfer_src = true

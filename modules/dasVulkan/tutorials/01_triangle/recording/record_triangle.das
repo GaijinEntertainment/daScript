@@ -3,11 +3,12 @@ options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 01 recording driver (manual, local-only). Sweeps the triangle through one full turn,
-// captures an APNG, then muxes a strudel music bed into the committed ../triangle.mp4. CI never runs
+// captures an APNG, then muxes a strudel music bed into ../triangle.mp4 (gitignored -- the
+// deliverable ships on the docs-assets release). CI never runs
 // this -- the tutorials .das_test skips the `recording/` folder when stbimage/audio aren't loaded.
 // The regression gate is the pixel oracle in ../test_triangle.das; this only produces the doc figure.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/01_triangle/recording/record_triangle.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/01_triangle/recording/record_triangle.das
 
 require ../triangle_tut.das
 require ../../recording/tutorial_record.das

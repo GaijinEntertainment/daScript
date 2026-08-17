@@ -5,7 +5,7 @@ the record, no longer load-bearing. A doc belongs here when its remaining value 
 record ("why is it built this way"), not operation. Living contracts and durable records
 stay next to their code (e.g. `modules/dasSQLITE/PROVIDER_CONTRACT.md`, the `MASTERPLAN.md`
 files, `modules/dasLLAMA/*_plan.md` specs still cited from code, `results.md` ledgers).
-Process and criteria: `skills/doc_archiving.md`.
+Process and criteria: `skills/internal/doc_archiving.md`.
 
 - `compiler/` — shipped compiler-rework docs (fixed-array structural types, annotation-info
   rtti rework, quote lowering)
@@ -23,6 +23,8 @@ Process and criteria: `skills/doc_archiving.md`.
   `modules/dasSQLITE/PROVIDER_CONTRACT.md`
 - `dasSpirv/` — the completed PHASE6–9 working plans (content captured in
   `modules/dasSpirv/MASTERPLAN.md`)
+- `dasVulkan/` — the original boost-layer design plan, carried over when the module moved
+  in-tree; the living docs are `modules/dasVulkan/CLAUDE.md` and its `ROADMAP.md`
 - `linq_fold/` — the linq_fold arc's plans and audits; the living masterplan is
   `daslib/linq_fold.md`, results stay at `benchmarks/sql/results.md`
 - `examples/` — plans, findings, and research notes behind shipped examples
@@ -123,3 +125,4 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-08-06 `plans/vulkan_class_kernels.md` → `history/dasLLAMA/vulkan_class_kernels_plan.md` — the vulkan class-kernel arc plan (`[spirv_kernel]`/`[vk_dispatch]`; shipped — serving is 100% class kernels, the module-global kernel world deleted)
 - 2026-08-06 `modules/dasLLAMA/vulkan_family_walkthrough.md` → `history/dasLLAMA/vulkan_family_walkthrough.md` — per-family das-vs-llama.cpp vulkan walkthrough record (debug-grade rows; verdicts live on as `followup_vulkan.md` items 11/13/14)
 - 2026-08-07 `modules/dasLLAMA/INVENTORY.md` → `history/dasLLAMA/INVENTORY.md` — the 2026-07-29 as-is census that scoped the reorg (self-dated snapshot at b0049dc52; the reorg + class-kernel + cm2 arcs rebuilt what it describes)
+- 2026-08-16 `ORIGINAL_PLAN.md` (dasVulkan standalone repo root) → `history/dasVulkan/ORIGINAL_PLAN.md` — the boost-layer design plan that drove the raw→boost build-out (all 9 phases shipped; landed here rather than under `modules/dasVulkan/` when the module moved in-tree)

@@ -43,12 +43,12 @@ def public queue_family_supports_present(phys : VkPhysicalDevice; queue_family :
 
 //! swapchain + its per-image views and framebuffers, owned together
 struct public Swapchain {
-    handle : SwapchainKHR
-    format : VkFormat
-    color_space : VkColorSpaceKHR
-    width : int
-    height : int
-    images : array<VkImage>            //!< owned by the swapchain object itself; not destroyed here
+    handle : SwapchainKHR             //!< the VkSwapchainKHR
+    format : VkFormat                 //!< color format of the swapchain images
+    color_space : VkColorSpaceKHR     //!< color space the surface presents in
+    width : int                       //!< current extent width, in pixels
+    height : int                      //!< current extent height, in pixels
+    images : array<VkImage>           //!< owned by the swapchain object itself; not destroyed here
     views : array<ImageView>          //!< created + owned here
     framebuffers : array<Framebuffer> //!< created + owned here (after build_swapchain_framebuffers)
     readback_supported : bool         //!< true if the images carry TRANSFER_SRC (host readback is possible)

@@ -52,8 +52,8 @@ FILE(GLOB AOT_DASGLTF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "te
 
 # dasLLAMA IS NEVER AOT'D. No dasLLAMA test — old or new — joins test_aot: the engine is
 # -jit only (its AOT story ends at the generic compile of the tree), and its require graph
-# reaches modules that live in SEPARATE REPOSITORIES (dasVulkan), whose AOT TUs cannot build
-# from this one. Do not re-register it here.
+# reaches dasVulkan, which is in-tree but carries no AOT registration at all, so a dasLLAMA
+# AOT TU would have no Vulkan half to link against. Do not re-register it here.
 
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)

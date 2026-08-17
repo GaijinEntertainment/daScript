@@ -4,11 +4,12 @@ options indenting = 4
 
 // Tutorial 12 recording driver (manual, local-only). Renders the GPU-driven occlusion-culling scene
 // while the occluder wall sweeps across the field (30 s at 30 fps -> 900 frames), captures an APNG,
-// then ffmpeg-muxes a daStrudel music bed + voice + captions into the committed ../gpu_driven.mp4.
+// then ffmpeg-muxes a daStrudel music bed + voice + captions into ../gpu_driven.mp4 (gitignored --
+// the deliverable ships on the docs-assets release).
 // CI never runs this -- the tutorials .das_test skips the `recording/` folder when stbimage / audio /
 // dasHV aren't loaded.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/12_gpu_driven/recording/record_gpu_driven.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/12_gpu_driven/recording/record_gpu_driven.das
 
 require ../gpu_driven_tut.das
 require ../../recording/tutorial_record_voiced.das

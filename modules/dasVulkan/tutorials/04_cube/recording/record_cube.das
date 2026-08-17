@@ -4,11 +4,12 @@ options indenting = 4
 
 // Tutorial 04 recording driver (manual, local-only). Renders the synthwave cube headlessly over one
 // full lemniscate orbit (30 seconds at 30 fps -> 900 frames), captures an APNG, and ffmpeg-muxes
-// a daStrudel supersaw-pad music bed + voice + captions into the committed ../cube.mp4. CI never
+// a daStrudel supersaw-pad music bed + voice + captions into ../cube.mp4 (gitignored -- the
+// deliverable ships on the docs-assets release). CI never
 // runs this -- the tutorials .das_test skips the `recording/` folder when stbimage/audio/dasHV
 // aren't loaded. Sibling of record_mandelbrot.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/04_cube/recording/record_cube.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/04_cube/recording/record_cube.das
 
 require ../cube_tut.das
 require ../../recording/tutorial_record_voiced.das

@@ -176,9 +176,9 @@ def hdr_down_fs {
     let o = pc.src_rcp          // 1 source-texel offset in UV space
     let c  = textureLod(src0, f_uv, 0.0).xyz
     let lt = textureLod(src0, f_uv + float2(-o.x, -o.y), 0.0).xyz
-    let rt = textureLod(src0, f_uv + float2( o.x, -o.y), 0.0).xyz
+    let rt = textureLod(src0, f_uv + float2(o.x, -o.y), 0.0).xyz
     let lb = textureLod(src0, f_uv + float2(-o.x,  o.y), 0.0).xyz
-    let rb = textureLod(src0, f_uv + float2( o.x,  o.y), 0.0).xyz
+    let rb = textureLod(src0, f_uv + float2(o.x,  o.y), 0.0).xyz
     // Centre weighted 0.5; the four diagonal samples 0.125 each.
     // Each diagonal sample sits at +-1 texel of the source mip, so bilinear filter effectively
     // averages a 2x2 box -- 5 samples cover a 16-texel footprint of the input.
@@ -195,14 +195,14 @@ def hdr_up_fs {
     let o = pc.src_rcp
     // 9-tap tent with 1-2-1 / 2-4-2 / 1-2-1 weights (sum = 16, divided out)
     let s00 = textureLod(src0, f_uv + float2(-o.x, -o.y), 0.0).xyz
-    let s10 = textureLod(src0, f_uv + float2( 0.0, -o.y), 0.0).xyz
-    let s20 = textureLod(src0, f_uv + float2( o.x, -o.y), 0.0).xyz
+    let s10 = textureLod(src0, f_uv + float2(0.0, -o.y), 0.0).xyz
+    let s20 = textureLod(src0, f_uv + float2(o.x, -o.y), 0.0).xyz
     let s01 = textureLod(src0, f_uv + float2(-o.x,  0.0), 0.0).xyz
     let s11 = textureLod(src0, f_uv, 0.0).xyz
-    let s21 = textureLod(src0, f_uv + float2( o.x,  0.0), 0.0).xyz
+    let s21 = textureLod(src0, f_uv + float2(o.x,  0.0), 0.0).xyz
     let s02 = textureLod(src0, f_uv + float2(-o.x,  o.y), 0.0).xyz
-    let s12 = textureLod(src0, f_uv + float2( 0.0,  o.y), 0.0).xyz
-    let s22 = textureLod(src0, f_uv + float2( o.x,  o.y), 0.0).xyz
+    let s12 = textureLod(src0, f_uv + float2(0.0,  o.y), 0.0).xyz
+    let s22 = textureLod(src0, f_uv + float2(o.x,  o.y), 0.0).xyz
     let tent = ((s00 + s20 + s02 + s22) * (1.0 / 16.0) +
                 (s10 + s01 + s21 + s12) * (2.0 / 16.0) +
                  s11                    * (4.0 / 16.0))

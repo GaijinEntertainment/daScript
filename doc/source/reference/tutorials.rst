@@ -10,7 +10,7 @@ This section provides hands-on tutorials organized by topic:
 * **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
 * **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
 * **Macro Tutorials** — write compile-time code transformations using the daslang macro system
-* **Module Tutorials** — dasHV (HTTP), dasLLAMA (local LLM inference), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasMinfft (FFT / DCT), OpenGL / WebGL2 (graphics), dasPEG (parser generator)
+* **Module Tutorials** — dasHV (HTTP), dasLLAMA (local LLM inference), dasOPENAI (LLM / OpenAI-compatible API), dasPUGIXML (XML), dasStbImage, dasAudio, dasMinfft (FFT / DCT), dasVulkan and OpenGL / WebGL2 (graphics), dasPEG (parser generator)
 
 .. _tutorials_language:
 
@@ -508,13 +508,76 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_18_sfx_lab.rst
    tutorials/daStrudel_19_one_shots.rst
 
+.. _tutorials_vulkan:
+
+dasVulkan Tutorials
+===================
+
+Runnable, self-verifying tutorials for authoring GPU shaders **in daslang** and
+driving them through dasVulkan. Each shader is written in daslang and lowered to
+SPIR-V at compile time by dasSpirv (no GLSL, no glslang) -- the same language as
+the host, compute and graphics alike.
+
+The series builds **graphics → compute → 3D scene → instancing → environment →
+GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tracing**:
+01_triangle is the canonical hello-triangle, 02_mandelbrot and 03_sdf swap to the
+compute pipeline, 04_cube takes graphics into 3D with depth + UBO + push constant
++ texture, 05_instancing draws 1000 cubes in one call, 06_skybox wraps the scene
+in a cubemap, 07_particles hands the vertex stream itself to a compute shader,
+08_shadow runs two render passes per frame sharing one depth image, 09_msaa drops
+``VkRenderPass`` entirely in favour of Vulkan 1.3 dynamic rendering plus 4x MSAA
+with auto-resolve, 10_deferred brings everything together in a three-pass
+deferred renderer (sampled G-buffer) with SSAO + shadow + many lights, and
+11_hdr adds an HDR offscreen target + Karis-style five-level bloom pyramid + ACES
+tonemap composite for the post-process rail. 12_gpu_driven hands the draw
+decision to the GPU: a compute shader does Hi-Z occlusion culling, compacts
+survivors into an indirect-draw buffer with a GPU-written count, and
+``cmd_draw_indexed_indirect_count`` draws them with bindless materials. 13_mesh
+and 14_teapot drop the vertex buffer entirely for the GPU-driven **mesh-shader**
+pipeline -- cluster culling, then on-GPU Bezier tessellation of the Utah teapot.
+Finally 15_raytracing leaves the rasterizer behind for **hardware ray tracing**:
+acceleration structures, a ``VK_KHR_ray_tracing_pipeline``, and a traced shadow
+ray per hit -- raygen, miss, and closest-hit shaders all authored in daslang.
+Each tutorial's `Next` footer links to the one after.
+
+Every tutorial lives in its own self-contained directory under
+``modules/dasVulkan/tutorials/``: the shaders, the offscreen render, a
+**pixel-oracle test** that is the lavapipe CI regression gate, and a recording
+driver that renders the embedded ``.mp4``. The render behind each video is
+pixel-checked **every CI run** by the tutorial's oracle test; the ``.mp4`` is the
+documentation figure of that same verified render, regenerated manually with the
+local recording driver (which needs stbimage + audio + ffmpeg, so it does not run
+in CI). The mesh-shader tutorials (13_mesh, 14_teapot) soft-skip on CI's software
+renderer, which lacks ``VK_EXT_mesh_shader``, and 15_raytracing soft-skips there
+too (no ``VK_KHR_ray_tracing_pipeline``); 13_mesh's figure is a still image
+rather than a video.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/vulkan/01_triangle.rst
+   tutorials/vulkan/02_mandelbrot.rst
+   tutorials/vulkan/03_sdf.rst
+   tutorials/vulkan/04_cube.rst
+   tutorials/vulkan/05_instancing.rst
+   tutorials/vulkan/06_skybox.rst
+   tutorials/vulkan/07_particles.rst
+   tutorials/vulkan/08_shadow.rst
+   tutorials/vulkan/09_msaa.rst
+   tutorials/vulkan/10_deferred.rst
+   tutorials/vulkan/11_hdr.rst
+   tutorials/vulkan/12_gpu_driven.rst
+   tutorials/vulkan/13_mesh.rst
+   tutorials/vulkan/14_teapot.rst
+   tutorials/vulkan/15_raytracing.rst
+
 .. _tutorials_opengl:
 
 OpenGL / WebGL2 Tutorials
 =========================
 
-A ladder of runnable OpenGL tutorials that mirror the
-`dasVulkan <https://github.com/borisbat/dasVulkan>`_ series shader-for-shader, to
+A ladder of runnable OpenGL tutorials that mirror the :ref:`dasVulkan
+<tutorials_vulkan>` series shader-for-shader, to
 the degree the WebGL2 portable floor allows. Every shader is written in
 **daslang** -- the same shared shader builtins (``shader_lingua_franca``) the
 Vulkan rail uses -- and lowered to GLSL (GLSL ES 3.00 on the web) at compile time

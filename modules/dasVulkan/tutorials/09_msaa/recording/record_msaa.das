@@ -8,7 +8,7 @@ options indenting = 4
 // the edges go from jaggy to smooth and back. CI never runs this -- the tutorials .das_test skips
 // `recording/` when stbimage / audio / dasHV aren't loaded.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/09_msaa/recording/record_msaa.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/09_msaa/recording/record_msaa.das
 
 require ../msaa_tut.das
 require ../../recording/tutorial_record_voiced.das

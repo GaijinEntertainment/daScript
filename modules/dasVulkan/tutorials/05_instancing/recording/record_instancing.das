@@ -4,11 +4,12 @@ options indenting = 4
 
 // Tutorial 05 recording driver (manual, local-only). Renders the instanced swarm headlessly over
 // one full camera orbit (30 seconds at 30 fps -> 900 frames), captures an APNG, and ffmpeg-muxes a
-// daStrudel music bed + voice + captions into the committed ../instancing.mp4. CI never runs this
+// daStrudel music bed + voice + captions into ../instancing.mp4 (gitignored -- the deliverable
+// ships on the docs-assets release). CI never runs this
 // -- the tutorials .das_test skips the `recording/` folder when stbimage / audio / dasHV aren't
 // loaded. Sibling of record_cube.das / record_sdf.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/05_instancing/recording/record_instancing.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/05_instancing/recording/record_instancing.das
 
 require ../instancing_tut.das
 require ../../recording/tutorial_record_voiced.das

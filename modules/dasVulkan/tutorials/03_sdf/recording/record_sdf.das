@@ -4,11 +4,12 @@ options indenting = 4
 
 // Tutorial 03 recording driver (manual, local-only). Renders the SDF raymarch headlessly at fixed
 // dt = 1/fps (no glfw window, no swapchain), captures an APNG of the camera orbiting once around the
-// scene, then ffmpeg-muxes a daStrudel music bed + voice + captions into the committed ../sdf.mp4.
+// scene, then ffmpeg-muxes a daStrudel music bed + voice + captions into ../sdf.mp4 (gitignored --
+// the deliverable ships on the docs-assets release).
 // CI never runs this -- the tutorials .das_test skips the `recording/` folder when stbimage/audio/dasHV
 // aren't loaded. Sibling of record_mandelbrot.das and record_cube.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/03_sdf/recording/record_sdf.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/03_sdf/recording/record_sdf.das
 
 require ../sdf_tut.das
 require ../../recording/tutorial_record_voiced.das
@@ -32,7 +33,7 @@ def main {
     // Captions stay canonical; voice text is respelled phonetically per skills/recording.md
     // (dasVulkan -> "das Vulkan", SPIR-V -> "Spear V" per Khronos, digits -> words for the ear).
     // Periods (not commas) force the TTS to pause between beats.
-    say( 30, "dasVulkan tutorial 3 -- SDF ray march",
+    say(30, "dasVulkan tutorial 3 -- SDF ray march",
             "das Vulkan tutorial three. The SDF ray march.")
     say(360, "No vertices. No textures. Just math",
             "No vertices. No textures. The whole scene is math.")

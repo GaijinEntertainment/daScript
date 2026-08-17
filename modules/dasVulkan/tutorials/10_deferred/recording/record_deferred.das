@@ -8,7 +8,7 @@ options indenting = 4
 // a viewer literally watches the G-buffer + SSAO + lighting decompose themselves. CI never runs
 // this -- the tutorials .das_test skips `recording/` when stbimage / audio / dasHV aren't loaded.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/10_deferred/recording/record_deferred.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/10_deferred/recording/record_deferred.das
 
 require ../deferred_tut.das
 require ../../recording/tutorial_record_voiced.das

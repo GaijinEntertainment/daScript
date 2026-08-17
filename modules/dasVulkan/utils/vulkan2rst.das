@@ -2,8 +2,6 @@ options gen2
 options _comment_hygiene = true
 options rtti = true
 // This file emits RST prose - section titles carry em-dashes that render on the docs site.
-// The option is environment-independent; a per-line nolint is not, because STYLE039's default
-// is path-gated (on under daslib/ and modules/) and dasVulkan is checked out standalone in CI.
 options _ascii_strings = false
 
 require strings
@@ -125,20 +123,14 @@ def document_vulkan_structs_anchors() {
     fclose(doc_file)
 }
 
-// dasVulkan repo root, derived from a loaded module's own source path so docs
-// generate correctly under both -load_module (dev) and daspkg-install (CI).
-def dasvulkan_root() : string {
-    let m = find_module("vulkan_boost")
-    assert(m != null, "vulkan_boost not loaded - cannot locate dasVulkan root")
-    return dir_name(dir_name(string(m.fileName)))
-}
-
 [export]
 def main {
     ast_gc_guard() {
-        let dasvulkan_doc = dasvulkan_root() + "/doc/source/stdlib"
-        topic_root = "{dasvulkan_doc}/generated"
-        handmade_root = dasvulkan_doc
+        // dasVulkan docs live in the main doc tree; generated pages join
+        // das2rst's output under doc/source/stdlib/generated/.
+        let doc_stdlib = get_das_root() + "/doc/source/stdlib"
+        topic_root = "{doc_stdlib}/generated"
+        handmade_root = doc_stdlib
 
         document_module_vulkan_runtime()
         document_module_vulkan_handles()

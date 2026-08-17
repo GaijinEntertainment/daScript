@@ -63,7 +63,7 @@ def ubo_nested_vert {
     let i = gl_VertexIndex
     var xy = float2(0.0f, 0.0f)
     if (i == 0) { xy = float2(-1.0f, -1.0f) }
-    if (i == 1) { xy = float2( 3.0f, -1.0f) }
+    if (i == 1) { xy = float2(3.0f, -1.0f) }
     if (i == 2) { xy = float2(-1.0f,  3.0f) }
     gl_Position = float4(xy, 0.0f, 1.0f)
 }

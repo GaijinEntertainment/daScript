@@ -32,14 +32,16 @@ doc/source/stdlib/generated/
 # daspkg install dir + index cache (created by `daspkg install` / `daspkg introduce`)
 modules/
 
-# tutorial recording intermediates -- only the .mp4 doc figure is tracked; the
-# APNG, the strudel music-bed wav, and any scratch frames are regenerated locally
-# by tutorials/*/recording/record_*.das (which need stbimage + audio, absent in CI).
+# Tutorial recordings: nothing a record_*.das driver produces is tracked. The MP4
+# deliverable ships on the rolling docs-assets GitHub release; the APNG, the strudel
+# music-bed wav, the voiceover wavs and any scratch frames are local intermediates
+# (the drivers need stbimage + audio, absent in CI).
+tutorials/**/*.mp4
+tutorials/**/*.mp4.ffmpeg.txt
 tutorials/**/recording/*.apng
 tutorials/**/recording/*.wav
 tutorials/**/recording/*.png
 tutorials/**/recording/voiceover/
-tutorials/**/*.mp4.ffmpeg.txt
 
 # Sphinx build-time copies of tutorial recordings (the tracked source is
 # tutorials/<name>/*.mp4; conf.py copies them here at build).

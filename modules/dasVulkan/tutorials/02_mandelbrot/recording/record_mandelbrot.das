@@ -4,10 +4,11 @@ options indenting = 4
 
 // Tutorial 02 recording driver (manual, local-only). Renders the animated Mandelbrot zoom headlessly
 // at fixed dt = 1/fps (no glfw window, no swapchain), captures an APNG, then ffmpeg-muxes a strudel
-// music bed into the committed ../mandelbrot.mp4. CI never runs this -- the tutorials .das_test skips
+// music bed into ../mandelbrot.mp4 (gitignored -- the deliverable ships on the docs-assets
+// release). CI never runs this -- the tutorials .das_test skips
 // the `recording/` folder when stbimage/audio aren't loaded. Sibling of record_triangle.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/02_mandelbrot/recording/record_mandelbrot.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/02_mandelbrot/recording/record_mandelbrot.das
 
 require ../window/mandelbrot_compute.das
 require ../window/mandelbrot_zoom_shaders.das
@@ -117,7 +118,7 @@ def main {
 
     // captions stay canonical; voice text is respelled phonetically per skills/recording.md
     // (dasVulkan -> "das Vulkan", SPIR-V -> "Spear V" per Khronos, digits -> words for the ear).
-    say( 30, "dasVulkan tutorial 2 -- Mandelbrot zoom",
+    say(30, "dasVulkan tutorial 2 -- Mandelbrot zoom",
             "das Vulkan tutorial two. The Mandelbrot zoom.")
     say(360, "Time drives the animation",
             "One time push constant drives the whole animation. Zoom. Rotation. Color.")

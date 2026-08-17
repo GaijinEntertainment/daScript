@@ -8,7 +8,7 @@ options indenting = 4
 // runs this -- the tutorials .das_test skips the `recording/` folder when stbimage / audio / dasHV
 // aren't loaded. Sibling of record_particles.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/08_shadow/recording/record_shadow.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/08_shadow/recording/record_shadow.das
 
 require ../shadow_tut.das
 require ../../recording/tutorial_record_voiced.das

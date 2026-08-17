@@ -139,9 +139,9 @@ def build_sky_vertices() : array<float> {
     let t = tan(CAM_FOV_Y * 0.5f)
     let aspect = float(TEAPOT_W) / float(TEAPOT_H)
     // ray(nx,ny) = f + nx*t*aspect*r - ny*t*u
-    let ray_a = f + (-t * aspect) * r + ( t) * u      // clip (-1,-1)
+    let ray_a = f + (-t * aspect) * r + (t) * u       // clip (-1,-1)
     let ray_c = f + (-t * aspect) * r + (-3.0f * t) * u   // clip (-1, 3)
-    let ray_b = f + ( 3.0f * t * aspect) * r + ( t) * u   // clip ( 3,-1)
+    let ray_b = f + (3.0f * t * aspect) * r + (t) * u     // clip ( 3,-1)
     return <- [
         -1.0f, -1.0f,  ray_a.x, ray_a.y, ray_a.z,
         -1.0f,  3.0f,  ray_c.x, ray_c.y, ray_c.z,

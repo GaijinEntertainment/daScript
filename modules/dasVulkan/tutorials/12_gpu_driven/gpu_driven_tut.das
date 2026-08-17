@@ -1201,7 +1201,7 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         bb_rsn.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
         bb_rsn.buffer = weak_copy(res.cull_reason.buffer)
         bb_rsn.size = VK_WHOLE_SIZE
-        let bufs <- [<-bb_ind, <-bb_cnt, <-bb_vtx, <-bb_rsn]
+        let bufs <- [ <- bb_ind, <- bb_cnt, <- bb_vtx, <- bb_rsn]
         let no_mem : array<MemoryBarrier>
         let no_img : array<ImageMemoryBarrier>
         var src : VkPipelineStageFlags

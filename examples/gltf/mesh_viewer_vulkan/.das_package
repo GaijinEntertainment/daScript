@@ -9,11 +9,6 @@ def package() {
 }
 
 [export]
-def dependencies(version : string) {
-    require_package("dasVulkan")
-}
-
-[export]
 def release() {
     release_main("main.das")
     release_include("../media/**")

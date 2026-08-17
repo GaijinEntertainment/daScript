@@ -62,10 +62,10 @@ let private cube_vertices : array<float> <- [
      0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
     -0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,
     // -Y face (bottom), normal = (0, -1, 0)
-    -0.5f, -0.5f,  0.5f,  0.0f,-1.0f, 0.0f,
-     0.5f, -0.5f,  0.5f,  0.0f,-1.0f, 0.0f,
-     0.5f, -0.5f, -0.5f,  0.0f,-1.0f, 0.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f,-1.0f, 0.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f, 0.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, -1.0f, 0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f, 0.0f,
     // +X face, normal = (1, 0, 0)
      0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
      0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,
@@ -82,10 +82,10 @@ let private cube_vertices : array<float> <- [
     -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
      0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,
     // -Z face, normal = (0, 0, -1)
-    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,-1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f, 0.0f,-1.0f,
-     0.5f,  0.5f, -0.5f,  0.0f, 0.0f,-1.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f, 0.0f,-1.0f
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, -1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, 0.0f, -1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f, 0.0f, -1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f, 0.0f, -1.0f
 ]
 
 let private cube_indices : array<uint16> <- [
@@ -144,10 +144,10 @@ def private rotate_y_m4(angle : float) : float4x4 {
     let c = cos(angle)
     let s = sin(angle)
     var m : float4x4
-    m[0] = float4(   c, 0.0,  -s, 0.0)
-    m[1] = float4( 0.0, 1.0, 0.0, 0.0)
-    m[2] = float4(   s, 0.0,   c, 0.0)
-    m[3] = float4( 0.0, 0.0, 0.0, 1.0)
+    m[0] = float4(c, 0.0,  -s, 0.0)
+    m[1] = float4(0.0, 1.0, 0.0, 0.0)
+    m[2] = float4(s, 0.0,   c, 0.0)
+    m[3] = float4(0.0, 0.0, 0.0, 1.0)
     return m
 }
 

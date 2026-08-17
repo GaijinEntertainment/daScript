@@ -4,11 +4,12 @@ options indenting = 4
 
 // Tutorial 06 recording driver (manual, local-only). Renders the skybox headlessly over one full
 // camera orbit (30 seconds at 30 fps -> 900 frames), captures an APNG, and ffmpeg-muxes a daStrudel
-// music bed + voice + captions into the committed ../skybox.mp4. CI never runs this -- the
+// music bed + voice + captions into ../skybox.mp4 (gitignored -- the deliverable ships on the
+// docs-assets release). CI never runs this -- the
 // tutorials .das_test skips the `recording/` folder when stbimage / audio / dasHV aren't loaded.
 // Sibling of record_cube.das / record_instancing.das.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/06_skybox/recording/record_skybox.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/06_skybox/recording/record_skybox.das
 
 require ../skybox_tut.das
 require ../../recording/tutorial_record_voiced.das

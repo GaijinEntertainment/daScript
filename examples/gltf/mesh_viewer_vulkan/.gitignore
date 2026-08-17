@@ -1,4 +1,4 @@
-# daspkg install populates modules/ with the dasVulkan + dasImgui deps and writes daspkg.lock;
-# both are build artifacts, resolved from the package index / .das_package at install time.
+# This example declares no external deps (dasGLTF / dasVulkan / dasImgui are all in-tree), but a
+# stray `daspkg install` here still writes modules/ + daspkg.lock — build artifacts either way.
 modules/
 daspkg.lock

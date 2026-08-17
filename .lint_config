@@ -15,5 +15,5 @@ exclude = ["tests/interfaces/test_interfaces.das"]
 [rules]
 # PERF031 (slice/chop on a loop-invariant string in a loop) is ON here as everywhere -
 # the byte-view sweep rewrote the tree onto peek_data views; only external checkouts
-# living inside the tree (dasVulkan, sfx_lab's dasImgui copies, das-claude) still hit.
+# living inside the tree (sfx_lab's dasImgui copies, das-claude) still hit.
 PERF031 = true

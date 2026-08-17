@@ -10,7 +10,7 @@ options indenting = 4
 // a GPU with VK_EXT_mesh_shader -- this is why CI never runs it (lavapipe lacks the extension; the
 // tutorials .das_test also skips `recording/` when stbimage / audio / dasHV aren't loaded).
 //
-//   <daslang> -load_module <dasVulkan> tutorials/14_teapot/recording/record_teapot.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/14_teapot/recording/record_teapot.das
 
 require ../teapot_tut.das
 require ../../recording/tutorial_record_voiced.das

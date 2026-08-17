@@ -4,10 +4,11 @@ options indenting = 4
 
 // Tutorial 11 recording driver (manual, local-only). Renders the HDR + bloom scene over one full
 // camera orbit (30 s at 30 fps -> 900 frames), captures an APNG, then ffmpeg-muxes the daStrudel
-// music bed + voice + captions into the committed ../hdr.mp4. CI never runs this -- the tutorials
+// music bed + voice + captions into ../hdr.mp4 (gitignored -- the deliverable ships on the
+// docs-assets release). CI never runs this -- the tutorials
 // .das_test skips the `recording/` folder when stbimage / audio / dasHV aren't loaded.
 //
-//   <daslang> -load_module <dasVulkan> tutorials/11_hdr/recording/record_hdr.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/11_hdr/recording/record_hdr.das
 
 require ../hdr_tut.das
 require ../../recording/tutorial_record_voiced.das

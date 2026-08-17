@@ -66,26 +66,26 @@ The `--root` flag sets the project root directory (default: current directory). 
 
 ## Global Modules
 
-Large packages (e.g. dasVulkan) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
+Large packages (e.g. dasImguiNodeEditor) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
 
-Note: **in-tree modules satisfy `require_package` automatically** — a package depending on dasImgui resolves against `modules/dasImgui` ("part of this daslang tree — nothing to install").
+Note: **in-tree modules satisfy `require_package` automatically** — a package depending on dasImgui or dasVulkan resolves against `modules/dasImgui` / `modules/dasVulkan` ("part of this daslang tree — nothing to install").
 
 ### Usage
 
 ```bash
 # Install globally (to das_root/modules/)
-daspkg install --global dasVulkan
-daspkg install --global github.com/user/dasVulkan@1.0
+daspkg install --global dasImguiNodeEditor
+daspkg install --global github.com/user/dasImguiNodeEditor@1.0
 
 # List globally installed packages
 daspkg list --global
 
 # Update/upgrade globally
-daspkg update --global dasVulkan
-daspkg upgrade --global dasVulkan
+daspkg update --global dasImguiNodeEditor
+daspkg upgrade --global dasImguiNodeEditor
 
 # Remove globally
-daspkg remove --global dasVulkan
+daspkg remove --global dasImguiNodeEditor
 
 # Build all global native packages
 daspkg build --global
@@ -106,7 +106,7 @@ daspkg check --global
 A package can exist both locally and globally. The C++ runtime (`require_dynamic_modules`) handles this via **shadow detection**:
 
 - If the same module directory exists in both `{das_root}/modules/` and `{project_root}/modules/`, the **local version wins**
-- A warning is printed: `"Warning: local 'dasVulkan' shadows global — using local"`
+- A warning is printed: `"Warning: local 'dasImguiNodeEditor' shadows global — using local"`
 - This is safe — removing the local copy seamlessly falls back to the global one
 
 ### Remove behavior
@@ -116,7 +116,7 @@ A package can exist both locally and globally. The C++ runtime (`require_dynamic
 
 ### CMake integration
 
-Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_standalone` marker file. The main daScript `CMakeLists.txt` skips directories with this marker during auto-discovery, preventing `FATAL_ERROR` from standalone CMakeLists.txt files (e.g. dasVulkan requires `DASLANG_DIR` to be set explicitly).
+Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_standalone` marker file. The main daScript `CMakeLists.txt` skips directories with this marker during auto-discovery, preventing `FATAL_ERROR` from standalone CMakeLists.txt files (e.g. dasImguiNodeEditor requires `DASLANG_DIR` to be set explicitly).
 
 ## `.das_package` Manifest
 

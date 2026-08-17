@@ -9,7 +9,7 @@ options indenting = 4
 // (lavapipe has no RT; the tutorials .das_test also skips `recording/` when stbimage / audio /
 // dasHV aren't loaded).
 //
-//   <daslang> -load_module <dasVulkan> tutorials/15_raytracing/recording/record_raytracing.das
+//   <daslang> -project_root . modules/dasVulkan/tutorials/15_raytracing/recording/record_raytracing.das
 
 require ../raytracing_tut.das
 require ../../recording/tutorial_record_voiced.das
