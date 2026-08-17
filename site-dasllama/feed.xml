@@ -11,11 +11,12 @@
 <link href="https://dasllama.io/#n-2026-08-17-metal-asr"/>
 <id>https://dasllama.io/#n-2026-08-17-metal-asr</id>
 <updated>2026-08-17T00:00:00Z</updated>
-<content type="html">&lt;p&gt;ASR now runs on the GPU: encoder, cross-attention and decoder all serve on Metal, on by
-default on Apple GPUs. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in
-4.0 s — 49x realtime, against 36x for whisper.cpp&#x27;s Metal path and 12x for our own CPU
-lane. The &lt;a href=&quot;ladder.html&quot;&gt;ladder&lt;/a&gt; now splits ASR into the same cpu / cpu + accel / gpu
-categories the LLM board has, each paired against the reference&#x27;s matching mode.&lt;/p&gt;</content>
+<content type="html">&lt;p&gt;Speech-to-text now serves on Metal: whisper&#x27;s cross-attention and decoder run on the GPU
+by default on Apple silicon, and the full-GPU mode powers the new gpu category on the
+board. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in 4.0 s — 49x
+realtime, against 36x for whisper.cpp&#x27;s Metal path and 12x for our CPU lane. The
+&lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt; now splits ASR into the same cpu / cpu + accel /
+gpu categories the LLM board has.&lt;/p&gt;</content>
 </entry>
 <entry>
 <title>dasllama.io is live — news, the full ladder, and the sidecar exchange.</title>
