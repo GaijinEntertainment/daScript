@@ -633,6 +633,27 @@ redded 18 cells); the mtmd-oracle cell (`test_qwen3a_tower`) pins the CPU conv �
 reorder bars are CPU claims (the hook-flip discipline); the q8-vs-f32 transcript A/B and the
 mtower qwen3a cell ride the knob symmetrically.
 
+## Slice R record — the f32-fallback compliance audit DONE 2026-08-16 (zero fixes)
+
+Every call site of the slow-f32 GEMM family classified per the REVIEW rule; the tree is
+ALREADY compliant — the q8 enrollment arcs wrapper-ized the weights-GEMMs, and this chunk
+GPU-served the two real offenders the slice-M probe named (the qwen3a conv GEMMs, the
+whisper conv). The classification:
+- **q8-wrapper fallback arms** (the rule's sanctioned shape): `cn_mm`/`cn_mm_rq` (canary),
+  the parakeet enc wrapper, `g4a_mm` x2 (gemma4a), `q3a_mm_rq` (qwen3a), `tw_mm`/`tw_mm_rq`
+  (towers), `wm_mm` (whisper dec), the `wblob` arm in dasllama_common.
+- **No faster twin exists** (unquantized planes / K under 32): the gemma4uv embedder's CPU
+  fallback, whisper conv1 (its fill job carries NO `gemm_n` — deliberately not a quantizable
+  region), the qwen3a conv2d CPU fallback (GPU-served now), canary's c0 conv (K=9), the
+  parakeet joint_net (its WRITTEN carve-out: "joint_net stays fp32, a few % of encode"),
+  the MoE router against the f32 aux blob (bit-exact-routing comment in place).
+- **Activation math — no quant twin as a class**: every `gemm_f32` site (the whisper CPU
+  decoder attention — now the GPU step's fallback; the q8-tower CPU attention micro-GEMMs;
+  prefill attention; the deltanet chain; the FFT twiddle GEMMs).
+- **Oracle rails**: the QuantMode.fp32 / `set_asr_fp32` paths, by definition.
+The q8-tower CPU attention (85% of a q8-CPU encode) stays the one big LEDGERED f32 cost —
+rule-compliant (no twin exists), GPU-served under `--ngl`, a PERF ledger item for the CPU rail.
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`
