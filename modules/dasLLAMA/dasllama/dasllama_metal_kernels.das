@@ -3584,6 +3584,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_cross_kx = compile_pso(metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, ok)
     g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
     g_pso_cross_vx_h = compile_pso(metal_cross_vx_h_msl, metal_cross_vx_h_msl_entry, metal_cross_vx_h_msl_fastmath, ok)
+    g_pso_im2col3 = compile_pso(metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, ok)
     g_pso_wdec_attn = compile_pso(metal_wdec_attn_msl, metal_wdec_attn_msl_entry, metal_wdec_attn_msl_fastmath, ok)
     g_pso_wdec_attn_part = compile_pso(metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, ok)
     g_pso_wdec_attn_comb = compile_pso(metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, ok)
@@ -4265,6 +4266,7 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     release_pso(g_pso_cross_kx)
     release_pso(g_pso_cross_vx)
     release_pso(g_pso_cross_vx_h)
+    release_pso(g_pso_im2col3)
     release_pso(g_pso_wdec_attn)
     release_pso(g_pso_wdec_attn_part)
     release_pso(g_pso_wdec_attn_comb)
@@ -4977,6 +4979,39 @@ class MetalWdecAttnComb {
             y[r * dim + h * hs + j] = acc * inv
             j += gl_WorkGroupSize.x
         }
+    }
+}
+
+// The whisper conv-frontend im2col (k=3, "same" pad): output row i is 3 x nch columns in
+// (dk, c) order — the loader's weight permute. `chmajor` picks the source layout: conv1 reads
+// the channel-major mel ([c][t]), conv2 the row-major y1 ([t][c]); `stride` is 1 or 2.
+[metal_dispatch(name = "enc_im2col3", pso = "g_pso_im2col3", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalIm2col3 {
+    @ssbo @binding = 0 @role = "read" src : array<float>
+    @ssbo @binding = 1 @role = "write" col : array<float>   // [rows x 3*nch]
+    @uniform @binding = 2 nch : uint
+    @uniform @binding = 3 srclen : uint     // source positions (the pad guard)
+    @uniform @binding = 4 stride : uint
+    @uniform @binding = 5 chmajor : uint
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_im2col3_msl")]
+    def metal_im2col3 {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let w3 = 3u * nch
+        let i = gid / w3
+        let rem = gid % w3
+        let dk = rem / nch
+        let c = rem % nch
+        let sp = int(i * stride + dk) - 1
+        var v = 0.0
+        if (sp >= 0 && sp < int(srclen)) {
+            v = chmajor != 0u ? src[c * srclen + uint(sp)] : src[uint(sp) * nch + c]
+        }
+        col[gid] = v
     }
 }
 

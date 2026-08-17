@@ -591,6 +591,25 @@ the test seat). The lcpp `--asr` CPU rows pin the driver OFF (a CPU row means CP
 bench-level hook-flip trap). Gates: the pc pair's unit cells with a recorded control, the
 floor legs in the wdec model gate, f16 fixtures in the attention gates.
 
+## Slice P record — the whisper conv frontend on the GPU DONE 2026-08-16
+
+`MetalIm2col3` (k=3 "same"-pad, one kernel for both layouts: chmajor mel for conv1, row-major
+y1 for conv2, stride 1/2) + the existing `enc_f32_mm`/bias/GELU-flavor/`enc_add` chain as
+one command buffer in the tower driver; `register_tower_conv_gpu` at the top of
+`audio_encode_blocks` (BEST-EFFORT inside the tower knob: a shape misfit — tiny's 3x80
+im2col width fails kdim%32 — silently keeps the CPU conv while the blocks still ride the
+GPU; no decline-counter noise, `convs` in metal_tower_stats is the engage evidence).
+
+**Measured (turbo gb1, stage probe): enc.conv 1229 → 33 ms (37x). The gb1 bucket sum lands
+at 4.11 s — encode 2.99 (vs whisper.cpp's own 3.38), decode 1.01, cross_kv 0.06, mel 0.055.
+Everything except the 55 ms mel is on Metal.** P10's post-conv bar (≤4.8) beaten.
+
+Gates: im2col unit cells (both layouts, both strides, odd tail + pad edges; control: the
+dropped pad shift redded 18 cells), the tower cell's convs-delta asserts (large = 1 serve,
+tiny = 0 with the carve-out named), mtower 28/0 transcript-exact with the GPU conv in the
+chain. qwen2audio/voxtral (nm=128, d fits) now conv-serve through the same hook — the
+blocks-parity suite re-run gates them.
+
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% — the slice-G ad-hoc figure
 confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2col 650
 (7.5%) — PREDICTION MISS** (called im2col ≥ 60%): the wall is the three f32 `mm_blob_b`

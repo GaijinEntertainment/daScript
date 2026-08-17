@@ -29,12 +29,13 @@ let private TW_ONES_DIM = 8192
 //! Engage/decline counters (the counts live in dasllama_metal_common, the counting home);
 //! `blocks` = transformer blocks run (n_layer per whisper-class encode; 0 for gemma4uv).
 //! Model-level gates assert DELTAS on these.
-def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64> {
+def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; convs : int64; declines : int64> {
     var dtot = 0l
     for (v in values(g_tower_declines_by_reason)) {
         dtot += v
     }
-    return (encodes = g_tower_encodes, rows = g_tower_rows, blocks = g_tower_blocks, declines = dtot)
+    return (encodes = g_tower_encodes, rows = g_tower_rows, blocks = g_tower_blocks,
+        convs = g_tower_convs, declines = dtot)
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalTowerDecline` value names.
@@ -289,9 +290,103 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     return true
 }
 
+// The whisper conv frontend for one mel chunk: im2col + conv GEMMs + bias + GELU + pos-add,
+// one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
+// silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
+[hot_path]
+def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower || t.q8) {
+        return false
+    }
+    let tin = AUDIO_CHUNK_FRAMES
+    let tt = t.n_ctx
+    let d = t.d_model
+    let nm = t.n_mel
+    // tiny's 3x80 im2col width stays CPU; init re-arms after any shutdown seat
+    if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init()) {
+        return false
+    }
+    let mp1 = (tin + 31l) / 32l * 32l
+    let mp2 = (tt + 31l) / 32l * 32l
+    let mapped = t.image_map != null
+    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
+    let bytes_mel = uint64(nm * tin * 4l)
+    let bytes_x1 = uint64(mp1 * 3l * nm * 4l)
+    let bytes_y1 = uint64(mp1 * d * 4l)
+    let bytes_x2 = uint64(mp2 * 3l * d * 4l)
+    let bytes_xo = uint64(mp2 * d * 4l)
+    var bmel = pool_acquire(g_tw_pool, g_dev, bytes_mel)
+    var bx1 = pool_acquire(g_tw_pool, g_dev, bytes_x1)
+    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
+    var bx2 = pool_acquire(g_tw_pool, g_dev, bytes_x2)
+    var bxo = pool_acquire(g_tw_pool, g_dev, bytes_xo)
+    unsafe {
+        memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
+    }
+    var u_nm = uniform_u32(uint(nm))
+    var u_nm3 = uniform_u32(uint(3l * nm))
+    var u_d = uniform_u32(uint(d))
+    var u_3d = uniform_u32(uint(3l * d))
+    var u_tin = uniform_u32(uint(tin))
+    var u_s1 = uniform_u32(1u)
+    var u_s2 = uniform_u32(2u)
+    var u_z = uniform_u32(0u)
+    var u_totx1 = uniform_u32(uint(tin * 3l * nm))
+    var u_totd1 = uniform_u32(uint(tin * d))
+    var u_totx2 = uniform_u32(uint(tt * 3l * d))
+    var u_totd2 = uniform_u32(uint(tt * d))
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        enc_im2col3(enc, bmel, bx1, u_nm, u_tin, u_s1, u_s1, u_totx1, tin * 3l * nm)   // chmajor=1: the mel is [c][t]
+        enc_f32_mm(enc, bblob, uint64(t.conv1_w_off * 4l), bx1, by1, 0ul, u_nm3, u_d, mp1, d)
+        enc_add_bias_rows(enc, by1, 0ul, bblob, uint64(t.conv1_b_off * 4l), u_d, u_totd1, tin * d)
+        if (t.gelu_tanh) {
+            enc_gelu_lut(enc, by1, 0ul, u_totd1, tin * d)
+        } else {
+            enc_gelu_erf(enc, by1, 0ul, u_totd1, tin * d)
+        }
+        enc_im2col3(enc, by1, bx2, u_d, u_tin, u_s2, u_z, u_totx2, tt * 3l * d)   // chmajor=0: y1 is [t][c]
+        enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
+        enc_add_bias_rows(enc, bxo, 0ul, bblob, uint64(t.conv2_b_off * 4l), u_d, u_totd2, tt * d)
+        if (t.gelu_tanh) {
+            enc_gelu_lut(enc, bxo, 0ul, u_totd2, tt * d)
+        } else {
+            enc_gelu_erf(enc, bxo, 0ul, u_totd2, tt * d)
+        }
+        enc_add(enc, bxo, 0ul, bblob, uint64(t.pos_off * 4l), u_totd2, tt * d)
+    }
+    var served = false
+    if (ran) {
+        unsafe {
+            memcpy(addr(s.x[0]), metal_buffer_contents(bxo), uint64(tt * d * 4l))
+        }
+        g_tower_convs++
+        served = true
+    }
+    pool_release(g_tw_pool, bmel, bytes_mel)
+    pool_release(g_tw_pool, bx1, bytes_x1)
+    pool_release(g_tw_pool, by1, bytes_y1)
+    pool_release(g_tw_pool, bx2, bytes_x2)
+    pool_release(g_tw_pool, bxo, bytes_xo)
+    pool_release(g_upool, u_nm, 4ul)
+    pool_release(g_upool, u_nm3, 4ul)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_3d, 4ul)
+    pool_release(g_upool, u_tin, 4ul)
+    pool_release(g_upool, u_s1, 4ul)
+    pool_release(g_upool, u_s2, 4ul)
+    pool_release(g_upool, u_z, 4ul)
+    pool_release(g_upool, u_totx1, 4ul)
+    pool_release(g_upool, u_totd1, 4ul)
+    pool_release(g_upool, u_totx2, 4ul)
+    pool_release(g_upool, u_totd2, 4ul)
+    return served
+}
+
 [init]
 def dasllama_metal_tower_register {
     g_tw_env_tower = g_env_metal.tower
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_tower_blocks_gpu(@@metal_tower_blocks)
+    register_tower_conv_gpu(@@metal_conv_frontend)
 }

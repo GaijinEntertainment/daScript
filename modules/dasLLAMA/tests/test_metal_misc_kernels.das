@@ -1311,6 +1311,67 @@ def private bias_gelu_lut_gate(t : T?; dev, queue; nrows, dim : int) {
     delete want
 }
 
+// The conv-frontend im2col vs the CPU walk — bit-exact scatter with the "same"-pad zero
+// edges; both source layouts (chmajor mel vs row-major y1) and both strides.
+// Negative control recorded 2026-08-16: dropping the -1 pad shift redded all four cells.
+def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
+    let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = rows * 3 * nch
+    var src : array<float>
+    src |> resize(srclen * nch)
+    for (i in range(srclen * nch)) {
+        src[i] = 0.21 * float(i % 53) - 4.0
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(rows)) {
+        for (dk in range(3)) {
+            let sp = i * stride + dk - 1
+            for (c in range(nch)) {
+                want[(i * 3 + dk) * nch + c] = (sp >= 0 && sp < srclen
+                    ? (chmajor ? src[c * srclen + sp] : src[sp * nch + c])
+                    : 0.0)
+            }
+        }
+    }
+    var bsrc = buf_upload(dev, src)
+    var bcol = buf_fill(dev, total, -333.0)
+    var bnch = buf_u32(dev, uint(nch))
+    var bsl = buf_u32(dev, uint(srclen))
+    var bst = buf_u32(dev, uint(stride))
+    var bch = buf_u32(dev, chmajor ? 1u : 0u)
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsrc, 0ul, 0)
+        metal_set_buffer(enc, bcol, 0ul, 1)
+        metal_set_buffer(enc, bnch, 0ul, 2)
+        metal_set_buffer(enc, bsl, 0ul, 3)
+        metal_set_buffer(enc, bst, 0ul, 4)
+        metal_set_buffer(enc, bch, 0ul, 5)
+        metal_set_buffer(enc, btot, 0ul, 6)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bcol, want, tag), 0)
+    }
+    metal_release(bsrc)
+    metal_release(bcol)
+    metal_release(bnch)
+    metal_release(bsl)
+    metal_release(bst)
+    metal_release(bch)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
 def private suppress_row_gate(t : T?; dev, queue; total, nids : int) {
     let tag = "suppress_row total={total} nids={nids}"
     var err : string
@@ -1500,6 +1561,9 @@ def test_metal_misc_kernels(t : T?) {
                 wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 256, 256, false)   // exactly one chunk
                 bias_add_res_gate(t, dev, queue, 3, 128)
                 bias_gelu_lut_gate(t, dev, queue, 2, 640)
+                im2col3_gate(t, dev, queue, 20, 16, 20, 1, true)    // conv1 shape: chmajor, s1, same len
+                im2col3_gate(t, dev, queue, 10, 32, 20, 2, false)   // conv2 shape: row-major, s2, halved rows
+                im2col3_gate(t, dev, queue, 7, 16, 13, 2, true)     // odd tail + the right pad edge
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
