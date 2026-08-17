@@ -4820,7 +4820,7 @@ class MetalCrossVxH {
         if (hasb != 0u) {
             v += bias[h * hs + j]
         }
-        vx[h * tstride * hs + (t0 + t) * hs + j] = float16(v)
+        vx[h * tstride * hs + (t0 + t) * hs + j] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
     }
 }
 

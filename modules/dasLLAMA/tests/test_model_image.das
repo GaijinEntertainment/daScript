@@ -1746,10 +1746,11 @@ def test_dlim_flavor_lanes(t : T?) {
         var current <- dlim_current_identities()
         var p = DlimPeek(valid = true, version = IMAGE_VERSION, identity = planar)
         t |> equal(dlim_image_verdict(p, current), "CURRENT", "own planar identity")
-        // the observed cross-context metal identity: blob bake selects portable + its own winners
-        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|metal"
+        // a cross-context GPU identity: winners impossible on any box (mr9/kq9), so it can never
+        // coincide with THIS process's own identity the way a realistic fixture once did
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|metal"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context metal image is FOREIGN, not OTHER")
-        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|{vk_tag}"
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|{vk_tag}"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context vulkan image is FOREIGN")
         // a family tag whose module is not loaded in the judging process: unrecomputable, so
         // FOREIGN — the 2026-08-02 board's step-zero GC reaped every whisper/parakeet image

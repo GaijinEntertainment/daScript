@@ -55,7 +55,7 @@ var private g_wd_sh : MetalBuffer?     // [WD_ROW_CAP x 4d]
 var private g_wd_slog : MetalBuffer?   // [WD_ROW_CAP x nvpad] logits (the prompt batch computes every row)
 var private g_wd_bpms : MetalBuffer?   // attention chunk partials [nch][hh][n][2] (m, s)
 var private g_wd_bpy : MetalBuffer?    // attention chunk partials [nch][hh][n][hs]
-var private g_wd_nvpad = 0l            // n_vocab padded to 64 rows — the GEMV grid covers whole row groups
+var private g_wd_nvpad = 0l            // n_vocab padded to 64 rows — enc_gemm_b tiles by floor(n/32), so an unpadded tail would silently drop (the GEMV ceil-divides and needs none)
 // the live GPU-owned window: ONE DecoderState at a time; set by a served cross_kv, checked by
 // every decode batch (a mismatch falls back cleanly — the CPU chain reads the ds.kx/vx readback)
 var private g_wd_window_key = 0ul
@@ -105,7 +105,8 @@ def set_metal_wdec_step_min_d(n : int64) {
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private wd_decline(why : MetalWdecDecline) : bool {
     note_wdec_decline("{why}")
-    if (why != MetalWdecDecline.knob) {   // knob = policy; capability declines honor required mode
+    // knob and small = policy (the enum documents both); capability declines honor required mode
+    if (why != MetalWdecDecline.knob && why != MetalWdecDecline.small) {
         require_or_panic("wdec", "{why}")
     }
     return false
@@ -190,7 +191,7 @@ def private wdec_attach(w : WhisperModel) : bool {
     var cur = 0ul
     g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, rep, mr, kgroup, wbias, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l
-    for (i in range64(te_pad)) {   // zero rows: the row-group GEMV grid covers them, their logits go unread
+    for (i in range64(te_pad)) {   // zero rows: the prompt-batch GEMM's floor-tiling needs them, their logits go unread
         staging[int64(cur) + i] = 0u8
     }
     cur += uint64(te_pad)
@@ -235,8 +236,8 @@ def private wdec_attach(w : WhisperModel) : bool {
     let hh_a = w.n_text_head
     g_wd_bpms = metal_new_buffer(g_dev, uint64(nch_cap * hh_a * WD_ROW_CAP * 2l * 4l))
     g_wd_bpy = metal_new_buffer(g_dev, uint64(nch_cap * hh_a * WD_ROW_CAP * (d / hh_a) * 4l))
-    if (g_wd_slog == null) {   // the last allocation failing implies the rest may have too
-        return false
+    if (g_wd_slog == null || g_wd_bpms == null || g_wd_bpy == null) {   // any miss: the key stays
+        return false                                                    // unset, the next window re-attaches
     }
     g_wd_key = base
     g_wd_len = blen
@@ -320,7 +321,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
         g_wd_window_live = true
         g_wd_window_step = g_wd_step_env && d >= g_wd_step_min_d
         if (g_wd_step_env && !g_wd_window_step) {
-            note_wdec_decline("small")   // policy class: the window still cross-KV-serves
+            wd_decline(MetalWdecDecline.small)   // policy class: the window still cross-KV-serves
         }
         served = true
     }
@@ -436,8 +437,9 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
             enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln1_w * 4l), bblobf, uint64(lo.ln1_b * 4l), g_wd_sxb, u_d, u_eps, n)
             if (n == 1l) {   // the fused-QKV GEMV: the q,k,v regions sit contiguous in the driver's blob
                 enc_gemv(enc, g_wd_mblob, g_wd_boffs[bo], g_wd_sxb, g_wd_sq, u_d, u_3d, 3l * d)
-                enc_cross_vx_h(enc, g_wd_sq, uint64(d * 4l), g_wd_bkc, koff_self, bblobf, 0ul, u_d, u_hs, u_n, u_p0, u_tmax, u_c0, u_totd, n * d)
-                enc_cross_vx_h(enc, g_wd_sq, uint64(2l * d * 4l), g_wd_bvc, koff_self, bblobf, uint64(lo.v_b * 4l), u_d, u_hs, u_n, u_p0, u_tmax, u_c1, u_totd, n * d)
+                // dim = the SOURCE row stride: the k/v column blocks sit in the fused 3d-wide rows
+                enc_cross_vx_h(enc, g_wd_sq, uint64(d * 4l), g_wd_bkc, koff_self, bblobf, 0ul, u_3d, u_hs, u_n, u_p0, u_tmax, u_c0, u_totd, n * d)
+                enc_cross_vx_h(enc, g_wd_sq, uint64(2l * d * 4l), g_wd_bvc, koff_self, bblobf, uint64(lo.v_b * 4l), u_3d, u_hs, u_n, u_p0, u_tmax, u_c1, u_totd, n * d)
             } else {
                 wd_mm(enc, g_wd_boffs[bo], g_wd_sxb, g_wd_sq, u_d, u_d, d, d, n)
                 wd_mm(enc, g_wd_boffs[bo + 1l], g_wd_sxb, g_wd_sk, u_d, u_d, d, d, n)

@@ -461,14 +461,12 @@ def private q3a_stage(enc : MetalComputeEncoder?; bsrc : MetalBuffer?; soff : ui
 // DEFAULT too); the shuffle/conv_out tail stays CPU. BEST-EFFORT: declines are a silent false.
 [hot_path]
 def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var y3all : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
-    if (!g_tw_env_tower || !metal_tower_init() || !q3a_wpad_attach(t)) {
-        return false
-    }
     let nm = t.core.n_mel
     let nch = t.n_ch
     let ncp = (nch + 63l) & ~63l
     let k2 = 9l * nch
-    if (k2 % 32l != 0l) {   // the dense-K stages ride the tile GEMM unpadded
+    // the k2%32 shape gate runs first so a forever-declining tower never mints the padded slab
+    if (k2 % 32l != 0l || !g_tw_env_tower || !metal_tower_init() || !q3a_wpad_attach(t)) {
         return false
     }
     let xin_n = QWEN3A_CHUNK * nm
