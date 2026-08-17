@@ -375,3 +375,16 @@
     - **The whisper decode step's small-model floor**: tiny (d=384) loses ~3x to the
       per-dispatch latency floor and keeps the CPU rail by policy — a graph/ICB replay or
       megafusion round would move the floor; measured, ledgered, not urgent.
+
+27. **The metal suites should catch a raw (runner-less) invocation (2026-08-17).** Running
+    `dastest -- --test modules/dasLLAMA/tests` directly — without `tests/run.das` — drops the
+    runner's env (`DASLLAMA_CPU_PREFILL=1`, `DASLLAMA_METAL_HAZARD_STRICT=1`,
+    `DAS_TUNE_MANIFEST=m1.tune.json`) and produces phantom reds that read like real
+    regressions: the CPU-truth A/B halves trip the CPU-prefill panic, untuned identities
+    collide with the dlim flavor-lane fixtures, and the combined run even segfaulted. The
+    prohibition exists in `tests/CLAUDE.md` but nothing ENFORCES it — a session that skips
+    the doc burns an hour on fake failures. Add a guard test (or a `_model_tier` setup
+    check) that detects the missing runner markers and fails IMMEDIATELY with "run through
+    modules/dasLLAMA/tests/run.das", instead of letting the suite die deep. Design choice
+    for implementation: refuse outright vs loud-warn; and keep single-file dastest runs
+    OUTSIDE the metal-suite set (test_whisper.das etc.) unaffected.
