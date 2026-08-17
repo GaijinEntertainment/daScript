@@ -3245,7 +3245,7 @@
       },
       {
         "engine":"das",
-        "backend":"accel",
+        "backend":"cpu",
         "flavor":"accel",
         "box":"m1",
         "threads":8,
@@ -3745,7 +3745,7 @@
       },
       {
         "engine":"das",
-        "backend":"accel",
+        "backend":"cpu",
         "flavor":"accel",
         "box":"m1",
         "threads":8,
@@ -4639,7 +4639,7 @@
       },
       {
         "engine":"das",
-        "backend":"accel",
+        "backend":"cpu",
         "flavor":"accel",
         "box":"m1",
         "threads":8,

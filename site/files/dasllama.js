@@ -493,9 +493,9 @@
   // no flash); the gpu das row pairs the tool's own GPU mode (greedy, its flash default).
   // Rows from before the split carry no backend and read as 'cpu'.
   var AUDIO_LANES = [
-    { backend: 'cpu',   ref: 'cpu',   label: 'cpu' },
-    { backend: 'accel', ref: 'cpu',   label: 'cpu + accel' },
-    { backend: 'metal', ref: 'metal', label: 'gpu' }
+    { backend: 'cpu',   das: 'tuned', ref: 'cpu',   label: 'cpu' },
+    { backend: 'cpu',   das: 'accel', ref: 'cpu',   label: 'cpu + accel' },
+    { backend: 'metal', das: 'tuned', ref: 'metal', label: 'gpu' }
   ];
 
   function buildAudioRows(recs, workload) {
@@ -507,7 +507,8 @@
       Object.keys(boxes).forEach(function (bx) {
         AUDIO_LANES.forEach(function (L) {
         var dasHits = runs.filter(function (r) {
-          return r.box === bx && r.engine === 'das' && (r.backend || 'cpu') === L.backend;
+          return r.box === bx && r.engine === 'das' && (r.backend || 'cpu') === L.backend &&
+            (r.flavor || 'tuned').indexOf(L.das) === 0;
         });
         if (!dasHits.length) return;
         var das = newest(dasHits);

@@ -618,7 +618,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 var asrLeg = ""
                 if (sr.backend == "cpu" && sr.flavor == "tuned") {
                     asrLeg = ""
-                } elif (sr.backend == "accel" && sr.flavor == "accel") {
+                } elif (sr.backend == "cpu" && sr.flavor == "accel") {
                     asrLeg = "accel"
                 } elif (sr.backend == "metal" && sr.flavor == "tuned") {
                     asrLeg = "metal"

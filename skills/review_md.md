@@ -114,7 +114,8 @@ and the forced-vs-semantic test on its REPAIR decides the disposition. One check
 dragon then re-reads cold. Serious findings it returns open one more batch on the same
 terms; the round exits when a fresh cold read returns none. Wording a dragon itself authored
 and the round applied verbatim is exempt from the next pass — never run dragon on dragon;
-re-judging its own prose is oscillation by construction.
+re-judging its own prose is oscillation by construction. A document a round has ruled on is
+not re-dragoned in later rounds unless a serious rule change touches it — a ruling stands.
 
 ## Reviewing a REVIEW.md diff
 

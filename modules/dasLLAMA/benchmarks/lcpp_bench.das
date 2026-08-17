@@ -258,7 +258,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
     var leg_ok = true   // nolint:LINT003,LINT019 — falsified in the apple static_if half; the linux flavor sees it const
-    var run = BenchRun(engine = "das", backend = gpu ? "metal" : (accel ? "accel" : "cpu"),
+    var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu",   // accel is the FLAVOR, like the LLM rows
         flavor = flavor_stamp(accel ? "accel" : "tuned"),
         exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,

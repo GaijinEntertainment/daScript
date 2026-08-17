@@ -156,7 +156,7 @@ configurations still in active development. Measured rows are annotated, not del
 ## What is not claimed
 
 - ASR rows split into the same cpu / cpu + accel / gpu categories as the LLMs (the ASR
-  accel lever is stamped `backend: accel`), and the macOS reference CLIs get Apple's AMX
+  accel lever is `flavor: accel` on a cpu row, like the LLM rows), and the macOS reference CLIs get Apple's AMX
   matrix unit through Accelerate in every CPU mode — noted where it applies. llama.cpp has
   no speech-to-text engine; those references are the dedicated ones (whisper.cpp,
   parakeet-cli, ONNX Runtime, NeMo), and the gpu category exists where the reference has a
