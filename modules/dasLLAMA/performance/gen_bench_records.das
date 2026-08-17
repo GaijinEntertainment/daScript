@@ -762,13 +762,23 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
+// the families the metal das leg serves end to end (tower + decoder); the Conformer and
+// GGUF-tower rows would trip the --ngl anti-sandbag (their towers keep the CPU by design)
+def private asr_metal_leg(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
+
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
-                         var models : array<BenchModel>; var failed : array<string>) {
+                         var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr")}))
-    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    let leg_tag = empty(leg) ? "" : " {leg}"
+    to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr{leg_tag}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr{leg}")}))
+    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "1"])
+    }
     var out = ""
     let rc = run_and_stream(args, out)
     var cell : array<BenchModel>
@@ -806,7 +816,7 @@ def private asr_ref_available(tool : string) : bool {
 // cli tools fork per clip; onnx/nemo run ONE process over all clips (python load amortized).
 def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; cfg : Args; threads : int;
                          hw : HardwareInfo; box, date, store : string;
-                         var models : array<BenchModel>; var failed : array<string>) {
+                         var models : array<BenchModel>; var failed : array<string>; gpu : bool = false) {
     if (!asr_ref_available(ref.tool)) {
         to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} - tool not on this box\n")
         return
@@ -825,7 +835,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     }
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
-        backend = "cpu",
+        backend = gpu ? "metal" : "cpu",
         flavor = "stock",
         workload = asr_workload(spec),
         box = box,
@@ -914,7 +924,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             var rtext = ""
             let ms = (ref.tool == "mtmd"
                 ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
-                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
+                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd, gpu))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
@@ -1160,12 +1170,28 @@ def main : int {
             }
             settle_das(cfg)
             asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
+            static_if (typeinfo builtin_module_exists(das_accelerate)) {
+                settle_das(cfg)
+                asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "accel")
+            }
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                if (asr_metal_leg(spec)) {   // GPU-served families only: the anti-sandbag would refuse the rest
+                    settle_das(cfg)
+                    asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "metal")
+                }
+            }
             for (rf in spec.refs) {
                 if (!key_exists(toolVersions, rf.tool)) {
                     toolVersions |> insert(rf.tool, asr_ref_available(rf.tool) ? asr_tool_versions(rf.tool) : "")
                 }
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
+                static_if (typeinfo builtin_module_exists(das_metal)) {
+                    if (rf.tool == "whisper-cli" && asr_metal_leg(spec)) {   // the metal das row's like-for-like pair
+                        settle(cfg)
+                        asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
+                    }
+                }
             }
             let wasr = dlim_wipe(asr_model_path(spec))   // same lifecycle for the audio images
             if (wasr.removed > 0) {

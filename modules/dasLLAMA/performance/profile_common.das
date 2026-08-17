@@ -1364,12 +1364,16 @@ def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
 
 //! whisper.cpp parakeet-cli / whisper-cli — one process per clip (load is ~ms; parse_cli_ms
 //! subtracts it regardless). Best over `reps`. Returns the winning command line too — the receipt.
-def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
+def run_asr_cli(cli, model_path, wav_path : string; threads, reps : int; var cmd_out : string&; gpu : bool = false) : double {
     var args <- [whisper_cpp_bin(cli), "-m", model_path, "-f", wav_path, "-t", "{threads}"]
     if (cli == "whisper-cli") {
-        args |> push_from(["-bs", "1", "-bo", "1", "-nf"])
+        // greedy both modes (the das side is greedy — same search, only the device axis flips);
+        // the cpu mode also drops flash (-nf), the gpu mode keeps the tool's flash default
+        args |> push_from(gpu ? ["-bs", "1", "-bo", "1"] : ["-bs", "1", "-bo", "1", "-nf"])
     }
-    args |> push("-ng")
+    if (!gpu) {
+        args |> push("-ng")
+    }
     var best = -1.0lf
     cmd_out = argv_line(args)
     for (_rep in range(reps)) {
