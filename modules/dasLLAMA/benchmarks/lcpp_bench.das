@@ -353,8 +353,9 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
         }
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        if (!gpu) {   // the CPU row means CPU: the wdec driver (default-on) would silently GPU-serve the q8 decode
-            set_metal_wdec(false)
+        if (!gpu) {   // a CPU/accel row means CPU: the default-on drivers would silently GPU-serve
+            set_metal_wdec(false)   // the q8 whisper decode
+            set_metal_tower(false)  // the qwen3a-family conv2d (f32 planes serve even under q8 towers)
         }
     }
     apply_box_profile_runtime()

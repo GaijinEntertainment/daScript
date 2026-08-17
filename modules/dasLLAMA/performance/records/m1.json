@@ -4528,5 +4528,295 @@
     ],
     "arch":"Qwen3-Omni-30B audio",
     "size_bytes":32484494336
+  },
+  {
+    "gguf":"Qwen3-ASR-0.6B-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m Qwen3-ASR-0.6B-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":908.47699999999998,
+            "audio_s":11,
+            "encode_ms":563.25999999999999,
+            "text":"And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country."
+          },
+          "asr:jfk3.wav":{
+            "ms":2594.2779999999998,
+            "audio_s":33,
+            "encode_ms":1595.2570000000001,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:gb1.wav":{
+            "ms":18852.728999999999,
+            "audio_s":198.734375,
+            "encode_ms":9309.8539999999994,
+            "text":"My fellow Americans. This day has brought terrible news. In great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Doctor Kulpina Shavla, and Elon Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket. And the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers. And they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well. Of the families of these men and women, who have been given this sudden shock in grief. You are not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude. Of this country, the cause in which they died will continue. Mankind is led into the darkness. Beyond our world, by the inspiration of discovery. And the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah. Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one. And calls them each by name. Because of his great power. And mighty strength, not one of them is missing. The same creator who names the stars. Also knows the names. Of the seven souls we mourn today. The crew of the shuttle Columbia. Did not return safely to Earth. Yet we can pray. That all are safely home. May God bless the grieving families. And may God continue to bless America."
+          },
+          "asr:hp0.wav":{
+            "ms":26971.976999999999,
+            "audio_s":273.28724999999997,
+            "encode_ms":12834.700000000001,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia, at en.wikipedia.org. Henry F. Phillips. From Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design, lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward, to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, U.S. Patent Number 2,000,46,000,343, U.S. Patents 2,000,46,000,837 to 2,000,46,000,840. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company, went on to devise the Posidrive screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption: Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Posidrive, Supadrive. Torx. Hex, Allen. Robertson. Triwing. Torxet. Spannerhead. Triple Square, XZN. Others, Polydrive, Splinedrive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April 2008, at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U.S. registered 501c3, tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/slash, copyleft/slash, fdl.shtml."
+          },
+          "asr:hp0x2.wav":{
+            "ms":69716.904999999999,
+            "audio_s":546.57449999999994,
+            "encode_ms":26436.562000000002,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia, at en.wikipedia.org. Henry F. Phillips. From Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958. A U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, U.S. patent number 2,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,00"
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"53609e0d9",
+        "version":"0.6.4",
+        "dasllama_version":4,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8_nrsplit2 (manifest)",
+        "tune_sha":"fed11aa5ad4f874f88fc1a628e3bf0fd1c57601ddc1288044e81f5c125b9dccf",
+        "noise":"ok",
+        "exec_fmt":"q8/q8",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf",
+            "sha256":"bca259818b50ca7c4c05e9bdb35a5dc04fa039653a6d6f3f0f331f96f6aa1971",
+            "bytes":804749248
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf",
+            "sha256":"dae36c855f9a82a8916bea2238b24bda69a39d8da8b2f46dee7c103775656039",
+            "bytes":378575520
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"accel",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m Qwen3-ASR-0.6B-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":686.04300000000001,
+            "audio_s":11,
+            "encode_ms":339.80099999999999,
+            "text":"And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country."
+          },
+          "asr:jfk3.wav":{
+            "ms":1985.884,
+            "audio_s":33,
+            "encode_ms":965.98400000000004,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:gb1.wav":{
+            "ms":15175.775,
+            "audio_s":198.734375,
+            "encode_ms":5642.8639999999996,
+            "text":"My fellow Americans. This day has brought terrible news. In great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Doctor Kulpina Shavla, and Elon Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket. And the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers. And they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well. Of the families of these men and women, who have been given this sudden shock in grief. You are not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude. Of this country, the cause in which they died will continue. Mankind is led into the darkness. Beyond our world, by the inspiration of discovery. And the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah. Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one. And calls them each by name. Because of his great power. And mighty strength, not one of them is missing. The same creator who names the stars. Also knows the names. Of the seven souls we mourn today. The crew of the shuttle Columbia. Did not return safely to Earth. Yet we can pray. That all are safely home. May God bless the grieving families. And may God continue to bless America."
+          },
+          "asr:hp0.wav":{
+            "ms":21873.233,
+            "audio_s":273.28724999999997,
+            "encode_ms":7778.0789999999997,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia, at en.wikipedia.org. Henry F. Phillips. From Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, U.S. Patent Number 2,000,46,000,343, U.S. Patents 2,000,46,000,837 to 2,000,46,000,840. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape, in the head of the screw. As distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company, went on to devise the Posidrive screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly erroneously flat head. Phillips cross head. Posidrive, Supadrive. Torx. Hex, Allen. Robertson. Triwing. Torxet. Spanner head. Triple square, XZN. Others, Polydrive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April 2008, at 17:04. All text is available under the terms of the GNU Free Documentation License, see copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U.S. registered 501c3, tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/slash, copyleft/slash, fdl.shtml."
+          },
+          "asr:hp0x2.wav":{
+            "ms":59587.262000000002,
+            "audio_s":546.57449999999994,
+            "encode_ms":15674.139999999999,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia, at en.wikipedia.org. Henry F. Phillips. From Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958. A U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, U.S. patent number 2,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,000,00"
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"53609e0d9",
+        "version":"0.6.4",
+        "dasllama_version":4,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8_nrsplit2 (manifest)",
+        "tune_sha":"fed11aa5ad4f874f88fc1a628e3bf0fd1c57601ddc1288044e81f5c125b9dccf",
+        "noise":"ok",
+        "exec_fmt":"q8/q8",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf",
+            "sha256":"bca259818b50ca7c4c05e9bdb35a5dc04fa039653a6d6f3f0f331f96f6aa1971",
+            "bytes":804749248
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf",
+            "sha256":"dae36c855f9a82a8916bea2238b24bda69a39d8da8b2f46dee7c103775656039",
+            "bytes":378575520
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav",
+            "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+            "bytes":17490462
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3-ASR-0.6B-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":3669.5,
+            "encode_ms":3446.9000000000001,
+            "text":"0.00.004.812 I common_init_result: fitting params to device memory ... 0.00.004.815 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.168.407 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.265.149 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.407.524 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.552.104 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.654.451 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.654.518 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.654.750 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.654.752 W       For normal use cases, please use the standard llama-cli 0.01.666.733 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.03.888.286 I mtmd batch encoding done in 2221 ms 0.03.967.251 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.05.044.253 I mtmd batch encoding done in 1077 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 26 2548 1128 498 646 653 369 697 3146 13 151645"
+          },
+          "asr:jfk3.wav":{
+            "ms":10260.6,
+            "encode_ms":9591,
+            "text":"0.00.002.767 I common_init_result: fitting params to device memory ... 0.00.002.772 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.149.895 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.246.237 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.384.102 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.507.870 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.605.110 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.605.161 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.605.408 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.605.409 W       For normal use cases, please use the standard llama-cli 0.01.627.017 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 7) 0.03.818.175 I mtmd batch encoding done in 2191 ms 0.03.889.234 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 7) 0.06.047.875 I mtmd batch encoding done in 2158 ms 0.06.123.139 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 7) 0.08.266.212 I mtmd batch encoding done in 2143 ms 0.08.345.904 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 7) 0.10.491.052 I mtmd batch encoding done in 2146 ms 0.10.595.278 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 7) 0.11.143.569 I mtmd batch encoding done in 548 ms language English<asr_text>And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.DASLLAMA_IDS: 11528 6364 151704 3036 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 1597 773 11 847 12357 8877 11 2548 537 1128 697 3146 646 653 369 498 11 2548 1128 498 646 653 369 697 3146 13 151645"
+          },
+          "asr:gb1.wav":{
+            "ms":65063.699999999997,
+            "encode_ms":57186.599999999999,
+            "text":"0.00.002.756 I common_init_result: fitting params to device memory ... 0.00.002.761 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.152.741 I common_params_fit_impl: projected to use 7927 MiB of host memory vs. 65536 MiB of total host memory 0.00.250.096 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.01.384.926 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.511.992 I mtmd_cli_context: chat template example: <|im_start|>system You are a helpful assistant<|im_end|> <|im_start|>user Hello<|im_end|> <|im_start|>assistant Hi there<|im_end|> <|im_start|>user How are you?<|im_end|> <|im_start|>assistant 0.01.610.597 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.610.658 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/Qwen3-ASR-0.6B-Q8_0.gguf 0.01.610.881 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.610.882 W       For normal use cases, please use the standard llama-cli 0.01.709.755 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 27) 0.03.911.754 I mtmd batch encoding done in 2202 ms 0.03.982.205 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 27) 0.06.120.153 I mtmd batch encoding done in 2138 ms 0.06.195.204 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 27) 0.08.356.320 I mtmd batch encoding done in 2161 ms 0.08.440.317 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 27) 0.10.578.022 I mtmd batch encoding done in 2138 ms 0.10.663.674 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 27) 0.12.823.985 I mtmd batch encoding done in 2161 ms 0.12.916.936 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 27) 0.15.053.324 I mtmd batch encoding done in 2136 ms 0.15.149.665 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 27) 0.17.303.179 I mtmd batch encoding done in 2154 ms 0.17.406.615 I encoding mtmd batch, n_chunks = 1 (done = 8, total = 27) 0.19.544.258 I mtmd batch encoding done in 2138 ms 0.19.654.228 I encoding mtmd batch, n_chunks = 1 (done = 9, total = 27) 0.21.795.029 I mtmd batch encoding done in 2141 ms 0.21.946.902 I encoding mtmd batch, n_chunks = 1 (done = 10, total = 27) 0.24.084.842 I mtmd batch encoding done in 2137 ms 0.24.205.833 I encoding mtmd batch, n_chunks = 1 (done = 11, total = 27) 0.26.340.416 I mtmd batch encoding done in 2135 ms 0.26.465.086 I encoding mtmd batch, n_chunks = 1 (done = 12, total = 27) 0.28.616.427 I mtmd batch encoding done in 2151 ms 0.28.748.485 I encoding mtmd batch, n_chunks = 1 (done = 13, total = 27) 0.30.884.287 I mtmd batch encoding done in 2136 ms 0.31.022.746 I encoding mtmd batch, n_chunks = 1 (done = 14, total = 27) 0.33.181.099 I mtmd batch encoding done in 2159 ms 0.33.322.756 I encoding mtmd batch, n_chunks = 1 (done = 15, total = 27) 0.35.460.532 I mtmd batch encoding done in 2138 ms 0.35.609.978 I encoding mtmd batch, n_chunks = 1 (done = 16, total = 27) 0.37.761.805 I mtmd batch encoding done in 2151 ms 0.37.918.112 I encoding mtmd batch, n_chunks = 1 (done = 17, total = 27) 0.40.054.301 I mtmd batch encoding done in 2136 ms 0.40.213.649 I encoding mtmd batch, n_chunks = 1 (done = 18, total = 27) 0.42.363.721 I mtmd batch encoding done in 2150 ms 0.42.531.078 I encoding mtmd batch, n_chunks = 1 (done = 19, total = 27) 0.44.666.373 I mtmd batch encoding done in 2135 ms 0.44.837.551 I encoding mtmd batch, n_chunks = 1 (done = 20, total = 27) 0.46.990.064 I mtmd batch encoding done in 2153 ms 0.47.172.281 I encoding mtmd batch, n_chunks = 1 (done = 21, total = 27) 0.49.306.347 I mtmd batch encoding done in 2134 ms 0.49.492.454 I encoding mtmd batch, n_chunks = 1 (done = 22, total = 27) 0.51.628.205 I mtmd batch encoding done in 2136 ms 0.51.866.946 I encoding mtmd batch, n_chunks = 1 (done = 23, total = 27) 0.54.017.477 I mtmd batch encoding done in 2150 ms 0.54.212.527 I encoding mtmd batch, n_chunks = 1 (done = 24, total = 27) 0.56.347.664 I mtmd batch encoding done in 2135 ms 0.56.549.358 I encoding mtmd batch, n_chunks = 1 (done = 25, total = 27) 0.58.434.594 I mtmd batch encoding done in 1885 ms language English<asr_text>My fellow Americans. This day has brought terrible news. In great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Doctor Kulpina Shavla, and Elon Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket. And the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers. And they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well. Of the families of these men and women, who have been given this sudden shock in grief. You are not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude. Of this country, the cause in which they died will continue. Mankind is led into the darkness. Beyond our world, by the inspiration of discovery. And the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah. Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one. And calls them each by name. Because of his great power. And mighty strength, not one of them is missing. The same creator who names the stars. Also knows the names. Of the seven souls we mourn today. The crew of the shuttle Columbia. Did not return safely to Earth. Yet we can pray. That all are safely home. May God bless the grieving families. And may God continue to bless America.DASLLAMA_IDS: 11528 6364 151704 5050 12357 8877 13 1096 1899 702 7117 17478 3669 13 758 2244 50878 311 1039 3146 13 2411 11627 297 62410 419 6556 11 8954 2524 304 16003 5558 3645 448 1039 3550 44541 18796 13 362 2805 882 2937 11 33998 572 3884 15679 504 279 49293 3403 8257 13 576 18796 374 5558 13 2619 525 902 31596 13 1913 4479 572 264 13627 315 8094 13 51698 22388 73359 11 54137 51698 7937 20642 11 34138 80464 21304 11 21316 6798 10471 11 34138 12375 14249 1749 11 18635 730 12840 2210 1417 402 4260 11 323 68539 15152 263 11 264 14889 301 304 279 15907 6553 11732 13 4220 2953 323 3198 19110 2244 5214 304 279 2473 311 678 21941 13 758 458 4231 979 3550 10971 702 2525 311 2803 4558 14021 11 432 374 4135 311 30705 279 35964 315 5821 553 24306 13 1597 279 26038 315 59399 279 41342 15955 16566 315 279 9237 13 4220 68422 6876 279 35964 13 1597 807 16601 1105 72552 11 14063 807 1030 264 1550 323 34382 7428 304 2272 13 9211 315 862 24744 323 58672 323 10507 2142 11 582 686 3116 1105 678 279 803 13 2009 8877 3351 525 7274 438 1632 13 4940 279 8521 315 1493 2953 323 3198 11 879 614 1012 2661 419 10968 10755 304 37284 13 1446 525 537 7484 13 5633 4453 6995 342 7231 2342 448 498 13 1597 1846 498 10245 686 2677 614 279 5091 323 45035 13 4940 419 3146 11 279 5240 304 892 807 8469 686 3060 13 386 69270 374 6069 1119 279 26298 13 30786 1039 1879 11 553 279 19760 315 18335 13 1597 279 78322 311 3535 13 5633 11618 1119 3550 686 728 389 13 758 279 49293 3351 11 582 5485 19258 323 30826 13 14626 42626 1091 582 646 1490 11 1052 374 6838 323 3900 13 758 279 4244 315 279 52504 63430 13 52435 697 6414 323 1401 311 279 62780 13 10479 3465 678 1493 30 1260 879 12434 700 279 6774 884 18432 825 553 825 13 1597 6738 1105 1817 553 829 13 9211 315 806 2244 2355 13 1597 41627 8170 11 537 825 315 1105 374 7402 13 576 1852 19919 879 5036 279 9759 13 7281 8788 279 5036 13 4940 279 8094 34726 582 59134 3351 13 576 13627 315 279 44541 18796 13 14568 537 470 21000 311 9237 13 14626 582 646 23803 13 2938 678 525 21000 2114 13 3217 4264 16072 279 90744 8521 13 1597 1231 4264 3060 311 16072 5159 13 151645"
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "versions":"llama.cpp @ ebd048fc5 + mtmd-timing.patch@93138f65",
+        "exec_fmt":"bf16/q8_0",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf",
+            "sha256":"bca259818b50ca7c4c05e9bdb35a5dc04fa039653a6d6f3f0f331f96f6aa1971",
+            "bytes":804749248
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf",
+            "sha256":"dae36c855f9a82a8916bea2238b24bda69a39d8da8b2f46dee7c103775656039",
+            "bytes":378575520
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          }
+        ]
+      }
+    ],
+    "arch":"Qwen3-ASR-0.6B",
+    "size_bytes":804749248
   }
 ]
