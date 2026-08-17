@@ -187,10 +187,11 @@ def private wdec_attach(w : WhisperModel) : bool {
     g_wd_nvpad = (w.n_vocab + 63l) & ~63l
     var staging : array<uint8>
     staging |> reserve_resize((blen / 32l) * 34l + (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l + 16l * (nl * WD_MATS + 1l))
-    let rep = select_matmul_backend_for_load()
-    let mr = active_q8_layout_mr()
-    let kgroup = active_q8_kgroup()
-    let wbias = active_q8_wbias()
+    // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
+    let rep = kernel_backend_needs_repack(active_kernel_backend())
+    let mr = rep ? active_q8_layout_mr() : 1l
+    let kgroup = rep ? active_q8_kgroup() : 4l
+    let wbias = rep ? active_q8_wbias() : 0l
     var cur = 0ul
     g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, rep, mr, kgroup, wbias, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l

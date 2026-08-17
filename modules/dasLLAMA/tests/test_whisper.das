@@ -542,6 +542,9 @@ def test_whisper_q8_gate(t : T?) {
         // whole-model deletes: image-backed planes are locked views, only the finalizer may release them
         delete m
         delete mf
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_wdec(true)   // restore: later cells' GPU-serving claims see the default again
+        }
     }
 }
 
@@ -579,6 +582,7 @@ def test_whisper_tower_fp32_knob(t : T?) {
                 msegs |> push_clone(seg)
             }
             t |> equal(length(segs), length(msegs), "segment count")
+            to_log(LOG_INFO, "whisper-tiny q8-default jfk eyeball: '{segs[0].text}'\n")
             to_log(LOG_INFO, "whisper-tiny f32/q8 jfk eyeball: '{msegs[0].text}'\n")
             var mismatches = 0
             var total = 0

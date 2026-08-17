@@ -59393,3 +59393,2777 @@ Load command 16
   ship: dasllama-bench.tune.json (tune sidecar)
   wrote: Contents/Info.plist (CFBundleIdentifier=com.daspkg.dasllama-bench)
 Released to: modules/dasLLAMA/performance/_rig/dasllama-bench.app (72.6s)
+
+--- daspkg ---
+  [debug] $ rm -rf "modules/dasLLAMA/performance/_rig/dasllama-bench.app"
+  [debug] $ "/Users/borisbatkin/Work/daScript/bin/daslang" -exe -output "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench" --list-shared-modules "/Users/borisbatkin/Work/daScript/_daspkg_release_deps_2.json" "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/lcpp_bench.das"
+  output: compiler took 0.343783, /Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/lcpp_bench.das
+[I] LLVM EXE: targeting the current box (CPU + features) - the build carries [llvm_code] kernels
+[I] LLVM EXE: NEED_MODULE(Module_BuiltIn) for `$`
+[I] LLVM EXE: NEED_MODULE(Module_Strings) for `strings`
+[I] LLVM EXE: NEED_MODULE(Module_FIO) for `fio_core`
+[I] LLVM EXE: NEED_MODULE(Module_Math) for `math`
+[I] LLVM EXE: NEED_MODULE(Module_Rtti) for `rtti_core`
+[I] LLVM EXE: NEED_MODULE(Module_JobQue) for `jobque`
+[I] LLVM EXE: NEED_MODULE(Module_Debugger) for `debugapi`
+[I] LLVM EXE: NEED_MODULE(Module_DASBIND) for `dasbind`
+[I] LLVM EXE: wrote release deps to /Users/borisbatkin/Work/daScript/_daspkg_release_deps_2.json (shared=5, das=1)
+[I] LLVM EXE: NEED_MODULE(Module_FIO) for `fio_core`
+[I] LLVM EXE: NEED_MODULE(Module_Rtti) for `rtti_core`
+[I] LLVM EXE: NEED_MODULE(Module_JobQue) for `jobque`
+[I] LLVM EXE: NEED_MODULE(Module_Math) for `math`
+[I] LLVM EXE: include dynamic module: `das_metal`
+[I] LLVM EXE: include dynamic module: `stbimage`
+[I] LLVM EXE: include dynamic module: `audio`
+[I] LLVM EXE: include dynamic module: `das_accelerate`
+[I] LLVM EXE: include dynamic module: `dashv`
+[I] LLVM JIT: standalone exe entry point generated '_anon_7813693388109758024`main implementation', 5366 functions
+[I] Library modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench.exe linked - ok
+[I] LLVM JIT: 5366 functions incl 26 tune-stamped in 51.794408 sec (codegen, O3)
+[I] LLVM JIT time: hash 0 init 0.000449 declare 0.18211 probe 0 irgen 2.478163 optimize 21.233653 emit+link 27.713191 install 1e-06 finalize 0.186241
+dry run: /Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/lcpp_bench.das
+
+  build: standalone exe in 62.2s
+  tune: scope `dasllama` inherited (--quick): noise=ok mode=paranoid sha=1df0a9620 written=2026-08-17T12:33:37.001Z box=darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __PAGEZERO
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000100000000
+  fileoff 0
+ filesize 0
+  maxprot 0x00000000
+ initprot 0x00000000
+   nsects 0
+    flags 0x0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 632
+  segname __TEXT
+   vmaddr 0x0000000100000000
+   vmsize 0x000000000068c000
+  fileoff 0
+ filesize 6864896
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 7
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x00000001000007a0
+      size 0x0000000000585398
+    offset 1952
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x0000000100585b38
+      size 0x000000000000033c
+    offset 5790520
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000100585e74
+      size 0x0000000000000008
+    offset 5791348
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x0000000100585e80
+      size 0x0000000000002a00
+    offset 5791360
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x0000000100588880
+      size 0x00000000000e33b5
+    offset 5802112
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x000000010066bc38
+      size 0x0000000000004e30
+    offset 6732856
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x0000000100670a68
+      size 0x000000000001a2c8
+    offset 6752872
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x000000010068c000
+   vmsize 0x0000000000004000
+  fileoff 6864896
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x000000010068c000
+      size 0x0000000000000228
+    offset 6864896
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 69 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x000000010068c228
+      size 0x0000000000000058
+    offset 6865448
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA
+   vmaddr 0x0000000100690000
+   vmsize 0x00000000001d0000
+  fileoff 6881280
+ filesize 1867776
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x0000000100690000
+      size 0x00000000001c7f20
+    offset 6881280
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x0000000100857f20
+      size 0x0000000000004948
+    offset 0
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 4
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000100860000
+   vmsize 0x0000000000014000
+  fileoff 8749056
+ filesize 79312
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 8749056
+ datasize 1984
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 8751040
+ datasize 360
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 8756240
+   nsyms 81
+  stroff 8758088
+ strsize 1704
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 0
+     iextdefsym 0
+     nextdefsym 12
+      iundefsym 12
+      nundefsym 69
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 8757536
+  nindirectsyms 138
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+          cmd LC_LOAD_DYLINKER
+      cmdsize 32
+         name /usr/lib/dyld (offset 12)
+Load command 10
+     cmd LC_UUID
+ cmdsize 24
+    uuid 41375E82-828B-3071-BCCC-1DA0E6AFDF69
+Load command 11
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 12
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 13
+       cmd LC_MAIN
+   cmdsize 24
+  entryoff 5572468
+ stacksize 0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 16
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 17
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 18
+          cmd LC_RPATH
+      cmdsize 32
+         path @executable_path (offset 12)
+Load command 19
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 20
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 8751400
+ datasize 4840
+Load command 21
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 8756240
+ datasize 0
+Load command 22
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 8759792
+ datasize 68576
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench"
+  ship: modules/dasMetal/dasModuleMetal.shared_module
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasMetal/dasModuleMetal.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasMetal/dasModuleMetal.shared_module:
+@rpath/dasModuleMetal.shared_module
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasMetal/dasModuleMetal.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasMetal/dasModuleMetal.shared_module:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 792
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000000024000
+  fileoff 0
+ filesize 147456
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 9
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000000002e38
+      size 0x0000000000019454
+    offset 11832
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x000000000001c28c
+      size 0x0000000000000330
+    offset 115340
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __objc_stubs
+   segname __TEXT
+      addr 0x000000000001c5c0
+      size 0x00000000000005a0
+    offset 116160
+     align 2^5 (32)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x000000000001cb60
+      size 0x0000000000000018
+    offset 117600
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x000000000001cb78
+      size 0x0000000000001308
+    offset 117624
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x000000000001de80
+      size 0x000000000000155c
+    offset 122496
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x000000000001f3dc
+      size 0x0000000000000055
+    offset 127964
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __objc_methname
+   segname __TEXT
+      addr 0x000000000001f431
+      size 0x00000000000003cb
+    offset 128049
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x000000000001f7fc
+      size 0x0000000000000d48
+    offset 129020
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 392
+  segname __DATA_CONST
+   vmaddr 0x0000000000024000
+   vmsize 0x0000000000004000
+  fileoff 147456
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 4
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000000024000
+      size 0x00000000000002d8
+    offset 147456
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 68 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x00000000000242d8
+      size 0x0000000000003aa0
+    offset 148184
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cfstring
+   segname __DATA_CONST
+      addr 0x0000000000027d78
+      size 0x0000000000000020
+    offset 163192
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __objc_imageinfo
+   segname __DATA_CONST
+      addr 0x0000000000027d98
+      size 0x0000000000000008
+    offset 163224
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 312
+  segname __DATA
+   vmaddr 0x0000000000028000
+   vmsize 0x0000000000004000
+  fileoff 163840
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 3
+    flags 0x0
+Section
+  sectname __objc_selrefs
+   segname __DATA
+      addr 0x0000000000028000
+      size 0x0000000000000168
+    offset 163840
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x10000005
+ reserved1 0
+ reserved2 0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x0000000000028168
+      size 0x00000000000000b8
+    offset 164200
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x0000000000028220
+      size 0x0000000000000038
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x000000000002c000
+   vmsize 0x0000000000040000
+  fileoff 180224
+ filesize 248896
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/dasModuleMetal.shared_module (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 180224
+ datasize 4304
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 184528
+ datasize 5152
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 191080
+   nsyms 1560
+  stroff 216680
+ strsize 208968
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 1402
+     iextdefsym 1402
+     nextdefsym 70
+      iundefsym 1472
+      nundefsym 88
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 216040
+  nindirectsyms 159
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid 3CFDB649-FF80-3D8D-B2CA-D38E92D4D58C
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 88
+         name /System/Library/Frameworks/Metal.framework/Versions/A/Metal (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 373.2.0
+compatibility version 1.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 96
+         name /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 5026.5.4
+compatibility version 300.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 16
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 17
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 18
+          cmd LC_LOAD_DYLIB
+      cmdsize 104
+         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 5026.5.4
+compatibility version 150.0.0
+Load command 19
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libobjc.A.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 228.0.0
+compatibility version 1.0.0
+Load command 20
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 21
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 22
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 189680
+ datasize 1400
+Load command 23
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 191080
+ datasize 0
+Load command 24
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 425648
+ datasize 3472
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasMetal/dasModuleMetal.shared_module"
+  ship: modules/dasAccelerate/dasModuleAccelerate.shared_module
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAccelerate/dasModuleAccelerate.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAccelerate/dasModuleAccelerate.shared_module:
+@rpath/dasModuleAccelerate.shared_module
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAccelerate/dasModuleAccelerate.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAccelerate/dasModuleAccelerate.shared_module:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000000008000
+  fileoff 0
+ filesize 32768
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000000002050
+      size 0x0000000000002dd4
+    offset 8272
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x0000000000004e24
+      size 0x0000000000000210
+    offset 20004
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000000005034
+      size 0x0000000000000018
+    offset 20532
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x000000000000504c
+      size 0x000000000000002e
+    offset 20556
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x000000000000507c
+      size 0x00000000000001c0
+    offset 20604
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x000000000000523c
+      size 0x00000000000001df
+    offset 21052
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x000000000000541c
+      size 0x00000000000003e0
+    offset 21532
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x0000000000005800
+      size 0x0000000000000e88
+    offset 22528
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x0000000000008000
+   vmsize 0x0000000000004000
+  fileoff 32768
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000000008000
+      size 0x0000000000000188
+    offset 32768
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 44 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x0000000000008188
+      size 0x0000000000000508
+    offset 33160
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 312
+  segname __DATA
+   vmaddr 0x000000000000c000
+   vmsize 0x0000000000004000
+  fileoff 49152
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 3
+    flags 0x0
+Section
+  sectname __thread_vars
+   segname __DATA
+      addr 0x000000000000c000
+      size 0x0000000000000018
+    offset 49152
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000013
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_bss
+   segname __DATA
+      addr 0x000000000000c018
+      size 0x0000000000000001
+    offset 0
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000012
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x000000000000c020
+      size 0x0000000000000088
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000000010000
+   vmsize 0x0000000000008000
+  fileoff 65536
+ filesize 20896
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 72
+         name @rpath/dasModuleAccelerate.shared_module (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 65536
+ datasize 2168
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 67704
+ datasize 168
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 68032
+   nsyms 215
+  stroff 71848
+ strsize 13760
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 154
+     iextdefsym 154
+     nextdefsym 4
+      iundefsym 158
+      nundefsym 57
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 71472
+  nindirectsyms 93
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid D89B29AA-7A93-3DF2-9A06-D0568C7882CB
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 96
+         name /System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 4.0.0
+compatibility version 1.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 16
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 17
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 18
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 19
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 67872
+ datasize 160
+Load command 20
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 68032
+ datasize 0
+Load command 21
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 85616
+ datasize 816
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAccelerate/dasModuleAccelerate.shared_module"
+  ship: modules/dasAudio/dasModuleAudio.shared_module
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAudio/dasModuleAudio.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAudio/dasModuleAudio.shared_module:
+@rpath/dasModuleAudio.shared_module
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAudio/dasModuleAudio.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAudio/dasModuleAudio.shared_module:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x00000000001c8000
+  fileoff 0
+ filesize 1867776
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x00000000000028c8
+      size 0x0000000000095c24
+    offset 10440
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x00000000000984ec
+      size 0x0000000000000654
+    offset 623852
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000000098b40
+      size 0x0000000000000018
+    offset 625472
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x0000000000098b60
+      size 0x000000000010e400
+    offset 625504
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x00000000001a6f60
+      size 0x0000000000002da4
+    offset 1732448
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x00000000001a9d04
+      size 0x0000000000002d40
+    offset 1744132
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x00000000001aca44
+      size 0x00000000000056a8
+    offset 1755716
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x00000000001b20f0
+      size 0x0000000000013c90
+    offset 1777904
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x00000000001c8000
+   vmsize 0x0000000000010000
+  fileoff 1867776
+ filesize 65536
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x00000000001c8000
+      size 0x0000000000000530
+    offset 1867776
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 135 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x00000000001c8530
+      size 0x000000000000e450
+    offset 1869104
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA
+   vmaddr 0x00000000001d8000
+   vmsize 0x0000000000004000
+  fileoff 1933312
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x00000000001d8000
+      size 0x0000000000000640
+    offset 1933312
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x00000000001d8640
+      size 0x0000000000002aa8
+    offset 0
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x00000000001dc000
+   vmsize 0x000000000007c000
+  fileoff 1949696
+ filesize 493680
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/dasModuleAudio.shared_module (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 1949696
+ datasize 8472
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 1958168
+ datasize 568
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 1962760
+   nsyms 4021
+  stroff 2028304
+ strsize 395984
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 3779
+     iextdefsym 3779
+     nextdefsym 33
+      iundefsym 3812
+      nundefsym 209
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 2027096
+  nindirectsyms 301
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid 448C2629-A3AB-3EBC-AEEB-60C8D1E9E321
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 104
+         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 5026.5.4
+compatibility version 150.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 96
+         name /System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1.0.0
+compatibility version 1.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 104
+         name /System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1000.0.0
+compatibility version 1.0.0
+Load command 16
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 17
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 18
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 19
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 20
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 21
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 1958736
+ datasize 4024
+Load command 22
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 1962760
+ datasize 0
+Load command 23
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 2424288
+ datasize 19088
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasAudio/dasModuleAudio.shared_module"
+  ship: modules/dasStbImage/dasModuleStbImage.shared_module
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasStbImage/dasModuleStbImage.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasStbImage/dasModuleStbImage.shared_module:
+@rpath/dasModuleStbImage.shared_module
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasStbImage/dasModuleStbImage.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasStbImage/dasModuleStbImage.shared_module:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000000098000
+  fileoff 0
+ filesize 622592
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000000001c30
+      size 0x0000000000076ce0
+    offset 7216
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x0000000000078910
+      size 0x00000000000003f0
+    offset 493840
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000000078d00
+      size 0x0000000000000038
+    offset 494848
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x0000000000078d40
+      size 0x0000000000002fdc
+    offset 494912
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x000000000007bd1c
+      size 0x0000000000002560
+    offset 507164
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x000000000007e27c
+      size 0x0000000000001b44
+    offset 516732
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x000000000007fdc0
+      size 0x0000000000004b90
+    offset 523712
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x0000000000084950
+      size 0x000000000001247c
+    offset 543056
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x0000000000098000
+   vmsize 0x000000000000c000
+  fileoff 622592
+ filesize 49152
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000000098000
+      size 0x00000000000002f0
+    offset 622592
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 84 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x00000000000982f0
+      size 0x0000000000009ac8
+    offset 623344
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 392
+  segname __DATA
+   vmaddr 0x00000000000a4000
+   vmsize 0x0000000000004000
+  fileoff 671744
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 4
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x00000000000a4000
+      size 0x0000000000000330
+    offset 671744
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_vars
+   segname __DATA
+      addr 0x00000000000a4330
+      size 0x00000000000000a8
+    offset 672560
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000013
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_bss
+   segname __DATA
+      addr 0x00000000000a43d8
+      size 0x0000000000000020
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000012
+ reserved1 0
+ reserved2 0
+Section
+  sectname __common
+   segname __DATA
+      addr 0x00000000000a43f8
+      size 0x0000000000000004
+    offset 0
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x00000000000a8000
+   vmsize 0x0000000000070000
+  fileoff 688128
+ filesize 445344
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/dasModuleStbImage.shared_module (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 688128
+ datasize 6392
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 694520
+ datasize 312
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 698408
+   nsyms 3468
+  stroff 754608
+ strsize 369912
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 3324
+     iextdefsym 3324
+     nextdefsym 12
+      iundefsym 3336
+      nundefsym 132
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 753896
+  nindirectsyms 178
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid B341F603-5E13-3A97-805B-828403666A4B
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 16
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 17
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 18
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 694832
+ datasize 3576
+Load command 19
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 698408
+ datasize 0
+Load command 20
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 1124528
+ datasize 8944
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasStbImage/dasModuleStbImage.shared_module"
+  ship: modules/dasHV/dasModuleHV.shared_module
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasHV/dasModuleHV.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasHV/dasModuleHV.shared_module:
+@rpath/dasModuleHV.shared_module
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasHV/dasModuleHV.shared_module"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasHV/dasModuleHV.shared_module:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x00000000000c4000
+  fileoff 0
+ filesize 802816
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000000002d50
+      size 0x00000000000954dc
+    offset 11600
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x000000000009822c
+      size 0x0000000000000da4
+    offset 623148
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000000098fd0
+      size 0x0000000000000024
+    offset 626640
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x0000000000099000
+      size 0x0000000000004248
+    offset 626688
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x000000000009d248
+      size 0x0000000000006335
+    offset 643656
+     align 2^0 (1)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x00000000000a3580
+      size 0x0000000000006778
+    offset 669056
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x00000000000a9cf8
+      size 0x00000000000067b8
+    offset 695544
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x00000000000b04b0
+      size 0x00000000000121f8
+    offset 722096
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x00000000000c4000
+   vmsize 0x0000000000010000
+  fileoff 802816
+ filesize 65536
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x00000000000c4000
+      size 0x0000000000000a48
+    offset 802816
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 291 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x00000000000c4a48
+      size 0x000000000000c2b8
+    offset 805448
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 312
+  segname __DATA
+   vmaddr 0x00000000000d4000
+   vmsize 0x0000000000004000
+  fileoff 868352
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 3
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x00000000000d4000
+      size 0x0000000000000100
+    offset 868352
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x00000000000d4100
+      size 0x0000000000000220
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Section
+  sectname __common
+   segname __DATA
+      addr 0x00000000000d4320
+      size 0x0000000000000760
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x00000000000d8000
+   vmsize 0x00000000000bc000
+  fileoff 884736
+ filesize 754616
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/dasModuleHV.shared_module (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 884736
+ datasize 14496
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 899232
+ datasize 18624
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 922944
+   nsyms 5712
+  stroff 1016816
+ strsize 609656
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 4738
+     iextdefsym 4738
+     nextdefsym 612
+      iundefsym 5350
+      nundefsym 362
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 1014336
+  nindirectsyms 620
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid 9C607457-8A8B-3880-91CE-6841B5883EC0
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 104
+         name /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 5026.5.4
+compatibility version 150.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 96
+         name /System/Library/Frameworks/Security.framework/Versions/A/Security (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 61901.120.67
+compatibility version 1.0.0
+Load command 15
+          cmd LC_LOAD_DYLIB
+      cmdsize 80
+         name /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 3.0.0
+compatibility version 3.0.0
+Load command 16
+          cmd LC_LOAD_DYLIB
+      cmdsize 72
+         name /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 3.0.0
+compatibility version 3.0.0
+Load command 17
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 18
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 19
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 20
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 21
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 22
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 917856
+ datasize 5088
+Load command 23
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 922944
+ datasize 0
+Load command 24
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 1626480
+ datasize 12872
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/modules/dasHV/dasModuleHV.shared_module"
+  ship runtime: liblibDaScriptDyn.dylib
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn.dylib"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn.dylib:
+@rpath/liblibDaScriptDyn.dylib
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn.dylib"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn.dylib:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x00000000009c4000
+  fileoff 0
+ filesize 10240000
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000000001818
+      size 0x000000000079c360
+    offset 6168
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x000000000079db78
+      size 0x0000000000001b54
+    offset 7986040
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x000000000079f6cc
+      size 0x0000000000000450
+    offset 7993036
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x000000000079fb20
+      size 0x00000000000433f4
+    offset 7994144
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x00000000007e2f14
+      size 0x000000000002d5f4
+    offset 8269588
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x0000000000810508
+      size 0x00000000000154f5
+    offset 8455432
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x0000000000825a00
+      size 0x0000000000060600
+    offset 8542720
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x0000000000886000
+      size 0x000000000013aa94
+    offset 8937472
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x00000000009c4000
+   vmsize 0x00000000003b4000
+  fileoff 10240000
+ filesize 3883008
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x00000000009c4000
+      size 0x0000000000001640
+    offset 10240000
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 583 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x00000000009c5640
+      size 0x00000000003b1968
+    offset 10245696
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 472
+  segname __DATA
+   vmaddr 0x0000000000d78000
+   vmsize 0x0000000000004000
+  fileoff 14123008
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 5
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x0000000000d78000
+      size 0x0000000000000104
+    offset 14123008
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_vars
+   segname __DATA
+      addr 0x0000000000d78108
+      size 0x0000000000000138
+    offset 14123272
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000013
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_bss
+   segname __DATA
+      addr 0x0000000000d78240
+      size 0x0000000000000090
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000012
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x0000000000d782d0
+      size 0x00000000000000cc
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Section
+  sectname __common
+   segname __DATA
+      addr 0x0000000000d783a0
+      size 0x0000000000000084
+    offset 0
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000000d7c000
+   vmsize 0x0000000000c3c000
+  fileoff 14139392
+ filesize 12816072
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 56
+         name @rpath/liblibDaScriptDyn.dylib (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 14139392
+ datasize 39688
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 14179080
+ datasize 39400
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 14314176
+   nsyms 109911
+  stroff 16077936
+ strsize 10668424
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 108392
+     iextdefsym 108392
+     nextdefsym 763
+      iundefsym 109155
+      nundefsym 756
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 16072752
+  nindirectsyms 1295
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid 06F21274-CAA3-3DF4-B060-368CBDC32ECF
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 15
+          cmd LC_RPATH
+      cmdsize 56
+         path /Users/borisbatkin/Work/daScript/lib (offset 12)
+Load command 16
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 14218480
+ datasize 95696
+Load command 17
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 14314176
+ datasize 0
+Load command 18
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 26746368
+ datasize 209096
+
+  [debug] $ install_name_tool -delete_rpath "/Users/borisbatkin/Work/daScript/lib" "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn.dylib"
+  ship runtime: liblibDaScriptDyn_runtime.dylib
+  [debug] $ otool -D "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn_runtime.dylib"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn_runtime.dylib:
+@rpath/liblibDaScriptDyn_runtime.dylib
+
+  [debug] $ otool -l "modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn_runtime.dylib"
+  output: modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/liblibDaScriptDyn_runtime.dylib:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 712
+  segname __TEXT
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000000eb8000
+  fileoff 0
+ filesize 15433728
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 8
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x00000000000013f0
+      size 0x0000000000b95c24
+    offset 5104
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x0000000000b97014
+      size 0x0000000000000eb8
+    offset 12152852
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Section
+  sectname __init_offsets
+   segname __TEXT
+      addr 0x0000000000b97ecc
+      size 0x0000000000000404
+    offset 12156620
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000016
+ reserved1 0
+ reserved2 0
+Section
+  sectname __const
+   segname __TEXT
+      addr 0x0000000000b982d0
+      size 0x0000000000008f58
+    offset 12157648
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x0000000000ba1228
+      size 0x000000000001e0d5
+    offset 12194344
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000002
+ reserved1 0
+ reserved2 0
+Section
+  sectname __gcc_except_tab
+   segname __TEXT
+      addr 0x0000000000bbf300
+      size 0x0000000000051440
+    offset 12317440
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __unwind_info
+   segname __TEXT
+      addr 0x0000000000c10740
+      size 0x000000000008c2b0
+    offset 12650304
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __eh_frame
+   segname __TEXT
+      addr 0x0000000000c9c9f0
+      size 0x00000000002195f8
+    offset 13224432
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x6800000b
+ reserved1 0
+ reserved2 0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA_CONST
+   vmaddr 0x0000000000eb8000
+   vmsize 0x00000000001b4000
+  fileoff 15433728
+ filesize 1785856
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000000eb8000
+      size 0x0000000000000ac0
+    offset 15433728
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 314 (index into indirect symbol table)
+ reserved2 0
+Section
+  sectname __const
+   segname __DATA_CONST
+      addr 0x0000000000eb8ac0
+      size 0x00000000001b0ce8
+    offset 15436480
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 552
+  segname __DATA
+   vmaddr 0x000000000106c000
+   vmsize 0x0000000000014000
+  fileoff 17219584
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 6
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x000000000106c000
+      size 0x0000000000000428
+    offset 17219584
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_vars
+   segname __DATA
+      addr 0x000000000106c428
+      size 0x0000000000000210
+    offset 17220648
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000013
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_data
+   segname __DATA
+      addr 0x000000000106c638
+      size 0x0000000000000001
+    offset 17221176
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000011
+ reserved1 0
+ reserved2 0
+Section
+  sectname __thread_bss
+   segname __DATA
+      addr 0x000000000106c640
+      size 0x0000000000010118
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000012
+ reserved1 0
+ reserved2 0
+Section
+  sectname __common
+   segname __DATA
+      addr 0x000000000107c760
+      size 0x0000000000000298
+    offset 0
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x000000000107ca00
+      size 0x0000000000000580
+    offset 0
+     align 2^4 (16)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000001080000
+   vmsize 0x0000000000aec000
+  fileoff 17235968
+ filesize 11443968
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 4
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/liblibDaScriptDyn_runtime.dylib (offset 24)
+   time stamp 1 Wed Dec 31 16:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 17235968
+ datasize 10824
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 17246792
+ datasize 125160
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 17475672
+   nsyms 99481
+  stroff 19070000
+ strsize 9387448
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 96524
+     iextdefsym 96524
+     nextdefsym 2602
+      iundefsym 99126
+      nundefsym 355
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 19067368
+  nindirectsyms 658
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+     cmd LC_UUID
+ cmdsize 24
+    uuid EA3AA19A-DF9C-30D4-A23E-B66D1EF1EBE6
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+          cmd LC_LOAD_DYLIB
+      cmdsize 48
+         name /usr/lib/libc++.1.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 2100.43.0
+compatibility version 1.0.0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Wed Dec 31 16:00:02 1969
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 14
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 17371952
+ datasize 103720
+Load command 15
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 17475672
+ datasize 0
+Load command 16
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 28457456
+ datasize 222480
+
+  ship: dasllama-bench.tune.json (tune sidecar)
+  wrote: Contents/Info.plist (CFBundleIdentifier=com.daspkg.dasllama-bench)
+Released to: modules/dasLLAMA/performance/_rig/dasllama-bench.app (74.1s)
