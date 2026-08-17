@@ -56,7 +56,9 @@ no home in the file goes to a design doc. Terse section dividers stay.
 **A file header is a map, not an essay.** At or under the comment cap a header may stay
 prose; past it, it either becomes a map — one line per fact of the file's contract — or
 gets trimmed. A header may repeat per-symbol comments (a cold reader needs the shape
-before any symbol), never text the code already prints.
+before any symbol), never text the code already prints. The map allowance is not
+header-only: a comment whose lines are one-fact-each, sitting above a list-shaped
+declaration, is a map too — capped by the list it describes, not by the prose cap.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
 for tooling-visible public API. On a private symbol a docstring restates the name to a
@@ -105,7 +107,9 @@ rides the pointed-from line when it fits; when the pointed-from code is a whole 
 — its half of a duplicated block — or the pointer overflows the line, it sits directly
 above the pointed-from code, each copy carrying its own.
 The discriminator against the consequence-note ban below: a pointer names WHERE the other
-half lives, so a maintainer changing this line knows what else to open
+half lives, so a maintainer changing this line knows what else to open. The absence is a
+finding too: two halves that must change together with no pointer on either half — fix by
+adding the pointer to one half
 (`// consumed by control.html's chat panel`); a note describing WHAT the effect looks like
 downstream (`// the page shows its attach button on this`) is the banned kind.
 

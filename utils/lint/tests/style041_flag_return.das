@@ -205,7 +205,7 @@ def neg_separator(xs : array<int>) : string {
 }
 
 // set + continue in an UNGUARDED loop that deliberately keeps reporting - the
-// collapse would eat the remaining diagnostics (the utils/hygiene shape)
+// collapse would eat the remaining diagnostics (the hygiene tool's shape)
 def neg_collect_diagnostics(xs : array<int>) : int {
     var any_missing = false
     for (x in xs) {

@@ -1786,7 +1786,7 @@ static das::string resolve_dynamic_module_path ( const char *, const char * ) {
 #endif
 
 // Standalone-exe browser lifecycle (matches the interpreter's WebLoop in
-// utils/daScript/main.cpp). A cross-compiled wasm graphics app exports
+// utils/daslang/main.cpp). A cross-compiled wasm graphics app exports
 // init/update/shutdown, but its `main` is the blocking desktop driver. On the web
 // the generated entry (llvm_exe.das) runs init() then calls jit_run_web_lifecycle
 // instead of main: it installs an rAF loop on update() and runs shutdown() when

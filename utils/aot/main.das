@@ -26,7 +26,7 @@ def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool; aot_lib :
     cop.version_2_syntax = gen2;
     cop.gen2_make_syntax = gen2_make;
     // AOT output is a cross-box artifact — per-box [tune] stamps must not leak into the
-    // generated stubs (the das twin of utils/daScript/main.cpp's -aot policy; without it the
+    // generated stubs (the das twin of utils/daslang/main.cpp's -aot policy; without it the
     // stubs record stamped-world hashes while the AOT-consuming runtime compiles gated →
     // error[50101] on any function with a [tune] family in its static call graph)
     cop.tune_frozen = true;

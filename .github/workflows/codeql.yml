@@ -81,7 +81,7 @@ jobs:
           -**/stb_*.h
           -modules/dasSQLITE/sqlite/**
           -modules/dasMinfft/minfft/**
-          -utils/dasFormatter/ds_parser.cpp
+          -utils/gen1-to-gen2/ds_parser.cpp
         input: sarif-results/cpp.sarif
         output: sarif-results/cpp.sarif
 

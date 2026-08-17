@@ -11,7 +11,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-//! Regression for three LineInfo range bugs (see utils/lineinfo-audit):
+//! Regression for three LineInfo range bugs (see utils/internal/lineinfo-audit):
 //! 1. ExprLet.atInit used to include the lexer-synthesized statement-terminating
 //!    semicolon, overshooting one phantom column past the end of line.
 //! 2. Closure/block-arg bodies started one column early — the hidden mid-rule

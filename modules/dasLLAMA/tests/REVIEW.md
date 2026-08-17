@@ -28,10 +28,10 @@ is added, corrected when what it covers is renamed or re-scoped.
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
 
 **Weakening `test_env_registry.das` is a defect.** It enforces the knob contract: no raw
-environment access outside `dasllama_env.das` (declare an `[EnvConfig]` field and read
-`g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no re-declared
-env helper, and a checked-in `ENVIRONMENT.md` matching what the declarations render
-(regenerate with `harness/gen_env_doc.das`).
+environment access outside `../dasllama/dasllama_env.das` (declare an `[EnvConfig]` field and
+read `g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no re-declared
+env helper, and a checked-in `../ENVIRONMENT.md` matching what the declarations render
+(regenerate with `../harness/gen_env_doc.das`).
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect.
@@ -51,6 +51,10 @@ through their family loaders). Image-rail coverage belongs to the image suites a
 bit; a platform-fixed predicate's observable is the argv it gates or the mode it selects; a
 moved or edited registration's observable is reachability.** Feed the function and check the
 bytes; "the model still runs" is not that test.
+
+**A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
+naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless
+round-trip.**
 
 **Every test that compares generated tokens, ids, or logits logs the decoded text for both
 sides.** A red, or a suspicious green, must be readable as text in the log, not only as an id

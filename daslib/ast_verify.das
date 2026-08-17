@@ -845,7 +845,7 @@ class private AstVerifyVisitor : AstVisitor {
 def public verify_module(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module in place, emitting a ``macro_error`` per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building
-    //! AST — see utils/ast-fuzz/README.md for when each entry point applies.
+    //! AST — the repo's ast-fuzz suite README covers when each entry point applies.
     var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? true)
     make_visitor(*v) $(adapter) {
         v.adapter = adapter

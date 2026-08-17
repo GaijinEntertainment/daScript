@@ -6,7 +6,7 @@ was an **oracle mismatch** — a gate CI enforces that no local step mirrored �
 not a wrong change. This file maps every PR-triggered lane to its exact local
 mirror, or says honestly that there isn't one.
 
-**`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
+**`utils/internal/preflight` automates these gates.** `daslang utils/internal/preflight/main.das`
 runs the fast tier (format + lint + clang frontend pass on changed C++ —
 escalating to a full src+tests-cpp sweep when a header changed; seconds);
 `-- --full` adds the untracked-files gate, dasgen freshness, the CI-only-das
@@ -46,7 +46,7 @@ the CI ref, never a working-tree copy.
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
-| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | five doc gates |
+| `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
 
 > A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains + the full build matrix (Release cells add the full AOT sweep; Debug cells ride along — `matrix` isn't available in a job-level `if`, so they can't be excluded); `bundle_smoke` and `build_linux_gcc` are gated off `schedule`.
@@ -146,26 +146,27 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 
 | CI step | Local mirror | Notes |
 |---|---|---|
-| dasgen freshness | `<daslang> utils/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; see `skills/internal/visitor_gen_bind.md` |
+| dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; see `skills/internal/visitor_gen_bind.md` |
 | Run examples | `cmake --build build --config Release --target run_examples` | |
 | Utils tests | `cmake --build build --config Release --target run_utils_tests` | |
 | Tutorial dry-runs | `cmake --build build --config Release --target dry_run_tutorials` | catches compile rot in `tutorials/` — run after daslib API changes |
 | Standalone exes | `cmake --build build --config Release --target all_utils_exe`, plus `<daslang> -exe -output bin/das-fmt utils/das-fmt/dasfmt.das` and `... bin/das-lint utils/lint/main.das` | `-exe` needs dasLLVM + lld-link on PATH |
 | Sequence smoke | Windows: `pwsh examples/games/sequence/ci_smoke_test.ps1 "$(pwd)"`; linux/mac: `bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"` | build the runtime modules first: `cmake --build build --config Release --target dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio dasModulePUGIXML dasModuleStbImage`. **This is the only pre-merge lane that compiles GLFW-gated `.das` like dasOpenGL** — run it for type-system / daslib-generics changes |
-| Formatter `--verify` | preflight's `format` gate runs it exactly (tracked files via `--files-from`); manual: `<daslang> utils/das-fmt/dasfmt.das -- --path ./ --verify` | CI's second verify pass runs an `-exe`-compiled `bin/das-fmt.exe` built from `dasfmt.das`; the v1→v2 syntax converter is a separate binary, `gen1_to_gen2` (`utils/dasFormatter/`) |
+| Formatter `--verify` | preflight's `format` gate runs it exactly (tracked files via `--files-from`); manual: `<daslang> utils/das-fmt/dasfmt.das -- --path ./ --verify` | CI's second verify pass runs an `-exe`-compiled `bin/das-fmt.exe` built from `dasfmt.das`; the v1→v2 syntax converter is a separate binary, `gen1_to_gen2` (`utils/gen1-to-gen2/`) |
 | Lint changed `.das` | preflight's `lint` gate — THREE rails, mirroring CI exactly: host-flavor interp, the LINUX-lane mirror (`--disable-module dasMetal` — CI's verdict is rendered ONLY by the linux lane, where dasMetal's platform `static_if` halves compile out so its requires/args read unused there and nowhere else; dasVulkan is in-tree and present on linux, so it is NOT disabled), and the `-exe`-compiled `das-lint` (different module resolution). Manual single-rail form: `git diff --name-only origin/master..HEAD -- '*.das' \| xargs <daslang> utils/lint/main.das -- --quiet` | zero warnings on ALL rails; a mirror-only STYLE030/LINT012 takes the both-worlds `nolint:...,LINT019` spelling |
 | daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | rarely built locally; catches static-registration / no-dynamic-modules divergence |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | run after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
 | AST verify sweep — **not a PR gate** | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only` — only an `AST verify` line is a failure; compile errors are expected (many tests assert one) | Runs on `extended_checks.yml`'s 04:00 cron, not per PR: ~23 min, one daslang process per test file. Force it early with `gh workflow run extended_checks.yml`. Run it locally after touching macro or AST-building code — `skills/das_macros.md` |
-| Authored-doc code blocks — **not a PR gate** | `<daslang> utils/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | Nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run it locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes that docs quote — `skills/internal/doc_sweep.md` |
+| Authored-doc code blocks — **not a PR gate** | `<daslang> utils/internal/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | Nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run it locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes that docs quote — `skills/internal/doc_sweep.md` |
 | MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI but runs anywhere; MCP signature changes break it silently — run after editing `utils/mcp/` |
 | dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/internal/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
-## doc.yml — the five gates
+## doc.yml — the gates
 
-Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
-`daslib/**` means **any daslib edit** runs all five. CI stops at the FIRST
+Only triggered when `doc/**`, `daslib/**`, `src/builtin/**`,
+`modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**`
+changed — but `daslib/**` means **any daslib edit** runs them all. CI stops at the FIRST
 das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
 locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
 `DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
@@ -178,10 +179,12 @@ that pdflatex lacked a glyph for is no longer a build concern anywhere.
 | # | Gate | Local mirror |
 |---|---|---|
 | 1 | das2rst runs clean (positional handmade-doc validation panics on count mismatch) | `<daslang> -documentation doc/reflections/das2rst.das` — repeat until no panic; the host policy keeps per-box transforms inert |
-| 2 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
-| 3 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
-| 4 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
-| 5 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
+| 2 | imgui2rst regenerates clean | `<daslang> modules/dasImgui/utils/imgui2rst.das` |
+| 3 | vulkan2rst regenerates clean | `<daslang> modules/dasVulkan/utils/vulkan2rst.das` |
+| 4 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
+| 5 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
+| 6 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
+| 7 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
 
 Tool discovery: preflight probes PATH, then `~/Library/Python/*/bin` +
 `~/.local/bin` for sphinx-build. A `.. video::` whose recording is missing from
@@ -194,7 +197,7 @@ staging failed and the build then red.
 `wasm_build`: emsdk build of `web/` + a Node hello-world. `wasm_cross`:
 cross-compiles utility mains to wasm32 via dasLLVM and runs them under
 wasmtime, with emscripten **pinned to 5.0.3** (newer clang crashes on
-`utils/dasFormatter/ds_parser.cpp` diagnostics). At risk when touching the
+`utils/gen1-to-gen2/ds_parser.cpp` diagnostics). At risk when touching the
 parser (`.ypp` → huge generated `.cpp`), `web/`, or the dasLLVM cross-compile
 pipeline. Local mirror = emsdk in WSL following the workflow verbatim; for
 most changes, let CI carry this lane.

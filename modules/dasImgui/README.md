@@ -129,7 +129,7 @@ imgui modules carry macro-generated surfaces das2rst's reflection pass can't
 group — writing the GUI stdlib pages into `doc/source/stdlib/generated/`
 (gitignored). Re-run it whenever a public `//!` comment changes. Tutorial
 recordings are not in git; they stage from the rolling `docs-assets` GitHub
-release via `utils/docs_assets/fetch.sh` / `fetch.ps1`. CI builds Sphinx with
+release via `utils/internal/docs-assets/fetch.sh` / `fetch.ps1`. CI builds Sphinx with
 `-W` (warnings-as-errors); a local `--keep-going` invocation is enough for
 spot-checking.
 

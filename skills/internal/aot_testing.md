@@ -69,7 +69,7 @@ tests/aot/
 | `DAS_AOT_EXT(files, genList, target, tool, extra)` | Core macro — others call this | `extra` alone (no implicit `-aot`; `DAS_AOT` passes `-aot` as the extra) |
 | `DAS_AOT_CTX(files, genList, target, tool)` | AOT with custom context | `-ctx` |
 | `DAS_AOT_STANDALONE(files, genList, target, tool, extra)` | AOT for a standalone binary | `extra` |
-| `DAS_LLVM_AOT_LIB(files, genList, target)` | LLVM-backend AOT — emits native `.o`, not C++; runs `utils/jit/main.das` in batches of 32 | `--aot-object` |
+| `DAS_LLVM_AOT_LIB(files, genList, target)` | LLVM-backend AOT — emits native `.o`, not C++; runs `utils/internal/jit/main.das` in batches of 32 | `--aot-object` |
 
 **Target name collision**: `DAS_AOT_EXT` creates a custom target named `${mainTarget}_genaot`. Multiple calls with the same `mainTarget` will collide. Use distinct target names (e.g., `test_aot_testing` and `test_aot_tests`).
 
@@ -379,7 +379,7 @@ All `_aot_generated/` directories are covered by a single broad pattern in `.git
 
 ### The LLVM-AOT rail (`test_llvm_aot`)
 
-There is a third binary beside `test_aot` / `test_aot_subset`. `test_llvm_aot` (LLVM-only, `EXCLUDE_FROM_ALL`, opt-in — not in ALL and not in CI) compiles each `.das` through the **LLVM backend** into a self-registering native `.o` (a `das_aot_register` load ctor), linked straight into the binary; `-use-aot` then binds each function as a `SimNode_Jit` via `linkCppAot`. It is built by `DAS_LLVM_AOT_LIB` (which drives `utils/jit/main.das --aot-object`, not the C++ AOT tool) and run through the `run_tests_llvm_aot` target in `tests/CMakeLists.txt`.
+There is a third binary beside `test_aot` / `test_aot_subset`. `test_llvm_aot` (LLVM-only, `EXCLUDE_FROM_ALL`, opt-in — not in ALL and not in CI) compiles each `.das` through the **LLVM backend** into a self-registering native `.o` (a `das_aot_register` load ctor), linked straight into the binary; `-use-aot` then binds each function as a `SimNode_Jit` via `linkCppAot`. It is built by `DAS_LLVM_AOT_LIB` (which drives `utils/internal/jit/main.das --aot-object`, not the C++ AOT tool) and run through the `run_tests_llvm_aot` target in `tests/CMakeLists.txt`.
 
 **Its corpus is derived, so registering a suite enrols it here too.** `LLVM_AOT_TEST_FILES` is the accumulated `TEST_AOT_ALL_DAS` (every `reg`-flavor suite's test bodies) plus `tests/jit_tests/*.das`, minus `_`-prefixed files and a filter list (`cant_`, `llvm_tune`, `llvm_code`, `llvm_compile_only`, `dll_cache`, `jit_fastpath`, `typeinfo`, and all of `tests/msl/` + `tests/metal/`, which decline the JIT via `lattice_fallback`). Adding a directory to `DAS_AOT_SUITES` therefore silently adds it to the LLVM-AOT corpus — if it can't survive that rail, it needs a filter entry as well.
 

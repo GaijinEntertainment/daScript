@@ -435,7 +435,7 @@ runs (exit 0) with `VULKAN_SDK` set. Registered in `tests/aot/CMakeLists.txt` (5
    clean, so it never hits this). All three tiers verified green (interp/JIT/AOT 10/10) +
    `spirv-val` clean. The only full-suite failure is the pre-existing, unrelated
    `tests/fio/test_format_time.das` (time/locale).
-10. **`DASLANG` env points preflight at the wrong binary.** `utils/preflight` resolves `$DASLANG`
+10. **`DASLANG` env points preflight at the wrong binary.** `utils/internal/preflight` resolves `$DASLANG`
    first; on this machine it's the main checkout (`d:/Work/daScript/...`, no dasSpirv), so every
    gate ran against a binary lacking the spirv module → false `spirv/* file not found`. Run preflight
    with `DASLANG` set inline to the worktree's `bin/Release/daslang.exe`.

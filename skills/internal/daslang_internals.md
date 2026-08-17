@@ -51,7 +51,7 @@ compile against both.
 The 16/8-bit lattice vector types (`half2..8`, `short2..8`, `ushort*`, `byte*`, `ubyte*`) carry
 NO `ExprConst` nodes by design: `isFoldable` is false and `Program::makeConst` returns null, so
 every caller must handle that null. Conformance harness: `tests/type_lattice/` — GENERATED,
-regenerate with `daslang utils/dasgen/gen_type_conformance.das`.
+regenerate with `daslang utils/internal/dasgen/gen_type_conformance.das`.
 
 ## addr<T?> desugaring
 

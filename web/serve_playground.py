@@ -110,7 +110,7 @@ def fetch_runtime():
     print("runtime staged")
 
 
-# The sample service (utils/dasweb-playground) answers these in production.
+# The sample service (utils/internal/dasweb-playground) answers these in production.
 # The rig has no backend, so it answers them itself with the "nothing stored,
 # no builder" shape — which is what the page's fallbacks are written for: the
 # dropdown drops back to the repo's data.json, and the wasm engine stays off.

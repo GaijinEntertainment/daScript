@@ -4,14 +4,11 @@
  Utils
 ==========
 
-This section documents the command-line tools that ship with daslang:
-the live-reload application host, the test framework, the code coverage
-tool, the lint checker, the package manager, the MCP server for AI
-coding assistants, the LSP server for editors and AI diagnostics, the
-cross-file duplicate-function detector and its AI judge, the runtime
-profiler and memory-leak tracker, the OpenAI-compatible dasLLAMA
-inference server, and a cheat sheet for every built-in leak-detection
-mechanism.
+This section documents the command-line tools that ship with daslang —
+every tool under the SDK's ``utils/`` has a page here, from the test
+framework and lint runner to the AI-assistant servers and the dasLLAMA
+inference stack — plus the runtime profiler and a cheat sheet for every
+built-in leak-detection mechanism.
 
 .. toctree::
    :maxdepth: 2
@@ -20,11 +17,19 @@ mechanism.
    utils/dastest.rst
    utils/dascov.rst
    utils/lint.rst
+   utils/das_fmt.rst
+   utils/fix_lint_errors.rst
    utils/daspkg.rst
+   utils/benchctl.rst
+   utils/aot.rst
    utils/mcp.rst
    utils/lsp.rst
    utils/detect_dupe.rst
    utils/find_dupe.rst
+   utils/jobque_timeline.rst
    utils/profiler.rst
    utils/dasllama_server.rst
+   utils/dasllama_convert.rst
+   utils/watchdog.rst
+   utils/vscode_daslang_test.rst
    utils/memory_leak_detection.rst

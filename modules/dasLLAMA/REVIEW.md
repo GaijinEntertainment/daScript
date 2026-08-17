@@ -10,7 +10,8 @@ location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
 Kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
-lands, answers to `modules/dasLLVM/REVIEW.md`. This file's rules bind the rest of the engine.
+lands, answers to `modules/dasLLVM/REVIEW.md`. Every file under `modules/dasLLAMA/` that the
+routing above does not claim is reviewed against the rules below.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -60,14 +61,14 @@ annotation itself; a rename is not new** (annotations follow the name in the sam
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
 `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows for the affected
 backend** — the instrument is the scaling ratio across the size ladder, and superlinear is a
-defect. A change to the cell's own corpus input ships the same rows or a statement that the
-bytes are unchanged.
+defect.
+
+**A change to the corpus input of the `--tok` measurement cell (`benchmarks/lcpp_bench.das`)
+ships the same before/after rows or a statement that the bytes are unchanged.**
 
 **A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
-`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.** A new pre-tokenizer
-family or backend ships its `corpus_case` arm naming the `ggml-vocab-*.gguf` fixture; a
-corpus case asserts exact reference ids AND lossless round-trip.
+`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is a gate escape,
 policy override, or threshold recalibration. Where one changes what a run measures, mints, or
@@ -130,8 +131,9 @@ reads is not written — the mint decides, not the load. A flavor takes its file
 planes is a defect.
 
 **A change to user-facing API updates every place it is shown.** User-facing means anything a
-consumer outside this repo calls or types — exported facade functions, CLI flags, environment
-knobs, file formats, defaults — plus the in-repo rig and tool surface: any output another tool
+consumer outside this repo can depend on — what it calls, types, requires, or parses
+(facade functions, CLI flags, environment knobs, file formats, defaults, what the installed
+SDK lets a program `require`) — plus the in-repo rig and tool surface: any output another tool
 parses, a console-only diagnostic not being one. A tutorial source, `.rst` page, docstring,
 help string, `README.md`, or checked-in document still showing the old call, flag, or default
 is a defect of the change, not of the docs.
@@ -146,15 +148,16 @@ struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to
 a struct the renderer emits but the registry does not is caught by
 `tests/test_env_registry.das`.
 
-**A new module file is registered in `.das_module` in the same change.**
+**A new `.das` under `dasllama/` is registered in `.das_module` in the same change.** Module
+files shipped from other subfolders resolve by relative path and register nothing.
 
 **`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
 `unicode-data.cpp`; hand-editing them is a defect.**
 
-**Placement truth — what each file holds, the seams, the carve-outs — lives in
-`ARCHITECTURE.md` §1 and nowhere else; a diff that adds a file, moves code between files, or
-changes what a file owns lands the §1 edit that keeps the charters true, in the same change.**
-A file inventory restated in this checklist is a defect of the checklist.
+**A diff that adds a file, moves code between files, or changes what a file owns lands the
+`ARCHITECTURE.md` §1 edit that keeps the charters true, in the same change.** A per-file
+inventory restated in this checklist is a defect of the checklist (the per-kind landing rules
+below are the checklist's own).
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 

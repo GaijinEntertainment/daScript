@@ -121,7 +121,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
             file(COPY ${das_llvm_shared_lib_SOURCE_DIR}/LLVM.dll DESTINATION ${CMAKE_SOURCE_DIR}/lib)
             IF(WIN32)
-                # The package also ships clang-cl.exe (utils/preflight probes it
+                # The package also ships clang-cl.exe (utils/internal/preflight probes it
                 # in the FetchContent source dir as a bundled-compiler fallback);
                 # only the linker goes to bin/.
                 file(COPY ${das_llvm_shared_lib_SOURCE_DIR}/lld-link.exe DESTINATION ${CMAKE_SOURCE_DIR}/bin)

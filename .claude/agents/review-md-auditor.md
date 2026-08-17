@@ -18,7 +18,7 @@ every changed file under its directory.
 The orchestrator discovered your checklist with the step-0a walk:
 
 ```bash
-daslang utils/review-md/main.das -- --base <base>
+daslang utils/internal/review-md/main.das -- --base <base>
 ```
 
 Re-run it to confirm your assigned file is in the set (a mismatch means the diff moved — say so

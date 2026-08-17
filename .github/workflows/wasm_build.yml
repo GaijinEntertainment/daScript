@@ -184,7 +184,7 @@ jobs:
       uses: emscripten-core/setup-emsdk@v11
       with:
         # 5.0.7 ships clang commit 7b58716d that crashes in
-        # TextDiagnostic::emitSnippetAndCaret on utils/dasFormatter/ds_parser.cpp
+        # TextDiagnostic::emitSnippetAndCaret on utils/gen1-to-gen2/ds_parser.cpp
         # (std::length_error during diagnostic snippet rendering). 5.0.3 works.
         version: '5.0.3'
 

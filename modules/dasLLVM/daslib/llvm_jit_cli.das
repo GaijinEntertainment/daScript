@@ -8,7 +8,7 @@ require daslib/clargs
 //! Shared JIT command-line option schema.
 //!
 //! Declared here (rather than inside `llvm_macro`) so both the `jit_llvm`
-//! simulate-macro and the `utils/jit` driver parse the exact same flags.
+//! simulate-macro and the repo's `jit` driver parse the exact same flags.
 
 [CommandLineArgs]
 struct public JitCliOptions {

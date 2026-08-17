@@ -2,7 +2,7 @@
 
 The dasVulkan tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/vulkan/`, with an MP4 per page. Recordings are produced by a **per-tutorial driver** — `modules/dasVulkan/tutorials/<NN>_<scene>/recording/record_<scene>.das` — that re-renders the scene parametrically (one frame per integer index, headless Vulkan readback), streams it to an APNG, then ffmpeg-muxes a daStrudel music bed, voiceover and captions onto it.
 
-Read this before writing or revising any `record_*.das` driver. Recording is NOT in CI — the drivers are manually-driven artifact producers, eyeballed and listened to before they ship. The deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release; MP4s are NOT committed, and docs builds stage them via `utils/docs_assets/fetch.{sh,ps1}` before sphinx runs.
+Read this before writing or revising any `record_*.das` driver. Recording is NOT in CI — the drivers are manually-driven artifact producers, eyeballed and listened to before they ship. The deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release; MP4s are NOT committed, and docs builds stage them via `utils/internal/docs-assets/fetch.{sh,ps1}` before sphinx runs.
 
 **`docs-assets` is one flat namespace shared with the dasImgui recordings, so every dasVulkan MP4 uploads under a `vulkan_` prefix** — the driver writes `<scene>.mp4` beside its tutorial, and it ships as `vulkan_<scene>.mp4`:
 

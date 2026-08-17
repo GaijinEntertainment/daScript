@@ -2843,7 +2843,7 @@ def test_project_root_eval_expression(t : T?) {
 def test_project_root_run_script(t : T?) {
     t |> run("run_script honors project_root") <| @(t : T?) {
         // Use INLINE code (not file path). daslang.exe auto-deduces project_root
-        // from files.front()'s directory (utils/daScript/main.cpp:390); when
+        // from files.front()'s directory (utils/daslang/main.cpp:390); when
         // run_script is given a file path, that's the consumer's own directory
         // which auto-resolves modules/. Inline code writes a temp stub at
         // get_das_root(), whose modules tree doesn't include pretend_mod.

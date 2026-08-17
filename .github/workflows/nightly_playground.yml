@@ -63,19 +63,19 @@ jobs:
         # deliberately no `cache:` — see the header
 
     - name: "Install runner dependencies"
-      working-directory: utils/dasweb-verify/browser
+      working-directory: utils/internal/dasweb-verify/browser
       run: npm ci
 
     - name: "Install Chromium"
-      working-directory: utils/dasweb-verify/browser
+      working-directory: utils/internal/dasweb-verify/browser
       run: npx playwright install chromium --with-deps
 
     - name: "Protocol unit tests"
-      working-directory: utils/dasweb-verify/browser
+      working-directory: utils/internal/dasweb-verify/browser
       run: node --test
 
     - name: "Verify curated samples"
-      working-directory: utils/dasweb-verify/browser
+      working-directory: utils/internal/dasweb-verify/browser
       # Dispatch inputs reach bash through env, never through ${{ }} pasted into the
       # script body. An expression is substituted as TEXT before the shell parses the
       # line, so a quote, $(…) or backtick in an input would break the command or run
@@ -99,6 +99,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: sample-failures
-        path: utils/dasweb-verify/browser/artifacts
+        path: utils/internal/dasweb-verify/browser/artifacts
         if-no-files-found: ignore
         retention-days: 14

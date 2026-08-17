@@ -90,7 +90,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
 | `skills/internal/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server) — locked architecture, coordinate conventions, protocol tests |
-| `utils/dasHerd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (any `DASHERD_SESSION_ID` env var set) — the session cooperation contract: inbox/outbox mailbox, declaring participating repositories, Review Bundles, the `dasherd.ps1` CLI |
+| `utils/internal/das-herd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (any `DASHERD_SESSION_ID` env var set) — the session cooperation contract: inbox/outbox mailbox, declaring participating repositories, Review Bundles, the `dasherd.ps1` CLI |
 | `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — ANY dasImgui UI/interaction bug: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix from logic or a screenshot alone |
 | `skills/imgui_application.md` | Building any dasImgui application — harness lifecycle (`init`/`update`/`shutdown`, `harness_*` frame calls), the headless arm, heap/GC ownership contract |
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table (`imgui_lint` IMGUI002 points here) |
@@ -107,7 +107,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang/references/files-and-paths.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
 | `skills/internal/version_update.md` | Bumping the daslang version number |
 | `skills/internal/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` — the archive-vs-stay test, reference-update discipline, area-index notes, the `history/README.md` ledger |
-| `skills/internal/doc_sweep.md` | Running the each-release authored-RST doc sweep, editing `.. das-doc:` markers, or extending `utils/doc-verify/` |
+| `skills/internal/doc_sweep.md` | Running the each-release authored-RST doc sweep, editing `.. das-doc:` markers, or extending `utils/internal/doc-verify/` |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of the six leak-detection mechanisms and which to reach for |
 | `skills/internal/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
@@ -134,7 +134,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/internal/documentation_rst.md`.
 
-**Formatter reminder:** Use the MCP `format_file` tool to format `.das` files. It calls `daslib/das_source_formatter` directly. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter — the `gen1_to_gen2` binary — not a code formatter).
+**Formatter reminder:** Use the MCP `format_file` tool to format `.das` files. It calls `daslib/das_source_formatter` directly. Do NOT use `utils/gen1-to-gen2/` (that is the v1→v2 syntax converter — the `gen1_to_gen2` binary — not a code formatter).
 
 ### Updating Instructions with New Knowledge
 
@@ -158,7 +158,7 @@ of the checklist, marked like any other finding), the Form hard limits — lives
 `REVIEW_COMMON.md` at the repo root; every checklist opens with a pointer to it from its
 first commit, never a restatement (`skills/review_md.md` carries the opening template). When
 a checklist audit runs for a PR, its scope is every REVIEW.md discovered from the changed set
-(the `skills/internal/make_pr.md` step-0a walk, tool: `utils/review-md/main.das`): each discovered
+(the `skills/internal/make_pr.md` step-0a walk, tool: `utils/internal/review-md/main.das`): each discovered
 checklist is itself audited under the self-review rule, not
 just applied. The implementer is the shared **`review-md-auditor` agent**
 (`.claude/agents/review-md-auditor.md`): one instance owns exactly one checklist, so with

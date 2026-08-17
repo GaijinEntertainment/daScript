@@ -9,7 +9,7 @@ add_custom_target(check_format
 )
 
 add_custom_target(check_dasgen
-    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/dasgen/gen_bind.das
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/internal/dasgen/gen_bind.das
     COMMAND git diff --exit-code -- ${PROJECT_SOURCE_DIR}/include/daScript/builtin/
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -17,7 +17,7 @@ add_custom_target(check_dasgen
 )
 
 # Build daslang utilities as standalone executables using -exe mode.
-# Each utility with a main.das is compiled via daslang -exe and the
+# Each utility's entry .das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
 # Requires LLVM for -exe compilation.
@@ -39,22 +39,22 @@ elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
     set(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
 endif()
 
+# Entries are paths relative to utils/; the exe/target name is the basename.
+# mcp/lsp never build as exe: their python keep-alive dev setup means an exe
+# form would never be dogfooded.
 set(DAS_UTILS
     aot
     dascov
     daspkg
+    das-fmt
     detect-dupe
-    hygiene
-    jit
     lint
+    internal/hygiene
+    internal/jit
 )
 
 if(NOT DAS_SQLITE_DISABLED)
-    list(APPEND DAS_UTILS benchctl)
-endif()
-
-if(NOT DAS_HV_DISABLED)
-    list(APPEND DAS_UTILS mcp)
+    list(APPEND DAS_UTILS benchctl)   # same gate on DAS_UTILS_SHIPPED_EXES below
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies. jit is a compiler-
@@ -76,8 +76,15 @@ else()
     set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin)
 endif()
 
-foreach(util ${DAS_UTILS})
-    set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util}/main.das)
+foreach(util_path ${DAS_UTILS})
+    get_filename_component(util ${util_path} NAME)
+    # dasfmt.das is das-fmt's published entry point — external CIs and the
+    # shipped pre-commit hook invoke it by name, so it does not rename to main.das
+    if(util STREQUAL "das-fmt")
+        set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util_path}/dasfmt.das)
+    else()
+        set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util_path}/main.das)
+    endif()
 
     # jit and lint are compiler-drivers: their standalone exes recompile
     # arbitrary daslang at runtime (lint compiles each target to walk its AST),
@@ -117,10 +124,25 @@ add_custom_target(dastest_exe DEPENDS ${UTIL_BIN_DIR}/dastest.exe)
 
 
 add_custom_target(all_utils_exe ALL)
-foreach(util ${DAS_UTILS})
+foreach(util_path ${DAS_UTILS})
+    get_filename_component(util ${util_path} NAME)
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
 add_dependencies(all_utils_exe dastest_exe)
+
+# Single-config generators only: UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on
+# multi-config, which install() cannot resolve — and release bundles are cut on
+# single-config (Ninja) lanes. Each tool's exe-or-not decision is recorded in
+# that tool's REVIEW.md.
+if(NOT _DAS_UTILS_MULTI_CONFIG)
+    set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
+    if(NOT DAS_SQLITE_DISABLED)
+        list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)   # same gate on DAS_UTILS above
+    endif()
+    foreach(util ${DAS_UTILS_SHIPPED_EXES})
+        install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe DESTINATION ${DAS_INSTALL_BINDIR})
+    endforeach()
+endif()
 
 # Prewarm the JIT dll cache for the whole test tree, except module-gated folders and gc
 # (mirrors tests/.das_test: gc stays interp-only under -jit — heap_collect can't see
@@ -141,8 +163,9 @@ SET(DAS_UTILS_TO_TEST
     lint
     detect-dupe
     find-dupe/tests
-    hygiene
-    ast-fuzz
+    internal/hygiene
+    internal/ast-fuzz
+    internal/requirefix
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})
@@ -153,12 +176,12 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
     )
 ENDFOREACH()
 
-# gen1_to_gen2 (utils/dasFormatter, the gen1->gen2 syntax converter) carries its own
+# gen1_to_gen2 (utils/gen1-to-gen2, the gen1->gen2 syntax converter) carries its own
 # --tests self-check suite. It's a C++ target (not a daslang -exe util), so invoke
 # the binary directly rather than through dastest. Previously uncovered by CI, which
 # let the make-literal verify-compile tests rot unnoticed. (issue #3094)
 LIST(APPEND _run_utils_tests
-    COMMAND ${CMAKE_COMMAND} -E echo "Running tests gen1_to_gen2 dasFormatter --tests"
+    COMMAND ${CMAKE_COMMAND} -E echo "Running tests gen1_to_gen2 --tests"
     COMMAND $<TARGET_FILE:gen1_to_gen2> --tests
     DEPENDS gen1_to_gen2
 )

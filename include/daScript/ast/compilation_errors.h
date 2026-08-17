@@ -690,7 +690,7 @@ namespace das
     ,   invalid_private                                             =   30345    // parser_impl.cpp private-modifier
     ,   invalid_static                                              =   30346    // parser_impl.cpp static-modifier
     ,   aot_side_effects                                            =   40500    // ast_lint AOT side-effects warning
-    // dasFormatter (utils/dasFormatter/ds_parser.ypp) — older parser, not audited
+    // dasFormatter (utils/gen1-to-gen2/ds_parser.ypp) — older parser, not audited
     ,   cant_pipe                                                   =   30347    // dasFormatter parser
     ,   enumeration_value_already_declared                          =   30348    // dasFormatter parser
     ,   invalid_escape_sequence                                     =   10005    // dasFormatter parser

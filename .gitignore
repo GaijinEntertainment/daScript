@@ -63,12 +63,12 @@ site/doc/
 doc/sphinx-build/
 doc/sphinx-build-latex/
 doc/source/stdlib/generated/
-utils/ast-fuzz/__*.das
-utils/ast-fuzz/__*.log
-utils/ast-fuzz/_ast_synth_all.das
+utils/internal/ast-fuzz/__*.das
+utils/internal/ast-fuzz/__*.log
+utils/internal/ast-fuzz/_ast_synth_all.das
 # Tutorial recordings: APNG intermediates land here from modules/dasImgui/tests
 # record_* drivers; the MP4 deliverables are staged here from the docs-assets
-# GitHub release by utils/docs_assets/fetch — neither is tracked.
+# GitHub release by utils/internal/docs-assets/fetch — neither is tracked.
 doc/source/_static/tutorials/
 doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
@@ -89,7 +89,7 @@ daScript.code-workspace
 examples/wip.das
 examples/wip_macro.das
 
-utils/dasFormatter/ds_parser.output
+utils/gen1-to-gen2/ds_parser.output
 src/parser/ds2_parser.output
 src/parser/ds_parser.output
 

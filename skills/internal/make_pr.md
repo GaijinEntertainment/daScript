@@ -2,7 +2,7 @@
 
 Before creating a pull request, complete ALL of the following steps in order. Do not skip steps. If any step fails, fix the issue before proceeding.
 
-**Shortcut:** `daslang utils/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/internal/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
+**Shortcut:** `daslang utils/internal/preflight/main.das -- --full` runs most of the mechanical gates below in one command (`skills/internal/preflight.md` maps each gate to its CI lane). The steps here remain the authority on fix policy and on the judgment steps (dupe triage, workaround audit, doc stubs) the tool can't do.
 
 ## 0. Sync with origin/master and rebase
 
@@ -30,7 +30,7 @@ every `REVIEW.md` in a parent directory of a changed file is binding for the fil
 under it, on top of the repo-wide checklist below. One command finds them all:
 
 ```bash
-daslang utils/review-md/main.das -- --base origin/master
+daslang utils/internal/review-md/main.das -- --base origin/master
 ```
 
 (`--base` defaults to `origin/master`; explicit paths as positionals skip git.) If any
@@ -109,7 +109,7 @@ minutes before producing a non-representative result.
 
 ## 1. Lint all changed `.das` files — **zero warnings required**
 
-Because runners are no longer free, local preflight *is* the test rig: commit your work, run `daslang utils/preflight/main.das -- --full`, then push (typically one batched PR). (The lint/format commands below remain useful for debugging a single gate ahead of the full run.)
+Because runners are no longer free, local preflight *is* the test rig: commit your work, run `daslang utils/internal/preflight/main.das -- --full`, then push (typically one batched PR). (The lint/format commands below remain useful for debugging a single gate ahead of the full run.)
 
 **The full preflight runs ONCE per PR — never a second full run.** If the run FAILS: fix every failure, validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the failing test slice, a scratch probe — whatever proves that fix, minutes not tens of minutes), say so in your summary, and let CI validate the complete tip. Fix commits after the run (including the fixes for its own findings) do NOT trigger a re-run; neither do Copilot/CI fix rounds later (`skills/internal/babysit.md`).
 
@@ -403,7 +403,7 @@ Do NOT format files you didn't change — only format files that are part of the
 
 CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify` — the script is **in the repo tree** and wraps the same `daslib/das_source_formatter` engine as MCP `format_file`, so the two agree (probe-verified: both rewrite `Foo(a=1)` → `Foo(a = 1)`). Preflight's format gate runs the exact CI command on tracked files; if it passes, the CI formatter gate passes.
 
-**Not the converter:** `bin/Release/gen1_to_gen2.exe` (the CMake target from `utils/dasFormatter/`) is the **v1→v2 syntax converter**, a different tool. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`); CI additionally compiles the formatter itself to `bin/das-fmt.exe` via `-exe` and re-runs the verify with it.
+**Not the converter:** `bin/Release/gen1_to_gen2.exe` (the CMake target from `utils/gen1-to-gen2/`) is the **v1→v2 syntax converter**, a different tool. Locally, always invoke the formatter as `<daslang> utils/das-fmt/dasfmt.das -- ...` (or MCP `format_file`); CI additionally compiles the formatter itself to `bin/das-fmt.exe` via `-exe` and re-runs the verify with it.
 
 ## 6. Create the PR
 

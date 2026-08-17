@@ -119,7 +119,7 @@ jobs:
           ninja -C build LLVM-C clang lld
           cp build/bin/LLVM-C.dll LLVM.dll
           # clang-cl.exe is a driver alias of clang.exe (dispatch on argv[0]).
-          # Kept in the package for utils/preflight's bundled-compiler fallback.
+          # Kept in the package for utils/internal/preflight's bundled-compiler fallback.
           if [ -f build/bin/clang-cl.exe ]; then
             cp build/bin/clang-cl.exe .
           else

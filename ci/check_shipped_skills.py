@@ -37,7 +37,8 @@ REPO_PATH = re.compile(
     r"|doc/source/[A-Za-z0-9_./+*-]*[A-Za-z0-9_+*-]"
     r"|benchmarks/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|history/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
-    r"|utils/daScript/[A-Za-z0-9_./+-]*"
+    r"|utils/daslang/[A-Za-z0-9_./+-]*"
+    r"|utils/internal/[A-Za-z0-9_./+-]*"
     r"|modules/[A-Za-z0-9_-]+/(?:src|tests|tutorial|harness)[A-Za-z0-9_./+-]*"
     r")")
 # NOT banned: utils/lint/tests/ -- CMake installs it (the SDK self-checks its linter).

@@ -22,7 +22,7 @@ it adds nothing you will not find here, so stay in this file.
 **CLI dash convention:** `-track-allocations` and `-heap-report` use **one**
 leading dash; `--track-smart-ptr`, `--track-job-status`, and
 `--das-profiler-leaks` use **two**. This is a historical inconsistency in
-`utils/daScript/main.cpp` — preserve it as-is in the commands you suggest. <!-- repo-only -->
+`utils/daslang/main.cpp` — preserve it as-is in the commands you suggest. <!-- repo-only -->
 
 Order of investigation if you see multiple leak reports at exit: fix #3
 (gc_node) first (any survivor indicates an ownership bug that can cascade),
@@ -128,7 +128,7 @@ quick survey of "what's alive right now".
 Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, etc.) that
 outlives compilation or execution.
 
-**Invoke:** nothing. `utils/daScript/main.cpp` and <!-- repo-only -->
+**Invoke:** nothing. `utils/daslang/main.cpp` and <!-- repo-only -->
 `utils/daslang-live/main.cpp` check `gc_root::gc_get_thread_root().gc_count`
 at two points: after compile+simulate (`GC COMPILE LEAK`) and after main
 returns (`GC APP LEAK`). Any non-zero count triggers `gc_report()`.
@@ -180,7 +180,7 @@ hits `os_debug_break()`. Attach a debugger (or `-das-wait-debugger`) to
 collect stack traces.
 
 **Automatic companion:** at exit `daslang` calls
-`ptr_ref_count::DumpTrackPtr()` (`utils/daScript/main.cpp:960`) which prints <!-- repo-only -->
+`ptr_ref_count::DumpTrackPtr()` (`utils/daslang/main.cpp:960`) which prints <!-- repo-only -->
 all surviving smart pointers. Read a suspect id from there, rerun with
 `--track-smart-ptr <id>`, debug.
 

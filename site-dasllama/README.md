@@ -22,7 +22,7 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 - `robots.txt` — static
 
 The public home URL is `https://dasllama.io/`. All pages link home with `/`, each page
-declares an absolute canonical URL, and `utils/dasllama-ladder/caddy.snippet` permanently
+declares an absolute canonical URL, and `utils/internal/dasllama-ladder/caddy.snippet` permanently
 redirects `/index.html` to `/`. The sitemap and Atom feed also use the root URL so crawlers
 never receive competing home-page identities.
 
@@ -38,13 +38,13 @@ ledgered follow-up.
 
 `serve.py` also proxies `/api/*` to a locally running ladder service on 127.0.0.1:8201
 (mirroring the Caddy vhost), so a preview against real data is: start
-`utils/dasllama-ladder/main.das` with `--official-dir modules/dasLLAMA/performance/records`,
+`utils/internal/dasllama-ladder/main.das` with `--official-dir modules/dasLLAMA/performance/records`,
 then browse. Without the service the pages show their unreachable/zero states.
 
 ## Data
 
 Tables, fact tiles, and the sidecar finder render client-side from the `dasllama-ladder`
-service (`utils/dasllama-ladder/README.md` §1.1 lists the routes; 127.0.0.1:8201 behind
+service (`utils/internal/dasllama-ladder/README.md` §1.1 lists the routes; 127.0.0.1:8201 behind
 Caddy). The ladder joins `/api/runs` with the verbatim `/api/submission/:id` documents —
 measurements, receipts and command lines all come from the submission itself, and pairing
 is within one submission only (a ratio appears when the methodology's reference flavor
