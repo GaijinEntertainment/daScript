@@ -111,6 +111,8 @@ is visible. Zero confirmed findings is a reportable result — say what was chec
 Fix policy is the repo's standing one, not this skill's: findings are DISCUSSED before fixing
 (fix-vs-workaround is the user's call), accepted fixes land as ONE batch per round, and any
 finding that reveals a lint-able pattern is named as a lint candidate in the summary.
+Checklist self-review findings are accepted through the damper in `skills/review_md.md` —
+verdict-blockers, diff-added-rule defects, and serious latents only; good enough, not clean.
 
 ## Mechanics
 

@@ -86,6 +86,33 @@ Size is a symptom, not a criterion: a file where every rule survives these class
 long as its module needs. But "a reviewer reports they can no longer follow the file" is
 itself a finding, and its fix is applying the classes above — never a table of contents.
 
+
+## Accepting self-review findings — the damper
+
+The standard for rule text is GOOD ENOUGH, not clean: text, like code, can be exercised for
+correctness endlessly, so stop when nothing serious remains — the marginal edit costs a
+dragon round and buys polish, not verdicts. A round accepts a self-review finding into its
+edits only when it is one of:
+
+1. **Verdict-blocking on this diff** — the defect prevented or flipped a verdict while
+   auditing the change under review; the auditor cites the code site where rule application
+   failed, or the finding is not accepted.
+2. **A defect in a rule the diff itself adds or edits.**
+3. **Serious latent** — a factually stale claim (names, lists, APIs no longer matching the
+   tree), a contradiction between two rules, or a fused rule hiding a second obligation.
+   The test for serious: acting on it changes what a reviewer CHECKS or CONCLUDES; a change
+   that only improves the reading is minor.
+
+Minor findings ride along only in a file already open for the reasons above — never the
+sole reason to touch a checklist — and are otherwise dropped, not ledgered: a latent defect
+that matters returns as class 1 with a citation. Disposition: FIX NOW when the repair is
+forced (one reasonable edit — staleness is the canonical case); ASK the user when the
+repair is a semantic choice (which side of a contradiction wins, a rule deleted because a
+test enforces it, a scope reassignment). Auditors tag each self-review finding
+`blocking | stale | contradiction | structural | formatting` so the disposition is
+mechanical. One checklist-edit batch per round, one dragon pass over the batch; a FRESH
+dragon then re-reads cold, and nothing-serious-remains is the exit.
+
 ## Reviewing a REVIEW.md diff
 
 Check the change against `REVIEW_COMMON.md`: is every new entry diff-checkable in
