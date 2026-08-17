@@ -26,7 +26,7 @@ def main {
     let out_mp4 = path_join(dir_name(here), "raytracing.mp4")
     let das_root = get_das_root()
     let daslang_exe = find_daslang_exe(das_root)
-    let music = path_join(das_root, "examples/daStrudel/features/integration_supersaw_pad.das")
+    let music = path_join(das_root, "examples/daStrudel/features/sf2_integration_full_ambient.das")
 
     let n_frames = 30 * 30      // 30 fps * 30 s
     let fps = 30

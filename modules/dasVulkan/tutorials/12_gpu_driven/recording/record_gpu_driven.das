@@ -3,7 +3,7 @@ options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 12 recording driver (manual, local-only). Renders the GPU-driven occlusion-culling scene
-// while the occluder wall sweeps across the field (30 s at 30 fps -> 900 frames), captures an APNG,
+// while the occluder wall sweeps across the field (37 s at 30 fps -> 1110 frames), captures an APNG,
 // then ffmpeg-muxes a daStrudel music bed + voice + captions into ../gpu_driven.mp4 (gitignored --
 // the deliverable ships on the docs-assets release).
 // CI never runs this -- the tutorials .das_test skips the `recording/` folder when stbimage / audio /
@@ -24,9 +24,9 @@ def main {
     let out_mp4 = path_join(dir_name(here), "gpu_driven.mp4")
     let das_root = get_das_root()
     let daslang_exe = find_daslang_exe(das_root)
-    let music = path_join(das_root, "examples/daStrudel/features/integration_signal_filter_reverb.das")
+    let music = path_join(das_root, "examples/daStrudel/features/sf2_integration_full_ambient.das")
 
-    let n_frames = 30 * 30      // 30 fps * 30 s
+    let n_frames = 30 * 37      // 30 fps * 37 s -- the last say(885) starts at 29.5 s and runs ~7 s
     let fps = 30
     let frame_ms = 1000 / fps
     let dur_s = float(n_frames) / float(fps)
@@ -34,13 +34,13 @@ def main {
     // Captions stay canonical; voice text respelled phonetically (ASCII only -- no em-dash / arrows).
     say(15,  "dasVulkan tutorial 12 -- GPU-driven rendering",
              "das Vulkan tutorial twelve. G P U driven rendering.")
-    say(210, "Hi-Z occlusion culling: a compute shader tests every cube against a depth pyramid",
+    say(180, "Hi-Z occlusion culling: a compute shader tests every cube against a depth pyramid",
              "High Z occlusion culling. A compute shader tests every cube against a depth pyramid.")
-    say(420, "survivors compact into an indirect-draw buffer with a GPU-written count",
+    say(384, "survivors compact into an indirect-draw buffer with a GPU-written count",
              "Survivors compact into an indirect draw buffer, with a G P U written count. The C P U never learns how many survive.")
-    say(620, "bindless materials: nonuniformEXT indexes a sampler array, keyed by gl_DrawID",
+    say(660, "bindless materials: nonuniformEXT indexes a sampler array, keyed by gl_DrawID",
              "Bindless materials. non uniform E X T indexes a sampler array, keyed by G L draw I D.")
-    say(800, "left: the camera sees only survivors. right: the god view reveals the culled ghosts",
+    say(885, "left: the camera sees only survivors. right: the god view reveals the culled ghosts",
              "Left, the camera sees only survivors. Right, the god view reveals the culled cubes as ghosts.")
 
     var inscope ctx <- build_gpu_driven_context()

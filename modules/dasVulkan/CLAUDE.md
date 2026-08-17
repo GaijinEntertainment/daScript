@@ -55,13 +55,13 @@ bin/Release/daslang -project_root . modules/dasVulkan/examples/offscreen_triangl
 
 `vulkan_runtime` (hand) ← `vulkan_ctors` (gen) ← `vulkan_handles` (gen) ← `vulkan_structs` (gen) ← `vulkan_commands` (gen creators) ← `vulkan_cmds` (gen plain commands) / `vulkan_boost` (hand) / `vulkan_window` (hand). Each file is `module <name>` + `require vulkan public`.
 
-**Every daslib file has TWO registration points**, and they must stay in sync: `ADD_MODULE_DAS(vulkan daslib <name>)` in `CMakeLists.txt` (the static in-tree build) and a `register_native_path` entry in `.das_module` (the DLL / daspkg flow). A file registered in only one resolves in only one build flavor.
+**Every daslib file has TWO registration points**, and they must stay in sync: `ADD_MODULE_DAS(vulkan daslib <name>)` in `CMakeLists.txt` (the static in-tree build) and a `<name>` entry in the `boost_paths` list in `.das_module` (the DLL / daspkg flow). A file registered in only one resolves in only one build flavor.
 
 ## Docs
 
 `utils/vulkan2rst.das` (RTTI introspection, modeled on dasImgui's `imgui2rst`) documents the ergonomic layer into the main Sphinx tree's generated stdlib pages; the hand-filled module intros are tracked, the generated pages are not. Tutorial pages live at `doc/source/reference/tutorials/vulkan/`.
 
-- A new public `vulkan_boost` / `vulkan_window` helper must land in a `group_by_regex` group in `vulkan2rst.das` **in the same change**, or it is silently undocumented. A type it exposes that the boost layer does not own needs an `external_types` label, or the `:ref:` dangles and the `-W` docs build goes red.
+- A new public `vulkan_boost` / `vulkan_window` helper must land in a `group_by_regex` group in `vulkan2rst.das` **in the same change**, or it is silently undocumented. A type it exposes that the boost layer does not own needs a label in `doc/source/stdlib/vulkan_external_types.rst` (repo root), or the `:ref:` dangles and the `-W` docs build goes red.
 - The raw `vulkan` binding and the generated `vulkan_structs` (~2000 symbols), `vulkan_cmds`, `vulkan_ctors` mirror Vulkan 1:1 and are deliberately **not** re-documented — the overview page explains the patterns and points at the spec.
 - Doc snippets are not compile-checked — verify field names against the real `examples/` before writing one (the boost field names are not what you'd guess — see below).
 

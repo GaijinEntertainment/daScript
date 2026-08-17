@@ -3,7 +3,7 @@ options _comment_hygiene = true
 options indenting = 4
 
 // Tutorial 14 recording driver (manual, local-only). Spins the GPU-tessellated teapot through two
-// full turns over one 30 s take (30 fps * 30 s -> 900 frames) on its grounded stage -- env sky,
+// full turns over one 33 s take (30 fps * 33 s -> 990 frames) on its grounded stage -- env sky,
 // reflective checkerboard floor (receiving the mesh-shader shadow), and the glazed-ceramic teapot.
 // The per-patch debug tint auto-toggles every 3 seconds, so a viewer watches the smooth ceramic
 // glaze dissolve into the rainbow "1 Bezier patch = 1 mesh workgroup" decomposition and back. Needs
@@ -25,9 +25,9 @@ def main {
     let out_mp4 = path_join(dir_name(here), "teapot.mp4")
     let das_root = get_das_root()
     let daslang_exe = find_daslang_exe(das_root)
-    let music = path_join(das_root, "examples/daStrudel/features/integration_supersaw_pad.das")
+    let music = path_join(das_root, "examples/daStrudel/features/sf2_integration_full_ambient.das")
 
-    let n_frames = 30 * 30      // 30 fps * 30 s
+    let n_frames = 30 * 33      // 30 fps * 33 s -- the last say(750) runs ~7 s
     let fps = 30
     let frame_ms = 1000 / fps
     let dur_s = float(n_frames) / float(fps)
@@ -36,14 +36,14 @@ def main {
     let spin_max = 4.0f * PI / 0.6f
 
     // Captions are canonical but short: this tutorial captures at 512 px wide (others are 768), so
-    // terse keeps them inside the frame; the voice (respelled per skills/recording.md) carries the detail.
+    // terse keeps them inside the frame; the voice (respelled per skills/internal/vulkan_recording.md) carries the detail.
     say(30,  "dasVulkan tutorial 14 -- GPU teapot",
              "das Vulkan tutorial fourteen. The G P U teapot. Mesh shaders.")
     say(300, "Mesh shader tessellates 32 patches",
              "The mesh shader tessellates the thirty two Bezier patches. straight on the G P U. No vertex buffer.")
     say(540, "Debug tint: patch = workgroup",
              "The rainbow tint shows the structure. One Bezier patch. is one mesh workgroup.")
-    say(780, "Grounded stage + mesh-shader shadow",
+    say(750, "Grounded stage + mesh-shader shadow",
              "A grounded stage. env sky. reflective floor. and a shadow map. baked by a second mesh shader pass.")
 
     if (!mesh_shader_available()) {

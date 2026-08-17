@@ -30,7 +30,7 @@ def main {
     let frame_ms = 1000 / fps
     let dur_s = float(n_frames) / float(fps)
 
-    // Captions stay canonical; voice text is respelled phonetically per skills/recording.md
+    // Captions stay canonical; voice text is respelled phonetically per skills/internal/vulkan_recording.md
     // (dasVulkan -> "das Vulkan", SPIR-V -> "Spear V" per Khronos, digits -> words for the ear).
     say(30, "dasVulkan tutorial 5 -- instancing",
             "das Vulkan tutorial five. Instancing.")
