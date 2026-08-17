@@ -358,20 +358,20 @@
     - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint — a name squat on the
       standard image-API prefix; rename ours or accept the squat deliberately.
 
-26. **ASR perf follow-ups after the Metal tower (metal-media chunk 2, 2026-08-16).** With the
-    whisper-class block loop GPU-served (~31x the CPU f32 block rate; large-v3-turbo f32-GPU
-    beats the q8-CPU serving default 1.82x end to end), the remaining ASR wall splits into:
-    - **J-qwen3a — the conv2d frontend** (~89% of that family's encode, quant-independent,
-      measured slice G): GPU im2col+mm, or at minimum threading the serial im2col. The
-      blocks-only offload buys qwen3a ~11%; the frontend is the family's actual bottleneck.
-    - **The whisper decoder half**: post-tower gb1 splits encode 4.35 s vs decode 3.50 s +
-      cross_kv 1.65 s — the decoder is now the larger half of a whisper-large transcribe.
-    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven, possibly
-      post-PR (the chunk 2 non-goal note); the f32 lane already beats the q8-CPU default
-      for whisper-class, so this is upside, not a gap.
+26. **ASR perf follow-ups after the Metal tower — MOSTLY RESOLVED by metal-media chunk 3
+    (2026-08-16, `metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
+    the q8-native decode step on Metal, part/comb attention, f16 KV — decode beats the
+    q8-CPU rail 1.6x and serves by default above the `n_text_state >= 1024` floor); J-qwen3a
+    SHIPPED (the conv2d frontend pads into the tile GEMM — encode 6.3x, the q8 serving
+    default included); the whisper conv frontend rides the GPU too (37x). gb1
+    large-v3-turbo lands ~4.1 s vs whisper-cli's 5.61. What remains:
+    - **The q8 tower lane**: transform-vs-upload-dequant, measurement-driven — the encoder
+      blocks still ride the f32 lane under `--ngl` (the one remaining fp32-forced half).
     - **Audio mmproj provenance**: `qwen2audio-mmproj-f32.gguf` and
       `voxtral-mini-mmproj-f32.gguf` are locally-converted fixtures with no
-      `performance/fetch_models.das` entry — the tests that load them (encoder oracles, the
-      blocks-parity cells, the erf-GELU census carrier) skip honestly without them, but the
-      files are not re-fetchable from the manifest. Mint the entries (or a documented
-      convert recipe) rather than inventing provenance.
+      `performance/fetch_models.das` entry — the tests that load them skip honestly without
+      them, but the files are not re-fetchable from the manifest. Mint the entries (or a
+      documented convert recipe) rather than inventing provenance.
+    - **The whisper decode step's small-model floor**: tiny (d=384) loses ~3x to the
+      per-dispatch latency floor and keeps the CPU rail by policy — a graph/ICB replay or
+      megafusion round would move the floor; measured, ledgered, not urgent.

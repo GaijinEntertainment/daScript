@@ -700,6 +700,20 @@ cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated
 - **S — bench + docs.** `lcpp_bench --asr --ngl` re-run (anti-sandbag live), record-grade
   released-exe numbers, the whisper-cli comparison re-quoted, followup #26 updated,
   ENVIRONMENT.md regen (new knob), arm lists, REVIEW companions.
+  STATE 2026-08-16: docs half DONE (#26 rewritten — decoder + J-qwen3a resolved, the q8
+  tower lane + provenance + the small-model decode floor remain; ENVIRONMENT regenerated
+  with both wdec knobs; the mtower arm doc carries the decoder gate). The record-grade
+  released-exe re-profile WAITS on the fresh quiet-box mint the DASLLAMA_VERSION=4 bump
+  demands (the tune gate refuses the v3 sidecar by name) — debug-grade leg validation runs
+  under DASLLAMA_ALLOW_UNTUNED, stamped debug, never stored.
+  DEBUG-GRADE LEG VALIDATION DONE (turbo, -r 1, untuned, parsec stamped on — wiring truth,
+  not record truth): CPU row gb1 16.85 s / hp0x2 47.4 s (the historical q8-CPU baseline —
+  the CPU-row wdec pin proven); GPU row jfk 449 ms / jfk3 925 / **gb1 4.05 s (xRT 49)** /
+  hp0 5.84 / **hp0x2 11.24 s (xRT 48.6)** — anti-sandbag passed, transcripts full and
+  correct. From chunk 2's close (9.32/25.2) another 2.3x; vs the q8-CPU default 4.16x e2e;
+  vs whisper-cli's 5.61 s gb1 (beam-5) we are 1.39x FASTER greedy. NOTE: the catalog has no
+  Qwen3-ASR-0.6B row (the family's board exposure is the Omni-30B row) — adding one is a
+  board-curation call, not a slice item; the qwen3a 6.3x claim stands on the stage probe.
 
 ## Open design decisions (named before O starts)
 
