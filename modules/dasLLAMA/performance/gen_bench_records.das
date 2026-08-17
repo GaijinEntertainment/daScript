@@ -466,32 +466,38 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
 // The ASR twin of oracle_cell: re-measure one stored audio row and gate it against itself. No
 // reference tools run — this is the das side against its own record, like the LLM legs. The ms
 // metrics gate through the same oracle_compare, mirrored (for a duration, worse is HIGHER).
-def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; threads : int;
+def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; leg : string; cfg : Args; threads : int;
                             cellPath, exe : string; var board : array<string>) : OracleVerdict {
     let path = asr_model_path(spec)
+    let leg_tag = empty(leg) ? "asr" : "asr {leg}"
     if (!stat(path).is_valid) {
-        let miss = "FAIL {spec.display} das asr - model file missing: {path}"
+        let miss = "FAIL {spec.display} das {leg_tag} - model file missing: {path}"
         to_log(LOG_ERROR, "gen_bench_records: ORACLE {miss}\n")
         board |> push(miss)
         return OracleVerdict.fail
     }
-    to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das asr\n")
-    logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display)}))
-    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das {leg_tag}\n")
+    logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display), "leg" => JV(leg_tag)}))
+    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "1"])
+    }
     var out = ""
     let rc = run_and_stream(args, out)
     var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
-        board |> push("FAIL {spec.display} das asr - cell did not measure (rc={rc}, see the log)")
+        board |> push("FAIL {spec.display} das {leg_tag} - cell did not measure (rc={rc}, see the log)")
         return OracleVerdict.fail
     }
     remove(cellPath)
     var verdict = OracleVerdict.fail
-    var detail = "no das run in the fresh cell records"
+    var detail = "no das {stored.backend} run in the fresh cell records"
     for (c in cell) {
         for (r in c.runs) {
-            if (r.engine != "das" || empty(r.workload)) {
+            if (r.engine != "das" || empty(r.workload) || r.backend != stored.backend) {
                 continue
             }
             var lines : array<string>
@@ -500,7 +506,7 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; 
             delete lines
         }
     }
-    let line = "{oracle_verdict_str(verdict)} {spec.display} das asr: {detail}"
+    let line = "{oracle_verdict_str(verdict)} {spec.display} das {leg_tag}: {detail}"
     let level = verdict == OracleVerdict.fail ? LOG_ERROR : (verdict == OracleVerdict.warn ? LOG_WARNING : LOG_INFO)
     to_log(level, "gen_bench_records: ORACLE {line}\n")
     board |> push(line)
@@ -607,12 +613,32 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 if (!found) {
                     continue
                 }
+                // stored row -> the rig leg that produced it, like the LLM map below; a row no
+                // leg produces (a foreign backend, a stale flavor) is skipped loudly, not raced
+                var asrLeg = ""
+                if (sr.backend == "cpu" && sr.flavor == "tuned") {
+                    asrLeg = ""
+                } elif (sr.backend == "accel" && sr.flavor == "accel") {
+                    asrLeg = "accel"
+                } elif (sr.backend == "metal" && sr.flavor == "tuned") {
+                    asrLeg = "metal"
+                } else {
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} {sr.backend}/{sr.flavor} - no rig leg produces it\n")
+                    continue
+                }
                 cells++
                 if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das asr", board, fails, warns)) {
                     continue
                 }
                 settle(cfg)
-                let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, exe, board)
+                var va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
+                if (va == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
+                    // same contract as the LLM legs below: the solo re-run's verdict stands
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
+                    board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
+                    sleep(uint(cfg.oracle_retry_settle * 1000))
+                    va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
+                }
                 if (va == OracleVerdict.fail) {
                     fails++
                     if (!cfg.oracle_keep_going) {
