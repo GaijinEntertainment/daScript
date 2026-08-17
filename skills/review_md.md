@@ -112,7 +112,9 @@ test enforces it, a scope reassignment). Auditors tag each self-review finding
 `blocking | stale | contradiction | structural | formatting`; the tag locates the defect,
 and the forced-vs-semantic test on its REPAIR decides the disposition. One checklist-edit batch per round, one dragon pass over the batch; a FRESH
 dragon then re-reads cold. Serious findings it returns open one more batch on the same
-terms; the round exits when a fresh cold read returns none.
+terms; the round exits when a fresh cold read returns none. Wording a dragon itself authored
+and the round applied verbatim is exempt from the next pass — never run dragon on dragon;
+re-judging its own prose is oscillation by construction.
 
 ## Reviewing a REVIEW.md diff
 
