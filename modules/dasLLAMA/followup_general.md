@@ -389,3 +389,14 @@
     modules/dasLLAMA/tests/run.das", instead of letting the suite die deep. Design choice
     for implementation: refuse outright vs loud-warn; and keep single-file dastest runs
     OUTSIDE the metal-suite set (test_whisper.das etc.) unaffected.
+
+28. **CPU fallback on anything but tiny should be LOUD (2026-08-17).** The review round's
+    pattern: the GPU drivers decline silently by design (best-effort inside knobs), which is
+    right for tiny — the floor genuinely serves it better on CPU — but on any above-floor
+    model a silent CPU fallback is a performance cliff the user only finds by profiling.
+    Discussion to have: a single loudness policy for the serving paths — e.g. every decline
+    of a model the driver WOULD normally serve (above the floor, right quant, registered
+    family) logs one line naming the reason, while policy-class declines (floor, knob-off)
+    stay counter-only. Touches the tower conv frontends' bare-false contract, the wdec
+    decline notes (partly landed in the review round), and the required-mode asymmetry the
+    round ledgered. Decide the policy once, then sweep the drivers to it.
