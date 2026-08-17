@@ -10,10 +10,10 @@ require daslib/fio
 require daslib/json public
 require daslib/json_boost public
 
-//! Fixture-driven feature coverage for `imgui_file_dialog`, driven through
-//! `imgui_playwright`: builds a temp directory with known files (alpha.png /
-//! beta.jpg / gamma.txt + a subdir), drives the dialog there via the editable
-//! path bar, and cleans up the fixture.
+//! Feature coverage for `imgui_file_dialog` driven through `imgui_playwright`:
+//! the test builds a temp directory with known files (alpha.png / beta.jpg /
+//! gamma.txt + a subdir), drives the dialog there via the editable path bar,
+//! and cleans up the fixture.
 
 let FIXTURE_NAME = "das_fd_dialog_test"
 
