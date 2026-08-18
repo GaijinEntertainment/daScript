@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 // Pins the borrowed-plane vocabulary (dasllama_plane): a plane binds to a byte range, reads
 // back the bytes that are there, reports its own length, and owns nothing. Feed the function,

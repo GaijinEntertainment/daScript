@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
-module exchange_schema shared public
+module dasllama_exchange_schema shared public
 
+require dasllama/dasllama_lint public
 require daslib/json_boost
 require daslib/strings_boost      // split — the box identity parse
 require daslib/strings_convert    // try_to_int — provenance version is validated, never trusted

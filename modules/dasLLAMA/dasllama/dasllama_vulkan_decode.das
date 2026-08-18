@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_vulkan_decode shared public
 options _cyclomatic_complexity = 0   // whole-token record/setup walks — split queued for the dedup phase
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane

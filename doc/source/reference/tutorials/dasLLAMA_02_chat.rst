@@ -82,6 +82,39 @@ text is just ``user\nThanks!\nassistant\n``. The template's
 model sees, which ``decode`` renders invisibly. Only the text between them
 survives a round-trip.
 
+Replaying history
+=================
+
+A stateless server receives the whole transcript with every request and must
+rebuild the conversation before it can answer the new question.
+``add_assistant`` is ``respond`` with the reply already known: it prefills
+the pending user turn and the given reply into the KV cache and closes the
+turn — no generation. Replay the pairs in order and the fresh chat stands
+exactly where the old one did:
+
+.. das-doc: given var m = Model(); var chat = ChatSession()
+.. code-block:: das
+
+   var replay = create_chat(m, SYSTEM)
+   var i = 0
+   while (i + 1 < length(chat.history)) {
+       add_user(replay, chat.history[i].content)
+       add_assistant(m, replay, chat.history[i + 1].content)
+       i += 2
+   }
+
+``render_assistant`` is the same replay with no model run and no KV: on a
+renderer chat it appends the exact token stream ``add_assistant`` would
+prefill. Schedulers replay long histories this way — tokens only, cache
+memory spent only when the stream actually runs:
+
+.. code-block:: das
+
+   var rchat = create_chat_renderer(m, SYSTEM)
+   add_user(rchat, "What is the capital of France?")
+   var toks : array<int64>
+   render_assistant(m, rchat, "Paris.", toks)   // the exchange, as tokens
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/02_chat.das <../../../../tutorials/dasLLAMA/02_chat.das>`

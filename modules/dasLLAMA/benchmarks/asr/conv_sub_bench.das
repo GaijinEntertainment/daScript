@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Isolated conv-subsampling bench (parakeet encoder pre-stage). Part 1 of the conv_sub
 // stage pass: split the single `pk.conv_subsample` profiler bucket into its sub-stages —

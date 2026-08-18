@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_spm shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
 require dasllama/dasllama_gguf

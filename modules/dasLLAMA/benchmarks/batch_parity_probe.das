@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — the CPU truth half only
+options _dasllama_internal = true
 
 require dasllama/dasllama   // the facade: arch [init] registrations + load_model's prepared-image (.dlim) cache
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax

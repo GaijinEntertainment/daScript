@@ -1,5 +1,6 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dasllama/dasllama_transformer
 require dasllama/dasllama_math

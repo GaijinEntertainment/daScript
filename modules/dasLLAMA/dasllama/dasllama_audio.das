@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_audio shared public
 options _function_length = 0   // per-family transcribe pipelines mirror the model schema
 
+require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require strings

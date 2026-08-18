@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_vulkan_common shared public
 options _cyclomatic_complexity = 0   // the init/teardown state walks are the domain shape
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math

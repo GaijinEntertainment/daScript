@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_math_aarch64_neon shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // dot_q8q8_idot4x4/_f16s — the plain-das GEMV dots this backend dispatches
 require dasllama/dasllama_tune  // [tuned]: reconstitute the laneq4x4 tile from its template with per-box loop hints

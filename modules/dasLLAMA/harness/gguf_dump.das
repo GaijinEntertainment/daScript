@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 require daslib/fio
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs

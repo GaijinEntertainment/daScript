@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 // Targeted tests for dasllama_repack — the grp<mr> weight repacks, the disk-order K-quant
 // extractors, and the kq panel unpack. Byte-level, model-free, platform-neutral (pure CPU).

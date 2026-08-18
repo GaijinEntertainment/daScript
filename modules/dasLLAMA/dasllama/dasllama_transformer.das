@@ -1,11 +1,13 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_transformer shared public
 
 // dasLLAMA public front door. Re-exports the engine (dasllama_common) and pulls in every architecture
 // so its [init] registration fires. Consumers `require dasllama/dasllama_transformer` get the full API
 // plus all registered arches; adding an architecture = a new dasllama_arch_*.das + one require here.
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common public
 require dasllama/dasllama_layout   // [init]-only: registers the disk->compute layout hooks (repacks + GPU gathers) into dasllama_common; unset hooks panic at load
 require dasllama/dasllama_moe public   // the MoE router/expert dispatch the block kernels reach through

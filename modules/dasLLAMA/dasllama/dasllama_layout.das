@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_layout shared public
 options _cyclomatic_complexity = 0   // format/schema dispatch ladders are the domain shape
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_math          // g_repack_* backend pointers + active_* layout knobs
 require dasllama/dasllama_math_default  // k4_sc_mn — the k4 6-bit sc/mn decoder

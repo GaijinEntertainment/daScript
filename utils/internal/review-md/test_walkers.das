@@ -87,6 +87,49 @@ def test_pilot_gate_fixtures(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
+def make_dasllama_fixture(t : T?; tree, root : string) {
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
+    write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "// demonstrates covered_fn\n")
+    write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
+    var err : string
+    t |> success(copy_file(path_join(tree, "modules/dasLLAMA/REVIEW.das"), path_join(root, "modules/dasLLAMA/REVIEW.das"), true, err), "copied the real dasllama gate")
+}
+
+[test]
+def test_dasllama_gate_fixtures(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_dasllama")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_dasllama_fixture(t, tree, fixture)
+
+    let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
+    t |> equal(0, green.rc, "covered fixture is green: {green.out}")
+    t |> success(find(green.out, "REVIEW.das dasllama: OK") >= 0, "green verdict printed")
+
+    // one violation per miss class: a def no tutorial demonstrates, and a word-boundary
+    // near-miss (bound_fnx must not count as a mention of bound_fn)
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama.das",
+        "options gen2\n\ndef covered_fn() \{\n\}\n\ndef hidden_fn() \{\n\}\n\ndef bound_fn() \{\n\}\n")
+    write_at(t, fixture, "tutorials/dasLLAMA/02_demo.das", "// bound_fnx is a different identifier\n")
+
+    let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
+    t |> equal(1, red.rc, "planted fixture is red")
+    for (needle in ["facade def hidden_fn appears in no tutorials/dasLLAMA/*.das",
+                    "facade def hidden_fn appears in no doc/source/reference/tutorials/dasLLAMA_*.rst",
+                    "facade def bound_fn appears in no tutorials/dasLLAMA/*.das"]) {
+        t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
+    }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
 [test]
 def test_all_and_main_walker_wiring(t : T?) {
     let tree = getcwd()

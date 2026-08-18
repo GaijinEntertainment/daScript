@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_arch_qwen35 shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // the gated-attention path shares the std attention + FFN block helpers
 require dasllama/dasllama_attn_prefill   // prefill_attention: the gated-attention prefill drives the shared head kernels

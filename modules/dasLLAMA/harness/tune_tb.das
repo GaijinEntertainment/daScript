@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Per-box TB (token-block) measurement harness for the repack-tier batched Q8·Q8 GEMM
 // (arm64-gen / x64-gen). TB is a RUNTIME knob (set_q8_token_block) read by the repack

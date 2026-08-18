@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_repack shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_math_default  // k4_sc_mn — the kq 6-bit sc/mn decoder (stays there: hot in the kq dots, auto-inline is same-module-only)
 
 // Disk-order -> compute-order kernel data repacking, ALL weight formats, platform-neutral.

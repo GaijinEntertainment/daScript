@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options persistent_heap   // the layout arm loads a multi-GB model; explicit delete below
 options _cyclomatic_complexity = 35   // every gate here is the same flat fmt == 4/5/6/40 ladder repeated per stage
 options _function_length = 170        // and each gate carries its whole fixture build + oracle inline
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _model_tier

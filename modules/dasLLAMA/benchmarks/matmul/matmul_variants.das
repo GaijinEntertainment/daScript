@@ -2,6 +2,7 @@ options gen2
 
 module matmul_variants shared public
 
+require dasllama/dasllama_lint public
 require daslib/jobque_boost
 require llvm/daslib/aarch64_neon  // sdot4: JIT-emitted ARM SDOT (scalar fallback elsewhere)
 require math  // mad: fused multiply-add in the decode-GEMV flush variants

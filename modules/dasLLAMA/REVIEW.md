@@ -150,10 +150,18 @@ parses, a console-only diagnostic not being one. A tutorial source, `.rst` page,
 help string, `README.md`, or checked-in document still showing the old call, flag, or default
 is a defect of the change, not of the docs.
 
-**A symbol the facade re-exports is required through `dasllama/dasllama` (or
-`dasllama/dasllama_transformer`) by code outside the module; engine internals, in-module tests,
-harnesses and benchmarks require engine files directly.** A split that spreads facade-reachable
-requires instead of fixing the re-export is a defect.
+**Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) is a defect.** It machine-checks the
+facade boundary at every consumer compile: outside code requires only `dasllama/dasllama`,
+`dasllama/dasllama_scheduler`, and `dasllama/dasllama_exchange` — by name AND by resolved
+path (the tree guard) — and its DASLLAMA001 error text states the rule. Widening the
+allowed set, or adding `options _dasllama_internal` to a file that is not an engine file, an
+in-module test/harness/benchmark, or a ruled bake-side tool, is the weakening.
+
+**Weakening `REVIEW.das` (beside this file) is a defect.** It machine-checks the tutorial
+floor — every def the facade file itself defines appears in a dasLLAMA tutorial source AND its
+`.rst` page; each finding's text states its rule. The floor proves presence only: a facade def
+whose tutorial mention does not TEACH it — demonstrated in runnable code, narrated on the
+page — is a defect this checklist still owns.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;

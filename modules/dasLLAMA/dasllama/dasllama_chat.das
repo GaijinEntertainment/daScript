@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_chat shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower

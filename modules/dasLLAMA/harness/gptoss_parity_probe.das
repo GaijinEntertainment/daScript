@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true
 
 // Diagnostic twin of test_parity_gptoss_20b: same pinned-oracle path (classic prefill attention +
 // scalar libm act + raw greedy generate), but prints got-vs-want with the divergence index, and

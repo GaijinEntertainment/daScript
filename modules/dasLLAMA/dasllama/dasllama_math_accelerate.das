@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_math_accelerate shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // cvt_f32_to_f16 — the BNNS f16 batch prep
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

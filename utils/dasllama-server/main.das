@@ -24,10 +24,9 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require openai_server           // the server + route handlers (this directory)
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
-require dasllama/dasllama_image // dlim_clean — the startup dlim GC
-require dasllama/dasllama_math  // set_dispatch_worker_limit (engine-level knob, not re-exported)
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status (the injected guard resolves here)
-require ../../modules/dasLLAMA/performance/exchange_client.das   // the sidecar exchange: boot resolver + submit check
+require dasllama/dasllama_exchange   // the sidecar exchange: boot resolver + submit check
+require jobque                  // set_jobque_threads_cap / set_jobque_affinity (came via dasllama_math before the facade cut)
 require daslib/clargs
 require daslib/toml
 require daslib/json_boost

@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 // Silero-VAD parity gate: dump one `PROB<TAB>frame<TAB>prob` line per 512-sample chunk,
 // diffable against harness/silero_vad_oracle.py (onnxruntime op15). Target max|Δ| ≤ 1e-4.

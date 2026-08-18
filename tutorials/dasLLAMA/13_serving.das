@@ -15,6 +15,8 @@ require strings
 //   - Batched vs sequential wall-clock for the same four conversations
 //   - The prefix cache: a repeated system prompt skips its own prefill
 //   - Stateless requests: rendered token prompts hold no KV memory
+//   - Multi-model GPU serving: the tier want/arm calls and the slot dance
+//     (capture, rearm, hydrate, drop, the resident-prefill pin)
 //
 // Prerequisites: tutorials 02 and 04.
 //
@@ -150,6 +152,62 @@ def sequential_round(m : Model) : int64 {
     return wall
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 4 — Multi-model GPU serving: the slot dance
+// ──────────────────────────────────────────────────────────────────────────
+//
+// A server holding several models has ONE GPU tier: the engine's tier state
+// (routing marks + resident-driver state) is per-process, not per-model. So a
+// multi-model host runs a small dance around every load and every switch. On
+// a CPU-only box every step below is a cheap no-op that reports "cpu" — the
+// calls are the contract; run this with the vulkan backend to watch the tier
+// actually move.
+//
+// At load time we request a tier BEFORE the load: set_gpu_tier_want records
+// the request (the programmatic mirror of the DASLLAMA_GPU_* env vars; a zero
+// want keeps the load off the device), moe_gpu_tier_arm arms it so a backend
+// can install its hooks, and moe_gpu_weight_budget says how many bytes of
+// weights the armed backend will hold resident. gpu_tier_status is the
+// running snapshot the server's GPU badge reads.
+//
+// After the load, the arm outcome belongs to THAT model. gpu_slot_capture
+// moves it into a GpuModelMarks holder (gpu_model_marks_init makes an empty
+// one) and classifies what the model got: "cpu", "gpu:rails" (some weights
+// ride device rails), or "gpu:resident" (the whole stack lives on device).
+//
+// On a switch-in: restore the model's marks, then gpu_slot_rearm — want, arm,
+// resident upload, through the bake-slice path when the image is a mapped
+// vulkan flavor. On a switch-out with eviction: moe_gpu_hydrate_session pulls
+// each live session's KV back to host memory (the device mirror dies with the
+// drop), moe_gpu_drop_model frees the model's whole device state, and
+// moe_gpu_model_marks_save banks what is left in the slot.
+
+def section_gpu_slots(m : Model) {
+    set_gpu_tier_want(GpuTierWant(auto_tier = true))
+    let armed = moe_gpu_tier_arm()
+    let tier = gpu_tier_status()
+    print("tier want armed: {armed}; resident weight budget {moe_gpu_weight_budget()} bytes; device '{tier.device}'\n")
+
+    var slot_a = gpu_model_marks_init()
+    let outcome = gpu_slot_capture(slot_a)   // after A's load: A's tier state moves into the slot
+    print("model A captured as '{outcome}'\n")
+
+    moe_gpu_model_marks_restore(slot_a)      // switch-in: A's marks install...
+    let rearmed = gpu_slot_rearm(GpuTierWant(auto_tier = true), m)   // ...and A re-arms
+    print("A switched in: '{rearmed}'\n")
+
+    var s = create_session(m)                // switch-out with eviction: KV home first, then drop
+    moe_gpu_hydrate_session(m, s)
+    moe_gpu_drop_model()
+    delete s
+    moe_gpu_model_marks_save(slot_a)
+
+    // one more serving pin: park the resident prefill arm while a bake (or any
+    // other workload) owns the device; flip it back when the device is yours
+    set_resident_prefill_allowed(false)
+    set_resident_prefill_allowed(true)
+}
+
 [export]
 def main() {
     let path = model_path()
@@ -174,6 +232,8 @@ def main() {
         // of prefilled, so only each question's tail pays prefill
 
         delete sch
+
+        section_gpu_slots(m)
     }
     // From here the OpenAI-compatible server is the same module with more streams:
     // utils/dasllama-server drives this exact scheduler under HTTP + SSE.

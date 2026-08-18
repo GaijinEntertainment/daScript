@@ -364,9 +364,9 @@ command, not archaeology.
 - **`performance/fetch_models.das`** — the fetch/verify driver over the provenance view.
   Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md §2 is the runbook.
-- **`performance/exchange_schema.das`** — engine-free validation for exchange submissions
+- **`dasllama/dasllama_exchange_schema.das`** — engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
-- **`performance/exchange_client.das`** — the sidecar-exchange client: the boot-time
+- **`dasllama/dasllama_exchange.das`** — the sidecar-exchange client (a sanctioned public entry point): the boot-time
   lookup/apply (llvm_tune's scope resolver — a verified per-box match downloads instead of a
   ~20-minute tune), the privacy-stripped submit rails, and the control-page surface
   dasllama-server serves at `/exchange`.

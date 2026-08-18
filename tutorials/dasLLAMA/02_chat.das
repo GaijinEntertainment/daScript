@@ -13,6 +13,7 @@ require strings
 //   - Multi-turn memory — the whole conversation lives in the session's KV cache
 //   - The transcript: chat.history
 //   - Under the hood: chat templates and render_turn
+//   - Replaying history: add_assistant and render_assistant
 //
 // Prerequisites: tutorial 01; a chat-tuned GGUF (SmolLM2-135M-Instruct works).
 //
@@ -117,5 +118,41 @@ def main() {
             return true
         }
         print("\n")
+
+        section_replay(m, chat)
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — Replaying history: add_assistant and render_assistant
+// ──────────────────────────────────────────────────────────────────────────
+//
+// A stateless server receives the whole transcript with every request and
+// must rebuild the conversation before it can answer the new question.
+// add_assistant is respond() with the reply already known: it prefills the
+// pending user turn and the given reply into the KV cache and closes the
+// turn — no generation. Replay the pairs in order and the fresh chat stands
+// exactly where the old one did.
+
+def section_replay(m : Model; chat : ChatSession) {
+    print("\nreplaying {length(chat.history)} messages into a fresh chat:\n")
+    var replay = create_chat(m, SYSTEM)
+    var i = 0
+    while (i + 1 < length(chat.history)) {
+        add_user(replay, chat.history[i].content)
+        add_assistant(m, replay, chat.history[i + 1].content)
+        i += 2
+    }
+    ask(m, replay, "Which country did we talk about first?")
+
+    // render_assistant is the same replay with no model run and no KV: on a
+    // renderer chat it appends the exact token stream add_assistant would
+    // prefill. Schedulers replay long histories this way — tokens only, cache
+    // memory spent only when the stream actually runs.
+
+    var rchat = create_chat_renderer(m, SYSTEM)
+    add_user(rchat, "What is the capital of France?")
+    var replay_toks : array<int64>
+    render_assistant(m, rchat, "Paris.", replay_toks)
+    print("one replayed exchange = {length(replay_toks)} tokens, rendered without touching the model\n")
 }

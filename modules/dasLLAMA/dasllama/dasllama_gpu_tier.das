@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gpu_tier shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic

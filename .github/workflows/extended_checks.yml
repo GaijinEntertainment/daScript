@@ -493,6 +493,16 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_env_registry.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLVM/tests/llvm_env_registry.das
 
+    - name: "Test dasllama facade lint"
+      # The DASLLAMA001 smokes: a direct engine require kabooms (expected-compile-failure
+      # file), and the per-file options escape admits one. Model-free, sub-second.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_require.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_escape.das
+
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a
       # hyphenated directory requires siblings by bare name), so `--test

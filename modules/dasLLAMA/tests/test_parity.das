@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap   // + explicit deletes below: each arm frees its model/session before the next loads, so multi-GB weights never accumulate in the process
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)

@@ -4,6 +4,7 @@ options persistent_heap   // model-scale allocations — freed per test
 // parakeet, canary, gemma4a) — ~5 KB / ~10 KB each now; tests holding two (q8-gate) or nesting
 // load frames (parakeet) need headroom above the default. Bumped for the 6-backend union.
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_whisper

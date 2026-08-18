@@ -8,9 +8,11 @@
 // every case skips there regardless of tier — the gate only ever bites on a local box.
 
 options gen2
+options _dasllama_internal = true
 
 module _model_tier shared public
 
+require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require daslib/fio public
 require strings public

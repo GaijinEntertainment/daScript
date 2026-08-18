@@ -9,10 +9,7 @@ require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
-require dasllama/dasllama_math  // gpu_tier_status: the GET /config GPU badge
-require dasllama/dasllama_image   // dlim_inventory / dlim_clean: GET /v1/images + the bake GC
-require dasllama/dasllama_config  // dlim_config_current/json: the bake child's --config payload
-require ../../modules/dasLLAMA/performance/exchange_client.das   // the /exchange surface + submit rails
+require dasllama/dasllama_exchange   // the /exchange surface + submit rails
 require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require daslib/jobque_boost
@@ -22,11 +19,7 @@ require daslib/fio              // sleep(), path_join, base_name, remove, get_en
 require daslib/module_path      // get_this_module_dir: control.html ships beside the server sources
 require strings
 require math
-require dasllama/dasllama_audio_io   // load_audio_16k_mono: any uploaded audio format -> 16 kHz mono f32
-require dasllama/dasllama_vision_io  // load_image_rgb(bytes): the chat route's data-URI image parts
 require daslib/base64                // base64_decode: the data: URI payload
-require dasllama/dasllama_vad        // POST /vad: silero speech spans for the page's waveform overlay
-require dasllama/dasllama_gpu_resident   // multi-model slot switch (marks save/restore) + the resident-prefill pin
 
 // An OpenAI-compatible HTTP server over the dasLLAMA facade. The SERVING paths reach only public
 // facade verbs — no engine internals — which is the acceptance test for the API: if a full OpenAI
@@ -72,7 +65,7 @@ struct ModelSlot {
     sw_us : int64
     gpu_want : GpuTierWant = GpuTierWant()   // the tier request this slot re-arms with on switch-in
     gpu_capable : bool              // want is non-zero and backend != cpu (set_slot_gpu_want)
-    gpu_marks : GpuModelMarks <- GpuModelMarks()   // this model's tier routing marks while NOT installed
+    gpu_marks : GpuModelMarks <- gpu_model_marks_init()   // this model's tier routing marks while NOT installed
     vision : Gemma4uvEmbedder = Gemma4uvEmbedder()   // set_model_vision; proj_dim == 0 = text only (encode runs on the vision worker)
     vision_path : string                             // the worker loads its own embedder from this
     think_default : bool   // family default when the request sends no enable_thinking (gemma-4 off, qwen3 on)
@@ -175,12 +168,8 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
-    // Attribution reads the CAPTURED marks, not the process-global VRAM counter — that still
-    // holds the previous load's bytes when a later CPU-only slot loads.
-    let was_resident = moe_gpu_resident_active()
-    moe_gpu_model_marks_save(slot.gpu_marks)
-    let was_gpu = was_resident || moe_gpu_marks_armed(slot.gpu_marks.marks)
-    slot.backend_effective = was_resident ? "gpu:resident" : (was_gpu ? "gpu:rails" : "cpu")
+    slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
+    let was_gpu = slot.backend_effective != "cpu"
     var probe <- create_chat_renderer(slot.model, "", 1l)
     // reporting the raw template default would show the page a checked box for a family whose
     // vocab cannot think
@@ -254,23 +243,13 @@ def private bind_gpu_slot(si : int) {
         prev_note = "from {g_slots[prev].name}, "
     }
     install_slot_marks(si)
-    set_gpu_tier_want(g_slots[si].gpu_want)
-    moe_gpu_tier_arm()
-    // a vulkan-flavor image re-binds by SLICING its baked planes (the same rail its load used);
-    // on a planes-trimmed image a live re-gather would panic — the slice is the only path
-    if (!empty(g_slots[si].model.vkplan)) {
-        vulkan_bake_slice_begin()
-        moe_gpu_upload_resident(g_slots[si].model)
-        vulkan_bake_slice_end(g_slots[si].model)
-    } else {
-        moe_gpu_upload_resident(g_slots[si].model)
-    }
+    // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
+    // order-sensitive half of the switch lives in the engine
+    g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
     g_slots[si].sw_count ++
     g_slots[si].sw_us += us
-    g_slots[si].backend_effective = (moe_gpu_resident_active() ? "gpu:resident"
-        : (gpu_tier_status().vram_bytes > 0l ? "gpu:rails" : "cpu"))
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
 }
 

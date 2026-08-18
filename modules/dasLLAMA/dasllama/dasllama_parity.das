@@ -1,7 +1,9 @@
 options gen2
+options _dasllama_internal = true
 
 module dasllama_parity shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/strings_boost

@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_common shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_version public  // DASLLAMA_VERSION — re-exported so the facade chain carries the module's release counter
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

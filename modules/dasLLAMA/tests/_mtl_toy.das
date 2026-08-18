@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 module _mtl_toy shared public
 
+require dasllama/dasllama_lint public
 require das_metal
 require metal/msl_shader
 require dasllama/dasllama_metal_common

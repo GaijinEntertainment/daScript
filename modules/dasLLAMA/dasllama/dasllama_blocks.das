@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_blocks shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_moe   // moe_select_core/moe_ffn_core/moe_shexp_gate — the router the MoE blocks drive
 require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threaded prefill the std/dense blocks call

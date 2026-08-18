@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
+options _dasllama_internal = true
 
 // fetch_models — the fetch/verify driver over the provenance view (BRINGUP.md §2). The data
 // lives in model_specs.das (the model-set table) and profile_common's asr_catalog;

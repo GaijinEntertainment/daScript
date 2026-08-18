@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Small-m batched-GEMM shape study (parakeet encoder, jfk tt=138): the d×d projections
 // (attn q/k/v/o, conv pw2) aggregate ~132 GMAC/s while the d×4d FFN halves run ~296 at the

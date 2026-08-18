@@ -46,6 +46,18 @@ conservative) default. Re-run the tutorial with ``DAS_JOBQUE_THREADS=1`` to
 see what threading buys — the win grows with model size, since tiny models
 have tiny matmuls.
 
+Inside a fixed queue the kernel dispatch can still be capped:
+``set_dispatch_worker_limit(n)`` bounds how many workers the kernels use
+(``0`` = no limit), and ``get_dispatch_worker_limit()`` reads the cap back. A
+serving box caps it to keep cores free for the rest of the process:
+
+.. das-doc: given var m = Model()
+.. code-block:: das
+
+   set_dispatch_worker_limit(2)   // kernels use at most 2 workers
+   print("cap: {get_dispatch_worker_limit()}\n")
+   set_dispatch_worker_limit(0)   // back to all of them
+
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute
 lanes on one physical core's SMT pair, which roughly halves batched prefill
@@ -93,6 +105,32 @@ the smallest footprint, not the fastest path. For small *and* fast, prefer a
 K-quant / mxfp4 / Q4_0 GGUF (Q4_K_M / Q5_K_M / Q6_K): under ``QuantMode.q8``
 those files keep their native 4-6 bit planes on the same fast rails, so both
 phases stay at full speed with a q4-class footprint.
+
+The load's two caches
+=====================
+
+Two more calls round out the load story. ``select_matmul_backend_for_load()``
+picks the fastest kernel backend for the *next* load (honoring a pin) and
+answers one question: must the loader repack the weights into that backend's
+interleaved layout? ``load_model`` runs it itself; call it yourself when you
+schedule loads and want the answer early.
+
+And the prepared images have a management surface. ``dlim_inventory`` lists
+the ``.dlim`` images minted beside a GGUF, each with a verdict — ``CURRENT``,
+``STALE`` (the bake configuration changed; ``DlimConfiguration`` holds every
+knob that changes image bytes), or ``BROKEN``. ``dlim_clean`` is the garbage
+collector: ``apply = false`` only reports, ``apply = true`` removes the stale
+ones — the server runs this at startup:
+
+.. code-block:: das
+
+   let repack = select_matmul_backend_for_load()
+   var inscope images <- dlim_inventory(path)
+   for (im in images) {
+       print("{im.file}: {im.bytes} bytes, {im.verdict}\n")
+   }
+   let r = dlim_clean(path, false)   // report only
+   print("{r.stale} of {r.total} stale\n")
 
 Where to go deeper: ``modules/dasLLAMA/tune_for_this_box.md`` covers kernel
 tuning (token-block size, unrolls, the ``[dasllama_grid]`` tuner) when you

@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true
 
 // Per-kernel occupancy report over every production Metal kernel: maxTotalThreadsPerThreadgroup
 // is the register-pressure oracle — a reg-limited PSO reports < 1024 and runs fewer resident

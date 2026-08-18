@@ -5,6 +5,7 @@ options _cyclomatic_complexity = 0   // bench cell main = the measurement protoc
 options _function_length = 0   // same
 options _ascii_strings = false   // the bench report is human-facing: the markdown/console rows print the mean +- sd with a real plus-minus sign
 options log_compile_time = true   // front-end compile wall + the jit backend's per-phase breakdown (llvm_jit_run reads the same option)
+options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
@@ -25,7 +26,7 @@ require daslib/module_path            // get_this_module_dir — the default pro
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
-require ../performance/exchange_client.das   // --submit: POST the stamped records to the exchange
+require dasllama/dasllama_exchange   // --submit: POST the stamped records to the exchange
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs

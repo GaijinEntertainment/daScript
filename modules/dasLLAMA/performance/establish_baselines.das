@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
+options _dasllama_internal = true
 
 // Batch reference-baseline establisher for the dasLLAMA profiling suite. Runs the REFERENCE tools once
 // per box (llama.cpp llama-bench for LLMs here; the ASR CLIs land in a later phase) and writes their

@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_math_default shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_math       // KernelBackend + register_kernel_backend + the matmul_chunks shapers + repack_q8q8_identity
 require dasllama/dasllama_tune       // [tuned]: reconstitute dot_q8q8 from its template with per-box loop hints
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides

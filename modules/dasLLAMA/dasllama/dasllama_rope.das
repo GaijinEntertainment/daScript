@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_rope shared public
 
+require dasllama/dasllama_lint public
 require math
 
 // RoPE ANGLE GENERATION, platform-neutral: the theta schedule (freq[j] = 1/theta^(2j/hs)), the

@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // CPU-oracle helpers of the kernel suite that need vulkan-present symbols — the
 // shader_lingua_franca exact bodies (sdot4, unpackHalf2x16) and the kq class instances.
@@ -6,6 +7,7 @@ options gen2
 // bar runs without dasVulkan, and this module drops out whole behind `require ?vulkan`.
 module _vkd_oracles shared public
 
+require dasllama/dasllama_lint public
 require daslib/shader_lingua_franca
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_vulkan_classes

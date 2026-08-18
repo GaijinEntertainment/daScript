@@ -2,6 +2,7 @@ options gen2
 options _function_length = 0   // one flat per-family row per function: needs pin, per-path cells, generate + batch parity
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced

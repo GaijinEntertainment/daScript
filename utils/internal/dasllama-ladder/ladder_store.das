@@ -1,9 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true   // the exchange SERVICE: implements the wire contract, so it reads the schema module directly
 
 module ladder_store public
 
-require ../../../modules/dasLLAMA/performance/exchange_schema.das public   // BoxIdentity/SidecarInfo are store API types
+require dasllama/dasllama_exchange_schema public   // BoxIdentity/SidecarInfo are store API types
 require daslib/sql
 require sqlite/sqlite_migrate public
 require daslib/sql_linq

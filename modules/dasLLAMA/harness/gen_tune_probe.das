@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options _jit_fast_math = true   // match gemm_1core_probe / the end-to-end config
+options _dasllama_internal = true
 
 // M3/M4 grid gates (gemm_generator_plan.md): run with DAS_TUNE_MODE=test or =tune, -jit.
 // Layout is per-variant: each variant's mr comes off its q8q8_layout_gen__<suffix>

@@ -1,7 +1,8 @@
 options gen2
 options stack = 524288
+options _dasllama_internal = true
 require dastest/testing_boost public
-require ../performance/exchange_schema.das
+require dasllama/dasllama_exchange_schema
 require ../performance/profile_common.das   // the REAL record writer — the anti-drift arm
 require ../harness/tuner_phrases.das   // the provenance phrase leaf test_writer_phrases pins
 require dasllama/dasllama_version

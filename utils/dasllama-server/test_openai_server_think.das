@@ -2,6 +2,7 @@ options gen2
 options persistent_heap   // each server thread loads/frees a multi-GB model once; explicit deletes below
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — this is an inference tool test, not the bit-exact suite
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // the server under test (sibling — bare require, hyphenated dir)

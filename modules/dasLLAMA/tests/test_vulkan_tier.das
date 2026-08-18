@@ -1,6 +1,7 @@
 options gen2
 options _function_length = 0   // one flat gate per kernel arm: fixture build, hook install, dispatch, CPU-reference compare
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math

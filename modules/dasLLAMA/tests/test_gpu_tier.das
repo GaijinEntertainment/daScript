@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 // The device-cooperation seam (dasllama_gpu_tier) tested as a CONTRACT, model-free and
 // device-free: uninstalled slots decline (never panic on the probe surface), installed das-side

@@ -40,6 +40,8 @@ which is where the throughput comes from:
    var rows <- [unsafe(addr(s0)), unsafe(addr(s1))]
    var toks <- [sample(*rows[0], SamplingParams()), sample(*rows[1], SamplingParams())]
    eval_batch(m, ws, rows, toks)   // ONE weight pass advances every stream
+   release_kv_pages(s0)            // pages go back to the pool before the session dies
+   release_kv_pages(s1)
 
 The scheduler
 =============
@@ -101,6 +103,55 @@ Forty-eight of sixty-seven prompt tokens — the system turn's three pages —
 arrived from the cache; only the question's tail paid prefill, and time to
 first token dropped to match.
 
+Multi-model GPU serving: the slot dance
+=======================================
+
+A server holding several models has *one* GPU tier: the engine's tier state
+(routing marks + resident-driver state) is per-process, not per-model. A
+multi-model host runs a small dance around every load and switch — on a
+CPU-only box each step is a cheap no-op that reports ``"cpu"``, so the code
+runs anywhere.
+
+Before a load we request a tier: ``set_gpu_tier_want`` records the request
+(the programmatic mirror of the ``DASLLAMA_GPU_*`` env vars; a zero want
+keeps the load off the device), ``moe_gpu_tier_arm`` arms it so a backend can
+install its hooks, ``moe_gpu_weight_budget`` says how many bytes of weights
+the armed backend will hold resident, and ``gpu_tier_status`` is the running
+snapshot a status page reads. After the load, ``gpu_slot_capture`` moves the
+arm outcome into a ``GpuModelMarks`` holder (``gpu_model_marks_init`` makes
+an empty one) and classifies it: ``"cpu"``, ``"gpu:rails"``, or
+``"gpu:resident"``:
+
+.. das-doc: given var m = Model()
+.. code-block:: das
+
+   set_gpu_tier_want(GpuTierWant(auto_tier = true))
+   let armed = moe_gpu_tier_arm()
+   print("budget {moe_gpu_weight_budget()} bytes on '{gpu_tier_status().device}'\n")
+   // ... load_model runs here ...
+   var slot = gpu_model_marks_init()
+   let outcome = gpu_slot_capture(slot)   // "cpu" | "gpu:rails" | "gpu:resident"
+
+On a switch-in, restore the model's marks and re-arm it — ``gpu_slot_rearm``
+runs want, arm, and the resident upload, through the bake-slice path when the
+image is a mapped vulkan flavor. On a switch-out with eviction,
+``moe_gpu_hydrate_session`` pulls each live session's KV back to host memory
+first (the device mirror dies with the drop), ``moe_gpu_drop_model`` frees
+the model's device state, and ``moe_gpu_model_marks_save`` banks the rest:
+
+.. code-block:: das
+
+   moe_gpu_model_marks_restore(slot)                     // switch-in...
+   let backend = gpu_slot_rearm(GpuTierWant(auto_tier = true), m)
+   // ... serve ... then evict:
+   moe_gpu_hydrate_session(m, s)                         // per live session
+   moe_gpu_drop_model()
+   moe_gpu_model_marks_save(slot)
+
+One more serving pin: ``set_resident_prefill_allowed(false)`` parks the
+resident-decode prefill arm while a bake or another workload owns the device;
+flip it back when the device is yours.
+
 The same module, more streams
 =============================
 
@@ -113,6 +164,8 @@ same events.
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/13_serving.das <../../../../tutorials/dasLLAMA/13_serving.das>`
+
+   Next tutorial: :ref:`tutorial_dasLLAMA_vision_chat`
 
    Sessions and the KV cache: :ref:`tutorial_dasLLAMA_sessions_and_memory`
 

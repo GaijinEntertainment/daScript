@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_arch_phi3 shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 

@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_arch_gemma4 shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // attention_std_decode/prefill — gemma4 binds the standard attention with its own FFN
 require dasllama/dasllama_ple  // the PLE + gemma4 MoE kernels this arch binds into ArchBlocks

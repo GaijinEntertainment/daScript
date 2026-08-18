@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Isolated conformer conv-module bench (parakeet encoder, the two non-GEMM loops inside
 // pk.conv_module): GLU (signal · σ(gate)) and depthwise conv1d k9 over time + inference

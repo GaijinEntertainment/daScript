@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_math_vulkan shared public
 options _cyclomatic_complexity = 0   // the capability-probe/arm ladders are the domain shape
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_classes public   // the facade: consumers reach the whole backend through this module
 require dasllama/dasllama_vulkan_common public
 require dasllama/dasllama_vulkan_decode public

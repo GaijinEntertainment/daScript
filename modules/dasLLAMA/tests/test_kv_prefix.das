@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap   // several Sessions live at once (see test_forward.das)
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration

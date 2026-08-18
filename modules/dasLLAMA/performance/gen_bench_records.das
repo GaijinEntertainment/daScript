@@ -2,6 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the single-rig consolidation
 options _function_length = 0   // same
+options _dasllama_internal = true
 
 require profile_common
 require dasllama/dasllama_env   // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
@@ -174,7 +175,7 @@ var private g_mint_seen : table<string; clock>
 var private g_mint_count : table<string; int>
 
 def private mint_snapshot(dir : string) {
-    for (im in dlim_inventory(dir)) {
+    for (im in dlim_inventory_(dir)) {
         let st = stat(im.path)
         if (st.is_valid) {
             g_mint_seen[im.path] = st.mtime
@@ -183,7 +184,7 @@ def private mint_snapshot(dir : string) {
 }
 
 def private mint_check(dir, whose : string) {
-    for (im in dlim_inventory(dir)) {
+    for (im in dlim_inventory_(dir)) {
         let st = stat(im.path)
         continue if (!st.is_valid)
         // unseen path or a moved mtime = this cell wrote it

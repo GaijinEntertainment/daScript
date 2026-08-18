@@ -12,7 +12,6 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // the three tools), and every sibling is tuned.
 
 require dasllama/dasllama       // load_model / generate / the shared [tune_scope]
-require dasllama/dasllama_vision_io   // --image: file → RGB8 (the only stbimage-touching module)
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status
 require daslib/jobque_boost
 require daslib/clargs

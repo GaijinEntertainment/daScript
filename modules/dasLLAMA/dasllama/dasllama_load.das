@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_load shared public
 
@@ -9,6 +10,7 @@ module dasllama_load shared public
 // It requires dasllama_common back for Model/Session, so the transformer umbrella requires it and
 // breaks the cycle, exactly like the GPU residency rail and the Metal drivers.
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gguf

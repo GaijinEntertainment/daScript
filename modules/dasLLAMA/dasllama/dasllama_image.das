@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_image shared public
 options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive schema
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/apply
@@ -220,7 +222,7 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
 }
 
 //! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
-def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
+def dlim_inventory_(gguf_path : string) : array<DlimImageInfo> {
     var out : array<DlimImageInfo>
     var st : FStat
     if (!stat(gguf_path, st)) {
@@ -247,7 +249,7 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
 //! identities fold other bake contexts' backend/winner state — this save proves nothing there.
 def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8") {
     let lane = "{quant}#{tag}"
-    var inv <- dlim_inventory(source_path)
+    var inv <- dlim_inventory_(source_path)
     var removed = 0
     var freed = 0l
     for (im in inv) {
@@ -270,9 +272,9 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
 //! The dlim GC beside `gguf_path`: everything non-CURRENT goes by default — BROKEN,
 //! version-stale, AND valid other-identity siblings (old identities pile up across re-mints).
 //! ``keep_other = true`` is the opt-out for a bake deliberately carried from another box.
-def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
+def dlim_clean_(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
-    var inv <- dlim_inventory(gguf_path)
+    var inv <- dlim_inventory_(gguf_path)
     var foreign_kept = 0
     for (im in inv) {
         r.total++

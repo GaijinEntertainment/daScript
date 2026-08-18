@@ -14,8 +14,11 @@ require math
 // This tutorial covers:
 //   - Why model programs always run with -jit (and _jit_fast_math)
 //   - Threading the kernels: with_job_que + the jobque dispatch knobs
+//   - set_dispatch_worker_limit / get_dispatch_worker_limit — capping the kernel workers
 //   - Quantization: fp32 vs q8 vs q4_0 — memory and speed
 //   - Reading stats(): prefill vs generation, time to first token
+//   - The load's two caches: select_matmul_backend_for_load and the .dlim
+//     prepared images (dlim_inventory / dlim_clean)
 //
 // Prerequisites: tutorial 01.
 //
@@ -85,6 +88,14 @@ def section_threads(m : Model) {
         setup_dasllama_jobque()
         print("job queue: {get_total_hw_jobs()} hardware jobs (override with DAS_JOBQUE_THREADS=N)\n")
         bench_gen(m, "threaded: ")
+
+        // set_dispatch_worker_limit caps how many of those workers the kernel
+        // dispatch uses (0 = no limit); get_dispatch_worker_limit reads it back.
+        // A serving box caps it to keep cores free for the rest of the process.
+        set_dispatch_worker_limit(2)
+        print("dispatch capped at {get_dispatch_worker_limit()} workers | ")
+        bench_gen(m, "capped:   ")
+        set_dispatch_worker_limit(0)
     }
 }
 
@@ -144,6 +155,35 @@ def main() {
     section_quant(path, QuantMode.fp32, "fp32")
     section_quant(path, QuantMode.q8, "q8  ")
     section_quant(path, QuantMode.q4_0, "q4_0")
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Section 3 — The load's two caches
+    // ──────────────────────────────────────────────────────────────────────
+    //
+    // select_matmul_backend_for_load picks the fastest kernel backend for the
+    // NEXT load (honoring a pin) and answers one question: must the loader
+    // repack the weights into that backend's interleaved layout? load_model
+    // runs this itself; call it yourself when you schedule loads and want the
+    // answer early.
+    //
+    // The q8 loads above also minted a PREPARED IMAGE (.dlim) beside the GGUF —
+    // the mapped weight planes that make reloads millisecond-fast.
+    // dlim_inventory lists the images beside a GGUF with a verdict per image;
+    // STALE means the bake configuration changed (the knobs that change image
+    // bytes live in DlimConfiguration). dlim_clean with apply = false only
+    // reports; apply = true removes the stale ones — the server runs this GC
+    // at startup.
+
+    print("\n")
+    let repack = select_matmul_backend_for_load()
+    print("backend picked for the next load; needs weight repack: {repack}\n")
+    var inscope images <- dlim_inventory(path)
+    print("{length(images)} prepared image(s) beside the gguf:\n")
+    for (im in images) {
+        print("  {im.file}: {mb(im.bytes)} MB, {im.verdict}\n")
+    }
+    let r = dlim_clean(path, false)
+    print("dlim_clean (report only): {r.total} image(s), {r.stale} stale\n")
 
     // Where to go deeper: modules/dasLLAMA/tune_for_this_box.md covers kernel tuning
     // (token-block size, unrolls, the [dasllama_grid] tuner) when you want to squeeze

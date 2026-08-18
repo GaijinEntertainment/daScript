@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_convert shared public
 
+require dasllama/dasllama_lint public
 require math
 require llvm/daslib/f16_cvt   // f16<->f32 halfword codecs — the Q5_K encoder + every f16 scale read
 require daslib/jobque_boost public   // quantize_k5_plane threads its superblock loop

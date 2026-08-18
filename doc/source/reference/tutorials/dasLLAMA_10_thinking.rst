@@ -80,6 +80,18 @@ its think block — the flush then returns the tail as reasoning, and the
 content half stays empty; the tutorial file shows the pattern that handles
 both endings.
 
+When the reply is already whole — a captured ``respond`` return, a server's
+non-streaming route — ``think_drain`` runs the same splitter in one call:
+feed, finish, and the strip rule together:
+
+.. code-block:: das
+
+   var ts2 = make_think_stream(chat2)
+   let full = respond(m, chat2, SamplingParams()) $(piece) {
+       return true   // capture only
+   }
+   let sp = think_drain(ts2, full)   // ThinkSplit: .reasoning / .content
+
 Turning thinking off
 ====================
 

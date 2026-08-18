@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options _jit_fast_math = true   // match the engine config the trace numbers came from
+options _dasllama_internal = true
 
 // Flash-decode stage-2 mechanism probe (30B emission investigation): the traced kv-partials
 // stage runs ~118us/chain at d544 vs ~40us byte-bound, format-independent (q8 KV barely moves

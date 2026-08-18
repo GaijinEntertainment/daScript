@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 require metal/msl_shader
 require dasllama/dasllama_metal_lens

@@ -1,10 +1,13 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_asr_types shared public
 
 // The ASR floor: the types every family file and the facade share. Family modules require
 // this instead of each other — capability/segment shapes move up here, never sideways.
+
+require dasllama/dasllama_lint public
 
 //! Timestamp granularity an ASR backend can produce.
 enum AsrTimestamps {

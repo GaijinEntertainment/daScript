@@ -1,7 +1,9 @@
 options gen2
+options _dasllama_internal = true
 
 module dasllama_scheduler shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama   // the public facade — the scheduler reaches no engine internals
 require math
 require strings             // tail bookkeeping for the poll surface (length / slice / peek_data)

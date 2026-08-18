@@ -1,5 +1,6 @@
 options gen2
 options stack = 524288
+options _dasllama_internal = true
 
 // Per-box kernel tuner — sweeps the FULL grid (20 perms) for every [tuned] kernel and writes
 // the winning permutation of each to box_profile.json. [dasllama_grid] emits, cross-module, each template's

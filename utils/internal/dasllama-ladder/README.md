@@ -41,11 +41,11 @@ Three tables, one migration stream (`ladder_migration_*`):
   is (`Gguf`, `Box`, `Engine`, `Backend`, `Flavor`, `Workload`); official imports replace on
   it, community rows append.
 - `sidecars` — content-addressed by the document's own sha256; identity columns come from
-  `exchange_schema`'s `parse_sidecar_info` and drive the lookup ladder: exact box → same
+  `dasllama_exchange_schema`'s `parse_sidecar_info` and drive the lookup ladder: exact box → same
   platform/arch/cpu → same platform/arch, verified first within a tier, newest first.
 
-Validation is `modules/dasLLAMA/performance/exchange_schema.das` (required by path, re-exported
-`public`): submission grade for community uploads, shape grade for official imports (official
+Validation is `dasllama/dasllama_exchange_schema` (required through the registered package
+name, re-exported `public`): submission grade for community uploads, shape grade for official imports (official
 history predates `DASLLAMA_VERSION`). `Source` and `Verified` are always stamped by the store;
 nothing submitter-supplied reaches those columns. Sidecar submissions are privacy-stripped
 server-side before hashing and storage (`exchange_strip_private` — `provenance.binary` and any
@@ -55,7 +55,7 @@ byte-identical and dedups).
 ## 3. Engine-free rule
 
 The service builds and runs without dasLLAMA, dasLLVM, or any model machinery — dasweb-1 has
-no GPU and no reason to compile an inference engine. `exchange_schema` carries the same rule
+no GPU and no reason to compile an inference engine. `dasllama_exchange_schema` carries the same rule
 on its side (`modules/dasLLAMA/REVIEW.md`).
 
 ## 4. Running the tests
@@ -68,7 +68,7 @@ Plain dastest — the same lane `extended_checks` runs the dasweb-playground sui
 
 ## 5. The client side
 
-The consuming half lives with dasLLAMA: `modules/dasLLAMA/performance/exchange_client.das`
+The consuming half lives with dasLLAMA: `modules/dasLLAMA/dasllama/dasllama_exchange.das`
 (boot-time sidecar lookup/apply as llvm_tune's scope resolver, the privacy-stripped submit
 rails, the control-page surface), wired into `utils/dasllama-server` (the `/exchange`
 endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. The follow-up ledger (partial

@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)

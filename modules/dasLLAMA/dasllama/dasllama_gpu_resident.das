@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gpu_resident shared public
 
@@ -9,6 +10,7 @@ module dasllama_gpu_resident shared public
 // the device SPI in dasllama_gpu_tier — no device module is required here, so this file compiles
 // on every box. "vulkan" is the tier string it registers under, not a dependency.
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kqformat
@@ -831,6 +833,12 @@ struct GpuModelMarks {
     rdec_kvdt : KVDtype
 }
 
+//! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
+//! (a generated constructor is not callable through a facade typedef).
+def gpu_model_marks_init() : GpuModelMarks {
+    return <- GpuModelMarks()
+}
+
 //! Move the INSTALLED per-model tier state out into `st`; the globals read as no-model after.
 def moe_gpu_model_marks_save(var st : GpuModelMarks) {
     moe_gpu_marks_save(st.marks)
@@ -858,6 +866,31 @@ def moe_gpu_model_marks_restore(var st : GpuModelMarks) {
 //! Is the resident whole-stack decode driver active for the INSTALLED model? (The arm-outcome
 //! discriminator status surfaces read: resident beats rails beats cpu.)
 def moe_gpu_resident_active() : bool => g_rdec_active
+
+//! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save``) and
+//! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a
+//! multi-model host's slot bookkeeping.
+def gpu_slot_capture(var st : GpuModelMarks) : string {
+    let was_resident = g_rdec_active
+    moe_gpu_model_marks_save(st)
+    return was_resident ? "gpu:resident" : (moe_gpu_marks_armed(st.marks) ? "gpu:rails" : "cpu")
+}
+
+//! Re-arm the INSTALLED model onto the GPU tier (marks already restored): want, arm, resident
+//! upload — through the bake-slice path when `t` is a mapped vulkan-flavor image (a live
+//! re-gather on a planes-trimmed image panics). Returns "gpu:resident" | "gpu:rails" | "cpu".
+def gpu_slot_rearm(want : GpuTierWant; t : Model) : string {
+    set_gpu_tier_want(want)
+    moe_gpu_tier_arm()
+    if (!empty(t.vkplan)) {
+        vulkan_bake_slice_begin()
+        moe_gpu_upload_resident(t)
+        vulkan_bake_slice_end(t)
+    } else {
+        moe_gpu_upload_resident(t)
+    }
+    return g_rdec_active ? "gpu:resident" : (gpu_tier_status().vram_bytes > 0l ? "gpu:rails" : "cpu")
+}
 
 //! Hydrate `s`'s host KV from the device mirror when `s` owns live mirror rows (no-op
 //! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model``

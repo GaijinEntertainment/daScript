@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
-module exchange_client shared public
+module dasllama_exchange shared public
 
-require exchange_schema public          // SidecarInfo/BoxIdentity + the validators
+require dasllama/dasllama_lint public
+require dasllama/dasllama_exchange_schema public   // SidecarInfo/BoxIdentity + the validators
 require dasllama/dasllama_version      // DASLLAMA_VERSION — the exchange lookup key
 require dasllama/dasllama_env          // g_env_exchange — the env override rail
 require llvm/daslib/llvm_tune          // box identity, manifest path, the scope-resolver seam
@@ -21,7 +23,7 @@ require strings
 // sidecar instead of paying ~20 quiet-box minutes; after a local tune, offer/submit it back.
 // Registered as llvm_tune's scope resolver by dasllama-server ([init] — before the guard);
 // lcpp_bench uses only the submit half. The service contract lives in the repo's
-// dasllama-ladder README §1.1; validation is exchange_schema, shared with the service.
+// dasllama-ladder README §1.1; validation is dasllama_exchange_schema, shared with the service.
 
 //! The baked-in exchange; `exchange_url` in the app config or `DASLLAMA_EXCHANGE_URL` override it.
 let public EXCHANGE_URL_DEFAULT = "https://dasllama.io"

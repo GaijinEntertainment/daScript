@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_unicode shared public
 
+require dasllama/dasllama_lint public
 require strings
 
 // Unicode classification + UTF-8 codec for the Llama-3 / tiktoken BPE pre-tokenizer.

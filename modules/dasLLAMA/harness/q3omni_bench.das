@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 // Qwen3-Omni-30B transcribe A/B (das side): warmup + best-of-N transcribe ms, encode/decode
 // split via asr_prof, xRT vs clip duration. Pair with llama-mtmd-cli for the section A/B.

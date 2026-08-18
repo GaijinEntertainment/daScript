@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true
 
 // Attribute the ~4.2us/worker empty parallel_for round-trip tax (dasLLAMA decode leg).
 // Hand-rolls the exact _parallel_for shape (with_wait_group + new_job per chunk) so we can

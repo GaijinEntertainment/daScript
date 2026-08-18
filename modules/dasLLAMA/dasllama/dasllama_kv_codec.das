@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_kv_codec shared public
 
+require dasllama/dasllama_lint public
 require math
 require llvm/daslib/f16_cvt  // per-element f16 scale reads/writes inside the hot loops
 require dasllama/dasllama_math  // dot/axpy/copy_floats — the f32 arms of the dispatch below

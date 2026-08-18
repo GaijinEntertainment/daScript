@@ -1,10 +1,12 @@
 options gen2
+options _dasllama_internal = true
 
 // Shared GPU plumbing + eyeball-dump compares for the per-class Metal kernel-oracle suites
 // (test_metal_*_kernels). Generic bodies instantiate only inside each suite's Apple static_if,
 // so off-Apple this module parses and drops out whole.
 module _metal_kernel_common shared public
 
+require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require llvm/daslib/f16_cvt         // f32_to_f16 — packing synthetic scale planes
