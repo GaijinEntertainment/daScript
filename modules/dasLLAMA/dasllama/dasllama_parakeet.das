@@ -403,11 +403,9 @@ def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : 
 }
 
 def private pk_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
-    let need = npos * n
-    if (long_length(xq) < need) {
-        xq |> resize(need)
-        xs |> resize(need / 32l)
-    }
+    let need = npos * n   // a minutes-long clip crosses max_unreserved_size — pk_ensure reserves
+    pk_ensure(xq, need)
+    pk_ensure(xs, need / 32l)
     asr_requant_rows_q8(x, n, npos, xq, xs)
 }
 

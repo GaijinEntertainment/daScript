@@ -23,6 +23,34 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // greedy continuation — which also proves the conv/S state the chunked prefill leaves behind
 // feeds the recurrent decode correctly.
 
+// Model-free: the deltanet session-state sizing at Qwen3.8-27B geometry — 48 recurrent layers
+// x 48 v-heads x 128x128 S = 144 MB in one array, past the 64 MB max_unreserved_size guard, so
+// make_run_state must reserve the computed size instead of bare-resizing into it.
+[test]
+def test_deltanet_state_sizing(t : T?) {
+    t |> run("deltanet session state at 27B geometry clears max_unreserved_size") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        var c = Config(
+            dim = 64l, hidden_dim = 64l, n_layers = 64l,
+            n_heads = 4l, n_kv_heads = 1l, head_size = 16l, kv_dim = 16l,
+            vocab_size = 64l, seq_len = 16l,
+            hybrid_deltanet = true, q_gated = true,
+            ssm_d_conv = 4l, ssm_d_state = 128l, ssm_n_group = 16l,
+            ssm_dt_rank = 48l, ssm_d_inner = 48l * 128l)
+        for (l in range64(c.n_layers)) {
+            if (((l + 1l) % 4l) != 0l) {   // the 27B interleave: every 4th layer is full attention
+                c.recr_mask |= 1ul << uint64(l)
+            }
+        }
+        var s <- make_run_state(c)
+        t |> equal(long_length(s.dn_state), 48l * 48l * 128l * 128l)
+        delete s
+    }
+}
+
 def private argmax_of(v : array<float>) : int64 {
     var best = -1e30
     var bi = 0l

@@ -1424,18 +1424,20 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     let tt = t.n_ctx
     let d = t.d_model
     var s = EncoderState()
-    s.x1 |> resize(tin * 3l * t.n_mel)
-    s.y1 |> resize(tin * d)
-    s.x2 |> resize(tt * 3l * d)
-    s.x |> resize(tt * d)
-    s.xb |> resize(tt * d)
-    s.xb2 |> resize(tt * d)
-    s.qq |> resize(tt * d)
-    s.kk |> resize(tt * d)
-    s.vv |> resize(tt * d)
-    s.hp |> resize(4l * tt * d)
-    s.att |> resize(int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt)
-    s.h |> resize(tt * t.n_ff)
+    // whole-clip towers carry tt = the clip's frames — att alone is slots x 128 x tt, past
+    // max_unreserved_size on a minutes-long clip, so every buffer here reserves its exact size
+    s.x1 |> reserve_resize(tin * 3l * t.n_mel)
+    s.y1 |> reserve_resize(tin * d)
+    s.x2 |> reserve_resize(tt * 3l * d)
+    s.x |> reserve_resize(tt * d)
+    s.xb |> reserve_resize(tt * d)
+    s.xb2 |> reserve_resize(tt * d)
+    s.qq |> reserve_resize(tt * d)
+    s.kk |> reserve_resize(tt * d)
+    s.vv |> reserve_resize(tt * d)
+    s.hp |> reserve_resize(4l * tt * d)
+    s.att |> reserve_resize(int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt)
+    s.h |> reserve_resize(tt * t.n_ff)
     s.pooled |> reserve_resize(tt / 2l * d)
     let rows = audio_tokens_per_chunk(t)
     if (t.proj_kind != AudioProjKind.qwen2a) {
@@ -1467,7 +1469,8 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     let nu = int(t.n_head) * nqb
     // que-less-creation guard: the state may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
-    if (long_length(s.att) < attNeed) {
+    if (long_length(s.att) < attNeed) {   // direct reserve+resize: the @scratch mark licenses it
+        s.att |> reserve(attNeed)
         s.att |> resize(attNeed)
     }
     unsafe {
