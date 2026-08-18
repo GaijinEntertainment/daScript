@@ -40,8 +40,8 @@ def changed_from_git_output(out : string) : array<string> {
 def sibling_gates(root : string; mds : array<string>) : array<string> {
     var out : array<string>
     for (md in mds) {
-        let d = dir_name(md)
-        let rel = empty(d) ? "REVIEW.das" : "{d}/REVIEW.das"
+        let d = dir_name(md)   // "" on Windows, "." on POSIX for a bare filename
+        let rel = (empty(d) || d == ".") ? "REVIEW.das" : "{d}/REVIEW.das"
         if (fexist(path_join(root, rel))) {
             out |> push(rel)
         }
@@ -58,8 +58,8 @@ def orphan_finding(gate : string) : string {
 def orphan_gates(root : string; gates : array<string>) : array<string> {
     var out : array<string>
     for (g in gates) {
-        let d = dir_name(g)
-        let rel = empty(d) ? "REVIEW.md" : "{d}/REVIEW.md"
+        let d = dir_name(g)   // "" on Windows, "." on POSIX for a bare filename
+        let rel = (empty(d) || d == ".") ? "REVIEW.md" : "{d}/REVIEW.md"
         if (!fexist(path_join(root, rel))) {
             out |> push(g)
         }
