@@ -105,19 +105,25 @@ def update() {
             separator()
 
             // Full image, then a tinted + bordered copy — same texture reused.
-            image(TR_PIC, (user_texture_id = texture_ref(),
-                           size = float2(float(g_tex_w), float(g_tex_h)),
-                           uv0 = float2(0.0f, 0.0f),
-                           uv1 = float2(1.0f, 1.0f),
-                           tint_col = float4(1.0f, 1.0f, 1.0f, 1.0f),
-                           border_col = float4(0.6f, 0.6f, 0.6f, 1.0f)))
+            // the named-tuple argument mints an ImTextureRef temp — a handled-type
+            // local, unsafe-scoped like any minted ImTextureRef
+            unsafe {
+                image(TR_PIC, (user_texture_id = texture_ref(),
+                               size = float2(float(g_tex_w), float(g_tex_h)),
+                               uv0 = float2(0.0f, 0.0f),
+                               uv1 = float2(1.0f, 1.0f),
+                               tint_col = float4(1.0f, 1.0f, 1.0f, 1.0f),
+                               border_col = float4(0.6f, 0.6f, 0.6f, 1.0f)))
+            }
             same_line(TR_GAP)
-            image(TR_TINT, (user_texture_id = texture_ref(),
-                            size = float2(float(g_tex_w), float(g_tex_h)),
-                            uv0 = float2(0.0f, 0.0f),
-                            uv1 = float2(1.0f, 1.0f),
-                            tint_col = float4(0.4f, 0.8f, 1.0f, 1.0f),
-                            border_col = float4(1.0f, 1.0f, 1.0f, 1.0f)))
+            unsafe {
+                image(TR_TINT, (user_texture_id = texture_ref(),
+                                size = float2(float(g_tex_w), float(g_tex_h)),
+                                uv0 = float2(0.0f, 0.0f),
+                                uv1 = float2(1.0f, 1.0f),
+                                tint_col = float4(0.4f, 0.8f, 1.0f, 1.0f),
+                                border_col = float4(1.0f, 1.0f, 1.0f, 1.0f)))
+            }
             separator()
             text("{g_tex_w}x{g_tex_h}. Swap PICTURE_PATH / _TexID for your own texture.")
         }
