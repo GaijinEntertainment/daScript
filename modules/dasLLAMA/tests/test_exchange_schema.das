@@ -51,7 +51,7 @@ def test_corpus_records(t : T?) {
 
 [test]
 def test_corpus_sidecars(t : T?) {
-    t |> run("every current-format in-tree sidecar passes shape validation and indexes") @(t : T?) {
+    t |> run("every in-tree sidecar archive hashes to its own address and indexes") @(t : T?) {
         // parse_sidecar_info is the format discriminator: pre-box / four-field-box sidecars are
         // frozen history the exchange can never serve, so only indexable files carry the claim
         var current = 0
