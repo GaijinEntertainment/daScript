@@ -1,0 +1,45 @@
+# Homebrew formula template for the daslang tap.
+# Lives in the tap repo as Formula/daslang.rb; this copy is the template of record.
+# Update per release: url tags + sha256 values (from the .sha256 assets).
+class Daslang < Formula
+  desc "High-performance statically-typed scripting language for games and real-time applications"
+  homepage "https://daslang.io"
+  version "@VERSION@"
+  license "BSD-3-Clause"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-darwin26-arm64.zip"
+      sha256 "@SHA_DARWIN_ARM64@"
+    end
+  end
+  on_linux do
+    on_intel do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-linux-x86_64.zip"
+      sha256 "@SHA_LINUX_X86_64@"
+    end
+    on_arm do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-linux-arm64.zip"
+      sha256 "@SHA_LINUX_ARM64@"
+    end
+  end
+
+  def install
+    # the bundle is a self-contained SDK tree; daslang derives its module root
+    # from the executable location, so the tree must stay together
+    libexec.install Dir["*"]
+    bin.install_symlink libexec/"bin/daslang"
+    bin.install_symlink libexec/"bin/daslang-live"
+    bin.install_symlink libexec/"bin/gen1_to_gen2"
+  end
+
+  test do
+    (testpath/"hello.das").write <<~EOS
+      [export]
+      def main() {
+          print("hello daslang\\n")
+      }
+    EOS
+    assert_match "hello daslang", shell_output("#{bin}/daslang #{testpath}/hello.das")
+  end
+end
