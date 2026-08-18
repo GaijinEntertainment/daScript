@@ -65,8 +65,22 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-08-17-metal-asr" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-08-17</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Metal support lands in speech-to-text — whisper large-v3-turbo at 49x realtime on an M1 Max.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-08-18-qwen38-27b" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-18</span><span class="dio-item__tag">models</span><h2 class="dio-item__title">Qwen 3.8 27B joins the board — the new dense hybrid runs on CPU and Metal.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Qwen 3.8 27B is out, and it needed no new architecture support in dasLLAMA: the 3.8
+generation keeps the qwen3.5 architecture — Gated-DeltaNet recurrent layers interleaved
+3:1 with gated full attention — so it loads on the existing family path as a pure
+scale-up. The Q4_K_M file's attention and FFN planes serve natively on the kq rails, CPU
+and Metal alike (the DeltaNet projections transcode to q8 at load), and the model joins
+the official board catalog.</p>
+<p>On an M1 Max (pp512 / tg128, llama-bench protocol): Metal — das 147.0 / 14.5 tok/s,
+llama.cpp 137.6 / 11.5; CPU — das 33.2 / 5.8, llama.cpp 29.8 / 5.6. On an M4 Pro:
+Metal — das 127.0 / 12.8, llama.cpp 126.2 / 11.5; CPU — das 45.8 / 11.6, llama.cpp
+40.4 / 11.0. Full rows for both boxes are on the
+<a href="https://daslang.io/dasllama.html">board</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-08-17-metal-asr" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-08-17</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Metal support lands in speech-to-text — whisper large-v3-turbo at 49x realtime on an M1 Max.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>Speech-to-text now serves on Metal: whisper's cross-attention and decoder run on the GPU
 by default on Apple silicon, and the full-GPU mode powers the new gpu category on the
 board. On an M1 Max, whisper large-v3-turbo transcribes a 3:19 clip in 4.0 s — 49x

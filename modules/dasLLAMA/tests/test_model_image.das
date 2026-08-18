@@ -1830,3 +1830,31 @@ def test_dlim_flavor_lanes(t : T?) {
         delete current
     }
 }
+
+// Model-free: the k6 scale-plane GPU split at 27B scale — a ~1.8B-weight q6 region is a strip
+// past the 64 MB max_unreserved_size guard, so the staging copy must reserve, not bare-resize.
+// Split layout owner: metal_blob_scale_plane in dasllama_layout.das.
+[test]
+def test_k6_scale_split_sizing(t : T?) {
+    t |> run("k6 scale split at 27B-scale strip clears max_unreserved_size") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let nsb = 4000000l   // x K6_SSB = 72 MB, past the 67,108,864 B guard
+        var m = Model()
+        m.k6s |> reserve_resize(nsb * K6_SSB)
+        for (i in range64(K6_SSB)) {   // K6_SSB bytes into sb0 and the last sb — distinct values trace the split
+            m.k6s[i] = uint8(100l + i)
+            m.k6s[(nsb - 1l) * K6_SSB + i] = uint8(200l + i)
+        }
+        t |> success(metal_blob_scale_plane(m, "k6s"), "k6s is a kq scale plane")
+        t |> equal(long_length(m.k6s), nsb * K6_SSB, "split form keeps the byte count")
+        t |> equal(int(m.k6s[0]), 100, "sb0 sub-scales lead the strip")
+        t |> equal(int(m.k6s[15l]), 115, "sb0 sub-scale 15 in place")
+        t |> equal(int(m.k6s[(nsb - 1l) * 16l]), 200, "last sb's subs end the sub-strip")
+        t |> equal(int(m.k6s[nsb * 16l]), 116, "sb0 d low byte opens the d strip")
+        t |> equal(int(m.k6s[nsb * 16l + 1l]), 117, "sb0 d high byte")
+        t |> equal(int(m.k6s[nsb * 16l + (nsb - 1l) * 2l]), 216, "last sb's d low byte closes the strip")
+        delete m
+    }
+}

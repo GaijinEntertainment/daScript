@@ -438,3 +438,55 @@
       prefix ban.
     - The site dl-* shared-selector parity check (parse both files, intersect selectors,
       assert identical bodies).
+
+34. **ModelSpec unification — one source of truth for the model set (2026-08-18, NEXT PR).**
+    The 27B bring-up edited three lists by hand (`llm_catalog`, `pub_catalog`, the
+    `fetch_models` provenance manifest) — a design flaw, not a gate candidate. One
+    `ModelSpec` table in `profile_common.das` carrying the union (catalog fields +
+    `official` flag/note + provenance url/bytes/sha/recipe + parity evidence as DATA:
+    pinned prompt/gen ids + arms); the three lists become views, companion artifacts
+    (mmprojs, fixtures) hang off their owning entry or an explicit companions list;
+    `asr_catalog` gets the same treatment. Follow-ons in the same design: the README
+    support-matrix table becomes a generated rendering of the table (gen_env_doc pattern;
+    authored arch-prose rides as a field — stages behind the catalog move); `test_parity`'s
+    standard fixtures become one generic loop over specs with evidence; the board rig's
+    warmup becomes the parity pregate (greedy 40 vs pinned ids, refuse the cell on mismatch
+    like tune_gate, decoded-text eyeball in the log — text derived via the tokenizer, never
+    stored); the parity verdict stamps into every das record row.
+
+35. **`@exact_size` allocation-mode annotation (2026-08-18, OWN PR + design discussion).**
+    Five max_unreserved_size strikes in one day, four modules, all input-scaled buffers
+    grown by bare resize. Per-site reserves fix instances; the mechanism fix is a
+    declaration-site annotation flipping the array to EXACT growth (no pow2) — bare
+    `resize(need)` becomes the correct spelling on annotated arrays and the guard's hazard
+    is structurally absent. Machinery precedent: the scratch-flag arc (#3745) — flags-union
+    bit + resize-arm predicate + daslib surface. The guard panic gains a fourth exit
+    ("mark the destination @exact_size"). Caveat at the definition: exact mode in an append
+    loop is quadratic — open-ended accumulation keeps ensure_capacity. The repo-wide
+    unreserved-grow LINT stays unbundled behind this discussion — the shape defines the
+    defect in dasLLAMA, not across the general codebase.
+
+36. **The vulkan bake-trim embedding planes carry the same bare-grow shape (2026-08-18).**
+    `dasllama_gpu_resident.das` (the cls_q8/cls_kq trim arms) resizes `embq`/`embs` to
+    vocab-scaled sizes without reserve — ~600 MB+ at the 27B's 248k vocab. Off the Metal
+    rail (untripped today), but zen2's first big-model vulkan bake will strike it. Fix with
+    the reserve idiom or under #35.
+
+37. **`test_parity_mistral7b` is red on clean master (2026-08-18).** Verified by a
+    detached-master run (54 tests, that one red). PARITY_FULL-gated, so per-PR CI never
+    sees it. Needs its own session: regression vs upstream re-upload vs stale expectation
+    (the fixture discipline's stash-and-rerun steps, then the model-file sha against the
+    manifest).
+
+38. **Large-tier parity fixtures have no CI lane (2026-08-18).** Everything behind
+    `DASLLAMA_PARITY_FULL` executes only on dev boxes — a wrong-ids fixture sits green
+    indefinitely. Decide the liveness lane: a nightly PARITY_FULL job on a model-stocked
+    runner, or the #34 parity pregate doubling as the de facto lane (every board sweep
+    exercises the official set's evidence).
+
+39. **The ASR reference receipt collapses a clip ladder to one argv (2026-08-18).** Reference
+    ASR tools take one clip per invocation, and `gen_bench_records.das` stores only the LAST
+    clip's command line ("they differ only in -f"), so the site renders hp0x2's receipt under
+    every clip row of that run — a reader reproducing jfk gets the hp0x2 number. Fix is a
+    per-clip `cmd` (schema addition) or a receipt template with the `-f` slot marked; the das
+    rows are unaffected (one process serves the whole ladder).

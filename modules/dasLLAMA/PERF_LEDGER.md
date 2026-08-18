@@ -831,6 +831,18 @@ group; wording kept.
   `dasllama/dasllama_math_accelerate.das` (bf16 planes via BNNS f16 matmul under
   `DASLLAMA_ACCEL_F16=1`, jobque strip-dispatched).
 
+- **OPEN — k4-native deltanet planes (the "dn planes are ALWAYS q8" loader invariant aged).**
+  Minted on 0.8B–4B where the dn projections were a rounding error; on Qwen3.8-27B (dense
+  hybrid, 48 recurrent layers) they are ~5.6 B of the 6.7 B q8-region weights, so the
+  q4k→q8 load transcode costs **+~2.8 GB of image (22.3 vs ~19.5 GB metal blob) and ~20% of
+  decode's per-token weight reads** (measured via the 2026-08-17 27B bring-up: dlim plane
+  sizes + the q8-region scale count). The dn shapes are why the invariant exists — β/α are
+  dim × dt_rank (16–64, under every kq GEMM tile's N) — so the fix is a narrow k4 GEMV
+  family (`MetalDnBa`-class + the CPU dot), not a kq-tile retrofit. Pays on every lane, and
+  it is step one of **the 16 GB-card game** (Boris, 2026-08-17): 27B q4k on a discrete
+  16 GB GPU needs the image at ~19.5 GB *plus* partial residency (the vulkan tier's
+  offload/stream lane) or a ~3.5 bpw format family (k3/IQ — unsupported today).
+
 ### From `audio_models_plan.md` (Findings; correctness, not perf)
 
 - **OPEN — the v0.3 Mistral `[INST]` template's derived close is ` [/INST]` — wrong for multi-turn

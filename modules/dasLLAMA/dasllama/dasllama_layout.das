@@ -174,7 +174,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (!empty(t.k6s)) {
         var k6c : array<uint8>
         let nsb = long_length(t.k6s) / K6_SSB
-        k6c |> resize(nsb * K6_SSB)
+        k6c |> reserve_resize(nsb * K6_SSB)   // a 27B-class q6 region is a ~120 MB strip — one grow
         unsafe {
             var dp = addr(k6c[0])
             let sp = addr < uint8 const? >(t.k6s[0])

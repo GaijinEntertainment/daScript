@@ -144,6 +144,7 @@ def llm_catalog() : array<LlmModel> {
         LlmModel(file="gemma-4-26B_q4_0-it.gguf", display="gemma-4-26B-A4B-q40", quant=QuantMode.q8, quant_label="q4_0", prefill_ctx=512, emission_ctx=128),
         LlmModel(file="Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", display="Qwen3-30B-A3B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
         LlmModel(file="Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", display="Qwen3.6-35B-A3B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
+        LlmModel(file="Qwen3.8-27B-Q4_K_M.gguf", display="Qwen3.8-27B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
         LlmModel(file="Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display="Qwen3-Coder-30B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
         LlmModel(file="Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display="Qwen3-Coder-30B-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
         LlmModel(file="Qwen3-Coder-Next-Q4_K_M.gguf", display="Qwen3-Coder-Next-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128)

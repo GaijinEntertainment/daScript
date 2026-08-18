@@ -412,6 +412,15 @@ CI's `extended_checks` runs `./bin/daslang ./utils/das-fmt/dasfmt.das -- --path 
 
 Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follow the commit message conventions from the repository (see recent `git log` for style).
 
+**`#N` is GitHub reference syntax, never ledger numbering.** GitHub renders `#N` in a PR
+body, a commit message, or a review reply as a link to issue/PR N of this repo and posts a
+"mentioned" backlink on it; a backlink from a commit message cannot be taken back, because
+the commit is already pushed. Cite an internal ledger entry — a `followup_*.md`
+item, a `PERF_LEDGER.md` item, any numbered in-repo ledger — as `followup 34`, or as
+`` `#34` `` in backticks, since GitHub does not autolink inside a code span. Reserve the
+bare hash for real issues and PRs. The preflight `hash-refs` gate enforces the
+commit-message arm pre-push; weakening it is a defect.
+
 ### The PR body — two layers, one artifact
 
 A short human document on top, a machine-readable ledger folded below. Humans read the top

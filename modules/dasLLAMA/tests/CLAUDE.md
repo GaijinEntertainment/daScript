@@ -145,6 +145,9 @@ by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full e
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.
+`test_deltanet.das` — model-free: the deltanet session-state sizing at 27B geometry through
+`make_run_state` (S state + widened-conv history past the guard); model-gated: the
+chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B.
 `test_vision.das` — model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint.sh in the models dir's
 `gemma4-vision-oracle/`), plus the stbimage decode/dump round-trips in a per-process temp dir.

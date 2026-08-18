@@ -121,6 +121,7 @@ struct private PubEntry {
 // every box.
 def private pub_catalog() : array<PubEntry> {
     return <- [
+        PubEntry(file = "Qwen3.8-27B-Q4_K_M.gguf"),
         PubEntry(file = "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"),
         PubEntry(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf"),
         PubEntry(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf"),

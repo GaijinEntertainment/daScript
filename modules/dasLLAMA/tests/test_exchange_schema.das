@@ -3,6 +3,7 @@ options stack = 524288
 require dastest/testing_boost public
 require ../performance/exchange_schema.das
 require ../performance/profile_common.das   // the REAL record writer — the anti-drift arm
+require ../harness/tuner_phrases.das   // the provenance phrase leaf test_writer_phrases pins
 require dasllama/dasllama_version
 require daslib/json_boost   // the %json~ fixtures + write_json
 require daslib/fio
@@ -50,7 +51,7 @@ def test_corpus_records(t : T?) {
 
 [test]
 def test_corpus_sidecars(t : T?) {
-    t |> run("every current-format in-tree sidecar passes shape validation and indexes") @(t : T?) {
+    t |> run("every in-tree sidecar archive hashes to its own address and indexes") @(t : T?) {
         // parse_sidecar_info is the format discriminator: pre-box / four-field-box sidecars are
         // frozen history the exchange can never serve, so only indexable files carry the claim
         var current = 0
@@ -63,20 +64,15 @@ def test_corpus_sidecars(t : T?) {
                     legacy++
                 } else {
                     current++
-                    var errors : array<string>
-                    report(t, name, validate_sidecar(text, errors), errors)
-                    delete errors
                     t |> success(info.kernel_count > 0, "{name} has kernels")
                     t |> success(!empty(info.identity.platform) && !empty(info.identity.cpu), "{name} box identity parses")
-                    // the release counter decides submission grade: pre-counter sidecars are
-                    // shape-valid history the exchange must refuse; stamped ones must clear it
-                    var serrors : array<string>
-                    if (info.dasllama_version == 0) {
-                        t |> success(!validate_sidecar_submission(text, serrors), "{name} is not submission-grade")
-                    } else {
-                        report(t, "{name} submission-grade", validate_sidecar_submission(text, serrors), serrors)
-                    }
-                    delete serrors
+                    // a records/ sidecar is a frozen mint, content-addressed by its own bytes:
+                    // a name whose sha12 no longer re-derives from the file is a hand-edited
+                    // archive. Validator grades bind the WRITER (test_writer_round_trip,
+                    // test_writer_phrases) and submissions — never history: an archive minted
+                    // by an older writer stays exactly as minted.
+                    let sha = sidecar_generation_sha("{RECORDS_DIR}/{name}")
+                    t |> success(ends_with(name, "{slice(sha, 0, 12)}.json"), "{name} hashes to its own address")
                 }
             }
         }
@@ -349,5 +345,39 @@ def test_box_parse(t : T?) {
         t |> success(!parse_box_string("darwin|arm64|m|b", b), "four fields refused")
         t |> success(!parse_box_string("darwin|arm64|m|b|", b), "empty cpu refused")
         t |> success(!parse_box_string("", b), "empty refused")
+    }
+}
+
+// The writer seam: every phrase a tuner writes into sidecar provenance reaches the exchange
+// verbatim, so the phrase leaf (harness/tuner_phrases.das) is pinned against the validator's
+// render charset HERE — an archive carrying a pre-fix phrase is frozen history, but a writer
+// emitting one is a regression this test reds on.
+[test]
+def test_writer_phrases(t : T?) {
+    t |> run("tuner provenance phrases clear the render charset") @(t : T?) {
+        var doc = %json~
+        {
+            "kernels" : { "dot" : "vec8_u8" },
+            "runtime" : { "jobque_spin_us" : 30000 },
+            "provenance" : {
+                "box" : "darwin|arm64|MacBookPro18,2|25F84|Apple M1 Max",
+                "engine_sha" : "8a538d795",
+                "written" : "2026-08-10T00:00:00Z",
+                "noise" : "ok",
+                "noise_probes" : "PHRASE",
+                "dasllama_version" : "4"
+            }
+        }
+        %%
+        let base = write_json(doc)
+        var errors : array<string>
+        let ok = replace(base, "PHRASE", settle_note("mid1", 3.09lf, 1.12lf))
+        report(t, "settle note is render-safe", validate_sidecar_submission(ok, errors), errors)
+        delete errors
+        var berrors : array<string>
+        let bad = replace(base, "PHRASE", "mid1 cv 3.09% -> settled 1.12%")
+        t |> success(!validate_sidecar_submission(bad, berrors), "the pre-fix arrow spelling is refused")
+        t |> success(find(join(berrors, ";"), "noise_probes") >= 0, "the refusal names the field")
+        delete berrors
     }
 }
