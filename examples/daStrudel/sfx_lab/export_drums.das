@@ -1,16 +1,21 @@
 options gen2
 options indenting = 4
 
-// Headless: emit a drop-in .das render function for each finished drum .sfx, concatenated into one
-// file (/tmp/drums_gen.das) for splicing into strudel_synth.das. The tom is exported parametric
-// (base_freq scales the modal pitch). Run: bin/daslang examples/daStrudel/sfx_lab/export_drums.das
+// Headless: one .das render function per finished drum .sfx, for splicing into strudel_synth.das.
+//   Output: <temp dir>/drums_gen.das
+//   Tom:    exported parametric (base_freq scales the modal pitch)
+//   Run:    bin/daslang examples/daStrudel/sfx_lab/export_drums.das
 
 require strudel/strudel_sfx
 require daslib/fio
 require strings
 
 let DIR = "{get_das_root()}/examples/daStrudel/sfx_lab/sounds/"
-let OUT = "/tmp/drums_gen.das"
+
+def out_path() : string {
+    let tmp = temp_directory_result()
+    return path_join(tmp is value ? tmp as value : ".", "drums_gen.das")
+}
 
 struct DrumExport {
     sfx : string
@@ -45,7 +50,8 @@ def main {
             to_log(LOG_INFO, "{d.func}: {length(doc.layers)} layers\n")
         }
     }
-    if (fwrite(OUT, all)) {
-        to_log(LOG_INFO, "wrote {OUT}\n")
+    let out = out_path()
+    if (fwrite(out, all)) {
+        to_log(LOG_INFO, "wrote {out}\n")
     }
 }

@@ -129,6 +129,8 @@ def main() {
     list_devices()
     if (record_clip()) {
         verify_clip()
+        remove(OUT_FILE)
+        print("  removed {OUT_FILE} (drop the remove() to keep the clip)\n")
     }
     manual_capture()
     print("\nDone!\n")

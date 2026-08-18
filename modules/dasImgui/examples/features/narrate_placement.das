@@ -16,6 +16,7 @@ require imgui/imgui_visual_aids
 //          to hide narration. Selected button is outlined by highlight(); the
 //          banner points at it via a connector line.
 // STANDALONE: daslang.exe modules/dasImgui/examples/features/narrate_placement.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/features/narrate_placement.das -- --headless --headless-frames=60
 // LIVE:       daslang-live modules/dasImgui/examples/features/narrate_placement.das
 // =============================================================================
 

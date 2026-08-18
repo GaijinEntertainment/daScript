@@ -25,6 +25,7 @@ require imgui/imgui_file_dialog
 // take a typed name and confirm-overwrite if it already exists.
 //
 // STANDALONE: daslang.exe modules/dasImgui/examples/tutorial/file_dialog.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/tutorial/file_dialog.das -- --headless --headless-frames=60
 // LIVE:       daslang-live modules/dasImgui/examples/tutorial/file_dialog.das
 // =============================================================================
 

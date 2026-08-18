@@ -56,6 +56,17 @@ def test_centibels_to_linear(t : T?) {
 }
 
 [test]
+def test_load_empty_path(t : T?) {
+    t |> run("sf2_load(\"\") returns null instead of panicking in fopen") <| @(t : T?) {
+        // a missing-soundfont probe hands "" here; fopen("") is a panic, so the guard must catch it first
+        t |> success(sf2_load("") == null)
+    }
+    t |> run("sf2_load on a missing file returns null") <| @(t : T?) {
+        t |> success(sf2_load("{get_das_root()}/tests/strudel/fixtures/does_not_exist.sf2") == null)
+    }
+}
+
+[test]
 def test_load_sf3_compressed(t : T?) {
     // mini.sf3: a hand-built minimal SF3 holding one OGG-Vorbis sample (a 0.06s 440Hz
     // mono sine, 22050Hz). Exercises the SF3 decode path deterministically — no external asset.

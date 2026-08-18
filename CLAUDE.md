@@ -228,6 +228,9 @@ diagnostic in any tier.
   fresh clone per registration, not the same variable passed twice.
 - **`new WithCtor(field = v)` skips the user constructor** — it is plain field-init, so
   inherited fields stay zero. Write `new WithCtor(args)` when the constructor must run.
+- **`defer()` at the top level of a lambda body never fires per call** — it becomes the lambda's
+  finalizer (runs on `delete`), silently. `t |> run(...) @(t : T?) { defer() {...} ... }` is exactly
+  this shape. Nest the body in a bare `{ }` block, or make the cleanup the last statement.
 
 ### Code style — prefer idiomatic forms
 

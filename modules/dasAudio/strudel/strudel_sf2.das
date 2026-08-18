@@ -603,6 +603,10 @@ def private sf3_decode_samples(data : array<uint8>; smpl_offset, smpl_size : int
 
 def public sf2_load(path : string) : SF2File? {
     //! Load and parse an SF2 soundfont file from disk.
+    if (empty(path)) {           // fopen panics on an empty name
+        to_log(0, "SF2: empty path\n")
+        return null
+    }
     var data : array<uint8>
     fopen(path, "rb") $(f) {
         if (f != null) {

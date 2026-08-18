@@ -18,6 +18,7 @@ require imgui/imgui_harness
 //          curl -X POST -d '{"name":"imgui_force_set","args":{"target":"MAIN_WIN/VOLUME","value":0.5}}' \
 //               localhost:9090/command
 // STANDALONE: daslang.exe modules/dasImgui/examples/features/foundation.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/features/foundation.das -- --headless --headless-frames=60
 // LIVE:       daslang-live modules/dasImgui/examples/features/foundation.das
 // =============================================================================
 

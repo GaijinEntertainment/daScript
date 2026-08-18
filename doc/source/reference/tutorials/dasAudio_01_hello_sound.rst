@@ -125,6 +125,14 @@ You will hear three tones played sequentially: a 440 Hz sine wave, middle C
 and C5, then a 440 Hz square wave.  Each tone lasts approximately one
 second.
 
+Every program that opens the audio system through ``with_audio_system`` also
+understands two flags after ``--``: ``--volume V`` scales the master volume
+(0..1), and ``--null-audio`` runs on a silent null device — for a machine with
+no sound card, or a batch run you do not want to hear::
+
+   daslang.exe tutorials/dasAudio/01_hello_sound.das -- --volume 0.2
+   daslang.exe tutorials/dasAudio/01_hello_sound.das -- --null-audio
+
 .. seealso::
 
    Full source: :download:`tutorials/dasAudio/01_hello_sound.das <../../../../tutorials/dasAudio/01_hello_sound.das>`

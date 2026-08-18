@@ -70,8 +70,13 @@ def main() {
 
     let pat <- stack([layer1, layer2, layer3, layer4, layer5, layer6, layer7, layer8])
 
+    let sf2_path = find_sf2()
+    if (empty(sf2_path)) {
+        print("No SF2 found in examples/daStrudel/midi_sf2_demo — skipping\n")
+        return
+    }
     default_feature_duration = 60.0  // override default duration for this feature
     play_feature_cps(pat, 15.0lf / 60.0lf) {
-        strudel_load_sf2(find_sf2())
+        strudel_load_sf2(sf2_path)
     }
 }

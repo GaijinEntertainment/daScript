@@ -27,6 +27,7 @@ require strudel/strudel
 require strudel/strudel_player
 require strudel/strudel_live
 require daslib/strings_boost
+require daslib/strings_convert
 require live_host
 
 // --- Constants ---
@@ -1514,7 +1515,7 @@ def parse_args() {
     let args <- get_command_line_arguments()
     for (i in range(length(args) - 1)) {
         if (args[i] == "--max-frames") {
-            max_frame_limit = to_int(args[i + 1])
+            max_frame_limit = try_to_int(args[i + 1]) ?? 0   // garbage = no cap
         }
     }
 }

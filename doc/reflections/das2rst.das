@@ -1603,7 +1603,7 @@ def document_module_audio(_root : string) {
 def document_module_audio_boost(_root : string) {
     var mod = find_module("audio_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|audio_system_create|audio_system_finalize|audio_system_release_context)$%%),
+        group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|audio_system_create|audio_system_finalize|audio_system_release_context|audio_user_args)$%%),
         group_by_regex("Sound playback", mod, %regex~(play_sound|play_3d_sound)%%),
         group_by_regex("Sound control", mod, %regex~(set_volume|set_pan|set_pitch|set_pause|set_global_pitch|set_global_pause|set_global_volume|set_ignore_global_volume|stop|set_playback_position)$%%),
         group_by_regex("3D audio", mod, %regex~(set_head_position|set_position)$%%),

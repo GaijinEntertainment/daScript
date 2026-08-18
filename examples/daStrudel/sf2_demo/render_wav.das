@@ -9,6 +9,7 @@ require strudel/strudel_sf2
 require audio/audio_wav
 require audio/audio_boost
 require daslib/fio
+require daslib/clargs
 
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
@@ -80,7 +81,8 @@ def main() {
         wall_time += double(chunk_sec)
     }
 
-    let wav_path = "E:/sf2_demo.wav"
+    let args <- get_user_args()
+    let wav_path = !empty(args) ? args[0] : "sf2_demo.wav"
     print("Writing {wav_path} ({length(output) / 2} frames)\n")
     write_wav(wav_path, output, [sample_rate = 48000u, channels = 2])
     print("Done!\n")

@@ -2,6 +2,7 @@ options gen2
 
 require daslib/sql
 require sqlite/sqlite_boost
+require daslib/fio
 
 // [sql_table] is a structure macro. At compile time it reads the field
 // metadata (@sql_primary_key etc.) and generates, attached to type Car:
@@ -48,4 +49,5 @@ def main() {
             Car(Id = 8, Name = "Volkswagen", Price = 21600)
         ])
     }
+    remove("test.db")   // reruns start clean
 }

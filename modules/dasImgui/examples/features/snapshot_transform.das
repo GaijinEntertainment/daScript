@@ -15,6 +15,7 @@ require imgui/imgui_boost_runtime
 //            - widgets before the push / after the pop: screen-native bbox, no canvas_bbox.
 // DRIVE:   modules/dasImgui/tests/test_snapshot_transform.das
 // STANDALONE: daslang.exe modules/dasImgui/examples/features/snapshot_transform.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/features/snapshot_transform.das -- --headless --headless-frames=60
 // =============================================================================
 
 let XFORM_SCALE  = float2(2.0, 3.0)

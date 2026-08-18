@@ -48,7 +48,7 @@ Needs the dasClangBind/libclang stack — read `skills/internal/clang_bind_build
 ## Examples layout (`modules/dasImgui/examples/`)
 
 - `features/` — small focused demos, one wrapper per file (~20-80 LOC); drive `[test]` smokes in `modules/dasImgui/tests/test_<name>.das`. `harness_*` lifecycle.
-- `imgui_demo/` — daslang port of `imgui_demo.cpp`: per-scene modules consumed by `imgui_demo.das`; `main.das` is the live-reload entry; `harness_<scene>.das` for headless smokes + recordings.
+- `imgui_demo/` — daslang port of `imgui_demo.cpp`: per-scene modules consumed by `imgui_demo.das`; `main.das` is the whole-demo harness app (headless-capable); `harness_<scene>.das` for per-scene headless smokes + recordings.
 - `tutorial/` — annotated tutorials matching `doc/source/reference/tutorials/imgui/*.rst`; `live_*` lifecycle so the live-reload tutorial flow works.
 - `save_demo/` — one-shot save/load demo.
 
