@@ -11,11 +11,12 @@
 <link href="https://dasllama.io/#n-2026-08-18-qwen38-27b"/>
 <id>https://dasllama.io/#n-2026-08-18-qwen38-27b</id>
 <updated>2026-08-18T00:00:00Z</updated>
-<content type="html">&lt;p&gt;Qwen 3.8 27B is out, and it runs in dasLLAMA unchanged: the 3.8 generation keeps the
-qwen3.5 architecture — Gated-DeltaNet recurrent layers interleaved 3:1 with gated full
-attention — so the existing family support picked it up as a pure scale-up. The Q4_K_M
-file serves natively on the kq rails, CPU and Metal alike, and the model joins the
-official board catalog.&lt;/p&gt;
+<content type="html">&lt;p&gt;Qwen 3.8 27B is out, and it needed no new architecture support in dasLLAMA: the 3.8
+generation keeps the qwen3.5 architecture — Gated-DeltaNet recurrent layers interleaved
+3:1 with gated full attention — so it loads on the existing family path as a pure
+scale-up. The Q4_K_M file&#x27;s attention and FFN planes serve natively on the kq rails, CPU
+and Metal alike (the DeltaNet projections transcode to q8 at load), and the model joins
+the official board catalog.&lt;/p&gt;
 &lt;p&gt;On an M1 Max (pp512 / tg128, llama-bench protocol): Metal — das 147.0 / 14.5 tok/s,
 llama.cpp 137.6 / 11.5; CPU — das 33.2 / 5.8, llama.cpp 29.8 / 5.6. On an M4 Pro:
 Metal — das 127.0 / 12.8, llama.cpp 126.2 / 11.5; CPU — das 45.8 / 11.6, llama.cpp

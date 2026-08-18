@@ -6259,8 +6259,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"parakeet-cli",
@@ -6502,8 +6501,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -7931,8 +7929,7 @@
             "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
             "bytes":373038
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"parakeet-cli",
@@ -8635,8 +8632,7 @@
             "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
             "bytes":373038
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -9865,8 +9861,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"whisper-cli",
@@ -10083,8 +10078,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -10184,8 +10178,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"whisper-cli",
@@ -11289,8 +11282,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"whisper-cli",
@@ -11507,8 +11499,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -11608,8 +11599,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"whisper-cli",
@@ -12361,8 +12351,7 @@
             "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
             "bytes":6359578
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"nemo",
@@ -12502,8 +12491,7 @@
             "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
             "bytes":6359578
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -13049,8 +13037,7 @@
             "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
             "bytes":8745270
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -13144,8 +13131,7 @@
             "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
             "bytes":8745270
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -13815,8 +13801,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",
@@ -13922,8 +13907,7 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ],
-        "comment":"This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+        ]
       },
       {
         "engine":"das",

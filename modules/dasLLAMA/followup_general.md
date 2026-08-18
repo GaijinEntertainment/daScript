@@ -483,3 +483,10 @@
     indefinitely. Decide the liveness lane: a nightly PARITY_FULL job on a model-stocked
     runner, or the #34 parity pregate doubling as the de facto lane (every board sweep
     exercises the official set's evidence).
+
+39. **The ASR reference receipt collapses a clip ladder to one argv (2026-08-18).** Reference
+    ASR tools take one clip per invocation, and `gen_bench_records.das` stores only the LAST
+    clip's command line ("they differ only in -f"), so the site renders hp0x2's receipt under
+    every clip row of that run — a reader reproducing jfk gets the hp0x2 number. Fix is a
+    per-clip `cmd` (schema addition) or a receipt template with the `-f` slot marked; the das
+    rows are unaffected (one process serves the whole ladder).
