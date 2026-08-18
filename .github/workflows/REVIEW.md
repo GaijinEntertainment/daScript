@@ -3,10 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `skills/internal/preflight.md` (repo root).
 
-**A per-PR gate step in `doc.yml` must fail the lane on a doc defect and only on a doc defect —
-removing a step, neutering it, or renaming or deleting the script or target it invokes is a
-defect.** Each gate enforces a doc invariant with no reviewer involved (the gate map:
-`skills/internal/preflight.md` (repo root), the doc.yml section).
+**Removing or neutering a per-PR gate step in `doc.yml` or `extended_checks.yml` — deleting
+the step, adding `continue-on-error`, narrowing its `if:`, or substituting a weaker target or
+command — is a defect.** Each such step machine-enforces an invariant with no reviewer
+involved (the gate map: `skills/internal/preflight.md` (repo root)).
 
-**Weakening the `all_utils_exe` build step in `extended_checks.yml` is a defect.** It is what
-machine-enforces that every shipped tool exe stays `daslang -exe`-compilable.
+**A per-PR gate step in `doc.yml` fails the lane on a doc defect and only on a doc defect.**

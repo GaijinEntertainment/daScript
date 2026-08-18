@@ -77,3 +77,13 @@ def dyn_array(b : B?) {
     }
 }
 ```
+
+## review_gate.das
+
+Not part of the test runner: `dastest/review_gate.das` is the support library for
+`REVIEW.das` gates — the executable half of a folder's `REVIEW.md` review checklist (the
+contract lives in `REVIEW_COMMON.md` at the repo root, vendored by repos that adopt it). It
+provides finding accumulation and the exit verdict (`gate_finding`, `gate_findings`,
+`gate_reset`, `gate_verdict`), plus tree-analysis helpers: `das_requires`,
+`cmake_command_blocks`, `cmake_list_entries`, `is_kebab_case`, `find_line`. It lives under
+`dastest/` so an installed SDK carries it the same way it carries the test framework.

@@ -33,9 +33,12 @@ under it, on top of the repo-wide checklist below. One command finds them all:
 daslang utils/internal/review-md/main.das -- --base origin/master
 ```
 
-(`--base` defaults to `origin/master`; explicit paths as positionals skip git.) If any
-turn up, initiate the code review with those files' rules **listed explicitly** in the
-review context.
+(`--base` defaults to `origin/master`; explicit paths as positionals skip git.) The walk
+first EXECUTES the sibling `REVIEW.das` gate of each discovered checklist that has one —
+fail-fix, like dastest: a red gate exits 1 with findings, and no agent launches until it
+is green (`--list-only` skips gate execution); a checklist without a gate is simply
+listed. Then, if any checklists turn up, initiate the code review with those files' rules
+**listed explicitly** in the review context.
 
 Worked example: `modules/dasImgui/REVIEW.md` (tests placement + pre-PR suite
 run + multiplatform-tests rules for anything touching that module).
@@ -511,7 +514,7 @@ created it.
 |---|---|---|
 | Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | Untracked files | preflight `untracked` gate (`git ls-files --others --exclude-standard`) | Empty at PR time — commit, delete, or ignore each (`.gitignore` pattern / `.git/info/exclude` for box-local) |
-| REVIEW audit | step-0a walk → one `review-md-auditor` per discovered checklist | Binding rules; checklist defects fixed in the same batch |
+| REVIEW audit | step-0a walk (runs each discovered checklist's `REVIEW.das` gate first; red gate = exit 1, fix before agents; `--list-only` to relist) → one `review-md-auditor` per discovered checklist | Binding rules; gate red is fail-fix; checklist defects fixed in the same batch |
 | TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |

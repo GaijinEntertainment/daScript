@@ -81,6 +81,10 @@ COMPILE_TESTS=(
     "mcp|utils/mcp/main.das"
     "mcp-cpp|utils/mcp/cpp_main.das"
     "mcp-setup|utils/mcp/setup.das"
+    # Not an entry point, but the library an adopting repo's REVIEW.das requires
+    # (REVIEW_COMMON.md contract) — a bundle where it does not compile breaks
+    # every external gate.
+    "review-gate|dastest/review_gate.das"
     # In-tree module das layers — these catch the missing-payload class (the
     # dasImgui merge shipped binaries + descriptor but zero .das for a while:
     # the descriptor resolved to files the bundle did not carry).

@@ -24,9 +24,19 @@ reachable branch ships a test that fails without it; a diff that adds a branch n
 distinguishes is a defect. The audit procedure — including the negative control that settles
 "would it fail?" — is `skills/tdd_audit.md`.
 
-**A rule that a test or lint enforces is deleted.** Automation replaces the rule; the
-checklist keeps at most "weakening that check is a defect." A rule that COULD be automated is
-a lint candidate — say so in the review round.
+**A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
+replaces the rule; the checklist keeps at most "weakening that check is a defect." A rule
+that COULD be automated is a lint or `REVIEW.das` candidate — say so in the review round.
+
+**A `REVIEW.das` beside a checklist is that checklist's mechanical gate** — a standalone
+script (`daslang <folder>/REVIEW.das`, run from the repo root; support library
+`dastest/review_gate`) that prints `path: finding` lines (`path:line: finding` when a
+line is known) and exits nonzero on any.
+
+**The gate is fail-fix, like a test suite: it runs before every review, and a red gate
+stops the round until fixed.**
+
+**A `REVIEW.das` without its sibling `REVIEW.md` is a defect.**
 
 **A rule is absolute; sanctioned violations live in the architecture doc.** No "except",
 "exempt", "carve-out", or "the one sanctioned" — move the boundary inside the trigger, fix

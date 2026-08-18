@@ -1846,7 +1846,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 
 # utils/internal/ never installs — the folder is the audience decision
-# (utils/REVIEW.md).
+# (machine-checked by utils/REVIEW.das).
 
 # Install aot tool (the AOT generation driver the integration scaffolds invoke)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)

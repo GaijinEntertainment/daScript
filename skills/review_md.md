@@ -7,9 +7,8 @@ placing the file IS the registration).
 
 ## The contract — one file, shared
 
-The rules every checklist lives under — what a checklist may contain (diff-checkable
-criteria only), the self-review rule, the branch-test rule, and the Form hard limits —
-live ONCE, in `REVIEW_COMMON.md` at the repo root. A checklist does not restate them;
+The rules every checklist lives under — the whole shared contract — live ONCE, in
+`REVIEW_COMMON.md` at the repo root. A checklist does not restate them;
 its opening is this block, verbatim except for the name and the two facts it declares:
 
 ```markdown
@@ -35,12 +34,30 @@ fixed like any other. An external repo that adopts `REVIEW.md` vendors a copy of
 Name it concretely; a module whose rules keep wanting a rationale home probably needs to
 grow one.
 
+## The executable half — REVIEW.das
+
+The gate contract — what a `REVIEW.das` is, its output protocol, fail-fix, the orphan
+rule, and when a checklist rule is deleted in its favor — lives in `REVIEW_COMMON.md`;
+this section carries only the authoring craft. A rule is gate material when it is
+mechanically decidable from tree state alone: a file exists, a name matches a pattern,
+list A equals list B, nothing under X references Y. The support library's API is
+documented in `dastest/README.md`. A gate self-reports through `gate_verdict`, so a
+hand-run is just `bin/daslang <folder>/REVIEW.das` from the repo root.
+
+A worked example is `utils/REVIEW.das`. (repo-only)
+
+The walkers that execute gates are repo tooling: the per-diff walk (gates before agent
+review) is `skills/internal/make_pr.md` step 0a; the tree-wide walk is
+`utils/internal/review-md/all.das`, the `extended_checks` "Run REVIEW.das gates" CI step. (repo-only)
+
 ## Why "no numbers" is load-bearing
 
 A numbered entry gets cited — from other modules, from commit messages, from other rule
-files — and the citation outlives the numbering. A cross-module reference restates the
-criterion in place and cites nothing; coupling between rule documents is routing, never
-citation.
+files — and the citation outlives the numbering. Applying another checklist is done by
+routing ("a diff touching X applies that checklist too"). Borrowing a criterion whose home
+is another folder's document is done by restating the criterion in place and citing
+nothing — a restated criterion survives any rewording of its home; a citation points at
+whatever sits there today.
 
 ## Writing the entries
 
@@ -110,9 +127,10 @@ forced (one reasonable edit — staleness is the canonical case); ASK the user w
 repair is a semantic choice (which side of a contradiction wins, a rule deleted because a
 test enforces it, a scope reassignment). Auditors tag each self-review finding
 `blocking | stale | contradiction | structural | formatting`; the tag locates the defect,
-and the forced-vs-semantic test on its REPAIR decides the disposition. One checklist-edit batch per round, one dragon pass over the batch; a FRESH
-dragon then re-reads cold. Serious findings it returns open one more batch on the same
-terms; the round exits when a fresh cold read returns none. Wording a dragon itself authored
+and the forced-vs-semantic test on its REPAIR decides the disposition. One checklist-edit
+batch per round, one dragon pass over the batch; a FRESH dragon then re-reads cold.
+Serious findings it returns open one more batch on the same terms; the round exits when a
+fresh cold read returns none. Wording a dragon itself authored
 and the round applied verbatim is exempt from the next pass — never run dragon on dragon;
 re-judging its own prose is oscillation by construction. A document a round has ruled on is
 not re-dragoned in later rounds unless a serious rule change touches it — a ruling stands.
@@ -122,9 +140,10 @@ not re-dragoned in later rounds unless a serious rule change touches it — a ru
 Check the change against `REVIEW_COMMON.md`: is every new entry diff-checkable in
 isolation? one paragraph? unnumbered? exception-free? example-free? at most one sentence of
 WHY, and only where it makes the criterion decidable? Does a moved rationale actually land
-in the architecture doc, or did it just get deleted? Then apply the self-review rule
-literally — an entry a reviewer cannot apply as written is itself a finding — and run the
-followability classes above over the touched rules. The `dragon` agent runs this audit on
+in the architecture doc, or did it just get deleted? — and every other limit
+`REVIEW_COMMON.md` states; that file is the law, these are its most-missed questions.
+Then apply the self-review rule literally — an entry a reviewer cannot apply as written
+is itself a finding — and run the followability classes above over the touched rules. The `dragon` agent runs this audit on
 any modified rule document; the `placement-auditor` agent audits a placement block against
 its folder. The canonical conforming set is `modules/dasLLAMA/REVIEW.md` and its routed
 companions.

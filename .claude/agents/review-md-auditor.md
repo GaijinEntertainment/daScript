@@ -18,11 +18,12 @@ every changed file under its directory.
 The orchestrator discovered your checklist with the step-0a walk:
 
 ```bash
-daslang utils/internal/review-md/main.das -- --base <base>
+daslang utils/internal/review-md/main.das -- --base <base> --list-only
 ```
 
 Re-run it to confirm your assigned file is in the set (a mismatch means the diff moved — say so
-and stop). Read `REVIEW_COMMON.md` at the repo root — the contract every checklist lives
+and stop). Keep `--list-only`: the orchestrator already ran the `REVIEW.das` gates — you audit
+the prose half. Read `REVIEW_COMMON.md` at the repo root — the contract every checklist lives
 under — then your checklist in full, then scope the diff to the files under its directory.
 
 ## Step 2 — audit each rule against the diff
