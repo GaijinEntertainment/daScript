@@ -16,13 +16,24 @@
 #                                    #   <name|path> accepts a bare name or a .shader path,
 #                                    #   e.g. ./run.sh --das capability/cap_control.shader
 #
-# Requires bin/daslang built in the daScript root.
+# Binary: $DASLANG if set, else the first of bin/daslang (single-config layout),
+# bin/Release/daslang[.exe] (MSVC layout), or `daslang` on PATH (installed SDK).
+# The candidate list is duplicated in capability/check.sh — keep them in step.
 
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-daslang="$root/bin/daslang"
 proj="$here/flatten_shaders.das_project"
+
+find_daslang() {
+    if [[ -n "${DASLANG:-}" ]]; then echo "$DASLANG"; return; fi
+    local c
+    for c in "$root/bin/daslang" "$root/bin/Release/daslang.exe" "$root/bin/Release/daslang"; do
+        if [[ -x "$c" ]]; then echo "$c"; return; fi
+    done
+    command -v daslang || command -v daslang.exe || true
+}
+daslang="$(find_daslang)"
 
 dump_das=0
 shaders=()
@@ -34,8 +45,8 @@ for a in "$@"; do
     fi
 done
 
-if [[ ! -x "$daslang" ]]; then
-    echo "error: $daslang not found — build daScript first (cmake --build build --config Release)" >&2
+if [[ -z "$daslang" || ! -x "$daslang" ]]; then
+    echo "error: no daslang binary found — build daScript first (cmake --build build --config Release) or set DASLANG" >&2
     exit 1
 fi
 

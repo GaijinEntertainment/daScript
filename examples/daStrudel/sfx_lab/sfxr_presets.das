@@ -1,5 +1,5 @@
 // sfxr_presets — render and audition the classic sfxr preset family.
-// Renders each generator to a WAV under ./sfxr_renders/ and plays them in sequence.
+// Renders each generator to a WAV under <temp dir>/sfxr_renders/ and plays them in sequence.
 // Run: daslang examples/daStrudel/sfx_lab/sfxr_presets.das
 options gen2
 options indenting = 4
@@ -23,10 +23,11 @@ def build_preset(idx : int; var seed : uint&) : SfxrSound {
 def main() {
     let names = fixed_array("pickup_coin", "laser_shoot", "explosion", "powerup", "hit_hurt", "jump", "blip_select")
     let seeds = fixed_array(12345u, 22222u, 33333u, 44444u, 55555u, 66666u, 77777u)
-    let outdir = "sfxr_renders"
+    let tmp = temp_directory_result()
+    let outdir = path_join(tmp is value ? tmp as value : ".", "sfxr_renders")
     mkdir_rec(outdir)
 
-    print("sfxr presets -> ./{outdir}/ (playing each as it renders)\n")
+    print("sfxr presets -> {outdir}/ (playing each as it renders)\n")
     with_audio_system() {
         for (idx in range(length(names))) {
             var seed = seeds[idx]

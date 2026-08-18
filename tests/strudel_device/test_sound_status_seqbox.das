@@ -5,7 +5,6 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost
-require daslib/defer
 require daslib/fio
 require daslib/jobque_boost
 require audio/audio_boost
@@ -28,9 +27,6 @@ def private short_tone(seconds : float) : array<float> {
 def test_status_seeded_on_the_calling_thread(t : T?) {
     t |> run("the box reads `starting` before the audio thread has seen the sound") @(t : T?) {
         sound_set_null_device(true)
-        defer() {
-            sound_set_null_device(false)
-        }
         with_audio_system() {
             var tone <- short_tone(0.2)
             let sid = play_sound_from_pcm(MA_SAMPLE_RATE, 1, tone)
@@ -46,6 +42,7 @@ def test_status_seeded_on_the_calling_thread(t : T?) {
             unset_status_update(sid)
             box |> seq_box_release
         }
+        sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }
 
@@ -53,9 +50,6 @@ def test_status_seeded_on_the_calling_thread(t : T?) {
 def test_status_reaches_stopped(t : T?) {
     t |> run("a one-shot tone advances to stopped") @(t : T?) {
         sound_set_null_device(true)
-        defer() {
-            sound_set_null_device(false)
-        }
         with_audio_system() {
             var tone <- short_tone(0.2)
             let sid = play_sound_from_pcm(MA_SAMPLE_RATE, 1, tone)
@@ -73,6 +67,7 @@ def test_status_reaches_stopped(t : T?) {
             unset_status_update(sid)
             box |> seq_box_release
         }
+        sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }
 
@@ -80,9 +75,6 @@ def test_status_reaches_stopped(t : T?) {
 def test_release_needs_no_ordering(t : T?) {
     t |> run("releasing the box while the sound still plays leaks nothing") @(t : T?) {
         sound_set_null_device(true)
-        defer() {
-            sound_set_null_device(false)
-        }
         let before = count_jobque_leaks()
         with_audio_system() {
             for (_i in range(8)) {
@@ -98,5 +90,6 @@ def test_release_needs_no_ordering(t : T?) {
             sleep(60u)
         }
         t |> equal(count_jobque_leaks(), before)
+        sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }

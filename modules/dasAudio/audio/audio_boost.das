@@ -21,6 +21,9 @@ module audio_boost shared private
 
 require audio public
 require math
+require strings
+require daslib/strings_convert
+require daslib/clargs
 require daslib/rtti
 
 require daslib/array_boost
@@ -1248,14 +1251,43 @@ tuple public AudioSystemChannels {
     next_sid : Atomic64 ?
 }
 
+def public audio_user_args(args : array<string>) : tuple<null_device : bool; volume : float> {
+    //! The audio knobs every app gets from its user args: `--null-audio` (run on the null backend, no
+    //! device) and `--volume V` (master volume, clamped 0..1). `volume < 0` means not given or not a number.
+    var res = (null_device = false, volume = -1.0)
+    for (i in range(length(args))) {
+        if (args[i] == "--null-audio") {
+            res.null_device = true
+        } elif (args[i] == "--volume" && i + 1 < length(args)) {
+            let parsed = try_to_float(args[i + 1])
+            if (is_ok(parsed)) {
+                res.volume = clamp(unwrap(parsed), 0.0, 1.0)
+            } else {
+                to_log(LOG_WARNING, "audio: --volume {args[i + 1]} is not a number, ignored\n")
+            }
+        }
+    }
+    return res
+}
+
 def public audio_system_create : AudioSystemChannels {
-    //! Low-level: creates the audio system. Prefer with_audio_system.
+    //! Low-level: creates the audio system. Prefer with_audio_system. Applies `audio_user_args` to the
+    //! user args (after `--` interpreted, argv[1..] as a standalone exe - `get_user_args` picks).
+    let knobs = audio_user_args(get_user_args())
+    if (knobs.null_device) {
+        sound_set_null_device(true)
+        to_log(LOG_INFO, "audio: --null-audio, using the null backend\n")
+    }
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var s = unsafe(stream_create())
     s |> add_ref()
     g_command_stream = s
     g_sound_sid = atomic64_create()
     unsafe(invoke_in_context(mixer_context(), "setup_command_processor", s))
+    if (knobs.volume >= 0.0) {
+        set_global_volume(knobs.volume)
+        to_log(LOG_INFO, "audio: --volume {knobs.volume}\n")
+    }
     return (command = s, next_sid = g_sound_sid)
 }
 

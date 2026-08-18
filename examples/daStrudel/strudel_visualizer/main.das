@@ -192,11 +192,11 @@ def init() { // nolint:STYLE038 — linear track-setup sequence
     create_ttf_objects()
     delete font
     font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [pixel_height = 16.0, oversampling = 2])
-    if (!!empty(font.bitmap.bytes)) {
+    if (empty(font.bitmap.bytes)) {
         delete font
-        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])
+        font <- load_ttf("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf", [pixel_height = 16.0, oversampling = 2])
     }
-    if (!!empty(font.bitmap.bytes)) {
+    if (empty(font.bitmap.bytes)) {
         panic("can't load font")
     }
     upload_font_texture(font)

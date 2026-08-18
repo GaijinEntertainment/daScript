@@ -1025,7 +1025,7 @@ def init() {
         let primary_ttf = card_mesh_ttf_path()
         ui_font <- load_ttf(primary_ttf, [pixel_height = 24.0, oversampling = 2])
         if (empty(ui_font.bitmap.bytes)) {
-            let fallback_ttf = "{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf"
+            let fallback_ttf = "{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf"
             ui_font <- load_ttf(fallback_ttf, [pixel_height = 24.0, oversampling = 2])
         }
         if (!empty(ui_font.bitmap.bytes)) {
@@ -1033,7 +1033,7 @@ def init() {
             // Small font for hints
             ui_font_small <- load_ttf(primary_ttf, [pixel_height = 14.0, oversampling = 2])
             if (empty(ui_font_small.bitmap.bytes)) {
-                ui_font_small <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf",
+                ui_font_small <- load_ttf("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf",
                     [pixel_height = 14.0, oversampling = 2])
             }
             if (!empty(ui_font_small.bitmap.bytes)) {

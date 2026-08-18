@@ -24,6 +24,7 @@ require imgui/imgui_harness
 // The narrow window below forces the headers to wrap across rows.
 //
 // STANDALONE: daslang.exe modules/dasImgui/examples/tutorial/wrap_tab_bar.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/tutorial/wrap_tab_bar.das -- --headless --headless-frames=60
 // LIVE:       daslang-live modules/dasImgui/examples/tutorial/wrap_tab_bar.das
 //
 // DRIVE (when running live) — select the "lava" tab (index 2):

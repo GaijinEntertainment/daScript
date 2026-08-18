@@ -3,6 +3,13 @@ options _comment_hygiene = true
 options gc
 options persistent_heap
 
+// =============================================================================
+// STANDALONE: daslang.exe modules/dasImgui/examples/features/embedded_terminal.das
+// HEADLESS:   daslang.exe modules/dasImgui/examples/features/embedded_terminal.das -- --headless --headless-frames=60
+//             spawns a real PTY child (default powershell.exe) — pass --terminal-command=/bin/sh on POSIX
+// LIVE:       daslang-live modules/dasImgui/examples/features/embedded_terminal.das
+// =============================================================================
+
 require imgui/imgui_harness
 require imgui/imgui_terminal
 require imgui/imgui_fonts

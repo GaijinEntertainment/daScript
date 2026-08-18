@@ -2,6 +2,7 @@ options gen2
 options gc
 options persistent_heap
 require glfw/glfw_boost
+require daslib/strings_convert
 require opengl/opengl_boost
 require math
 require daslib/math_boost
@@ -250,13 +251,30 @@ def shutdown {
     glfwTerminate()
 }
 
+var max_frame_limit = 0
+
+def parse_args {
+    let args <- get_command_line_arguments()
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--max-frames") {
+            max_frame_limit = try_to_int(args[i + 1]) ?? 0   // garbage = no cap
+        }
+    }
+}
+
 // Desktop driver. On the web this is never called -- the run path drives the
 // three lifecycle functions directly and persists the Context across frames.
 [export]
 def main {
+    parse_args()
     init()
+    var frame_count = 0
     while (update()) {
         maybe_collect_gc()
+        frame_count++
+        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
+            break
+        }
     }
     shutdown()
 }

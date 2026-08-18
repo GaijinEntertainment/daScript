@@ -88,8 +88,22 @@
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-daslang="$root/bin/daslang"
 proj="$here/../flatten_shaders.das_project"
+
+# Binary: $DASLANG if set, else bin/daslang, bin/Release/daslang.exe, or PATH (same rule as ../run.sh).
+find_daslang() {
+    if [[ -n "${DASLANG:-}" ]]; then echo "$DASLANG"; return; fi
+    local c
+    for c in "$root/bin/daslang" "$root/bin/Release/daslang.exe" "$root/bin/Release/daslang"; do
+        if [[ -x "$c" ]]; then echo "$c"; return; fi
+    done
+    command -v daslang || command -v daslang.exe || true
+}
+daslang="$(find_daslang)"
+if [[ -z "$daslang" || ! -x "$daslang" ]]; then
+    echo "error: no daslang binary found — build daScript first or set DASLANG" >&2
+    exit 1
+fi
 
 compile() { "$daslang" -compile-only -project "$proj" "$1" 2>&1; }
 hist()    { compile "$1" | grep '^node ' | awk '{print $3}' | sort | uniq -c; }

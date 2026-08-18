@@ -5,7 +5,6 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost
-require daslib/defer
 require strudel/strudel
 require strudel/strudel_player
 require audio/audio_boost
@@ -33,10 +32,6 @@ require jobque
 def test_device_teardown_no_leak(t : T?) {
     t |> run("strudel device create/tick/shutdown leaves no JobQue leak") @(t : T?) {
         sound_set_null_device(true)
-        // reset the global null-backend flag on exit, so a later audio test in this process isn't forced onto it
-        defer() {
-            sound_set_null_device(false)
-        }
         let before = count_jobque_leaks()
         with_audio_system() {
             strudel_create_channel()
@@ -50,6 +45,7 @@ def test_device_teardown_no_leak(t : T?) {
         }
         let after = count_jobque_leaks()
         t |> equal(after, before)
+        sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }
 
@@ -59,10 +55,6 @@ def test_device_teardown_no_leak(t : T?) {
 def test_device_teardown_rerun(t : T?) {
     t |> run("strudel device cycle is repeatable, still no JobQue leak") @(t : T?) {
         sound_set_null_device(true)
-        // reset the global null-backend flag on exit, so a later audio test in this process isn't forced onto it
-        defer() {
-            sound_set_null_device(false)
-        }
         let before = count_jobque_leaks()
         for (_cycle in range(2)) {
             with_audio_system() {
@@ -78,5 +70,6 @@ def test_device_teardown_rerun(t : T?) {
         }
         let after = count_jobque_leaks()
         t |> equal(after, before)
+        sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }
