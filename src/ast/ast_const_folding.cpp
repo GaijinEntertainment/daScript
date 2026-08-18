@@ -1190,7 +1190,9 @@ namespace das {
                     if ( isConstBoolValue(R,false) ) { reportFolding(); return L; }
                     if ( isConstBoolValue(R,true) && L->noSideEffects ) { reportFolding(); return R; }
                 }
-                // v * floatN(s) → v * s ; v / floatN(s) → v / s (splat collapse, per-lane bit-identical)
+                // v * floatN(s) → v * s ; v / floatN(s) → v / s (splat collapse, per-lane bit-identical).
+                // The OTHER operand must itself be a floatN — in `floatN(s) * t` (t scalar) the collapse
+                // would find the scalar `s * t` operator and leave a float under a floatN-typed node
                 if ( ( expr->op=="*" || expr->op=="/" ) && isFloat32Family(bt) && bt!=Type::tFloat ) {
                     auto trySplat = [&]( Expression * e ) -> Expression * {
                         if ( !e || !e->rtti_isCall() ) return nullptr;
@@ -1202,15 +1204,22 @@ namespace das {
                         if ( call->func->name!=das_to_string(bt) ) return nullptr;
                         return a0;
                     };
-                    if ( auto s = trySplat(expr->right) ) {
-                        if ( auto fn = findBuiltinOperator(expr->op.c_str(), L->type, s->type) ) {
-                            expr->right = s;
-                            expr->func = fn;
-                            reportFolding();
-                            return Visitor::visit(expr);
+                    auto isVecOfBt = [&]( Expression * e ) -> bool {
+                        return e && e->type && e->type->baseType==bt;
+                    };
+                    if ( isVecOfBt(L) ) {
+                        if ( auto s = trySplat(expr->right) ) {
+                            if ( auto fn = findBuiltinOperator(expr->op.c_str(), L->type, s->type) ) {
+                                expr->right = s;
+                                expr->func = fn;
+                                reportFolding();
+                                return Visitor::visit(expr);
+                            }
                         }
                     }
-                    if ( expr->op=="*" ) {
+                    // this arm SWAPS the operands (floatN(s) * v -> v * s), which reorders evaluation -
+                    // only when neither side can observe the other's effects
+                    if ( expr->op=="*" && isVecOfBt(R) && R->noSideEffects && L->noSideEffects ) {
                         if ( auto s = trySplat(expr->left) ) {
                             if ( auto fn = findBuiltinOperator("*", R->type, s->type) ) {
                                 expr->left = R;
