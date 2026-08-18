@@ -4,8 +4,24 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-08-17T00:00:00Z</updated>
+<updated>2026-08-18T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>Qwen 3.8 27B joins the board — the new dense hybrid runs on CPU and Metal.</title>
+<link href="https://dasllama.io/#n-2026-08-18-qwen38-27b"/>
+<id>https://dasllama.io/#n-2026-08-18-qwen38-27b</id>
+<updated>2026-08-18T00:00:00Z</updated>
+<content type="html">&lt;p&gt;Qwen 3.8 27B is out, and it runs in dasLLAMA unchanged: the 3.8 generation keeps the
+qwen3.5 architecture — Gated-DeltaNet recurrent layers interleaved 3:1 with gated full
+attention — so the existing family support picked it up as a pure scale-up. The Q4_K_M
+file serves natively on the kq rails, CPU and Metal alike, and the model joins the
+official board catalog.&lt;/p&gt;
+&lt;p&gt;On an M1 Max (pp512 / tg128, llama-bench protocol): Metal — das 147.0 / 14.5 tok/s,
+llama.cpp 137.6 / 11.5; CPU — das 33.2 / 5.8, llama.cpp 29.8 / 5.6. On an M4 Pro:
+Metal — das 127.0 / 12.8, llama.cpp 126.2 / 11.5; CPU — das 45.8 / 11.6, llama.cpp
+40.4 / 11.0. Full rows for both boxes are on the
+&lt;a href=&quot;https://daslang.io/dasllama.html&quot;&gt;board&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>Metal support lands in speech-to-text — whisper large-v3-turbo at 49x realtime on an M1 Max.</title>
 <link href="https://dasllama.io/#n-2026-08-17-metal-asr"/>
