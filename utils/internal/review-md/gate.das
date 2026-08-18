@@ -19,7 +19,9 @@ def run_argv(args : array<string>) : tuple<rc : int; out : string> {
 def run_gates(root : string; gates : array<string>) : int {
     return 0 if (empty(gates))
     let argv <- get_command_line_arguments()
-    let self = normalize(argv[0])
+    // absolutize BEFORE the chdir: CI invokes daslang by a relative path, which
+    // would resolve against the new cwd and fail every spawn
+    let self = get_full_file_name(normalize(argv[0]))
     let prev = getcwd()
     if (!chdir(root)) {
         to_log(LOG_ERROR, "review-md: cannot chdir to {root}\n")
