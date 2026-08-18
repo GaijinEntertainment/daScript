@@ -35,19 +35,21 @@ fails is a defect.
 **`model_specs.das`'s `model_specs()` (text) and `profile_common.das`'s `asr_catalog()`
 (audio) are the model set; a third list of model files, quants, board membership,
 provenance, or parity fixtures is a defect** — a new list is written as a view over those two
-(`llm_catalog` / `official_catalog` / `models_provenance` are the existing views).
+(`llm_catalog`, `official_catalog`, `models_provenance` are such views).
 
-**A model file this repo fetches, converts, or publishes a board number for carries its
-provenance on its own row there — `url` + `bytes` + `sha256`, or a `recipe` — and a companion
-artifact (an mmproj, an image fixture) rides its owning row's `companions`.** Weakening
-`../tests/test_model_specs.das`'s provenance invariants is a defect.
+**A model file this repo fetches, converts, or publishes a public benchmark-board number for
+carries its provenance on its own row in `model_specs()` (`model_specs.das`) or
+`asr_catalog()` (`profile_common.das`) — `url` + `bytes` + `sha256`, or a `recipe` — and a
+companion artifact (an mmproj, an image fixture) rides its owning row's `companions`.**
+Weakening `../tests/test_model_specs.das`'s provenance invariants is a defect.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
 
-**A change to a provenance field (`url`, `bytes`, `sha256`, `recipe`, a `companions` entry)
-or to `fetch_models.das` other than its comments records its gate run in the PR
-description: `fetch_models.das --` ends `0 failed`.**
+**A change to a provenance field on a model row (`url`, `bytes`, `sha256`, `recipe`, a
+`companions` entry in `model_specs.das` or `profile_common.das`), or to `fetch_models.das`
+other than its comments, records its gate run in the PR description: `fetch_models.das --`
+ends `0 failed`.**
 
 **An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
