@@ -643,4 +643,21 @@ jobs:
             -e "$RSH" _site_dasllama/ "deploy@89.167.63.131:/srv/dasllama.io/releases/$REL/"
         $RSH deploy@89.167.63.131 "ln -sfn /srv/dasllama.io/releases/$REL /srv/dasllama.io/current \
             && cd /srv/dasllama.io/releases && ls -1t | tail -n +6 | xargs -r rm -rf"
+        # The ladder renders from the exchange service's DB, not from the pages just shipped;
+        # its official boards are the record stores in the repo, so a merged store refresh
+        # must reach the service or the live board silently stays at its last hand-seed.
+        # Same shape as the playground nudge: loopback-only endpoint, upsert-on-identity
+        # (re-imports are idempotent), a miss must not fail the site deploy. Store filter
+        # mirrors the service's own official_dir import: records/<box>.json single-dot names
+        # only - tune sidecars, annotations.json and _scratch are not stores.
+        for store in modules/dasLLAMA/performance/records/*.json; do
+            name=$(basename "$store")
+            case "$name" in
+                *.*.*|annotations.json|_*) continue ;;
+            esac
+            $RSH deploy@89.167.63.131 \
+                "curl -sf -m 60 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8201/admin/import-official" \
+                < "$store" && echo "imported $name" \
+                || echo "ladder import of $name failed (service down?)"
+        done
         echo "deployed $REL"

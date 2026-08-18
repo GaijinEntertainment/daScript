@@ -111,7 +111,10 @@ until an operator opens it. Toggle for a test window over the loopback tunnel wi
 `sudo dasllama-deploy.sh open-submit` / `close-submit`; the permanent open (after the security
 audit) is `submit_open = true` in the deployed toml, or the `--submit-open` boot flag.
 
-Seed the official boards (they're not in the release — the record stores live under
-`modules/dasLLAMA/performance/records/`): stage that directory on the box, point the deployed
-toml's `official_dir` at it (imported at every start), or import once over loopback with
-`admin.das`.
+The official boards are the record stores under `modules/dasLLAMA/performance/records/`
+(not in the release). The site deploy (`.github/workflows/pages.yml`, after the dasllama.io
+flip) POSTs every `records/<box>.json` to `/admin/import-official` over loopback, so a merged
+store refresh publishes itself — the same commit-is-publish contract the news has. Manual
+paths for a box without a deploy: the deployed toml's `official_dir` (imported at every
+start), or on the box
+`daslang admin.das -- --db /srv/dasllama-ladder/ladder.db --op import-official --file records/<box>.json`.
