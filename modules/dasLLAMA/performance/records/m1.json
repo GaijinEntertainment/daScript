@@ -4818,5 +4818,276 @@
     ],
     "arch":"Qwen3-ASR-0.6B",
     "size_bytes":804749248
+  },
+  {
+    "gguf":"Qwen3.8-27B-Q4_K_M.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":146.98464403666389,
+            "stddev":1.6775456666946411
+          },
+          "tg128":{
+            "tok_s":14.454928980896796,
+            "stddev":0.0026774206198751926
+          }
+        },
+        "source":"official",
+        "sha":"aef0840b8",
+        "version":"0.6.4",
+        "dasllama_version":4,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4_nrsplit2 (manifest)",
+        "tune_sha":"c1cd9c5035ca7d81e7f3bbe95a576c22a3601303bfa3c04e04f46d8052bb29d7",
+        "noise":"ok",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":137.56638100000001,
+            "stddev":0.058006000000000002
+          },
+          "tg128":{
+            "tok_s":11.520108,
+            "stddev":0.030023000000000001
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":33.239019966861669,
+            "stddev":0.17517077922821045
+          },
+          "tg128":{
+            "tok_s":5.8207341408622959,
+            "stddev":0.0236338060349226
+          }
+        },
+        "source":"official",
+        "sha":"aef0840b8",
+        "version":"0.6.4",
+        "dasllama_version":4,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4_nrsplit2 (manifest)",
+        "tune_sha":"c1cd9c5035ca7d81e7f3bbe95a576c22a3601303bfa3c04e04f46d8052bb29d7",
+        "noise":"ok",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":29.773734000000001,
+            "stddev":0.138298
+          },
+          "tg128":{
+            "tok_s":5.563599,
+            "stddev":0.023219
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":33.375229600569654,
+            "stddev":0.14754222333431244
+          },
+          "tg128":{
+            "tok_s":5.8126415881974207,
+            "stddev":0.03507552295923233
+          }
+        },
+        "source":"official",
+        "sha":"aef0840b8",
+        "version":"0.6.4",
+        "dasllama_version":4,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4_nrsplit2 (manifest)",
+        "tune_sha":"c1cd9c5035ca7d81e7f3bbe95a576c22a3601303bfa3c04e04f46d8052bb29d7",
+        "noise":"ok",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-17",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":29.789940999999999,
+            "stddev":0.099495
+          },
+          "tg128":{
+            "tok_s":5.5914400000000004,
+            "stddev":0.030686999999999999
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      }
+    ],
+    "arch":"qwen35",
+    "quant":"q8",
+    "params_b":26.895998464000002,
+    "active_b":23.84986112,
+    "size_bytes":18973870432
   }
 ]

@@ -42,7 +42,7 @@
 		"rmsnorm" : "vec8_u4"
 	},
 	"provenance" : {
-		"noise_probes" : "start cv 1.13% -> settled 0.49%; mid1 cv 0.53%; mid2 cv 0.50%; end cv 0.89%",
+		"noise_probes" : "start cv 1.13% settled 0.49%; mid1 cv 0.53%; mid2 cv 0.50%; end cv 0.89%",
 		"platform" : "windows",
 		"noise_floor_cv_pct" : "0.89",
 		"engine_sha" : "unknown",
