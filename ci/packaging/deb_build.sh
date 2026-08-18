@@ -8,6 +8,7 @@ set -euo pipefail
 BUNDLE="$1"
 RAW_VERSION="${2:-0.0.0-dev}"
 OUT="$3"
+mkdir -p "$OUT"
 
 VERSION="${RAW_VERSION#v}"
 VERSION="$(echo "$VERSION" | sed -E 's/-[Rr][Cc]([0-9]+)/~rc\1/')"

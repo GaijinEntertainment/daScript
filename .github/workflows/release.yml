@@ -322,8 +322,10 @@ jobs:
         run: |
           set -eux
           bash ci/packaging/deb_build.sh ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
-          d=$(ls artifacts/*.deb)
-          (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
+          cd artifacts
+          for d in *.deb; do
+            (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
+          done
       - name: "Upload release assets"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
         env:

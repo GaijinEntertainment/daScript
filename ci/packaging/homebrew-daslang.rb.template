@@ -26,8 +26,11 @@ class Daslang < Formula
 
   def install
     # the bundle is a self-contained SDK tree; daslang derives its module root
-    # from the executable location, so the tree must stay together
-    libexec.install Dir["*"]
+    # from the executable location, so the tree must stay together. The zip
+    # carries a top-level daslang_bundle/ dir; brew strips a sole top dir on
+    # unpack, but stage from it explicitly in case that ever changes.
+    root = File.directory?("daslang_bundle") ? "daslang_bundle" : "."
+    libexec.install Dir["#{root}/*"]
     bin.install_symlink libexec/"bin/daslang"
     bin.install_symlink libexec/"bin/daslang-live"
     bin.install_symlink libexec/"bin/gen1_to_gen2"
