@@ -68,8 +68,10 @@ would be surprised without it.
 
 **The body of a private function caps comments at ONE line** — a `def private`, a C++
 static or anonymous-namespace helper, a non-exported JS function (das: STYLE015, same
-gating as STYLE014). Body-only: a comment *attached to* a private symbol takes the
-ordinary cap plus the bar in *Private symbols don't get public-style docs* above.
+gating as STYLE014). A second line stands only when its content alone shows why — the
+same bar as *Short or absent* above; three or more never. Body-only: a comment
+*attached to* a private symbol takes the ordinary cap plus the bar in
+*Private symbols don't get public-style docs* above.
 
 **Field comments ride the declaration line** *(lintable)*, never a line above — fewer
 lines, and the struct scans as a table. A note that cannot fit the line belongs at the use
@@ -85,9 +87,12 @@ in the WHY above. A self-describing predicate — a named helper, a compare agai
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 
-**No incident citations.** The banned form is a citation that can only be verified
-outside the code — a PR or issue number, a date, "proven: <module> lost <bug>". The
-required form is the failure mode named in present tense at the code that guards it:
+**No incident citations.** The banned form is a citation of an event that can only be
+verified outside the code — a PR or issue number, a date pinning when something broke or
+was fixed, "proven: <module> lost <bug>". A date stamping when the data pinned beside it
+was captured or verified (a frozen expected-output fixture beside its ids, a
+`probe-verified <date>` claim) points at no event and is not a citation. The required
+form is the failure mode named in present tense at the code that guards it:
 "a defaulted operand no call site can supply crashes simulation", not "used to crash".
 A mechanism note stays when a maintainer needs it to change the code without breaking
 the guard (why an encoding stays injective); it goes when it only argues the guard was
