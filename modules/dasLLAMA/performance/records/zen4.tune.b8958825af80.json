@@ -42,7 +42,7 @@
 		"rmsnorm" : "vec16"
 	},
 	"provenance" : {
-		"noise_probes" : "start cv 1.65% settled 0.15%; mid1 cv 0.10%; mid2 cv 0.22%; end cv 0.10%",
+		"noise_probes" : "start cv 1.65% -> settled 0.15%; mid1 cv 0.10%; mid2 cv 0.22%; end cv 0.10%",
 		"platform" : "linux",
 		"noise_floor_cv_pct" : "0.22",
 		"engine_sha" : "17ec8bc39",

@@ -43,7 +43,7 @@
 	},
 	"provenance" : {
 		"validation" : "ok",
-		"noise_probes" : "start cv 0.33%; mid1 cv 3.09% settled 1.12%; mid2 cv 0.53%; end cv 0.27%",
+		"noise_probes" : "start cv 0.33%; mid1 cv 3.09% -> settled 1.12%; mid2 cv 0.53%; end cv 0.27%",
 		"platform" : "darwin",
 		"noise_floor_cv_pct" : "1.12",
 		"engine_sha" : "aef0840b8",
