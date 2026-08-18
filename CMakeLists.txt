@@ -2048,241 +2048,30 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/vscode-daslang-test/
     PATTERN "out" EXCLUDE
 )
 
-# Install daspkg examples. Whole-dir install, so exclude everything daspkg
-# generates in a working tree — modules/ (fetched deps), the lock file, build
-# output and shared modules would otherwise all land in the bundle.
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daspkg
+# The folder IS the shipping decision: everything under examples/ ships with the
+# SDK and must compile from a bare bundle (utils/internal/test-release owns the
+# floor sweep); a package-dependent example lives with its package, not here.
+# Excludes are working-tree residue plus fatman, the CI-only ABI-canary host.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+    PATTERN "fatman" EXCLUDE
     PATTERN "modules" EXCLUDE
     PATTERN "_build" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE
     PATTERN ".daspkg_tmp" EXCLUDE
     PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "jitted_scripts" EXCLUDE
     PATTERN "_aot_generated" EXCLUDE
+    PATTERN "_standalone_ctx_generated" EXCLUDE
     PATTERN "daspkg.lock" EXCLUDE
     PATTERN ".daspkg.log" EXCLUDE
     PATTERN "*.shared_module" EXCLUDE
 )
 
-# Install daslive examples
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daslive
-    FILES_MATCHING
-        PATTERN "*.das"
-        PATTERN ".das_package"
-    PATTERN "modules" EXCLUDE
-    PATTERN ".jitted_scripts" EXCLUDE
-    PATTERN "_aot_generated" EXCLUDE
-    PATTERN "jitted_scripts" EXCLUDE
-)
-
-# Install game examples with their full directory structure.
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/games/
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/games
-    PATTERN "modules" EXCLUDE
-    PATTERN "_build" EXCLUDE
-    PATTERN "*.shared_module" EXCLUDE
-    PATTERN ".daspkg_cache" EXCLUDE
-    PATTERN ".daspkg_tmp" EXCLUDE
-    PATTERN ".daspkg.log" EXCLUDE
-    PATTERN ".jitted_scripts" EXCLUDE
-    PATTERN "jitted_scripts" EXCLUDE
-    PATTERN "_aot_generated" EXCLUDE
-)
-
-# Install core example files
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/hello_world.das
-    ${PROJECT_SOURCE_DIR}/examples/README.md
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
-)
-
-# Install clargs example
-file(GLOB DAS_CLARGS_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/clargs/*.das
-)
-install(FILES ${DAS_CLARGS_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/clargs
-)
-
-# Install file_path_require example (cross-file require + .das_project resolution)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/file_path_require/main.das
-    ${PROJECT_SOURCE_DIR}/examples/file_path_require/shared_helpers.das
-    ${PROJECT_SOURCE_DIR}/examples/file_path_require/project.das_project
-    ${PROJECT_SOURCE_DIR}/examples/file_path_require/README.md
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/file_path_require
-)
-
-# Install mcp echo example (stdio MCP server + client)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/server.das
-    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/client.das
-    ${PROJECT_SOURCE_DIR}/examples/mcp/echo/README.md
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/mcp/echo
-)
-
-# Install dasbind example
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/dasbind
-)
-
-# Install crash example. The native failure modes now live in packages/dascrash, installed via
-# `daspkg install` from this local path, so there is no example-specific CMake target to include.
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/crash/main.das
-    ${PROJECT_SOURCE_DIR}/examples/crash/crash_kinds.das
-    ${PROJECT_SOURCE_DIR}/examples/crash/README.md
-    ${PROJECT_SOURCE_DIR}/examples/crash/.das_package
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/crash
-)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/crash/packages
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/crash
-)
-
-# Install minfft example (install rule is in modules/dasMinfft/CMakeLists.txt)
-
-file(GLOB DAS_DEBUGAPI_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/debugapi/*.das
-)
-install(FILES ${DAS_DEBUGAPI_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/debugapi
-)
-
-# Each per-example subdir (furier/, path_tracer_lab/, physarum_lab/) is a daspkg
-# -project-root: its own .das_package names the package and points release_main at the
-# shared source one level up, so those manifests are load-bearing for the cross-compile
-# path and must ship beside the .das. The manifests declare no deps (dasImgui is
-# in-tree); the modules/ EXCLUDE guards against stale local daspkg installs.
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/graphics/
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
-    FILES_MATCHING
-        PATTERN "*.das"
-        PATTERN ".das_package"
-        PATTERN "README.md"
-    PATTERN "modules" EXCLUDE
-    PATTERN ".daspkg_cache" EXCLUDE
-    PATTERN ".jitted_scripts" EXCLUDE
-    PATTERN "_aot_generated" EXCLUDE
-)
-
-# Install the SQL benchmark lanes. The installed examples/README.md documents this
-# folder and links its README, so it has to ship; the DuckDB/PostgreSQL providers are
-# daspkg-installed into modules/ from the folder's .das_package at run time (the SQLite
-# lane and the array baseline work against the bundled dasSQLITE alone).
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/benchmarks/
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/benchmarks
-    FILES_MATCHING
-        PATTERN "*.das"
-        PATTERN "*.md"
-        PATTERN ".das_package"
-    PATTERN "modules" EXCLUDE
-    PATTERN ".daspkg_cache" EXCLUDE
-    PATTERN ".jitted_scripts" EXCLUDE
-)
-
-# Install node-editor example
-file(GLOB DAS_NODE_EDITOR_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/node-editor/*.das
-    ${PROJECT_SOURCE_DIR}/examples/node-editor/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/node-editor/README.md
-)
-install(FILES ${DAS_NODE_EDITOR_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/node-editor
-)
-
-file(GLOB DAS_UNCATEGORIZED_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/uncategorized/*.das
-)
-install(FILES ${DAS_UNCATEGORIZED_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/uncategorized
-)
-
-# Install telegram echo-bot example
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/telegram/echo-bot/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/telegram/echo-bot/README.md
-    ${PROJECT_SOURCE_DIR}/examples/telegram/echo-bot/echo_bot.das
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/telegram/echo-bot
-)
-
-# Install claude example
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/claude/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/claude/.gitignore
-    ${PROJECT_SOURCE_DIR}/examples/claude/daslang_helper_bot.das
-    ${PROJECT_SOURCE_DIR}/examples/claude/sandbox.das_project
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude
-)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/claude/examples/daslang_helper/system_prompt.md
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude/examples/daslang_helper
-)
-
-file(GLOB DAS_HV_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/hv/*.das
-    ${PROJECT_SOURCE_DIR}/examples/hv/*.html
-    ${PROJECT_SOURCE_DIR}/examples/hv/*.md
-)
-install(FILES ${DAS_HV_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/hv
-)
-
-# Install opengl examples
-file(GLOB DAS_OPENGL_EXAMPLES
-    ${PROJECT_SOURCE_DIR}/examples/opengl/*.das
-)
-install(FILES ${DAS_OPENGL_EXAMPLES}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl
-)
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/opengl/image.png
-    # This mesh was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/assets/meshes`
-    ${PROJECT_SOURCE_DIR}/examples/opengl/orb.obj
-    # This font was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/runtime/font`
-    ${PROJECT_SOURCE_DIR}/examples/opengl/droidsansmono.ttf
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl/media
-)
-
-# dasGLTF sample assets (Khronos glTF-Sample-Assets). BoomBox is CC0; Fox is a CC0 model with
-# CC-BY 4.0 rig/animation (attribution in GLTF_SAMPLE_ASSETS.LICENSE, shipped below). Loaded by
-# examples/opengl/10_hello_gltf.das (BoomBox) + 11_hello_gltf_animation.das (Fox) via
-# get_das_root()/examples/gltf/media.
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/gltf/media/BoomBox.glb
-    ${PROJECT_SOURCE_DIR}/examples/gltf/media/Fox.glb
-    ${PROJECT_SOURCE_DIR}/examples/gltf/PROVENANCE.md
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/gltf/media
-)
-# The Fox rig/animation is CC-BY 4.0, so its attribution must ship with the SDK.
+# The Fox rig/animation is CC-BY 4.0, so its attribution must also ship at the
+# bundle root beside the other licenses (the examples/gltf copy rides the blanket).
 install(FILES ${PROJECT_SOURCE_DIR}/examples/gltf/GLTF_SAMPLE_ASSETS.LICENSE
     DESTINATION ${DAS_INSTALL_DOCDIR}
-)
-
-# dasGLTF ImGui mesh viewer. dasImgui is in-tree; run with
-# -project_root examples/gltf/mesh_viewer_opengl. Ships source + manifest only.
-file(GLOB DAS_GLTF_VIEWER_EXAMPLE
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/*.das
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/.gitignore
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/README.md
-)
-install(FILES ${DAS_GLTF_VIEWER_EXAMPLE}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/gltf/mesh_viewer_opengl
-)
-
-# dasGLTF Vulkan ImGui mesh viewer (vulkan_gltf sibling of the above). The dasVulkan dep is
-# daspkg-installed into modules/ (gitignored) from the .das_package (dasImgui is in-tree); run with
-# -project_root examples/gltf/mesh_viewer_vulkan. Ships source + manifest only.
-file(GLOB DAS_GLTF_VIEWER_VULKAN_EXAMPLE
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_vulkan/*.das
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_vulkan/.das_package
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_vulkan/.gitignore
-    ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_vulkan/README.md
-)
-install(FILES ${DAS_GLTF_VIEWER_VULKAN_EXAMPLE}
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/gltf/mesh_viewer_vulkan
 )
 
 add_subdirectory(tutorials)

@@ -236,8 +236,8 @@ The bundle is the host platform only. Cross-compilation is deferred until daslan
 `release_include` globs **downward from the package root**, so it cannot reach shared tooling that
 lives elsewhere in the tree. `release_include_from(source[, dest])` resolves `source` against
 `<das_root>` and copies it to `dest` (relative to the bundle root; defaults to `source`'s file
-name, and may name a subdirectory). This is how both `utils/dasllama-server` and
-`examples/telegram/dictation` ship the one supervisor in `utils/watchdog/`.
+name, and may name a subdirectory). This is how `utils/dasllama-server` (and the
+dictation bot in the das-telegram package) ships the one supervisor in `utils/watchdog/`.
 
 A missing source **fails the release** with exit 1 rather than shipping a bundle quietly short a
 file — a `release_include` whose target has moved away silently ships nothing, which is the failure

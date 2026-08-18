@@ -4,8 +4,8 @@ One Python supervisor for any daslang program that needs to stay up. It restarts
 bounded backoff, captures crashes into bundles, reports startup progress, and optionally exposes a
 per-program control page.
 
-It supervises two things in-tree today — `utils/dasllama-server` (JIT) and
-`examples/telegram/dictation` (a baked exe) — and was merged from the two forks those grew.
+It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the
+das-telegram package (a baked exe) — and was merged from the two forks those grew.
 
 ## Running it
 
@@ -116,7 +116,7 @@ If a `watchdog_control.py` sits beside `watchdog.py`, the watchdog imports it an
 `host.emit(...)` and `host.read_state()` rather than re-declaring them and drifting.
 
 Supervision stays generic; anything that knows what a *particular* program is lives in the plugin.
-`examples/telegram/dictation/watchdog_control.py` is the worked example: it owns `dictation.toml`,
+The dictation bot's `watchdog_control.py` (das-telegram package) is the worked example: it owns `dictation.toml`,
 the prompt set, generation defaults and the activity feed, and is ~480 lines that have no business
 in a supervisor. A plugin that fails to import is reported and skipped, never fatal — keeping the
 program alive outranks being able to reconfigure it.

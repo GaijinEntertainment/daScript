@@ -130,4 +130,4 @@ A typical cluster (3-4 functions, 50 lines total) consumes ~1 KTok in + 0.3 KTok
 ## See also
 
 - `utils/detect-dupe/README.md` — the cluster-producing pipeline whose JSON we consume.
-- `examples/claude/` — the daslang helper bot, the source pattern this tool was built from (also uses das-claude).
+- the daslang helper bot in the das-claude package repo — the source pattern this tool was built from.

@@ -1,25 +1,34 @@
+# The folder IS the shipping decision: everything under tutorials/ ships with the
+# SDK - data and native scaffolds included (utils/internal/test-release owns the
+# floor sweep). Build files are excluded: the bundle's per-tutorial CMakeLists.txt
+# is the standalone recipe, installed via the RENAME rules below.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}
+    PATTERN "CMakeLists.txt" EXCLUDE
+    PATTERN "CMakeLists.standalone.cmake" EXCLUDE
+    PATTERN "*.py" EXCLUDE
+    PATTERN "modules" EXCLUDE
+    PATTERN "_build" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "jitted_scripts" EXCLUDE
+    PATTERN "_aot_generated" EXCLUDE
+    PATTERN "_standalone_ctx_generated" EXCLUDE
+    PATTERN "*.shared_module" EXCLUDE
+)
+
 # Install language tutorial .das files
 file(GLOB LANGUAGE_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/language/*.das
-)
-install(FILES ${LANGUAGE_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/language
 )
 
 # Install macro tutorial .das files
 file(GLOB MACRO_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/macros/*.das
 )
-install(FILES ${MACRO_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/macros
-)
 
 # Install dasHV tutorial .das files
 file(GLOB DASHV_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasHV/*.das
-)
-install(FILES ${DASHV_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasHV
 )
 
 # Install dasPUGIXML tutorial files (.das + data files)
@@ -31,103 +40,62 @@ file(GLOB PUGIXML_TUTORIAL_DAS_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.das
 )
 
-install(FILES ${PUGIXML_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasPUGIXML
-)
 
 # Install dasStbImage tutorial .das files
 file(GLOB STBIMAGE_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasStbImage/*.das
-)
-install(FILES ${STBIMAGE_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasStbImage
 )
 
 # Install dasAudio tutorial .das files
 file(GLOB AUDIO_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasAudio/*.das
 )
-install(FILES ${AUDIO_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasAudio
-)
 
 # Install dasMinfft tutorial .das files
 file(GLOB MINFFT_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasMinfft/*.das
-)
-install(FILES ${MINFFT_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasMinfft
 )
 
 # Install dasSQLITE tutorial .das files
 file(GLOB SQL_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/sql/*.das
 )
-install(FILES ${SQL_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/sql
-)
 
 # the schema_from fixture DBs tutorials 39/42 read at compile time
 file(GLOB SQL_TUTORIAL_DATA
     ${PROJECT_SOURCE_DIR}/tutorials/sql/data/*.db
-)
-install(FILES ${SQL_TUTORIAL_DATA}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/sql/data
 )
 
 # Install dasPEG tutorial .das files
 file(GLOB DASPEG_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasPEG/*.das
 )
-install(FILES ${DASPEG_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasPEG
-)
 
 # Install daStrudel tutorial .das files
 file(GLOB DASTRUDEL_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/daStrudel/*.das
-)
-install(FILES ${DASTRUDEL_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/daStrudel
 )
 
 # Install jsonrpc tutorial .das files
 file(GLOB JSONRPC_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/jsonrpc/*.das
 )
-install(FILES ${JSONRPC_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/jsonrpc
-)
 
 # Install dasOPENAI tutorial .das files
 file(GLOB OPENAI_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasOPENAI/*.das
-)
-install(FILES ${OPENAI_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasOPENAI
 )
 
 # Install dasLLAMA tutorial .das files
 file(GLOB DASLLAMA_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasLLAMA/*.das
 )
-install(FILES ${DASLLAMA_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasLLAMA
-)
 
 # Install OpenGL tutorial .das files (nested one-dir-per-rung, so preserve structure)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/opengl/
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/opengl
-    FILES_MATCHING PATTERN "*.das"
-)
 
 # Install the shared assets the OpenGL rungs load at runtime (referenced as
 # "tutorials/_assets/..."): brick/cat textures, the cat mesh, an HDRI, provenance.
 # Exclude dev helper scripts (e.g. cat/gltf_to_obj.py) — not runtime assets.
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/_assets/
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/_assets
-    PATTERN "*.py" EXCLUDE
-)
 
 # Install the C / C++ integration tutorial sources + their standalone recipes.
 # These are UNCONDITIONAL on purpose: DAS_TUTORIAL_DISABLED means "don't build the
@@ -139,9 +107,6 @@ file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.inc
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.das_project
-)
-install(FILES ${C_INTEGRATION_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
 )
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/CMakeLists.standalone.cmake
@@ -156,9 +121,6 @@ file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.inc
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/*.das_project
-)
-install(FILES ${CPP_INTEGRATION_TUTORIAL_SOURCES}
-    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/cpp
 )
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/CMakeLists.standalone.cmake
