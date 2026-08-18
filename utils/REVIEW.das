@@ -93,9 +93,17 @@ def private check_kebab_case(externals, internals : array<string>) {
     }
 }
 
+// CMake commands are case-insensitive and this tree spells both install( and INSTALL(
+def private install_blocks_of(text : string) : array<string> {
+    var out <- cmake_command_blocks(text, "install")
+    var inscope upper <- cmake_command_blocks(text, "INSTALL")
+    out |> push_from(upper)
+    return <- out
+}
+
 def private check_install_symmetry(externals : array<string>) {
     let cm = fread("CMakeLists.txt")
-    var inscope blocks <- cmake_command_blocks(cm, "install")
+    var inscope blocks <- install_blocks_of(cm)
     for (n in externals) {
         let needle = "utils/{n}"
         var ok = false
@@ -112,7 +120,7 @@ def private check_install_symmetry(externals : array<string>) {
     // internal never installs — scan the two files that own utils install rules
     for (f in ["CMakeLists.txt", "utils/CMakeLists.txt"]) {
         let text = fread(f)
-        var inscope fblocks <- cmake_command_blocks(text, "install")
+        var inscope fblocks <- install_blocks_of(text)
         for (b in fblocks) {
             if (find(b, "utils/internal") >= 0) {
                 gate_finding(f, find_line(text, b), "install rule references utils/internal — utils/internal/ never installs")

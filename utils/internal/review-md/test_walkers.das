@@ -31,13 +31,15 @@ def run_in(cwd_root : string; args : array<string>) : tuple<rc : int; out : stri
 def spawn_at(cwd_root : string; args : array<string>) : tuple<rc : int; out : string> {
     let argv <- get_command_line_arguments()
     var full : array<string>
-    full |> push(normalize(argv[0]))
+    // absolutize before run_in's chdir — a relative argv[0] would resolve against the fixture
+    full |> push(get_full_file_name(normalize(argv[0])))
     full |> push_from(args)
     return run_in(cwd_root, full)
 }
 
 def make_pilot_fixture(t : T?; tree, root : string) {
-    write_at(t, root, "CMakeLists.txt", "install(FILES src/utils/good-tool/main.das DESTINATION utils/good-tool)\n")
+    // uppercase on purpose: the green run proves the case-insensitive install scan
+    write_at(t, root, "CMakeLists.txt", "INSTALL(FILES src/utils/good-tool/main.das DESTINATION utils/good-tool)\n")
     write_at(t, root, "utils/CMakeLists.txt", "set(DAS_UTILS\n    good-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool)\n")
     write_at(t, root, "utils/good-tool/main.das", "options gen2\n")
     write_at(t, root, "utils/good-tool/REVIEW.md", "stays in DAS_UTILS_SHIPPED_EXES\n")
