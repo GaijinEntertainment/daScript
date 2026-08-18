@@ -49,6 +49,11 @@ def sibling_gates(root : string; mds : array<string>) : array<string> {
     return <- out
 }
 
+//! The finding line both walkers print for an orphan gate.
+def orphan_finding(gate : string) : string {
+    return "{gate}: REVIEW.das without a sibling REVIEW.md — the checklist keeps the judgment half and the weakening-is-a-defect rule"
+}
+
 //! Gates missing their sibling REVIEW.md — a REVIEW.das without its checklist is a defect.
 def orphan_gates(root : string; gates : array<string>) : array<string> {
     var out : array<string>

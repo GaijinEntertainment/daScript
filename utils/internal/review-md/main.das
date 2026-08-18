@@ -2,6 +2,7 @@ options gen2
 
 require strings
 require daslib/strings_boost
+require daslib/fio
 require daslib/clargs
 require scan
 require gate
@@ -60,6 +61,16 @@ def main() : int {
         ? changed_from_git_output(git_out)
         : clone_to_move(cfg.files))
     var inscope found <- affected_review_md(root, changed)
+    // a changed REVIEW.das without its checklist is a structural defect — caught here
+    // even under --list-only, before any gate runs
+    let changed_gates <- [for (f in changed); f; where base_name(f) == "REVIEW.das"]
+    var inscope orphans <- orphan_gates(root, changed_gates)
+    if (!empty(orphans)) {
+        for (o in orphans) {
+            print("{orphan_finding(o)}\n")
+        }
+        return 1
+    }
     if (!cfg.list_only) {
         var inscope gates <- sibling_gates(root, found)
         let failed = run_gates(root, gates)

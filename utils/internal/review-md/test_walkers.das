@@ -137,5 +137,12 @@ def test_all_and_main_walker_wiring(t : T?) {
     t |> equal(0, clean.rc, "green gate lets the listing through")
     t |> success(find(clean.out, "a/REVIEW.md") >= 0, "checklist listed after green gate")
 
+    // a changed orphan REVIEW.das is a structural defect — red even under --list-only
+    let orphan_hit = spawn_at(fixture, [main_das, "--", "b/REVIEW.das"])
+    t |> equal(1, orphan_hit.rc, "changed orphan gate fails the walk")
+    t |> success(find(orphan_hit.out, "without a sibling REVIEW.md") >= 0, "orphan named by main.das")
+    let orphan_list = spawn_at(fixture, [main_das, "--", "b/REVIEW.das", "--list-only"])
+    t |> equal(1, orphan_list.rc, "--list-only does not bypass the orphan check")
+
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

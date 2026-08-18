@@ -49,7 +49,7 @@ def main() : int {
     var rc = 0
     var inscope orphans <- orphan_gates(root, gates)
     for (o in orphans) {
-        print("{o}: REVIEW.das without a sibling REVIEW.md — the checklist keeps the judgment half and the weakening-is-a-defect rule\n")
+        print("{orphan_finding(o)}\n")
         rc = 1
     }
     let failed = run_gates(root, gates)
