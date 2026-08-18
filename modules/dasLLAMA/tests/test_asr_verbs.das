@@ -6,12 +6,11 @@ require dasllama/dasllama_parakeet
 require dasllama/dasllama_canary
 require dasllama/dasllama_gemma4a
 require dasllama/dasllama_qwen3a
-require ../performance/fetch_models.das
 
 // The family-owned halves of the ASR facade verbs (asr_exec_fmt / asr_encode_bucket), fed
 // constructed structs — the moved-bit test the extraction owes. Plus parakeet's SPM detokenizer
-// over a hand-built vocab, and the model-provenance manifest's shape invariants (fetch_models.das
-// has no other model-free gate).
+// over a hand-built vocab. (The model-provenance shape invariants live in test_model_specs.das,
+// beside the rest of the model-set table's gates.)
 
 // A parakeet model carrying nothing but a toy SPM vocab — parakeet_detokenize reads m.vocab only.
 // ▁ is U+2581, the SentencePiece space marker.
@@ -87,27 +86,5 @@ def test_parakeet_detokenize(t : T?) {
         var none : array<int>
         t |> equal(detok(m, none), "", "no tokens, no transcript")
         delete none
-    }
-}
-
-[test]
-def test_models_provenance_invariants(t : T?) {
-    t |> run("the provenance manifest is well-formed") @(t : T?) {
-        var inscope entries <- models_provenance()
-        t |> success(length(entries) >= 18, "the catalog is complete (18+ entries)")
-        var seen : table<string>
-        for (e in entries) {
-            t |> success(!empty(e.name), "every entry is named")
-            t |> success(!key_exists(seen, e.name), "names are unique")
-            seen |> insert(e.name)
-            // a registry-served file pins bytes; a converted file carries its recipe — one
-            // of the two provenance stories must hold for every entry
-            let sha_ok = length(e.sha256) == 64
-            t |> success(sha_ok || !empty(e.recipe), "sha256 or recipe present: {e.name}")
-            if (!empty(e.url)) {
-                t |> success(starts_with(e.url, "https://"), "url is https: {e.name}")
-            }
-        }
-        delete seen
     }
 }

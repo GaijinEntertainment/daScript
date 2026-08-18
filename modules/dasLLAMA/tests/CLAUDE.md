@@ -135,8 +135,17 @@ cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` — the mixed f3
 serving mode and its `asr_exec_fmt` stamp), and the q8-gate CPU-vs-CPU claims (CPU-claim
 cells, wdec knob pinned OFF per the fixtures section). Runs under plain dastest.
 `test_asr_verbs.das` — model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
-`asr_encode_bucket`) over constructed structs, parakeet's SPM detokenizer over a toy vocab, and
-the `fetch_models.das` provenance-manifest invariants.
+`asr_encode_bucket`) over constructed structs and parakeet's SPM detokenizer over a toy vocab.
+`test_model_specs.das` — model-free: the model-set table's shape invariants
+(`../performance/model_specs.das`: unique file/display keys, official ⇒ provenance pinned,
+parity-evidence shape) and the derived provenance view's invariants (unique names, sha-or-recipe,
+https urls).
+`test_parity.das` — suite-less, model-gated: the frozen token-for-token parity gates. ONE
+generic loop drives every evidence-carrying spec of the model-set table through its declared
+pinned arms (evidence is DATA on `ModelSpec.parity` — ids + arms, regenerated via
+`harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
+shared-load double fixture. Every compare logs decoded-text eyeball lines. Large carriers gate
+on `DASLLAMA_PARITY_FULL=1` via `model_available`.
 `test_run_summary.das` — model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.

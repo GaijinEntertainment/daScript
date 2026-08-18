@@ -110,29 +110,6 @@ struct Args {
     help : bool
 }
 
-struct private PubEntry {
-    file : string
-    note : string   // board caveat, stamped into the model record ("" = none)
-}
-
-// The public catalog: community-popular GGUFs, one popular quant each — NOT the internal quant
-// matrix. Curated to what people run THIS year (2026 spring/summer lists: Qwen3.6 family, gemma-4
-// daily drivers, the standing staples). Absent files skip with a warning, so one list serves
-// every box.
-def private pub_catalog() : array<PubEntry> {
-    return <- [
-        PubEntry(file = "Qwen3.8-27B-Q4_K_M.gguf"),
-        PubEntry(file = "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"),
-        PubEntry(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-12B-it-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-E4B-it-Q8_0.gguf"),
-        PubEntry(file = "gpt-oss-20b-mxfp4.gguf"),
-        PubEntry(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"),
-        PubEntry(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf")
-    ]
-}
-
 // The measurement child is the RELEASED exe, never a script: its tune winners are baked in at
 // build time, so no cell can tune, re-exec, or drift onto different winners mid-sweep. Absent or
 // older than the bench source is a hard stop with the build line — never a silent rebuild here,
@@ -1131,7 +1108,7 @@ def main : int {
     let threads = cfg.threads > 0 ? cfg.threads : profile_threads()
     let cellPath = "modules/dasLLAMA/performance/records/_cell_{box}.json"
     var failed : array<string>
-    var cat <- pub_catalog()
+    var cat <- official_catalog()
     for (ent in cat) {
         if (!doLlm) {
             continue

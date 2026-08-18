@@ -20,6 +20,7 @@ require daslib/json_boost                 // ?[] / ?? navigation — the sidecar
 require dasllama/dasllama_common public   // QuantMode
 require dasllama/dasllama_math            // active_kernel_backend — the exec_fmt layout receipt
 require llvm/daslib/llvm_tune             // tune_status — stamp provenance for the platform block
+require model_specs public                // the model-set table + its llm/official views
 
 // ===== Box + model roots =====
 
@@ -101,55 +102,6 @@ def lcpp_affinity_argv(threads : int) : array<string> {
 // ~5GB-and-under carriers (incl. gemma-4-E2B at 4.63GB) from the 7GB+ heavies.
 let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 
-// ===== The text-LLM catalog =====
-
-//! One profiled text model: its GGUF basename under [[models_dir]], a scoreboard display name, the
-//! quant to load das-side, and the prefill / emission context sizes to measure at.
-struct LlmModel {
-    file : string
-    display : string
-    quant : QuantMode
-    quant_label : string   // scoreboard quant cell override ("" = quant_str) — Q4_K_M carriers load kq-native under q8 mode
-    prefill_ctx : int
-    emission_ctx : int
-}
-
-// The text LLMs the suite profiles. Absent files are skipped at run time, so this can list every box's
-// models; each box measures the subset it actually has. Audio models live in the ASR path, not here.
-def llm_catalog() : array<LlmModel> {
-    return <- [
-        LlmModel(file="SmolLM2-135M-Instruct-Q8_0.gguf", display="SmolLM2-135M", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen2.5-0.5B-Instruct-Q8_0.gguf", display="Qwen2.5-0.5B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-0.6B-Q8_0.gguf", display="Qwen3-0.6B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3.5-0.8B-Q8_0.gguf", display="Qwen3.5-0.8B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-3-1b-it-Q8_0.gguf", display="gemma-3-1B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="tinyllama-1.1b-chat-v1.0.Q8_0.gguf", display="TinyLlama-1.1B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Llama-3.2-1B-Instruct-Q8_0.gguf", display="Llama-3.2-1B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen2.5-1.5B-Instruct-Q8_0.gguf", display="Qwen2.5-1.5B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="SmolLM2-1.7B-Instruct-Q8_0.gguf", display="SmolLM2-1.7B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-2-2b-it-Q8_0.gguf", display="gemma-2-2B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Llama-3.2-3B-Instruct-Q8_0.gguf", display="Llama-3.2-3B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-3-4b-it-Q8_0.gguf", display="gemma-3-4B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-4B-Instruct-2507-Q8_0.gguf", display="Qwen3-4B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-4B-Instruct-2507-Q4_K_M.gguf", display="Qwen3-4B-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-4-E2B-it-Q8_0.gguf", display="gemma-4-E2B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Mistral-7B-Instruct-v0.3-Q8_0.gguf", display="Mistral-7B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-4-E4B-it-Q8_0.gguf", display="gemma-4-E4B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Meta-Llama-3.1-8B-Instruct-Q8_0.gguf", display="Llama-3.1-8B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gpt-oss-20b-mxfp4.gguf", display="gpt-oss-20b", quant=QuantMode.q8, quant_label="mxfp4", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-4-26B-A4B-it-Q8_0.gguf", display="gemma-4-26B-A4B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="gemma-4-26B-A4B-it-Q4_K_M.gguf", display="gemma-4-26B-A4B-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        // the QAT file rides the q40 KqFmt tier (native Q4_0 planes on the kq rails) — quant is
-        // the loader mode (q8), the label the on-disk format, like the Q4_K_M rows
-        LlmModel(file="gemma-4-26B_q4_0-it.gguf", display="gemma-4-26B-A4B-q40", quant=QuantMode.q8, quant_label="q4_0", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", display="Qwen3-30B-A3B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", display="Qwen3.6-35B-A3B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3.8-27B-Q4_K_M.gguf", display="Qwen3.8-27B", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display="Qwen3-Coder-30B", quant=QuantMode.q8, prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display="Qwen3-Coder-30B-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128),
-        LlmModel(file="Qwen3-Coder-Next-Q4_K_M.gguf", display="Qwen3-Coder-Next-q4k", quant=QuantMode.q8, quant_label="q4_k_m", prefill_ctx=512, emission_ctx=128)
-    ]
-}
 
 //! Tier selector matching the --tier flag.
 enum Tier {
@@ -169,7 +121,7 @@ def parse_tier(s : string) : Tier {
 }
 
 // Full path to a catalog entry's GGUF.
-def model_path(m : LlmModel) : string {
+def model_path(m : ModelSpec) : string {
     return "{models_dir()}{m.file}"
 }
 
@@ -186,7 +138,7 @@ def quant_str(q : QuantMode) : string {
 
 //! The scoreboard quant cell for a catalog entry: its explicit label when set (the kq-native
 //! Q4_K_M carriers load under QuantMode.q8), else the plain quant-mode spelling.
-def model_quant_str(m : LlmModel) : string {
+def model_quant_str(m : ModelSpec) : string {
     return empty(m.quant_label) ? quant_str(m.quant) : m.quant_label
 }
 
@@ -287,7 +239,7 @@ def lcpp_exec_fmt(backend : string) : string {
 }
 
 //! True when `m` is present on disk AND in the requested tier. `sz` receives the file size (0 if absent).
-def model_selected(m : LlmModel; tier : Tier; var sz : uint64&) : bool {
+def model_selected(m : ModelSpec; tier : Tier; var sz : uint64&) : bool {
     let st = stat(model_path(m))
     sz = st.is_valid ? st.size : 0ul
     if (!st.is_valid) {
@@ -1135,6 +1087,11 @@ struct AsrModelSpec {
     // model-speed, and bytes mis-sort it — large-v3-turbo is 1.51 GB against Parakeet's 2.33 GB
     // yet costs 97.5 s per rep against Parakeet's 38.6 s (m1, the five corpus buckets).
     tier : Tier = Tier.small
+    // provenance facet ([[models_provenance]]): `prov` pins the das-side carrier itself
+    // (ProvEntry.root is the symbolic "llm"/"whisper", not this spec's resolved dir);
+    // companions carry the mmproj + reference-side derivatives fetched/verified with it
+    prov : ProvEntry
+    companions : array<ProvEntry>
 }
 
 //! Full path to the spec's das-side carrier — the one source for what four call sites spelled
@@ -1152,7 +1109,7 @@ def asr_model_selected(spec : AsrModelSpec; tier : Tier) : bool {
 
 // The audio models the suite profiles. Absent files are skipped at run time. The das side is uniform
 // (load_asr_model + transcribe drives every entry); the heterogeneity is which reference tool(s) apply.
-def asr_catalog() : array<AsrModelSpec> {
+def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog table, one entry per model
     let wroot = whisper_models_dir()
     let lroot = models_dir()
     return <- [
@@ -1165,22 +1122,38 @@ def asr_catalog() : array<AsrModelSpec> {
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "parakeet-cli", handle = "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "v2-int8", exec_fmt = "int8")],
-            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en",
+            prov = ProvEntry(name = "ggml-parakeet-tdt-0.6b-v2-f32.bin", root = "whisper",
+                bytes = 2471664028l, sha256 = "9dde716823d0dfe587cb7396a7cc251708c30a8475f6fccc8af36ee769fcd808",
+                recipe = PARAKEET_RECIPE),
+            companions <- [ProvEntry(name = "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Parakeet-TDT v3", das_model = "ggml-parakeet-tdt-0.6b-v3-f32.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "parakeet-cli", handle = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "int8", exec_fmt = "int8")],
-            buckets <- corpus_buckets(), libri_short = "v3", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "v3", lang = "en",
+            prov = ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-f32.bin", root = "whisper",
+                bytes = 2508463079l, sha256 = "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
+                recipe = PARAKEET_RECIPE),
+            companions <- [ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-tiny-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "whisper-tiny-int8", exec_fmt = "int8")],
-            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en",
+            prov = ProvEntry(name = "ggml-tiny.bin", root = "whisper",
+                url = "{HF}/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+                bytes = 77691713l, sha256 = "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"),
+            companions <- [ProvEntry(name = "ggml-tiny-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-large-v3-turbo-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "whisper-turbo-int8", exec_fmt = "int8")],
-            buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large,
+            prov = ProvEntry(name = "ggml-large-v3-turbo.bin", root = "whisper",
+                url = "{HF}/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+                bytes = 1624555275l, sha256 = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"),
+            companions <- [ProvEntry(name = "ggml-large-v3-turbo-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         // canary caps at gb1: the model's trained envelope is 40 s audio / 1024 total tokens
         // (model card) — hp0-class single-window greedy decode runaway-loops on repetitive
         // audio in BOTH engines, the model's limitation, not a budget choice; 40 s chunked
@@ -1188,7 +1161,11 @@ def asr_catalog() : array<AsrModelSpec> {
         AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b", exec_fmt = "bf16")],
-            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large,
+            prov = ProvEntry(name = "canary-qwen-2.5b-decoder-f16.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
+            companions <- [ProvEntry(name = "canary-qwen-2.5b-encoder-f32.bin", root = "llm",
+                bytes = 3252768256l, sha256 = "37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+                recipe = CANARY_ENC_RECIPE)]),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
         // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; its
@@ -1199,7 +1176,13 @@ def asr_catalog() : array<AsrModelSpec> {
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-ASR-0.6B-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
-            buckets <- corpus_buckets(), libri_short = "", lang = "auto"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "auto",
+            prov = ProvEntry(name = "Qwen3-ASR-0.6B-Q8_0.gguf", root = "llm",
+                url = "{HF}/ggml-org/Qwen3-ASR-0.6B-GGUF/resolve/main/Qwen3-ASR-0.6B-Q8_0.gguf",
+                bytes = 804749248l, sha256 = "bca259818b50ca7c4c05e9bdb35a5dc04fa039653a6d6f3f0f331f96f6aa1971"),
+            companions <- [ProvEntry(name = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = "llm",
+                url = "{HF}/ggml-org/Qwen3-ASR-0.6B-GGUF/resolve/main/mmproj-Qwen3-ASR-0.6B-bf16.gguf",
+                bytes = 378575520l, sha256 = "dae36c855f9a82a8916bea2238b24bda69a39d8da8b2f46dee7c103775656039")]),
         // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
         // tokens against the 8192 decoder window — a single-window architectural limit
         // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
@@ -1208,15 +1191,55 @@ def asr_catalog() : array<AsrModelSpec> {
             // mtmd's CPU Conformer encode runs near xRT 1 — same per-rep budget cap as omni's
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
-            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large,
+            // this spec owns the carrier's provenance; the text-LLM row for the same file in
+            // [[model_specs]] is the profile facet only
+            prov = ProvEntry(name = "gemma-4-E2B-it-Q8_0.gguf", root = "llm",
+                url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
+                bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a"),
+            companions <- [ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
+                url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-BF16.gguf",
+                bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")]),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
             // mtmd's CPU-only AuT encode runs near xRT 1 (and far worse on zen2) — the long
             // clips would blow the per-rep budget, so this reference stays on the short ladder
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
-            buckets <- corpus_buckets(), libri_short = "", lang = "auto", tier = Tier.large)
+            buckets <- corpus_buckets(), libri_short = "", lang = "auto", tier = Tier.large,
+            prov = ProvEntry(name = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf", root = "llm",
+                url = "{HF}/ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+                bytes = 32484494336l, sha256 = "8a50e5a7d29ae6a28fea9ca45e3bb0a142e76ec07e6787a7703cd498eb08ffaa"),
+            companions <- [ProvEntry(name = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = "llm",
+                url = "{HF}/ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF/resolve/main/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+                bytes = 2207465568l, sha256 = "f0dfe825fb692d426362b1ac79678fc08daa4758f7151526cad110515f122883")])
     ]
+}
+
+//! The provenance-manifest view over [[model_specs]] + [[asr_catalog]] (BRINGUP.md §2): one
+//! row per provenance-carrying file — every spec's own pin, with its companions adjacent.
+//! fetch_models.das is the fetch/verify driver over this view.
+def models_provenance() : array<ProvEntry> {
+    var specs <- model_specs()
+    var aspecs <- asr_catalog()
+    var out : array<ProvEntry>
+    out |> reserve(length(specs) + length(aspecs) + 16)   // + a few companions per pinned spec
+    for (s in specs) {
+        if (!empty(s.url) || !empty(s.recipe)) {
+            out |> emplace(ProvEntry(name = s.file, root = "llm", url = s.url,
+                bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe))
+        }
+        out |> emplace_from(s.companions)
+    }
+    delete specs
+    for (a in aspecs) {
+        if (!empty(a.prov.name)) {
+            out |> emplace(a.prov)
+        }
+        out |> emplace_from(a.companions)
+    }
+    delete aspecs
+    return <- out
 }
 
 // ===== ASR: reference tools (paths, parsers, runners, versions) =====

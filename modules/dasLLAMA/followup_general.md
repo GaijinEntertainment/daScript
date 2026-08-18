@@ -472,11 +472,12 @@
     rail (untripped today), but zen2's first big-model vulkan bake will strike it. Fix with
     the reserve idiom or under #35.
 
-37. **`test_parity_mistral7b` is red on clean master (2026-08-18).** Verified by a
-    detached-master run (54 tests, that one red). PARITY_FULL-gated, so per-PR CI never
-    sees it. Needs its own session: regression vs upstream re-upload vs stale expectation
-    (the fixture discipline's stash-and-rerun steps, then the model-file sha against the
-    manifest).
+37. **The Mistral-7B-v0.3 parity fixture is red on clean master (2026-08-18).** Verified by a
+    detached-master run (54 tests, that one red); the arm now runs as
+    `pinned-greedy parity: Mistral-7B-Instruct-v0.3-Q8_0.gguf` inside `test_parity_specs`.
+    PARITY_FULL-gated, so per-PR CI never sees it. Needs its own session: regression vs
+    upstream re-upload vs stale expectation (the fixture discipline's stash-and-rerun steps,
+    then the model-file sha against the manifest).
 
 38. **Large-tier parity fixtures have no CI lane (2026-08-18).** Everything behind
     `DASLLAMA_PARITY_FULL` executes only on dev boxes — a wrong-ids fixture sits green

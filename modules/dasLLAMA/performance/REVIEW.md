@@ -32,9 +32,14 @@ defect even where the strip itself is intact.
 **A lookup failure never kills a boot.** A boot path that fails when the exchange lookup
 fails is a defect.
 
-**`fetch_models.das` is the model-provenance manifest; a model referenced anywhere without
-its entry is a defect.** A downloaded entry carries the source URL, canonical bytes, and
-sha256; a converted entry carries its conversion recipe.
+**`model_specs.das` is the one model-set table; a second list of model files, quants, board
+membership, provenance, or parity fixtures is a defect** — a new list is written as a view
+over the table (`llm_catalog` / `official_catalog` / `models_provenance` are the existing
+three).
+
+**A model referenced anywhere without its provenance in the table is a defect.** A downloaded
+entry carries the source URL, canonical bytes, and sha256; a converted entry carries its
+conversion recipe; a companion artifact (mmproj, image fixture) hangs off its owning spec.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
