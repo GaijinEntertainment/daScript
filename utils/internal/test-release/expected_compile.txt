@@ -1,10 +1,6 @@
 # test-release expected compile failures — a RULING per line, not a mute button.
-# Format: <bundle-relative-path> <reason>. SHIP-DEFECT entries must disappear when fixed.
 
 # --- ship defects awaiting repo fixes (RC2) ---
-tutorials/sql/39-schema_from.das SHIP-DEFECT: [sql_table] schema_from reads tests/dasSQLITE fixture db that never ships
-tutorials/sql/42-schema_evolution.das SHIP-DEFECT: same unshipped fixture db
-modules/dasImgui/examples/tutorial/texture_ref.das SHIP-DEFECT: rotted vs compiler policy — local ImTextureRef now requires unsafe
 
 # --- daspkg-package tier: compile only after `daspkg install` (planned daspkg phase) ---
 examples/benchmarks/sql/_common.das needs duckdb/postgres provider packages
@@ -13,18 +9,15 @@ examples/benchmarks/sql/array.das needs duckdb/postgres provider packages
 examples/benchmarks/sql/duckdb.das needs duckdb/postgres provider packages
 examples/benchmarks/sql/postgres.das needs duckdb/postgres provider packages
 examples/benchmarks/sql/sqlite.das needs duckdb/postgres provider packages
-examples/claude/daslang_helper_bot.das needs the telegram/tbot package
-examples/telegram/echo-bot/echo_bot.das needs the telegram/tbot package
 examples/crash/crash_kinds.das needs its crash package installed
 examples/crash/main.das needs its crash package installed
-examples/daStrudel/sfx_lab/main.das needs the implot package (imgui_implot_boost_v2)
+examples/daStrudel/sfx_lab/main.das daspkg exercise: needs the implot package
 examples/daspkg/daspkg-build-example/main.das daspkg tutorial project — resolves after its own install flow
 examples/daspkg/daspkg-example/main.das daspkg tutorial project — resolves after its own install flow
 examples/daspkg/daspkg-version-1/main.das daspkg tutorial project — resolves after its own install flow
 examples/daspkg/daspkg-version-2/main.das daspkg tutorial project — resolves after its own install flow
 examples/daspkg/packages/daspkg-example-mixed/daslib/smooth.das daspkg tutorial package internals
 examples/games/sequence/main.das needs the cards package
-examples/node-editor/imgui_node_editor_basic.das needs the imgui-node-editor package
 
 # --- integration-scaffold tier: the tutorial has the user BUILD the native module ---
 tutorials/integration/c/03_binding_types.das requires the native scaffold the tutorial builds

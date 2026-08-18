@@ -69,6 +69,30 @@ def collect_targets(bundle : string) : array<string> {
     return <- out
 }
 
+//! The nearest *.das_project at or above `f` (bundle-relative), "" when none — a file
+//! under a project dir compiles the way its README runs it: with `-project`.
+def project_for(f : string; var cache : table<string; string>) : string {
+    var d = dir_name(f)
+    while (!empty(d) && d != ".") {
+        let hit = cache ?[d] ?? "?"
+        if (hit != "?") {
+            return hit
+        }
+        var found = ""
+        dir(d) $(name) {
+            if (empty(found) && extension(name) == ".das_project") {
+                found = "{d}/{name}"
+            }
+        }
+        cache[d] = found
+        if (!empty(found)) {
+            return found
+        }
+        d = dir_name(d)
+    }
+    return ""
+}
+
 def run_worker(cfg : Config) : int {
     let exe = bundle_binary(cfg.bundle)
     if (empty(exe)) {
@@ -80,12 +104,26 @@ def run_worker(cfg : Config) : int {
         return 2
     }
     let listing = fread(cfg.paths_from)
+    var inscope proj_cache : table<string; string>
     for (raw in split(listing, "\n")) {
         let f = strip(raw)
         continue if (empty(f))
         let t0 = ref_time_ticks()
         var out : string
-        let rc = run_and_capture([exe, "-compile-only", f], out, cfg.timeout)
+        var rc = run_and_capture([exe, "-compile-only", f], out, cfg.timeout)
+        if (rc != 0) {
+            // a file that fails bare may be a project-file example (engine-alias
+            // resolvers etc.) — retry the way its README runs it. Never the other
+            // way around: sandbox-lesson projects would break bystander siblings.
+            let proj = project_for(f, proj_cache)
+            if (!empty(proj)) {
+                var pout : string
+                let prc = run_and_capture([exe, "-compile-only", f, "-project", proj], pout, cfg.timeout)
+                if (prc == 0) {
+                    rc = 0
+                }
+            }
+        }
         let sec = float(get_time_usec(t0)) / 1000000.0
         print("{verdict_line(f, rc, sec, cfg.timeout, out)}\n")
     }
