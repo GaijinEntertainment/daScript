@@ -31,6 +31,13 @@ letterbox and the encoder run right there, so ``respond`` only prefills and
 generates. One image per turn; text via ``add_user`` rides along:
 
 .. das-doc: given var m = Model()
+.. das-doc: given let image_path = "photo.jpg"
+.. das-doc: given let mmproj_path = "mmproj.gguf"
+.. das-doc: given let prompt = "Describe this image in one sentence."
+.. das-doc: given var s = Session()
+.. das-doc: given var rows : array<float>
+.. das-doc: given let np = 0l
+.. das-doc: given let n_head = 0l
 .. code-block:: das
 
    var inscope img <- load_image_rgb(image_path)

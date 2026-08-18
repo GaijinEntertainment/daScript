@@ -29,12 +29,11 @@ require dasllama/dasllama_gemma4uv public      // gemma4uv vision embedder (imag
 require dasllama/dasllama_asr public           // uniform ASR surface (whisper today; parakeet/qwen3-asr land behind the same sniff)
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
-require dasllama/dasllama_version public       // DASLLAMA_VERSION — the release counter sidecars and the exchange key on
 require dasllama/dasllama_audio_io public      // audio decode (wav/mp3/flac/ogg) to 16 kHz mono f32 PCM
 require dasllama/dasllama_vision_io public     // image decode to RGB8 VisionImage — the only stbimage seam
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)
-require dasllama/dasllama_gpu_resident        // resident slot-switch/pin surface (wrapped below, not re-exported)
+require dasllama/dasllama_gpu_resident         // resident slot-switch/pin surface (wrapped below, not re-exported)
 
 // This facade owns the good names; the engine spells each wrapped function with a trailing
 // underscore (load_model_, eval_, ...) so the public re-export above and the documented stub
@@ -427,105 +426,107 @@ def gpu_model_marks_init() : dasllama_gpu_resident::GpuModelMarks {
     //! A fresh no-model marks holder — one per model slot; the marks save/restore pair swaps
     //! tier state across switches. (A generated constructor is not callable through the
     //! facade typedef, so the holder is minted here.)
-    return <- dasllama_gpu_resident::gpu_model_marks_init()
+    return <- gpu_model_marks_init_()
 }
 
 def dlim_inventory(gguf_path : string) : array<dasllama_image::DlimImageInfo> {
-    //! List the prepared images (``.dlim``) minted beside ``gguf_path`` — per image: flavor,
-    //! identity, size, staleness against the current bake configuration. The inspection half
-    //! of the image cache ``load_model`` reads through.
+    //! List the prepared images (``.dlim``) minted beside ``gguf_path`` — per image: file, bytes,
+    //! image version, identity, and a verdict (``CURRENT`` loads; ``STALE vN`` is an older image
+    //! version; ``OTHER`` a different bake configuration or box; ``FOREIGN`` a different flavor).
     return <- dlim_inventory_(gguf_path)
 }
 
 def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
-    //! Garbage-collect stale ``.dlim`` images beside ``gguf_path``: ``apply = false`` reports what
-    //! WOULD go, ``true`` removes it. ``keep_other`` spares other flavors' images. Returns
-    //! (total, stale, removed, freed bytes).
+    //! Garbage-collect ``STALE`` and ``OTHER`` images beside ``gguf_path`` (``FOREIGN``, another
+    //! flavor's, are always left alone): ``apply = false`` only reports, ``true`` removes;
+    //! ``keep_other`` spares ``OTHER``. Returns (total, stale, removed, freed bytes).
     return dlim_clean_(gguf_path, apply, keep_other)
 }
 
 def gpu_tier_status() : dasllama_gpu_tier::GpuTierStatus {
     //! Snapshot of the GPU tier in force: VRAM budget, resident/streamed layer counts, dense
     //! planes, engage/decline state — the server's GPU badge reads this.
-    return dasllama_gpu_tier::gpu_tier_status()
+    return gpu_tier_status_()
 }
 
 def set_dispatch_worker_limit(v : int) {
-    //! Cap the kernel-dispatch worker count (0 = no limit, all job-que workers). An engine-level
-    //! knob: set once at startup, before models load.
-    dasllama_math::set_dispatch_worker_limit(v)
+    //! Cap the kernel-dispatch worker count (0 = no limit, all job-que workers). Latched by
+    //! ``setup_dasllama_jobque`` — set it before that call.
+    set_dispatch_worker_limit_(v)
 }
 
 def get_dispatch_worker_limit() : int {
     //! The dispatch worker cap in force (0 = no limit) — ``set_dispatch_worker_limit``'s read half.
-    return dasllama_math::get_dispatch_worker_limit()
+    return get_dispatch_worker_limit_()
 }
 
 def select_matmul_backend_for_load() : bool {
     //! Select the best matmul backend for the NEXT model load (honors a pin). Returns true when
     //! the choice needs the loader to repack weights into its interleaved layout.
-    return dasllama_math::select_matmul_backend_for_load()
+    return select_matmul_backend_for_load_()
 }
 
 def set_gpu_tier_want(want : dasllama_gpu_tier::GpuTierWant) {
     //! Record the GPU tier request the NEXT ``moe_gpu_tier_arm``/``load_model`` honors — the
-    //! programmatic mirror of the ``DASLLAMA_GPU_*`` env vars (an env var present overrides its
-    //! field). A zero want keeps the load off the device.
-    dasllama_gpu_tier::set_gpu_tier_want(want)
+    //! programmatic form of the core ``DASLLAMA_GPU_*`` knobs (an env var present overrides its
+    //! field; the classifier/dense-arm knobs are env-only). A zero want keeps the load off the device.
+    set_gpu_tier_want_(want)
 }
 
 def moe_gpu_tier_arm() : bool {
     //! Arm the recorded tier want so a GPU backend can install its hooks — call between
     //! ``set_gpu_tier_want`` and ``load_model``. False when no backend claims the request.
-    return dasllama_gpu_tier::moe_gpu_tier_arm()
+    return moe_gpu_tier_arm_()
 }
 
 def moe_gpu_weight_budget() : int64 {
     //! The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
-    return dasllama_gpu_tier::moe_gpu_weight_budget()
+    return moe_gpu_weight_budget_()
 }
 
 def gpu_slot_capture(var st : dasllama_gpu_resident::GpuModelMarks) : string {
-    //! Capture the INSTALLED model's tier state into ``st`` and classify what it had —
-    //! "gpu:resident" | "gpu:rails" | "cpu". Call once right after a slot's ``load_model``;
-    //! the marks re-install on switch-in via ``moe_gpu_model_marks_restore``.
-    return dasllama_gpu_resident::gpu_slot_capture(st)
+    //! Capture the INSTALLED model's tier state into ``st`` right after its ``load_model`` and
+    //! classify it — "gpu:resident" | "gpu:rails" | "cpu" — from the CAPTURED marks, never the
+    //! process-global VRAM counter (it still holds the previous load's bytes on a later CPU load).
+    return gpu_slot_capture_(st)
 }
 
 def gpu_slot_rearm(want : dasllama_gpu_tier::GpuTierWant; t : Model) : string {
-    //! Re-arm the INSTALLED model onto the GPU tier — want, arm, resident upload, through the
-    //! bake-slice path when ``t`` is a mapped vulkan-flavor image. Marks must already be
-    //! installed. Returns the arm outcome: "gpu:resident" | "gpu:rails" | "cpu".
-    return dasllama_gpu_resident::gpu_slot_rearm(want, t)
+    //! Re-arm the INSTALLED model onto the GPU tier — want, arm, resident upload (bake-slice
+    //! path for a mapped vulkan-flavor ``t``). Its marks are installed and the device holds no other
+    //! model (``moe_gpu_drop_model`` first). Returns "gpu:resident" | "gpu:rails" | "cpu".
+    return gpu_slot_rearm_(want, t)
 }
 
 def moe_gpu_model_marks_save(var st : dasllama_gpu_resident::GpuModelMarks) {
     //! Save the INSTALLED model's GPU tier state into ``st`` and disarm it — one half of the
     //! multi-model slot switch (the engine's tier state is per-process, not per-model).
-    dasllama_gpu_resident::moe_gpu_model_marks_save(st)
+    moe_gpu_model_marks_save_(st)
 }
 
 def moe_gpu_model_marks_restore(var st : dasllama_gpu_resident::GpuModelMarks) {
     //! Install ``st`` as the per-model GPU tier state — ``moe_gpu_model_marks_save``'s inverse;
     //! ``st`` reads as no-model after.
-    dasllama_gpu_resident::moe_gpu_model_marks_restore(st)
+    moe_gpu_model_marks_restore_(st)
 }
 
 def moe_gpu_hydrate_session(t : Model; var s : Session) {
     //! Pull ``s``'s host KV back from the device mirror when it owns live mirror rows (no-op
     //! otherwise). Run over every live session of the outgoing model BEFORE
     //! ``moe_gpu_drop_model`` — the drop destroys the mirror.
-    dasllama_gpu_resident::moe_gpu_hydrate_session(t, s)
+    moe_gpu_hydrate_session_(t, s)
 }
 
 def moe_gpu_drop_model() {
     //! Drop the INSTALLED model's whole device state (resident stacks, mirrors, VRAM) — the
-    //! evict half of a slot switch. Hydrate live sessions first.
-    dasllama_gpu_resident::moe_gpu_drop_model()
+    //! evict half of a slot switch. Caller guarantees quiescence: no step in flight, every live
+    //! session hydrated first.
+    moe_gpu_drop_model_()
 }
 
 def set_resident_prefill_allowed(allowed : bool) {
-    //! Allow or pin out the resident-decode prefill arm — servers disable it while a bake or a
-    //! competing GPU workload owns the device.
-    dasllama_gpu_resident::set_resident_prefill_allowed(allowed)
+    //! Allow or pin out the resident-decode prefill arm. A multi-stream scheduler pins it OFF for
+    //! good: the single shared mirror plus chunked prefill would leave device-only KV that a
+    //! second stream's steal strands.
+    set_resident_prefill_allowed_(allowed)
 }

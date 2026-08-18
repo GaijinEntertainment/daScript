@@ -1562,7 +1562,7 @@ def find_stream_group(w0 : int64; fmt : int) : int {
 def find_stack(w0 : int64; fmt : int; who : string) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
-        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) - stale route mark, or a model swapped in without moe_gpu_drop_model()")
+        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) - stale route mark, or a model swapped in without moe_gpu_drop_model_()")
     }
     return i
 }

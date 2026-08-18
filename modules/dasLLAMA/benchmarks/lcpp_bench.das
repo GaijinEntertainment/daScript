@@ -1421,7 +1421,7 @@ def main() : int {
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
         // a jit run that produced nothing logs its own LLVM JIT error beside this
         let exec_state = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "INTERPRETED")
-        let gpu_seg = moe_gpu_tier_installed() ? " | gpu {gpu_tier_status().backend}" : ""
+        let gpu_seg = moe_gpu_tier_installed() ? " | gpu {gpu_tier_status_().backend}" : ""
         say(fmt, "config: dim={c.dim} layers={c.n_layers} vocab={c.vocab_size} | backend {active_kernel_backend()} (batch {active_batch_backend()}) | {exec_state}{gpu_seg} | t{threads} affinity {pinned ? "hard" : "env/off"} | pp{plen} tg{ngen} x {reps} reps\n")
         modelArch = "{t.arch}"
         activeB = active_params_b(t)

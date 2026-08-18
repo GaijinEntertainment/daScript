@@ -1,10 +1,9 @@
 options gen2
 options persistent_heap
-options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_exchange
-require dasllama/dasllama_version   // DASLLAMA_VERSION — the fixture stamps
+require dasllama/dasllama   // DASLLAMA_VERSION — the fixture stamps (facade-public)
 require dashv/dashv_boost
 require llvm/daslib/llvm_tune
 require daslib/jobque_boost

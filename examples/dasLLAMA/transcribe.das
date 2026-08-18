@@ -73,6 +73,10 @@ def main {
     let c <- caps(w)
     print("model: {length(c.languages)} language(s), translate {c.translate ? "yes" : "no"}, {c.timestamps} timestamps\n")
     let samples <- load_audio_16k_mono(audio_path)
+    if (empty(samples)) {
+        print("could not decode audio: {audio_path}\n")
+        return
+    }
     print("audio: {length(samples)} samples ({float(length(samples)) / float(int(AUDIO_SAMPLE_RATE))} s)\n")
 
     with_job_que() {

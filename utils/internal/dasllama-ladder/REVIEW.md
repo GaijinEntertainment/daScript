@@ -46,9 +46,10 @@ reachable from any non-loopback path, is a defect.
 `/api/submit/sidecar` matcher only; every other proxied route carries the small read cap.** A
 large cap on any other route, or a read cap on a submit route, is a defect.
 
-**Nothing in this directory requires dasLLAMA, dasLLVM, or any engine module; the only
-cross-tree require is the engine-free `modules/dasLLAMA/performance/exchange_schema.das`**
-(`README.md` §3).
+**Nothing in this directory requires the dasLLAMA engine, dasLLVM, or any model machinery; the
+only dasLLAMA module required is the engine-free `dasllama/dasllama_exchange_schema` (a public
+entry of that module's facade lint), and only `ladder_store.das` requires it** (`README.md`
+§3). Its `dasllama_lint` carrier is a compile-time macro, not engine code.
 
 **Every community document passes `validate_record_submission` / `validate_sidecar_submission`
 before any row is written; `import_official_store` validates with `validate_record_store` /

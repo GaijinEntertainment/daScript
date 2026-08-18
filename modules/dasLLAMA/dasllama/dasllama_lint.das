@@ -15,7 +15,7 @@ require daslib/ast_boost
 require strings
 
 let private ALLOWED_DASLLAMA : table<string> <- {
-    "dasllama", "dasllama_scheduler", "dasllama_exchange", "dasllama_lint"
+    "dasllama", "dasllama_scheduler", "dasllama_exchange", "dasllama_exchange_schema", "dasllama_lint"
 }
 
 [lint_macro]
@@ -39,9 +39,11 @@ class DasllamaLintMacro : AstPassMacro {
             let mname = string(rmod.name)
             if (key_exists(ALLOWED_DASLLAMA, mname)) return
             // the tree is the boundary, not the name: a path-require resolving into
-            // modules/dasLLAMA is the same breach through the side door
-            let inside_tree = find(replace(string(rmod.fileName), "\\", "/"), "modules/dasLLAMA/") >= 0
-            if (!starts_with(mname, "dasllama") && !inside_tree) return
+            // modules/dasLLAMA is the same breach through the side door (case-folded: Windows
+            // and macOS resolve a lowercased path, and a user's own dasllama_* module outside
+            // the tree is theirs)
+            let inside_tree = find(to_lower(replace(string(rmod.fileName), "\\", "/")), "modules/dasllama/") >= 0
+            if (!inside_tree) return
             prog |> macro_error(at,
                 "DASLLAMA001: require of dasLLAMA internal '{mname}' - the public surface is require dasllama/dasllama (+ dasllama/dasllama_scheduler for serving, dasllama/dasllama_exchange for the sidecar exchange). A symbol the facade lacks means the facade is missing it: add it to dasllama.das. Engine/test escape: options _dasllama_internal = true.")
         }

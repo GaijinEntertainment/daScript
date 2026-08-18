@@ -150,18 +150,27 @@ parses, a console-only diagnostic not being one. A tutorial source, `.rst` page,
 help string, `README.md`, or checked-in document still showing the old call, flag, or default
 is a defect of the change, not of the docs.
 
-**Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) is a defect.** It machine-checks the
-facade boundary at every consumer compile: outside code requires only `dasllama/dasllama`,
-`dasllama/dasllama_scheduler`, and `dasllama/dasllama_exchange` — by name AND by resolved
-path (the tree guard) — and its DASLLAMA001 error text states the rule. Widening the
-allowed set, or adding `options _dasllama_internal` to a file that is not an engine file, an
-in-module test/harness/benchmark, or a ruled bake-side tool, is the weakening.
+**Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) — the compile-time check that a
+consumer requires only this module's public entry modules, matched by the resolved file's
+path under `modules/dasLLAMA/` — is a defect:** a module added to its allowed set, the path
+match dropped or narrowed, or an error text that no longer names the facade to require
+instead. The allowed set is the table in the lint; the entry modules are the facade, the
+scheduler, and the exchange pair.
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** It machine-checks the tutorial
-floor — every def the facade file itself defines appears in a dasLLAMA tutorial source AND its
-`.rst` page; each finding's text states its rule. The floor proves presence only: a facade def
-whose tutorial mention does not TEACH it — demonstrated in runnable code, narrated on the
-page — is a defect this checklist still owns.
+**`options _dasllama_internal` belongs only in a file whose job is to reach engine
+internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
+owns, or a consumer `ARCHITECTURE.md` §1 names as ruled.** Any other file carrying it is a
+defect — a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
+
+**Weakening `REVIEW.das` (beside this file) — the gate that fails when a `def` of
+`dasllama/dasllama.das` appears in no `tutorials/dasLLAMA/*.das` (repo root) or in no
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page — is a defect:** dropping either
+check, exempting a def, or a finding text that no longer names what failed.
+
+**A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
+runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** A mention that only names it (a
+comment, a passing reference) is a defect the gate cannot see.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
@@ -211,7 +220,7 @@ non-zero.
 **Tool wire text — building or parsing — is produced only in `dasllama/dasllama_tools.das`.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
-miniaudio decode module).** Benchmarks, harnesses, and tests decode their own fixtures.
+miniaudio decode module).
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
 Benchmarks, harnesses, and tests decode their own fixtures.

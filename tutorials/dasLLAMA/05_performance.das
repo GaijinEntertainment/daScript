@@ -88,15 +88,18 @@ def section_threads(m : Model) {
         setup_dasllama_jobque()
         print("job queue: {get_total_hw_jobs()} hardware jobs (override with DAS_JOBQUE_THREADS=N)\n")
         bench_gen(m, "threaded: ")
+    }
 
-        // set_dispatch_worker_limit caps how many of those workers the kernel
-        // dispatch uses (0 = no limit); get_dispatch_worker_limit reads it back.
-        // A serving box caps it to keep cores free for the rest of the process.
-        set_dispatch_worker_limit(2)
+    // set_dispatch_worker_limit caps how many workers the kernel dispatch uses (0 = no
+    // limit); get_dispatch_worker_limit reads it back. setup_dasllama_jobque() latches the cap
+    // into the queue, so set it BEFORE that call - a serving box does this at startup.
+    set_dispatch_worker_limit(2)
+    with_job_que() {
+        setup_dasllama_jobque()
         print("dispatch capped at {get_dispatch_worker_limit()} workers | ")
         bench_gen(m, "capped:   ")
-        set_dispatch_worker_limit(0)
     }
+    set_dispatch_worker_limit(0)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -168,10 +171,12 @@ def main() {
     //
     // The q8 loads above also minted a PREPARED IMAGE (.dlim) beside the GGUF —
     // the mapped weight planes that make reloads millisecond-fast.
-    // dlim_inventory lists the images beside a GGUF with a verdict per image;
-    // STALE means the bake configuration changed (the knobs that change image
-    // bytes live in DlimConfiguration). dlim_clean with apply = false only
-    // reports; apply = true removes the stale ones — the server runs this GC
+    // dlim_inventory lists the images beside a GGUF with a verdict per image:
+    // CURRENT loads; STALE vN was minted by an older image version; OTHER was
+    // minted under a different bake configuration (the knobs that change image
+    // bytes live in DlimConfiguration) or on another box; FOREIGN belongs to a
+    // different flavor. dlim_clean with apply = false only reports; apply = true
+    // removes STALE and OTHER (keep_other spares OTHER) — the server runs this GC
     // at startup.
 
     print("\n")

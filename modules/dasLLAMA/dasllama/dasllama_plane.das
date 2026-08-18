@@ -6,7 +6,7 @@ module dasllama_plane shared public
 
 // The borrowed-plane vocabulary. A plane is a pointer into a prepared image plus its element
 // count: the image owns the bytes and a weight carrier owns nothing but its backing. This
-// module requires nothing dasllama — the image rail binds planes, every carrier holds them.
+// module requires no engine file — the image rail binds planes, every carrier holds them.
 
 require dasllama/dasllama_lint public
 

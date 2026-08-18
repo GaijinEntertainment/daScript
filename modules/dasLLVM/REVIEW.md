@@ -39,7 +39,7 @@
 
 - **A diff that adds a new top-level section, or a new value shape inside one, to the tune
   sidecar (`<app>.tune.json`, written by `daslib/llvm_tune.das`) updates
-  `modules/dasLLAMA/performance/exchange_schema.das` in the same change and keeps
+  `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in the same change and keeps
   `modules/dasLLAMA/tests/test_exchange_schema.das` green** — the validator allow-lists
   sections, so one it does not know fails every newly minted sidecar at submission, and
   the checked-in corpus the test sweeps cannot show it.

@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 // Diagnostic twin of test_parity_gptoss_20b: same pinned-oracle path (classic prefill attention +
 // scalar libm act + raw greedy generate), but prints got-vs-want with the divergence index, and
-// honors DASLLAMA_PIN_BACKEND (pin BEFORE load, so select_matmul_backend_for_load obeys).
+// honors DASLLAMA_PIN_BACKEND (pin BEFORE load, so select_matmul_backend_for_load_ obeys).
 // Run: daslang -jit gptoss_parity_probe.das   [DASLLAMA_PIN_BACKEND=portable|x64-gen]
 
 require dasllama/dasllama

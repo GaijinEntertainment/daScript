@@ -345,7 +345,7 @@ def whisper_dec_quantize(var st : WhisperStaging) {
     delete st.dblob
     st.dblob <- nf
     st.e.dq8 = true
-    if (!select_matmul_backend_for_load()) {
+    if (!select_matmul_backend_for_load_()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     wm_repack(st.dqblob, st.dqscales, st.e.d_te_q_off, d, st.e.n_vocab)
@@ -703,7 +703,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
             whisper_dec_compact_offsets(st.e)
         }
         // no selected backend = flat Q8_0 image, same repack gate the eager quantizers take
-        let bk = select_matmul_backend_for_load()
+        let bk = select_matmul_backend_for_load_()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
@@ -713,8 +713,8 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         if (dec_q8) {
             extra += uint64(sz.dec_len) + uint64((sz.dec_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
         }
-        wrote = cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
-                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
+        wrote = cache_via_image_staged_hooked(st, out, img, extra, tag, "q8") $(name : string;
+                                                                                var w : ImgWriter; var sections : array<ImgSection>) {
             if (name == "dblob") {
                 return wstream_plane(recs, bytes, decJobs, 0, dec_q8, rep_dec, w, sections, name)
             }

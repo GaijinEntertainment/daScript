@@ -48,15 +48,21 @@ have tiny matmuls.
 
 Inside a fixed queue the kernel dispatch can still be capped:
 ``set_dispatch_worker_limit(n)`` bounds how many workers the kernels use
-(``0`` = no limit), and ``get_dispatch_worker_limit()`` reads the cap back. A
-serving box caps it to keep cores free for the rest of the process:
+(``0`` = no limit), and ``get_dispatch_worker_limit()`` reads the cap back.
+``setup_dasllama_jobque()`` latches the cap into the queue, so set it before that
+call — a serving box does this at startup to keep cores free for the rest of the
+process:
 
 .. das-doc: given var m = Model()
+.. das-doc: given let path = "model.gguf"
 .. code-block:: das
 
-   set_dispatch_worker_limit(2)   // kernels use at most 2 workers
-   print("cap: {get_dispatch_worker_limit()}\n")
-   set_dispatch_worker_limit(0)   // back to all of them
+   set_dispatch_worker_limit(2)
+   with_job_que() {
+       setup_dasllama_jobque()   // the cap is latched here
+       print("cap: {get_dispatch_worker_limit()}\n")
+   }
+   set_dispatch_worker_limit(0)   // 0 = back to all of them
 
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute
@@ -116,11 +122,13 @@ interleaved layout? ``load_model`` runs it itself; call it yourself when you
 schedule loads and want the answer early.
 
 And the prepared images have a management surface. ``dlim_inventory`` lists
-the ``.dlim`` images minted beside a GGUF, each with a verdict — ``CURRENT``,
-``STALE`` (the bake configuration changed; ``DlimConfiguration`` holds every
-knob that changes image bytes), or ``BROKEN``. ``dlim_clean`` is the garbage
-collector: ``apply = false`` only reports, ``apply = true`` removes the stale
-ones — the server runs this at startup:
+the ``.dlim`` images minted beside a GGUF, each with a verdict: ``CURRENT``
+loads; ``STALE vN`` was minted by an older image version; ``OTHER`` was minted
+under a different bake configuration (``DlimConfiguration`` holds every knob
+that changes image bytes) or on another box; ``FOREIGN`` belongs to a different
+flavor. ``dlim_clean`` is the garbage collector: ``apply = false`` only reports,
+``apply = true`` removes ``STALE`` and ``OTHER`` (``keep_other`` spares ``OTHER``)
+— the server runs this at startup:
 
 .. code-block:: das
 

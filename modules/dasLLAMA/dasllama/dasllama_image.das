@@ -1047,7 +1047,7 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     // the image's planes are packed for the load backend — activate it before any kernel runs
     // (same select the gguf loader does; the identity check below then names that backend)
-    select_matmul_backend_for_load()
+    select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
     if (read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)
             || read_u32(bp, 8l) != uint(IMAGE_PAGE)) {
@@ -1386,8 +1386,8 @@ def cache_via_image(var m; var out; img : string; tag : string = ""; quant : str
 //! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
 //! build that cannot produce an image panics rather than handing anything back.
 def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") : bool {
-    return cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
-                                                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
+    return cache_via_image_staged_hooked(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                                var w : ImgWriter; var sections : array<ImgSection>) {
         return false
     }
 }
@@ -1395,8 +1395,8 @@ def cache_via_image_staged(var st; var out; img : string; tag : string = ""; qua
 //! cache_via_image_staged with the walk's plane hook exposed plus a pre-sized `extra` for the
 //! bytes the hook streams — the streamed mints serve their big planes straight from the source
 //! mapping. True only when the FILE was written: only then may the caller reap its lane.
-def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag : string; quant : string;
-                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64; tag : string; quant : string;
+                                  plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, plane)) {

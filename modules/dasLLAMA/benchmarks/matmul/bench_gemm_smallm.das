@@ -515,7 +515,7 @@ def main() : int {
     if (!a.hand) {
         // a Q8 model load selects the repack tier (arm64-gen/x64-gen) — mirror it, or the bench
         // times the wrong (hand) backend
-        select_matmul_backend_for_load()
+        select_matmul_backend_for_load_()
     }
     with_job_que() {
         setup_dasllama_jobque_()

@@ -376,7 +376,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
 //! the commonest support question on this tier is "why did it decline", so the answer is the API.
 def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
     let c = t.config
-    var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget())
+    var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
     if (p.budget_bytes <= 0l) {
         p.reason = "no GPU tier armed"
         return p
@@ -443,12 +443,12 @@ var private g_rdec_cnt = 0l             // cached positions in the device KV mir
 var private g_rdec_cap = 0l             // mirror context the driver armed at (<= model ctx when VRAM-capped)
 var private g_rdec_gen = 0l             // mirror ownership generation (bumped per resident prefill)
 var private g_rdec_kvdt = KVDtype.f16   // the ARMED mirror codec — sessions must match to be served
-var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed)
+var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed_)
 
 //! Allow/forbid the whole-prefill resident override. A multi-stream scheduler (dasllama-server)
 //! pins it OFF: the single shared mirror + chunked prefill would leave device-only KV that a
 //! second stream's steal strands. Single-session tools keep the fast path (default on).
-def set_resident_prefill_allowed(allowed : bool) {
+def set_resident_prefill_allowed_(allowed : bool) {
     g_resident_prefill_allowed = allowed
 }
 
@@ -835,12 +835,12 @@ struct GpuModelMarks {
 
 //! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
 //! (a generated constructor is not callable through a facade typedef).
-def gpu_model_marks_init() : GpuModelMarks {
+def gpu_model_marks_init_() : GpuModelMarks {
     return <- GpuModelMarks()
 }
 
 //! Move the INSTALLED per-model tier state out into `st`; the globals read as no-model after.
-def moe_gpu_model_marks_save(var st : GpuModelMarks) {
+def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     moe_gpu_marks_save(st.marks)
     st.rdec_active = g_rdec_active
     st.rdec_cnt = g_rdec_cnt
@@ -852,7 +852,7 @@ def moe_gpu_model_marks_save(var st : GpuModelMarks) {
 }
 
 //! Install `st` as the per-model tier state (the save's inverse; `st` reads as no-model after).
-def moe_gpu_model_marks_restore(var st : GpuModelMarks) {
+def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     moe_gpu_marks_restore(st.marks)
     g_rdec_active = st.rdec_active
     g_rdec_cnt = st.rdec_cnt
@@ -867,21 +867,21 @@ def moe_gpu_model_marks_restore(var st : GpuModelMarks) {
 //! discriminator status surfaces read: resident beats rails beats cpu.)
 def moe_gpu_resident_active() : bool => g_rdec_active
 
-//! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save``) and
+//! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save_``) and
 //! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a
 //! multi-model host's slot bookkeeping.
-def gpu_slot_capture(var st : GpuModelMarks) : string {
+def gpu_slot_capture_(var st : GpuModelMarks) : string {
     let was_resident = g_rdec_active
-    moe_gpu_model_marks_save(st)
+    moe_gpu_model_marks_save_(st)
     return was_resident ? "gpu:resident" : (moe_gpu_marks_armed(st.marks) ? "gpu:rails" : "cpu")
 }
 
 //! Re-arm the INSTALLED model onto the GPU tier (marks already restored): want, arm, resident
 //! upload — through the bake-slice path when `t` is a mapped vulkan-flavor image (a live
 //! re-gather on a planes-trimmed image panics). Returns "gpu:resident" | "gpu:rails" | "cpu".
-def gpu_slot_rearm(want : GpuTierWant; t : Model) : string {
-    set_gpu_tier_want(want)
-    moe_gpu_tier_arm()
+def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
+    set_gpu_tier_want_(want)
+    moe_gpu_tier_arm_()
     if (!empty(t.vkplan)) {
         vulkan_bake_slice_begin()
         moe_gpu_upload_resident(t)
@@ -889,13 +889,13 @@ def gpu_slot_rearm(want : GpuTierWant; t : Model) : string {
     } else {
         moe_gpu_upload_resident(t)
     }
-    return g_rdec_active ? "gpu:resident" : (gpu_tier_status().vram_bytes > 0l ? "gpu:rails" : "cpu")
+    return g_rdec_active ? "gpu:resident" : (gpu_tier_status_().vram_bytes > 0l ? "gpu:rails" : "cpu")
 }
 
 //! Hydrate `s`'s host KV from the device mirror when `s` owns live mirror rows (no-op
-//! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model``
+//! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model_``
 //! — the drop destroys the mirror, and an unhydrated owner's rows exist nowhere else.
-def moe_gpu_hydrate_session(t : Model; var s : Session) {
+def moe_gpu_hydrate_session_(t : Model; var s : Session) {
     // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
     // session must never receive them (the gen match alone is ambiguous at generation 0)
     if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated
@@ -907,7 +907,7 @@ def moe_gpu_hydrate_session(t : Model; var s : Session) {
 //! Drop the INSTALLED model's whole GPU state (every model-owned device object + the routing
 //! marks); the model keeps serving on the CPU rails, and re-arm = the same three calls a load
 //! runs. Caller guarantees quiescence: no step in flight, sessions hydrated first.
-def moe_gpu_drop_model() {
+def moe_gpu_drop_model_() {
     if (!moe_gpu_tier_installed()) {
         return
     }

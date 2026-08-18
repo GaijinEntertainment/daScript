@@ -450,7 +450,7 @@ def test_vulkan_moe_heat_cache(t : T?) {
             set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
             var want = GpuTierWant()
             want.heat = 2l   // two slots: the eviction/reuse choreography below assumes C = 2
-            set_gpu_tier_want(want)
+            set_gpu_tier_want_(want)
             let ege1 = NFE * N
             let ege2 = N * NFE
             var wq1 : array<int8>
@@ -2941,7 +2941,7 @@ def test_vulkan_drop_model(t : T?) {
                 // the whole-model drop: every stack (this file's earlier tests included), the
                 // arena, and all lazy dispatch state die; cycle 1 re-runs the ladder from bare
                 moe_gpu_drop_model_state()
-                t |> equal(0l, gpu_tier_status().vram_bytes, "cycle {cycle} drop left zero resident bytes")
+                t |> equal(0l, gpu_tier_status_().vram_bytes, "cycle {cycle} drop left zero resident bytes")
                 delete wq
                 delete ws
                 delete wqb

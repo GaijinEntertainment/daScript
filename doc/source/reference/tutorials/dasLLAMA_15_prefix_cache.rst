@@ -31,6 +31,9 @@ pool. Stream A prefills the full prompt, answers, and donates with
 every full page of it. The preview string is only a label for dashboards:
 
 .. das-doc: given var m = Model()
+.. das-doc: given let SYSTEM = "You are a terse assistant."
+.. das-doc: given let Q1 = " Do you sell drills?"
+.. das-doc: given let Q2 = " When do you open?"
 .. code-block:: das
 
    var pool <- create_kv_pool(m, 16l)

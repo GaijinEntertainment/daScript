@@ -113,7 +113,7 @@ CPU-only box each step is a cheap no-op that reports ``"cpu"``, so the code
 runs anywhere.
 
 Before a load we request a tier: ``set_gpu_tier_want`` records the request
-(the programmatic mirror of the ``DASLLAMA_GPU_*`` env vars; a zero want
+(the programmatic form of the core ``DASLLAMA_GPU_*`` knobs; a zero want
 keeps the load off the device), ``moe_gpu_tier_arm`` arms it so a backend can
 install its hooks, ``moe_gpu_weight_budget`` says how many bytes of weights
 the armed backend will hold resident, and ``gpu_tier_status`` is the running
@@ -122,7 +122,7 @@ arm outcome into a ``GpuModelMarks`` holder (``gpu_model_marks_init`` makes
 an empty one) and classifies it: ``"cpu"``, ``"gpu:rails"``, or
 ``"gpu:resident"``:
 
-.. das-doc: given var m = Model()
+.. das-doc: given var s = Session()
 .. code-block:: das
 
    set_gpu_tier_want(GpuTierWant(auto_tier = true))
@@ -132,25 +132,27 @@ an empty one) and classifies it: ``"cpu"``, ``"gpu:rails"``, or
    var slot = gpu_model_marks_init()
    let outcome = gpu_slot_capture(slot)   // "cpu" | "gpu:rails" | "gpu:resident"
 
-On a switch-in, restore the model's marks and re-arm it — ``gpu_slot_rearm``
-runs want, arm, and the resident upload, through the bake-slice path when the
-image is a mapped vulkan flavor. On a switch-out with eviction,
+A switch has two halves, and the order is the contract. Switch-out first:
 ``moe_gpu_hydrate_session`` pulls each live session's KV back to host memory
-first (the device mirror dies with the drop), ``moe_gpu_drop_model`` frees
-the model's device state, and ``moe_gpu_model_marks_save`` banks the rest:
+(the device mirror dies with the drop), ``moe_gpu_drop_model`` frees the
+outgoing model's device state, ``moe_gpu_model_marks_save`` banks what is left
+in its slot. Only then switch-in: restore the incoming model's marks and
+``gpu_slot_rearm`` — want, arm, resident upload, through the bake-slice path
+when the image is a mapped vulkan flavor. Re-arming onto a device that still
+holds a model is the bug this order prevents:
 
 .. code-block:: das
 
-   moe_gpu_model_marks_restore(slot)                     // switch-in...
-   let backend = gpu_slot_rearm(GpuTierWant(auto_tier = true), m)
-   // ... serve ... then evict:
    moe_gpu_hydrate_session(m, s)                         // per live session
    moe_gpu_drop_model()
-   moe_gpu_model_marks_save(slot)
+   moe_gpu_model_marks_save(slot)                        // A is out
+   moe_gpu_model_marks_restore(slot)                     // B (here: A again) is in...
+   let backend = gpu_slot_rearm(GpuTierWant(auto_tier = true), m)   // ...and re-armed
 
-One more serving pin: ``set_resident_prefill_allowed(false)`` parks the
-resident-decode prefill arm while a bake or another workload owns the device;
-flip it back when the device is yours.
+One more serving pin: a multi-stream scheduler calls
+``set_resident_prefill_allowed(false)`` once and leaves it — its single shared
+mirror plus chunked prefill would leave device-only KV that a second stream's
+steal strands. ``dasllama-server`` does exactly this.
 
 The same module, more streams
 =============================

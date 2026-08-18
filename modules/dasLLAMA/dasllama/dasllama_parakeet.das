@@ -279,7 +279,7 @@ def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private pk_repack_all(var st : ParakeetStaging) {
-    if (!select_matmul_backend_for_load()) {
+    if (!select_matmul_backend_for_load_()) {
         return
     }
     let d = st.e.n_state

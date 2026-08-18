@@ -168,8 +168,8 @@ def public get_jobque_join_poll() : int64 { return g_jobque_join_poll }
 // tiny-model dial. An inline-dominated decode token runs FASTER with fewer awake workers (zen2
 // 135M: T=8 176 t/s vs T=48 149 — T-1 pollers interfere with main-thread weight streaming). 0 = no limit.
 var g_dispatch_worker_limit = 0
-def public set_dispatch_worker_limit(v : int) { g_dispatch_worker_limit = max(v, 0) }
-def public get_dispatch_worker_limit() : int { return g_dispatch_worker_limit }
+def set_dispatch_worker_limit_(v : int) { g_dispatch_worker_limit = max(v, 0) }
+def get_dispatch_worker_limit_() : int { return g_dispatch_worker_limit }
 
 // Per-op team rank gate (JobQue::setTeamRankGate — each team op admits only as many workers as
 // its widest stage published chunks). Server-core boxes want it ON (135M T=48: +10% zen2/+48% SPR,
@@ -1404,7 +1404,7 @@ def pin_backend_for_bake(cpu : DlimCpuConfig) : bool {
         pin_kernel_backend(cpu.backend)
         return active_kernel_backend() == cpu.backend
     }
-    select_matmul_backend_for_load()   // the load enters repack stages only under a repack backend
+    select_matmul_backend_for_load_()   // the load enters repack stages only under a repack backend
     if (!kernel_backend_needs_repack(active_kernel_backend())) {
         to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family - none is active here\n")
         return false
@@ -1653,7 +1653,7 @@ def private apply_batch_override(name : string) {
 
 //! Register a kernel backend under its name. Auto-activates it as the row-major default when it is the
 //! highest-priority backend that needs no repack — so direct callers get the best un-repacked kernel with
-//! no load step. Repack backends are activated only by select_matmul_backend_for_load (at model load).
+//! no load step. Repack backends are activated only by select_matmul_backend_for_load_ (at model load).
 def register_kernel_backend(be : KernelBackend) {
     g_kernel_backends[be.name] = be
     if (g_backend_pin == "" && !be.needs_repack && be.priority > g_active_priority) {
@@ -1680,7 +1680,7 @@ def select_kernel_backend(name : string) {
 //! benchmarking on one binary — e.g. pin "arm64-sdot" to measure the row-major baseline against the gen tier.
 def pin_kernel_backend(name : string) {
     // Reject an unknown name rather than sticking an invalid pin: a bad pin would suppress
-    // auto-activation AND keep select_matmul_backend_for_load from picking the best (repack) backend,
+    // auto-activation AND keep select_matmul_backend_for_load_ from picking the best (repack) backend,
     // silently degrading to whatever is currently active. Keep the current backend and warn instead.
     if (!key_exists(g_kernel_backends, name)) {
         to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - no such backend registered; keeping '{g_active_backend}'\n")
@@ -1716,7 +1716,7 @@ def active_batch_backend() : string {
 //! Select the best backend for a model load — INCLUDING repack backends (arm64 laneq). Honors a pin.
 //! Returns true if the selected backend needs the loader to repack every weight tensor (via
 //! repack_q8q8_weight) into its interleaved layout before any matmul runs.
-def select_matmul_backend_for_load() : bool {
+def select_matmul_backend_for_load_() : bool {
     if (g_backend_pin != "") {
         select_kernel_backend(g_backend_pin)
         return g_active_needs_repack

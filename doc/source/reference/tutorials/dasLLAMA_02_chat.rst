@@ -92,7 +92,8 @@ the pending user turn and the given reply into the KV cache and closes the
 turn — no generation. Replay the pairs in order and the fresh chat stands
 exactly where the old one did:
 
-.. das-doc: given var m = Model(); var chat = ChatSession()
+.. das-doc: given var chat = ChatSession()
+.. das-doc: given let SYSTEM = "You are a helpful, friendly assistant. Keep answers concise."
 .. code-block:: das
 
    var replay = create_chat(m, SYSTEM)

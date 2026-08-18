@@ -11,7 +11,7 @@ require ?das_metal dasllama/dasllama_metal_common  // the coverage census rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown rails
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
-require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model — the census's model-switch drops
+require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
@@ -368,7 +368,7 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
         // the model-switch contract: whoever puts a DIFFERENT model on the GPU drops the old one
         // first (the slot machinery / server do) — without this the stack table accumulates
         // across the zoo until the MAX_STACKS decline
-        moe_gpu_drop_model()
+        moe_gpu_drop_model_()
         delete tr
     }
 }

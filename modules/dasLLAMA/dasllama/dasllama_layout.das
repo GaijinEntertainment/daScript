@@ -520,7 +520,7 @@ def private repack_kq_weights(var t : Model) {
 
 // Repack the native-MXFP4 expert stacks into the active backend's interleaved mx layout, IN PLACE
 // (each expert slice is its own 2D tensor). Mirrors repack_q8_weights' contract: called only after
-// select_matmul_backend_for_load picks a repack backend; the pointer is otherwise identity.
+// select_matmul_backend_for_load_ picks a repack backend; the pointer is otherwise identity.
 def private repack_mx4_stacks(var t : Model) {
     let c = t.config
     let dim = c.dim

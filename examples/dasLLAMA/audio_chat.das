@@ -49,6 +49,10 @@ def main {
     var tower <- load_audio_tower(mmproj_path)
     allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     let samples <- load_audio_16k_mono(audio_path)
+    if (empty(samples)) {
+        print("could not decode audio: {audio_path}\n")
+        return
+    }
     print("audio: {length(samples)} samples ({float(length(samples)) / float(int(AUDIO_SAMPLE_RATE))} s)\n")
 
     with_job_que() {

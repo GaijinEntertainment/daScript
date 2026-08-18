@@ -23,8 +23,7 @@ require daslib/base64                // base64_decode: the data: URI payload
 
 // An OpenAI-compatible HTTP server over the dasLLAMA facade. The SERVING paths reach only public
 // facade verbs — no engine internals — which is the acceptance test for the API: if a full OpenAI
-// surface builds without reaching into the engine, the facade is complete. (The dashboard-only
-// surfaces additionally read dasllama_math's tier-status getters — see the require above.)
+// surface builds without reaching into the engine, the facade is complete.
 // Chat and completion requests batch continuously: handlers parse + render + register and return;
 // run_server's loop drives dasllama_scheduler (one eval_batch decode step over every live stream + one
 // bounded prefill chunk per tick) and routes SchedEvents back to each request's writer. Streaming

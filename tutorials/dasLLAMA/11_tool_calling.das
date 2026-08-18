@@ -107,8 +107,20 @@ def section_call_and_answer(m : Model; var chat : ChatSession) {
     print("model, with the result: ")
     ask_streaming(m, chat)
     // Out-of-order or id-keyed hosts use add_tool_results(chat, results, names) — the
-    // name-spelling families (harmony, gemma-4) then pair results correctly; and a
-    // stateless server replays a past call turn with render_assistant_calls.
+    // name-spelling families (harmony, gemma-4) then pair results correctly.
+
+    // A stateless server replays a past call turn without running the model:
+    // render_assistant_calls appends the exact tokens that assistant turn prefilled —
+    // its text plus the verbatim call objects — onto a renderer chat (tutorial 02's
+    // render_assistant, for a turn that called tools).
+    var replay = create_chat_renderer(m, "")
+    var replay_tools <- [WEATHER_TOOL]
+    set_tools(replay, replay_tools)
+    add_user(replay, "What is the weather in Paris right now?")
+    let call_objs <- [for (c in tr.calls); "\{\"name\":\"{c.name}\",\"arguments\":{c.args}}"]
+    var toks : array<int64>
+    render_assistant_calls(m, replay, tr.content, call_objs, toks)
+    print("replayed call turn = {length(toks)} tokens, no model run\n")
 }
 
 [export]

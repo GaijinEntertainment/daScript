@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _cyclomatic_complexity = 0   // CLI dispatch; absorbed into lcpp_bench by the single-rig consolidation
 options _function_length = 0   // same
-options _dasllama_internal = true   // the engine's own bake tool: the four bake-side requires above are its charter
+options _dasllama_internal = true   // the engine's own bake tool: its bake-side requires below are its charter
 
 // dasllama-convert — turn a GGUF into a prepared .dlim image, offline.
 //

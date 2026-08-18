@@ -499,9 +499,10 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_require.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_escape.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_require.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_escape.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_contracts.das
 
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a

@@ -336,7 +336,8 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   letterbox resize (aspect-preserving bilinear onto a centered black canvas), u8→f32 normalize,
   and the `DASLLAMA_VISION_DUMP` PPM writer. The only preprocessing home.
 - **`dasllama_vision_io.das`** — image decode to RGB8, from a file or a byte blob. The only file
-  that talks to stbimage; optional, like `dasllama_audio_io` — the facade takes decoded pixels.
+  that talks to stbimage; re-exported by the facade (like `dasllama_audio_io`) so consumers
+  decode through one seam — the engine itself takes decoded pixels.
 - **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
   im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
   projector family, following the audio tower pattern; shared pieces move up, never sideways.
@@ -356,6 +357,14 @@ command, not archaeology.
 - **`dasllama_parity.das`** — CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** — the prefix/page cache for evaluated token history.
+- **`dasllama_lint.das`** — the facade boundary as a compile-time lint (DASLLAMA001): every
+  engine module carries it, so a consumer requiring anything under `modules/dasLLAMA/` but the
+  entry modules (facade, scheduler, exchange pair) fails to compile. Escape:
+  `options _dasllama_internal = true` — engine files, this module's own tests/harnesses/
+  benchmarks/rigs, and the ruled consumers: `utils/dasllama-convert` (the bake tool reads
+  the mint rail), `utils/dasllama-server/test_openai_server*.das` (env-registry test knobs),
+  `modules/dasLLVM/daslib/llvm_user_modules.das` + `modules/dasLLVM/tests/test_{grid,tune,tuned}.das`
+  (the tune-generator contract).
 - **`performance/model_specs.das`** — the ONE model-set table: per carrier, the profiled-
   catalog fields, the official-board flag, the provenance pin (exact HF repo + revision +
   sha256, or the on-box conversion recipe; companions hang off their owning entry), and the

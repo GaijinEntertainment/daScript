@@ -9,7 +9,7 @@ require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack
-// backend (arm64-gen / x64-gen) is only activated by select_matmul_backend_for_load. No model file needed.
+// backend (arm64-gen / x64-gen) is only activated by select_matmul_backend_for_load_. No model file needed.
 
 def private registered(name : string) : bool {
     for (n in kernel_backend_names()) {
@@ -42,7 +42,7 @@ def test_select_and_pin(t : T?) {
         t |> equal(active_kernel_backend(), "portable")
         // for-load picks the best registered backend (a repack backend where available); its bool
         // return (needs_repack) drives whether the loader repacks — exercised for real by test_forward.
-        select_matmul_backend_for_load()
+        select_matmul_backend_for_load_()
         t |> success(registered(active_kernel_backend()), "for-load activated a registered backend")
         // pin forces a specific backend, overriding auto-select
         pin_kernel_backend("portable")
@@ -89,7 +89,7 @@ def test_backend_availability_predicate(t : T?) {
             mm = @@unavailable_mm, batch = @@unavailable_batch, group3 = @@unavailable_group3,
             repack = @@unavailable_repack, needs_repack = true, priority = 99,
             available = @@never_available))
-        select_matmul_backend_for_load()
+        select_matmul_backend_for_load_()
         t |> success(active_kernel_backend() != "test-unavailable", "for-load select skips an unavailable backend")
         pin_kernel_backend("test-unavailable")
         t |> success(active_kernel_backend() != "test-unavailable", "pin refuses an unavailable backend")

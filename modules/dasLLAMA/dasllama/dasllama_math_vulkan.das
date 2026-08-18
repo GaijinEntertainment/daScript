@@ -218,14 +218,14 @@ def private arm_say(outcome : int; msg : string) {
 }
 
 //! Arm the vulkan MoE tier from the effective GPU want (env-else-programmatic). Registered as
-//! the ``moe_gpu_tier_arm`` probe; ``[init]`` also runs it directly for the env-only path.
-//! Idempotent — re-arming after ``set_gpu_tier_want`` just refreshes the layer count.
+//! the ``moe_gpu_tier_arm_`` probe; ``[init]`` also runs it directly for the env-only path.
+//! Idempotent — re-arming after ``set_gpu_tier_want_`` just refreshes the layer count.
 def vulkan_moe_gpu_arm : bool {
     let layers = gpu_want_moe_layers()
     // the want truth is gpu_want_arms_tier — ONE definition shared with the loud-failure
     // checks, so "would arm" and "should have armed" can never drift apart
     if (!gpu_want_arms_tier()) {   // checked first — the device probe is not free
-        arm_say(0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want)")
+        arm_say(0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want_)")
         return false
     }
     if (!vulkan_backend_available()) {

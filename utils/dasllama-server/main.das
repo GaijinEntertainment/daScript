@@ -26,7 +26,7 @@ require openai_server           // the server + route handlers (this directory)
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
 require llvm/daslib/llvm_tune   // [tune_policy] + tune_status (the injected guard resolves here)
 require dasllama/dasllama_exchange   // the sidecar exchange: boot resolver + submit check
-require jobque                  // set_jobque_threads_cap / set_jobque_affinity (came via dasllama_math before the facade cut)
+require jobque                  // set_jobque_threads_cap / set_jobque_affinity
 require daslib/clargs
 require daslib/toml
 require daslib/json_boost

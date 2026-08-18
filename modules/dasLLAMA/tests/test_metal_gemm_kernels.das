@@ -2,6 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require daslib/math_bits            // float_bits_to_uint / uint_bits_to_float — the bf16 halfword pun

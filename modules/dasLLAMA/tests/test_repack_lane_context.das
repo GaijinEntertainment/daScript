@@ -25,7 +25,7 @@ def private fill_pattern(var q : array<int8>; var s : array<float>) {
 [test]
 def test_repack_slot_is_context_proof(t : T?) {
     t |> run("gen repack slot: pool-lane bytes == main-thread bytes") @(t : T?) {
-        select_matmul_backend_for_load()
+        select_matmul_backend_for_load_()
         if (!kernel_backend_needs_repack(active_kernel_backend())) {
             t |> success(true, "active backend has no repack - nothing to prove on this box")
             return

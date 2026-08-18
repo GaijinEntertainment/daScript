@@ -413,7 +413,7 @@ def private g4a_repack(var st : Gemma4aStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private g4a_repack_all(var st : Gemma4aStaging) {
-    if (!st.e.q8 || !select_matmul_backend_for_load()) {
+    if (!st.e.q8 || !select_matmul_backend_for_load_()) {
         return
     }
     let d = st.e.d_model
