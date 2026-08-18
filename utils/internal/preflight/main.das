@@ -378,6 +378,107 @@ def gate_untracked() : GateResult {
         output = ls.out)
 }
 
+// A bare #N in a commit message renders on GitHub as a link to issue/PR N and posts a
+// permanent backlink there (make_pr step 6). Ledger cites spell out or ride backticks; a
+// reference far below the repo's newest number is a ledger number in disguise - the incident
+// class resolves to a REAL ancient issue, so existence is the wrong predicate.
+let HASH_REF_WINDOW = 500l
+
+def private bare_hash_refs(msg : string; var hits : array<int64>) {
+    peek_data(msg) $(d) {
+        var inTick = false
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let c = int(d[i])
+            if (c == '`') {
+                inTick = !inTick
+                i ++
+                continue
+            }
+            if (inTick || c != '#') {
+                i ++
+                continue
+            }
+            if (i > 0) {
+                let prev = int(d[i - 1])
+                if (is_alpha(prev) || is_number(prev) || prev == '_') {
+                    i ++
+                    continue
+                }
+            }
+            var j = i + 1
+            var v = 0l
+            while (j < n && int(d[j]) >= '0' && int(d[j]) <= '9') {
+                v = v * 10l + int64(int(d[j]) - '0')
+                j ++
+            }
+            if (j > i + 1) {
+                hits |> push(v)
+            }
+            i = j
+        }
+    }
+}
+
+def private all_digits(s : string) : bool {
+    var ok = !empty(s)
+    peek_data(s) $(d) {
+        for (b in d) {
+            let c = int(b)
+            ok = ok && c >= '0' && c <= '9'
+        }
+    }
+    return ok
+}
+
+def gate_hash_refs() : GateResult {
+    let t0 = ref_time_ticks()
+    let shas = run_argv(["git", "log", "origin/master..HEAD", "--format=%H"])
+    if (shas.rc != 0) {
+        return GateResult(name = "hash-refs", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "git log origin/master..HEAD failed - fetch origin first")
+    }
+    var found_sha : array<string>
+    var found_n : array<int64>
+    for (sha in non_empty_lines(shas.out)) {
+        let body = run_argv(["git", "log", "-1", "--format=%B", sha])
+        continue if (body.rc != 0)
+        var hits : array<int64>
+        bare_hash_refs(body.out, hits)
+        found_n |> push_from(hits)
+        found_sha |> reserve(long_length(found_sha) + long_length(hits))
+        for (_h in hits) {
+            found_sha |> push(sha)
+        }
+        delete hits
+    }
+    if (empty(found_n)) {
+        return GateResult(name = "hash-refs", status = GateStatus.Pass, seconds = seconds_since(t0))
+    }
+    let gh = run_argv(["gh", "api", "repos/:owner/:repo/issues?per_page=1&state=all", "--jq", ".[0].number"])
+    let latest_str = strip(gh.out)
+    if (gh.rc != 0 || !all_digits(latest_str)) {
+        return GateResult(name = "hash-refs", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "{length(found_n)} bare #N found but gh is unavailable - verify each by hand (make_pr step 6)")
+    }
+    var latest = 0l
+    peek_data(latest_str) $(d) {
+        for (b in d) {
+            latest = latest * 10l + int64(int(b) - '0')
+        }
+    }
+    let offenders <- [for (sha, n in found_sha, found_n);
+        "{slice(sha, 0, 9)}: #{n} - a ledger number? spell it out or backtick; a real old issue takes its full URL";
+        where n < latest - HASH_REF_WINDOW]
+    if (empty(offenders)) {
+        return GateResult(name = "hash-refs", status = GateStatus.Pass, seconds = seconds_since(t0))
+    }
+    return GateResult(name = "hash-refs", status = GateStatus.Fail, seconds = seconds_since(t0),
+        detail = "{length(offenders)} bare #N far below the repo's newest number ({latest}) - GitHub will mislink them (make_pr step 6)",
+        output = join(offenders, "\n"))
+}
+
 def gate_format(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     // verify TRACKED files only (CI's own scope), so gitignored scratch that
@@ -1002,6 +1103,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "untracked", full_only = true, doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
+        GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
@@ -1159,6 +1261,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_format(ctx)
             } elif (info.name == "lint") {
                 r <- gate_lint(ctx)
+            } elif (info.name == "hash-refs") {
+                r <- gate_hash_refs()
             } elif (info.name == "cpp-syntax") {
                 r <- gate_cpp_syntax(ctx)
             } elif (info.name == "dasgen") {

@@ -417,7 +417,9 @@ body, a commit message, or a review reply as a link to issue/PR N of this repo a
 "mentioned" backlink on it; a backlink from a commit message cannot be taken back, because
 the commit is already pushed. Cite an internal ledger entry — a `followup_*.md`
 item, a `PERF_LEDGER.md` item, any numbered in-repo ledger — as `followup 34`, or as
-`` `#34` `` in backticks, since GitHub does not autolink inside a code span. Reserve the bare hash for real issues and PRs.
+`` `#34` `` in backticks, since GitHub does not autolink inside a code span. Reserve the
+bare hash for real issues and PRs. The preflight `hash-refs` gate enforces the
+commit-message arm pre-push; weakening it is a defect.
 
 ### The PR body — two layers, one artifact
 

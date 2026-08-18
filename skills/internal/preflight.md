@@ -23,6 +23,11 @@ leftover file forces one durable decision — commit it, delete it, or ignore it
 box-local keeps). Session goo that would otherwise ride into a PR or linger
 for weeks fails the run instead.
 
+The **hash-refs gate** likewise mirrors no CI lane: it scans `origin/master..HEAD` commit
+messages for a bare `#N` far below the repo's newest issue/PR number — a ledger number
+GitHub would mislink, permanently once pushed (make_pr step 6 carries the spelling rule).
+Needs `gh` for the window; offline it reports SKIP.
+
 A complete `--full` run is Release-only and fails immediately for a Debug
 host. Debug may be used for intentional subset diagnosis with `--only` or
 `--skip`; it must never be substituted when a Windows MCP process locks the
