@@ -56,7 +56,7 @@ class SiteMetadataTest(unittest.TestCase):
 
     def test_caddy_redirects_explicit_index(self):
         snippet = (
-            REPO_ROOT / "utils" / "dasllama-ladder" / "caddy.snippet"
+            REPO_ROOT / "utils" / "internal" / "dasllama-ladder" / "caddy.snippet"
         ).read_text(encoding="utf-8")
         self.assertIn("redir /index.html / 308", snippet)
 
