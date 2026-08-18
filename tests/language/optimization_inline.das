@@ -208,7 +208,7 @@ def target_basic(x, y : int) : int {
 
 [export]
 def target_fold : float {
-    return clamp01f(2.5); // constant arg: folds through the inlined body
+    return clamp01f(2.5); // nolint:PERF015,LINT019 -- constant arg folds through the inlined body; the inliner splices clamp01f's nolinted ternary to this call site in optimized lint configs
 }
 
 [export]
