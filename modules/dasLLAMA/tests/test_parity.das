@@ -307,6 +307,28 @@ def test_parity_qwen35_08b(t : T?) {
     }
 }
 
+// Qwen3.8-27B Q4_K_M — the qwen35 hybrid dense at scale: 48 deltanet + 16 gated-attention layers
+// (24Q/4KV at head 256, 48 v-heads x 128 deltanet), native K-quant planes. Same counting ids as
+// the dense Qwen fixtures (verified against the live oracle). Large tier (17.7 GB).
+[test]
+def test_parity_qwen35_27b(t : T?) {
+    t |> run("qwen35 forward (Qwen3.8-27B Q4_K_M, deltanet hybrid dense)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "Qwen3.8-27B-Q4_K_M.gguf")
+        if (!model_available(t, path)) return
+        var tr <- load_gguf(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {   // KV RAM cap, same as parity_ok
+            tr.config.seq_len = 2048l
+        }
+        t |> success(parity_gen_ok(tr, QWEN3_PROMPT, QWEN3_GEN), "qwen3.8-27b token-for-token")
+        t |> success(parity_gen_ok(tr, QWEN3_PROMPT, QWEN3_GEN, [dn_chunked = true]), "qwen3.8-27b chunked-prefill token-for-token")
+        delete tr
+    }
+}
+
 // Qwen3.6-35B-A3B UD-Q4_K_M — the qwen35moe hybrid: 30 deltanet + 10 gated-attention layers
 // (16Q/2KV, v-heads 32 over 16 k-heads — the modulo GQA-repeat), softmax top-8-of-256 renormalized
 // + sigmoid-gated shared expert, F32 ssm_beta/alpha (the fp32 matmul rail), K-quant expert stacks.
