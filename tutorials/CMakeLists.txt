@@ -61,10 +61,6 @@ file(GLOB SQL_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/sql/*.das
 )
 
-# the schema_from fixture DBs tutorials 39/42 read at compile time
-file(GLOB SQL_TUTORIAL_DATA
-    ${PROJECT_SOURCE_DIR}/tutorials/sql/data/*.db
-)
 
 # Install dasPEG tutorial .das files
 file(GLOB DASPEG_TUTORIAL_SOURCES
