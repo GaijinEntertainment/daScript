@@ -305,8 +305,29 @@ jobs:
         if: matrix.cmake_preset == 'Release'
         shell: bash
         run: bash ci/smoke_test_bundle.sh ./daslang_bundle
-      - name: "Upload release asset"
+      - name: "Checksum"
+        # every package-manager manifest reads its sha256 from this sibling asset
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
+          cd artifacts
+          f=daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
+          (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") > "$f.sha256"
+          cat "$f.sha256"
+      - name: "Build .deb"
+        # the apt-installable form of the linux bundle (ci/packaging/README.md)
+        if: matrix.cmake_preset == 'Release' && matrix.release_target == 'linux' && matrix.release_arch == 'x86_64'
+        shell: bash
+        run: |
+          set -eux
+          bash ci/packaging/deb_build.sh ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
+          cd artifacts
+          for d in *.deb; do
+            (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
+          done
+      - name: "Upload release assets"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber

@@ -1,0 +1,39 @@
+# winget manifest trio template (submitted to microsoft/winget-pkgs under
+# manifests/g/GaijinEntertainment/daslang/@VERSION@/ as three files; the
+# split points are marked). First submission happens at the REAL release tag,
+# never an RC — the catalog is public and each version is a reviewed PR.
+
+# --- GaijinEntertainment.daslang.yaml (version manifest) ---
+PackageIdentifier: GaijinEntertainment.daslang
+PackageVersion: "@VERSION@"
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
+
+# --- GaijinEntertainment.daslang.installer.yaml ---
+# PackageIdentifier / PackageVersion as above
+# Installers:
+#   - Architecture: x64
+#     InstallerType: zip
+#     InstallerUrl: https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-windows-x86_64.zip
+#     InstallerSha256: "@SHA_WINDOWS_X86_64@"
+#     NestedInstallerType: portable
+#     NestedInstallerFiles:
+#       - RelativeFilePath: daslang_bundle\bin\daslang.exe
+#         PortableCommandAlias: daslang
+#       - RelativeFilePath: daslang_bundle\bin\daslang-live.exe
+#         PortableCommandAlias: daslang-live
+#       - RelativeFilePath: daslang_bundle\bin\dastest.exe
+#         PortableCommandAlias: dastest
+#       - RelativeFilePath: daslang_bundle\bin\daspkg.exe
+#         PortableCommandAlias: daspkg
+# ManifestType: installer
+
+# --- GaijinEntertainment.daslang.locale.en-US.yaml ---
+# PackageIdentifier / PackageVersion as above
+# Publisher: Gaijin Entertainment
+# PackageName: daslang
+# License: BSD-3-Clause
+# ShortDescription: High-performance statically-typed scripting language for games and real-time applications
+# PackageUrl: https://daslang.io
+# ManifestType: defaultLocale
