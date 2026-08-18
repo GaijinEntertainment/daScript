@@ -40,10 +40,13 @@ REF_GEN="$(printf '%s\n' "$REF" | sed -n 's/^GEN_IDS: //p')"
 IDS_CSV="$(printf '%s' "$PROMPT_IDS" | tr ' ' ',')"
 
 # 2. dasLLAMA: same prompt ids -> greedy generated ids. KQ_NATIVE=1/0 (env) A/Bs the native
-# K-quant planes; unset keeps the engine default.
+# K-quant planes; unset keeps the engine default. DASLLAMA_CPU_PREFILL=1 declares the CPU
+# prefill intent: without it a >512-token prompt trips the Metal-build tripwire, and with
+# stderr dropped the whole script dies silently (set -e) — the 12B counting-prompt mint hit
+# exactly that.
 KQ_FLAG=""
 [ -n "${KQ_NATIVE:-}" ] && KQ_FLAG="--kquant-native $KQ_NATIVE"
-DAS="$("$DASLANG" -jit "$PARITY" -- -m "$MODEL" -n "$N" --quant "$QUANT" --kv "$KV" $KQ_FLAG --ids "$IDS_CSV" 2>/dev/null)"
+DAS="$(DASLLAMA_CPU_PREFILL=1 "$DASLANG" -jit "$PARITY" -- -m "$MODEL" -n "$N" --quant "$QUANT" --kv "$KV" $KQ_FLAG --ids "$IDS_CSV" 2>/dev/null)"
 DAS_GEN="$(printf '%s\n' "$DAS" | sed -n 's/^GEN_IDS: //p')"
 
 # 3. token-for-token diff

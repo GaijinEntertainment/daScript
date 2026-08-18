@@ -23,6 +23,10 @@ def test_model_specs_invariants(t : T?) {
             if (s.official) {
                 t |> success(!empty(s.url) || !empty(s.recipe),
                     "an official-board spec pins its provenance: {s.file}")
+                // the board pregate refuses evidence-less models, so an official spec without
+                // a frozen fixture could never board — catch it here, not mid-sweep
+                t |> success(!empty(s.parity.gen),
+                    "an official-board spec carries parity evidence: {s.file}")
             }
         }
         delete seen

@@ -225,6 +225,19 @@ def private ev_gemma4_26b_q4km() : ParityEvidence {
         moe_per_expert = true)
 }
 
+// Mistral-Small-3.1-24B Q4_K_M, "1, 2, 3, 4, 5, 6, 7," (tekken BPE, BOS=1) — frozen from
+// simple_ids 2026-08-18, das matched 40/40 at mint time (harness/parity.sh).
+def private ev_mistral_small() : ParityEvidence {
+    return <- ParityEvidence(
+        prompt <- [1l, 1049l, 1044l, 1032l, 1050l, 1044l, 1032l, 1051l, 1044l, 1032l,
+                   1052l, 1044l, 1032l, 1053l, 1044l, 1032l, 1054l, 1044l, 1032l, 1055l,
+                   1044l],
+        gen <- [1032l, 1056l, 1044l, 1032l, 1057l, 1044l, 1032l, 1049l, 1048l, 1044l,
+                1032l, 1049l, 1049l, 1044l, 1032l, 1049l, 1050l, 1044l, 1032l, 1049l,
+                1051l, 1044l, 1032l, 1049l, 1052l, 1044l, 1032l, 1049l, 1053l, 1044l,
+                1032l, 1049l, 1054l, 1044l, 1032l, 1049l, 1055l, 1044l, 1032l, 1049l])
+}
+
 // gpt-oss-20b counting fixture, "1, 2, 3, 4, 5, 6, 7," (no BOS — gpt-4o pre adds none). The
 // o200k prompt ids coincide with the Qwen fixtures' (shared low-ASCII BPE layout); the
 // continuation diverges at "10" (one token here, digit-split there), so the arrays are kept
@@ -338,6 +351,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-12B-it-Q4_K_M.gguf", official = true,
             url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+            // this file's own oracle (2026-08-18) continues the dense fixture byte-identically
+            parity <- ev_gemma4_dense(),
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-12B-it-BF16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/mmproj-gemma-4-12B-it-BF16.gguf",
@@ -363,7 +378,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_gptoss()),
         ModelSpec(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf", official = true,
             url = "{HF}/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF/resolve/main/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
-            bytes = 14333910592l, sha256 = "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2"),
+            bytes = 14333910592l, sha256 = "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
+            parity <- ev_mistral_small()),
         ModelSpec(file = "gemma-4-26B-A4B-it-Q8_0.gguf", display = "gemma-4-26B-A4B",
             // the gemma4 MoE member: every layer sums a DENSE shared expert and routed
             // top-8-of-128 experts under a custom-normalized router
@@ -379,7 +395,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B_q4_0-it.gguf", display = "gemma-4-26B-A4B-q40", quant_label = "q4_0"),
         ModelSpec(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf", official = true,
             url = "{HF}/unsloth/Qwen3.6-27B-MTP-GGUF/resolve/main/Qwen3.6-27B-Q4_K_M.gguf",
-            bytes = 17106773120l, sha256 = "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f"),
+            bytes = 17106773120l, sha256 = "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+            // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35-dense arm
+            // coverage (chunked deltanet) lives on the 0.8B/4B/27B carriers
+            parity <- ev_qwen_count()),
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", display = "Qwen3-30B-A3B", quant_label = "q4_k_m", official = true,
             url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
             bytes = 18556686752l, sha256 = "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
@@ -402,7 +421,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         ModelSpec(file = "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", official = true,
             url = "{HF}/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
-            bytes = 22663387424l, sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b"),
+            bytes = 22663387424l, sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35moe arm
+            // coverage (chunked deltanet + reference MoE prefill) lives on the plain-stem twin
+            parity <- ev_qwen_count()),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B"),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m"),
         ModelSpec(file = "Qwen3-Coder-Next-Q4_K_M.gguf", display = "Qwen3-Coder-Next-q4k", quant_label = "q4_k_m",
