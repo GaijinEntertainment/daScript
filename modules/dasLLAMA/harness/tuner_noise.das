@@ -112,7 +112,7 @@ def noise_gate(tag : string) : bool {
         tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}%{thrTag} - settling 8s hot, re-probing\n")
         let cv0 = cv
         cv = probe_once(8000, med)
-        g_probe_log |> push("{tag} cv {cv0:0.2f}% -> settled {cv:0.2f}%")
+        g_probe_log |> push("{tag} cv {cv0:0.2f}% settled {cv:0.2f}%")
     } else {
         g_probe_log |> push("{tag} cv {cv:0.2f}%")
     }
