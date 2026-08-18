@@ -1087,7 +1087,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     let gpu_comb = fused_gpu && gpu_combine_on()
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
     let grows = fused ? nk : npos
-    // zeroed_resize: a long media prefill (omni ASR, ~2.6k rows x k experts) crosses max_unreserved_size
+    // a long media prefill (omni ASR, ~2.6k rows x k experts) sizes these into the tens of MB (sizing mirrors ple.das)
     s.moe_rlog |> zeroed_resize(npos * ne)
     s.moe_idx_b |> zeroed_resize(nk)
     s.moe_w_b |> zeroed_resize(nk)

@@ -369,3 +369,26 @@ def test_encoder_oracle(t : T?) {
         delete tw   // image-backed planes are locked views — only the finalizer may release them
     }
 }
+
+// Model-free: encoder-state sizing on a whole-clip tower — tt = the clip's frames, so at
+// minutes scale the tt- and 4·tt·d-sized buffers cross the 64 MB max_unreserved_size guard
+// and make_encoder_state must reserve each exact size (a bare resize panics here).
+[test]
+def test_encoder_state_sizing(t : T?) {
+    t |> run("whole-clip encoder state clears max_unreserved_size") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let tw = AudioTower(n_mel = 128l, d_model = 1088l, n_head = 8l, n_layer = 1l,
+            n_ff = 1024l, n_ctx = 16384l, proj_dim = 0l,
+            conv1_w_off = 0l, conv1_b_off = 0l, conv2_w_off = 0l, conv2_b_off = 0l,
+            pos_off = 0l, layers_off = 0l, layer_stride = 0l, lnp_w_off = 0l, lnp_b_off = 0l,
+            proj_w_off = 0l, proj_b_off = 0l)
+        var s <- make_encoder_state(tw)
+        t |> equal(long_length(s.x), tw.n_ctx * tw.d_model)
+        t |> equal(long_length(s.hp), 4l * tw.n_ctx * tw.d_model)
+        t |> equal(long_length(s.h), tw.n_ctx * tw.n_ff)
+        delete s
+    }
+}

@@ -294,7 +294,7 @@ def private cn_mm_rq(m : CanaryEncoder; var y : array<float>; woff : int64; x : 
 }
 
 def private cn_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
-    let need = npos * n   // a minutes-long clip crosses max_unreserved_size — reserve the grow
+    let need = npos * n   // minutes-long clips: tens of MB
     if (long_length(xq) < need) {
         xq |> reserve(need)
         xq |> resize(need)

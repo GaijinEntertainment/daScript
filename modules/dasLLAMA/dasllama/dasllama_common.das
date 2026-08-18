@@ -1861,7 +1861,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
             }
         }
         s.dn_conv_state |> reserve_resize(co)
-        s.dn_state |> reserve_resize(so)   // 27B-class: 48 layers x 48 heads x 128^2 = 144 MB in one grow
+        s.dn_state |> reserve_resize(so)   // 27B-class: 48 recurrent layers x 48 heads x 128^2 = 144 MB in one grow
         s.dn_qkv |> resize(cd)
         s.dn_z |> resize(c.ssm_d_inner)
         s.dn_beta |> resize(c.ssm_dt_rank)

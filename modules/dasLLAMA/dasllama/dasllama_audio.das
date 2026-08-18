@@ -1424,8 +1424,7 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     let tt = t.n_ctx
     let d = t.d_model
     var s = EncoderState()
-    // whole-clip towers carry tt = the clip's frames — att alone is slots x 128 x tt, past
-    // max_unreserved_size on a minutes-long clip, so every buffer here reserves its exact size
+    // whole-clip towers carry tt = the clip's own frame count — minutes-scale buffers here
     s.x1 |> reserve_resize(tin * 3l * t.n_mel)
     s.y1 |> reserve_resize(tin * d)
     s.x2 |> reserve_resize(tt * 3l * d)
@@ -1469,7 +1468,7 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     let nu = int(t.n_head) * nqb
     // que-less-creation guard: the state may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
-    if (long_length(s.att) < attNeed) {   // direct reserve+resize: the @scratch mark licenses it
+    if (long_length(s.att) < attNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
         s.att |> reserve(attNeed)
         s.att |> resize(attNeed)
     }
