@@ -1,5 +1,6 @@
 options gen2
 
+require strings
 require daslib/fio
 
 //! Child-process plumbing: REVIEW.das gates run with the walker's own binary (never another
@@ -15,13 +16,20 @@ def run_argv(args : array<string>) : tuple<rc : int; out : string> {
     return (rc = rc, out = output)
 }
 
+//! The running binary, spawn-safe across a chdir: a path-form argv[0] (CI's ./bin/daslang)
+//! is absolutized so it survives the cwd change; a bare name stays bare for PATH resolution.
+def walker_self_binary : string {
+    let argv <- get_command_line_arguments()
+    if (find(to_generic_path(argv[0]), "/") < 0) {
+        return argv[0]
+    }
+    return get_full_file_name(normalize(argv[0]))
+}
+
 //! Execute each gate (repo-relative path), printing its output. Returns the red-gate count.
 def run_gates(root : string; gates : array<string>) : int {
     return 0 if (empty(gates))
-    let argv <- get_command_line_arguments()
-    // absolutize BEFORE the chdir: CI invokes daslang by a relative path, which
-    // would resolve against the new cwd and fail every spawn
-    let self = get_full_file_name(normalize(argv[0]))
+    let self = walker_self_binary()
     let prev = getcwd()
     if (!chdir(root)) {
         to_log(LOG_ERROR, "review-md: cannot chdir to {root}\n")

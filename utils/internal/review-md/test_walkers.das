@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require daslib/fio
+require gate
 
 // End-to-end walker coverage against planted fixture repos, spawned exactly as CI runs
 // them: the pilot gate's rejection branches, all.das's rc wiring, main.das's gate-red arm.
@@ -29,10 +30,8 @@ def run_in(cwd_root : string; args : array<string>) : tuple<rc : int; out : stri
 }
 
 def spawn_at(cwd_root : string; args : array<string>) : tuple<rc : int; out : string> {
-    let argv <- get_command_line_arguments()
     var full : array<string>
-    // absolutize before run_in's chdir — a relative argv[0] would resolve against the fixture
-    full |> push(get_full_file_name(normalize(argv[0])))
+    full |> push(walker_self_binary())
     full |> push_from(args)
     return run_in(cwd_root, full)
 }
