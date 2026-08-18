@@ -194,6 +194,14 @@ def test_splat_collapse(t : T?) {
     t |> equal(g_v * float3(g_f), float3(1.0 * g_f, 2.0 * g_f, 4.0 * g_f))
     t |> equal(g_v / float3(g_f), float3(1.0 / g_f, 2.0 / g_f, 4.0 / g_f))
     t |> equal(float3(g_f) * g_v, float3(g_f * 1.0, g_f * 2.0, g_f * 4.0))
+    // splat against a SCALAR is not a collapse candidate: the other side must be the vector,
+    // or the fold finds the scalar operator and leaves a float under a floatN-typed node
+    t |> equal(float2(g_f) * g_f, float2(g_f * g_f, g_f * g_f))          // splat * scalar
+    t |> equal(g_f * float2(g_f), float2(g_f * g_f, g_f * g_f))          // scalar * splat
+    t |> equal(g_f / float3(g_f), float3(1.0, 1.0, 1.0))                 // scalar / splat
+    t |> equal(float3(g_f) * 2.0, float3(g_f * 2.0, g_f * 2.0, g_f * 2.0))
+    t |> equal(float4(g_f) / g_f, float4(1.0, 1.0, 1.0, 1.0))            // splat / scalar: never matched, keep it so
+    t |> equal(float2(g_f) * float2(g_f), float2(g_f * g_f, g_f * g_f))  // splat * splat: the cascade
 }
 
 [test]

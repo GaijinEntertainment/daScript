@@ -75,6 +75,11 @@ def target_splat(v : float3; s : float) : float3 {
 }
 
 [export]
+def target_splat_swap(v : float3; s : float) : float3 {
+    return float3(s) * v
+}
+
+[export]
 def target_div_one(f : float) : float {
     return f / 1.0
 }
@@ -253,6 +258,11 @@ def test_identity_folds_fired(t : T?) {
             let b = body_of(t, "target_splat")
             t |> success(!has(b, "float3("), "no splat ctor survives: {b}")
             t |> success(has(b, "v * s"), "vec*scalar form present: {b}")
+        }
+        t |> run("float3(s)*v collapses the splat (the swap arm, both operands pure)") @(t : T?) {
+            let b = body_of(t, "target_splat_swap")
+            t |> success(!has(b, "float3("), "no splat ctor survives: {b}")
+            t |> success(has(b, "v * s"), "swapped to vec*scalar: {b}")
         }
         t |> run("x/1.0 leaves no divide") @(t : T?) {
             let b = body_of(t, "target_div_one")
