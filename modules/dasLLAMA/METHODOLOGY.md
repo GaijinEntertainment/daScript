@@ -134,6 +134,11 @@ engine-free validator of the same record shape plus the tune-sidecar form;
 - **`noise`** copies the mint's noise verdict out of the sidecar provenance (`ok` or
   `overridden`): a row measured under a noise-overridden mint says so on the board, not only
   inside the sidecar.
+- **`parity`** (`ok`) rides das rows: before a model's first cell, the sweep runs the model's
+  frozen pinned-greedy parity fixture (`performance/model_specs.das` evidence — the same one
+  the test suite gates) and refuses every cell on a mismatch, so a board number can never come
+  from an engine that decodes garbage on that box. The pregate prints both decoded texts into
+  the sweep log; only the verdict is stored.
 - **`hardware`** is auto-probed on the box, never typed in — it is the block a reader has to be
   able to trust.
 - **`dasllama_version`** rides das rows only: dasLLAMA's own release counter

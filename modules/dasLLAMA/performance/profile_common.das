@@ -1680,6 +1680,9 @@ struct BenchRun {
                                 // GENERATION; rows across generations are not comparable
     @optional noise : string    // the mint's noise verdict from the sidecar provenance ("ok" |
                                 // "overridden") — an overridden mint shows on the board, not only in the sidecar
+    @optional parity : string   // "ok" = the model's pinned parity pregate (lcpp_bench --parity)
+                                // matched its frozen fixture token-for-token on this box before
+                                // its cells ran — stamped by the board driver on das rows
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor

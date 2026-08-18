@@ -132,10 +132,11 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 
 ## 2. Models
 
-- **One tool provisions and gates the whole set** — `models_provenance()` in
-  `performance/fetch_models.das` is the committed manifest: per file, the exact HF repo +
-  revision pin, canonical bytes + sha256, and the conversion recipe where no registry serves
-  the file. Verify is the default; `--fetch` downloads what is absent (resumable curl):
+- **One tool provisions and gates the whole set** — `performance/fetch_models.das` drives the
+  committed manifest (`models_provenance()`, a view over the `performance/model_specs.das`
+  table): per file, the exact HF repo + revision pin, canonical bytes + sha256, and the
+  conversion recipe where no registry serves the file. Verify is the default; `--fetch`
+  downloads what is absent (resumable curl):
 
 ```sh
 export DASLLAMA_MODELS_DIR=<dir>       # WHISPER_CPP_MODELS too, or point both at ONE dir

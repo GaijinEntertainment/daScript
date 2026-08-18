@@ -340,6 +340,8 @@ def private validate_run(run : JsonValue const?; submission : bool; path : strin
     chk_str(run, "versions", false, MAX_PROV_VALUE, path, errors)
     chk_str(run, "tune", false, MAX_PROV_VALUE, path, errors)
     chk_str(run, "tune_sha", false, MAX_NAME, path, errors)
+    chk_str(run, "noise", false, MAX_SHORT, path, errors)
+    chk_str(run, "parity", false, MAX_SHORT, path, errors)
     chk_str(run, "workload", false, MAX_SHORT, path, errors)
     chk_str(run, "exec_fmt", false, MAX_NAME * 2, path, errors)
     let source = chk_str(run, "source", false, MAX_SHORT, path, errors)

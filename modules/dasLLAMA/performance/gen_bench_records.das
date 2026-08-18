@@ -259,7 +259,7 @@ def private snapshot_tune_generation(exe : string) {
 }
 
 def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string;
-                        var failed : array<string>&) {
+                        var failed : array<string>&; parity : string = "") {
     let hw = gather_hardware()
     for (c in cell) {
         var debug_stamped = false
@@ -269,6 +269,9 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             // the driver's probe is the hardware truth — a child exe built before a probe fix
             // stamps stale/empty identity (zen4 bringup: every das cell read "unknown")
             r.hardware = hw
+            if (!empty(parity) && r.engine == "das") {
+                r.parity = parity   // the model's pregate verdict — cells only run after it passed
+            }
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
             unstamped ||= das_run_unstamped(r)
         }
@@ -390,7 +393,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
         return
     }
     mint_check(models_dir(), "{file} das {tag}")
-    absorb_cell(models, cell, store, note, failed)
+    absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -1120,6 +1123,18 @@ def main : int {
         let path = "{models_dir()}{file}"
         if (!stat(path).is_valid) {
             to_log(LOG_WARNING, "gen_bench_records: SKIP {file} - not on this box\n")
+            continue
+        }
+        // profiling a model STARTS with the parity check: its frozen pinned-greedy fixture
+        // (model_specs.das evidence — the same one test_parity gates) must reproduce on this
+        // box, or no cell of it is measured. The child prints both decoded texts — the
+        // eyeball rides the sweep log; the verdict stamps every das row as `parity`.
+        to_log(LOG_INFO, "gen_bench_records: PARITY PREGATE {file}\n")
+        var pre_tail = ""
+        if (run_and_stream([exe, "--", "--parity", "-m", path], pre_tail) != 0) {
+            to_log(LOG_ERROR, "gen_bench_records: PARITY GATE failed for {file} - skipping every cell of this model (pregate output above)\n")
+            logger_error("bench.records", "parity gate failed", JV({"model" => JV(file)}))
+            failed |> push("{file} parity")
             continue
         }
         // thermal-fair pass order: each ratio's das cell and its ref run ADJACENT (the
