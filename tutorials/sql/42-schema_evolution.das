@@ -19,10 +19,10 @@ require daslib/sql_linq
 
 // One struct per known historical shape. Both name="Logs" — they describe the
 // same logical table at different points in its history.
-[sql_table(name = "Logs", schema_from = "tests/dasSQLITE/test_data/schema_from_v1.db")]
+[sql_table(name = "Logs", schema_from = "tutorials/sql/data/schema_from_v1.db")]
 struct OldLogV1 {}
 
-[sql_table(name = "Logs", schema_from = "tests/dasSQLITE/test_data/schema_from_v2.db")]
+[sql_table(name = "Logs", schema_from = "tutorials/sql/data/schema_from_v2.db")]
 struct OldLogV2 {}
 
 // The current shape — hand-declared, lives in code, evolves with the app.
@@ -57,7 +57,7 @@ def main() {
         newDb |> create_table(type<LogEntry>)
 
         // Stream from a v1-shape source, normalize, insert.
-        with_sqlite("tests/dasSQLITE/test_data/schema_from_v1.db") $(oldDb) {
+        with_sqlite("tutorials/sql/data/schema_from_v1.db") $(oldDb) {
             // `_each_sql` is the streaming iterator — one row at a time, no
             // full-array materialization. Important for large old DBs.
             for (e in _each_sql(oldDb |> select_from(type<OldLogV1>))) {
@@ -66,7 +66,7 @@ def main() {
         }
         // ... and from a v2-shape source. Same `migrate_one_row`, different
         // compile-time branch.
-        with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(oldDb) {
+        with_sqlite("tutorials/sql/data/schema_from_v2.db") $(oldDb) {
             for (e in _each_sql(oldDb |> select_from(type<OldLogV2>))) {
                 newDb |> insert(migrate_one_row(e))
             }

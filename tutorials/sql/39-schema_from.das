@@ -36,7 +36,7 @@ require daslib/sql_linq
 //
 // schema_from_v2.db has:  Logs(Id INTEGER PRIMARY KEY, Severity INTEGER NOT NULL, Message TEXT NOT NULL)
 // → struct LogEntry gets: { @sql_primary_key Id : int64; Severity : int64; Message : string }
-[sql_table(name = "Logs", schema_from = "tests/dasSQLITE/test_data/schema_from_v2.db")]
+[sql_table(name = "Logs", schema_from = "tutorials/sql/data/schema_from_v2.db")]
 struct LogEntry {}
 
 // --- Partial body: hand-declared fields are CONTRACTS --------------------
@@ -54,7 +54,7 @@ struct Note {
     rank  : int
 }
 
-[sql_table(name = "Logs", schema_from = "tests/dasSQLITE/test_data/schema_from_v2.db")]
+[sql_table(name = "Logs", schema_from = "tutorials/sql/data/schema_from_v2.db")]
 struct LogEntryRefined {
     // Id : int (narrowed from INTEGER → int instead of synthesized int64).
     // Severity and Message left to schema_from synthesis.
@@ -72,7 +72,7 @@ def main() {
     }
 
     // Runtime: open the actual DB and read.
-    with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(db) {
+    with_sqlite("tutorials/sql/data/schema_from_v2.db") $(db) {
         // `check_schema` is the runtime startup-defense pattern. With schema_from
         // it's a tautology against the source DB — but if the user passes a
         // DIFFERENT DB at runtime, this catches it.

@@ -196,31 +196,12 @@ providers install via this folder's `.das_package`; results land in a generated
 | `_sql_families.das` | The query families, once, generic over the runner type |
 | `_update_results.das` | Regenerates the INTERP/JIT matrices in `results.md` from sweep JSON |
 
-## telegram/ — Telegram Bot Example
+## Package examples live with their packages
 
-A Telegram echo bot using the `das-telegram` daspkg package. Requires setup:
-
-```
-cd examples/telegram
-daslang.exe ../../utils/daspkg/main.das -- install
-```
-
-| File | Description |
-|------|-------------|
-| `echo_bot.das` | Telegram echo bot — replies with the same message |
-
-## claude/ — Claude API Example
-
-A daslang helper bot using the `das-claude` daspkg package (Anthropic API bindings). Requires setup:
-
-```
-cd examples/claude
-daslang.exe ../../utils/daspkg/main.das -- install
-```
-
-| File | Description |
-|------|-------------|
-| `daslang_helper_bot.das` | Interactive Claude-powered daslang coding assistant |
+A package's examples ship with the package, not here: the Telegram bots (echo +
+dictation) live in the `das-telegram` package repo, the Claude helper bot in
+`das-claude`, and the node-editor example in `dasImguiNodeEditor` — `daspkg install`
+brings each package with its examples.
 
 ## graphics/ — ImGui Examples
 
@@ -236,18 +217,3 @@ daslang.exe -project_root . furier_opengl_imgui_example.das
 |------|-------------|
 | `furier_opengl_imgui_example.das` | Fourier series visualization with ImGui controls |
 
-## node-editor/ — Node Editor Example
-
-[imgui-node-editor](https://github.com/thedmd/imgui-node-editor) example using
-the `dasImguiNodeEditor` daspkg package (`dasImgui` itself ships built-in).
-Requires setup:
-
-```
-cd examples/node-editor
-daslang.exe ../../utils/daspkg/main.das -- install
-daslang.exe -project_root . imgui_node_editor_basic.das
-```
-
-| File | Description |
-|------|-------------|
-| `imgui_node_editor_basic.das` | Two linked nodes in a fullscreen node-editor canvas |
