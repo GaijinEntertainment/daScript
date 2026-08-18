@@ -356,10 +356,14 @@ command, not archaeology.
 - **`dasllama_parity.das`** — CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** — the prefix/page cache for evaluated token history.
-- **`performance/fetch_models.das`** — the committed model-provenance manifest: per catalog
-  file, the exact HF repo + revision pin + sha256, or the on-box conversion recipe. Verify by
-  default, `--fetch` downloads; it never converts, never benches, and it touches no tune
-  state (`tune_policy(missing="fallback")`). BRINGUP.md §2 is the runbook.
+- **`performance/model_specs.das`** — the ONE model-set table: per carrier, the profiled-
+  catalog fields, the official-board flag, the provenance pin (exact HF repo + revision +
+  sha256, or the on-box conversion recipe; companions hang off their owning entry), and the
+  frozen parity evidence as data (pinned ids + arms). `llm_catalog` / `official_catalog` /
+  `models_provenance` are views over it.
+- **`performance/fetch_models.das`** — the fetch/verify driver over the provenance view.
+  Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
+  it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md §2 is the runbook.
 - **`performance/exchange_schema.das`** — engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
 - **`performance/exchange_client.das`** — the sidecar-exchange client: the boot-time

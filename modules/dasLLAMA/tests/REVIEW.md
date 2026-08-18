@@ -74,9 +74,10 @@ input, which can wrongly satisfy a tolerant compare.
 **Every ASR family has a token-for-token oracle cell** — one comparing a transcript against a
 reference leg, external dump or CPU control alike.
 
-**A real model file, mmproj, or image fixture a test in this folder loads has its
-`../performance/fetch_models.das` entry**, or a convert script checked in beside that
-manifest in `../performance/`.
+**A real model file, mmproj, or image fixture a test in this folder loads has a row in
+`../performance/model_specs.das` (or `asr_catalog` in `../performance/profile_common.das`),
+rides a row's `companions` list, or has a convert script checked in beside the table in
+`../performance/`.**
 
 **A vision test that needs no model builds its image procedurally and pins its expectations
 in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via

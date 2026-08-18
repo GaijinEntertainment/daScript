@@ -110,29 +110,6 @@ struct Args {
     help : bool
 }
 
-struct private PubEntry {
-    file : string
-    note : string   // board caveat, stamped into the model record ("" = none)
-}
-
-// The public catalog: community-popular GGUFs, one popular quant each — NOT the internal quant
-// matrix. Curated to what people run THIS year (2026 spring/summer lists: Qwen3.6 family, gemma-4
-// daily drivers, the standing staples). Absent files skip with a warning, so one list serves
-// every box.
-def private pub_catalog() : array<PubEntry> {
-    return <- [
-        PubEntry(file = "Qwen3.8-27B-Q4_K_M.gguf"),
-        PubEntry(file = "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"),
-        PubEntry(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-12B-it-Q4_K_M.gguf"),
-        PubEntry(file = "gemma-4-E4B-it-Q8_0.gguf"),
-        PubEntry(file = "gpt-oss-20b-mxfp4.gguf"),
-        PubEntry(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"),
-        PubEntry(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf")
-    ]
-}
-
 // The measurement child is the RELEASED exe, never a script: its tune winners are baked in at
 // build time, so no cell can tune, re-exec, or drift onto different winners mid-sweep. Absent or
 // older than the bench source is a hard stop with the build line — never a silent rebuild here,
@@ -282,7 +259,7 @@ def private snapshot_tune_generation(exe : string) {
 }
 
 def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string;
-                        var failed : array<string>&) {
+                        var failed : array<string>&; parity : string = "") {
     let hw = gather_hardware()
     for (c in cell) {
         var debug_stamped = false
@@ -292,6 +269,9 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             // the driver's probe is the hardware truth — a child exe built before a probe fix
             // stamps stale/empty identity (zen4 bringup: every das cell read "unknown")
             r.hardware = hw
+            if (!empty(parity) && r.engine == "das") {
+                r.parity = parity   // the model's pregate verdict — cells only run after it passed
+            }
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
             unstamped ||= das_run_unstamped(r)
         }
@@ -413,7 +393,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
         return
     }
     mint_check(models_dir(), "{file} das {tag}")
-    absorb_cell(models, cell, store, note, failed)
+    absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -1131,7 +1111,7 @@ def main : int {
     let threads = cfg.threads > 0 ? cfg.threads : profile_threads()
     let cellPath = "modules/dasLLAMA/performance/records/_cell_{box}.json"
     var failed : array<string>
-    var cat <- pub_catalog()
+    var cat <- official_catalog()
     for (ent in cat) {
         if (!doLlm) {
             continue
@@ -1143,6 +1123,16 @@ def main : int {
         let path = "{models_dir()}{file}"
         if (!stat(path).is_valid) {
             to_log(LOG_WARNING, "gen_bench_records: SKIP {file} - not on this box\n")
+            continue
+        }
+        // profiling a model STARTS with its frozen pinned-greedy fixture (model_specs.das
+        // evidence, the same rows test_parity gates); the verdict stamps every das row as `parity`
+        to_log(LOG_INFO, "gen_bench_records: PARITY PREGATE {file}\n")
+        var out = ""
+        if (run_and_stream([exe, "--", "--parity", "-m", path], out) != 0) {
+            to_log(LOG_ERROR, "gen_bench_records: PARITY PREGATE failed for {file} - skipping every cell of this model (pregate output above)\n")
+            logger_error("bench.records", "parity pregate failed", JV({"model" => JV(file)}))
+            failed |> push("{file} parity")
             continue
         }
         // thermal-fair pass order: each ratio's das cell and its ref run ADJACENT (the

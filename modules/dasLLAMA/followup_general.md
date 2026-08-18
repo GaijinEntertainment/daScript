@@ -439,20 +439,18 @@
     - The site dl-* shared-selector parity check (parse both files, intersect selectors,
       assert identical bodies).
 
-34. **ModelSpec unification — one source of truth for the model set (2026-08-18, NEXT PR).**
-    The 27B bring-up edited three lists by hand (`llm_catalog`, `pub_catalog`, the
-    `fetch_models` provenance manifest) — a design flaw, not a gate candidate. One
-    `ModelSpec` table in `profile_common.das` carrying the union (catalog fields +
-    `official` flag/note + provenance url/bytes/sha/recipe + parity evidence as DATA:
-    pinned prompt/gen ids + arms); the three lists become views, companion artifacts
-    (mmprojs, fixtures) hang off their owning entry or an explicit companions list;
-    `asr_catalog` gets the same treatment. Follow-ons in the same design: the README
-    support-matrix table becomes a generated rendering of the table (gen_env_doc pattern;
-    authored arch-prose rides as a field — stages behind the catalog move); `test_parity`'s
-    standard fixtures become one generic loop over specs with evidence; the board rig's
-    warmup becomes the parity pregate (greedy 40 vs pinned ids, refuse the cell on mismatch
-    like tune_gate, decoded-text eyeball in the log — text derived via the tokenizer, never
-    stored); the parity verdict stamps into every das record row.
+34. **ModelSpec unification — the staged README rendering (2026-08-18, remainder).** The
+    catalog move SHIPPED: one `ModelSpec` table (`performance/model_specs.das`, re-exported
+    by `profile_common`) carries catalog fields + `official` flag/note + provenance +
+    companions + parity evidence as data; `llm_catalog` / `official_catalog` /
+    `models_provenance` are views, `asr_catalog` specs carry their own provenance,
+    `test_parity` runs one generic loop over evidence, and the board pregate
+    (`lcpp_bench --parity`) refuses a model whose fixture does not reproduce, stamping
+    `parity` into das rows. STAGED BEHIND: the README support-matrix table becomes a
+    generated rendering of the table (gen_env_doc pattern; authored arch-prose rides as a
+    field). Found while scoping it: the README matrix claims frozen `test_parity.das`
+    fixtures for GLM-4.5-Air, Phi-3.5, Mistral-Medium-3.5 and Gemma-4-31B that do not exist
+    in the tree — the generation arc starts by reconciling those rows (re-mint or re-word).
 
 35. **`@exact_size` allocation-mode annotation (2026-08-18, OWN PR + design discussion).**
     Five max_unreserved_size strikes in one day, four modules, all input-scaled buffers
@@ -472,17 +470,23 @@
     rail (untripped today), but zen2's first big-model vulkan bake will strike it. Fix with
     the reserve idiom or under #35.
 
-37. **`test_parity_mistral7b` is red on clean master (2026-08-18).** Verified by a
-    detached-master run (54 tests, that one red). PARITY_FULL-gated, so per-PR CI never
-    sees it. Needs its own session: regression vs upstream re-upload vs stale expectation
-    (the fixture discipline's stash-and-rerun steps, then the model-file sha against the
-    manifest).
+37. **The Mistral-7B-v0.3 parity fixture is red on clean master (2026-08-18).** Verified by a
+    detached-master run (54 tests, that one red); the arm now runs as
+    `pinned-greedy parity: Mistral-7B-Instruct-v0.3-Q8_0.gguf` inside `test_parity_specs`.
+    PARITY_FULL-gated, so per-PR CI never sees it. The eyeball rail now shows the shape:
+    38/40 match, then "...interest in the technology" (oracle) vs "...in the field" (das) —
+    a prose-tail near-tie of the "Once upon a time" prompt, the exact class the fixture
+    header disallows. Needs its own session: regression vs upstream re-upload vs stale
+    expectation (stash-and-rerun, then the model-file sha against the manifest); the likely
+    resolution is re-freezing on the counting prompt like every other carrier.
 
-38. **Large-tier parity fixtures have no CI lane (2026-08-18).** Everything behind
-    `DASLLAMA_PARITY_FULL` executes only on dev boxes — a wrong-ids fixture sits green
-    indefinitely. Decide the liveness lane: a nightly PARITY_FULL job on a model-stocked
-    runner, or the #34 parity pregate doubling as the de facto lane (every board sweep
-    exercises the official set's evidence).
+38. **Large-tier parity fixtures have no CI lane (2026-08-18; narrowed).** The official
+    set's evidence is now exercised by every board sweep (the parity pregate — the de facto
+    liveness lane), and the invariants test pins official ⇒ evidence. What remains
+    CI-blind: the non-official large-tier fixtures (the kq trios, the 26B Q8, the
+    plain-stem 35B, Coder-Next) still run only under `DASLLAMA_PARITY_FULL` on dev boxes.
+    Decide whether a nightly PARITY_FULL job on a model-stocked runner is worth standing up
+    for that residue.
 
 39. **The ASR reference receipt collapses a clip ladder to one argv (2026-08-18).** Reference
     ASR tools take one clip per invocation, and `gen_bench_records.das` stores only the LAST
