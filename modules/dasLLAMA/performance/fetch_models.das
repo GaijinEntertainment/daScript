@@ -3,10 +3,11 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options indenting = 4
 
 // fetch_models — the fetch/verify driver over the provenance view (BRINGUP.md §2). The data
-// lives in profile_common's model_specs/asr_catalog table (models_provenance renders it): the
-// exact HF source per carrier (revision-pinned where upstream re-uploads bit-different files
-// under the same name), canonical bytes + sha256, and the on-box conversion recipe for the
-// files no registry serves. Verify is the default; --fetch downloads what is absent. Roots
+// lives in model_specs.das (the model-set table) and profile_common's asr_catalog;
+// models_provenance renders both. Per carrier: the exact HF source (revision-pinned where
+// upstream re-uploads bit-different files under the same name), canonical bytes + sha256, and
+// the on-box conversion recipe for the files no registry serves. Verify is the default;
+// --fetch downloads what is absent. Roots
 // come from the usual env: DASLLAMA_MODELS_DIR ("llm") and WHISPER_CPP_MODELS ("whisper" —
 // point it at the llm dir to keep ONE dir per box).
 //   bin/daslang modules/dasLLAMA/performance/fetch_models.das -- [--fetch] [--dry-run] [-o <substr>]

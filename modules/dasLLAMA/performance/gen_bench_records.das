@@ -1125,15 +1125,13 @@ def main : int {
             to_log(LOG_WARNING, "gen_bench_records: SKIP {file} - not on this box\n")
             continue
         }
-        // profiling a model STARTS with the parity check: its frozen pinned-greedy fixture
-        // (model_specs.das evidence — the same one test_parity gates) must reproduce on this
-        // box, or no cell of it is measured. The child prints both decoded texts — the
-        // eyeball rides the sweep log; the verdict stamps every das row as `parity`.
+        // profiling a model STARTS with its frozen pinned-greedy fixture (model_specs.das
+        // evidence, the same rows test_parity gates); the verdict stamps every das row as `parity`
         to_log(LOG_INFO, "gen_bench_records: PARITY PREGATE {file}\n")
-        var pre_tail = ""
-        if (run_and_stream([exe, "--", "--parity", "-m", path], pre_tail) != 0) {
-            to_log(LOG_ERROR, "gen_bench_records: PARITY GATE failed for {file} - skipping every cell of this model (pregate output above)\n")
-            logger_error("bench.records", "parity gate failed", JV({"model" => JV(file)}))
+        var out = ""
+        if (run_and_stream([exe, "--", "--parity", "-m", path], out) != 0) {
+            to_log(LOG_ERROR, "gen_bench_records: PARITY PREGATE failed for {file} - skipping every cell of this model (pregate output above)\n")
+            logger_error("bench.records", "parity pregate failed", JV({"model" => JV(file)}))
             failed |> push("{file} parity")
             continue
         }

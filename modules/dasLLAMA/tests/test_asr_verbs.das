@@ -9,8 +9,7 @@ require dasllama/dasllama_qwen3a
 
 // The family-owned halves of the ASR facade verbs (asr_exec_fmt / asr_encode_bucket), fed
 // constructed structs — the moved-bit test the extraction owes. Plus parakeet's SPM detokenizer
-// over a hand-built vocab. (The model-provenance shape invariants live in test_model_specs.das,
-// beside the rest of the model-set table's gates.)
+// over a hand-built vocab.
 
 // A parakeet model carrying nothing but a toy SPM vocab — parakeet_detokenize reads m.vocab only.
 // ▁ is U+2581, the SentencePiece space marker.

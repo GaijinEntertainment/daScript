@@ -203,6 +203,30 @@ def test_hostile_records(t : T?) {
         var e4 : array<string>
         t |> success(!validate_record_store(write_store(runs4), e4), "negative tok/s")
         delete e4
+        // the two verdict stamps are bounded strings: an over-long value is a hostile record,
+        // and the writer's own "ok" round-trips clean
+        var r5 <- make_das_run()
+        r5.parity = "ok"
+        r5.noise = "ok"
+        var runs5 : array<BenchRun>
+        runs5 |> emplace(r5)
+        var e5 : array<string>
+        t |> success(validate_record_store(write_store(runs5), e5), "parity/noise 'ok' pass")
+        delete e5
+        var r6 <- make_das_run()
+        r6.parity = repeat("x", 65)
+        var runs6 : array<BenchRun>
+        runs6 |> emplace(r6)
+        var e6 : array<string>
+        t |> success(!validate_record_store(write_store(runs6), e6), "over-long parity stamp")
+        delete e6
+        var r7 <- make_das_run()
+        r7.noise = repeat("x", 65)
+        var runs7 : array<BenchRun>
+        runs7 |> emplace(r7)
+        var e7 : array<string>
+        t |> success(!validate_record_store(write_store(runs7), e7), "over-long noise stamp")
+        delete e7
         remove(TMP)
     }
 }

@@ -6,19 +6,13 @@ require dasllama/dasllama   // the public facade — public-path tests exercise 
 require llvm/daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
 require daslib/jobque_boost
 require daslib/fio
-require strings
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require ../performance/model_specs.das   // the model-set table — parity evidence lives there as DATA
 
-// Frozen token-for-token parity gates for the GGUF arches that stories15M (test_forward.das)
-// doesn't cover. Each fixture is DATA on the model-set table (model_specs.das): pinned prompt
-// ids — or a prompt the arm encodes through the model's own tokenizer — plus the reference
-// greedy continuation llama.cpp's simple_ids oracle produced (regenerate with
-// harness/parity.sh), plus the pinned arms it was frozen under. One generic loop below runs
-// every evidence-carrying spec through its declared arms; the board rig's parity pregate reads
-// the same evidence. The GGUF models are gitignored multi-GB files, so each arm skips cleanly
-// when its model is absent (a real local regression, a no-op in CI) — same contract as
-// test_forward.das.
+// Frozen token-for-token parity gates for the arches stories15M (test_forward.das) doesn't cover.
+// Evidence is DATA in model_specs.das — pinned ids (or a text prompt encoded here) + the arms it was
+//   frozen under; regenerate with harness/parity.sh. The board's --parity pregate reads the same rows.
+// Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
 
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
@@ -122,9 +116,7 @@ def private dn_kq_engaged(fmts : array<KqFmt>) : int64 {
     return n
 }
 
-// One spec's parity arms off one model load: the plain pinned run, then every extra arm the
-// evidence declares (chunked deltanet prefill, reference/per-expert MoE prefill), each
-// restoring the mode it flips. load_model_ (not load_gguf) so the tokenizer rides along —
+// One spec's arms off ONE model load. load_model_ (not load_gguf) so the tokenizer rides along:
 // text-form prompts encode here, and every compare logs its decoded-text eyeball lines.
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     let prev_kq = get_kquant_native()
@@ -167,8 +159,6 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     delete tr
 }
 
-// The generic loop: every evidence-carrying spec gets its own run arm, driven entirely by the
-// table. gpt-oss is the one exception — its shared-load double fixture runs below.
 [test]
 def test_parity_specs(t : T?) {
     var files : array<string>
@@ -206,14 +196,6 @@ let GPTOSS_LONG_GEN <- [220l, 17395l, 11l, 220l, 17336l, 11l, 220l, 17773l, 11l,
                         11l, 220l, 19548l, 11l, 220l, 19218l, 11l, 220l, 9444l, 11l,
                         220l, 18881l, 11l, 220l, 18694l, 11l, 220l, 17666l, 11l, 220l]
 
-def private gptoss_counting_prompt() : string {
-    return build_string() $(var w) {
-        for (i in range(1, 151)) {
-            w |> write(i)
-            w |> write(i < 150 ? ", " : ",")
-        }
-    }
-}
 
 // gpt-oss-20b (arch "gpt-oss", native-MXFP4 expert planes — attn/cls Q8) — the wave-5 stack:
 // per-head attention sinks, YaRN rope (factor 32 / 4096), alternating 128-token SWA,
@@ -234,7 +216,7 @@ def test_parity_gptoss_20b(t : T?) {
             tr.config.seq_len = 2048l
         }
         t |> success(parity_gen_ok(tr, spec.parity.prompt, spec.parity.gen, [eyeball = true]), "gpt-oss-20b token-for-token")
-        let long_prompt <- encode(tr, gptoss_counting_prompt(), true, false)
+        let long_prompt <- encode(tr, counting_prompt(150), true, false)
         t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN, [eyeball = true]), "gpt-oss-20b window-engaged token-for-token")
         delete tr
     }

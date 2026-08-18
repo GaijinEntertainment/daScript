@@ -2,9 +2,9 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
 
-// Shared foundation for the dasLLAMA profiling suite: the model catalog, the small/large tier gate,
-// the per-box platform block, and the baseline-TSV I/O that the reference establisher writes and the
-// das-side generator reads. The suite is deliberately self-contained (it does not cross-require the
+// Shared foundation for the dasLLAMA profiling suite: the ASR catalog (the text model table lives
+// in model_specs.das, re-exported here), the small/large tier gate, the per-box platform block, and
+// the baseline-TSV I/O that the reference establisher writes and the das-side generator reads. The suite is deliberately self-contained (it does not cross-require the
 // tests/ tier helper) so it lives entirely under modules/dasLLAMA/performance/.
 
 module profile_common shared public

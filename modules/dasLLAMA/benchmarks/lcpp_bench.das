@@ -1025,8 +1025,7 @@ def private argmax_logit(s : Session; vocab : int64) : int64 {
 
 // ===== The parity pregate (--parity: the board's start-of-model gate) =====
 
-// the pinned greedy continuation: prefill the pinned prompt, then argmax-decode n_gen tokens —
-// the same slice test_parity's parity_gen_ok compares
+// greedy continuation over the same slice test_parity's parity_gen_ok compares
 def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64) : array<int64> {
     var got : array<int64>
     got |> reserve(n_gen)
@@ -1058,16 +1057,19 @@ def private parity_eyeball(t : Model; ids : array<int64>) : string {
     return replace(decode_(t, ids), "\n", "\\n")
 }
 
-// One pinned run against the model-set table's frozen evidence — the same fixture
-// test_parity's generic loop gates, run by gen_bench_records before a model's first cell so a
-// board never measures an engine that decodes garbage on this box. Loads the PLANAR rail
-// (load_model_ — the layout the fixtures were frozen on) under the pinned bit-exact kernel
-// modes; both decoded texts print (the eyeball is derived via the tokenizer, never stored).
-// True only on a full token-for-token match.
+// The board's start-of-model gate: one pinned run against the spec's frozen evidence — the same
+// fixture test_parity's generic loop drives. Loads the PLANAR rail (load_model_ — the layout the
+// fixtures were frozen on); the eyeball texts are derived via the tokenizer here, never stored.
 def private parity_cell_main(model : string) : bool {
     var inscope spec <- spec_by_file(base_name(model))
+    return parity_check(model, spec)
+}
+
+//! The pregate's verdict for `model` under `spec`'s evidence — public so a test can drive the
+//! compare with a deliberately wrong fixture; the arm's own path binds `spec` off the table.
+def parity_check(model : string; spec : ModelSpec) : bool {
     if (empty(spec.parity.gen)) {
-        print("PARITY GATE: no evidence for {base_name(model)} in the model-set table (model_specs.das) - freeze a fixture (harness/parity.sh) before boarding this model\n")
+        print("PARITY PREGATE: no evidence for {base_name(model)} in the model-set table (model_specs.das) - freeze a fixture (harness/parity.sh) before boarding this model\n")
         return false
     }
     allow_cpu_prefill()   // the pinned compare is CPU by protocol — disarm the Metal-build tripwire
@@ -1079,8 +1081,7 @@ def private parity_cell_main(model : string) : bool {
     if (spec.parity.kq_native) {
         set_kquant_native(prev_kq)
     }
-    // the pinned modes the fixtures were frozen under: bit-exact classic prefill attention,
-    // scalar libm activations, per-token recurrent deltanet prefill
+    // the modes the fixtures were frozen under — keep in step with test_parity's parity_gen_ok
     let prev_attn = get_prefill_attn_mode()
     set_prefill_attn_mode(AttnPrefillMode.classic)
     let prev_act = get_act_vec()
@@ -1109,7 +1110,7 @@ def private parity_cell_main(model : string) : bool {
         if (ok) {
             print("parity ok: {base_name(model)} {int(n_gen)}/{int(n_gen)} token-for-token\n")
         } else {
-            print("PARITY GATE: {base_name(model)} diverges from its frozen fixture - this box's engine does not reproduce the pinned continuation, so no cell of this model is measurable\n")
+            print("PARITY PREGATE: {base_name(model)} diverges from its frozen fixture - this box's engine does not reproduce the pinned continuation, so no cell of this model is measurable\n")
         }
         delete got
         delete prompt
@@ -1341,7 +1342,7 @@ def main() : int {
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
         return 1
     }
-    if (cfg.parity) {   // the board pregate: a correctness gate under the same kernel stack, no timings
+    if (cfg.parity) {   // the board pregate: correctness only — same tuned stack as the cells, fixture modes pinned, no timings
         return parity_cell_main(cfg.model) ? 0 : 1
     }
     if (cfg.accel && gpu) {

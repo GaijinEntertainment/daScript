@@ -1,18 +1,17 @@
 options gen2
 options indenting = 4
 
-// The model-set table — ONE source of truth for the model set; every catalog list is a view
-// over it (the profiled llm_catalog, the official board, and — via profile_common, which also
-// folds in asr_catalog — the models_provenance manifest). A deliberately light leaf: tests
-// require it directly without paying profile_common's tool closure, and it defines no path
-// helpers, so it never collides with a test harness's own models_dir.
+// ONE source of truth for the text model set: llm_catalog / official_catalog are views below;
+//   models_provenance (profile_common, folding in asr_catalog) is the third.
+// A light leaf on purpose: tests require it without profile_common's tool closure.
+// Defines no path helpers, so it never collides with a test harness's own models_dir.
 
 module model_specs shared public
 
 require strings public
 require dasllama/dasllama_common public   // QuantMode
 
-// ===== The model set (ONE table; every list below is a view over it) =====
+// ===== Row types =====
 
 //! One provenance-pinned artifact: local `name` under `root` ("llm" = DASLLAMA_MODELS_DIR,
 //! "whisper" = WHISPER_CPP_MODELS), the exact source `url` ("" = converted on-box per
@@ -29,9 +28,7 @@ struct ProvEntry {
 
 //! A spec's frozen greedy parity fixture — evidence as DATA (pinned ids, never a test name).
 //! Empty `gen` = no evidence. `prompt_text` (instead of `prompt`) = the prompt encodes in-test
-//! through the model's own tokenizer. The bools name the extra pinned arms and load modes the
-//! fixture was frozen under; the decoded-text eyeball is always derived via the tokenizer at
-//! run time, never stored.
+//! through the model's own tokenizer; the decoded-text eyeball is derived the same way, never stored.
 [safe_when_uninitialized]   // default init (empty ids, false arms) IS "no evidence"
 struct ParityEvidence {
     prompt : array<int64>
@@ -184,18 +181,22 @@ def private ev_gemma3_4b() : ParityEvidence {
                 236743l, 236770l, 236825l, 236764l, 236743l, 236770l, 236832l, 236764l, 236743l, 236770l])
 }
 
-//! The gemma4 fixture prompt: "1, 2, …, 320," (~1490 tokens, byte-identical to the oracle
-//! run's input) — encoded in-test through the model's tokenizer, so it gates the tokenizer AND
-//! the forward, and the sliding window is genuinely engaged (kstart > 0). The short 21-token
-//! counting prompt was rejected: its oracle continuation drifts into the channel format on a
-//! near-tie that flips under the pinned classic+libm kernels.
-def gemma4_counting_prompt() : string {
+//! "1, 2, …, N," — the counting prompt the long text-form fixtures encode in-model (byte-identical
+//! to the oracle run's input).
+def counting_prompt(n : int) : string {
     return build_string() $(var w) {
-        for (i in range(1, 321)) {
+        for (i in range(1, n + 1)) {
             w |> write(i)
-            w |> write(i < 320 ? ", " : ",")
+            w |> write(i < n ? ", " : ",")
         }
     }
+}
+
+// the gemma4 fixture prompt, 1..320 (~1490 tokens): the sliding window is genuinely engaged
+// (kstart > 0). The short 21-token counting prompt was rejected — its oracle continuation
+// drifts into the channel format on a near-tie that flips under the pinned classic+libm kernels.
+def private gemma4_counting_prompt() : string {
+    return counting_prompt(320)
 }
 
 // the dense-gemma4 continuation (frozen on the 12B, shared by every dense gemma4 carrier —
@@ -322,10 +323,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q6_K.gguf",
             parity <- ev_qwen_count([kq_native = true])),
         // the deltanet arm of the native-kq gate: recurrent-layer projections (attn_qkv /
-        // attn_gate / ssm_out) ride kq-native planes on the CPU rail (Metal/GPU-tier loads
-        // keep them q8). The trio spans k4/k5/k6 dn planes (qkv mixes Q6_K into the Q4/Q5
-        // files); the engaged assert is per plane kind — a silently-demoted tag would
-        // otherwise pass green on the q8 fallback rail.
+        // attn_gate / ssm_out) ride kq-native planes on the CPU rail; the trio spans k4/k5/k6
+        // dn planes (qkv mixes Q6_K into the Q4/Q5 files)
         ModelSpec(file = "Qwen3.5-4B-Q4_K_M.gguf",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true, require_dn_kq = true])),
         ModelSpec(file = "Qwen3.5-4B-Q5_K_M.gguf",
@@ -402,22 +401,19 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", display = "Qwen3-30B-A3B", quant_label = "q4_k_m", official = true,
             url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
             bytes = 18556686752l, sha256 = "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
-            // the qwen3moe arch (QK-norm, softmax router -> RENORMALIZED top-8-of-128, no
-            // shared expert) and the MoE arm of the native-kq gate: the grouped prefill
-            // gathers per-expert token batches off the K-form batch image
+            // the MoE arm of the native-kq gate: the grouped prefill gathers per-expert token
+            // batches off the K-form batch image (the seam the dense arms never touch)
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         ModelSpec(file = "Qwen3.8-27B-Q4_K_M.gguf", display = "Qwen3.8-27B", quant_label = "q4_k_m", official = true,
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
-            // the qwen35 hybrid dense at scale: 48 deltanet + 16 gated-attention layers
-            // (24Q/4KV at head 256, 48 v-heads x 128 deltanet), native K-quant planes
+            // the qwen35 hybrid dense at scale, native K-quant planes
             parity <- ev_qwen_count([dn_chunked = true])),
         // the same UD-Q4_K_M weights under two local names: the MTP-stem file carries the MTP
         // head (the official-board carrier), the plain stem predates it (the profiled carrier)
         ModelSpec(file = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", display = "Qwen3.6-35B-A3B", quant_label = "q4_k_m",
-            // the qwen35moe hybrid: 30 deltanet + 10 gated-attention layers (16Q/2KV, v-heads
-            // 32 over 16 k-heads — the modulo GQA-repeat), softmax top-8-of-256 renormalized +
-            // sigmoid-gated shared expert, F32 ssm_beta/alpha, K-quant expert stacks
+            // the qwen35moe hybrid (deltanet + routed experts + shared expert): both MoE
+            // prefill paths and the chunked deltanet arm off one load
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         ModelSpec(file = "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", official = true,
             url = "{HF}/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
@@ -428,41 +424,36 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B"),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m"),
         ModelSpec(file = "Qwen3-Coder-Next-Q4_K_M.gguf", display = "Qwen3-Coder-Next-q4k", quant_label = "q4_k_m",
-            // arch qwen3next, the parent hybrid: the FILE layout differs from qwen35 (fused
-            // Q4_K ssm_ba, HF grouped v-head order) — this fixture proves the loader's
-            // grouped->tiled permutes (qkv v-rows, z gate, conv channels, a/dt, ba split,
-            // ssm_out columns)
+            // arch qwen3next: the FILE layout differs from qwen35 (fused Q4_K ssm_ba, HF
+            // grouped v-head order) — this fixture proves the loader's grouped->tiled permutes
             parity <- ev_qwen_count([dn_chunked = true]))
     ]
 }
 
-//! The profiled text-LLM view over [[model_specs]] — the rows gen_profile / the baseline
-//! establisher measure (a spec with a scoreboard display name).
-def llm_catalog() : array<ModelSpec> {
+// the rows of [[model_specs]] the predicate keeps
+def private spec_view(keep : block<(s : ModelSpec) : bool>) : array<ModelSpec> {
     var all <- model_specs()
     var out : array<ModelSpec>
     for (s in all) {
-        if (!empty(s.display)) {
+        if (invoke(keep, s)) {
             out |> emplace(s)
         }
     }
     delete all
     return <- out
+}
+
+//! The profiled text-LLM view over [[model_specs]] — the rows gen_profile / the baseline
+//! establisher measure (a spec with a scoreboard display name).
+def llm_catalog() : array<ModelSpec> {
+    return <- spec_view() $(s : ModelSpec) : bool { return !empty(s.display); }
 }
 
 //! The public-board view over [[model_specs]] — the rows gen_bench_records sweeps: community-
 //! popular GGUFs, one popular quant each, NOT the internal quant matrix (curated to what
 //! people run THIS year). Absent files skip with a warning, so one list serves every box.
 def official_catalog() : array<ModelSpec> {
-    var all <- model_specs()
-    var out : array<ModelSpec>
-    for (s in all) {
-        if (s.official) {
-            out |> emplace(s)
-        }
-    }
-    delete all
-    return <- out
+    return <- spec_view() $(s : ModelSpec) : bool { return s.official; }
 }
 
 //! The spec row keyed `file` (empty `file` field back = no such spec) — a fresh copy off the

@@ -146,6 +146,12 @@ pinned arms (evidence is DATA on `ModelSpec.parity` — ids + arms, regenerated 
 `harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
 shared-load double fixture. Every compare logs decoded-text eyeball lines. Large carriers gate
 on `DASLLAMA_PARITY_FULL=1` via `model_available`.
+`test_parity_pregate.das` — suite-less, model-gated: the board parity pregate
+(`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers — the real
+fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
+encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
+(Qwen3-4B Q4_K_M). Requires the bench by relative path (like `test_tok_seed`), so it pays the
+bench's engine compile.
 `test_run_summary.das` — model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
