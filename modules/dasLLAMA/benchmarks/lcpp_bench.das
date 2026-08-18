@@ -1044,15 +1044,6 @@ def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64) : arr
     return <- got
 }
 
-// text-form evidence encodes through the model's own tokenizer, the same flags the test loop
-// uses (add_special on, parse_special off)
-def private parity_encode(model, text : string) : array<int64> {
-    var tk <- load_tokenizer_auto(model)
-    var ids <- encode(tk, text, true, false)
-    delete tk
-    return <- ids
-}
-
 def private parity_eyeball(t : Model; ids : array<int64>) : string {
     return replace(decode_(t, ids), "\n", "\\n")
 }
@@ -1091,8 +1082,10 @@ def parity_check(model : string; spec : ModelSpec) : bool {
     var ok = false
     with_job_que() {
         setup_dasllama_jobque_()
+        // text-form evidence encodes through the loaded model's own tokenizer (load_model_
+        // carries it), the same flags the test loop uses (add_special on, parse_special off)
         var prompt <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
-            : parity_encode(model, spec.parity.prompt_text))
+            : encode_(t, spec.parity.prompt_text, true, false))
         let n_gen = long_length(spec.parity.gen)
         t.config.seq_len = min(t.config.seq_len, long_length(prompt) + n_gen + 8l)   // KV cap: only these positions run
         var got <- parity_greedy(t, prompt, n_gen)
