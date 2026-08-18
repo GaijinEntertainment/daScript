@@ -12,6 +12,12 @@ comment that remains: **does it add information the reader would otherwise have 
 look for?** Every rule below is this test applied to a specific shape. Style target:
 less War & Peace, more O. Henry.
 
+**Teaching code narrates on purpose.** In tutorials and examples the prose IS the
+deliverable: the cap and the narration ban apply to comments that add nothing to the line
+they sit on (`// increment i`, a tail comment restating the call), not to section prose
+carrying the lesson. Duplication still counts — a preamble and the tail comments telling
+the same sequence twice is one telling too many.
+
 **Keep rules simple.** One rule here is one short paragraph. An entry that needs more
 is describing an essay, not a shape — split it or drop it.
 
@@ -89,7 +95,8 @@ narration. The comment must say something the identifiers don't.
 
 **No incident citations.** The banned form is a citation of an event that can only be
 verified outside the code — a PR or issue number, a date pinning when something broke or
-was fixed, "proven: <module> lost <bug>". A date stamping when the data pinned beside it
+was fixed, "proven: <module> lost <bug>", or a reference to a past state of the code
+("came via X before the split", "moved here from Y"). A date stamping when the data pinned beside it
 was captured or verified (a frozen expected-output fixture beside its ids, a
 `probe-verified <date>` claim) points at no event and is not a citation. The required
 form is the failure mode named in present tense at the code that guards it:

@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // explicit deletes: each arm frees its model before the next loads
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require ../benchmarks/lcpp_bench.das   // parity_check — the board pregate's verdict, driven with a controlled spec

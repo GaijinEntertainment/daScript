@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 // ONE source of truth for the text model set: llm_catalog / official_catalog are views below;
 //   models_provenance (profile_common, folding in asr_catalog) is the third.
@@ -8,6 +9,7 @@ options indenting = 4
 
 module model_specs shared public
 
+require dasllama/dasllama_lint public
 require strings public
 require dasllama/dasllama_common public   // QuantMode
 
