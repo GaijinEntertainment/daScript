@@ -443,6 +443,24 @@ jobs:
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_scan.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_gate.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_walkers.das
+
+    - name: "Test dastest own suite"
+      # the whole directory, so a new dastest/tests file is covered with no
+      # hand-added row (this also runs the review_gate library tests)
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./dastest/tests
+
+    - name: "Run REVIEW.das gates"
+      # the CI counterpart of the make_pr step-0a walk (fail-fix: agents only
+      # ever review a mechanically-clean tree)
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang ./utils/internal/review-md/all.das
 
     - name: "Test pr-babysit verdict core"
       if: matrix.target == 'linux'

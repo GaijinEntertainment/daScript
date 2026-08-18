@@ -55,6 +55,40 @@ def test_walk_collects_governing_checklists(t : T?) {
 }
 
 [test]
+def test_sibling_and_orphan_gates(t : T?) {
+    let fixture_r = create_temp_directory_result("review_md_gates")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    t |> success(mkdir_rec("{fixture}/a"))
+    t |> success(mkdir_rec("{fixture}/b"))
+    t |> success(mkdir_rec("{fixture}/c"))
+    write_marker("{fixture}/REVIEW.md")
+    write_marker("{fixture}/a/REVIEW.md")
+    write_marker("{fixture}/b/REVIEW.md")
+    write_marker("{fixture}/a/REVIEW.das")
+    write_marker("{fixture}/c/REVIEW.das")
+
+    var inscope gates <- sibling_gates(fixture, ["REVIEW.md", "a/REVIEW.md", "b/REVIEW.md"])
+    t |> equal(1, length(gates), "only a/ pairs a checklist with a gate")
+    t |> equal("a/REVIEW.das", gates[0])
+
+    var inscope orphans <- orphan_gates(fixture, ["a/REVIEW.das", "c/REVIEW.das"])
+    t |> equal(1, length(orphans), "c/ has a gate and no checklist")
+    t |> equal("c/REVIEW.das", orphans[0])
+
+    // root arms: a gate beside the root checklist, and a root gate with no checklist
+    write_marker("{fixture}/REVIEW.das")
+    var inscope root_gate <- sibling_gates(fixture, ["REVIEW.md"])
+    t |> equal(1, length(root_gate))
+    t |> equal("REVIEW.das", root_gate[0])
+    var inscope root_orphan <- orphan_gates("{fixture}/c", ["REVIEW.das"])
+    t |> equal(1, length(root_orphan), "c/ as root has a gate and no checklist")
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test]
 def test_git_output_parsing(t : T?) {
     var inscope parsed <- changed_from_git_output("a.txt\r\n\nb/c.txt\n")
     t |> equal(2, length(parsed))

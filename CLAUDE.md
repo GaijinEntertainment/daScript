@@ -160,7 +160,9 @@ first commit, never a restatement (`skills/review_md.md` carries the opening tem
 a checklist audit runs for a PR, its scope is every REVIEW.md discovered from the changed set
 (the `skills/internal/make_pr.md` step-0a walk, tool: `utils/internal/review-md/main.das`): each discovered
 checklist is itself audited under the self-review rule, not
-just applied. The implementer is the shared **`review-md-auditor` agent**
+just applied. The walk tool first EXECUTES each discovered checklist's `REVIEW.das` gate
+(the mechanical half — fail-fix like dastest, no agents until green; contract in
+`REVIEW_COMMON.md`). The implementer for the prose half is the shared **`review-md-auditor` agent**
 (`.claude/agents/review-md-auditor.md`): one instance owns exactly one checklist, so with
 several in scope the ORCHESTRATOR launches one instance per checklist in parallel and merges
 the findings into one report. Self-review includes **followability** — the finding classes

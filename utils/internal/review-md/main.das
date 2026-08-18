@@ -5,10 +5,11 @@ require daslib/strings_boost
 require daslib/fio
 require daslib/clargs
 require scan
+require gate
 
 // Lists every REVIEW.md whose folder the changed set touches (skills/internal/make_pr.md step 0a).
-// The changed set is `git diff --name-only <base>` — committed and working-tree changes
-// alike.
+// Runs their REVIEW.das gates first: a red gate is fail-fix, no agent review until green.
+// Changed set = `git diff --name-only <base>` — committed and working-tree changes alike.
 
 [CommandLineArgs]
 struct Config {
@@ -20,19 +21,12 @@ struct Config {
     @clarg_doc = "Explicit changed paths (skips git entirely)"
     files : array<string>
 
+    @clarg_doc = "List affected checklists only — skip executing their REVIEW.das gates"
+    list_only : bool
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
-}
-
-def run_argv(args : array<string>) : tuple<rc : int; out : string> {
-    var output : string
-    let rc = unsafe(popen_argv(args, 0.0) $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    })
-    return (rc = rc, out = output)
 }
 
 [export]
@@ -67,6 +61,24 @@ def main() : int {
         ? changed_from_git_output(git_out)
         : clone_to_move(cfg.files))
     var inscope found <- affected_review_md(root, changed)
+    // a changed REVIEW.das without its checklist is a structural defect — caught here
+    // even under --list-only, before any gate runs
+    let changed_gates <- [for (f in changed); f; where base_name(f) == "REVIEW.das"]
+    var inscope orphans <- orphan_gates(root, changed_gates)
+    if (!empty(orphans)) {
+        for (o in orphans) {
+            print("{orphan_finding(o)}\n")
+        }
+        return 1
+    }
+    if (!cfg.list_only) {
+        var inscope gates <- sibling_gates(root, found)
+        let failed = run_gates(root, gates)
+        if (failed != 0) {
+            to_log(LOG_ERROR, "review-md: {failed} REVIEW.das gate(s) red — fix before agent review\n")
+            return 1
+        }
+    }
     for (p in found) {
         print("{p}\n")
     }
