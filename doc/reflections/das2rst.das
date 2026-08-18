@@ -376,6 +376,14 @@ def document_module_dasllama(_root : string) {
             "A loaded gemma vision embedder: the mmproj GGUF's projection weights plus the family's geometry, as produced by ``load_gemma4uv_embedder``. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``proj_dim`` must match the decoder's embedding width (checked at create).")
         dasllama_type_stanza(f, "struct-dasllama_gemma4uv-Gemma4uvState", "Gemma4uvState",
             "Caller-owned scratch for the embedder forward: the im2col and GEMM buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
+        dasllama_type_stanza(f, "struct-dasllama_image-DlimImageInfo", "DlimImageInfo",
+            "One prepared image beside a GGUF, as listed by ``dlim_inventory``: ``file``, ``path``, ``bytes``, the image ``version``, its bake ``identity``, and a ``verdict`` — ``CURRENT`` loads; ``STALE vN`` is an older image version; ``OTHER`` a different bake configuration or box; ``FOREIGN`` a different flavor.")
+        dasllama_type_stanza(f, "struct-dasllama_gpu_tier-GpuTierStatus", "GpuTierStatus",
+            "Snapshot of the GPU tier in force (``gpu_tier_status``): the ``device`` name, ``vram_bytes`` held, and the resident/streamed layer counts, dense planes and classifier residency the armed backend reports.")
+        dasllama_type_stanza(f, "struct-dasllama_gpu_tier-GpuTierWant", "GpuTierWant",
+            "A programmatic GPU tier request (``set_gpu_tier_want``): ``auto_tier`` asks for the measured-best rail set; ``moe_layers``/``moe_stream``/``vram_mb`` and the per-rail flags override it. The core ``DASLLAMA_GPU_*`` env knobs override the matching fields when present. ``GpuTierWant()`` is a zero want — no device.")
+        dasllama_type_stanza(f, "struct-dasllama_gpu_resident-GpuModelMarks", "GpuModelMarks",
+            "One model's complete per-model GPU tier state while it is NOT the installed model (a multi-model host keeps one per slot): its routing marks plus the resident driver's activation. Mint with ``gpu_model_marks_init``; ``gpu_slot_capture`` fills it after the model's load, ``moe_gpu_model_marks_save``/``_restore`` swap it in and out on a switch.")
     }
     document("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
 }
