@@ -555,6 +555,17 @@ def private validate_check(kernel : string; names : array<string>; med : array<d
     tune_progress_note("VALIDATE {kernel}: {why}, level drift {drift:0.2f}%\n")
     if (!keep) {
         demote(kernel, why)
+        return
+    }
+    // the seat's recorded margin becomes the WEAKEST observed one - the closing-floor check
+    // below must judge what the re-race actually held, not the race's high-water mark
+    if (bi >= 0 && ok[bi] && key_exists(g_race, kernel)) {
+        let remargin = med[bi] > 0.0lf ? (med[bi] - med[ri]) / med[bi] * 100.0lf : 0.0lf
+        var row = g_race[kernel]
+        let old : double = row?["margin_pct"] ?? 0.0lf
+        if (remargin < old) {
+            update(row, "margin_pct", JV(remargin))
+        }
     }
 }
 

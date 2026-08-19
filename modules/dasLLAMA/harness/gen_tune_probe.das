@@ -58,7 +58,13 @@ require dasllama/dasllama_env
 let SCREEN_ROUNDS = 2
 let ROUNDS = 8
 let GEN_KEEP = 1.20lf
-let GEN_MARGIN = 1.03lf   // a new crown must beat the incumbent's best by this, else the incumbent keeps the seat
+let GEN_MARGIN_PCT = 3.0lf   // a new crown must beat the incumbent's best by this (or the probe floor, if higher)
+
+// the sticky margin as a factor: 3% or the highest probe cv seen so far - a noisier run
+// demands a wider win to move a seat
+def private gen_margin() : double {
+    return 1.0lf + max(GEN_MARGIN_PCT, noise_floor_pct()) / 100.0lf
+}
 
 require tuner_cli              // the shared tuner CLI
 
@@ -85,7 +91,7 @@ def private gen_round_step(r : int; keep : array<bool>) {
 }
 
 // the previous sidecar's seat for `entry`, read raw (a stale sidecar still names the seats) —
-// a re-mint's crown only moves when it beats the incumbent by GEN_MARGIN
+// a re-mint's crown only moves when it beats the incumbent by gen_margin()
 var private g_incumbent : table<string; string>
 var private g_incumbent_loaded = false
 
@@ -113,13 +119,16 @@ def private gen_incumbent(entry : string) : string {
 }
 
 // the sticky seat: winner index unless the incumbent (by name) is raced, passed, and the winner
-// does not beat its best by GEN_MARGIN
-def private gen_sticky(entry : string; names : array<string>; best : array<double>; winner : int) : int {
+// does not beat its best by the margin. `times` is the metric that DECIDED the seat - the tile
+// bench for a cross-tile move, the hot decode bench between rows sharing the winner's tile key
+// (their tile times are near-identical by construction, so tile times cannot compare them)
+def private gen_sticky(entry : string; names : array<string>; times : array<double>; winner : int) : int {
     let inc = gen_incumbent(entry)
     return winner if (empty(inc) || inc == names[winner])
+    let m = gen_margin()
     for (i, nm in count(), names) {
-        if (nm == inc && best[i] < 1.0e29lf && best[winner] * GEN_MARGIN > best[i]) {
-            tune_detail("{entry}: {names[winner]} does not beat the incumbent {inc} by x{GEN_MARGIN} - the seat stays\n")
+        if (nm == inc && times[i] < 1.0e29lf && times[winner] * m > times[i]) {
+            tune_detail("{entry}: {names[winner]} does not beat the incumbent {inc} by x{m:0.3f} - the seat stays\n")
             return i
         }
     }
@@ -908,6 +917,18 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         }
         delete sq; delete ss; delete hq; delete hs
     }
+    // the sticky seat, by the recorded times: the incumbent keeps the crown inside the margin
+    if (!empty(best)) {
+        let inc = gen_incumbent("q51q8_tile_gen")
+        if (!empty(inc) && inc != best && key_exists(rows_out, inc)) {
+            var irow = rows_out[inc]
+            let it : double = irow?["streamed_us"] ?? -1.0lf
+            if (it > 0.0lf && double(bestDt) * gen_margin() > it) {
+                tune_detail("q51q8_tile_gen: {best} does not beat the incumbent {inc} by x{gen_margin():0.3f} - the seat stays\n")
+                best = inc
+            }
+        }
+    }
     delete sfx
     delete hfx
     delete tvs
@@ -1680,8 +1701,12 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     if (merged != winner) {
         tune_detail("tile winner {vs[winner]._0} + hot decode winner within '{wkey}' -> {vs[merged]._0}\n")
     }
+    // stickiness on the metric that decided each half: an incumbent in the winner's own tile
+    // family raced the HOT bench for the seat, a cross-tile incumbent raced the tile bench
     var vnames <- [for (v in vs); v._0]
-    merged = gen_sticky("q8q8_tile_gen", vnames, best, merged)
+    let q8inc = gen_incumbent("q8q8_tile_gen")
+    let incSameTile = !empty(q8inc) && tile_key(q8inc) == wkey
+    merged = gen_sticky("q8q8_tile_gen", vnames, incSameTile ? hbest : best, merged)
     delete vnames
     delete keep
     // the kq families tune separately — one manifest entry per format, tile-best wins (the
