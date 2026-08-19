@@ -100,7 +100,7 @@ def test_uarith_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.c[0], 4u)     // x=3, y=1: (3+1)-(3*1) + (3/1)+(3%1) = 4 — the oracle itself computed
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -166,7 +166,7 @@ def test_iarith_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.c[0], -197)   // x=-40, y=-5: (-45 - 200) + (8 + 0) + 40 = -197
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -231,7 +231,7 @@ def test_farith_gpu_vs_cpu(t : T?) {
         t |> success(fapprox(oracle.c[0], 1.5), "x=0, y=1.5: result is 1.5 — the oracle itself computed")
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -299,7 +299,7 @@ def test_vecarith_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.flags[0], 1)      // ib[0] == ia[0] by construction -> the all() branch
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

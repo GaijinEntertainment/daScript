@@ -706,7 +706,7 @@ def private q8_mv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, nrows, xs4, ys 
 def test_metal_kq_gemv_kernels(t : T?) {
     t |> run("kq GEMV / KqMv / MoeGemv-kq kernels == the plane-dequant CPU reference") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return

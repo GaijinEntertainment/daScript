@@ -191,7 +191,7 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
 def test_metal_sq_attn_kernels(t : T?) {
     t |> run("single-query attention kernels == CPU attention oracle (sinks, softcap, split-K, window)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return

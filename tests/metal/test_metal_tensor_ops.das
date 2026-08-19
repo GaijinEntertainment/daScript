@@ -12,7 +12,7 @@ require strings
 require metal/msl_shader
 require daslib/math_bits   // float_bits_to_uint — bf16 halfword construction
 require llvm/daslib/f16_cvt   // f32_to_f16 — the f16s scale plane
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let M = 8
 let N = 16
@@ -191,7 +191,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         t |> success(nz > M * N / 2, "q8 reference is non-trivial")
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -238,7 +238,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                     let tew = metal_pipeline_thread_execution_width(pso)
                     var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb]
                     var rerr : string
-                    let tpg = uint(tew) * SGS
+                    let tpg = tew * SGS
                     let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : 0ul)
                     t |> success(ran, "dispatch {entry}: {rerr}")
                     if (ran) {

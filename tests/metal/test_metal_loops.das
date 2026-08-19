@@ -11,7 +11,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require metal/msl_shader
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let NREAL = 1000        // guarded thread count (the uniform n)
 let PAD = 1024          // ceil(1000/64)*64 — what the GPU actually launches
@@ -83,7 +83,7 @@ def test_loops_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.dst[NREAL], SENT_I)       // oracle's own guard left the pad untouched
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

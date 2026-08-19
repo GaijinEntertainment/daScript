@@ -975,7 +975,7 @@ def private unsign_gate(t : T?; dev, queue; hs, nheads, nrows, pad : int) {
 def test_metal_rope_store_kernels(t : T?) {
     t |> run("fused rope + KV-store kernels == the CPU rope/codec seam (all four mirrors, flat/head/batched)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return

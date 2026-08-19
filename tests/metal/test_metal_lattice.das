@@ -16,7 +16,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require metal/msl_shader
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let N = 256
 let TPG = 64u
@@ -133,7 +133,7 @@ def test_halfarith_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU c
         t |> equal(oracle.hflags[0], 1)     // row 0 is a k%5==0 row by construction
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -223,7 +223,7 @@ def test_latconv_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU com
         t |> equal(int(oracle.bs[0].x), -128)   // (-125*40 - 125) saturates to -128
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
@@ -316,7 +316,7 @@ def test_packed3_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.pio[0].x, -375)   // pb[0].x = -125, widened * 3 — the oracle itself computed
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

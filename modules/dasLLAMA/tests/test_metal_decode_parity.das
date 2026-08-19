@@ -661,6 +661,7 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
                     t |> success(streams_match(cpuk2, gpuk2), "B=2 kq q8_0-KV batched greedy streams match the CPU control")
                     // B=12: the kq mul_mm batch form (B >= 9 leaves the per-stream GEMVs)
                     var promptsk12 : array<array<int64>>
+                    promptsk12 |> reserve(12)
                     for (i in range(12)) {
                         promptsk12 |> emplace <| encode(trkb, counting_prompt(1 + i, 34 + 2 * i), true, false)
                     }
@@ -772,7 +773,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     feint("metal decode declined (no Metal device?); GPU parity skipped\n")
                     return
                 }
-                t |> success(same(cpu16, gpu16), "40-token continuation matches the CPU control (CPU prefill → GPU decode)")
+                t |> success(same(cpu16, gpu16), "40-token continuation matches the CPU control (CPU prefill -> GPU decode)")
             }
 
             // arm 2: Metal-prefill → GPU-decode (both residents live, one queue each)
@@ -789,7 +790,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 select_prefill_override("")
                 set_metal_prefill_min_npos(64l)
                 t |> success(hyb_decodes > 0l && hyb_prefills > 0l, "hybrid arm served on both devices")
-                t |> success(same(cpu16, hyb), "40-token continuation matches the CPU control (Metal prefill → GPU decode)")
+                t |> success(same(cpu16, hyb), "40-token continuation matches the CPU control (Metal prefill -> GPU decode)")
             }
 
             // arm 13: the concurrent encoder + hazard tracker. Paranoid window isolates the
@@ -837,7 +838,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 with_job_que() {
                     setup_dasllama_jobque()
                     eval_(tr, sc, prompt2)
-                    rewind_cpu <- greedy_steps(tr, sc, 16)
+                    rewind_cpu <- greedy_steps(tr, sc, 16)   // nolint:PERF030 - fresh empty target; it is declared outside the job-que block only so it outlives it
                 }
                 delete sc
                 before = metal_decode_stats().decodes

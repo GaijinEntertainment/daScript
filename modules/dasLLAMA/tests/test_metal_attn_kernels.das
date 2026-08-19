@@ -714,7 +714,7 @@ def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsg
 def test_metal_attn_codec_kernels(t : T?) {
     t |> run("sq_attn codec twins (f32/q8/tq4, single + split-K) == CPU attention over the dequant truth") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU kernel checks skipped\n")
                     return

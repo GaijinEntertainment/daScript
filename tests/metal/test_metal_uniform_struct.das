@@ -56,7 +56,7 @@ def test_uniform_struct_gpu_vs_cpu(t : T?) {
         t |> equal(oracle.ys[N - 1], -1000.0)      // past n: untouched
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

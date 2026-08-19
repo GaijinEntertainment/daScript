@@ -9,7 +9,7 @@ options indenting = 4
 require dastest/testing_boost public
 require strings
 require metal/msl_shader
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let N = 256
 let TPG = 64u
@@ -52,7 +52,7 @@ def test_sdot_gpu_vs_cpu(t : T?) {
         }
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return
