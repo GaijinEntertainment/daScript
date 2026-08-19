@@ -123,6 +123,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_think_split.das",
                     "modules/dasLLAMA/tests/test_tok_seed.das",
                     "modules/dasLLAMA/tests/test_tool_formats.das",
+                    "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",

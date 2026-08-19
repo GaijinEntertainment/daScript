@@ -307,54 +307,6 @@ def private uv_check_planes(t : Gemma4uvEmbedder; src : string) {
     }
 }
 
-// im2col in ggml's [C][KH][KW] row order over the PLANAR view of the interleaved planes;
-// superpatches walk the canvas row-major, matching pos_x = i % n_cols, pos_y = i / n_cols
-def private uv_im2col(t : Gemma4uvEmbedder; planes : array<float>; w, h : int64; var x0 : array<float>) : int64 {
-    let p = t.patch
-    let n_cols = w / p
-    let n_rows = h / p
-    let npos = n_cols * n_rows
-    let psq = p * p
-    uv_ensure(x0, npos * t.patch_dim)
-    unsafe {
-        let src = addr<float const?>(planes[0])
-        var dst = addr(x0[0])
-        for (pi in range64(0l, npos)) {
-            let py = (pi / n_cols) * p
-            let px = (pi % n_cols) * p
-            var row = dst + pi * t.patch_dim
-            for (c in range64(0l, 3l)) {
-                for (ky in range64(0l, p)) {
-                    let sline = src + ((py + ky) * w + px) * 3l + c
-                    var dline = row + c * psq + ky * p
-                    for (kx in range64(0l, p)) {
-                        dline[kx] = sline[kx * 3l]
-                    }
-                }
-            }
-        }
-    }
-    return npos
-}
-
-// weightless ggml_rms_norm: x ⊙ 1/√(mean(x²) + eps), per row
-def private uv_rms_rows(var x : array<float>; d, npos : int64; eps : float) {
-    unsafe {
-        var xp = addr(x[0])
-        for (r in range64(0l, npos)) {
-            var row = xp + r * d
-            var s = 0.0lf
-            for (i in range64(0l, d)) {
-                s += double(row[i]) * double(row[i])
-            }
-            let scale = float(1.0lf / sqrt(s / double(d) + double(eps)))
-            for (i in range64(0l, d)) {
-                row[i] *= scale
-            }
-        }
-    }
-}
-
 // One GEMM, on whichever plane this embedder's offsets index. Both arms are the same arithmetic:
 // dot_bf16's widen is an exact high-half shift, so the bf16 arm reads half the bytes for the
 // identical result.
@@ -393,7 +345,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     }
     let d = t.n_embd
     let n_cols = w / t.patch
-    let npos = uv_im2col(t, planes, w, h, s.x0)
+    let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     if (g_uv_gpu_set) {
         uv_ensure(out, npos * t.proj_dim)
         if (invoke(g_uv_gpu, t, s, npos, n_cols, out)) {
@@ -420,7 +372,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     }
     layernorm_batch(s.x1, s.x2, t.blob, t.ln3_w, t.ln3_b, d, npos, GEMMA4UV_LN_EPS)
     // Gemma4UnifiedMultimodalEmbedder: weightless rms(meta eps) → square projection
-    uv_rms_rows(s.x1, d, npos, t.rms_eps)
+    rms_rows_weightless(s.x1, d, npos, t.rms_eps)
     uv_ensure(out, npos * t.proj_dim)
     uv_gemm(out, t, t.proj_bf16, t.proj_w, s.x1, d, t.proj_dim, npos)
     return npos

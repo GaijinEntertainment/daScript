@@ -44,18 +44,6 @@ let private G4A_PAST = 12l         // max past horizon (window = self + 11 previ
 let private G4A_SOFTCAP = 50.0
 let private G4A_RES_W = 0.5        // macaron half-step residual weight
 
-//! Per-op activation-quant calibration range (mtmd ClippableLinear). ``active`` false = a plain
-//! matmul (wide default range = no-op clamp). clamp(x, imin, imax) before the matmul, clamp the
-//! result to (omin, omax) after.
-[safe_when_uninitialized]
-struct private Clamp {
-    imin : float = -3.4028235e38
-    imax : float = 3.4028235e38
-    omin : float = -3.4028235e38
-    omax : float = 3.4028235e38
-    active : bool = false
-}
-
 //! Per-layer weight offsets into ``blob`` + the clamp ranges of the clamped matmuls.
 struct private G4aLayer {
     ff_norm : int64
@@ -271,25 +259,6 @@ def private g4a_ensure(@scratch var a : array<float>; n : int64) {
 }
 
 // ===== loader =====
-
-def private g4a_read1(m : GGUFMeta; bytes : array<uint8> | #; name : string) : float {
-    var tmp : array<float>
-    tmp |> resize(1)
-    gguf_read_tensor_f32(m, bytes, name, tmp, 0l, 1l)
-    return tmp[0]
-}
-
-def private g4a_read_clamp(m : GGUFMeta; bytes : array<uint8> | #; base : string) : Clamp {
-    var c = Clamp()
-    if (gguf_find_tensor(m, "{base}.input_max") >= 0) {
-        c.imax = g4a_read1(m, bytes, "{base}.input_max")
-        c.imin = g4a_read1(m, bytes, "{base}.input_min")
-        c.omax = g4a_read1(m, bytes, "{base}.output_max")
-        c.omin = g4a_read1(m, bytes, "{base}.output_min")
-        c.active = true
-    }
-    return c
-}
 
 //! HTK triangular mel filterbank ``[n_mel][n_bins]`` (fmin=0, fmax=sr/2, no area normalization) —
 //! a direct port of mtmd's ``fill_mel_filterbank_matrix`` HTK branch for gemma4a.
@@ -573,16 +542,16 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
             gguf_read_tensor_f32(m, bytes, "{p}.ln2.weight", st.blob, lo.ln2, d)
             // clamp ranges of the clamped matmuls
             var lc = st.layers[l]
-            lc.c_ff_up = g4a_read_clamp(m, bytes, "{p}.ffn_up")
-            lc.c_ff_down = g4a_read_clamp(m, bytes, "{p}.ffn_down")
-            lc.c_q = g4a_read_clamp(m, bytes, "{p}.attn_q")
-            lc.c_k = g4a_read_clamp(m, bytes, "{p}.attn_k")
-            lc.c_v = g4a_read_clamp(m, bytes, "{p}.attn_v")
-            lc.c_o = g4a_read_clamp(m, bytes, "{p}.attn_out")
-            lc.c_pw1 = g4a_read_clamp(m, bytes, "{p}.conv_pw1")
-            lc.c_pw2 = g4a_read_clamp(m, bytes, "{p}.conv_pw2")
-            lc.c_ff_up_1 = g4a_read_clamp(m, bytes, "{p}.ffn_up_1")
-            lc.c_ff_down_1 = g4a_read_clamp(m, bytes, "{p}.ffn_down_1")
+            lc.c_ff_up = read_clamp(m, bytes, "{p}.ffn_up")
+            lc.c_ff_down = read_clamp(m, bytes, "{p}.ffn_down")
+            lc.c_q = read_clamp(m, bytes, "{p}.attn_q")
+            lc.c_k = read_clamp(m, bytes, "{p}.attn_k")
+            lc.c_v = read_clamp(m, bytes, "{p}.attn_v")
+            lc.c_o = read_clamp(m, bytes, "{p}.attn_out")
+            lc.c_pw1 = read_clamp(m, bytes, "{p}.conv_pw1")
+            lc.c_pw2 = read_clamp(m, bytes, "{p}.conv_pw2")
+            lc.c_ff_up_1 = read_clamp(m, bytes, "{p}.ffn_up_1")
+            lc.c_ff_down_1 = read_clamp(m, bytes, "{p}.ffn_down_1")
             st.layers[l] = lc
         }
     }
@@ -752,12 +721,6 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
 // ===== encoder helpers =====
 
 // clamp x[0..n) in place to [imin, imax]
-def private g4a_clamp(var x : array<float>; n : int64; lo, hi : float) {
-    for (i in range64(n)) {
-        x[i] = clamp(x[i], lo, hi)
-    }
-}
-
 // mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
 def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : array<float>;
                    xq : array<int8>; xs : array<float>; n, d, npos : int64) {
@@ -822,11 +785,9 @@ def private g4a_mm_clamped(enc : Gemma4aEncoder; var st : Gemma4aState; var y : 
         return
     }
     g4a_ensure(st.xc, n * npos)
-    for (i in range64(n * npos)) {
-        st.xc[i] = clamp(x[i], c.imin, c.imax)
-    }
+    clamp_rows(st.xc, x, n * npos, c.imin, c.imax)
     g4a_mm_rq(enc, st, y, w_off, st.xc, n, d, npos)
-    g4a_clamp(y, d * npos, c.omin, c.omax)
+    clamp_rows(y, y, d * npos, c.omin, c.omax)
 }
 
 // RMSNorm each d-wide row of src into dst against a blob weight (weight-multiply, gemma4a eps).

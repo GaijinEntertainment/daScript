@@ -973,6 +973,244 @@ def mm_bf16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<flo
     matmul_bf16_batch(y, blob, woff, x, n, d, npos)
 }
 
+// ===== shared encoder-tower pieces (the gemma4a audio and gemma4v vision towers both build on
+// these; one home — a family module never re-implements a shape found here) =====
+
+//! Per-op activation-quant calibration range (mtmd ClippableLinear): clamp(x, imin, imax) before
+//! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
+//! disk, which mtmd treats as ±FLT_MAX — an identity clamp, so callers may skip the pass.
+[safe_when_uninitialized]
+struct Clamp {
+    imin : float = -3.4028235e38
+    imax : float = 3.4028235e38
+    omin : float = -3.4028235e38
+    omax : float = 3.4028235e38
+    active : bool = false
+}
+
+def private read_scalar_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : string) : float {
+    var tmp : array<float>
+    tmp |> resize(1)
+    gguf_read_tensor_f32(m, bytes, name, tmp, 0l, 1l)
+    return tmp[0]
+}
+
+//! The four sidecar scalars beside ``<base>.weight`` (``.input_min/.input_max/.output_min/
+//! .output_max``). A file without them yields the inactive (identity) clamp.
+def read_clamp(m : GGUFMeta; bytes : array<uint8> | #; base : string) : Clamp {
+    var c = Clamp()
+    if (gguf_find_tensor(m, "{base}.input_max") >= 0) {
+        c.imax = read_scalar_tensor(m, bytes, "{base}.input_max")
+        c.imin = read_scalar_tensor(m, bytes, "{base}.input_min")
+        c.omax = read_scalar_tensor(m, bytes, "{base}.output_max")
+        c.omin = read_scalar_tensor(m, bytes, "{base}.output_min")
+        c.active = true
+    }
+    return c
+}
+
+//! dst[i] = clamp(src[i], lo, hi) over the first ``n`` elements, rows split across lanes.
+//! ``dst`` may be ``src`` (in place). Elementwise ⇒ bit-identical at any lane count.
+def clamp_rows(var dst : array<float>; src : array<float>; n : int64; lo, hi : float) {
+    if (n <= 0l) return
+    unsafe {
+        var dp = addr(dst[0])
+        let sp = addr<float const?>(src[0])
+        let nblk = int((n + 1023l) / 1024l)
+        maybe_parallel_for(0, nblk, lanes_for_work(n, get_gemv_lane_cap())) $(bb, be) {
+            unsafe {
+                for (i in range64(int64(bb) * 1024l, min(int64(be) * 1024l, n))) {
+                    dp[i] = clamp(sp[i], lo, hi)
+                }
+            }
+        }
+    }
+}
+
+//! Threaded per-row RMSNorm against a weight row in a prepared image: out[r] = rmsnorm(src[r])·w
+//! (``rmsnorm``'s (x·scale)·w order — ggml's RMS_NORM then MUL). ``out`` may be ``src``. A
+//! per-head norm is this with ``d`` = head width and ``npos`` = tokens × heads.
+def rms_rows(var out : array<float>; src : array<float>; w : PlaneF; woff, d, npos : int64; eps : float) {
+    if (npos <= 0l || d <= 0l) return
+    unsafe {
+        var op = addr(out[0])
+        let sp = addr<float const?>(src[0])
+        let wp = plane_at(w, woff)
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 2l, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    rmsnorm(op + r * d, sp + r * d, wp, d, eps)
+                }
+            }
+        }
+    }
+}
+
+//! Weightless ggml_rms_norm per row, in place: x ⊙ 1/√(mean(x²) + eps), the mean accumulated in
+//! double (gemma4uv's pre-projection norm; gemma4v's V-norm with ``d`` = head width).
+def rms_rows_weightless(var x : array<float>; d, npos : int64; eps : float) {
+    if (npos <= 0l || d <= 0l) return
+    unsafe {
+        var xp = addr(x[0])
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 2l, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    var row = xp + r * d
+                    var s = 0.0lf
+                    for (i in range64(0l, d)) {
+                        s += double(row[i]) * double(row[i])
+                    }
+                    let scale = float(1.0lf / sqrt(s / double(d) + double(eps)))
+                    for (i in range64(0l, d)) {
+                        row[i] *= scale
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The f16 table for geglu_quick_lut_rows: ggml-cpu's ggml_table_gelu_quick_f16 (GGML_GELU_QUICK_FP16
+// is on by default) — idx = f32_to_f16(x), value = f16(x·σ(1.702x)) widened. Built once, main thread.
+var private g_gelu_quick_lut : array<float>
+
+[cold_path]
+def private gelu_quick_lut_ensure() {
+    if (!empty(g_gelu_quick_lut)) {
+        return
+    }
+    g_gelu_quick_lut |> resize(65536)
+    for (h in range(65536)) {
+        let xr = f16_to_f32(uint(h))
+        if ((unsafe(reinterpret<uint>(xr)) & 0x7F800000u) != 0x7F800000u) {   // finite (not inf/nan)
+            let g = xr * (1.0 / (1.0 + exp(-1.702 * xr)))
+            g_gelu_quick_lut[h] = f16_to_f32(f32_to_f16(g))
+        }
+    }
+}
+
+//! GEGLU-quick over token-major rows: h = gelu_quick(gate) ⊙ up, gelu_quick evaluated as ggml-cpu
+//! does — input and output both round-trip through binary16 (its f16 table), matching the CPU
+//! oracle bit-for-bit rather than the exact x·σ(1.702x). Elementwise ⇒ lane-count invariant.
+def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos : int64) {
+    if (npos <= 0l || ff <= 0l) return
+    gelu_quick_lut_ensure()
+    unsafe {
+        var hp = addr(h[0])
+        let gp = addr<float const?>(gate[0])
+        let up_ = addr<float const?>(up[0])
+        let lp = addr<float const?>(g_gelu_quick_lut[0])
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * ff * 4l, 0)) $(rb, re) {
+            unsafe {
+                for (i in range64(int64(rb) * ff, int64(re) * ff)) {
+                    hp[i] = lp[int(f32_to_f16(gp[i]))] * up_[i]
+                }
+            }
+        }
+    }
+}
+
+//! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in ggml's [C][KH][KW]
+//! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
+//! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
+def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>) : int64 {
+    let n_cols = w / p
+    let npos = n_cols * (h / p)
+    let psq = p * p
+    let row_dim = 3l * psq
+    if (long_length(x0) < npos * row_dim) {
+        x0 |> reserve(npos * row_dim)
+        x0 |> resize(npos * row_dim)
+    }
+    unsafe {
+        let src = addr<float const?>(planes[0])
+        var dst = addr(x0[0])
+        for (pi in range64(0l, npos)) {
+            let py = (pi / n_cols) * p
+            let px = (pi % n_cols) * p
+            var row = dst + pi * row_dim
+            for (c in range64(0l, 3l)) {
+                for (ky in range64(0l, p)) {
+                    let sline = src + ((py + ky) * w + px) * 3l + c
+                    var dline = row + c * psq + ky * p
+                    for (kx in range64(0l, p)) {
+                        dline[kx] = sline[kx * 3l]
+                    }
+                }
+            }
+        }
+    }
+    return npos
+}
+
+//! Two-axis NEOX RoPE over token-major rows [npos × n_head·hs], in place: each head's first hs/2
+//! dims rotate by the row's x-position table entry, the second hs/2 by its y entry (ggml: two ROPE
+//! views then CONCAT). Tables are ``build_rope_tabs_rows`` outputs at head_size = hs/2.
+def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
+                      cos_x, sin_x, cos_y, sin_y : array<float>) {
+    if (npos <= 0l) return
+    let d = n_head * hs
+    let half = hs / 2l      // one axis's rotary width
+    let q = half / 2l       // that axis's table row width (cos or sin)
+    unsafe {
+        var vp = addr(v[0])
+        let cx = addr<float const?>(cos_x[0])
+        let sx = addr<float const?>(sin_x[0])
+        let cy = addr<float const?>(cos_y[0])
+        let sy = addr<float const?>(sin_y[0])
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 4l, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    rope_scaled_neox_tab_part(vp + r * d, hs, half, d, cx + r * q, sx + r * q)
+                    rope_scaled_neox_tab_part(vp + r * d + half, hs, half, d, cy + r * q, sy + r * q)
+                }
+            }
+        }
+    }
+}
+
+//! Average pool k×k, stride k, over a patch grid held token-major (row = gy·gw + gx, d channels):
+//! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner — ggml's POOL_2D
+//! accumulation order, then one divide). Ragged edges are dropped. Returns the output row count.
+def avg_pool2d_rows(var out : array<float>; x : array<float>; gw, gh, d, k : int64) : int64 {
+    let ow = gw / k
+    let oh = gh / k
+    let nout = ow * oh
+    if (nout <= 0l) return 0l
+    if (long_length(out) < nout * d) {
+        out |> reserve(nout * d)
+        out |> resize(nout * d)
+    }
+    unsafe {
+        var op = addr(out[0])
+        let xp = addr<float const?>(x[0])
+        maybe_parallel_for(0, int(nout), lanes_for_work(nout * d * k * k, 0)) $(rb, re) {
+            unsafe {
+                for (o in range64(int64(rb), int64(re))) {
+                    let oy = o / ow
+                    let ox = o % ow
+                    var orow = op + o * d
+                    for (c in range64(0l, d)) {
+                        orow[c] = 0.0
+                    }
+                    for (ky in range64(0l, k)) {
+                        for (kx in range64(0l, k)) {
+                            let irow = xp + ((oy * k + ky) * gw + ox * k + kx) * d
+                            for (c in range64(0l, d)) {
+                                orow[c] += irow[c]
+                            }
+                        }
+                    }
+                    for (c in range64(0l, d)) {
+                        orow[c] /= float(k * k)
+                    }
+                }
+            }
+        }
+    }
+    return nout
+}
+
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
 //! Repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
@@ -1459,28 +1697,38 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     return <- s
 }
 
-// Blocked non-causal attention (score=Q·Kᵀ, softmax, out=P·V) flattened over head×row-block units
-// so head-parallel dispatch doesn't waste lanes (6 heads/8 lanes would otherwise idle ~17%).
-// No KV cache, no mask — every position attends to all `tt` positions.
+// the audio tower's attention: 1/√hs scaled, the shared bidirectional core over its state
 def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
-    let d = t.d_model
-    let hs = d / t.n_head
-    let scale = 1.0 / sqrt(float(hs))
+    let hs = t.d_model / t.n_head
+    attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, tt, t.d_model, t.n_head, 1.0 / sqrt(float(hs)))
+}
+
+//! Blocked bidirectional attention over token-major q/k/v [tt × d], ``n_head`` heads: out = softmax
+//! (scale·QKᵀ)·V per head, no cache, no mask; flattened over head × row-block units so 6 heads
+//! don't idle 8 lanes. ``hp``/``att`` are caller scratch grown here; ``scale`` is the caller's.
+def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; var hp : array<float>;
+                    @scratch var att : array<float>; tt, d, n_head : int64; scale : float) {
+    let hs = d / n_head
     let nqb = int((tt + ATTN_ENC_QB - 1l) / ATTN_ENC_QB)
-    let nu = int(t.n_head) * nqb
+    let nu = int(n_head) * nqb
     // que-less-creation guard: the state may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
-    if (long_length(s.att) < attNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
-        s.att |> reserve(attNeed)
-        s.att |> resize(attNeed)
+    if (long_length(att) < attNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
+        att |> reserve(attNeed)
+        att |> resize(attNeed)
+    }
+    let hpNeed = 4l * tt * d
+    if (long_length(hp) < hpNeed) {
+        hp |> reserve(hpNeed)
+        hp |> resize(hpNeed)
     }
     unsafe {
-        let qp = addr<float const?>(s.qq[0])
-        let kp = addr<float const?>(s.kk[0])
-        let vp = addr<float const?>(s.vv[0])
-        var hpp = addr(s.hp[0])
-        var attp = addr(s.att[0])
-        var aop = addr(s.xb2[0])
+        let qp = addr<float const?>(qq[0])
+        let kp = addr<float const?>(kk[0])
+        let vp = addr<float const?>(vv[0])
+        var hpp = addr(hp[0])
+        var attp = addr(att[0])
+        var aop = addr(out[0])
         var tp = ref_time_ticks()
         maybe_parallel_for(0, nu, min(get_dispatch_lanes(), nu)) $(ub, ue) {
             unsafe {
@@ -1532,7 +1780,7 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
                         oh[qb0 * hs + i] = 0.0
                     }
                     gemm_f32(oh + qb0 * hs, ah, vh, qbn, tt, hs)
-                    // scatter this unit's rows back to token-major xb2
+                    // scatter this unit's rows back to token-major out
                     for (p in range64(qb0, qb0 + qbn)) {
                         for (j in range64(hs)) {
                             aop[p * d + hoff + j] = oh[p * hs + j]

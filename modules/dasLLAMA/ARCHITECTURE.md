@@ -318,8 +318,10 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
   `asr_ctx_guard`). Family modules require this instead of each other — a shape needed by two
   families moves up here, never sideways.
-- **`dasllama_audio.das`** — the shared audio tower: mel front-end, encoder blocks, the pieces every
-  audio model composes.
+- **`dasllama_audio.das`** — the shared encoder tower: mel front-end, encoder blocks, and the
+  tower pieces every audio AND vision tower composes (`Clamp`/`clamp_rows`, the row norms,
+  `attention_bidir`, `rope_neox_2d_rows`, `im2col_rgb_patches`, `avg_pool2d_rows`, the f16-table
+  activations). The one home: a family file that re-implements one of these is a defect.
 - **`dasllama_audio_io.das`** — decode-any-format → 16 kHz mono f32 PCM. The only file that talks to
   miniaudio.
 - **`dasllama_asr.das`** — the ASR facade: capability declaration, timestamp granularity, the
@@ -340,7 +342,8 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   decode through one seam — the engine itself takes decoded pixels.
 - **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
   im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
-  projector family, following the audio tower pattern; shared pieces move up, never sideways.
+  projector family, following the audio tower pattern; shared pieces move up into
+  `dasllama_audio.das` (the encoder-tower home), never sideways.
   A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
   embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
   follows its source tensor, per tensor, never a per-file verdict.
