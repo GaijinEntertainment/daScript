@@ -9,11 +9,12 @@ require ../../common/parallel_workers.das
 require classify
 require utils_phase
 
-// The release-audit batch runner: points at an EXTRACTED release bundle and proves it
-// sane with the bundle's own binary — no repo, no build tree. Phase `compile` is the
-// floor: every example/tutorial .das in the bundle compiles (-compile-only, per-file
-// timeout). Phase `utils` exercises every shipped tool from the bundle (utils_phase.das).
-// The process doc is README.md here.
+// Release-audit batch runner over an EXTRACTED bundle: the bundle's own binary, no repo, no build tree.
+// compile: every example/tutorial .das compiles (-compile-only, per-file timeout).
+// utils:   every shipped tool run from the bundle (utils_phase.das). Process: README.md.
+
+// the tool runs from the repo root (README), so the default lists are repo-relative
+let private EXPECTED_DIR = "utils/internal/test-release"
 
 [CommandLineArgs]
 struct Config {
@@ -26,8 +27,8 @@ struct Config {
     @clarg_doc = "Worker processes (0 = auto)"
     jobs : int = 0
 
-    @clarg_doc = "Expected-failures list (default: expected_compile.txt beside the tool)"
-    expected : string
+    @clarg_doc = "compile phase expected-failures list (default: expected_compile.txt beside the tool)"
+    expected_compile : string
 
     @clarg_doc = "Which phases to run: compile, utils, or all"
     phase : string = "all"
@@ -49,17 +50,12 @@ struct Config {
     help : bool
 }
 
-def bundle_binary(bundle : string) : string {
-    for (name in ["bin/daslang.exe", "bin/daslang"]) {
-        let p = path_join(bundle, name)
-        if (fexist(p)) {
-            return get_full_file_name(p)
-        }
-    }
-    return ""
+def bundle_daslang(bundle : string) : string {
+    let p = bundle_exe(bundle, "daslang")
+    return fexist(p) ? p : ""
 }
 
-//! Every example/tutorial .das in the bundle, bundle-relative with forward slashes.
+// every example/tutorial .das in the bundle, bundle-relative with forward slashes
 def collect_targets(bundle : string) : array<string> {
     var out : array<string>
     var roots <- ["examples", "tutorials"]
@@ -84,8 +80,7 @@ def collect_targets(bundle : string) : array<string> {
     return <- out
 }
 
-//! The nearest *.das_project at or above `f` (bundle-relative), "" when none — a file
-//! under a project dir compiles the way its README runs it: with `-project`.
+// nearest *.das_project at or above `f` (bundle-relative), "" when none
 def project_for(f : string; var cache : table<string; string>) : string {
     var d = dir_name(f)
     while (!empty(d) && d != ".") {
@@ -109,7 +104,7 @@ def project_for(f : string; var cache : table<string; string>) : string {
 }
 
 def run_worker(cfg : Config) : int {
-    let exe = bundle_binary(cfg.bundle)
+    let exe = bundle_daslang(cfg.bundle)
     if (empty(exe)) {
         to_log(LOG_ERROR, "test-release: no daslang binary under {cfg.bundle}/bin\n")
         return 2
@@ -132,9 +127,9 @@ def run_worker(cfg : Config) : int {
             // way around: sandbox-lesson projects would break bystander siblings.
             let proj = project_for(f, proj_cache)
             if (!empty(proj)) {
-                var pout : string
-                let prc = run_and_capture([exe, "-compile-only", f, "-project", proj], pout, cfg.timeout)
-                if (prc == 0) {
+                var proj_out : string
+                let proj_rc = run_and_capture([exe, "-compile-only", f, "-project", proj], proj_out, cfg.timeout)
+                if (proj_rc == 0) {
                     rc = 0
                 }
             }
@@ -146,10 +141,9 @@ def run_worker(cfg : Config) : int {
 }
 
 def run_utils_phase(cfg : Config; bundle : string) : int {
-    // internal tool: runs from the repo root (README), so the default list is repo-relative
-    var inscope expected <- load_expected(!empty(cfg.expected_utils) ? cfg.expected_utils : "utils/internal/test-release/expected_utils.txt")
+    var inscope expected <- load_expected(!empty(cfg.expected_utils) ? cfg.expected_utils : path_join(EXPECTED_DIR, "expected_utils.txt"))
     to_log(LOG_INFO, "test-release utils: {cfg.network ? "network rows on" : "network rows off"}, {length(expected)} expected failures on file\n")
-    let daslang = bundle_binary(bundle)
+    let daslang = bundle_daslang(bundle)
     if (cfg.network && get_platform_name() == "windows" && length(bundle) > 60) {
         to_log(LOG_WARNING, "test-release: bundle path is {length(bundle)} chars - git clones and native package builds under it can hit MAX_PATH; extract to a short path (e.g. C:/dl) for the network rows
 ")
@@ -169,7 +163,7 @@ def run_utils_phase(cfg : Config; bundle : string) : int {
 
 def run_parent(cfg : Config) : int {
     let bundle = get_full_file_name(cfg.bundle)
-    if (empty(bundle_binary(bundle))) {
+    if (empty(bundle_daslang(bundle))) {
         to_log(LOG_ERROR, "test-release: no daslang binary under {cfg.bundle}/bin\n")
         return 2
     }
@@ -193,19 +187,22 @@ def run_compile_phase(cfg : Config; bundle : string) : int {
         to_log(LOG_ERROR, "test-release: no example/tutorial .das found under {bundle}\n")
         return 2
     }
-    // internal tool: runs from the repo root (README), so the default list is repo-relative
-    var inscope expected <- load_expected(!empty(cfg.expected) ? cfg.expected : "utils/internal/test-release/expected_compile.txt")
+    var inscope expected <- load_expected(!empty(cfg.expected_compile) ? cfg.expected_compile : path_join(EXPECTED_DIR, "expected_compile.txt"))
     to_log(LOG_INFO, "test-release compile: {length(targets)} targets, {length(expected)} expected failures on file\n")
 
     let workers = compute_worker_count(length(targets), cfg.jobs)
     var inscope chunks <- chunk_files(targets, workers)
-    var err : string
     var argvs : array<array<string>>
     argvs |> reserve(length(chunks))
     var tmpfiles : array<string>
     tmpfiles |> reserve(length(chunks))
     for (chunk in chunks) {
+        var err : string
         let tmp = create_temp_file("test_release_chunk", ".txt", err)
+        if (empty(tmp)) {
+            to_log(LOG_ERROR, "test-release: cannot create a chunk file: {err}\n")
+            return 2
+        }
         let body = build_string() $(var writer) {
             for (f in chunk) {
                 writer |> write(f)

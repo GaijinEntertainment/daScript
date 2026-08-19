@@ -2,22 +2,55 @@ options gen2
 
 require dastest/testing_boost public
 require strings
+require daslib/fio
 require utils_phase
+
+// a throwaway bundle root with bin/<names...> as files; "" when the temp dir cannot be made
+def stage_bundle(names : array<string>) : string {
+    let r = create_temp_directory_result("test_release_bundle")
+    return "" if (!(r is value))
+    let root = to_generic_path(r as value)
+    mkdir(path_join(root, "bin"))
+    for (n in names) {
+        fwrite(path_join(root, "bin/{n}"), "x")
+    }
+    return root
+}
 
 [test]
 def test_substitute_tokens(t : T?) {
-    var inscope argv <- substitute(["@DASLANG@", "@OUT@/x.cpp", "plain", "--flag=@OUT@"], "/b/bin/daslang", "/b", "/tmp/o")
+    let root = stage_bundle(["lint.exe"])
+    t |> success(!empty(root), "staged a bundle")
+    return if (empty(root))
+    var inscope argv <- substitute_tokens(["@DASLANG@", "@OUT@/x.cpp", "plain", "--flag=@OUT@", "@EXE:lint@"], "/b/bin/daslang", root, "/tmp/o")
     t |> equal("/b/bin/daslang", argv[0])
     t |> equal("/tmp/o/x.cpp", argv[1])
     t |> equal("plain", argv[2])
     t |> equal("--flag=/tmp/o", argv[3], "@OUT@ substitutes anywhere in the token")
+    t |> equal(to_generic_path(get_full_file_name(path_join(root, "bin/lint.exe"))), to_generic_path(argv[4]), "@EXE:x@ resolves through bundle_exe, trailing @ stripped")
+    rmdir_rec(root)
 }
 
 [test]
-def test_bundle_exe_missing_still_names_bin(t : T?) {
-    // a tool the bundle lacks resolves to bin/<name> so the launch fails naming the tool
-    let p = bundle_exe("/nonexistent-bundle", "nosuchtool")
-    t |> success(p |> ends_with("bin/nosuchtool") || p |> ends_with("bin\\nosuchtool"), "resolved to bin/<name>: {p}")
+def test_bundle_exe_prefers_exe_then_bare_then_names_bin(t : T?) {
+    let root = stage_bundle(["both.exe", "both", "bare"])
+    t |> success(!empty(root), "staged a bundle")
+    return if (empty(root))
+    t |> success(to_generic_path(bundle_exe(root, "both")) |> ends_with("bin/both.exe"), ".exe wins when both exist")
+    t |> success(to_generic_path(bundle_exe(root, "bare")) |> ends_with("bin/bare"), "bare name when no .exe")
+    t |> success(to_generic_path(bundle_exe(root, "nosuchtool")) |> ends_with("bin/nosuchtool"), "missing tool still names bin/<name> so the launch fails naming it")
+    rmdir_rec(root)
+}
+
+[test]
+def test_judged_rc_and_head(t : T?) {
+    let row <- ToolCheck(name = "x", want <- ["Verified!"])
+    t |> equal(0, judged_rc(row, 0, "Verified! 3 files"), "rc 0 with the oracle met stays 0")
+    t |> equal(1, judged_rc(row, 0, "Complete! 3 files"), "rc 0 with the oracle unmet becomes 1")
+    t |> equal(2, judged_rc(row, 2, "Verified! 3 files"), "a non-zero exit keeps its code even if the words appear")
+    t |> equal("expected `Verified!` in output", judged_head(row, 0, "Complete! 3 files"))
+    t |> equal("Complete! 3 files", judged_head(row, 2, "Complete! 3 files"), "a real failure shows the child's output")
+    t |> equal("Verified! 3 files", judged_head(row, 0, "Verified! 3 files"))
 }
 
 [test]

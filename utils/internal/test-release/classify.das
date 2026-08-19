@@ -7,14 +7,15 @@ require daslib/fio
 // The pure half of test-release: verdict-line formatting/parsing, the expected-failures
 // list, and report summarization — everything a fixture test can pin without a bundle.
 
-//! One machine-parseable verdict line for a compiled file. Child stderr/stdout is folded
-//! to one line so parallel workers can never interleave a report.
-def verdict_line(f : string; rc : int; sec, timeout : float; out : string) : string {
+//! One machine-parseable verdict line per checked item (a bundle-relative path, or a utils
+//! row name). Child stderr/stdout is folded to one line so parallel workers can never
+//! interleave a report.
+def verdict_line(subject : string; rc : int; sec, timeout : float; out : string) : string {
     if (rc == 0) {
-        return "OK {f}"
+        return "OK {subject}"
     }
     if (sec >= timeout) {
-        return "TIMEOUT {f} {sec}s"
+        return "TIMEOUT {subject} {sec}s"
     }
     var head = ""
     for (ln in split(out, "\n")) {
@@ -24,7 +25,7 @@ def verdict_line(f : string; rc : int; sec, timeout : float; out : string) : str
             break
         }
     }
-    return "FAIL {f} rc={rc} {head}"
+    return "FAIL {subject} rc={rc} {head}"
 }
 
 //! Expected-failure entries: `path  reason`, one per line, `#` comments. Returns
@@ -59,12 +60,10 @@ struct Report {
 //! the list must shrink when the tree improves.
 def summarize(verdicts : array<string>; expected : table<string; string>) : Report {
     var r : Report
-    var inscope seen_expected : table<string>
     for (v in verdicts) {
         if (v |> starts_with("OK ")) {
             let f = slice(v, 3, length(v))
             if (key_exists(expected, f)) {
-                seen_expected |> insert(f)
                 r.lines |> push("STALE-EXPECTED {f} — passes now; drop it from the list")
                 r.stale_count++
             } else {
@@ -78,7 +77,6 @@ def summarize(verdicts : array<string>; expected : table<string; string>) : Repo
             let sp = find(rest, ' ')
             let f = sp < 0 ? rest : slice(rest, 0, sp)
             if (key_exists(expected, f)) {
-                seen_expected |> insert(f)
                 let reason = expected ?[f] ?? ""
                 r.lines |> push("expected-fail {f} ({reason})")
                 r.expected_count++

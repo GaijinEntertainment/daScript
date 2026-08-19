@@ -5,10 +5,8 @@ require daslib/strings_boost
 require daslib/fio
 require classify
 
-// Phase `utils`: every shipped tool exercised in its capacity, from the bundle alone -
-// the shipped suites through the shipped runner, one real invocation per exe with an
-// oracle a machine can check, and (with --network) daspkg installing the packages the
-// gated examples need. Rows are the verified command lines from the RC1 utils audit.
+// Phase `utils`: every shipped tool exercised from the bundle alone.
+// Row = argv + substring oracle; --network rows fetch packages and mutate example dirs.
 
 struct ToolCheck {
     name : string           //! verdict key, e.g. "lint.exe/daslib"
@@ -23,8 +21,7 @@ struct ToolCheck {
 let private DASTEST_OK <- ["0 failed, 0 errors, 0 skipped"]
 let private DASTEST_EMPTY <- ["\n0 tests,"]
 
-//! The bundle-relative suites the in-tree run_utils_tests target runs - through the
-//! script-form runner, which the exe-form row (dastest.exe) then has to match.
+// the bundle-relative suites the in-tree run_utils_tests target runs, through the script-form runner
 def private suite_row(name, dir : string; extra_argv : array<string>) : ToolCheck {
     var argv <- ["@DASLANG@"]
     argv |> push_from(extra_argv, ["dastest/dastest.das", "--", "--test", dir])
@@ -39,7 +36,7 @@ def public utils_checks() : array<ToolCheck> {
         <- suite_row("dastest/dascov-suite", "utils/dascov/tests", []),
         <- suite_row("dastest/find-dupe-suite", "utils/find-dupe/tests", []),
         <- suite_row("dastest/jobque-timeline-suite", "utils/jobque-timeline", ["-project_root", "utils/jobque-timeline"]),
-        // the exe form must be able to compile a test at all (RC1: frozen build-machine paths)
+        // the exe form must be able to compile a test at all: an -exe tool bakes its build machine's native paths
         ToolCheck(name = "dastest.exe/common-suite", argv <- ["@EXE:dastest@", "--test", "utils/common/tests"],
             want := DASTEST_OK, forbid := DASTEST_EMPTY, timeout = 300.0),
         ToolCheck(name = "gen1_to_gen2/self-tests", argv <- ["@EXE:gen1_to_gen2@", "--tests"]),
@@ -90,7 +87,7 @@ def public utils_checks() : array<ToolCheck> {
         ToolCheck(name = "daspkg.exe/run-build-example", argv <- ["@DASLANG@", "examples/daspkg/daspkg-build-example/main.das"],
             want <- ["fast_inv_sqrt(4.0) = 0.49915358", "counter(step=5), 2x increment = 10"], network = true),
     ]
-    // teardown - the example dirs go back to shipped state
+    // rows run in order - the daspkg cleanup rows must stay last
     rows |> reserve(length(rows) + 4)
     for (root in ["examples/games/sequence", "examples/daspkg/daspkg-example", "examples/telegram/echo-bot", "examples/daspkg/daspkg-build-example"]) {
         rows |> emplace(ToolCheck(name = "daspkg.exe/cleanup:{root}", argv <- ["@EXE:daspkg@", "cleanup", "--force", "--root", root, "--no-color"], network = true))
@@ -98,7 +95,7 @@ def public utils_checks() : array<ToolCheck> {
     return <- rows
 }
 
-def public substitute(argv : array<string>; daslang, bundle, out_dir : string) : array<string> {
+def public substitute_tokens(argv : array<string>; daslang, bundle, out_dir : string) : array<string> {
     var res : array<string>
     res |> reserve(length(argv))
     for (a in argv) {
@@ -125,6 +122,20 @@ def public bundle_exe(bundle, name : string) : string {
     return get_full_file_name(path_join(bundle, "bin/{name}"))   // missing: the launch fails loudly
 }
 
+//! An exit code of 0 is only a pass when the oracle holds: 1 with the unmet expectation
+//! as the FAIL head otherwise. Non-zero exits keep their code and the child's output.
+def public judged_rc(check : ToolCheck; rc : int; out : string) : int {
+    return rc == 0 && !empty(unmet(check, out)) ? 1 : rc
+}
+
+def public judged_head(check : ToolCheck; rc : int; out : string) : string {
+    if (rc != 0) {
+        return out
+    }
+    let miss = unmet(check, out)
+    return empty(miss) ? out : miss
+}
+
 //! "" when the output satisfies the row, else the first unmet expectation - the FAIL head.
 def public unmet(check : ToolCheck; out : string) : string {
     for (e in check.want) {
@@ -142,7 +153,7 @@ def public unmet(check : ToolCheck; out : string) : string {
 }
 
 //! Runs the rows in order from the bundle root; verdict lines in classify's shape.
-def public run_utils_checks(bundle, daslang : string; network : bool; only : string) : array<string> {
+def public run_utils_checks(bundle, daslang : string; network : bool; name_filter : string) : array<string> {
     var verdicts : array<string>
     let tmp = create_temp_directory_result("test_release_utils")
     let out_dir = tmp is value ? to_generic_path(tmp as value) : ""
@@ -152,25 +163,17 @@ def public run_utils_checks(bundle, daslang : string; network : bool; only : str
     }
     var inscope rows <- utils_checks()
     for (check in rows) {
-        continue if ((!empty(only) && find(check.name, only) < 0) || (check.network && !network))
+        continue if ((!empty(name_filter) && find(check.name, name_filter) < 0) || (check.network && !network))
         if (!empty(check.copy_from)) {
             let src = path_join(bundle, check.copy_from)
             fwrite(path_join(out_dir, base_name(src)), fread(src))
         }
-        var inscope argv <- substitute(check.argv, daslang, bundle, out_dir)
+        var inscope argv <- substitute_tokens(check.argv, daslang, bundle, out_dir)
         let t0 = ref_time_ticks()
         var out : string
-        var rc = run_and_capture(argv, out, check.timeout)
+        let rc = run_and_capture(argv, out, check.timeout)
         let sec = float(get_time_usec(t0)) / 1000000.0
-        var head = out
-        if (rc == 0) {
-            let miss = unmet(check, out)
-            if (!empty(miss)) {
-                rc = 1
-                head = miss
-            }
-        }
-        verdicts |> push(verdict_line(check.name, rc, sec, check.timeout, head))
+        verdicts |> push(verdict_line(check.name, judged_rc(check, rc, out), sec, check.timeout, judged_head(check, rc, out)))
     }
     rmdir_rec(out_dir)
     return <- verdicts
