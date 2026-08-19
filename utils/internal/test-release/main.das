@@ -145,8 +145,7 @@ def run_utils_phase(cfg : Config; bundle : string) : int {
     to_log(LOG_INFO, "test-release utils: {cfg.network ? "network rows on" : "network rows off"}, {length(expected)} expected failures on file\n")
     let daslang = bundle_daslang(bundle)
     if (cfg.network && get_platform_name() == "windows" && length(bundle) > 60) {
-        to_log(LOG_WARNING, "test-release: bundle path is {length(bundle)} chars - git clones and native package builds under it can hit MAX_PATH; extract to a short path (e.g. C:/dl) for the network rows
-")
+        to_log(LOG_WARNING, "test-release: bundle path is {length(bundle)} chars - git clones and native package builds under it can hit MAX_PATH; extract to a short path (e.g. C:/dl) for the network rows\n")
     }
     if (!chdir(bundle)) {
         to_log(LOG_ERROR, "test-release: cannot chdir to {bundle}\n")
