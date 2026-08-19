@@ -24,7 +24,7 @@ def make_name(idx : int; var since : int&) : string {
 }
 
 [test]
-def test_stackwalk_comprehension(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
+def test_stackwalk_comprehension(t : T?) {
     t |> run("one-line comprehension accumulator is live at an element park") @(t : T?) {
         var w = new CollectingWalker()
         let xs <- [for (i in range(3)); walk_len(w, "item_{i}")]

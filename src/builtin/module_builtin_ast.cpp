@@ -591,7 +591,8 @@ namespace das {
     }
 
     void for_each_pass_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
-        for ( auto * vec : { &mod->macros, &mod->inferMacros, &mod->optimizationMacros, &mod->lintMacros, &mod->globalLintMacros } ) {
+        for ( auto * vec : { &mod->macros, &mod->inferMacros, &mod->optimizationMacros, &mod->preInferMacros, &mod->postInferMacros,
+                             &mod->lintMacros, &mod->globalLintMacros, &mod->postCompileMacros } ) {
             for ( auto & td : *vec ) {
                 das_invoke<void>::invoke<const char *>(context,at,block,td->name.c_str());
             }

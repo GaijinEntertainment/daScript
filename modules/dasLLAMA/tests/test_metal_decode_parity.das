@@ -838,7 +838,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 with_job_que() {
                     setup_dasllama_jobque()
                     eval_(tr, sc, prompt2)
-                    rewind_cpu <- greedy_steps(tr, sc, 16)   // nolint:PERF030 - fresh empty target; it is declared outside the job-que block only so it outlives it
+                    rewind_cpu <- greedy_steps(tr, sc, 16)   // nolint:PERF030,LINT019 - fresh empty target, declared outside the job-que block only to outlive it; the metal half is cut off-Apple
                 }
                 delete sc
                 before = metal_decode_stats().decodes
