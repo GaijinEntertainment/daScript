@@ -173,8 +173,8 @@ def main() {
         if (!btn) return;
         btn.addEventListener('click', () => {
             const code = heroEditor ? heroEditor.getValue() : '';
-            const url = 'playground/index.html#code=' + encodeURIComponent(code);
-            window.open(url, '_blank');
+            const url = '/playground/#code=' + encodeURIComponent(code);
+            window.open(url, '_blank', 'noopener');
         });
     }
 
@@ -507,7 +507,7 @@ def main() {
         if (!el) return;
         const slug = BENCH_TO_SLUG[benchBm];
         el.innerHTML = slug
-            ? `<a href="/playground/index.html?example=${encodeURIComponent(slug)}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`
+            ? `<a href="/playground/?example=${encodeURIComponent(slug)}">try <span class="forge-bench__playground-test">${escapeHtml(benchBm)}</span> on the playground →</a>`
             : '';
     }
 
