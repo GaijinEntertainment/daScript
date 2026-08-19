@@ -374,7 +374,7 @@ jobs:
         #!/bin/bash
         f="$1"
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
-        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify "$f" 2>&1 || true)
+        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1 || true)
         if grep -q 'AST verify' <<< "$out"; then
           echo "ast-verify reported on $f"
           grep 'AST verify' <<< "$out" | sort -u | head -5
@@ -396,7 +396,7 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
-    - name: "Compile tests/ with --ast-verify"
+    - name: "Compile tests/ with --ast-verify-batch"
       # NIGHTLY ONLY (cron or manual dispatch), because of what it costs: 22.7 min,
       # a third of this job, and it moved the whole PR pipeline from ~57 min to
       # ~75 min the day it landed. The cost is structural — it launches one daslang
@@ -417,7 +417,7 @@ jobs:
         #!/bin/bash
         f="$1"
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
-        out=$(timeout 120 "$BIN/daslang" --ast-verify -compile-only "$f" 2>&1 || true)
+        out=$(timeout 120 "$BIN/daslang" --ast-verify-batch -compile-only "$f" 2>&1 || true)
         if grep -q 'AST verify' <<< "$out"; then
           echo "### $f"
           grep 'AST verify' <<< "$out" | sort -u | head -5

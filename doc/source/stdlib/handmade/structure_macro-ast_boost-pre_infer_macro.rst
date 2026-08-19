@@ -1,1 +1,1 @@
-The ``[pre_infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked before every type inference pass, on a tree a macro may have just modified.
+The ``[pre_infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked before every type inference pass, on a tree a macro may have just modified. Override ``canVisitPass(prog, mod, index)`` to skip passes: ``index`` is 0-based within one inference leg, and pass 0 is the one that follows a tree change by a macro.

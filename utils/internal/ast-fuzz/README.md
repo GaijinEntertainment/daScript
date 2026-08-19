@@ -111,7 +111,9 @@ AST verify: let variable 'i' has no type (Variable._type is null) at t.das:6:9
 Three ways in:
 
 - **CLI:** `daslang --ast-verify foo.das` force-includes the module (the way
-  `-jit` pulls in its daslib support).
+  `-jit` pulls in its daslib support). `--ast-verify-batch` is the sweep form
+  (CI, preflight): pre-infer before pass 0 of each inference leg only, post-infer
+  over the module being compiled only — every module still verified once.
 - **Source:** `require daslib/ast_verify`.
 - **Inline:** call `verify_module` / `verify_program` at the end of your own
   macro's `apply()`, right after building AST. `verify_expression` is for macros

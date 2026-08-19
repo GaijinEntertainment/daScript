@@ -13,10 +13,18 @@ module ast_verify shared private
 //!
 //! or ``require daslib/ast_verify``, or call [[verify_module]] /
 //! [[verify_expression]] from your own macro right after building AST.
+//!
+//! ``--ast-verify-batch`` is the sweep form for many files (CI, preflight): the pre-infer
+//! walk runs before pass 0 of each inference leg only (right after a macro changed the tree),
+//! and each post-infer firing walks just the module being compiled - "valid at the end", at
+//! a fraction of the cost. Plain ``--ast-verify`` re-walks before EVERY pass and sweeps every
+//! module on every post-infer firing: use it on one file to learn WHICH pass broke the tree.
 
 require daslib/ast
 require daslib/ast_boost
 require strings
+
+let private g_batch = has_value(get_command_line_arguments(), "--ast-verify-batch")
 
 def private placeholder(at : LineInfo) : ExpressionPtr {
     return new ExprConstInt(at = at, value = 0)
@@ -870,6 +878,11 @@ class AstVerifyMacro : AstPassMacro {
         verify_module(prog, mod)
         return true
     }
+    //! Under ``--ast-verify-batch`` only pass 0 of each inference leg is verified; the
+    //! post-infer verifier still checks the finished tree.
+    def override canVisitPass(prog : ProgramPtr; mod : Module?; index : int) : bool {
+        return index == 0 || !g_batch
+    }
 }
 
 def public verify_function(var fn : FunctionPtr) : int {
@@ -1448,11 +1461,18 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
+    //! Fires before every consumer of the finished tree (each infer leg, lint, every optimizer
+    //! round), so each firing walks thisMod. The sweep of every OTHER module covers a source
+    //! ``require`` (modules required before it compiled unverified) - skipped under ``-batch``.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
         }
-        verify_program_after_infer(prog, mod)
+        if (g_batch) {
+            verify_module_after_infer(prog, mod)
+        } else {
+            verify_program_after_infer(prog, mod)
+        }
         return true
     }
 }

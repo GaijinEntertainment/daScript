@@ -97,6 +97,27 @@ def test_ast_verify_clean_on_valid_code(t : T?) {
     t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
 }
 
+// Batch mode keeps pass 0 of every inference leg, which is where an [infer_macro] rewrite
+// first meets the verifier - so a macro-broken tree is still reported, only the per-pass
+// re-walks are gone.
+[test]
+def test_ast_verify_batch_still_reports_a_macro_broken_tree(t : T?) {
+    var out : string
+    let f = "utils/internal/ast-fuzz/selftest/at_unset.das"
+    let ec = run([BIN, "--ast-verify-batch", f], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "ExprOp2 has no source location (at is unset) in 'lost_one'") >= 0,
+        "batch mode did not report the unset at\n{out}")
+}
+
+[test]
+def test_ast_verify_batch_clean_on_valid_code(t : T?) {
+    var out : string
+    let ec = run([BIN, "--ast-verify-batch", "utils/internal/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
+    t |> equal(ec, 0)
+    t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
+}
+
 [test]
 def test_ast_verify_skips_late_extern_stubs(t : T?) {
     // a dasbind stub body is never inferred (InferTypes::canVisitFunction skips

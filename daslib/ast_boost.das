@@ -483,7 +483,8 @@ class SetupDirtyInferMacro : SetupAnyAnnotation {
 
 class SetupPreInferMacro : SetupAnyAnnotation {
     //! Registers annotated structure as a pre-infer macro: runs before every
-    //! (re-)inference pass, on a tree a macro may have just made invalid.
+    //! (re-)inference pass, on a tree a macro may have just made invalid. Override
+    //! ``canVisitPass`` to skip passes (pass 0 of a leg is the one after a macro's change).
     override annotation_function_call : string = "add_new_pre_infer_macro"
 }
 

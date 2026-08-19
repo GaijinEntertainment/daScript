@@ -527,7 +527,10 @@ Seven annotations control when a pass macro runs:
 
 - ``[infer_macro]`` — after clean type inference.  Returning ``true`` re-infers.
 - ``[dirty_infer_macro]`` — during each dirty inference pass.
-- ``[pre_infer_macro]`` — before each inference leg, on the not-yet-inferred tree.
+- ``[pre_infer_macro]`` — before each inference pass, on the not-yet-inferred tree.
+  Override ``canVisitPass(prog, mod, index)`` to skip passes: ``index`` is 0-based
+  within one inference leg, and pass 0 is the one that follows a tree change by a
+  macro (later passes see only the inferer's own edits).
 - ``[post_infer_macro]`` — once inference is finished, before the tree is consumed
   (access flags, lint, each optimisation round).
 - ``[lint_macro]`` — after successful compilation (lint phase, read-only).
@@ -827,6 +830,13 @@ The ``daslib/ast_verify`` module turns that into a diagnostic at the offending
 node. Reach for it first, not last::
 
     daslang --ast-verify program.das
+
+That form re-verifies before every inference pass and, after inference, sweeps
+every module on each firing, so the report names the pass that broke the tree
+even in a module required before the verifier. ``--ast-verify-batch`` is the
+sweep form for many files: it verifies before pass 0 of each inference leg
+(right after a macro changed the tree) and, after inference, only the module
+being compiled - every module still gets verified, at a fraction of the cost.
 
 Without it, a macro that leaves a variable untyped crashes:
 

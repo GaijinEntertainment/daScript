@@ -81,10 +81,12 @@ prefix keyword `private`; `[_macro, private]` is an error.
 **Pass macros** see the whole program and all derive from `AstPassMacro` (there is no
 `AstLintMacro` / `AstInferMacro` class), with one method
 `apply(prog : ProgramPtr; mod : Module?) : bool`. The annotation picks the phase:
-`[pre_infer_macro]`, `[infer_macro]` (return `true` to re-infer), `[dirty_infer_macro]`,
-`[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
-`[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`,
-`[post_compile_macro]` (after gc-root collection).
+`[pre_infer_macro]` (before every inference pass; override
+`canVisitPass(prog, mod, index) : bool` to skip passes — `index` is 0-based within one
+inference leg and pass 0 is the one right after a macro changed the tree), `[infer_macro]`
+(return `true` to re-infer), `[dirty_infer_macro]`, `[post_infer_macro]`,
+`[optimization_macro]`, `[lint_macro]` (per module), `[global_lint_macro]` (once, after all
+modules), `[pre_simulate_macro]`, `[post_compile_macro]` (after gc-root collection).
 
 Inside any macro `compiling_module()` is the module being compiled now (`mod` is the module owning
 the macro). Walk its declarations with
@@ -308,7 +310,9 @@ Visibility is never an annotation: write `def private helper`, `struct private F
 
 Slightly-wrong AST does not fail where the mistake is — it crashes passes later inside inference or
 codegen, with no line number and no hint which macro did it. `daslib/ast_verify` turns that into a
-diagnostic at the offending node: `daslang --ast-verify prog.das`, or from inside a macro
+diagnostic at the offending node: `daslang --ast-verify prog.das` (re-verifies before every
+inference pass, so the report names the pass that broke the tree; `--ast-verify-batch` is the
+cheaper many-files form — pass 0 of each inference leg plus post-infer), or from inside a macro
 `verify_module(prog, mod)` / `verify_expression(expr)` / `verify_function(fn)`. Each repairs what
 it reports so the scan finishes. It only knows shapes that crash the compiler, so silence is not
 proof; and a macro that re-breaks the same node every pass never converges — apply such a change

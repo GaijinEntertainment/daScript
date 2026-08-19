@@ -1524,6 +1524,17 @@ namespace das {
                 return false;
             }
         }
+        virtual bool canVisitPass ( Program * prog, Module * mod, int pass ) override {
+            if ( auto fnCanVisitPass = get_canVisitPass(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitPass", [&]() {
+                    result = invoke_canVisitPass(context,fnCanVisitPass,classPtr,prog,mod,pass);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

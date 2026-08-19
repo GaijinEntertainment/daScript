@@ -299,12 +299,14 @@ class AstPassMacro_Adapter {
 protected:
   enum {
     __fn_apply = 0,
+    __fn_canVisitPass = 1,
   };
 protected:
-  int _das_class_method_offset[1];
+  int _das_class_method_offset[2];
 public:
   AstPassMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = info->fields[2]->offset;
+      _das_class_method_offset[__fn_canVisitPass] = info->fields[3]->offset;
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -314,6 +316,15 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const >
         (__context__,nullptr,__funcCall__,
           self,prog,mod);
+  }
+  __forceinline Func get_canVisitPass ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitPass]);
+  }
+  __forceinline bool invoke_canVisitPass ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, int32_t index ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,int32_t>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,index);
   }
 };
 

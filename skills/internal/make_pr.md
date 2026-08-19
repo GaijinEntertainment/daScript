@@ -199,11 +199,13 @@ macro tooling, or the compiler's AST generation / inference (`src/ast/*.cpp`),
 the tree must still verify clean:
 
 ```bash
-# the files you changed, plus anything that requires them
-<daslang> --ast-verify -compile-only <changed .das files>
+# the files you changed, plus anything that requires them. -batch is the sweep form (pass 0 of
+# each inference leg + post-infer); plain --ast-verify re-walks before EVERY pass - use it on one
+# file when you need to know WHICH pass broke the tree
+<daslang> --ast-verify-batch -compile-only <changed .das files>
 # broader, when you touched daslib or src/ast: only an `AST verify` line is a failure
 find daslib tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \
-  | xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only
+  | xargs -0 -P8 -n1 <daslang> --ast-verify-batch -compile-only
 ```
 
 Expect **zero** `AST verify` lines — the tree is clean tree-wide, so any report is
@@ -526,7 +528,7 @@ created it.
 | REVIEW audit | step-0a walk (runs each discovered checklist's `REVIEW.das` gate first; red gate = exit 1, fix before agents; `--list-only` to relist) → one `review-md-auditor` per discovered checklist | Binding rules; gate red is fail-fix; checklist defects fixed in the same batch |
 | TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
-| AST verify | `<daslang> --ast-verify -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
+| AST verify | `<daslang> --ast-verify-batch -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |

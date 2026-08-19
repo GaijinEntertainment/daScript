@@ -597,7 +597,7 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                         for_each_clone(inCh) $(item : VerifyItem#) {
                             var out : string
                             let path = string(item.path)
-                            let argv <- [daslang, "-dry-run", "--ast-verify", path]
+                            let argv <- [daslang, "-dry-run", "--ast-verify-batch", path]
                             unsafe(popen_argv(argv, timeout, $(f) {
                                 if (f != null) {
                                     out := fread(f)
@@ -1205,7 +1205,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
-        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify on changed .das (parallel, 300s/file; mirrors CI) - only an AST verify line fails"),
+        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - only an AST verify line fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),

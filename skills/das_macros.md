@@ -12,7 +12,8 @@ the moment a macro misbehaves. Which entry point depends on how much of the tree
 
 | Call | Use when |
 |---|---|
-| `daslang --ast-verify file.das` | first move on any unexplained crash — checks every non-builtin module before each infer pass. `require daslib/ast_verify` pins that sweep in the source; `verify_module(prog, mod)` runs it at the end of your `apply()` |
+| `daslang --ast-verify file.das` | first move on any unexplained crash — checks every non-builtin module before each infer pass, so the report names the pass that broke the tree. `require daslib/ast_verify` pins that sweep in the source; `verify_module(prog, mod)` runs it at the end of your `apply()` |
+| `daslang --ast-verify-batch file.das` | the sweep form (CI, preflight, many files): pre-infer only before pass 0 of each inference leg — right after a macro changed the tree — and post-infer only over the module being compiled (plain mode re-sweeps every module on each firing). Every module is still verified once as `thisMod` |
 | `verify_expression(expr)` | you BUILD and RETURN a subtree — call / for-loop / variant / reader macros run inside inference, where the module-level form cannot see your result yet |
 | `verify_function(fn)` | you BUILD a function — `add_function` mangles the signature immediately, so a malformed result or argument type crashes there, before any pass could run |
 
@@ -76,6 +77,10 @@ those symbols by name — that resolves at the user's splice site and is unaffec
   sees the program its own module was compiled as. The hooks that do see the user program:
   `[pre_infer_macro]`, `[infer_macro]`, `[dirty_infer_macro]`, `[post_infer_macro]`,
   `[lint_macro]`, `[global_lint_macro]`, `[post_compile_macro]`.
+- A `[pre_infer_macro]` fires before EVERY inference pass; override
+  `canVisitPass(prog, mod, index)` to skip some — `index` is 0-based within one inference leg,
+  and pass 0 is the one right after a macro changed the tree (later passes see only the
+  inferer's own edits). `daslib/ast_verify` keeps pass 0 only under `--ast-verify-batch`.
 - `[post_compile_macro]` is the only hook running after the module's gc root is collected —
   everything earlier still sees the garbage inference left behind, so orphan hunting and gc
   bookkeeping belong there. Use its `prog` argument; `compiling_program()` throws by then.

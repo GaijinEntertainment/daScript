@@ -146,6 +146,10 @@ class AstStructureAnnotation {
 [macro_interface]
 class AstPassMacro {
     def abstract apply(prog : ProgramPtr; mod : Module?) : bool
+    //! Pre-infer macros only: gate before infer pass `index` (0-based within one
+    //! inference leg). Pass 0 follows a tree change by a macro; later passes see only the
+    //! inferer's own edits. Absent (or true) fires `apply` on every pass.
+    def abstract canVisitPass(prog : ProgramPtr; mod : Module?; index : int) : bool
 }
 
 [macro_interface]
