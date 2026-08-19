@@ -355,6 +355,9 @@ jobs:
 
     - name: "Run ast-verify on changed .das files"
       if: matrix.target == 'linux'
+      # a bare exit 143 with no finding is the runner killing the step (memory: each item is a
+      # whole-engine compile under the verifier) - the explicit deadline makes that a named failure
+      timeout-minutes: 90
       run: |
         set -eux
         BASE_REF="${{ github.event.pull_request.base.ref }}"
@@ -381,7 +384,9 @@ jobs:
         EOS
         chmod +x /tmp/ast_verify_changed.sh
         export BIN
-        printf '%s\0' "${CHANGED[@]}" | xargs -0 -P "$(nproc)" -n 1 /tmp/ast_verify_changed.sh
+        # two in flight, not nproc: four concurrent engine compiles under the verifier exceed the
+        # runner's memory and the step dies with a bare 143
+        printf '%s\0' "${CHANGED[@]}" | xargs -0 -P 2 -n 1 /tmp/ast_verify_changed.sh
 
     - name: "Test daslang_static"
       run: |
