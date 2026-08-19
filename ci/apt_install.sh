@@ -12,7 +12,10 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+# The runner image reaches ubuntu through mirror+file:/etc/apt/apt-mirrors.txt, a
+# priority list with the Azure mirror first - rewriting sources.list alone changes
+# nothing. Sweep the mirrorlist and every sources file.
+for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*; do
     if [ -w "$f" ]; then
         sed -i -e 's|\(https\?\)://azure\.archive\.ubuntu\.com|\1://archive.ubuntu.com|g' \
                -e 's|\(https\?\)://azure\.ports\.ubuntu\.com|\1://ports.ubuntu.com|g' "$f"
