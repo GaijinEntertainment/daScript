@@ -334,6 +334,24 @@ def test_privacy_strip(t : T?) {
         tt |> success(validate_sidecar_submission(stripped, errs), "still submission-grade")
         delete errs
     }
+    t |> run("a path smuggled into the identity keys is still stripped") @(tt : T?) {
+        // the identity keys are not exempt - a five-field box ending in a path, or an
+        // applied_box (never structurally validated), must not reach the public store
+        let smuggled = exchange_strip_private(fixture_sidecar("linux|x86_64||6.1|/home/alice/tool", DASLLAMA_VERSION, "vec16"))
+        tt |> success(find(smuggled, "alice") < 0, "path-shaped box is gone")
+        var errs : array<string>
+        tt |> success(!validate_sidecar_submission(smuggled, errs), "and the document is refused")
+        delete errs
+        var doc = JV((
+            kernels = (dot = "vec16"),
+            provenance = (
+                box = tune_box_identity(),
+                applied_box = "darwin|arm64|Mac|25F84|C:\\Users\\bob",
+                dasllama_version = "{DASLLAMA_VERSION}")))
+        let text = write_json(doc)
+        delete_json(doc)
+        tt |> success(find(exchange_strip_private(text), "bob") < 0, "path-shaped applied_box is gone")
+    }
 }
 
 [test]
