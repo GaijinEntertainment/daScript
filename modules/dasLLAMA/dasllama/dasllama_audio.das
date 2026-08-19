@@ -1172,7 +1172,7 @@ def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
 //! Average pool k×k, stride k, over a patch grid held token-major (row = gy·gw + gx, d channels):
 //! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner — ggml's POOL_2D
 //! accumulation order, then one divide). Ragged edges are dropped. Returns the output row count.
-def avg_pool2d_rows(var out : array<float>; x : array<float>; gw, gh, d, k : int64) : int64 {
+def avg_pool2d_rows(@scratch var out : array<float>; x : array<float>; gw, gh, d, k : int64) : int64 {
     let ow = gw / k
     let oh = gh / k
     let nout = ow * oh
@@ -1706,7 +1706,7 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
 //! Blocked bidirectional attention over token-major q/k/v [tt × d], ``n_head`` heads: out = softmax
 //! (scale·QKᵀ)·V per head, no cache, no mask; flattened over head × row-block units so 6 heads
 //! don't idle 8 lanes. ``hp``/``att`` are caller scratch grown here; ``scale`` is the caller's.
-def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; var hp : array<float>;
+def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; @scratch var hp : array<float>;
                     @scratch var att : array<float>; tt, d, n_head : int64; scale : float) {
     let hs = d / n_head
     let nqb = int((tt + ATTN_ENC_QB - 1l) / ATTN_ENC_QB)

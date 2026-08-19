@@ -200,6 +200,9 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   maxdiff lands in **3e-4 … 3e-3** — the uv gate (2e-4) does NOT hold across 16 layers of
   bf16-weight GEMMs with summation-order drift; the gate is set from the measurement on a
   scale-relative bar, not copied from uv.
+  **Scored at slice C:** measured 1.9e-4 (96² cb) … 9.4e-4 (blue 336²) across the eight
+  fixtures — the band held except the 96² floor (1.9e-4 sits just under 3e-4; the uv 2e-4 would
+  have held there and nowhere else). Bar set at 2e-4 + 4e-3·rms (≈3.2e-3): 3.4× headroom.
 - P2 (cost): CPU encode of 624×480 (1170 patches → 130 tokens) on the M1 Max lands in
   **0.9 … 1.8 s** (≈420 GFLOP: 16 blocks of GEMMs ≈ 350 + attention ≈ 67) — the image side
   becomes **≥ 12 %** of the turn that was 0.7 % for uv. This is the number that decides the
@@ -207,9 +210,15 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
 - P3 (clamps bind): at least one block's input or output clamp is ACTIVE on the `cb 336`
   fixture — disabling all clamps moves tier-1 by **> 1e-3** (the bounds ±6…±90 sit where
   activations live). Negative control in das, not in mtmd.
+  **Scored at slice C:** 0.73 on tok-0 v0 with every block clamp disarmed (`test_gemma4v_clamps_bind`)
+  — three orders past the bar; all 112 block GEMMs carry an active clamp on E2B.
 - P4 (first red): the first tier-1 red after the stem passes is in the rope halves or
   `kq_scale`, not in the norms — and the 96² node ladder localizes it to block 0 within one
   run.
+  **Scored at slice C: did not happen** — tier-1 went green on the first run, all eight
+  fixtures; the ladder was never consulted. The prediction over-weighted the rope/scale risk:
+  with the helpers unit-tested against in-test references (slice B) the tower had no untested
+  seam left to be wrong at.
 - P5 (decoder): once tier-1 passes, the E2B cats caption passes tier-3 on the first try —
   the splice, span and decoder are v1's, the E2B decoder already renders the markers.
 - P6 (rail): the gemma4v dlim stages in one pass under the 1 GiB cap at ≈ 0.35 GB and maps in

@@ -185,6 +185,16 @@ On Apple builds the CPU gate pins the tower knob off, and a second test gates th
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3·token-rms) — exceeding it
 is a red, the bar each fixture actually held is logged either way, and engage is proven per
 fixture by the encodes counter.
+`test_gemma4v.das` — the gemma4v ViT tower (E-series; E2B mmproj) tier-1 parity vs the
+`-p encode` dumps minted on the f32-widened E2B mmproj, CPU, `-fa off` (`mint_e2b.sh`): eight
+fixtures (96² cb through 672×336) on the scale-relative bar 2e-4 + 4e-3·token-rms, the measured
+maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
+staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
+without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
+per-token compare both vision tier-1 tests use.
+`test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama_audio.das`
+(clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
+each against an in-test reference.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
 agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
