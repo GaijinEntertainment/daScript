@@ -694,11 +694,12 @@ def private validate_sidecar_doc(doc : JsonValue const?; submission : bool; var 
     return empty(errors)
 }
 
-// Any backslash, or a slash glued to what follows (`/home/x`, `bin/daslang`, `C:/x`, a
-// trailing `/`). A slash followed by a space is prose, not a path: AMD APU brand strings read
-// `... 8700GE w/ Radeon 780M Graphics`, and that string is the box identity itself.
+// Any backslash, a leading `/` or `~` (an absolute path — the username-carrying shape), or a
+// slash glued to what follows (`bin/daslang`, `C:/x`, a trailing `/`). A slash followed by a
+// space inside prose is not a path: AMD APU brand strings read `... 8700GE w/ Radeon 780M
+// Graphics`, and that string is the box identity itself.
 def private path_shaped(s : string) : bool {
-    var shaped = false
+    var shaped = s |> starts_with("/") || s |> starts_with("~")
     peek_data(s) $(arr) {
         let n = length(arr)
         for (i in range(n)) {

@@ -351,6 +351,14 @@ def test_privacy_strip(t : T?) {
         let text = write_json(doc)
         delete_json(doc)
         tt |> success(find(exchange_strip_private(text), "bob") < 0, "path-shaped applied_box is gone")
+        // an absolute path is a path even when every component starts with a space
+        var abs = JV((
+            kernels = (dot = "vec16"),
+            provenance = (box = tune_box_identity(), leak = "/ Users/ alice", home = "~/ alice",
+                dasllama_version = "{DASLLAMA_VERSION}")))
+        let abs_text = write_json(abs)
+        delete_json(abs)
+        tt |> success(find(exchange_strip_private(abs_text), "alice") < 0, "leading-slash and tilde values are gone")
     }
 }
 
