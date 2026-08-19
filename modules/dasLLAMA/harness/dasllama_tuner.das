@@ -21,9 +21,9 @@ require dasllama/dasllama_env
 // A child failure is reported but does not abort the other half — the completeness check
 // upstream names whatever ends up missing.
 
-// Two modes only: default and `-- --tune-paranoid` (3x budget, 1% gate) — `daspkg release
-// --paranoid` forwards the flag here. There is no fast RACE mode; the debugging concession is
-// `daspkg release --quick`, which accepts the existing sidecar and never spawns this at all.
+// One protocol — `-- --tune-paranoid` (forwarded by `daspkg release --paranoid`) is accepted
+// and runs the same thing. The debugging concession is `daspkg release --quick`, which accepts
+// the existing sidecar and never spawns this at all.
 // Both halves take real measurements (the confirm gate is a full prefill), so they must run
 // under the box measurement regime — 16 cores with affinity on the big-SMT x64 boxes, not the
 // fresh-que default (all cores): a crown confirmed at the wrong width ships the wrong kernel.
@@ -157,7 +157,7 @@ def private run_half(name : string; paranoid : bool) : bool {
         // Under NOISE_OVERRIDE the gate line prints but the mint proceeds — a later nonzero
         // exit is then some OTHER fault, and blaming noise would hide it
         if (noiseRefused && !tune_noise_override()) {
-            print("dasllama_tuner: {name} REFUSED for noise (rc={rc}) - quiet the box and re-run; escapes: DAS_TUNE_NOISE_CV recalibrates the gate, DAS_TUNE_NOISE_OVERRIDE=1 mints anyway (stamped), DASLLAMA_ALLOW_UNTUNED=1 skips minting for dev runs\n")
+            print("dasllama_tuner: {name} REFUSED - the box is busy (probe cv past the ceiling), stop that and re-run; escapes: DAS_TUNE_NOISE_CV=<pct> raises the ceiling, DAS_TUNE_NOISE_OVERRIDE=1 mints anyway (stamped), DASLLAMA_ALLOW_UNTUNED=1 skips minting for dev runs\n")
         } else {
             print("dasllama_tuner: {name} FAILED (rc={rc})\n")
         }
@@ -170,16 +170,13 @@ def main : int {
     let t0 = ref_time_ticks()
     let paranoid = tuner_paranoid_requested()
     print("dasllama_tuner: sidecar = {g_env_core.tune_manifest}\n")
-    let modeDesc = (paranoid
-        ? "PARANOID (kernels 20 screening / 240 max, generators best-of-18, 1% gate, validation)"
-        : "default (kernels 20 screening / 80 max, generators best-of-6, validation)")
-    print("dasllama_tuner: mode = {modeDesc}\n")
+    print("dasllama_tuner: protocol = margin-decided (kernels: 5 screen + 15 final rounds in ~20 ms windows, 3% win margin, winner-vs-fallback validation; generators: screened best-of-8 + e2e confirm){paranoid ? " - --tune-paranoid accepted, same protocol" : ""}\n")
     // active overrides announce themselves up front: a mint an escape shaped must say so
     if (tune_noise_threshold_overridden()) {
-        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_CV - noise gate recalibrated to {tune_noise_threshold_pct(paranoid):0.1f}%\n")
+        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_CV - noise note threshold recalibrated to {tune_noise_threshold_pct(false):0.1f}% (the busy-box refusal ceiling is max(10%, this))\n")
     }
     if (tune_noise_override()) {
-        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_OVERRIDE - a failing noise gate mints anyway (sidecar stamped 'noise: overridden')\n")
+        print("dasllama_tuner: OVERRIDE DAS_TUNE_NOISE_OVERRIDE - a busy-box refusal mints anyway (sidecar stamped 'noise: overridden')\n")
     }
     // pre-mint snapshot: COPY, not rename — the halves UPSERT, and a rename would drop other
     // scopes' keys from the shared file. The post-mint diff reads it back.

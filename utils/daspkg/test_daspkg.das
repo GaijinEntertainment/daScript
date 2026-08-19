@@ -194,7 +194,7 @@ def test_parse_args(t : T?) {   // nolint:STYLE038 — a flat case table: one ar
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.command_arg |> is_none)
     }
-    t |> run("release with paranoid tuning") @(t : T?) {
+    t |> run("release accepts --paranoid (compat, no budget change)") @(t : T?) {
         var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--paranoid"])
         t |> success(r |> is_ok, "parse succeeds")
         let parsed <- r |> move_unwrap

@@ -261,8 +261,8 @@ tuner **re-mints on every release** — a frozen exe never tunes, so an
 unmeasured winner would ship forever. `--quick` is the only mode that
 inherits an existing sidecar, and only a complete, fresh one; an incomplete
 or stale sidecar mints even under `--quick`. A tuner that *refuses* (the
-noise gate, a failed validation) fails the release outright rather than
-shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
+noise probe's hard ceiling, a supervisor interrupt) fails the release
+outright rather than shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
 measured winners, and ships the sidecar beside the exe as
 `<bundle>.tune.json` (touched newer than the exe — the `"runtime"` knob
 section travels with the artifact, and the file documents the baked
@@ -398,12 +398,15 @@ what sits between two reads. The rule: **one timed window is tens of
 milliseconds** — a window the size of an OS timer tick reads scheduler jitter
 as a verdict — and **a winner is decided by margin, not by ranking**: a row
 takes the seat only when its median beats the shipped fallback by the win
-margin (the dasLLAMA harness uses 3%), and keeps it only when it still does in
-a validation re-race against that fallback alone. Everything inside the margin
-is the same measurement, and the fallback holds — deterministic beats lottery.
-A winner that loses its margin in the re-race is **demoted** to the fallback,
-per kernel; the mint still lands. Nothing in the measurement path refuses a
-sidecar.
+margin — 3% in the dasLLAMA harness, or the highest probe cv seen so far in
+the run, whichever is larger, so a noisier box demands a wider win — and keeps
+it only when it still does in a validation re-race against that fallback
+alone. Everything inside the margin is the same measurement, and the fallback
+holds — deterministic beats lottery. A winner that loses its margin in the
+re-race, or whose margin sits under the closing probe's floor, is **demoted**
+to the fallback, per kernel; the mint still lands. Neither the race nor the
+re-race ever refuses a sidecar; the only refusal is the probe's hard ceiling,
+below.
 
 The race shape that follows from this, per kernel family: a warm pass sizes
 each row's reps so its window lands near the target; a short screen races the
@@ -418,17 +421,19 @@ in seconds: its fallback holds.
 The noise probe is a **witness, not a gate**: a harness times one fixed kernel
 in the same tens-of-ms windows at the start, mid-run, and at the end, and
 stamps what it saw (`noise: ok` / `noisy`, `noise_probes`, the measured
-`noise_floor_cv_pct`). Only a **busy** box — cv past a hard ceiling an order of
-magnitude above the note threshold — refuses, with `DAS_TUNE_NOISE_OVERRIDE=1`
-turning that refusal into a pass stamped `noise: overridden`. A failed probe
-gets one settle-and-retry first (a transient the run itself caused fades in
-seconds; outside noise does not).
+`noise_floor_cv_pct`). Only a **busy** box — cv past a hard ceiling (10% in
+the dasLLAMA harness; the note threshold is 2%) — refuses, with
+`DAS_TUNE_NOISE_OVERRIDE=1` turning that refusal into a pass stamped
+`noise: overridden`. A probe over the note threshold gets one settle-and-retry
+before its cv is stamped (a transient the run itself caused fades in seconds;
+outside noise does not).
 
 The framework carries the policy and the math; the harness carries the probe:
 
 - `tune_noise_threshold_pct(paranoid)` — the note threshold: 2%;
-  `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration. (The `paranoid`
-  argument is retired; it no longer changes the value.)
+  `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration (and a value above the
+  hard ceiling raises the ceiling with it). The `paranoid` argument is
+  ignored.
 - `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns the hard-ceiling
   refusal into a pass, stamped `noise: overridden`; the escape always leaves a
   mark.
@@ -452,9 +457,8 @@ Level drift between the race and the re-race (`validation_max_drift_pct`) is
 stamped and noted, never judged: a row's absolute level moves with the
 interleave it ran in and the box's clock state, while same-window margins
 hold, so cross-window medians prove nothing. There is one protocol — no
-paranoid budget, no fast race: `--tune-paranoid` is still accepted and runs
-the same protocol, and the debugging concession remains accepting an existing
-sidecar.
+paranoid budget, no fast race: `--tune-paranoid` is accepted and runs the
+same protocol; the debugging concession is accepting an existing sidecar.
 
 ## Adding a kernel family
 
@@ -474,9 +478,8 @@ sidecar.
 
 A tuner is an ordinary `[export] def main` compiled with
 `DAS_TUNE_MODE=tune`, so the `<name>_variants()` registry holds the full
-grid as function pointers. It benches them (see the measurement discipline in
-`modules/dasLLAMA/tune_for_this_box.md` — interleaved A/B, correctness-gate
-every candidate, best-of-N, confirm the winner), then records the winner:
+grid as function pointers. It benches them (see the Measurement section
+above and `modules/dasLLAMA/tune_for_this_box.md`), then records the winner:
 
 ```das
 

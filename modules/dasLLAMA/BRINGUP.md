@@ -31,15 +31,16 @@ reference pair**, so the reference engines are not optional.
 The tuner is the detector, so the human never has to be. For a box with existing data:
 
 1. **Delete every `.dlim`** under the models dirs — the fresh generation re-bakes identities.
-2. **Mint PARANOID as part of building the exe**:
+2. **Mint as part of building the exe**:
    ```sh
    bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks \
      --out modules/dasLLAMA/performance/_rig
    ```
    Release ALWAYS mints (`--quick` is the sole inherit path, for later session iteration).
-   The mint refuses a noisy box (probe cv over the gate — quiet it and re-run; nothing was
-   written), self-validates (a heavy subset re-races and the winners must reproduce), and runs the
-   e2e confirm for divergent GEMM crowns (every platform; zen4-verified). The confirm model
+   The mint stamps the box's probe cv (only a busy box, cv past the ceiling, refuses), validates
+   every changed kernel against its fallback (a winner that lost its margin is demoted, the mint
+   still lands), and runs the e2e confirm for divergent GEMM crowns (every platform;
+   zen4-verified). The confirm model
    auto-resolves from the models dir (the preferred carrier, else the largest present q8 gguf;
    `DASLLAMA_CONFIRM_MODEL=<full path>` overrides) — the fallback pins only on a box with no
    q8 model at all, which the standard fetch order makes unreachable.
@@ -102,9 +103,10 @@ fallback kernels under a manifest one rebuild older. The bench cells REFUSE to m
 non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape — it also
 suppresses the auto-mint, so an untuned box runs fallback stamps instead of tuning first).
 
-Minting goes through the hardened wrapper — noise gates at start/mid/end (a refusal exits
-nonzero and writes NOTHING; the wrapper's closing line names the refusal and the escapes:
-`DAS_TUNE_NOISE_CV` recalibrates the gate, `DAS_TUNE_NOISE_OVERRIDE=1` mints anyway with
+Minting goes through the hardened wrapper — noise probes at start/mid/end (a busy-box refusal
+exits nonzero and writes NOTHING; the wrapper's closing line names the refusal and the escapes:
+`DAS_TUNE_NOISE_CV` recalibrates the note threshold (and raises the ceiling past 10% if set
+higher), `DAS_TUNE_NOISE_OVERRIDE=1` mints anyway with
 `noise: overridden` stamped in provenance, `DASLLAMA_ALLOW_UNTUNED=1` skips minting for dev
 runs), median ranking with deterministic tie-breaks inside the noise
 floor, a validation re-race per changed kernel (a winner that loses its margin is demoted

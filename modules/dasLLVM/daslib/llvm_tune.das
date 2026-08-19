@@ -689,8 +689,7 @@ var private g_noise_ovr = -1
 
     //! The probe-cv note threshold (percent): above it a tuner stamps the mint `noise: noisy`
     //! and races on margins; refusal is the harness's hard ceiling, far above. `DAS_TUNE_NOISE_CV`
-    //! overrides (calibration; garbage ignored), else 2%. The `paranoid` argument is retired —
-    //! one protocol — and no longer moves the value.
+    //! overrides (calibration; garbage ignored), else 2%; `paranoid` is ignored.
 def tune_noise_threshold_pct(_paranoid : bool) : double {
     if (g_noise_thr < 0.0lf) {
         let v = g_env_tune.tune_noise_cv

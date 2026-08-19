@@ -55,8 +55,8 @@ struct public TuneEnv {
     @clarg_doc = "Where mint archives land. Every mint archives (failures kept, marked .FAILED.json); the history is never deleted."
     tune_history : string = ""
 
-    @clarg_default_doc = "2 normal / 1 paranoid"
-    @clarg_doc = "The noise gate's probe-cv ceiling in percent - a calibration lever. Garbage or <= 0 reads as unset."
+    @clarg_default_doc = "2"
+    @clarg_doc = "The noise probe's note threshold in percent (a louder probe stamps the mint noisy; refusal sits at max(10, this)) - a calibration lever. Garbage or <= 0 reads as unset."
     tune_noise_cv : float = 0.0
 
     @clarg_doc = "Mint through a refusal at either gate - a failing noise probe or a failing validation verdict. The sidecar is stamped overridden, so the escape always leaves a mark."
