@@ -7,6 +7,7 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
 require daslib/fio
+require daslib/module_path
 require daslib/strings_boost
 require daslib/strings_convert
 require ladder_store public
@@ -46,12 +47,41 @@ def is_loopback_peer(peer : string) : bool {
     return peer == "127.0.0.1" || peer == "::1" || peer == "::ffff:127.0.0.1"
 }
 
-def private is_loopback_caller(var req : HttpRequest?) : bool {
-    //! Operator-surface gate on the TRANSPORT peer. Behind Caddy (which proxies from the same
-    //! box) that peer is always 127.0.0.1, so this passes for any internet caller — the REAL
-    //! boundary is that operator routes never appear in caddy.snippet. This is defense-in-depth
-    //! for direct-to-port access only; do not treat it as unforgeable behind the proxy.
-    return is_loopback_peer(client_ip(req))
+def private authority_host(authority : string) : string {
+    //! The host of an `authority` (`host` / `host:port` / `[v6]:port`), lowercased.
+    if (authority |> starts_with("[")) {   // bracketed IPv6: take inside the brackets
+        let close = find(authority, "]")
+        return close > 0 ? to_lower(slice(authority, 1, close)) : to_lower(authority)
+    }
+    let colon = find(authority, ":")
+    return to_lower(colon >= 0 ? slice(authority, 0, colon) : authority)
+}
+
+def private is_loopback_host(authority : string) : bool {
+    let host = authority_host(authority)
+    // same set as is_loopback_peer, incl. the IPv4-mapped IPv6 loopback
+    return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "::ffff:127.0.0.1"
+}
+
+def private is_operator_caller(var req : HttpRequest?) : bool {
+    // Three layers, all required. The peer is no boundary behind Caddy (it proxies from this
+    // box) — caddy.snippet keeping /admin/* unproxied is that one. The other two defend the
+    // ssh-tunnel case: a loopback Host defeats DNS rebinding (a rebound name still sends its own
+    // Host), and same-origin defeats a plain cross-origin fetch that happens to use a loopback
+    // Host. Comparing Origin to Host alone would NOT survive rebinding — the attacker owns both.
+    return (is_loopback_peer(client_ip(req))
+        && is_loopback_host(get_header(req, "Host"))
+        && same_origin_or_headerless(req))
+}
+
+def private same_origin_or_headerless(var req : HttpRequest?) : bool {
+    let origin = get_header(req, "Origin")
+    if (empty(origin)) {
+        return true   // CLI clients (curl) and plain navigations carry no Origin
+    }
+    let sep = find(origin, "://")
+    let authority = sep >= 0 ? slice(origin, sep + 3) : origin
+    return authority == get_header(req, "Host")
 }
 
 def is_valid_sha(h : string) : bool {
@@ -115,12 +145,30 @@ class LadderServer : HvWebServer {
         POST("/admin/import-official") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_official(req, resp)
         }
+        POST("/admin/import-sidecar") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_import_sidecar(req, resp)
+        }
         POST("/admin/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_admin_submit(req, resp)
         }
+        GET("/admin/") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_page(req, resp)
+        }
+        GET("/admin") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_page(req, resp)
+        }
+        GET("/admin/sidecars") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_sidecars(req, resp)
+        }
+        POST("/admin/sidecar/verify") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_sidecar_verify(req, resp)
+        }
+        POST("/admin/sidecar/delete") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_admin_sidecar_delete(req, resp)
+        }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let t0 = ref_time_ticks()
-            if (!is_loopback_caller(req)) {
+            if (!is_operator_caller(req)) {
                 log_request("POST", "/shutdown", 403, client_ip_of(req), 0, 0, t0)
                 return resp |> TEXT_PLAIN("forbidden", http_status.FORBIDDEN)
             }
@@ -279,9 +327,16 @@ def private handle_sidecar_doc(var req : HttpRequest?; var resp : HttpResponse?)
 
 def private submit_body_of(var req : HttpRequest?; route : string; var resp : HttpResponse?;
                            var status : http_status&; t0 : int64) : string {
-    //! Shared NUL guard: returns "" and fills `status` when the body cannot be
-    //! taken at face value ("" never validates downstream, so it is safe).
+    //! Shared body gate: returns "" and fills `status` when the body cannot be
+    //! taken at face value — absent entirely, or NUL-truncated ("" never
+    //! validates downstream, so it is safe).
     let raw_bytes = length(req.body)
+    if (raw_bytes == 0) {
+        let body = write_json(JV((error = "empty document")))
+        log_request("POST", route, 400, client_ip_of(req), 0, length(body), t0)
+        status = resp |> JSON(body, http_status.BAD_REQUEST)
+        return ""
+    }
     let text = string(req.body)
     if (!body_is_byte_faithful(raw_bytes, text)) {
         let body = write_json(JV((error = "document contains NUL bytes")))
@@ -399,7 +454,7 @@ def private handle_submit_records(var req : HttpRequest?; var resp : HttpRespons
 def private handle_admin_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
-    if (!is_loopback_caller(req)) {
+    if (!is_operator_caller(req)) {
         log_request("POST", "/admin/submit", 403, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
     }
@@ -419,10 +474,132 @@ def private handle_admin_submit(var req : HttpRequest?; var resp : HttpResponse?
     return resp |> JSON(body)
 }
 
+def private handle_admin_page(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    let path = string(req.path)   // /admin and /admin/ both land here; log the one that arrived
+    if (!is_operator_caller(req)) {
+        log_request("GET", path, 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    // the operator page ships beside the server sources; libhv sets text/html from the extension
+    let st = resp |> SERVE_FILE(path_join(get_this_module_dir(), "admin.html"))
+    log_request("GET", path, int(st), ip, 0, resp.content_length, t0)
+    return st
+}
+
+def private handle_admin_sidecars(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_operator_caller(req)) {
+        log_request("GET", "/admin/sidecars", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    let rows <- admin_list_sidecars(g_db)
+    var arr <- [for (r in rows); JV((
+        sha = r.sha, box = r.box, verified = r.verified, noise = r.noise,
+        written = r.written, kernel_count = r.kernel_count, engine_sha = r.engine_sha,
+        dasllama_version = r.dasllama_version, client_ip = r.client_ip,
+        created_at = r.created_at, url = "/api/sidecar/{r.sha}"))]
+    // admin.html's gate pill reads submit_open from this listing
+    let body = write_json(JV((submit_open = g_policy.submit_open, sidecars = JV(arr))))
+    resp |> set_header("Cache-Control", "no-store")
+    resp |> set_header("X-Content-Type-Options", "nosniff")
+    log_request("GET", "/admin/sidecars", 200, ip, 0, length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private handle_admin_sidecar_verify(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_operator_caller(req)) {
+        log_request("POST", "/admin/sidecar/verify", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    var early = http_status.OK
+    let doc = submit_body_of(req, "/admin/sidecar/verify", resp, early, t0)
+    if (empty(doc)) {
+        return early
+    }
+    var jerr = ""
+    var js = read_json(doc, jerr)
+    let sha : string = js?["sha"] ?? ""
+    let want : bool = js?["verified"] ?? false   // absent/garbage → demote (never promotes by accident)
+    delete_json(js)
+    if (!is_valid_sha(sha)) {
+        let body = write_json(JV((error = "malformed sha")))
+        log_request("POST", "/admin/sidecar/verify", 400, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.BAD_REQUEST)
+    }
+    let ok = set_sidecar_verified(g_db, sha, want)
+    let status = ok ? http_status.OK : http_status.NOT_FOUND
+    let body = (ok
+        ? write_json(JV((sha = sha, verified = want)))
+        : write_json(JV((error = "unknown sidecar"))))
+    log_request("POST", "/admin/sidecar/verify", int(status), ip, length(req.body), length(body), t0)
+    return resp |> JSON(body, status)
+}
+
+def private handle_admin_sidecar_delete(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_operator_caller(req)) {
+        log_request("POST", "/admin/sidecar/delete", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    var early = http_status.OK
+    let doc = submit_body_of(req, "/admin/sidecar/delete", resp, early, t0)
+    if (empty(doc)) {
+        return early
+    }
+    var jerr = ""
+    var js = read_json(doc, jerr)
+    let sha : string = js?["sha"] ?? ""
+    delete_json(js)
+    if (!is_valid_sha(sha)) {
+        let body = write_json(JV((error = "malformed sha")))
+        log_request("POST", "/admin/sidecar/delete", 400, ip, length(req.body), length(body), t0)
+        return resp |> JSON(body, http_status.BAD_REQUEST)
+    }
+    let ok = delete_sidecar(g_db, sha)
+    let status = ok ? http_status.OK : http_status.NOT_FOUND
+    let body = (ok
+        ? write_json(JV((sha = sha, deleted = true)))
+        : write_json(JV((error = "unknown sidecar"))))
+    log_request("POST", "/admin/sidecar/delete", int(status), ip, length(req.body), length(body), t0)
+    return resp |> JSON(body, status)
+}
+
+def private handle_import_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_operator_caller(req)) {
+        log_request("POST", "/admin/import-sidecar", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    var early = http_status.OK
+    let doc = submit_body_of(req, "/admin/import-sidecar", resp, early, t0)
+    if (empty(doc)) {
+        return early
+    }
+    let r = plant_sidecar(g_db, doc, g_policy, current_unix_time())
+    let status = put_status_of(r.status)
+    var body = ""
+    if (r.status == PutStatus.ok) {
+        body = write_json(JV((sha = r.sha, created = r.created, url = "/api/sidecar/{r.sha}")))
+    } elif (r.status == PutStatus.invalid) {
+        body = write_json(JV((error = r.error)))
+    } else {
+        body = write_json(JV((error = "{r.status}")))
+    }
+    log_request("POST", "/admin/import-sidecar", int(status), ip, length(doc), length(body), t0)
+    return resp |> JSON(body, status)
+}
+
 def private handle_import_official(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
-    if (!is_loopback_caller(req)) {
+    if (!is_operator_caller(req)) {
         log_request("POST", "/admin/import-official", 403, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
     }

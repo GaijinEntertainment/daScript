@@ -12,7 +12,10 @@ change here is `REVIEW.md`.
 - `ladder_server.das` — the HTTP surface (routes, transport shape checks, official-dir import).
 - `ladder_store.das` — schema, migrations, and every policy decision (size caps, rate
   ceiling, source stamping, the sidecar lookup ladder). Zero HTTP.
-- `admin.das` — the operator CLI (verify/delete levers, manual official import; run on the box).
+- `admin.das` — the operator CLI (verify/delete levers, manual official/sidecar imports; needs
+  a daslang on the box — the HTTP admin surface below is the interpreter-free twin).
+- `admin.html` — the loopback `/admin/` operator page (sidecar queue, promote/demote/delete,
+  plant, the submit-gate toggle), served beside the sources like the dasllama-server control page.
 - `caddy.snippet` / `watchdog.json` / `dasllama-ladder.toml` — the deploy contract.
 - `_ladder_test_common.das` + `test_ladder_*.das` — fixtures and the three dastest suites
   (store, config, server; the server suite owns reserved port 19015).
@@ -26,8 +29,16 @@ Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?versio
 browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
 lookup ladder — a `box` switches modes and then version is required), `GET /api/sidecar/:sha`
 (download), `POST /api/submit/records`, `POST /api/submit/sidecar`. Loopback-only:
-`POST /admin/import-official`, `POST /shutdown`, plus `GET /healthz` for the watchdog. The
-`box` query value must be percent-encoded — box strings carry `|`, `,` and spaces.
+`GET /admin/` (the operator page) + `GET /admin/sidecars` (its listing, gate state included),
+`POST /admin/sidecar/verify` / `POST /admin/sidecar/delete`, `POST /admin/import-sidecar`
+(plant official — stored verified; re-plant promotes), `POST /admin/import-official`,
+`POST /admin/submit` (the gate flip), `POST /shutdown`, plus `GET /healthz` for the watchdog.
+Operator callers pass a three-layer gate: a loopback peer, a loopback `Host` authority, and
+same-origin-or-header-less. The `Host` and `Origin` layers together are the CSRF guard for
+the `/admin/` page over an ssh tunnel — same-origin refuses a cross-origin fetch, and the
+loopback-`Host` requirement refuses DNS rebinding (a rebound hostname would satisfy an
+Origin-equals-Host check but still send its own non-loopback `Host`). The `box` query value
+must be percent-encoded — box strings carry `|`, `,` and spaces.
 
 ## 2. Data model
 
@@ -110,6 +121,15 @@ The board launches **read-only**: `submit_open` defaults false, so `/api/submit/
 until an operator opens it. Toggle for a test window over the loopback tunnel with
 `sudo dasllama-deploy.sh open-submit` / `close-submit`; the permanent open (after the security
 audit) is `submit_open = true` in the deployed toml, or the `--submit-open` boot flag.
+
+**Sidecar curation** has two equivalent operator surfaces, both driving the loopback admin
+routes. The browser one: `ssh -L 8201:127.0.0.1:8201 dasweb-1`, then open
+`http://localhost:8201/admin/` — the queue with promote/demote/delete, a plant picker, and
+the gate toggle. The scripted one: `dasllama-deploy.sh sidecars` / `promote <sha>` /
+`demote <sha>` / `plant <sidecar.json>` (plain curl wrappers — no root needed, they live in
+the deploy script only so the operator has one tool). Planting stores the sidecar verified;
+planting content that already exists promotes the existing row, so promote-by-content and
+promote-by-sha are both available.
 
 The official boards are the record stores under `modules/dasLLAMA/performance/records/`
 (not in the release). The site deploy (`.github/workflows/pages.yml`, after the dasllama.io

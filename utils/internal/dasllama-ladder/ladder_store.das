@@ -429,6 +429,62 @@ def import_official_store(db : SqlRunner; doc : string; now : int64) : ImportRes
     return ImportResult(ok = true, runs_added = added, runs_replaced = replaced)
 }
 
+//! Plant an official sidecar (the operator lever): `put_sidecar` minus the rate limit,
+//! stored verified. Same submission-grade validation (an unstamped sidecar can never be
+//! served, so storing one is always an error) and the same privacy strip — the strip is
+//! idempotent, and hashing the same text community submits is what makes a re-plant of
+//! an existing upload promote it instead of minting a second row.
+def plant_sidecar(db : SqlRunner; var doc : string; policy : LadderPolicy; now : int64) : PutSidecarResult {
+    if (empty(doc)) {
+        return PutSidecarResult(status = PutStatus.empty_doc)
+    }
+    if (length(doc) > policy.max_sidecar_bytes) {
+        return PutSidecarResult(status = PutStatus.too_large)
+    }
+    doc = exchange_strip_private(doc)
+    if (empty(doc)) {
+        return PutSidecarResult(status = PutStatus.invalid, error = "json parse failed")
+    }
+    var errors : array<string>
+    if (!validate_sidecar_submission(doc, errors)) {
+        let first = !empty(errors) ? errors[0] : "invalid"
+        return PutSidecarResult(status = PutStatus.invalid, error = first)
+    }
+    var info : SidecarInfo
+    if (!parse_sidecar_info(doc, info)) {
+        return PutSidecarResult(status = PutStatus.invalid, error = "index fields do not parse")
+    }
+    let sha = sha256_hex(doc)
+    let existing <- _sql(db |> select_from(type<SidecarRow>)
+        |> _where(_.Sha == sha)
+        |> _select(_.Sha)
+        |> take(1))
+    if (!empty(existing)) {
+        set_sidecar_verified(db, sha, true)
+        return PutSidecarResult(status = PutStatus.ok, sha = sha, created = false)
+    }
+    add_submission(db, "sidecar", sha, doc, "importer", now)
+    db |> insert(SidecarRow(
+        Sha = sha,
+        Doc = doc,
+        DasllamaVersion = info.dasllama_version,
+        Box = info.box,
+        Platform = info.identity.platform,
+        Arch = info.identity.arch,
+        ModelId = info.identity.model_id,
+        Cpu = info.identity.cpu,
+        EngineSha = info.engine_sha,
+        Written = info.written,
+        Noise = info.noise,
+        KernelCount = info.kernel_count,
+        Verified = 1,
+        CreatedAt = now,
+        ClientIp = "importer"))
+    logger_info("ladder.store", "plant official sidecar",
+        JV((sha = sha, version = info.dasllama_version, box = info.box)))
+    return PutSidecarResult(status = PutStatus.ok, sha = sha, created = true)
+}
+
 def private tier_hits(tier : string; var seen : table<string>;
                       var out : array<SidecarHit>; rows : array<SidecarRow>) {
     // verified rows surface before unverified within a tier; rows arrive newest-first
@@ -504,6 +560,38 @@ def list_sidecars(db : SqlRunner; version : int) : array<SidecarHit> {
         |> _where(_.DasllamaVersion == version)
         |> _order_by_descending(_.CreatedAt))
     return <- listing_hits(rows)
+}
+
+//! One operator-listing row: the public hit columns plus the moderation ones
+//! (submitter ip, insert time) that never leave the loopback surface.
+struct SidecarAdminRow {
+    sha : string
+    box : string
+    verified : bool
+    noise : string
+    written : string
+    kernel_count : int
+    engine_sha : string
+    dasllama_version : int
+    client_ip : string
+    created_at : int64
+}
+
+//! Every sidecar with the moderation columns, newest first — the /admin/ page listing.
+def admin_list_sidecars(db : SqlRunner) : array<SidecarAdminRow> {
+    let rows <- _sql(db |> select_from(type<SidecarRow>)
+        |> _order_by_descending(_.CreatedAt))
+    return <- [for (r in rows); SidecarAdminRow(
+        sha = r.Sha,
+        box = r.Box,
+        verified = r.Verified != 0,
+        noise = r.Noise,
+        written = r.Written,
+        kernel_count = r.KernelCount,
+        engine_sha = r.EngineSha,
+        dasllama_version = r.DasllamaVersion,
+        client_ip = r.ClientIp,
+        created_at = r.CreatedAt)]
 }
 
 //! The stored sidecar document, or "" when the sha is unknown (an empty document can

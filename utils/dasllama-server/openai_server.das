@@ -2828,12 +2828,30 @@ def private is_loopback_req(req : HttpRequest?) : bool {
     // an unknown/empty peer counts as remote (fail closed, like the ladder's is_loopback_peer):
     // this service binds every interface, so a LAN caller must not slip through on an unresolved peer
     let loopback = ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
-    return loopback && same_origin_or_headerless(req)
+    return loopback && is_loopback_host(get_header(req, "Host")) && same_origin_or_headerless(req)
+}
+
+def private authority_host(authority : string) : string {
+    // the host of an authority (host / host:port / [v6]:port), lowercased
+    if (authority |> starts_with("[")) {
+        let close = find(authority, "]")
+        return close > 0 ? to_lower(slice(authority, 1, close)) : to_lower(authority)
+    }
+    let colon = find(authority, ":")
+    return to_lower(colon >= 0 ? slice(authority, 0, colon) : authority)
+}
+
+def private is_loopback_host(authority : string) : bool {
+    let host = authority_host(authority)
+    // same set as the peer check above, incl. the IPv4-mapped IPv6 loopback
+    return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "::ffff:127.0.0.1"
 }
 
 // CSRF guard for the operator routes: allow_cors() is global and the peer is 127.0.0.1 for ANY
-// local browser, so a page the operator merely visits could POST to the destructive routes. Accept
-// only a same-origin request (the control page is served from here) or a header-less CLI client.
+// local browser, so a page the operator merely visits could POST to the destructive routes. A
+// same-origin request (the control page is served from here) or a header-less CLI client passes;
+// the loopback-Host requirement above defeats DNS rebinding, which Origin==Host alone would not
+// (a rebound name owns both).
 def private same_origin_or_headerless(req : HttpRequest?) : bool {
     let origin = get_header(req, "Origin")
     if (empty(origin)) {

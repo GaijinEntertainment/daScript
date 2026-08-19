@@ -16,13 +16,14 @@ require daslib/fio
 //   daslang admin.das -- --db ... --op unverify-submission --id <id>
 //   daslang admin.das -- --db ... --op delete-submission --id <id>
 //   daslang admin.das -- --db ... --op import-official --file records/m1.json
+//   daslang admin.das -- --db ... --op plant-sidecar --file box.tune.json
 
 [CommandLineArgs]
 struct AdminArgs {
     @clarg_doc = "SQLite database path"
     db : string = "/srv/dasllama-ladder/ladder.db"
 
-    @clarg_doc = "verify-sidecar | unverify-sidecar | delete-sidecar | verify-submission | unverify-submission | delete-submission | import-official"
+    @clarg_doc = "verify-sidecar | unverify-sidecar | delete-sidecar | verify-submission | unverify-submission | delete-submission | import-official | plant-sidecar"
     op : string = ""
 
     @clarg_doc = "Sidecar content sha (the *-sidecar ops)"
@@ -31,7 +32,7 @@ struct AdminArgs {
     @clarg_doc = "Submission id (the *-submission ops)"
     id : int = 0
 
-    @clarg_doc = "Record store path (import-official)"
+    @clarg_doc = "Document path (import-official record store; plant-sidecar sidecar)"
     file : string = ""
 
     @clarg_short = "?"
@@ -40,7 +41,7 @@ struct AdminArgs {
 }
 
 [export]
-def main : int {
+def main : int {   // nolint:STYLE037 (flat operator-verb dispatch — one arm per op is the shape)
     var r <- parse_args(type<AdminArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
@@ -95,6 +96,21 @@ def main : int {
             return 1
         }
         print("{res.runs_added} run(s) imported, {res.runs_replaced} replaced\n")
+        return 0
+    }
+    if (cfg.op == "plant-sidecar") {
+        let text = fread(cfg.file)
+        if (empty(text)) {
+            print("error: cannot read {cfg.file}\n")
+            return 1
+        }
+        let res = plant_sidecar(db, text, LadderPolicy(), int64(get_clock()))
+        if (res.status != PutStatus.ok) {
+            let why = !empty(res.error) ? res.error : "{res.status}"
+            print("error: {why}\n")
+            return 1
+        }
+        print(res.created ? "planted {res.sha}\n" : "already stored, promoted {res.sha}\n")
         return 0
     }
     print("error: unknown op '{cfg.op}'\n")

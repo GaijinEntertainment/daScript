@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dasllama-ladder admin</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px; background: #14161a; color: #d8dce2;
+         font: 14px/1.5 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #8b93a1; margin: 0 0 20px; }
+  .bar { display: flex; gap: 12px; align-items: center; margin: 0 0 16px; flex-wrap: wrap; }
+  .pill { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+  .open { background: #3a2b12; color: #f0b429; }
+  .closed { background: #16321e; color: #4cbb6c; }
+  .ok { background: #16321e; color: #4cbb6c; }
+  .pending { background: #3a2b12; color: #f0b429; }
+  button { background: #232830; color: #d8dce2; border: 1px solid #3a414d;
+           border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  button:hover { background: #2c3340; }
+  button.danger { color: #e07070; border-color: #5a3030; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #262b33;
+           white-space: nowrap; }
+  th { color: #8b93a1; font-weight: normal; }
+  td.box { white-space: normal; word-break: break-all; max-width: 340px; }
+  a { color: #6aa9e8; text-decoration: none; }
+  .plant { margin-top: 24px; padding: 14px; border: 1px dashed #3a414d; border-radius: 8px; }
+  .msg { margin-left: 12px; color: #8b93a1; }
+  .err { color: #e07070; }
+</style>
+</head>
+<body>
+<h1>dasllama-ladder admin</h1>
+<p class="sub">loopback-only operator surface &mdash; reach it through <code>ssh -L 8201:127.0.0.1:8201 dasweb-1</code></p>
+
+<div class="bar">
+  <span>submissions: <span id="gate" class="pill">&hellip;</span></span>
+  <button id="gate-btn" onclick="toggleGate()">&hellip;</button>
+  <button onclick="refresh()">refresh</button>
+  <span id="bar-msg" class="msg"></span>
+</div>
+
+<table>
+  <thead><tr>
+    <th>sha</th><th>v</th><th>box</th><th>noise</th><th>kernels</th>
+    <th>written</th><th>from</th><th>status</th><th>actions</th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="9">loading&hellip;</td></tr></tbody>
+</table>
+
+<div class="plant">
+  plant an official sidecar (stored verified):
+  <input type="file" id="plant-file" accept=".json">
+  <button onclick="plant()">plant</button>
+  <span id="plant-msg" class="msg"></span>
+</div>
+
+<script>
+"use strict";
+// wire contract: ladder_server.das - /admin/sidecars, /admin/sidecar/{verify,delete}, /admin/import-sidecar, /admin/submit
+let gateOpen = false;
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", body: JSON.stringify(body ?? {}) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+function say(id, text, isErr) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "msg" + (isErr ? " err" : "");
+}
+
+async function refresh() {
+  const r = await fetch("/admin/sidecars");
+  const j = await r.json();
+  gateOpen = !!j.submit_open;
+  const gate = document.getElementById("gate");
+  gate.textContent = gateOpen ? "OPEN" : "closed";
+  gate.className = "pill " + (gateOpen ? "open" : "closed");
+  document.getElementById("gate-btn").textContent = gateOpen ? "close submissions" : "open submissions";
+  const rows = document.getElementById("rows");
+  if (!j.sidecars.length) {
+    rows.innerHTML = '<tr><td colspan="9">no sidecars stored</td></tr>';
+    return;
+  }
+  rows.innerHTML = j.sidecars.map(s => {
+    const sha = esc(s.sha);
+    const when = new Date(s.created_at * 1000).toISOString().slice(0, 16).replace("T", " ");
+    return "<tr>" +
+      '<td><a href="/api/sidecar/' + sha + '" title="' + sha + '">' + sha.slice(0, 12) + "</a></td>" +
+      "<td>" + esc(s.dasllama_version) + "</td>" +
+      '<td class="box">' + esc(s.box) + "</td>" +
+      "<td>" + esc(s.noise) + "</td>" +
+      "<td>" + esc(s.kernel_count) + "</td>" +
+      "<td>" + esc(s.written) + '<br><span class="msg">' + when + "</span></td>" +
+      "<td>" + esc(s.client_ip) + "</td>" +
+      '<td><span class="pill ' + (s.verified ? "ok\">verified" : "pending\">pending") + "</span></td>" +
+      "<td>" +
+        (s.verified
+          ? '<button onclick="setVerified(\'' + sha + "', false)\">demote</button> "
+          : '<button onclick="setVerified(\'' + sha + "', true)\">promote</button> ") +
+        '<button class="danger" onclick="deleteSidecar(\'' + sha + "')\">delete</button>" +
+      "</td></tr>";
+  }).join("");
+}
+
+async function setVerified(sha, verified) {
+  try { await post("/admin/sidecar/verify", { sha, verified }); await refresh(); }
+  catch (e) { say("bar-msg", e.message, true); }
+}
+
+async function deleteSidecar(sha) {
+  if (!confirm("Delete sidecar " + sha.slice(0, 12) + "… permanently?")) return;
+  try { await post("/admin/sidecar/delete", { sha }); await refresh(); }
+  catch (e) { say("bar-msg", e.message, true); }
+}
+
+async function toggleGate() {
+  try { await post("/admin/submit", { open: !gateOpen }); await refresh(); }
+  catch (e) { say("bar-msg", e.message, true); }
+}
+
+async function plant() {
+  const f = document.getElementById("plant-file").files[0];
+  if (!f) { say("plant-msg", "pick a sidecar .json first", true); return; }
+  try {
+    const text = await f.text();
+    const r = await fetch("/admin/import-sidecar", { method: "POST", body: text });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+    say("plant-msg", (j.created ? "planted " : "already stored, promoted ") + j.sha.slice(0, 12));
+    await refresh();
+  } catch (e) { say("plant-msg", e.message, true); }
+}
+
+refresh().catch(e => say("bar-msg", e.message, true));
+</script>
+</body>
+</html>

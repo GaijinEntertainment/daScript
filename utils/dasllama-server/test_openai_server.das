@@ -397,6 +397,26 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             POST("{base_url}/config", "\{\"port\":\"eight\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
+            // operator-route CSRF gate: a cross-site Origin is refused, and a spoofed non-loopback
+            // Host is refused header-less (the DNS-rebinding defense — Origin==Host alone would pass)
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/config"
+                set_header(req, "Origin", "http://evil.example")
+                req.body := "\{\"port\":8123}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "cross-site /config refused")
+                }
+            }
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/config"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"port\":8123}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "rebound non-loopback Host refused")
+                }
+            }
             // /v1/streams — finished chat streams linger ~10 s with counters + text tails
             GET("{base_url}/v1/streams") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))

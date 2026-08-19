@@ -144,6 +144,46 @@ there, out of scope here.
 real server — the current mock shows an interactive `[use/tune/skip]` prompt, which this
 spec removes, so the page gets rewritten to the real output.
 
+## Slice 8 — sidecar operator surface + official seeding (Boris, 2026-08-19)
+
+The board is live read-only with 220 official records and zero sidecars. Sidecars are the
+product, and the first ones must be planted by us — but "official sidecar" has no entry
+path: community submit stamps unverified, and the only promote lever (`admin.das
+verify-sidecar`) needs a daslang interpreter the deploy box does not ship. This slice adds
+the operator surface, then seeds.
+
+**Decisions:**
+
+- Promote/plant go through the RUNNING service (loopback admin routes), never a second
+  process on the WAL db. Store logic stays in `ladder_store`.
+- Operator UI is a loopback-served `/admin/` page reached via `ssh -L` tunnel from the
+  operator's own browser — no public exposure, `/admin/*` stays out of caddy.snippet
+  (the standing transport boundary). A CLI wrapper (deploy-script verbs) covers scripting;
+  both drive the same routes.
+- Browser-facing loopback routes REQUIRE a three-layer operator gate: loopback peer +
+  loopback Host + same-origin-or-headerless. Same-origin (Origin authority == Host, or no
+  Origin at all for curl) refuses a cross-origin fetch; the loopback-Host requirement refuses
+  DNS rebinding, which an Origin==Host check alone does NOT (a rebound name owns both). The
+  openai_server CSRF lesson plus the woodpecker's rebinding catch.
+- The three seed sidecars are FRESH mints at the current `DASLLAMA_VERSION` from current
+  master on each box (m1 / m4 / zen4) — sidecar validity keys on version × box, so
+  anything from earlier profiling sessions is stale by our own rule.
+
+**Build (one PR):** store `plant_sidecar` (trusted put + Verified=1, dedup re-plant
+promotes) + admin listing; routes `GET /admin/sidecars`, `POST /admin/sidecar/verify`,
+`POST /admin/sidecar/delete`, `POST /admin/import-sidecar`, `GET /admin/` (the page; the
+no-slash `/admin` serves it too);
+same-origin hardening on `is_loopback_caller`; `admin.html`; deploy verbs
+`sidecars`/`promote`/`demote`/`plant`; tests on the in-dir harness; README + REVIEW.md.
+
+**Rollout:** rebuild bundle from master on zen4 → `install` (box catches up, picks up the
+surface) → mint v-current sidecars on m1/m4/zen4 → `plant` ×3 → verified on the site →
+brief open-submit window: the control-page exchange-card submit from m1 lands unverified,
+promote it from `/admin/` — the full user story exercised end to end.
+
+**Not this slice:** records-submission promote UI (admin.das keeps that lever); the
+dasllama-server config UX pass (gguf-only picker, simple/advanced split) — its own arc.
+
 ## Follow-up ledger (documented, deliberately not this arc)
 
 - **Partial re-race** (tune framework, dasLLVM + dasllama tuner): per-family variant-set
