@@ -53,10 +53,26 @@ require math
 require strings
 require dasllama/dasllama_env
 
-// This half is a flat best-of-N; paranoid triples the round count. The confirm pass is never
+// This half is best-of-N per family, screened: every perm races SCREEN_ROUNDS, then only the
+// perms within GEN_KEEP of the leader's best tile time continue for the remaining rounds - a
+// perm that lost by 10x in round one is not raced eighteen times. The confirm pass is never
 // cut: it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
-let ROUNDS_FULL = 6
-var ROUNDS = ROUNDS_FULL
+let SCREEN_ROUNDS = 2
+let ROUNDS = 8
+let GEN_KEEP = 1.20lf
+
+// the screen verdict for one family: after SCREEN_ROUNDS, keep[i] = perm i's best tile time is
+// within GEN_KEEP of the family leader (best[] is min-over-rounds so far)
+def private gen_screen(r : int; best : array<double>; var keep : array<bool>) {
+    return if (r != SCREEN_ROUNDS)
+    var leader = 1.0e30lf
+    for (b in best) {
+        leader = min(leader, b)
+    }
+    for (b, k in best, keep) {
+        k = b <= leader * GEN_KEEP
+    }
+}
 
 struct Fixture {
     n, d, ntok, nb : int64
@@ -872,7 +888,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -951,9 +967,20 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         hbest[i] = 1.0e30lf
     }
     let HOT_REPS = 16
-    for (r in range(ROUNDS)) {   // interleaved best-of within the family
-        tune_progress_kernel_step(r + 1, "best-of", length(tvs))
+    var keep : array<bool>
+    keep |> resize(nv)
+    for (i in range(nv)) {
+        keep[i] = true
+    }
+    for (r in range(ROUNDS)) {   // interleaved best-of within the family, screened
+        gen_screen(r, best, keep)
+        var live = 0
+        for (k in keep) {
+            live += k ? 1 : 0
+        }
+        tune_progress_kernel_step(r + 1, r < SCREEN_ROUNDS ? "screening" : "best-of", live)
         for (vi in range(nv)) {
+            continue if (!keep[vi])
             let mi = kq_mr_index(kmrs, vmr[vi])
             let t0 = ref_time_ticks()
             run_kq_tile(tvs[vi]._1, kbfx, bbuf[mi].q, bbuf[mi].s, vmr[vi], ky)
@@ -990,6 +1017,7 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
     let wname = tvs[winner]._0
+    delete keep
     delete ky
     delete kyg
     delete kyh
@@ -1542,9 +1570,20 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     // the hot shape runs HOT_REPS back-to-back per timing sample: 1MB of weights stays
     // cache-resident, so the sample measures compute, not the first-touch stream
     let HOT_REPS = 16
-    for (r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
-        tune_progress_kernel_step(r + 1, "best-of", length(vs))
+    var keep : array<bool>
+    keep |> resize(nv)
+    for (i in range(nv)) {
+        keep[i] = true
+    }
+    for (r in range(ROUNDS)) {   // interleaved best-of, screened: variant order inside each round
+        gen_screen(r, best, keep)
+        var live = 0
+        for (k in keep) {
+            live += k ? 1 : 0
+        }
+        tune_progress_kernel_step(r + 1, r < SCREEN_ROUNDS ? "screening" : "best-of", live)
         for (vi in range(nv)) {
+            continue if (!keep[vi])
             let t0 = ref_time_ticks()
             run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
             let us = double(get_time_usec(t0))
@@ -1594,6 +1633,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     if (merged != winner) {
         tune_detail("tile winner {vs[winner]._0} + hot decode winner within '{wkey}' -> {vs[merged]._0}\n")
     }
+    delete keep
     // the kq families tune separately — one manifest entry per format, tile-best wins (the
     // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
     // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
@@ -1707,8 +1747,7 @@ def main : int {
         return 1
     }
     if (tuner_paranoid_requested()) {
-        ROUNDS = ROUNDS_FULL * 3
-        noise_set_paranoid(true)
+        tune_detail("gen tuner: --tune-paranoid is retired - one screened best-of protocol; running it\n")
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips

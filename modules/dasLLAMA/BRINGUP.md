@@ -34,7 +34,7 @@ The tuner is the detector, so the human never has to be. For a box with existing
 2. **Mint PARANOID as part of building the exe**:
    ```sh
    bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks \
-     --out modules/dasLLAMA/performance/_rig --paranoid
+     --out modules/dasLLAMA/performance/_rig
    ```
    Release ALWAYS mints (`--quick` is the sole inherit path, for later session iteration).
    The mint refuses a noisy box (probe cv over the gate — quiet it and re-run; nothing was
@@ -47,7 +47,7 @@ The tuner is the detector, so the human never has to be. For a box with existing
    `~/.tune-history/<box>/` (failures too, marked). **Review the DIFF**: uniform time shift =
    box state; scattered past-floor flips = one of the mints was noisy; same-direction twin
    flips = an estimator change.
-   Measured on the M1 (2026-08-02): 886 s total — 72 s build, 732 s paranoid tune, 73 s rebuild.
+   Measured on the M1 (2026-08-02, the old paranoid protocol): 886 s total — 72 s build, 732 s tune, 73 s rebuild; the margin protocol mints the kernels half in ~1.5 min and the gen half in 4–8 min.
 3. **Run the oracle set — LLM and audio — plus one big known-good model on CPU** (section 5's
    oracle mode). The board owns its image lifecycle (wipe at start, bake per cell, delete after
    each model — `PROFILE.md`), so no pre-bake step precedes it; section 4 stays for converter
@@ -57,7 +57,7 @@ The tuner is the detector, so the human never has to be. For a box with existing
 
    **Any dasLLAMA source edit between here and the sweep invalidates the exe** — it bakes both
    the sources and the tune winners, so the rig refuses a stale one and prints the rebuild line.
-   Re-release with `--quick` (inherits the complete sidecar, ~85 s) and carry on; the paranoid
+   Re-release with `--quick` (inherits the complete sidecar, ~85 s) and carry on; the full
    mint is not repeated for a code edit. Exception: kernel work — its `DASLLAMA_VERSION` bump
    makes every existing sidecar read version-stale, so that release re-mints.
 4. **New box only:** the same big model vs llama.cpp (section 3 references) — when the
@@ -107,14 +107,14 @@ nonzero and writes NOTHING; the wrapper's closing line names the refusal and the
 `DAS_TUNE_NOISE_CV` recalibrates the gate, `DAS_TUNE_NOISE_OVERRIDE=1` mints anyway with
 `noise: overridden` stamped in provenance, `DASLLAMA_ALLOW_UNTUNED=1` skips minting for dev
 runs), median ranking with deterministic tie-breaks inside the noise
-floor, a validation re-race (winners must reproduce or the mint fails), race tables +
-provenance (noise verdict, mode, engine sha, box, date) in the sidecar, `.bak` + printed
-DIFF on re-mint, and an archive in `~/.tune-history/<box>/`. Two budgets only: normal
-(minutes) and `--tune-paranoid` (~3x, 1% gate) — there is no fast race. Direct form when
-not going through `daspkg release`:
+floor, a validation re-race per changed kernel (a winner that loses its margin is demoted
+to the fallback; the mint still lands), race tables + provenance (noise verdict, engine
+sha, box, date) in the sidecar, `.bak` + printed DIFF on re-mint, and an archive in
+`~/.tune-history/<box>/`. One protocol — margin-decided, ~20 ms windows; `--tune-paranoid`
+is accepted and runs the same thing. Direct form when not going through `daspkg release`:
 
 ```sh
-DAS_TUNE_MODE=tune bin/daslang modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo> [-- --tune-paranoid]
+DAS_TUNE_MODE=tune bin/daslang modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>
 ```
 
 Order: build → mint → sweep (the board bakes its own images; pre-bake is for §4 converter

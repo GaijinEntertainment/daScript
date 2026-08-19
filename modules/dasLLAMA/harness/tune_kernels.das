@@ -121,11 +121,48 @@ def private aligned_f32(@scratch var arr : array<float>; n : int64) : float? {
     return p
 }
 
-let SCREEN_ROUNDS = 20
-var private ROUNDS = 80   // paranoid triples this
-let MIN_FINALISTS = 4
-let FINALIST_MARGIN = 1.05lf
-let REPS = 2000
+// Stream `slot` of a bench: the 1MB-pinned base plus slot x (4KB + one cache line), so the
+// streams of one bench never share a page offset - the geometry is identical every run and
+// not the degenerate all-aliased one
+let STREAM_STAGGER = (4096l + 64l) / 4l   // floats
+
+def private aligned_stream(@scratch var arr : array<float>; n : int64; slot : int) : float? {
+    var p = aligned_f32(arr, n + STREAM_STAGGER * 8l)
+    unsafe {
+        p = p + STREAM_STAGGER * int64(slot)
+    }
+    return p
+}
+
+def private reset_stream(var dp : float?; d0 : array<float>) {
+    unsafe {
+        for (j in range64(length(d0))) {
+            dp[j] = d0[j]
+        }
+    }
+}
+
+// The race protocol: one warm pass, SCREEN_ROUNDS over the whole grid, then FINAL_ROUNDS over
+// the finalists only — every row whose screen median beats the shipped fallback by
+// WIN_MARGIN_PCT and sits within that same band of the best such row (the best and all its
+// twins, capped at MAX_FINALISTS), plus the fallback itself. No candidate after the screen =
+// the fallback holds and the kernel is done. A winner must keep its margin in the final
+// medians, and again in the validation re-race, or the fallback holds — per kernel, never a
+// refusal. Among twins the seat is sticky: the previous sidecar's winner keeps it while it
+// stays inside the band, so a re-mint only moves a kernel when the box actually changed.
+let SCREEN_ROUNDS = 5
+let FINAL_ROUNDS = 15
+let VALIDATE_ROUNDS = 10
+var private ROUNDS = SCREEN_ROUNDS + FINAL_ROUNDS
+let MAX_FINALISTS = 8
+let WIN_MARGIN_PCT = 3.0lf
+// One timed window = reps_of(i) calls; REPS_BASE is the unit every recorded sample is
+// normalized to (so race tables stay comparable across rows and across mints), and the warm
+// pass scales each row's reps up to ~TARGET_WINDOW_US — a window the size of an OS timer tick
+// reads jitter as a verdict; tens of ms read the kernel.
+let REPS_BASE = 2000
+let TARGET_WINDOW_US = 20000.0lf
+let MAX_REPS_SCALE = 32
 // The outer progress denominator, needed before the first kernel runs so it cannot be derived
 // from the results. A mismatch only skews the bar, and main says so at the end.
 let TUNED_KERNEL_COUNT = 25
@@ -141,69 +178,174 @@ struct private KernelResult {
 // from here rather than restating all three in parallel arrays that can drift apart.
 var private g_results : array<KernelResult>
 var private g_shipped : table<string; string>
-// per-candidate finalist-phase samples for the CURRENT kernel — reset at kernel_begin. The
-// median of these ranks the finalists in report(); best-of stays min-over-all-rounds (the
-// screening rule still runs on it) and is printed alongside as the per-kernel noise witness.
+// the previous sidecar's winners (the file this mint upserts into, stale or not): a twin that
+// already holds the seat keeps it
+var private g_incumbent : table<string; string>
+// per-row samples for the CURRENT kernel (every measured round, in REPS_BASE units) — reset
+// at kernel_begin; report() ranks by their median, best-of is printed beside as the witness
 var private g_samples : array<array<double>>
 // per-kernel race tables for the sidecar "race" section — "how much did it flip/win by" must
 // be answerable from the file long after the scrollback is gone
 var private g_race : table<string; JsonValue?>
-// the validation phase: a heavy subset re-races twice after the sweep; the verdict is
-// tune_validate_verdict over the windows — same-window ORDER only, drift reported never failed
+// the current kernel's race state: its name, the warm-pass time per row, the reps each row
+// runs per window (empty = REPS_BASE), whether the bench reads reps_of at all (a DRAM-walk
+// bench times a fixed walk and never scales), and the finalist mask the screen decided
+var private g_cur_kernel = ""
+var private g_warm_us : array<double>
+var private g_reps : array<int>
+var private g_reps_used = false
+var private g_finalist : array<bool>
+var private g_screened = false
+// the validation phase: every changed kernel re-races winner vs fallback once; a winner that
+// loses its margin is demoted to the fallback — per kernel, the mint still lands
 var private g_validating = false
-var private g_validate_expect : table<string; string>
+var private g_validate_pair : table<string; tuple<int; int>>   // kernel -> (winner row, fallback row)
 var private g_validate_med : table<string; double>
-var private g_validate_rows : table<string; array<TuneValidateRow>>
-var private VALIDATE_DRIFT_PCT = 5.0lf   // stationarity NOTE threshold (never fails); paranoid tightens in main
+var private g_validate_demoted = 0
+var private g_validate_drift = 0.0lf
+let VALIDATE_DRIFT_PCT = 5.0lf   // stationarity NOTE threshold (never fails)
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
-// ===== shared reporting =====
+// ===== the race driver =====
 
-// Keep the fastest rows plus anything within the supplied leader margin. Normal mode measures
-// the full grid for 20 rounds before the 80-round finalist phase. Fast mode narrows progressively:
-// full grid through round 4, top 8 / within 10% through round 8, then top 4 / within 5% to round 20.
-def screening_keep(best : array<double>; ok : array<bool>; i : int;
-                   min_finalists : int; margin : double) : bool {
-    if (!ok[i]) {
-        return false
-    }
-    var leader = 1.0e30lf
-    var faster = 0
-    for (bj, okj in best, ok) {
-        if (okj) {
-            if (bj < leader) {
-                leader = bj
-            }
-            if (bj < best[i]) {
-                faster ++
+//! Reps for row `i`'s timed window this round — REPS_BASE until the warm pass has sized the
+//! windows. Every bench that loops a fixed kernel call reads this; a bench that times a fixed
+//! DRAM walk does not, and its samples stay unscaled.
+def reps_of(i : int) : int {
+    g_reps_used = true
+    return i < length(g_reps) ? g_reps[i] : REPS_BASE
+}
+
+// the previous sidecar's "kernels" section, read raw (a stale sidecar still names the seats)
+def private load_incumbents() {
+    let text = fread(tune_manifest_path())
+    return if (empty(text))
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    if (doc != null && doc is _object) {
+        var ks = doc?["kernels"]
+        if (ks != null && ks is _object) {
+            for (k, v in keys(ks as _object), values(ks as _object)) {
+                if (v != null && v is _string) {
+                    g_incumbent[k] = clone_string(v as _string)
+                }
             }
         }
     }
-    return faster < min_finalists || best[i] <= leader * margin
+    delete_json(doc)
+    if (!empty(g_incumbent)) {
+        tune_detail("incumbents: {length(g_incumbent)} seats from the previous sidecar\n")
+    }
 }
 
 def private kernel_begin(name : string) : int64 {
     interrupt_gate(name)   // between families only — the race in flight always completes
     delete g_samples
+    delete g_warm_us
+    delete g_reps
+    delete g_finalist
+    g_reps_used = false
+    g_screened = false
+    g_cur_kernel = name
+    if (g_validating) {
+        // only the recorded winner and the fallback race; everything else sits out
+        let pr = g_validate_pair?[name] ?? (-1, -1)
+        g_finalist |> resize(max(pr._0, pr._1) + 1)
+        if (pr._0 >= 0) {
+            g_finalist[pr._0] = true
+        }
+        if (pr._1 >= 0) {
+            g_finalist[pr._1] = true
+        }
+        g_screened = true
+    }
     tune_progress_kernel_begin(name, ROUNDS)
     return ref_time_ticks()
 }
 
-// one timing sample: best[] keeps min-over-all-rounds (screening ranks on it); finalist-phase
-// rounds also collect into g_samples for the median ranking
+// one timing sample, normalized to REPS_BASE reps; the warm pass (round -1) only sizes the
+// windows, measured rounds feed best[] (min) and the per-row sample list (median)
 def private record_sample(round, i : int; us : double; var best : array<double>) {
+    var usn = us
+    if (g_reps_used && i < length(g_reps) && g_reps[i] != REPS_BASE) {
+        usn = us * double(REPS_BASE) / double(g_reps[i])
+    }
     if (round < 0) {
+        if (length(g_warm_us) <= i) {
+            g_warm_us |> resize(i + 1)
+        }
+        g_warm_us[i] = usn
         return
     }
-    if (us < best[i]) {
-        best[i] = us
+    if (usn < best[i]) {
+        best[i] = usn
     }
-    return if (round < SCREEN_ROUNDS)
     if (length(g_samples) <= i) {
         g_samples |> resize(i + 1)
     }
-    g_samples[i] |> push(us)
+    g_samples[i] |> push(usn)
+}
+
+// after the warm pass: scale each row's reps so its window lands near TARGET_WINDOW_US
+def private size_windows(ok : array<bool>) {
+    return if (!g_reps_used)
+    g_reps |> resize(length(ok))
+    for (i in range(length(ok))) {
+        let warm = i < length(g_warm_us) ? g_warm_us[i] : 0.0lf
+        var scale = 1
+        if (ok[i] && warm > 0.0lf) {
+            scale = clamp(int(TARGET_WINDOW_US / warm), 1, MAX_REPS_SCALE)
+        }
+        g_reps[i] = REPS_BASE * scale
+    }
+}
+
+def private row_median(i : int) : double {
+    return (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
+}
+
+def private fallback_row(names : array<string>; baseline : string) : int {
+    for (i, nm in count(), names) {
+        return i if (nm == baseline)
+    }
+    return -1
+}
+
+// after the screen: the finalists are the rows whose screen median beats the shipped fallback
+// by the margin AND sit within that band of the best such row — the best and its twins, the
+// whole tie set, so the tie-break below sees the same rows every mint — plus the fallback
+// itself. No such row = nothing to race.
+def private pick_finalists(names : array<string>; ok : array<bool>) {
+    g_screened = true
+    g_finalist |> resize(length(names))
+    let bi = fallback_row(names, shipped_fallback(g_cur_kernel))
+    let base = (bi >= 0 && ok[bi]) ? row_median(bi) : -1.0lf
+    let cut = base > 0.0lf ? base * (1.0lf - WIN_MARGIN_PCT / 100.0lf) : 1.0e30lf
+    var cands : array<tuple<double; int>>
+    for (i in range(length(names))) {
+        if (ok[i] && i != bi) {
+            let m = row_median(i)
+            if (m > 0.0lf && m <= cut) {
+                cands |> emplace((m, i))
+            }
+        }
+    }
+    sort(cands) $(a, b) {
+        return a._0 < b._0
+    }
+    if (!empty(cands)) {
+        let band = cands[0]._0 * (1.0lf + WIN_MARGIN_PCT / 100.0lf)
+        for (k in range(min(length(cands), MAX_FINALISTS))) {
+            if (cands[k]._0 <= band) {
+                g_finalist[cands[k]._1] = true
+            }
+        }
+        if (bi >= 0 && ok[bi]) {
+            g_finalist[bi] = true
+        }
+    }
+    delete cands
 }
 
 def private kernel_done(name : string; t0 : int64) {
@@ -217,25 +359,31 @@ def private kernel_done(name : string; t0 : int64) {
     tune_detail("TUNE_KERNEL_TIME {name} {get_time_usec(t0) / 1000} ms\n")
 }
 
-// One progress step per measured round: which pass we are in, and how many grid rows are still
-// in contention. Both are already computed by the screening rule — this only reports them.
-def private emit_round(round : int; best : array<double>; ok : array<bool>) {
+// Called at the top of every pass: the phase transitions live here (windows sized after the
+// warm pass, finalists picked after the screen), then one progress step with the live count.
+def private emit_round(round : int; names : array<string>; best : array<double>; ok : array<bool>) {
     if (round < 0) return
+    if (round == 0) {
+        size_windows(ok)
+    }
+    if (round == SCREEN_ROUNDS && !g_validating) {
+        pick_finalists(names, ok)
+    }
     var live = 0
     for (i in range(length(best))) {
         if (ok[i] && tune_candidate_active(round, best, ok, i)) {
             live++
         }
     }
-    let phase = round < SCREEN_ROUNDS ? "screening" : "finalists"
+    let phase = round < SCREEN_ROUNDS && !g_validating ? "screening" : "finalists"
     tune_progress_kernel_step(round + 1, phase, live)
 }
 
-def private tune_candidate_active(round : int; best : array<double>; ok : array<bool>; i : int) : bool {
-    if (round < SCREEN_ROUNDS) {
-        return true
+def private tune_candidate_active(_round : int; _best : array<double>; ok : array<bool>; i : int) : bool {
+    if (!g_screened) {
+        return ok[i]   // warm pass and the screen: the whole grid
     }
-    return screening_keep(best, ok, i, MIN_FINALISTS, FINALIST_MARGIN)
+    return ok[i] && i < length(g_finalist) && g_finalist[i]
 }
 
 // Print each passing variant's best time as a % delta vs the kernel's SHIPPED baseline (its
@@ -249,28 +397,35 @@ def private shipped_fallback(kernel : string) : string {
     return g_shipped?[kernel] ?? BASELINE
 }
 
-// deterministic tie-break: every candidate whose median sits within the noise floor of the
-// best is the SAME measurement — prefer the shipped baseline, else the first tied row in grid
-// order, so back-to-back mints reproduce instead of flipping between statistical twins
-// (measured: two quiet fast mints flipped 8/34 winners before this)
-def private tie_break(med : array<double>; ok : array<bool>; bi, winner : int; need : double) : int {
+// deterministic tie-break among the finalists: every row whose median sits within the margin
+// of the best is the SAME measurement — the seat goes to the incumbent (the previous sidecar's
+// winner) if it is tied, else the shipped baseline, else the first tied row in grid order, so
+// back-to-back mints reproduce instead of flipping between statistical twins
+def private tie_break(names : array<string>; med : array<double>; ok : array<bool>; bi, winner : int; need : double) : int {
     let cut = med[winner] * (1.0lf + need / 100.0lf)
+    let inc = fallback_row(names, g_incumbent?[g_cur_kernel] ?? "")
     var pick = -1
     for (i in range(length(med))) {
-        if (ok[i] && med[i] <= cut) {
-            if (i == bi) return i
-            if (pick < 0) {
+        if (ok[i] && tune_candidate_active(0, med, ok, i) && med[i] <= cut) {
+            if (i == inc) return i
+            if (i == bi && pick < 0) {
+                pick = i
+            } elif (pick < 0) {
                 pick = i
             }
         }
     }
+    if (bi >= 0 && ok[bi] && tune_candidate_active(0, med, ok, bi) && med[bi] <= cut) {
+        return bi   // the baseline outranks grid order
+    }
     return pick
 }
 
-// the kernel's race table: every passing candidate's median + best in us, the winner, the
-// shipped fallback it was judged against, and the noise floor the verdict was made under
+// the kernel's race table: every passing candidate's median + best in us (REPS_BASE units),
+// the winner, the shipped fallback it was judged against, the winner's margin over it, and
+// the noise floor the verdict was made under
 def private race_row(names : array<string>; med, best : array<double>; ok : array<bool>;
-                     wname, baseline : string; floor : double) : JsonValue? {
+                     wname, baseline : string; floor, margin : double) : JsonValue? {
     var rows : table<string; JsonValue?>
     var rej = ""
     for (nm, okv, m, bst in names, ok, med, best) {
@@ -282,7 +437,7 @@ def private race_row(names : array<string>; med, best : array<double>; ok : arra
     }
     var obj <- {
         "winner" => JV(wname), "fallback" => JV(baseline),
-        "floor_pct" => JV(floor), "rows" => JV(rows)
+        "floor_pct" => JV(floor), "margin_pct" => JV(margin), "rows" => JV(rows)
     }
     if (!empty(rej)) {
         obj["rejected"] = JV(rej)
@@ -306,64 +461,54 @@ def private print_race(kernel : string; names : array<string>; med, best : array
 
 def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
     let baseline = shipped_fallback(kernel)
-    // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
-    // Rows screened out before the finalist phase fall back to their best-of — they cannot
-    // win, and their line stays honest about what was measured.
+    // rank by MEDIAN over every measured round a row ran: the screen for everyone, the screen +
+    // finals for the finalists. Min-over-rounds is printed beside it as the noise witness.
     var inscope med : array<double>
     med |> resize(length(names))
     for (i in range(length(names))) {
         med[i] = (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : best[i]
     }
-    var bi = -1
-    for (i, nm in count(), names) {
-        if (nm == baseline) {
-            bi = i
-        }
-    }
+    let bi = fallback_row(names, baseline)
     let base = (bi >= 0 && ok[bi]) ? med[bi] : -1.0lf
+    // the seat is decided among the finalists only - a row that left after the screen has
+    // five samples against twenty and is not comparable
     var winner = -1
     for (i in range(length(names))) {
-        if (ok[i] && (winner < 0 || med[i] < med[winner])) {
+        if (ok[i] && tune_candidate_active(0, best, ok, i) && (winner < 0 || med[i] < med[winner])) {
             winner = i
         }
     }
-    let need = max(0.5lf, noise_floor_pct())
+    let need = max(WIN_MARGIN_PCT, noise_floor_pct())
     if (winner >= 0) {
-        winner = tie_break(med, ok, bi, winner, need)
+        winner = tie_break(names, med, ok, bi, winner, need)
+    } elif (bi >= 0 && ok[bi]) {
+        winner = bi   // the screen found nothing worth racing: the fallback holds, no tie to break
     }
     print_race(kernel, names, med, best, ok, winner, base, baseline)
     if (winner < 0) {
         tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
-        if (g_validating) {
-            // only kernels with a recorded winner have anything to reproduce — a kernel that
-            // legitimately shipped winner="" must not render a false "rejected" verdict
-            if (!empty(g_validate_expect?[kernel] ?? "")) {
-                g_validate_rows[kernel] |> push(TuneValidateRow(rejected = true))
-            }
-            tune_progress_note("VALIDATE {kernel}: no passing variant in the re-race\n")
-        } else {
+        if (!g_validating) {
             g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
-            g_race[kernel] = race_row(names, med, best, ok, "", baseline, noise_floor_pct())
+            g_race[kernel] = race_row(names, med, best, ok, "", baseline, noise_floor_pct(), 0.0lf)
         }
         delete med
         return ""
     }
     // a winner's best-of sitting far under its own median = interference landed on this
-    // kernel's rounds — the per-kernel noise flag (informational; the median already absorbed it)
+    // kernel's rounds - the per-kernel noise flag (informational; the median already absorbed it)
     let div = med[winner] > 0.0lf ? (med[winner] - best[winner]) / med[winner] * 100.0lf : 0.0lf
     let divThr = max(3.0lf * noise_floor_pct(), 2.0lf)
     if (div > divThr) {
         tune_progress_note("  {kernel}: NOISY - winner's best-of runs {div:0.1f}% under its median (flag at {divThr:0.1f}%)\n")
     }
     var wname = names[winner]
-    // a winner inside the measured noise floor HOLDS the shipped baseline: flipping the perm
-    // re-keys the JIT and reorders float math for a margin the box cannot even measure —
-    // deterministic beats lottery
+    // a winner inside the margin HOLDS the shipped baseline: flipping the perm re-keys the JIT
+    // and reorders float math for a gain the box cannot even measure - deterministic beats lottery
     let margin = base > 0.0lf ? (base - med[winner]) / base * 100.0lf : 0.0lf
     if (wname != baseline && base > 0.0lf && margin < need) {
         wname = baseline
-        tune_detail("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor: {margin:0.2f}% < {need:0.2f}%)\n")
+        tune_detail("  => {kernel}: {baseline} holds ({names[winner]} within the margin: {margin:0.2f}% < {need:0.2f}%)\n")
         tune_progress_kernel_end(kernel, wname, "holds")
     } elif (wname == baseline) {
         tune_detail("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
@@ -375,117 +520,97 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     if (g_validating) {
         validate_check(kernel, names, med, ok, wname, need)
     } else {
-        record_kernel(kernel, names, med, best, ok, wname, baseline, winner)
+        record_kernel(kernel, names, med, best, ok, wname, baseline, winner, wname == baseline ? 0.0lf : margin)
     }
     delete med
     return wname
 }
 
-// the record step: the summary row, the race table, and the validation expectations (the
-// shipped winner's name + its median — what the re-race must reproduce)
+// the record step: the summary row, the race table, and what validation re-races (the
+// winner's row and the fallback's, plus the winner's median - the drift witness)
 def private record_kernel(kernel : string; names : array<string>; med, best : array<double>;
-                          ok : array<bool>; wname, baseline : string; winner : int) {
+                          ok : array<bool>; wname, baseline : string; winner : int; margin : double) {
     g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
-    g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct())
-    var wi = winner
-    for (i, nm in count(), names) {
-        if (nm == wname) {
-            wi = i
-        }
+    g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct(), margin)
+    if (wname != baseline) {
+        g_validate_pair[kernel] = (fallback_row(names, wname), fallback_row(names, baseline))
+        g_validate_med[kernel] = med[winner]
     }
-    g_validate_expect[kernel] = wname
-    g_validate_med[kernel] = med[wi]
 }
 
-// one validation window: fill a TuneValidateRow for the recorded winner. No verdict here —
-// judging needs both windows and happens in run_validation
+// the validation window: the recorded winner raced the fallback again, alone. It keeps the
+// seat only if it still beats the fallback by the margin; otherwise the fallback takes the
+// kernel - a demotion, not a refusal. The level drift vs the recorded median is a stationarity
+// witness, reported never judged.
 def private validate_check(kernel : string; names : array<string>; med : array<double>;
                            ok : array<bool>; wname : string; need : double) {
-    let expect0 = g_validate_expect?[kernel] ?? ""
-    return if (empty(expect0))
-    var ei = -1
-    var wi = -1
-    for (i, nm in count(), names) {
-        if (nm == expect0) {
-            ei = i
-        }
-        if (nm == wname) {
-            wi = i
-        }
-    }
-    var row = TuneValidateRow()
-    if (ei < 0 || !ok[ei]) {
-        row.rejected = true
-        tune_progress_note("VALIDATE {kernel}: recorded winner {expect0} rejected in this re-race\n")
+    let pr = g_validate_pair?[kernel] ?? (-1, -1)
+    let ri = pr._0
+    let bi = pr._1
+    return if (ri < 0)
+    let recorded = g_validate_med?[kernel] ?? 0.0lf
+    let expected = names[ri]
+    var keep = false
+    var why = ""
+    if (!ok[ri]) {
+        why = "{expected} failed correctness in the re-race"
+    } elif (bi < 0 || !ok[bi]) {
+        keep = wname == expected   // nothing to lose to
+        why = keep ? "{expected} holds (no fallback to race)" : "{expected} lost the re-race"
     } else {
-        let recorded = g_validate_med?[kernel] ?? med[ei]
-        row.gap = (wi >= 0 && med[wi] > 0.0lf) ? (med[ei] - med[wi]) / med[wi] * 100.0lf : 0.0lf
-        row.drift = recorded > 0.0lf ? abs(med[ei] - recorded) / recorded * 100.0lf : 0.0lf
-        // the reproduce band sits ABOVE the tie floor: statistical twins drift up to ~1.2%
-        // between QUIET back-to-back mints (measured), and a twin flip says nothing about box noise
-        let band = max(need * 1.5lf, 1.0lf)
-        if (wname != expect0 && row.gap > band) {
-            row.challenger = wname
-            tune_progress_note("VALIDATE {kernel}: {wname} beat the recorded {expect0} by {row.gap:0.2f}% this window (band {band:0.2f}%)\n")
-        } else {
-            let fliptxt = wname != expect0 ? " (inside-floor flip vs {expect0})" : ""
-            tune_progress_note("VALIDATE {kernel}: window OK - winner {wname}{fliptxt}, level drift {row.drift:0.2f}%\n")
+        let margin = med[bi] > 0.0lf ? (med[bi] - med[ri]) / med[bi] * 100.0lf : 0.0lf
+        keep = margin >= need
+        why = (keep ? "{expected} holds by {margin:0.2f}% (need {need:0.2f}%)"
+            : "{expected} kept only {margin:0.2f}% of its margin (need {need:0.2f}%) - {names[bi]} takes the kernel")
+    }
+    let drift = (recorded > 0.0lf && ok[ri] && med[ri] > 0.0lf) ? abs(med[ri] - recorded) / recorded * 100.0lf : 0.0lf
+    g_validate_drift = max(g_validate_drift, drift)
+    tune_progress_note("VALIDATE {kernel}: {why}, level drift {drift:0.2f}%\n")
+    return if (keep)
+    g_validate_demoted ++
+    let fb = shipped_fallback(kernel)
+    for (r in g_results) {
+        if (r.kernel == kernel) {
+            r.winner = fb
         }
     }
-    g_validate_rows[kernel] |> push(row)
+    if (key_exists(g_race, kernel)) {
+        var row = g_race[kernel]
+        update(row, "winner", JV(fb))
+        update(row, "margin_pct", JV(0.0lf))
+        update(row, "demoted", JV(expected))
+    }
 }
 
-// re-race the heavy subset twice at the full budget; a winner that consistently fails to
-// reproduce fails the whole mint. DAS_TUNE_NOISE_OVERRIDE mints through a failed verdict, stamped
-def private run_validation() : bool {
-    var subset <- [
-        ("dot" => @@bench_dot), ("dot_q8q8" => @@bench_dot_q8q8), ("rmsnorm" => @@bench_rmsnorm),
-        ("gemm_f32_uk_4x16" => @@bench_gemm_tile), ("quantize_q8_0_into_ptr" => @@bench_quantize)
-    ]
-    tune_progress_note("validation: re-racing {length(subset)} heavy kernels twice at full budget\n")
+// re-race every changed kernel's winner against the fallback, once, at the validation budget.
+// Always returns: a winner that does not hold is demoted, never the mint refused.
+def private run_validation(benches : array<tuple<string; function<() : string>>>) {
+    var changed <- [for (r in g_results); r.kernel; where !empty(r.winner) && r.winner != r.fallback]
+    tune_progress_note("validation: re-racing {length(changed)} changed kernel(s) winner vs fallback, {VALIDATE_ROUNDS} rounds each\n")
     g_validating = true
-    for (_vrep in range(2)) {
-        for (s in subset) {
-            kernel_begin(s._0)
-            invoke(s._1)
+    ROUNDS = VALIDATE_ROUNDS
+    for (k in changed) {
+        for (b in benches) {
+            if (b._0 == k) {
+                kernel_begin(k)
+                invoke(b._1)
+            }
         }
     }
     g_validating = false
-    delete subset
-    var fails = 0
-    var maxdrift = 0.0lf
-    for (kernel, rows in keys(g_validate_rows), values(g_validate_rows)) {
-        for (r in rows) {
-            maxdrift = max(maxdrift, r.drift)
-        }
-        let verdict = tune_validate_verdict(rows)
-        if (!empty(verdict)) {
-            fails ++
-            tune_progress_note("VALIDATE {kernel}: FAIL - {verdict}\n")
-        }
-    }
+    ROUNDS = SCREEN_ROUNDS + FINAL_ROUNDS
     // stationarity is reported, not judged: the level moving between windows says the box's
-    // clock state changed, not that any winner is wrong — same-window order above decides
-    if (maxdrift > VALIDATE_DRIFT_PCT) {
-        tune_progress_note("validation: level drifted up to {maxdrift:0.2f}% between race and re-race (note at {VALIDATE_DRIFT_PCT:0.1f}%) - box is not stationary; order verdicts are same-window and unaffected\n")
+    // clock state changed, not that any winner is wrong - same-window margins above decide
+    if (g_validate_drift > VALIDATE_DRIFT_PCT) {
+        tune_progress_note("validation: level drifted up to {g_validate_drift:0.2f}% between race and re-race (note at {VALIDATE_DRIFT_PCT:0.1f}%) - same-window margins decide, unaffected\n")
     }
-    tune_provenance_note("validation_max_drift_pct", "{maxdrift:0.2f}")
-    if (fails > 0) {
-        if (tune_noise_override()) {
-            // the bar is still live here and the run continues — a raw print would be redrawn over
-            tune_progress_note("VALIDATION: {fails} winner(s) did not reproduce - DAS_TUNE_NOISE_OVERRIDE is set, minting anyway; the sidecar will carry 'validation: overridden'\n")
-            tune_provenance_note("validation", "overridden")
-            tune_provenance_note("validation_fails", "{fails}")
-            return true
-        }
-        tune_progress_finish()
-        print("VALIDATION FAILED: {fails} winner(s) consistently did not reproduce - the winners are weather, not measurement\n")
-        print("  escape hatch: DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped in provenance\n")
-        return false
-    }
+    tune_provenance_note("validation_max_drift_pct", "{g_validate_drift:0.2f}")
     tune_provenance_note("validation", "ok")
-    tune_progress_note("validation: every winner reproduced (same-window order, both re-races)\n")
-    return true
+    tune_provenance_note("validation_demoted", "{g_validate_demoted}")
+    tune_progress_note(g_validate_demoted == 0
+        ? "validation: every winner held its margin\n"
+        : "validation: {g_validate_demoted} winner(s) lost their margin in the re-race - demoted to the fallback\n")
+    delete changed
 }
 
 def reset(var d : array<float>; d0 : array<float>) {
@@ -554,7 +679,7 @@ def bench_dot() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -562,9 +687,11 @@ def bench_dot() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            unsafe {
-                for (r in range64(DOT_WALK_ROWS)) {
-                    op[r] = f(wp + r * N, xp, N)
+            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+                unsafe {
+                    for (r in range64(DOT_WALK_ROWS)) {
+                        op[r] = f(wp + r * N, xp, N)
+                    }
                 }
             }
             sink += unsafe(op[0])
@@ -584,10 +711,17 @@ def bench_dot() : string {
 def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
                  d0 : array<float>; s : array<float>; ref_elem : function<(a : float; b : float) : double>) : string {
     let nv = length(vs)
-    var inscope d : array<float>
-    d |> resize(N)
-    var dp = unsafe(addr(d[0]))
-    let sp = unsafe(addr(s[0]))
+    // both streams on pinned, distinct-offset bases: the same set geometry on every race, every
+    // run, every box - a per-process allocator roll once read the fallback row 23% slow here
+    var inscope db : array<float>
+    var inscope sb : array<float>
+    var dp = aligned_stream(db, N, 0)
+    var sp = aligned_stream(sb, N, 1)
+    unsafe {
+        for (j in range64(N)) {
+            sp[j] = s[j]
+        }
+    }
 
     var inscope names : array<string>
     var inscope ok : array<bool>
@@ -598,13 +732,13 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
     for (i in range(nv)) {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
-        reset(d, d0)
+        reset_stream(dp, d0)
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var maxrel = 0.0lf
         for (j in range64(N)) {
             let want = ref_elem(d0[j], s[j])
-            let got = double(d[j])
+            let got = double(unsafe(dp[j]))
             let rel = abs(got - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
                 maxrel = rel
@@ -616,24 +750,64 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
                 continue
             }
-            reset(d, d0)
+            reset_stream(dp, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
         }
-        sink += d[0]
+        sink += unsafe(dp[0])
     }
     tune_detail("  checksum {sink}\n")
     return report(kernel, names, best, ok)
+}
+
+// add / mul / copy share the (var d, s) signature - one bench, per-kernel data + reference
+def bench_add_inplace() : string {
+    var d0 : array<float>
+    var s : array<float>
+    d0 |> resize(N)
+    s |> resize(N)
+    for (i in range64(N)) {
+        d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
+        s[i] = cos(float(i) * 0.03f)
+    }
+    let vs <- add_inplace_template_variants()
+    return bench_binary("add_inplace", vs, d0, s, @@(a, b : float) : double => double(a) + double(b))
+}
+
+def bench_mul_inplace() : string {
+    var d0 : array<float>
+    var s : array<float>
+    d0 |> resize(N)
+    s |> resize(N)
+    for (i in range64(N)) {
+        d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
+        s[i] = 1.0f + 0.0005f * sin(float(i) * 0.02f)   // near 1.0: s^reps stays finite/normal
+    }
+    let vs <- mul_inplace_template_variants()
+    return bench_binary("mul_inplace", vs, d0, s, @@(a, b : float) : double => double(a) * double(b))
+}
+
+def bench_copy_floats() : string {
+    var d0 : array<float>
+    var s : array<float>
+    d0 |> resize(N)
+    s |> resize(N)
+    for (i in range64(N)) {
+        d0[i] = 0.0f
+        s[i] = cos(float(i) * 0.03f)
+    }
+    let vs <- copy_floats_template_variants()
+    return bench_binary("copy_floats", vs, d0, s, @@(_a, b : float) : double => double(b))
 }
 
 // ===== axpy: (var d, s, scale)->void =====
@@ -681,7 +855,7 @@ def bench_axpy() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -690,7 +864,7 @@ def bench_axpy() : string {
             reset(d, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, scale, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -740,7 +914,7 @@ def bench_dot_f16() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -748,7 +922,7 @@ def bench_dot_f16() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 sink += f(pa, pb, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -803,7 +977,7 @@ def bench_axpy_f16() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -812,7 +986,7 @@ def bench_axpy_f16() : string {
             reset(d, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, scale, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -858,7 +1032,7 @@ def bench_cvt_f32_to_f16() : string {
 
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -866,7 +1040,7 @@ def bench_cvt_f32_to_f16() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, N)   // pure overwrite — no reset needed
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -908,7 +1082,7 @@ def bench_cvt_f16_to_f32() : string {
 
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -916,7 +1090,7 @@ def bench_cvt_f16_to_f32() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, N)   // pure overwrite — no reset needed
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -966,7 +1140,7 @@ def bench_scale() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -975,7 +1149,7 @@ def bench_scale() : string {
             reset(d, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, scale, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1041,7 +1215,7 @@ def bench_softmax() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1050,7 +1224,7 @@ def bench_softmax() : string {
             reset(d, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1110,7 +1284,7 @@ def bench_rmsnorm() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1118,7 +1292,7 @@ def bench_rmsnorm() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, op, xp, wp, N, eps)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1172,7 +1346,7 @@ def bench_dot_q4() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1180,7 +1354,7 @@ def bench_dot_q4() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 sink += f(wqp, wsp, xp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1267,7 +1441,7 @@ def bench_dot_q8q8() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1275,9 +1449,11 @@ def bench_dot_q8q8() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            unsafe {
-                for (r in range64(DOT_WALK_ROWS)) {
-                    op[r] = f(wqp + r * N, wsp + r * nb, xqp, xsp, N)
+            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+                unsafe {
+                    for (r in range64(DOT_WALK_ROWS)) {
+                        op[r] = f(wqp + r * N, wsp + r * nb, xqp, xsp, N)
+                    }
                 }
             }
             sink += unsafe(op[0])
@@ -1363,7 +1539,7 @@ def bench_dot_q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1371,7 +1547,7 @@ def bench_dot_q8kv() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 sink += f(pa, pb, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1428,7 +1604,7 @@ def bench_dot_q8q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1436,7 +1612,7 @@ def bench_dot_q8q8kv() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 sink += f(qp, sp, pb, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1493,7 +1669,7 @@ def bench_axpy_q8kv() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1502,7 +1678,7 @@ def bench_axpy_q8kv() : string {
             reset(d, d0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, scale, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1552,7 +1728,7 @@ def bench_cvt_q8kv_to_f32() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1560,7 +1736,7 @@ def bench_cvt_q8kv_to_f32() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1610,7 +1786,7 @@ def bench_quantize_q8kv_row() : string {
     var sink = 0
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1618,7 +1794,7 @@ def bench_quantize_q8kv_row() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, dp, sp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1688,7 +1864,7 @@ def bench_dot_mx4q8() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1696,7 +1872,7 @@ def bench_dot_mx4q8() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 sink += f(lutp, wnp, wep, xqp, xsp, N)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1766,7 +1942,7 @@ def bench_quantize() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1774,9 +1950,11 @@ def bench_quantize() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            unsafe {
-                for (p in range64(npos)) {
-                    invoke(f, srcp + p * N, N, qp, sp, p * N, p * nb)
+            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+                unsafe {
+                    for (p in range64(npos)) {
+                        invoke(f, srcp + p * N, N, qp, sp, p * N, p * nb)
+                    }
                 }
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1851,7 +2029,7 @@ def bench_quantize_bs() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1859,7 +2037,7 @@ def bench_quantize_bs() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -1930,7 +2108,7 @@ def bench_rope_tab() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -1939,7 +2117,7 @@ def bench_rope_tab() : string {
             reset(v, v0)
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, vp, head_size, N, cp, sp)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -2008,7 +2186,7 @@ def bench_gemm_tile() : string {
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -2019,7 +2197,7 @@ def bench_gemm_tile() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, cp, ap, bp, 0l, 0l, K, NN)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -2118,7 +2296,7 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     var sink = 0.0f
     for (tpass in range(ROUNDS + 1)) {
         let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        emit_round(round, best, ok)
+        emit_round(round, names, best, ok)
         for (slot in range(nv)) {
             let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
@@ -2126,7 +2304,7 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
+            for (_rep in range(reps_of(i))) {
                 invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -2140,12 +2318,9 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
-def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise gates are its checkpoints
-    let paranoid = tuner_paranoid_requested()
-    if (paranoid) {
-        ROUNDS = 240   // ~3x the finalist budget; screening stays full-grid
-        VALIDATE_DRIFT_PCT = 3.0lf
-        noise_set_paranoid(true)
+def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise probes are its checkpoints
+    if (tuner_paranoid_requested()) {
+        tune_detail("kernel tuner: --tune-paranoid is retired - one protocol, margin-decided; running it\n")
     }
     let affinity_inherited = is_some(g_env_core.jobque_affinity)
     if (!affinity_inherited) {
@@ -2155,149 +2330,61 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     let affinity_desc = (affinity_inherited
         ? "DAS_JOBQUE_AFFINITY={unwrap(g_env_core.jobque_affinity)}"
         : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
-    let modeName = paranoid ? "PARANOID" : "default"
-    tune_detail("kernel tuner: {modeName}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
-    // refuse before burning minutes measuring noise — a refusal costs seconds, a noisy sidecar
-    // costs days of phantom regressions
+    tune_detail("kernel tuner: N={N}, ~{int(TARGET_WINDOW_US / 1000.0lf)} ms windows, {SCREEN_ROUNDS} screening rounds over the grid, {FINAL_ROUNDS} rounds over the finalists (the best candidate + its twins, up to {MAX_FINALISTS}, + fallback), win margin {WIN_MARGIN_PCT:0.1f}%, validation {VALIDATE_ROUNDS} rounds winner vs fallback, measurement affinity {affinity_desc}\n\n")
+    // the probes bracket the measurement window; only a busy box refuses (the hard ceiling),
+    // anything quieter is stamped and raced - the margin rule is what keeps weather out
     if (!noise_gate("start")) {
         return 1
     }
-    // +10: the validation phase re-races 5 kernels twice
+    // +1 per changed kernel is not known yet; the validation re-races are planned as a flat
+    // allowance and the bar says so when the count differs
     tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT + 10)
 
-    // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
-    var add_d0 : array<float>
-    var add_s : array<float>
-    add_d0 |> resize(N)
-    add_s |> resize(N)
-    for (i in range64(N)) {
-        add_d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
-        add_s[i] = cos(float(i) * 0.03f)
-    }
-    var mul_d0 : array<float>
-    var mul_s : array<float>
-    mul_d0 |> resize(N)
-    mul_s |> resize(N)
-    for (i in range64(N)) {
-        mul_d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
-        mul_s[i] = 1.0f + 0.0005f * sin(float(i) * 0.02f)   // near 1.0: s^REPS stays finite/normal
-    }
-    var cpy_d0 : array<float>
-    var cpy_s : array<float>
-    cpy_d0 |> resize(N)
-    cpy_s |> resize(N)
-    for (i in range64(N)) {
-        cpy_d0[i] = 0.0f
-        cpy_s[i] = cos(float(i) * 0.03f)
-    }
-
-    let add_vs <- add_inplace_template_variants()
-    let mul_vs <- mul_inplace_template_variants()
-    let cpy_vs <- copy_floats_template_variants()
-
-    var kernel_t0 = kernel_begin("dot")
-    let dotw = bench_dot()
-    kernel_done("dot", kernel_t0)
-    kernel_t0 = kernel_begin("axpy")
-    let axpyw = bench_axpy()
-    kernel_done("axpy", kernel_t0)
-    kernel_t0 = kernel_begin("dot_f16")
-    let dotf16w = bench_dot_f16()
-    kernel_done("dot_f16", kernel_t0)
-    kernel_t0 = kernel_begin("axpy_f16")
-    let axpyf16w = bench_axpy_f16()
-    kernel_done("axpy_f16", kernel_t0)
-    kernel_t0 = kernel_begin("cvt_f32_to_f16")
-    let cvt16w = bench_cvt_f32_to_f16()
-    kernel_done("cvt_f32_to_f16", kernel_t0)
-    kernel_t0 = kernel_begin("cvt_f16_to_f32")
-    let cvt32w = bench_cvt_f16_to_f32()
-    kernel_done("cvt_f16_to_f32", kernel_t0)
-    kernel_t0 = kernel_begin("add_inplace")
-    let addw = bench_binary("add_inplace", add_vs, add_d0, add_s, @@(a, b : float) : double => double(a) + double(b))
-    kernel_done("add_inplace", kernel_t0)
-    kernel_t0 = kernel_begin("mul_inplace")
-    let mulw = bench_binary("mul_inplace", mul_vs, mul_d0, mul_s, @@(a, b : float) : double => double(a) * double(b))
-    kernel_done("mul_inplace", kernel_t0)
-    kernel_t0 = kernel_begin("scale_inplace")
-    let scalew = bench_scale()
-    kernel_done("scale_inplace", kernel_t0)
-    kernel_t0 = kernel_begin("copy_floats")
-    let copyw = bench_binary("copy_floats", cpy_vs, cpy_d0, cpy_s, @@(_a, b : float) : double => double(b))
-    kernel_done("copy_floats", kernel_t0)
-    if (!noise_gate("mid1")) {
-        print("aborting mid-run - no sidecar written\n")
-        return 1
-    }
-    kernel_t0 = kernel_begin("softmax")
-    let softmaxw = bench_softmax()
-    kernel_done("softmax", kernel_t0)
-    kernel_t0 = kernel_begin("rmsnorm")
-    let rmsw = bench_rmsnorm()
-    kernel_done("rmsnorm", kernel_t0)
-    kernel_t0 = kernel_begin("dot_q4")
-    let dq4w = bench_dot_q4()
-    kernel_done("dot_q4", kernel_t0)
-    kernel_t0 = kernel_begin("dot_q8q8")
-    let dq8w = bench_dot_q8q8()
-    kernel_done("dot_q8q8", kernel_t0)
-    kernel_t0 = kernel_begin("dot_q8kv")
-    let dq8kvw = bench_dot_q8kv()
-    kernel_done("dot_q8kv", kernel_t0)
-    kernel_t0 = kernel_begin("dot_q8q8kv")
-    let dq8q8kvw = bench_dot_q8q8kv()
-    kernel_done("dot_q8q8kv", kernel_t0)
-    kernel_t0 = kernel_begin("axpy_q8kv")
-    let axq8kvw = bench_axpy_q8kv()
-    kernel_done("axpy_q8kv", kernel_t0)
-    kernel_t0 = kernel_begin("cvt_q8kv_to_f32")
-    let cvtq8kvw = bench_cvt_q8kv_to_f32()
-    kernel_done("cvt_q8kv_to_f32", kernel_t0)
-    kernel_t0 = kernel_begin("quantize_q8kv_row")
-    let quantq8kvw = bench_quantize_q8kv_row()
-    kernel_done("quantize_q8kv_row", kernel_t0)
-    if (!noise_gate("mid2")) {
-        print("aborting mid-run - no sidecar written\n")
-        return 1
-    }
-    kernel_t0 = kernel_begin("dot_mx4q8")
-    let dmx4w = bench_dot_mx4q8()
-    kernel_done("dot_mx4q8", kernel_t0)
-    kernel_t0 = kernel_begin("quantize_q8_0_into_ptr")
-    let quantw = bench_quantize()
-    kernel_done("quantize_q8_0_into_ptr", kernel_t0)
-    kernel_t0 = kernel_begin("quantize_q8_0_bs_into_ptr")
-    let quantbsw = bench_quantize_bs()
-    kernel_done("quantize_q8_0_bs_into_ptr", kernel_t0)
-    kernel_t0 = kernel_begin("rope_scaled_neox_tab")
-    let ropew = bench_rope_tab()
-    kernel_done("rope_scaled_neox_tab", kernel_t0)
-    kernel_t0 = kernel_begin("gemm_f32_uk_4x16")
-    let gemmw = bench_gemm_tile()
-    kernel_done("gemm_f32_uk_4x16", kernel_t0)
-    kernel_t0 = kernel_begin("dot_q8q8_laneq4x4")
-    let laneqw = bench_laneq4x4()   // last: it pins the repack backend (sticks until process exit)
-    kernel_done("dot_q8q8_laneq4x4", kernel_t0)
-
-    // self-validation, inside the measurement window: the winners just picked must reproduce
-    // in a fresh re-race or nothing ships
-    if (!run_validation()) {
-        print("aborting - no sidecar written\n")
-        return 1
+    load_incumbents()
+    // every bench by name: the sweep runs the list in order, validation re-runs the changed ones
+    var benches <- [
+        ("dot", @@bench_dot), ("axpy", @@bench_axpy), ("dot_f16", @@bench_dot_f16),
+        ("axpy_f16", @@bench_axpy_f16), ("cvt_f32_to_f16", @@bench_cvt_f32_to_f16),
+        ("cvt_f16_to_f32", @@bench_cvt_f16_to_f32), ("add_inplace", @@bench_add_inplace),
+        ("mul_inplace", @@bench_mul_inplace), ("scale_inplace", @@bench_scale),
+        ("copy_floats", @@bench_copy_floats), ("softmax", @@bench_softmax), ("rmsnorm", @@bench_rmsnorm),
+        ("dot_q4", @@bench_dot_q4), ("dot_q8q8", @@bench_dot_q8q8), ("dot_q8kv", @@bench_dot_q8kv),
+        ("dot_q8q8kv", @@bench_dot_q8q8kv), ("axpy_q8kv", @@bench_axpy_q8kv),
+        ("cvt_q8kv_to_f32", @@bench_cvt_q8kv_to_f32), ("quantize_q8kv_row", @@bench_quantize_q8kv_row),
+        ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
+        ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
+        ("gemm_f32_uk_4x16", @@bench_gemm_tile),
+        ("dot_q8q8_laneq4x4", @@bench_laneq4x4)   // last: it pins the repack backend (sticks until process exit)
+    ]
+    for (b in benches) {
+        let kernel_t0 = kernel_begin(b._0)
+        invoke(b._1)
+        kernel_done(b._0, kernel_t0)
+        // mid-run probes after the float set and after the KV codecs: the floor they measure
+        // is what the later kernels' margins are judged against
+        if (b._0 == "copy_floats" && !noise_gate("mid1")) {
+            print("aborting mid-run - no sidecar written\n")
+            return 1
+        }
+        if (b._0 == "quantize_q8kv_row" && !noise_gate("mid2")) {
+            print("aborting mid-run - no sidecar written\n")
+            return 1
+        }
     }
 
-    // the gate that closes the CPU measurement window: every sample the sidecar will carry was
-    // raced between this probe and the start one — a noisy read here means NOTHING is written.
-    // It runs BEFORE the Metal race so the bracket covers exactly the window that produced the
-    // numbers (noise during the GPU phase cannot retroactively touch the CPU medians). The race
-    // also blocks on the GPU, and a thread that blocked wakes cold (E-core placement, ~1.9x
-    // medians until a couple of seconds of sustained load re-promotes it) — a post-race gate
-    // would pay a mandatory settle just to measure through that. The Metal twin race guards
-    // itself: interleaved base/twin A/B, so common-mode noise cancels.
+    // self-validation, inside the measurement window: every winner just picked races its
+    // fallback once more; one that lost its margin is demoted, the mint still lands
+    run_validation(benches)
+
+    // the probe that closes the CPU measurement window: every sample the sidecar carries was
+    // raced between this probe and the start one. It runs BEFORE the Metal race so the bracket
+    // covers exactly the window that produced the numbers. The Metal twin race guards itself:
+    // interleaved base/twin A/B, so common-mode noise cancels.
     if (!noise_gate("end")) {
         print("aborting at the end-of-run gate - no sidecar written\n")
         return 1
     }
+    delete benches
 
     // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the
     // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).
@@ -2369,24 +2456,21 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
         threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+    // winners come from the results table (validation may have demoted one), softmax_sink
+    // mirrors softmax's loop shape exactly, and the [tuned] kernels this harness doesn't sweep
+    // yet keep their SHIPPED fallback as an explicit entry - the scope completeness check
+    // demands every non-pinned [tuned] kernel, and a missing key would re-tune on every start
     var winners <- {
-        "dot" => dotw, "axpy" => axpyw, "dot_f16" => dotf16w, "axpy_f16" => axpyf16w,
-        "cvt_f32_to_f16" => cvt16w, "cvt_f16_to_f32" => cvt32w, "add_inplace" => addw,
-        "mul_inplace" => mulw, "scale_inplace" => scalew, "copy_floats" => copyw,
-        "softmax" => softmaxw, "softmax_sink" => softmaxw, "rmsnorm" => rmsw,
-        "dot_q4" => dq4w, "dot_q8q8" => dq8w,
-        "dot_q8kv" => dq8kvw, "dot_q8q8kv" => dq8q8kvw, "axpy_q8kv" => axq8kvw,
-        "cvt_q8kv_to_f32" => cvtq8kvw, "quantize_q8kv_row" => quantq8kvw,
-        "dot_mx4q8" => dmx4w, "quantize_q8_0_into_ptr" => quantw, "quantize_q8_0_bs_into_ptr" => quantbsw,
-        "rope_scaled_neox_tab" => ropew, "gemm_f32_uk_4x16" => gemmw, "dot_q8q8_laneq4x4" => laneqw,
-        // recorded-not-measured: [tuned] kernels this harness doesn't sweep yet keep their
-        // SHIPPED fallback as an explicit entry — the scope completeness check demands every
-        // non-pinned [tuned] kernel, and a missing key would re-tune on every start. Adding a
-        // sweep for one of these replaces its literal with the measured winner.
         "dot_bf16" => "vec8_u2", "add_scale_inplace" => "vec8_u2",
         "axpy_tq4kv" => "vec8_u2", "cvt_tq4kv_to_f32" => "vec8_u2",
         "dot_q8tq4kv" => "vec16", "quantize_tq4kv_row" => "plain",
         "dot_q8q8_f16s" => "vec16", "dot_q51e" => "vec16"
+    }
+    for (r in g_results) {
+        winners[r.kernel] = r.winner
+        if (r.kernel == "softmax") {
+            winners["softmax_sink"] = r.winner
+        }
     }
     // upsert into the app sidecar (same resolution [tuned] reads from): the loop-hint winners
     // join the "kernels" section next to the [tune] generator perms, "runtime" is replaced —

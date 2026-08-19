@@ -56,6 +56,6 @@ ends `0 failed`.**
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
-names** — `mode` `paranoid`, `noise` `ok`, the current `dasllama_version`, and every `race`
+names** — `noise` `ok`, `validation` `ok`, the current `dasllama_version`, and every `race`
 entry's `winner` equal to that family's `kernels` value; a partial or hand-edited copy is a
 defect.

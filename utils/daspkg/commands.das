@@ -66,7 +66,7 @@ struct DaspkgArgs {
     out : string = "."
 
     @clarg_name = "paranoid"
-    @clarg_doc = "During `release`, tune with the paranoid budget (3x rounds, 1% noise gate)"
+    @clarg_doc = "Accepted for compatibility: the tuner runs one margin-decided protocol; this flag no longer changes the budget"
     paranoid : bool
 
     @clarg_name = "quick"

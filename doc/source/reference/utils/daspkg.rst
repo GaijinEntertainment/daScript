@@ -130,9 +130,9 @@ Options:
   ``check``).
 - ``--out <path>`` -- output directory for ``release`` (default:
   current directory).
-- ``--paranoid`` / ``--quick`` -- ``release`` tuning budget: re-mint the
-  ``[tune]`` sidecar with the paranoid budget, or accept a complete
-  existing sidecar instead of re-minting.
+- ``--quick`` -- on ``release``, accept a complete existing ``[tune]``
+  sidecar instead of re-minting (``--paranoid`` is accepted for
+  compatibility; the tuner runs one margin-decided protocol).
 - ``--wasm`` -- on ``build``, target wasm64 (memory64).
 - ``--wasm-lib-dir <path>`` -- directory holding the wasm64 archives;
   default ``<das_root>/web/output64/lib``.

@@ -118,10 +118,7 @@ stale — every reader treats it as absent, and the next tuner write resets it.
 ```
 bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das
 
-# paranoid: 3x the finalist budget, 1% noise-gate ceiling, tighter drift note
-bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das -- --tune-paranoid
-
-# full generator + kernel scope (also available as `daspkg release [--paranoid]`)
+# full generator + kernel scope (what `daspkg release` and the auto policy run)
 bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das
 ```
 
@@ -129,29 +126,40 @@ Sweeps every `[tuned]` kernel (25 — `TUNED_KERNEL_COUNT`, one `[dasllama_grid]
 elementwise set, softmax, rmsnorm, the quantized dots, the two activation requants, the NEOX
 rope-table leaf, the fp32 GEMM tile, the f16 codec set, the q8 KV-codec set, and — arm64+JIT
 only, clean skip elsewhere — the laneq4x4 tile) across the 20-permutation grid
-(`{plain, u2, u4, u8} ∪ {vec4,vec8,vec16,vec32} × {-, u2, u4, u8}`), interleaved best-of-N.
-The default screens the full valid grid for 20 rounds, retains the four fastest rows plus
-anything within 5% of the leader, and continues those finalists to at most 80 rounds;
-`--tune-paranoid` extends the finalists to 240. There is no fast RACE mode — short races
-cannot resolve sub-2% twins (measured: 10/34 winner flips between back-to-back fast mints);
-the debugging concession is accepting an existing sidecar, not racing cheaply. Every mode
-runs one unscored warm-up pass and rotates row order each round; finalists are ranked by the
-MEDIAN of their finalist rounds (best-of prints alongside), a winner must beat the shipped
-fallback by more than the measured noise floor, and ties inside the floor break
-deterministically (baseline first, then grid order). Noise gates probe the box at
-start/mid/end — a failing gate refuses to tune, and a failing end gate writes nothing. After
-the sweep, a five-kernel subset re-races twice; a winner fails the mint only when a re-race
-rejects it or the SAME challenger beats it past the band in both windows (level drift is
-stamped, never failed). The measurement thread is hard-pinned by its child-process JobQue (QoS-pinned on
-macOS, which has no core masks) and is automatically unpinned when that tuner child exits.
-Each round runs 2000 reps at N=4096. The correctness
-gate per variant (f64 reference; EXACT
-quant/scale equality for the requant), reports each variant as %Δ vs that kernel's SHIPPED
-fallback perm (`vec8_u2` for most; dot_q8q8 ships `vec16`, dot_q4 `vec4_u4`, the tile k-loops
-`u2`, rmsnorm/requant `plain`), and UPSERTS the winners into the app sidecar's `"kernels"`
-section plus a `"runtime"` section snapshotting the current runtime knobs (hand-editable
-afterwards; everything else in the sidecar — the `[tune]` generator winners — survives;
-`softmax_sink` mirrors `softmax`'s winner — same loop shape):
+(`{plain, u2, u4, u8} ∪ {vec4,vec8,vec16,vec32} × {-, u2, u4, u8}`). One protocol, margin-decided:
+
+- **Windows of ~20 ms.** One unscored warm pass times each row at the base 2000 reps and scales
+  its reps (up to 32×) so a timed window lands near 20 ms; every recorded sample is normalized
+  back to the base unit, so race tables stay comparable across rows and mints. A window the
+  size of an OS timer tick reads scheduler jitter as a verdict; tens of ms read the kernel.
+- **Screen, then finalists.** 5 rounds over the whole valid grid, rows rotating slot each round;
+  then 15 rounds over the finalists only — every row whose screen median beats the shipped
+  fallback by the **3% win margin** AND sits within that band of the best such row (the best
+  and its twins, the whole tie set, capped at 8), plus the fallback. No candidate after the
+  screen = the fallback holds and the kernel is done in ~2 s.
+- **The seat.** Decided on the finalists' medians (best-of prints alongside as the noise
+  witness); the winner must beat the fallback by the margin or the fallback holds. Among tied
+  finalists the seat is sticky: the previous sidecar's winner (the incumbent) keeps it, else the
+  fallback, else the first in grid order — a re-mint moves a kernel only when the box changed.
+- **Validation, per kernel.** Every changed kernel re-races its winner against the fallback
+  alone, 10 rounds; a winner that lost its margin is **demoted** to the fallback, stamped
+  `demoted` in its race row. Nothing refuses the mint. Level drift between race and re-race is
+  stamped (`validation_max_drift_pct`), never judged — a row's absolute level moves with the
+  interleave it ran in, while same-window margins hold.
+- **The noise probe is a witness.** Start/mid/end probes time a fixed dot in the same 20 ms
+  windows and stamp what they saw (`noise: ok` / `noisy`, the probe cvs); only a busy box
+  (cv past the 10% hard ceiling) refuses, and `DAS_TUNE_NOISE_OVERRIDE=1` mints through that.
+
+The measurement thread is hard-pinned by its child-process JobQue (QoS-pinned on macOS, which
+has no core masks) and is automatically unpinned when that tuner child exits. Windows race at
+N=4096. The correctness gate per variant (f64 reference; EXACT quant/scale equality for the
+requant), reports each variant as %Δ vs that kernel's SHIPPED fallback perm (`vec8_u2` for
+most; dot_q8q8 ships `vec16`, dot_q4 `vec4_u4`, the tile k-loops `u2`, rmsnorm/requant
+`plain`), and UPSERTS the winners into the app sidecar's `"kernels"` section plus a
+`"runtime"` section snapshotting the current runtime knobs (hand-editable afterwards;
+everything else in the sidecar — the `[tune]` generator winners — survives; `softmax_sink`
+mirrors `softmax`'s winner — same loop shape). A whole kernels half is ~70–90 s on a quiet
+zen2/zen4; `--tune-paranoid` is still accepted and runs the same protocol.
 
 ```json
 {"kernels":{"dot":"vec8_u2", "...":"...", "dot_q8q8":"vec16"},

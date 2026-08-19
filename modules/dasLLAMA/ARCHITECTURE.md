@@ -545,7 +545,7 @@ before the current `DASLLAMA_VERSION` serves fallbacks on any box — the compil
 one `WARNING DAS_TUNE_MANIFEST` line per scope. That is the whole
 contract — it suppresses the re-exec, it does not tune the box, and a number measured under it
 is not a benchmark. Benches and the rig keep minting their own; refresh the copy when a
-paranoid re-mint moves the crowns or `DASLLAMA_VERSION` bumps.
+re-mint moves the crowns or `DASLLAMA_VERSION` bumps.
 
 ### 2.6 Capability questions and readiness questions are different questions
 

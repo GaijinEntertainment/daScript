@@ -3,11 +3,11 @@ options _dasllama_internal = true
 
 module tuner_noise shared public
 
-//! The noise gate shared by both dasllama tuner halves. A winner raced on a non-silent box is
-//! a random number, and the sidecar is a FILE — one noisy mint persists for days and reads as
-//! a code regression. So before (and during, and after) a race, probe the box: race one fixed
-//! dot kernel at the real round shape, compute the cv, and REFUSE to tune above the threshold.
-//! A noisy end-probe means the sidecar is not written at all.
+//! The noise probes shared by both dasllama tuner halves: race one fixed dot kernel in
+//! ~20 ms windows at the start, mid-run, and at the end, and stamp the cv the box showed into
+//! the sidecar provenance (`noise`, `noise_probes`, `noise_floor_cv_pct`). A quiet probe reads
+//! `ok`, a loud one `noisy`; only a BUSY box - cv past the hard ceiling - refuses to tune. The
+//! margin rule in the halves is what keeps weather out of the winners; the probe is the witness.
 
 require dasllama/dasllama_lint public
 require llvm/daslib/llvm_tune
@@ -17,14 +17,20 @@ require daslib/strings_boost
 require daslib/fio            // popen + get_das_root — the engine-sha probe
 require math
 
-// the race regime of tune_kernels: one probe round costs the same as one real round there
+// the probe kernel shape; reps scale so one timed window lands near PROBE_WINDOW_US - a
+// window the size of an OS tick reads jitter as a verdict, tens of ms read the box
 let private PROBE_N = 4096
-let private PROBE_REPS = 2000
+let private PROBE_REPS_BASE = 2000
+let private PROBE_WINDOW_US = 20000.0lf
+let private PROBE_MAX_SCALE = 32
 let private PROBE_ROUNDS = 12
+// the hard ceiling: a probe cv past this is a box doing something else, and a race there
+// measures that something; below it the cv is stamped and the margin rule decides
+let private HARD_CV_PCT = 10.0lf
 
 var private g_floor_pct = 0.0lf
 var private g_overridden = false
-var private g_paranoid = false
+var private g_noisy = false
 var private g_probe_log : array<string>
 
 // fixed probe kernel — four accumulators like the hand vec bodies, deterministic, cache-resident
@@ -56,14 +62,23 @@ def private probe_once(settle_ms : int; var med_out : double&) : double {
     let pa = unsafe(addr(a[0]))
     let pb = unsafe(addr(b[0]))
     var sink = 0.0f
-    // warm the code and the cache; a settle SPINS the probe kernel for the whole window
-    // instead of sleeping — a slept thread wakes cold (E-core placement inflates the retry
-    // ~2x on Apple silicon), a spinning one stays hot while an external transient dies out
+    // warm the code and the cache, and size the window: one base block timed, then reps scaled
+    // so a window lands near PROBE_WINDOW_US. A settle SPINS the probe kernel for the whole
+    // window instead of sleeping - a slept thread wakes cold (E-core placement inflates the
+    // retry ~2x on Apple silicon), a spinning one stays hot while an external transient dies out
     let w0 = ref_time_ticks()
     var warmed = false
+    var reps = PROBE_REPS_BASE
     while (!warmed || get_time_usec(w0) < settle_ms * 1000) {
-        for (_rep in range(PROBE_REPS)) {
+        let b0 = ref_time_ticks()
+        for (_rep in range(PROBE_REPS_BASE)) {
             sink += probe_dot(pa, pb, PROBE_N)
+        }
+        if (!warmed) {
+            let base_us = double(get_time_usec(b0))
+            if (base_us > 0.0lf) {
+                reps = PROBE_REPS_BASE * clamp(int(PROBE_WINDOW_US / base_us), 1, PROBE_MAX_SCALE)
+            }
         }
         warmed = true
     }
@@ -71,7 +86,7 @@ def private probe_once(settle_ms : int; var med_out : double&) : double {
     samples |> reserve(PROBE_ROUNDS)
     for (_round in range(PROBE_ROUNDS)) {
         let t0 = ref_time_ticks()
-        for (_rep in range(PROBE_REPS)) {
+        for (_rep in range(reps)) {
             sink += probe_dot(pa, pb, PROBE_N)
         }
         samples |> push(double(get_time_usec(t0)))
@@ -91,18 +106,13 @@ def noise_floor_pct() : double {
     return g_floor_pct
 }
 
-//! Switch every subsequent gate to the paranoid threshold (1% instead of 2%). Call before the
-//! first gate; the flag also rides into the provenance stamp.
-def noise_set_paranoid(p : bool) {
-    g_paranoid = p
-}
-
-//! Probe the box and gate on the cv. True = quiet enough to keep measuring (a one-line verdict
-//! prints either way, so drift is visible across a run and across history). False = REFUSED:
-//! the caller must stop without writing a sidecar and exit nonzero. `DAS_TUNE_NOISE_OVERRIDE`
-//! turns a refusal into a pass, and the sidecar provenance is stamped `noise: overridden`.
+//! Probe the box. True = keep measuring; the verdict line prints either way, so drift is
+//! visible across a run and across history. A probe over the note threshold stamps the mint
+//! `noise: noisy`; only a probe over the hard ceiling refuses (False - the caller stops without
+//! writing a sidecar and exits nonzero). `DAS_TUNE_NOISE_OVERRIDE` turns that refusal into a
+//! pass stamped `noise: overridden`.
 def noise_gate(tag : string) : bool {
-    let thr = tune_noise_threshold_pct(g_paranoid)
+    let thr = tune_noise_threshold_pct(false)
     // active overrides announce themselves: a threshold a recalibration shaped says so inline
     let thrTag = tune_noise_threshold_overridden() ? " (DAS_TUNE_NOISE_CV)" : ""
     var med = 0.0lf
@@ -124,16 +134,20 @@ def noise_gate(tag : string) : bool {
         tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% <= {thr:0.1f}%{thrTag} - box is quiet (median {med:0.0f} us)\n")
         return true
     }
+    if (cv <= HARD_CV_PCT) {
+        g_noisy = true
+        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}%{thrTag} - box is not quiet (median {med:0.0f} us); racing on, the mint will carry 'noise: noisy' and only margin-clear winners\n")
+        return true
+    }
     tune_progress_finish()
-    print("NOISE GATE ({tag}): cv {cv:0.2f}% > {thr:0.1f}%{thrTag} (median {med:0.0f} us) - this box is not quiet enough to tune\n")
+    print("NOISE GATE ({tag}): cv {cv:0.2f}% > {HARD_CV_PCT:0.1f}% (median {med:0.0f} us) - this box is busy, not merely noisy\n")
     if (tune_noise_override()) {
         g_overridden = true
         print("  DAS_TUNE_NOISE_OVERRIDE is set - tuning anyway; the sidecar will carry 'noise: overridden'\n")
         return true
     }
-    print("  a winner raced in this noise is a lottery ticket, not a measurement - a sidecar minted now would poison every run that reads it\n")
-    print("  quiet the box (close apps, stop background work) and re-run: the cv above should fall under the threshold\n")
-    print("  escape hatches: DAS_TUNE_NOISE_CV=<pct> recalibrates the gate; DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped\n")
+    print("  a winner raced on a busy box measures whatever else is running - stop that, and re-run\n")
+    print("  escape hatch: DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped\n")
     return false
 }
 
@@ -153,10 +167,10 @@ def interrupt_gate(at : string) {
 //! Record this run's noise verdict into the sidecar provenance. Call once, right before the
 //! sidecar write, after the end-of-run gate passed.
 def noise_provenance_stamp() {
-    tune_provenance_note("noise", g_overridden ? "overridden" : "ok")
+    tune_provenance_note("noise", g_overridden ? "overridden" : (g_noisy ? "noisy" : "ok"))
     tune_provenance_note("noise_probes", join(g_probe_log, "; "))
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
-    tune_provenance_note("mode", g_paranoid ? "paranoid" : "normal")
+    tune_provenance_note("mode", "normal")
     tune_provenance_note("engine_sha", engine_sha())
     tune_provenance_note("dasllama_version", "{DASLLAMA_VERSION}")
 }

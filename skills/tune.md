@@ -390,60 +390,71 @@ A harness emits events with `tune_progress_plan` / `_kernel_begin` /
 `_kernel_step` / `_kernel_end`. A different front end (a GUI, a status page)
 consumes them with `tune_progress_feed` and renders `tune_progress_line`.
 
-## The noise gate
+## Measurement: windows, margins, the noise probe
 
-A winner raced on a non-silent box is a random number, and the sidecar is a
-file — one noisy mint persists and reads as a code regression later. A
-harness therefore probes the box before, during, and after its races: it
-times one fixed kernel for a dozen rounds at the real round shape, computes
-the coefficient of variation, and **refuses to tune** when the cv exceeds the
-threshold — nonzero exit, nothing written, the measured cv printed so you can
-watch it fall as you quiet the box. A failed probe gets one settle-and-retry
-first (a transient the run itself caused fades in seconds; outside noise does
-not), and a failed **end** probe discards the whole run: winners only reach
-the sidecar through a gate that just passed.
+A tuner decides with a stopwatch, and the stopwatch is the same one
+llama-bench uses (`ref_time_ticks`: QPC / `CLOCK_MONOTONIC`); what differs is
+what sits between two reads. The rule: **one timed window is tens of
+milliseconds** — a window the size of an OS timer tick reads scheduler jitter
+as a verdict — and **a winner is decided by margin, not by ranking**: a row
+takes the seat only when its median beats the shipped fallback by the win
+margin (the dasLLAMA harness uses 3%), and keeps it only when it still does in
+a validation re-race against that fallback alone. Everything inside the margin
+is the same measurement, and the fallback holds — deterministic beats lottery.
+A winner that loses its margin in the re-race is **demoted** to the fallback,
+per kernel; the mint still lands. Nothing in the measurement path refuses a
+sidecar.
+
+The race shape that follows from this, per kernel family: a warm pass sizes
+each row's reps so its window lands near the target; a short screen races the
+whole grid; the finalists are the best candidate and its twins (every row
+within the margin band of it, the whole tie set, capped) plus the fallback; the
+seat is decided on the finalists' medians; among tied finalists the
+**incumbent** — the previous sidecar's winner — keeps the seat, else the
+fallback, else the first in grid order, so a re-mint moves a kernel only when
+the box actually changed. A family with no candidate after the screen is done
+in seconds: its fallback holds.
+
+The noise probe is a **witness, not a gate**: a harness times one fixed kernel
+in the same tens-of-ms windows at the start, mid-run, and at the end, and
+stamps what it saw (`noise: ok` / `noisy`, `noise_probes`, the measured
+`noise_floor_cv_pct`). Only a **busy** box — cv past a hard ceiling an order of
+magnitude above the note threshold — refuses, with `DAS_TUNE_NOISE_OVERRIDE=1`
+turning that refusal into a pass stamped `noise: overridden`. A failed probe
+gets one settle-and-retry first (a transient the run itself caused fades in
+seconds; outside noise does not).
 
 The framework carries the policy and the math; the harness carries the probe:
 
-- `tune_noise_threshold_pct(paranoid)` — the cv ceiling: 2% normal, 1%
-  paranoid; `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration.
-- `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns refusals into
-  passes at BOTH gates: a failed noise probe (stamped `noise: overridden`)
-  and a failed validation verdict (stamped `validation: overridden`); the
-  escape always leaves a mark. It is one flag by design — "mint no matter
-  what" — so quieting a noise refusal also waives reproduction.
-- `tune_median(samples)` / `tune_cv_pct(samples)` — rank finalists by the
-  median of their finalist rounds (print best-of alongside); a best-of far
+- `tune_noise_threshold_pct(paranoid)` — the note threshold: 2%;
+  `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration. (The `paranoid`
+  argument is retired; it no longer changes the value.)
+- `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns the hard-ceiling
+  refusal into a pass, stamped `noise: overridden`; the escape always leaves a
+  mark.
+- `tune_median(samples)` / `tune_cv_pct(samples)` — rank by the median over
+  every measured round a row ran (print best-of alongside); a best-of far
   under its own median is a per-kernel noise flag.
-- `tune_provenance_note(key, value)` — attach the noise verdict (and any
-  other measurement condition) to the `"provenance"` section of every
-  subsequent sidecar save in the process.
+- `tune_provenance_note(key, value)` — attach the noise verdict, the
+  validation outcome (`validation: ok`, `validation_demoted`,
+  `validation_max_drift_pct`) and any other measurement condition to the
+  `"provenance"` section of every subsequent sidecar save in the process.
 
-Two placement rules from the dasLLAMA harness (the worked consumer): a winner
-must beat the shipped fallback by more than the measured noise floor or the
-fallback keeps the seat — deterministic beats lottery; and the closing probe
-runs **before** any GPU race in the same process, so the bracket covers
-exactly the window that produced the winners. (GPU races block the thread,
-and a thread that blocked wakes cold — the same E-core transient a sleep
-causes; it recovers under a couple of seconds of sustained load, but a
-post-race gate would pay that settle on every mint for a window whose noise
-cannot touch the CPU medians anyway.)
+Two placement rules from the dasLLAMA harness (the worked consumer): every
+sidecar `race` row carries the winner's `margin_pct` over the fallback and,
+after a demotion, the `demoted` row's name — "how much did it win by" and "what
+lost its seat" must be answerable from the file; and the closing probe runs
+**before** any GPU race in the same process, so the bracket covers exactly the
+window that produced the winners. (GPU races block the thread, and a thread
+that blocked wakes cold — the same E-core transient a sleep causes.)
 
-After the sweep, the harness validates itself: a heavy subset re-races twice
-at the same budget and the verdict is same-window ORDER (`TuneValidateRow` +
-`tune_validate_verdict`) — a winner fails only when a re-race rejects it
-outright, or the SAME challenger beats it past the reproduce band in BOTH
-windows. Anything else — an inside-floor flip, a one-window flip, differing
-challengers — is reproduction (ties break deterministically: baseline first,
-then grid order). Median drift between race and re-race is stamped
-(`validation_max_drift_pct`) and noted, never failed: a box's level moves
-with load history while same-window order holds, so cross-window medians
-prove nothing. A failed verdict fails the **mint as a whole** unless the
-override above mints through it, stamped. Two budgets exist: default and
-paranoid (3× the rounds, a 1% cv ceiling, a tighter drift note). There is
-deliberately no fast race mode: a short race cannot resolve sub-2% twins,
-so its winners are lottery tickets; the debugging concession is accepting
-an existing sidecar, never racing cheaply.
+Level drift between the race and the re-race (`validation_max_drift_pct`) is
+stamped and noted, never judged: a row's absolute level moves with the
+interleave it ran in and the box's clock state, while same-window margins
+hold, so cross-window medians prove nothing. There is one protocol — no
+paranoid budget, no fast race: `--tune-paranoid` is still accepted and runs
+the same protocol, and the debugging concession remains accepting an existing
+sidecar.
 
 ## Adding a kernel family
 
