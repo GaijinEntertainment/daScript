@@ -25,7 +25,7 @@ require dasllama/dasllama_prefix public        // page-granular prefix cache ove
 require dasllama/dasllama_chat public          // layer 2: chat sessions over the same engine
 require dasllama/dasllama_audio public         // audio tower (mel frontend + whisper encoder + projectors)
 require dasllama/dasllama_vision public        // image preprocessing rail (geometry, letterbox, normalize)
-require dasllama/dasllama_gemma4uv public      // gemma4uv vision embedder (image soft tokens)
+require dasllama/dasllama_vision_embedder public   // the vision embedder of whatever family (gemma4uv / gemma4v) — image soft tokens
 require dasllama/dasllama_asr public           // uniform ASR surface (whisper today; parakeet/qwen3-asr land behind the same sniff)
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
@@ -246,10 +246,10 @@ def create_chat(model : Model; var tower : AudioTower; system : string = ""; max
     return <- create_chat_(model, tower, system, max_new, kv_dtype)
 }
 
-def create_chat(model : Model; var embedder : Gemma4uvEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+def create_chat(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
     //! Start a VISION-CAPABLE conversation: takes ownership of ``embedder`` (moved in — load with
-    //! ``load_gemma4uv_embedder``) so ``add_user_image`` can splice image soft tokens into its
-    //! turns. Panics on a mismatched decoder/mmproj pair or a family with no image markers.
+    //! ``load_vision_embedder``, which sniffs the mmproj's family) so ``add_user_image`` can splice
+    //! image soft tokens into its turns. Panics on a mismatched pair or a family with no image markers.
     return <- create_chat_(model, embedder, system, max_new, kv_dtype)
 }
 
@@ -272,7 +272,7 @@ def add_user_image(var chat : ChatSession; img : VisionImage) {
     add_user_image_(chat, img)
 }
 
-def encode_image(embedder : Gemma4uvEmbedder; var scratch : Gemma4uvState; img : VisionImage;
+def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : VisionImage;
                  tag : string; var out : array<float>) : int64 {
     //! The whole image path in one call — geometry, letterbox, normalize, encode — into ``out`` =
     //! npos × proj_dim soft tokens (returns npos). ``add_user_image`` is this plus queueing onto a
@@ -310,7 +310,7 @@ def render_turn(model : Model; chat : ChatSession) : array<int64> {
 def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
     //! ``render_turn``'s IMAGE twin: the turn's prefill as the two token spans that bracket the
     //! image soft-token splice — ``head`` before the rows, ``tail`` after. Render-only (no KV, no
-    //! embedder): the rows come from ``gemma4uv_encode``, and a scheduler prefills head, rows, tail.
+    //! embedder): the rows come from ``encode_image``, and a scheduler prefills head, rows, tail.
     render_turn_image_(model, chat, head, tail)
 }
 

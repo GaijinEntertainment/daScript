@@ -156,7 +156,7 @@ def private ask_image(m : Model; cfg : AskArgs; params : SamplingParams; max_new
         to_log(LOG_ERROR, "ask: could not decode image '{cfg.image}'\n")
         return 1
     }
-    var emb <- load_gemma4uv_embedder(cfg.image_mmproj)
+    var emb <- load_vision_embedder(cfg.image_mmproj)
     var chat <- create_chat(m, emb, "", max_new)
     add_user_image(chat, img)
     add_user(chat, cfg.prompt)

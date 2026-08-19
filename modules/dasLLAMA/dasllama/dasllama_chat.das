@@ -9,7 +9,7 @@ require dasllama/dasllama_transformer   // the umbrella fires each arch [init] r
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
 require dasllama/dasllama_vision     // VisionImage + geometry/letterbox/normalize for the image turn
-require dasllama/dasllama_gemma4uv   // Gemma4uvEmbedder: chat sessions can carry a vision embedder
+require dasllama/dasllama_vision_embedder   // VisionEmbedder: chat sessions can carry a vision arm of any family
 require dasllama/dasllama_tools public   // the per-ToolMode wire codecs; public: parse_calls_ returns its ToolReply
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
 require math   // min/max in the reply-side reasoning matcher
@@ -62,8 +62,8 @@ struct ChatSession {
     enc : EncoderState = EncoderState()   // encoder scratch (sized once at create)
     audio_rows : array<float>             // encoded soft tokens awaiting the next respond()
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
-    embedder : Gemma4uvEmbedder = Gemma4uvEmbedder()   // proj_dim == 0 => no vision arm
-    embedder_scratch : Gemma4uvState = Gemma4uvState()
+    embedder : VisionEmbedder = VisionEmbedder()   // kind == none => no vision arm
+    embedder_scratch : VisionState = VisionState()
     image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
 }
@@ -674,12 +674,15 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
     return <- c
 }
 
-//! Start a VISION-CAPABLE conversation: takes ownership of a gemma4uv embedder (moved in) so
-//! ``add_user_image`` can splice image soft tokens into its turns. A mismatched decoder/mmproj
-//! pair or a family with no image markers panics here — not at respond time.
-def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
-    if (embedder.proj_dim != model.config.dim) {
-        panic("dasLLAMA chat: mmproj projects to {embedder.proj_dim} but the decoder is {model.config.dim}-wide - mismatched pair")
+//! Start a VISION-CAPABLE conversation: takes ownership of a vision embedder (moved in; any family
+//! `load_vision_embedder` serves) so ``add_user_image`` can splice image soft tokens into its turns.
+//! A mismatched decoder/mmproj pair or a family with no image markers panics here, not at respond.
+def create_chat_(model : Model; var embedder : VisionEmbedder; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
+    if (embedder.kind == VisionKind.none) {
+        panic("dasLLAMA chat: create_chat(model, embedder) needs a loaded vision embedder - this one has no vision arm")
+    }
+    if (vision_proj_dim(embedder) != model.config.dim) {
+        panic("dasLLAMA chat: mmproj projects to {vision_proj_dim(embedder)} but the decoder is {model.config.dim}-wide - mismatched pair")
     }
     if (model.config.recr_mask != 0ul) {
         panic("dasLLAMA chat: a non-causal image span cannot apply to recurrent layers - this architecture has no vision arm")
@@ -699,7 +702,7 @@ def create_chat_(model : Model; var embedder : Gemma4uvEmbedder; system : string
 //! the head of the next user turn (before its text). ONE image per turn in v1: a second call
 //! before respond() panics. Call inside with_job_que() (the embedder threads its GEMMs).
 def add_user_image_(var c : ChatSession; img : VisionImage) {
-    if (c.embedder.proj_dim == 0l) {
+    if (c.embedder.kind == VisionKind.none) {
         panic("dasLLAMA chat: this chat has no vision embedder - create it with create_chat(model, embedder)")
     }
     if (c.n_image_rows > 0l) {
@@ -760,7 +763,7 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
 
 //! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image
 //! soft-token splice — `head` before the rows, `tail` (generation prompt, think-suppress) after.
-//! Render-only: no KV, no embedder — the rows come from `gemma4uv_encode` on the caller's own.
+//! Render-only: no KV, no embedder — the rows come from `encode_image` on the caller's own.
 def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     render_prompt_image(m, c, head, tail)
     render_think_suppress(m, c, tail)

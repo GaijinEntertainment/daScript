@@ -65,7 +65,7 @@ struct ModelSlot {
     gpu_want : GpuTierWant = GpuTierWant()   // the tier request this slot re-arms with on switch-in
     gpu_capable : bool              // want is non-zero and backend != cpu (set_slot_gpu_want)
     gpu_marks : GpuModelMarks <- gpu_model_marks_init()   // this model's tier routing marks while NOT installed
-    vision : Gemma4uvEmbedder = Gemma4uvEmbedder()   // set_model_vision; proj_dim == 0 = text only (encode runs on the vision worker)
+    vision : VisionEmbedder = VisionEmbedder()   // set_model_vision; kind == none = text only (encode runs on the vision worker)
     vision_path : string                             // the worker loads its own embedder from this
     think_default : bool   // family default when the request sends no enable_thinking (gemma-4 off, qwen3 on)
 }
@@ -298,7 +298,7 @@ def set_default_max_tokens(n : int64) {
     g_default_max_new = n
 }
 
-//! Give slot `name` a vision arm: load the gemma4uv mmproj at `path` so its chat route accepts
+//! Give slot `name` a vision arm: load the vision mmproj at `path` (any family) so its chat route accepts
 //! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``init_server`` /
 //! ``run_server`` (the vision worker snapshots the arms at init). Anything wrong with the pair
 //! PANICS here, not on the first request.
@@ -310,12 +310,12 @@ def set_model_vision(name : string; path : string) {
     if (mi < 0) {
         panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
     }
-    if (g_slots[mi].vision.proj_dim != 0l) {
+    if (g_slots[mi].vision.kind != VisionKind.none) {
         panic("dasllama-server: slot '{name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - set_model_vision is once per slot")
     }
-    var inscope emb <- load_gemma4uv_embedder(path)
-    if (emb.proj_dim != g_slots[mi].model.config.dim) {
-        panic("dasllama-server: {base_name(path)} projects to {emb.proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
+    var inscope emb <- load_vision_embedder(path)
+    if (vision_proj_dim(emb) != g_slots[mi].model.config.dim) {
+        panic("dasllama-server: {base_name(path)} projects to {vision_proj_dim(emb)} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
     }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
     let no_markers = empty(probe.tmpl.image_pre.parts) || !image_vocab_ok(g_slots[mi].model, probe.tmpl)
@@ -325,7 +325,7 @@ def set_model_vision(name : string; path : string) {
     }
     g_slots[mi].vision <- emb
     g_slots[mi].vision_path = path
-    to_log(LOG_INFO, "dasllama-server: {name} vision arm: {base_name(path)} ({g_slots[mi].vision.proj_dim}-wide, {g_slots[mi].vision.patch}px superpatch)\n")
+    to_log(LOG_INFO, "dasllama-server: {name} vision arm: {base_name(path)} ({vision_family(g_slots[mi].vision)}, {vision_proj_dim(g_slots[mi].vision)}-wide, {vision_align(g_slots[mi].vision)}px per token)\n")
 }
 
 //! Configure long-lived ASR worker threads. Each worker loads and owns its model in its cloned
@@ -1852,7 +1852,7 @@ def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var write
             delete here
         }
         if (!empty(images)) {
-            if (g_slots[g_cur].vision.proj_dim == 0l) {
+            if (g_slots[g_cur].vision.kind == VisionKind.none) {
                 bad_request(srv, writer, "model '{cur_name()}' has no vision arm — start the server with an image mmproj for it to accept image_url parts")
                 return
             }
@@ -2306,7 +2306,7 @@ struct private OaiSlotStats {
     prefix_pages : int64
     weights_bytes : int64
     kv_bytes : int64
-    vision : bool             // a gemma4uv arm is attached: this slot's chat route takes image_url parts
+    vision : bool             // a vision arm is attached: this slot's chat route takes image_url parts
     thinking_default : bool   // this family's own default when a request sends no enable_thinking
     last_used_s : float       // seconds since this slot last admitted a request (-1 = never)
     sw_count : int64          // P2 gpu-switch telemetry
@@ -2393,7 +2393,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
         // DEFAULT slot, not g_active: these two gate the page's request UI, and a page request
         // carries no model field, so it lands on the default slot - the UI must show ITS truth
-        vision = g_slots[g_default_slot].vision.proj_dim > 0l,
+        vision = g_slots[g_default_slot].vision.kind != VisionKind.none,
         thinking_default = g_slots[g_default_slot].think_default,
         vision_pending = length(g_vision_wires), media_rows = g_media_rows)
     out.models |> reserve(length(g_slots))
@@ -2403,7 +2403,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             name = s.name, is_default = s.is_default, is_active = i == g_active,
             holds_gpu = i == g_gpu_owner,
             backend = s.opts.backend, backend_effective = s.backend_effective,
-            flavor = slot_flavor(s), vision = s.vision.proj_dim > 0l,
+            flavor = slot_flavor(s), vision = s.vision.kind != VisionKind.none,
             thinking_default = s.think_default,
             ctx = s.model.config.seq_len,
             active = n_active(s.sched), queued = n_queued(s.sched),
@@ -3265,16 +3265,16 @@ var private g_vision_armed = false
 def private vision_worker_main(slot_path_lines : string; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_vision"
     set_jobque_thread_team_mode(false)
-    var embs : table<int; Gemma4uvEmbedder>
-    var states : table<int; Gemma4uvState>
+    var embs : table<int; VisionEmbedder>
+    var states : table<int; VisionState>
     for (line in split(slot_path_lines, "\n")) {
         continue if (empty(line))
         let sep = find(line, "\t")
         let slot = to_int(slice(line, 0, sep))
         var load_failure = ""
         let load_failed = catch_worker_panic(load_failure) {
-            embs[slot] <- load_gemma4uv_embedder(slice(line, sep + 1))   // own mapping; pages shared with the slot's
-            states[slot] <- Gemma4uvState()
+            embs[slot] <- load_vision_embedder(slice(line, sep + 1))   // own mapping; pages shared with the slot's
+            states[slot] <- VisionState()
         }
         if (load_failed) {   // the slot's requests take the no-embedder 400; the boot must not hang on this thread
             to_log(LOG_ERROR, "dasllama-server: vision worker could not load slot {slot}'s embedder: {load_failure}\n")
@@ -3340,7 +3340,7 @@ def private start_vision_worker() {
     var arms : array<string>
     defer() { delete arms }
     for (i in range(length(g_slots))) {
-        if (g_slots[i].vision.proj_dim != 0l) {
+        if (g_slots[i].vision.kind != VisionKind.none) {
             arms |> push("{i}\t{g_slots[i].vision_path}")
         }
     }

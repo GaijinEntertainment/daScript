@@ -21,6 +21,8 @@ require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs
 
 let MM = "mmproj-gemma-4-12B-it-BF16.gguf"
 let DEC = "gemma-4-12B-it-Q4_K_M.gguf"
+let MM_E2B = "mmproj-gemma-4-E2B-it-bf16.gguf"   // the gemma4v ViT pair (E-series)
+let DEC_E2B = "gemma-4-E2B-it-Q8_0.gguf"
 let CATS = "coco-val2017-000000039769.jpg"
 
 // the pinned marker ids (gemma-4 vocab; ggml-vocab-gemma-4.gguf)
@@ -54,7 +56,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
                 set_metal_tower(true)
                 tower0_encodes = metal_tower_stats().encodes
             }
-            var emb <- load_gemma4uv_embedder(mm)
+            var emb <- load_vision_embedder(mm)
             var chat <- create_chat_(m, emb, "", 96l)
             add_user_image_(chat, img)
             add_user_(chat, "describe this image")
@@ -105,7 +107,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
                             "the image encode above was GPU-served (encodes delta)")
                 set_metal_tower(false)
                 let sc0 = metal_tower_stats()
-                var emb2 <- load_gemma4uv_embedder(mm)   // fresh: create_chat_ consumed `emb`
+                var emb2 <- load_vision_embedder(mm)   // fresh: create_chat_ consumed `emb`
                 var chat2 <- create_chat_(m, emb2, "", 96l)
                 add_user_image_(chat2, img)
                 add_user_(chat2, "describe this image")
@@ -122,6 +124,54 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
                 set_metal_tower(true)
                 delete chat2
             }
+        }
+        delete m
+    }
+}
+
+// The same turn through the gemma4v ViT tower (E-series): the carrier sniffs the family, the
+// splice and the span are the shared rail, so tier 2 is the same shape and tier 3 the same floor.
+[test]
+def test_vision_chat_e2b(t : T?) {
+    t |> run("the E2B image turn through the gemma4v tower: stream shape, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_E2B)
+        let dec = path_join(models_dir(), DEC_E2B)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)   // E2B serves q8 (its PLE table rides the q8 rail - the fp32 expand has no PLE arm)
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "gemma4v", "the E2B mmproj sniffs as gemma4v")
+            tt |> equal(vision_align(emb), 48l, "48 px per soft token (patch 16 x merge 3)")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, CATS_ROWS, "image span length from the geometry (mtmd: 130)")
+            var head : array<int64>
+            var tail : array<int64>
+            render_prompt_image(m, chat, head, tail)
+            tt |> success(!empty(head) && !empty(tail), "both spans render")
+            tt |> equal(head[long_length(head) - 1l], IMAGE_OPEN, "head ends with <|image>")
+            tt |> equal(tail[0], IMAGE_CLOSE, "tail starts with <image|>")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (E2B/gemma4v): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            delete chat
         }
         delete m
     }

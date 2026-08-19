@@ -128,6 +128,19 @@ def image_peek(path : string) : DlimPeek {
     return p
 }
 
+//! A prepared image's family, from the baked identity's trailing tag ("" = no family tag — a
+//! decoder image, which routes on its gguf instead). Panics on an unreadable image.
+def image_family_tag(path : string) : string {
+    let p = image_peek(path)
+    if (!p.valid || empty(p.identity)) {
+        panic("dasLLAMA: '{path}' is not a readable prepared image (see the log above)")
+    }
+    var parts <- split(p.identity, "|")
+    let tag = parts[length(parts) - 1]
+    delete parts
+    return tag
+}
+
 //! One .dlim sibling of a GGUF, as list/GC tooling sees it (converter --list, the server page).
 struct DlimImageInfo {
     file : string         //!< basename

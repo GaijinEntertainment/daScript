@@ -1,8 +1,28 @@
 # dasLLAMA vision and media rules
 
-**Routed from `REVIEW.md`: a diff touching the vision rail, a media splice, or a media-carrying
-scheduler path applies this list with the master's.** `REVIEW_COMMON.md` (repo root) binds this
-file too. Architecture doc: `ARCHITECTURE.md`.
+**Routed from `REVIEW.md`: a diff touching the vision rail, a media splice, a media-carrying
+scheduler path, `dasllama_vision_embedder.das`, or a vision family file — one
+`dasllama_<family>.das` holding a single vision projector family (`dasllama_gemma4uv.das`,
+`dasllama_gemma4v.das`) — applies this list with the master's.** `REVIEW_COMMON.md` (repo root)
+binds this file too. Architecture doc: `ARCHITECTURE.md`.
+
+**A vision family type (`Gemma4uvEmbedder`, `Gemma4vTower`, their states) is named outside its
+own file only in `dasllama_vision_embedder.das`** — the `VisionEmbedder` union carries it through
+every seam (chat, server, bench, facade, tutorials). A new family touches the carrier only at
+the union field, the finalize line, the `VisionKind` value, the sniff arm, and the one-line
+arms; a family name at a seam is a defect. Tests of the family itself and the Metal tower's
+family hooks are the carve-out.
+
+**A vision tower's clamp bounds come from the file's sidecar scalars (`read_clamp`), never a
+literal** — the mtmd ±FLT_MAX default applies only where the scalars are absent.
+
+**A shape shared by two tower families lives in `dasllama_audio.das`** (the encoder-tower home);
+a family file that re-implements clamp, row norms, bidirectional attention, 2-axis rope, im2col,
+pooling or an f16-table activation is a defect.
+
+**Every vision encode oracle dump is minted on the CPU, `-fa off`, from the f32-widened mmproj
+twin** — the only true-f32 reference arm; a dump from any other arm is a defect, and the test
+that reads it says which arm in its header.
 
 **A new media kind adds its marker pair to the chat template, never a second renderer.** A
 family whose template or vocab lacks the pair has no arm for that media kind — `create_chat_`

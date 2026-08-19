@@ -12,9 +12,10 @@ dasLLAMA-14 — Vision Chat
 Tutorial 08 gave a conversation ears. This one gives it eyes. A vision chat
 model pairs a normal text decoder with an image encoder: the encoder turns
 pixels into **soft tokens** — embedding rows the decoder reads inline with
-text, one row per group of image patches. The supported family is gemma-4
-dense, shipped as a decoder GGUF plus its vision multimodal projector
-(mmproj) GGUF.
+text, one row per group of image patches. The supported families are gemma-4
+dense (the gemma4uv embedder) and gemma-4 E-series (the gemma4v ViT tower),
+each shipped as a decoder GGUF plus its vision multimodal projector (mmproj)
+GGUF; the loader sniffs which family an mmproj is.
 
 Run it with a decoder, its mmproj, and any image stbimage decodes::
 
@@ -24,7 +25,7 @@ A conversation that can see
 ===========================
 
 The easy path is four calls. ``load_image_rgb`` decodes the file to an RGB8
-``VisionImage``. ``load_gemma4uv_embedder`` reads the mmproj — the vision half
+``VisionImage``. ``load_vision_embedder`` reads the mmproj — the vision half
 of the model. ``create_chat(model, embedder)`` moves the embedder into the
 chat, and ``add_user_image`` queues the picture for the next turn: geometry,
 letterbox and the encoder run right there, so ``respond`` only prefills and
@@ -41,7 +42,7 @@ generates. One image per turn; text via ``add_user`` rides along:
 .. code-block:: das
 
    var inscope img <- load_image_rgb(image_path)
-   var emb <- load_gemma4uv_embedder(mmproj_path)
+   var emb <- load_vision_embedder(mmproj_path)
    var chat <- create_chat(m, emb, "", 96l)
    add_user_image(chat, img)
    add_user(chat, "Describe this image in one sentence.")
@@ -63,7 +64,7 @@ the template's image marker, so tokenizer merges never cross the picture:
 
 .. code-block:: das
 
-   var scratch = Gemma4uvState()
+   var scratch = VisionState()
    var img_rows : array<float>
    let n_img = encode_image(emb, scratch, img, "tag", img_rows)
 
