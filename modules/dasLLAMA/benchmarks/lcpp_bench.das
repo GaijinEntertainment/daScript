@@ -510,6 +510,11 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             return false
         }
     }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!gpu) {   // a CPU/accel row means CPU: the default-on tower driver would silently GPU-serve the encode
+            set_metal_tower(false)
+        }
+    }
     apply_box_profile_runtime()
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
         return false

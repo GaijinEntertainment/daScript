@@ -191,9 +191,13 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   `model_specs` companion row, ENVIRONMENT/README/ARCHITECTURE touch.
 - **F. Measure**: `lcpp_bench --image` E2B cell, PERF_LEDGER entry, the q8/Metal decision
   written down with the number.
-- **G. (gated on F — F said yes)** the Metal tower leg via the `register_gemma4v_gpu` hook;
-  **G0 (F demanded it)** the q8 CPU lane first — the gemma4a/parakeet recipe (Q8_0 GEMM planes
-  + per-row requant), its own tier-1 gate on a relative bar; **H.** the bug-fix round + docs.
+- **G. (gated on F — F said yes)** the Metal tower leg via the `register_gemma4v_gpu` hook:
+  the block loop as one command buffer (stem and tail stay CPU), three new kernels
+  (`enc_clamp` reading the blob's clamp record, `enc_rope2d` on the CPU's packed tables,
+  `enc_geglu_quick` in the f16-table form), each unit-gated with a negative control; the
+  tier-1 GPU gate + counters + the knob-off leg. **G0 (F demanded it)** the q8 CPU lane first —
+  the gemma4a/parakeet recipe (Q8_0 GEMM planes + per-row requant), its own tier-1 gate on a
+  relative bar; **H.** the bug-fix round + docs.
 
 ## Predictions (registered before slice A; score at each slice)
 
@@ -250,6 +254,18 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   (`--accel`, which the image cell now arms) — on Apple the accelerate tier is the better
   default candidate; the q8 lane is the x64 answer. q8 is the serving default on the CPU tier
   (the gemma4a tower's policy) — the fidelity/speed default is flagged for Boris to overrule.
+
+- P8 (the Metal leg, registered before its first run — slice G): the block loop through the
+  tower driver (bf16 mul_mm, f32 norms/clamps, the prefill attention trio at scale 1, three
+  new elementwise kernels: clamp-from-record, rope2d, GEGLU-quick in the f16-table form) lands
+  the 640×480 encode at **≤ 120 ms** on the M1 Max (the 112 f16-tile GEMMs ≈ 40 ms, the rest
+  dispatch/upload/readback), tier-1 on the gemma4uv GPU rung (4e-3·rms) **holds on ≥ 4 of 5
+  fixtures** — the f16 staging over 16 blocks may breach it once.
+  **Scored at slice G:** 89 ms (21× over the exact CPU lane, 4.8× over q8); tier-1 GPU
+  8.9e-4 … 3.7e-3 — the 4e-3·rms rung held on 4 of 5 (green 336² at 3.7e-3 breached it by
+  5.8e-4), bar set at 8e-3·rms. Both halves landed. The lane policy follows the device: with
+  the Metal tower armed the default load is the exact-plane lane (the driver declines q8), the
+  q8 lane is the CPU default; a pin (`set_gemma4v_q8`) overrides either way.
 
 ## Out of scope (this arc)
 

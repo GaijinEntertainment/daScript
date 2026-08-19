@@ -11,6 +11,7 @@ require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
+require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
 
 // Tier-1 gemma4v tower parity vs llama-mtmd-debug -p encode on the f32-widened E2B mmproj (CPU,
 // --no-mmproj-offload, -fa off): pre-resized [0,1] float fixtures skip preprocessing entirely, so a
@@ -20,6 +21,7 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 
 let private TIER1_ABS = 2e-4
 let private TIER1_REL = 4e-3   // × token rms (≈0.75 on E2B) - the rung gemma4uv's GPU leg holds
+let private TIER1_REL_GPU = 8e-3   // the Metal leg: 112 f16-staged GEMM tiles over 16 blocks - measured 8.9e-4..3.7e-3 on these dumps (gemma4uv's 2-GEMM rung was 4e-3); set from the measurement
 let private TIER1_REL_Q8 = 1.2e-1   // the q8 serving lane: measured 3.1e-2..6.8e-2 (≈9% of rms) on these dumps - 16 blocks of q8×q8 GEMMs; the caption floor is the product gate
 
 def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind : string; w, h : int; logname : string; rel : float = TIER1_REL) : bool {
@@ -53,7 +55,10 @@ def test_gemma4v_tier1(t : T?) {
         }
         set_gemma4v_q8(false)   // the CPU gate owns the exact-plane lane; the q8 serving lane is the next test
         var tw <- load_gemma4v_tower(mm)
-        set_gemma4v_q8(true)
+        reset_gemma4v_q8()
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain; the GPU rung is its own test below
+        }
         var st = Gemma4vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.patch), 16, "patch")
@@ -76,8 +81,54 @@ def test_gemma4v_tier1(t : T?) {
         tt |> gate_encode(tw, st, "cb", 480, 480, "e2b.encode.cb480.log")
         // the non-square orientation / transposed-grid gate
         tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete st
         delete tw
+    }
+}
+
+// The GPU tier-1 gate: the same dumps through the Metal tower's block loop (bf16 mul_mm stages
+// f16 tiles, so the bar is the scale-relative rung gemma4uv's GPU leg holds). Engage evidence is
+// the encodes/blocks counters per fixture; the knob-off leg proves the CPU chain still serves.
+[test]
+def test_gemma4v_tier1_gpu(t : T?) {
+    t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(tt, mm)) {
+                return
+            }
+            set_metal_tower(true)
+            tt |> success(!gemma4v_q8_default(), "with the Metal tower armed the default lane is the file's planes")
+            var tw <- load_gemma4v_tower(mm)
+            var st = Gemma4vState()
+            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
+                            (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
+                            (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
+                            (kind = "cb", w = 480, h = 480, log = "e2b.encode.cb480.log"),
+                            (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
+            for (fx in fixtures) {
+                let s0 = metal_tower_stats()
+                let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)
+                if (ran) {
+                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: GPU-served (encodes delta)")
+                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
+                }
+            }
+            // the knob-off leg: the same tower, the CPU chain, no dispatch
+            set_metal_tower(false)
+            let sc0 = metal_tower_stats()
+            tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log")
+            let sc1 = metal_tower_stats()
+            tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
+            tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
+            set_metal_tower(true)
+            delete st
+            delete tw
+        }
     }
 }
 
@@ -99,7 +150,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         }
         set_gemma4v_q8(false)   // the exact-plane lane - the knockout reads against the strict bar's context
         var inscope st <- stage_gemma4v_tower(mm)
-        set_gemma4v_q8(true)
+        reset_gemma4v_q8()
         let d = st.t.n_embd
         let hd = d / st.t.n_head
         var armed = 0
@@ -116,6 +167,9 @@ def test_gemma4v_clamps_bind(t : T?) {
         tt |> equal(armed, int(st.t.n_layer * GEMMA4V_GEMMS), "every block GEMM carries an active clamp on E2B")
         var tw = Gemma4vTower()
         mint_gemma4v_tower(st, tw)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // the knockout reads the CPU chain
+        }
         var s = Gemma4vState()
         let planes <- make_planes("cb", 336, 336)
         var out : array<float>
@@ -129,6 +183,9 @@ def test_gemma4v_clamps_bind(t : T?) {
         }
         to_log(LOG_INFO, "gemma4v clamp knockout cb 336x336: maxdiff {maxdiff} (armed tower holds < 1e-3)\n")
         tt |> success(maxdiff > 1e-3, "disarmed clamps miss the oracle by {maxdiff}")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete s
         delete tw
     }
@@ -143,8 +200,9 @@ def test_gemma4v_tier1_q8(t : T?) {
         if (!model_available(tt, mm)) {
             return
         }
-        tt |> success(gemma4v_q8_default(), "q8 is the serving default")
+        set_gemma4v_q8(true)   // pinned: on Apple builds the Metal tower's presence flips the default to the exact lane
         var tw <- load_gemma4v_tower(mm)
+        reset_gemma4v_q8()
         var st = Gemma4vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> success(length(tw.qblob) == tw.n_layer * tw.layer_w_stride, "qblob holds exactly the block GEMM set")

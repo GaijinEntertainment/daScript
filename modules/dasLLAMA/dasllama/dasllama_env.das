@@ -169,7 +169,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
     span : bool = true
 
-    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver — the gemma4uv chain, the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
+    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver — the gemma4uv chain, the gemma4v ViT block loop (its exact-plane lane), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
     tower : bool = true
 
     @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder."

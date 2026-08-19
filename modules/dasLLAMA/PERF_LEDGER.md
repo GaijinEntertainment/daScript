@@ -28,7 +28,12 @@ what it costs today and what the fix would change.
   (`register_gemma4v_gpu`) is on; each lands with its own parity gate. The E2B decoder's own
   Metal prefill is declined in `required` mode on this tree ("layers") independent of the
   image span — the gemma4v Metal leg would be the only GPU piece of an E2B image turn until
-  that is served.
+  that is served. **Landed (same arc, slices G0/G):** the q8 CPU lane — 1.93 s → 0.43 s
+  (GEMMs 238 ms; the attention core at 163 ms is now the #2 bucket, the next CPU target);
+  the Metal block loop — **89 ms** on the exact planes (stem 10 ms + tail 2 ms CPU). Left on
+  the table: the CPU attention core (163 ms of the q8 lane's 430), the per-row
+  `pf_enc_rms` at head width (256-thread groups over 64 elements — 14k tiny dispatches per
+  block pair), and the E2B decoder's own Metal prefill decline.
 - **gemma4uv vision embedder: no quantized lane; the dlim rail is owed anyway (measured
   2026-08-14, M1 Max, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
   projection, 3840×3840 output projection). In a product-shaped turn — gemma-4-12B Q4_K_M

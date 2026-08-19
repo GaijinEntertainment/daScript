@@ -1371,6 +1371,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
         t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the block GEMM set")
         t |> equal(long_length(aq.wblob), aq.t.n_embd * aq.t.proj_dim, "q8 lane: the bf16 plane is exactly the projection")
+        reset_gemma4v_q8()
     }
 }
 

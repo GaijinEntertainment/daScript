@@ -31,14 +31,15 @@ require math
 let GEMMA4V_ROPE_THETA = 100.0
 let private GEMMA4V_MERGE_DEFAULT = 3l
 
-// per-block GEMM order — the clamp table and the wblob stride follow it
-let private G4V_Q = 0l
-let private G4V_K = 1l
-let private G4V_V = 2l
-let private G4V_O = 3l
-let private G4V_GATE = 4l
-let private G4V_UP = 5l
-let private G4V_DOWN = 6l
+// per-block GEMM order — the clamp table and the block GEMM plane stride follow it (public: the
+// Metal tower driver walks the same layout)
+let GEMMA4V_GEMM_Q = 0l
+let GEMMA4V_GEMM_K = 1l
+let GEMMA4V_GEMM_V = 2l
+let GEMMA4V_GEMM_O = 3l
+let GEMMA4V_GEMM_GATE = 4l
+let GEMMA4V_GEMM_UP = 5l
+let GEMMA4V_GEMM_DOWN = 6l
 let GEMMA4V_GEMMS = 7l
 let GEMMA4V_CLAMP_F = 5l   // imin imax omin omax active, per GEMM, in the f32 blob (public: the suite's clamp knockout reads the layout)
 
@@ -212,18 +213,48 @@ def private register_gemma4v_image_tags {
     register_image_family_tag(GEMMA4V_TAG_Q8)
 }
 
-// q8 is the serving default; the flag is the exact-plane reference route (tier-1's CPU gate)
-var private g_g4v_q8 = true
+// ===== the GPU blocks hook (registered by dasllama_metal_tower at [init]; requires-back). It takes
+// s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false =
+// declined, the CPU loop is the fallback. `serves` = would the driver serve (the lane policy asks)
+typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>
+typedef Gemma4vGpuServesFn = function<() : bool>
+var private g_g4v_gpu : Gemma4vGpuBlocksFn
+var private g_g4v_gpu_serves : Gemma4vGpuServesFn
+var private g_g4v_gpu_set = false
 
-//! Select the gemma4v tower's block-GEMM format for subsequent loads: q8 (the serving default)
-//! vs the file's own planes (the parity rail). Each lane is its own prepared image.
-def set_gemma4v_q8(on : bool) {
-    g_g4v_q8 = on
+def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn) {
+    g_g4v_gpu = fn
+    g_g4v_gpu_serves = serves
+    g_g4v_gpu_set = true
 }
 
-def gemma4v_q8_default() : bool => g_g4v_q8
+// The lane policy: q8 is the CPU serving default; a GPU blocks driver that will serve wants the
+// file's planes (it declines q8), so its presence + knob flips the default to the exact lane.
+// A pin (set_gemma4v_q8) overrides either way — the parity rails and the q8 gate pin explicitly.
+var private g_g4v_q8_pin = -1   // -1 unset, 0 exact planes, 1 q8
 
-def private g4v_tag() : string => g_g4v_q8 ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG
+def private g4v_serve_q8() : bool {
+    if (g_g4v_q8_pin >= 0) {
+        return g_g4v_q8_pin == 1
+    }
+    return !(g_g4v_gpu_set && invoke(g_g4v_gpu_serves))
+}
+
+//! Pin the gemma4v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
+//! vs the file's own planes (the parity rail, and what the Metal tower serves). Each lane is its
+//! own prepared image. ``reset_gemma4v_q8`` returns to the policy default.
+def set_gemma4v_q8(on : bool) {
+    g_g4v_q8_pin = on ? 1 : 0
+}
+
+def reset_gemma4v_q8() {
+    g_g4v_q8_pin = -1
+}
+
+//! The lane the next load takes under the current pin/policy (true = q8).
+def gemma4v_q8_default() : bool => g4v_serve_q8()
+
+def private g4v_tag() : string => g4v_serve_q8() ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG
 
 def private g4v_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
@@ -418,7 +449,7 @@ def private g4v_repack_all(var st : Gemma4vStaging; gemm_sizes : array<int64>) {
 //! them as BF16, to `blob` when fp32; conv, pos tables, norms and clamp sidecars are fp32 in `blob`.
 def stage_gemma4v_tower(path : string) : Gemma4vStaging {
     var st = Gemma4vStaging()
-    st.t.q8 = g_g4v_q8
+    st.t.q8 = g4v_serve_q8()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
@@ -615,35 +646,66 @@ def private g4v_rope_tables(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_ro
     s.grid_h = n_rows
 }
 
+//! One block's offsets (elements): the f32 rows in ``blob``, the seven GEMM regions in the block
+//! GEMM plane (``qblob`` when q8, else ``wblob``/``blob``), the seven clamp records in ``blob``
+//! (GEMMA4V_GEMM_* order). The CPU loop and the Metal driver both walk the layout through this.
+struct Gemma4vBlockOffs {
+    ln1 : int64
+    ln2 : int64
+    attn_post : int64
+    ffn_post : int64
+    q_norm : int64
+    k_norm : int64
+    w : int64[7]
+    clamp : int64[7]
+}
+
+def gemma4v_block_offs(t : Gemma4vTower; l : int64) : Gemma4vBlockOffs {
+    let d = t.n_embd
+    let ff = t.n_ff
+    let hd = d / t.n_head
+    let fo = t.layer_f + l * t.layer_f_stride
+    var o = Gemma4vBlockOffs(ln1 = fo, ln2 = fo + d, attn_post = fo + 2l * d, ffn_post = fo + 3l * d,
+        q_norm = fo + 4l * d, k_norm = fo + 4l * d + hd)
+    let clamps = fo + 4l * d + 2l * hd
+    let wo = t.layer_w + l * t.layer_w_stride
+    let sizes = fixed_array<int64>(d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d)
+    var at = wo
+    for (g in range(7)) {
+        o.w[g] = at
+        at += sizes[g]
+        o.clamp[g] = clamps + int64(g) * GEMMA4V_CLAMP_F
+    }
+    return o
+}
+
 // one pre-norm block over the residual stream s.x (npos rows)
 def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     let d = t.n_embd
     let ff = t.n_ff
     let hd = d / t.n_head
-    let fo = t.layer_f + l * t.layer_f_stride
-    let ln1 = fo
-    let ln2 = fo + d
-    let attn_post = fo + 2l * d
-    let ffn_post = fo + 3l * d
-    let q_norm = fo + 4l * d
-    let k_norm = q_norm + hd
-    let clamps = k_norm + hd
-    let wo = t.layer_w + l * t.layer_w_stride
-    let w_q = wo
-    let w_k = w_q + d * d
-    let w_v = w_k + d * d
-    let w_o = w_v + d * d
-    let w_gate = w_o + d * d
-    let w_up = w_gate + d * ff
-    let w_down = w_up + d * ff
+    let o = gemma4v_block_offs(t, l)
+    let ln1 = o.ln1
+    let ln2 = o.ln2
+    let attn_post = o.attn_post
+    let ffn_post = o.ffn_post
+    let q_norm = o.q_norm
+    let k_norm = o.k_norm
+    let w_q = o.w[GEMMA4V_GEMM_Q]
+    let w_k = o.w[GEMMA4V_GEMM_K]
+    let w_v = o.w[GEMMA4V_GEMM_V]
+    let w_o = o.w[GEMMA4V_GEMM_O]
+    let w_gate = o.w[GEMMA4V_GEMM_GATE]
+    let w_up = o.w[GEMMA4V_GEMM_UP]
+    let w_down = o.w[GEMMA4V_GEMM_DOWN]
     // attention (the g4v.* buckets feed asr_prof_report - the encode split, the gemma4a shape)
     var tp = ref_time_ticks()
     rms_rows(s.xb, s.x, t.blob, ln1, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, w_q, s.xb, d, d, npos, g4v_clamp_at(t, clamps + G4V_Q * GEMMA4V_CLAMP_F), t.q8)
-    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, w_k, s.xb, d, d, npos, g4v_clamp_at(t, clamps + G4V_K * GEMMA4V_CLAMP_F), t.q8)
-    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, w_v, s.xb, d, d, npos, g4v_clamp_at(t, clamps + G4V_V * GEMMA4V_CLAMP_F), t.q8)
+    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, w_q, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q]), t.q8)
+    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, w_k, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K]), t.q8)
+    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, w_v, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_V]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.qq, s.qq, t.blob, q_norm, hd, npos * t.n_head, t.eps)
@@ -656,7 +718,7 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0)   // kq_scale = 1: the ViT attends unscaled
     asr_prof_add("g4v.attn_core", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_o, s.xb2, d, d, npos, g4v_clamp_at(t, clamps + G4V_O * GEMMA4V_CLAMP_F), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_o, s.xb2, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_O]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.xb, s.xb, t.blob, attn_post, d, npos, t.eps)
@@ -665,14 +727,14 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     rms_rows(s.xb, s.x, t.blob, ln2, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, w_gate, s.xb, d, ff, npos, g4v_clamp_at(t, clamps + G4V_GATE * GEMMA4V_CLAMP_F), t.q8)
-    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, w_up, s.xb, d, ff, npos, g4v_clamp_at(t, clamps + G4V_UP * GEMMA4V_CLAMP_F), t.q8)
+    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, w_gate, s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_GATE]), t.q8)
+    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, w_up, s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_UP]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
     geglu_quick_lut_rows(s.hg, s.hg, s.hu, ff, npos)
     asr_prof_add("g4v.geglu", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_down, s.hg, ff, d, npos, g4v_clamp_at(t, clamps + G4V_DOWN * GEMMA4V_CLAMP_F), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_down, s.hg, ff, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.xb, s.xb, t.blob, ffn_post, d, npos, t.eps)
@@ -680,23 +742,10 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     asr_prof_add("g4v.norm", tp)
 }
 
-//! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into `out` =
-//! [nout × proj_dim] soft tokens. Returns nout = (w/48)×(h/48) (patch 16 × merge 3).
-[hot_path]
-def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64;
-                   var out : array<float>) : int64 {
-    let span = t.patch * t.merge
-    if (w % span != 0l || h % span != 0l) {
-        panic("dasLLAMA gemma4v: canvas {w}x{h} is not a multiple of the {span}px pooled patch - letterbox first")
-    }
-    // the learned position table holds pos_entries per axis; a wider grid would read past it
-    if (w / t.patch > t.pos_entries || h / t.patch > t.pos_entries) {
-        panic("dasLLAMA gemma4v: canvas {w}x{h} needs a {w / t.patch}x{h / t.patch} position grid but the mmproj table holds {t.pos_entries} per axis - lower DASLLAMA_VISION_MAX_TOKENS")
-    }
+// the stem: im2col → x·2−1 → patch conv → x/y position-table adds, leaving the residual stream in
+// s.x (npos rows); sizes every block buffer for this canvas
+def private g4v_stem(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, n_cols : int64) : int64 {
     let d = t.n_embd
-    let n_cols = w / t.patch
-    let n_rows = h / t.patch
-    var tp = ref_time_ticks()
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     // inp_raw_scaled: pixels [0, 1] -> [-1, 1] ahead of the conv
     unsafe {
@@ -726,13 +775,13 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
             }
         }
     }
-    g4v_rope_tables(t, s, n_cols, n_rows)
-    asr_prof_add("g4v.stem", tp)
-    for (l in range64(t.n_layer)) {
-        g4v_block(t, s, l, npos)
-    }
-    tp = ref_time_ticks()
-    // Gemma4VisionPooler: merge×merge mean over the patch grid, ×√d
+    return npos
+}
+
+// the tail: Gemma4VisionPooler (merge×merge mean, ×√d), the std guard, then the
+// Gemma4MultimodalEmbedder (weightless rms → clamped projection) into out; returns nout
+def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : int64; var out : array<float>) : int64 {
+    let d = t.n_embd
     let nout = avg_pool2d_rows(s.pooled, s.x, n_cols, n_rows, d, t.merge)
     unsafe {
         var pp = addr(s.pooled[0])
@@ -751,10 +800,42 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
             }
         }
     }
-    // Gemma4MultimodalEmbedder: weightless rms(meta eps) -> projection (clamped when the file says so)
     rms_rows_weightless(s.pooled, d, nout, t.eps)
     g4v_ensure(out, nout * t.proj_dim)
     g4v_gemm_clamped(out, t, s, t.proj_bf16, t.proj_w, s.pooled, d, t.proj_dim, nout, g4v_clamp_at(t, t.proj_clamp))
+    return nout
+}
+
+//! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into `out` =
+//! [nout × proj_dim] soft tokens. Returns nout = (w/48)×(h/48) (patch 16 × merge 3).
+[hot_path]
+def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64;
+                   var out : array<float>) : int64 {
+    let span = t.patch * t.merge
+    if (w % span != 0l || h % span != 0l) {
+        panic("dasLLAMA gemma4v: canvas {w}x{h} is not a multiple of the {span}px pooled patch - letterbox first")
+    }
+    // the learned position table holds pos_entries per axis; a wider grid would read past it
+    if (w / t.patch > t.pos_entries || h / t.patch > t.pos_entries) {
+        panic("dasLLAMA gemma4v: canvas {w}x{h} needs a {w / t.patch}x{h / t.patch} position grid but the mmproj table holds {t.pos_entries} per axis - lower DASLLAMA_VISION_MAX_TOKENS")
+    }
+    let n_cols = w / t.patch
+    let n_rows = h / t.patch
+    var tp = ref_time_ticks()
+    let npos = g4v_stem(t, s, planes, w, h, n_cols)
+    g4v_rope_tables(t, s, n_cols, n_rows)
+    asr_prof_add("g4v.stem", tp)
+    var gpu_served = false
+    if (g_g4v_gpu_set) {
+        gpu_served = invoke(g_g4v_gpu, t, s, npos)
+    }
+    if (!gpu_served) {
+        for (l in range64(t.n_layer)) {
+            g4v_block(t, s, l, npos)
+        }
+    }
+    tp = ref_time_ticks()
+    let nout = g4v_tail(t, s, n_cols, n_rows, out)
     asr_prof_add("g4v.tail", tp)
     return nout
 }

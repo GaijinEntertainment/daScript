@@ -169,6 +169,9 @@ var g_pso_ln : MetalComputePipeline?
 var g_pso_gelu_erf : MetalComputePipeline?
 var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
+var g_pso_clamp : MetalComputePipeline?        // gemma4v: the ClippableLinear clamp
+var g_pso_rope2d : MetalComputePipeline?       // gemma4v: the two-axis NEOX rope
+var g_pso_geglu_quick : MetalComputePipeline?  // gemma4v: GEGLU-quick, f16-table form
 var g_pso_f32mm : MetalComputePipeline?
 var g_pso_cross_kx : MetalComputePipeline?   // whisper cross-KV: K transpose+prescale shuffle
 var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major re-tile (+ the KV append)

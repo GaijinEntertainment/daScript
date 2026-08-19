@@ -6,7 +6,8 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_convert   // dequant_k6_plane_superblock_at — the embed-k6 reference
-require dasllama/dasllama_audio     // layernorm + the shipped gelu flavors — the tower oracles
+require dasllama/dasllama_audio     // layernorm + the shipped gelu flavors + the gemma4v pieces — the tower oracles
+require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
@@ -489,6 +490,180 @@ def private geglu_gate(t : T?; dev, queue; total : int) {
     delete g
     delete u
     delete want
+}
+
+// ===== the gemma4v tower primitives =====
+
+// clamp: dst = clamp(src, lo, hi) with the bounds read off a clamp record in a blob-shaped buffer
+// (`side` picks the input or output pair); exact vs the CPU clamp, the pad sentinel untouched;
+// run into a separate destination and in place.
+def private clamp_gate(t : T?; dev, queue; total : int; side : int; inplace : bool) {
+    let tag = "clamp total={total} side={side} inplace={inplace}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var src : array<float>
+    src |> resize(total)
+    for (i in range(total)) {
+        src[i] = 0.37 * float(i % 97) - 17.0   // -17 .. 18.5
+    }
+    // a record like the tower's: imin imax omin omax active, sitting past some junk floats
+    let rec <- [0.0, 0.0, 0.0, -6.0, 5.0, -2.5, 9.25, 1.0]
+    let lo = side == 0 ? rec[3] : rec[5]
+    let hi = side == 0 ? rec[4] : rec[6]
+    var want : array<float>
+    want |> resize(total + 16)
+    for (i in range(total + 16)) {
+        want[i] = i < total ? clamp(src[i], lo, hi) : -1000.0
+    }
+    var bs = buf_upload(dev, src)
+    var bd = inplace ? bs : buf_fill(dev, total + 16, -1000.0)
+    var brec = buf_upload(dev, rec)
+    var bside = buf_u32(dev, uint(side))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bs, 0ul, 0)
+        metal_set_buffer(enc, bd, 0ul, 1)
+        metal_set_buffer(enc, brec, 12ul, 2)   // the record starts 3 floats in
+        metal_set_buffer(enc, bside, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        if (inplace) {
+            want |> resize(total)
+        }
+        t |> equal(buf_mismatch_exact(bd, want, tag), 0)
+    }
+    metal_release(bs)
+    if (!inplace) {
+        metal_release(bd)
+    }
+    metal_release(brec)
+    metal_release(bside)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
+// GEGLU-quick: gelu_quick(g)*u through the CPU's f16-table form (dasllama_audio's
+// geglu_quick_lut_rows is the oracle) — the in-kernel binary16 round-trips must land on the
+// same table values, so the bar is the approx one (one f16 ulp of form slack at the boundary).
+def private geglu_quick_gate(t : T?; dev, queue; ff, rows : int) {
+    let total = ff * rows
+    let tag = "geglu_quick total={total}"
+    var err : string
+    var pso = pipeline_from_source(dev, MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var g : array<float>
+    var u : array<float>
+    g |> resize(total)
+    u |> resize(total)
+    for (i in range(total)) {
+        g[i] = 0.21 * float(i % 43) - 4.3
+        u[i] = 0.17 * float(i % 23) - 1.9
+    }
+    var want : array<float>
+    want |> resize(total)
+    geglu_quick_lut_rows(want, g, u, int64(ff), int64(rows))
+    var bg = buf_upload(dev, g)
+    var bu = buf_upload(dev, u)
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bg, 0ul, 0)
+        metal_set_buffer(enc, bu, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bg, want, tag), 0)
+    }
+    metal_release(bg)
+    metal_release(bu)
+    metal_release(btot)
+    metal_release(pso)
+    delete g
+    delete u
+    delete want
+}
+
+// two-axis NEOX rope over token-major rows vs the CPU rope_neox_2d_rows on the same tables (the
+// kernel reads the four tables packed per row as [cx|sx|cy|sy]); approx bar (fma ordering).
+def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
+    let d = n_head * hs
+    let q = hs / 4
+    let tag = "rope2d npos={npos} heads={n_head} hs={hs}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var pos_x : array<int64>
+    var pos_y : array<int64>
+    pos_x |> resize(npos)
+    pos_y |> resize(npos)
+    for (i in range(npos)) {
+        pos_x[i] = int64(i % 7)
+        pos_y[i] = int64(i / 7)
+    }
+    var cx, sx, cy, sy : array<float>
+    var no_ff : array<float>
+    build_rope_tabs_rows(cx, sx, 100.0, 1.0, 1.0, no_ff, false, pos_x, int64(npos), int64(hs / 2))
+    build_rope_tabs_rows(cy, sy, 100.0, 1.0, 1.0, no_ff, false, pos_y, int64(npos), int64(hs / 2))
+    var x : array<float>
+    x |> resize(npos * d)
+    for (i in range(npos * d)) {
+        x[i] = 0.13 * float(i % 29) - 1.7
+    }
+    var want := x
+    rope_neox_2d_rows(want, int64(npos), int64(n_head), int64(hs), cx, sx, cy, sy)
+    var tabs : array<float>
+    tabs |> resize(npos * 4 * q)
+    for (r in range(npos)) {
+        for (j in range(q)) {
+            tabs[r * 4 * q + j] = cx[r * q + j]
+            tabs[r * 4 * q + q + j] = sx[r * q + j]
+            tabs[r * 4 * q + 2 * q + j] = cy[r * q + j]
+            tabs[r * 4 * q + 3 * q + j] = sy[r * q + j]
+        }
+    }
+    let total = npos * n_head * q
+    var bx = buf_upload(dev, x)
+    var btabs = buf_upload(dev, tabs)
+    var bd = buf_u32(dev, uint(d))
+    var bhs = buf_u32(dev, uint(hs))
+    var bq = buf_u32(dev, uint(q))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, btabs, 0ul, 1)
+        metal_set_buffer(enc, bd, 0ul, 2)
+        metal_set_buffer(enc, bhs, 0ul, 3)
+        metal_set_buffer(enc, bq, 0ul, 4)
+        metal_set_buffer(enc, btot, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
+    }
+    metal_release(bx)
+    metal_release(btabs)
+    metal_release(bd)
+    metal_release(bhs)
+    metal_release(bq)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete want
+    delete tabs
 }
 
 // LayerNorm w+b vs the shipped CPU layernorm (dasllama_audio) — the tower/embedder norm.
@@ -1508,6 +1683,12 @@ def test_metal_misc_kernels(t : T?) {
                 rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
+                clamp_gate(t, dev, queue, 1000, 0, false)      // the input pair, separate dst, %64 tail
+                clamp_gate(t, dev, queue, 1000, 1, true)       // the output pair, in place
+                geglu_quick_gate(t, dev, queue, 3072, 3)       // the E2B ffn width
+                geglu_quick_gate(t, dev, queue, 100, 1)        // %64 tail
+                rope2d_gate(t, dev, queue, 36, 12, 64)         // the E2B 96x96 grid shape (6x6 patches)
+                rope2d_gate(t, dev, queue, 5, 2, 8)            // tiny: one head pair, q = 2
                 cross_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
                 cross_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
                 cross_vx_gate(t, dev, queue, 96, 128, 2, 0, 96, false)     // the cross_kv shape (t0=0, tstride=ta)
