@@ -65,7 +65,7 @@ def test_put_sidecar(t : T?) {
             tt |> success(put.status == PutStatus.ok, "planted: {put.error}")
             tt |> success(find(get_sidecar_doc(db, put.sha), "w/ Radeon") >= 0, "box survived the strip")
             var ident : BoxIdentity
-            parse_box_string(apu_box, ident)
+            tt |> success(parse_box_string(apu_box, ident), "the box string parses")
             var hits <- find_sidecars(db, 4, ident)
             tt |> equal(length(hits), 1, "indexed under its own box")
             tt |> success(hits[0].verified && hits[0].tier == "exact", "verified, exact tier")
