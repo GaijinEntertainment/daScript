@@ -111,7 +111,11 @@ AST verify: let variable 'i' has no type (Variable._type is null) at t.das:6:9
 Three ways in:
 
 - **CLI:** `daslang --ast-verify foo.das` force-includes the module (the way
-  `-jit` pulls in its daslib support).
+  `-jit` pulls in its daslib support). `--ast-verify-batch` is the CI gate form:
+  no pre-infer checks, post-infer over the module being compiled only — the
+  finished tree is checked, at a fraction of the cost; a tree a macro breaks
+  mid-inference then crashes the compiler instead of being reported, so the
+  CI/preflight gates count a crash as red. Either mode: a report fails the compile.
 - **Source:** `require daslib/ast_verify`.
 - **Inline:** call `verify_module` / `verify_program` at the end of your own
   macro's `apply()`, right after building AST. `verify_expression` is for macros
@@ -216,10 +220,14 @@ daslang dastest/dastest.das -- --test ./utils/internal/ast-fuzz
 ```
 
 It also runs in CI: `run_utils_tests` covers this directory, and an
-`extended_checks` step compiles every file under `tests/` with `--ast-verify`
-and fails on any report.
+`extended_checks` step compiles every file under `tests/` with `--ast-verify-batch`
+and fails on any report, crash, or timeout.
 
 1. the verifier reports a deliberately-nulled `ExprOp2.right` without crashing
 2. `--ast-verify` is active and silent on valid code (false-positive guard)
 3. every unguarded child deref in the visitor has a repair (the gate above)
 4. the driver generates, compiles and classifies
+5. `--ast-verify-batch` still reports a tree broken after inference, is silent
+   on valid code, and runs no pre-infer walk (`_mid_pass.das`: plain mode
+   reports the mid-pass null and repairs it; batch mode dies or reports it
+   post-infer, never silently)

@@ -577,12 +577,14 @@ struct private VerifyItem {
 
 struct private VerifyResult {
     index : int
-    findings : string   // the `AST verify` lines, "" when clean
+    findings : string   // the `AST verify` lines, or the crash/timeout line; "" when clean
+    unverifiable : bool // error 20510: the file is in the verifier's own require closure - never compiled under it
 }
 
 // One process per file, `workers` in flight, `timeout` seconds each - the CI step's contract.
-// A compile error is not a failure here (that gate belongs to whoever owns the file); only an
-// `AST verify` line is.
+// A compile error is not a failure here (that gate belongs to whoever owns the file); an
+// `AST verify` line, a crash, or a timeout is (batch mode has no pre-infer walk, so a tree a
+// macro breaks mid-inference surfaces as a crash, not a report).
 def private run_verify_workers(daslang : string; files : array<string>; workers : int; timeout : float) : array<VerifyResult> {
     let n = length(files)
     var results : array<VerifyResult>
@@ -597,16 +599,32 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                         for_each_clone(inCh) $(item : VerifyItem#) {
                             var out : string
                             let path = string(item.path)
-                            let argv <- [daslang, "-dry-run", "--ast-verify", path]
-                            unsafe(popen_argv(argv, timeout, $(f) {
+                            let argv <- [daslang, "-dry-run", "--ast-verify-batch", path]
+                            let rc = unsafe(popen_argv(argv, timeout, $(f) {
                                 if (f != null) {
                                     out := fread(f)
                                 }
                             }))
-                            let hits <- [for (line in split(out, "
-")); strip(line); where find(line, "AST verify") >= 0]
+                            let lines <- [for (line in split(out, "
+")); strip(line)]
+                            var hits <- [for (line in lines); line; where find(line, "AST verify") >= 0]
+                            let unverifiable = find(out, "error[20510]") >= 0
+                            if (empty(hits) && !unverifiable) {
+                                // popen_argv: POSIX signal death = the raw signal number (2..31), Windows = a negative
+                                // NTSTATUS; daslang itself only exits 0/1/255. No CRASH: banner = nothing ran the handler
+                                // (an OOM or external kill), which is still not a pass
+                                let crash_lines <- [for (line in lines); line; where find(line, "CRASH:") >= 0]
+                                if (rc == popen_timed_out) {
+                                    hits |> push("timed out after {int(timeout)}s")
+                                } elif (!empty(crash_lines)) {
+                                    hits |> push("crashed (exit {rc})")
+                                    hits |> push_from(crash_lines)
+                                } elif (rc < 0 || rc >= 128 || (rc >= 2 && rc <= 31)) {
+                                    hits |> push("killed (exit {rc}), no crash report - the runner, an external kill, or a stack overflow off the main thread")
+                                }
+                            }
                             outCh |> push_clone(VerifyResult(index = item.index, findings = join(hits, "
-")))
+"), unverifiable = unverifiable))
                             outCh |> notify()
                         }
                         inCh |> release()
@@ -622,6 +640,7 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                     if (r.index >= 0 && r.index < n) {
                         results[r.index].index = r.index
                         results[r.index].findings := r.findings
+                        results[r.index].unverifiable = r.unverifiable
                     }
                 }
                 done |> join()
@@ -637,7 +656,9 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     var files : array<string>
     for (f in ctx.changed_das) {
         let base = base_name(f)
-        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_"))
+        // ast-fuzz/selftest holds deliberately broken fixtures; test_ast_fuzz.das owns them
+        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_")
+                || find(f, "ast-fuzz/selftest/") >= 0)
         files |> push(f)
     }
     if (empty(files)) {
@@ -645,14 +666,21 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
             detail = "no .das files changed vs {ctx.base}")
     }
     files |> push("tests/linq/test_linq_fold.das")
-    // each item is a whole-engine compile under the verifier (30-80s, hundreds of MB), so the
-    // width is physical cores halved, not hardware threads - -j caps it further, never raises it
+    // each item is a whole-engine compile under the verifier (2-3x a plain compile, hundreds of MB),
+    // so the width is physical cores halved, not hardware threads - -j caps it further, never raises it
     let heavy = max(1, get_total_hw_cores() / 2)
     let workers = compute_worker_count(length(files), ctx.jobs > 0 ? min(ctx.jobs, heavy) : heavy)
     let results <- run_verify_workers(ctx.daslang, files, workers, 300.0)
     var red = 0
+    var unverifiable = 0
     let output = build_string() $(w) {
         for (i in range(length(files))) {
+            if (results[i].unverifiable) {
+                unverifiable ++
+                w |> write("--- {files[i]}: in the verifier's own require closure - not verifiable via --ast-verify (error 20510)
+")
+                continue
+            }
             continue if (empty(results[i].findings))
             red ++
             w |> write("=== {files[i]} ===
@@ -662,10 +690,12 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     }
     if (red > 0) {
         return GateResult(name = "ast-verify", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "{red} of {length(files)} file(s) report AST verify findings (skills/das_macros.md)", output = output)
+            detail = "{red} of {length(files)} file(s) report AST verify findings, crashed, or timed out (skills/das_macros.md)", output = output)
     }
     return GateResult(name = "ast-verify", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = "{length(files)} file(s) verify clean ({workers} workers)")
+        detail = unverifiable == 0 ? "{length(files)} file(s) verify clean ({workers} workers)"
+            : "{length(files) - unverifiable} file(s) verify clean, {unverifiable} not verifiable (the verifier's own require closure; see output) ({workers} workers)",
+        output = output)
 }
 
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
@@ -1205,7 +1235,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
-        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify on changed .das (parallel, 300s/file; mirrors CI) - only an AST verify line fails"),
+        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),

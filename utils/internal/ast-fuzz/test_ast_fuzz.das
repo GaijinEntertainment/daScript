@@ -11,7 +11,8 @@ def private run(argv : array<string>; var out : string&; timeout : float) : int 
 }
 
 def private died(ec : int; out : string) : bool {
-    return (ec >= 128 || ec == popen_timed_out || ec < 0 || find(out, "CRASH:") >= 0)
+    // popen_argv reports a POSIX signal death as the raw signal number (2..31), not 128+n; daslang itself exits 0/1/255
+    return (ec >= 128 || (ec >= 2 && ec <= 31) || ec == popen_timed_out || ec < 0 || find(out, "CRASH:") >= 0)
 }
 
 [test]
@@ -93,6 +94,57 @@ def test_ast_verify_guesses_a_location_for_an_unset_at(t : T?) {
 def test_ast_verify_clean_on_valid_code(t : T?) {
     var out : string
     let ec = run([BIN, "--ast-verify", "utils/internal/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
+    t |> equal(ec, 0)
+    t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
+}
+
+// Batch mode keeps the post-infer walk, so a tree an [infer_macro] broke after inference is
+// still reported before lint/fold/codegen consume it.
+[test]
+def test_ast_verify_batch_still_reports_a_macro_broken_tree(t : T?) {
+    var out : string
+    let f = "utils/internal/ast-fuzz/selftest/at_unset.das"
+    let ec = run([BIN, "--ast-verify-batch", f], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "ExprOp2 has no source location (at is unset) in 'lost_one'") >= 0,
+        "batch mode did not report the unset at\n{out}")
+}
+
+// The two modes differ exactly in the pre-infer walk: plain mode's next-pass walk reports the
+// break, repairs it so the scan finishes, and the compile FAILS (the report is sticky - a plain
+// error would be wiped by the next pass); batch mode has no pre-infer walk, so the inferer meets
+// the break itself - the compile dies (or, for a break the inferer survives, the post-infer walk
+// reports it). Either way it is not silent. Two breakers, one per pre-infer entry point:
+// mid_pass_breaker between two passes of one run, run_start_breaker before pass 0 of a new run.
+def check_pre_infer_walk_is_plain_mode_only(t : T?; f : string) {
+    var out : string
+    var ec = run([BIN, "--ast-verify", f], out, 60.0)
+    t |> success(!died(ec, out), "plain mode: compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "AST verify: ExprOp2.right is null") >= 0,
+        "plain mode did not report the null from the pre-infer walk\n{out}")
+    t |> success(ec != 0, "plain mode compiled a repaired tree as a success (exit {ec})\n{out}")
+    out = ""
+    ec = run([BIN, "--ast-verify-batch", f], out, 60.0)
+    t |> success(find(out, "AST verify: ExprOp2.right is null") < 0,
+        "batch mode ran a pre-infer walk\n{out}")
+    t |> success(died(ec, out) || find(out, "AST verify (post-infer)") >= 0,
+        "batch mode let the null through silently (exit {ec})\n{out}")
+}
+
+[test]
+def test_ast_verify_pre_infer_walk_is_plain_mode_only_mid_pass(t : T?) {
+    check_pre_infer_walk_is_plain_mode_only(t, "utils/internal/ast-fuzz/selftest/_mid_pass.das")
+}
+
+[test]
+def test_ast_verify_pre_infer_walk_is_plain_mode_only_run_start(t : T?) {
+    check_pre_infer_walk_is_plain_mode_only(t, "utils/internal/ast-fuzz/selftest/_run_start.das")
+}
+
+[test]
+def test_ast_verify_batch_clean_on_valid_code(t : T?) {
+    var out : string
+    let ec = run([BIN, "--ast-verify-batch", "utils/internal/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
     t |> equal(ec, 0)
     t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
 }

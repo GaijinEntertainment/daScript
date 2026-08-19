@@ -11,9 +11,10 @@ Modules compile in `require` order. Per module — any phase that reports errors
 
 1. **Parse** — source becomes AST; reader macros run here, on raw characters.
 2. **Apply** — `apply` on every function / structure / enumeration annotation.
-3. **Infer** — repeats until stable: type inference, during which `transform`, call macros,
-   variant macros, for-loop macros and type macros fire; then `[pre_infer_macro]`,
-   `[infer_macro]`, `[dirty_infer_macro]` pass macros.
+3. **Infer** — repeats until stable. Each pass runs `[pre_infer_macro]` first, then type
+   inference (during which `transform`, call macros, variant macros, for-loop macros and type
+   macros fire), then `[dirty_infer_macro]`. Once the passes settle with no errors,
+   `[infer_macro]` runs; returning `true` starts a fresh run of passes, numbered from 0 again.
 4. **Finish** — `finish` hooks. Fully typed; no more edits.
 5. **Lint** — `lint` / `verifyCall` hooks, `[lint_macro]` / `[global_lint_macro]`. Read-only.
 6. **Optimize** — repeats: built-in optimization plus `[optimization_macro]`.
@@ -79,12 +80,13 @@ prefix keyword `private`; `[_macro, private]` is an error.
 | `[simulate_macro]` | `AstSimulateMacro` | `preSimulate`, `simulate` |
 
 **Pass macros** see the whole program and all derive from `AstPassMacro` (there is no
-`AstLintMacro` / `AstInferMacro` class), with one method
-`apply(prog : ProgramPtr; mod : Module?) : bool`. The annotation picks the phase:
-`[pre_infer_macro]`, `[infer_macro]` (return `true` to re-infer), `[dirty_infer_macro]`,
-`[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
-`[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`,
-`[post_compile_macro]` (after gc-root collection).
+`AstLintMacro` / `AstInferMacro` class), with `apply(prog : ProgramPtr; mod : Module?) : bool`
+— and, for `[pre_infer_macro]` only, an optional `canVisitPass(prog, mod, index) : bool` (return
+`false` to skip a pass; `index` is the pass number within the current inference run, 0 after
+every (re)start). The annotation picks the phase: `[pre_infer_macro]` (before every inference
+pass), `[infer_macro]` (return `true` to re-infer), `[dirty_infer_macro]`, `[post_infer_macro]`,
+`[optimization_macro]`, `[lint_macro]` (per module), `[global_lint_macro]` (once, after all
+modules), `[pre_simulate_macro]`, `[post_compile_macro]` (after gc-root collection).
 
 Inside any macro `compiling_module()` is the module being compiled now (`mod` is the module owning
 the macro). Walk its declarations with
@@ -315,9 +317,12 @@ Slightly-wrong AST does not fail where the mistake is — it crashes passes late
 codegen, with no line number and no hint which macro did it. `daslib/ast_verify` turns that into a
 diagnostic at the offending node: `daslang --ast-verify prog.das`, or from inside a macro
 `verify_module(prog, mod)` / `verify_expression(expr)` / `verify_function(fn)`. Each repairs what
-it reports so the scan finishes. It only knows shapes that crash the compiler, so silence is not
-proof; and a macro that re-breaks the same node every pass never converges — apply such a change
-once.
+it reports so the scan finishes and every finding prints; any report fails the compile.
+`--ast-verify` re-checks before every inference pass, so a break
+is caught on the pass right after it happens; `--ast-verify-batch` is the cheaper form for many
+files — it checks only the finished tree. The verifier only knows shapes that crash the compiler,
+so silence is not proof; and a macro that re-breaks the same node every pass never converges —
+apply such a change once.
 
 It also enforces two invariants on anything a macro builds, and both are on by default:
 

@@ -426,7 +426,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     }
     if ( astVerifyRequired ) {
         // force-include the AST verifier the same way -jit/-debugger pull in their
-        // daslib support; its [pre_infer_macro] then runs over the program's modules.
+        // daslib support; its pre/post-infer macros then run over the program's modules
+        // (--ast-verify-batch keeps only the post-infer one, read from argv by the module).
         access->addExtraModule("ast_verify", getDasRoot() + "/daslib/ast_verify.das");
     }
     if ( useAot ) {
@@ -668,6 +669,7 @@ void print_help() {
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
+        << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
@@ -951,8 +953,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 printf("tracking JobStatus #%" PRIu64 "\n", id);
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
-            } else if ( cmd=="-ast-verify") {
-                astVerifyRequired = true;
+            } else if ( cmd=="-ast-verify" || cmd=="-ast-verify-batch" ) {
+                astVerifyRequired = true;   // daslib/ast_verify reads --ast-verify-batch from argv itself
             } else if ( cmd=="-linear-stack-allocator") {
                 scopedStackAllocator = false;
             } else if ( cmd=="-das-profiler") {

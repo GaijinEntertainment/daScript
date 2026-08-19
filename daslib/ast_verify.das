@@ -6,17 +6,40 @@ module ast_verify shared private
 
 //! AST invariant verifier.
 //!
-//! Reports a clean ``macro_error`` when an AST violates a structural invariant the
-//! compiler relies on, instead of letting it segfault several passes later::
+//! Reports a clean sticky compile error when an AST violates a structural invariant the
+//! compiler relies on, instead of letting it segfault several passes later - the node is
+//! repaired in place so every finding prints, and the compile fails::
 //!
 //!     daslang --ast-verify foo.das
 //!
 //! or ``require daslib/ast_verify``, or call [[verify_module]] /
 //! [[verify_expression]] from your own macro right after building AST.
+//!
+//! Two modes. Plain ``--ast-verify`` (or the source ``require``) is the debugging tool: it
+//! re-checks before EVERY inference pass, so a break is caught - and repaired in place - on the
+//! pass right after it happens, and each post-infer firing sweeps every module.
+//! ``--ast-verify-batch`` is the CI gate: no pre-infer checks (a tree a macro breaks
+//! mid-inference crashes the compiler instead of being repaired - the gates count that as red),
+//! and each post-infer firing checks only the module being compiled: the tree handed to
+//! lint/fold/codegen is valid, at a fraction of the cost. Under the CLI force-include every
+//! non-builtin module compiles after the verifier registered, so each is still checked once as
+//! the module being compiled (the verifier's own requires are promoted builtin - neither mode
+//! walks those); a module read from a module cache, or required before a source
+//! ``require daslib/ast_verify``, is not.
 
 require daslib/ast
 require daslib/ast_boost
 require strings
+
+def private batch_mode() : bool {
+    // daslang's own flags only: a script that owns a --ast-verify-batch after `--` must not flip the verifier
+    let args <- get_command_line_arguments()
+    for (arg in args) {
+        return false if (arg == "--")
+        return true if (arg == "--ast-verify-batch")
+    }
+    return false
+}
 
 def private placeholder(at : LineInfo) : ExpressionPtr {
     return new ExprConstInt(at = at, value = 0)
@@ -185,7 +208,8 @@ class private AstVerifyVisitor : AstVisitor {
         // a detached synthetic tree has no location in it at all - do not trail an empty " at "
         let loc = describe(at)
         to_log(LOG_ERROR, empty(loc) ? "AST verify: {msg}\n" : "AST verify: {msg} at {loc}\n")
-        compiling_program() |> macro_error(at, "AST verify: {msg}")
+        // sticky: the node is repaired so the walk goes on, and every infer pass clears plain errors
+        compiling_program() |> macro_sticky_error(at, "AST verify: {msg}")
     }
 
     def track_node(node : void?; what : string; at : LineInfo) : bool {
@@ -843,7 +867,7 @@ class private AstVerifyVisitor : AstVisitor {
 }
 
 def public verify_module(prog : ProgramPtr; mod : Module?) : int {
-    //! Verifies one module in place, emitting a ``macro_error`` per violation and
+    //! Verifies one module in place, emitting a sticky compile error per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building
     //! AST — the repo's ast-fuzz suite README covers when each entry point applies.
     var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? true)
@@ -860,15 +884,18 @@ def public verify_module(prog : ProgramPtr; mod : Module?) : int {
 
 [pre_infer_macro]
 class AstVerifyMacro : AstPassMacro {
-    //! Runs the AST verifier over each non-builtin module. Active whenever this
-    //! module is loaded — via ``--ast-verify`` (force-include) or a source
-    //! ``require daslib/ast_verify``.
+    //! Verifies the module being compiled before every inference pass. Active whenever
+    //! this module is loaded — via ``--ast-verify`` (force-include) or a source
+    //! ``require daslib/ast_verify``; ``--ast-verify-batch`` turns these pre-infer checks off.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
         }
         verify_module(prog, mod)
         return true
+    }
+    def override canVisitPass(prog : ProgramPtr; mod : Module?; index : int) : bool {
+        return !batch_mode()
     }
 }
 
@@ -1420,11 +1447,12 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 }
 
 def public verify_program_after_infer(prog : ProgramPtr; thisMod : Module?) : int {
-    //! Verifies thisMod plus every other non-builtin module - getSideEffects recurses
-    //! into CALLED functions. program_for_each_module does NOT yield thisMod itself.
+    //! Verifies thisMod plus every other non-builtin module (a callee's tree is dereferenced
+    //! too - getSideEffects recurses into CALLED functions). program_for_each_module yields
+    //! thisMod as well, so it is walked once here and skipped in the loop.
     var total = verify_module_after_infer(prog, thisMod)
     program_for_each_module(prog) $(mod) {
-        if (!mod.moduleFlags.builtIn) {
+        if (mod != thisMod && !mod.moduleFlags.builtIn) {
             total += verify_module_after_infer(prog, mod)
         }
     }
@@ -1448,11 +1476,18 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
+    //! Fires before every consumer of the finished tree (after each inference run, lint, every
+    //! optimizer round). Plain mode also sweeps every OTHER non-builtin module (a source ``require``
+    //! parses the ones before it unverified); under the CLI force-include each was verified as thisMod.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
         }
-        verify_program_after_infer(prog, mod)
+        if (batch_mode()) {
+            verify_module_after_infer(prog, mod)
+        } else {
+            verify_program_after_infer(prog, mod)
+        }
         return true
     }
 }

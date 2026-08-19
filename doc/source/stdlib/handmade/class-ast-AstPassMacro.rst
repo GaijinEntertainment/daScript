@@ -1,1 +1,1 @@
-Macro that executes as an additional inference pass during compilation. Allows injecting custom analysis and transformation logic into the type-inference pipeline.
+Macro that executes as an additional inference pass during compilation. Allows injecting custom analysis and transformation logic into the type-inference pipeline. ``apply(prog, mod)`` does the work; a ``[pre_infer_macro]`` may also override ``canVisitPass(prog, mod, index)`` and return ``false`` to skip an inference pass (``index`` is the pass number within the current inference run, 0 after every restart).

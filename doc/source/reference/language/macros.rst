@@ -527,7 +527,10 @@ Seven annotations control when a pass macro runs:
 
 - ``[infer_macro]`` — after clean type inference.  Returning ``true`` re-infers.
 - ``[dirty_infer_macro]`` — during each dirty inference pass.
-- ``[pre_infer_macro]`` — before each inference leg, on the not-yet-inferred tree.
+- ``[pre_infer_macro]`` — before each inference pass, on the not-yet-inferred tree.
+  Override ``canVisitPass(prog, mod, index)`` and return ``false`` to skip a pass;
+  ``index`` is the pass number within the current inference run, 0 after every
+  (re)start.
 - ``[post_infer_macro]`` — once inference is finished, before the tree is consumed
   (access flags, lint, each optimisation round).
 - ``[lint_macro]`` — after successful compilation (lint phase, read-only).
@@ -828,13 +831,20 @@ node. Reach for it first, not last::
 
     daslang --ast-verify program.das
 
+That form re-checks before every inference pass, so a break is caught on the
+pass right after it happens, and after inference it sweeps every module on each
+firing. ``--ast-verify-batch`` is the CI gate form for many files: no pre-infer
+checks, and after inference only the module being compiled is checked - the
+tree handed to lint, folding and codegen is valid, at a fraction of the cost.
+
 Without it, a macro that leaves a variable untyped crashes:
 
 .. code-block:: text
 
     CRASH: SIGSEGV (Segmentation fault) (signal 11) at address 0x30
 
-With it, the same program reports and keeps compiling:
+With it, the same program reports the node, repairs it so the scan can go on and
+every finding is printed, and fails the compile:
 
 .. code-block:: text
 
@@ -845,8 +855,8 @@ required children, null elements inside child lists, statements in positions
 where a value is required, malformed types such as an array with no element type,
 and declaration types on function results, arguments and structure fields.
 
-The command-line flag checks every module before each inference pass. When
-writing a macro, the inline forms see more:
+The command-line flag checks the module being compiled before each inference
+pass. When writing a macro, the inline forms see more:
 
 ``verify_module(prog, mod)``
     at the end of ``apply()``, once the tree is installed in the module.
