@@ -40,7 +40,7 @@ let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x4ful   // literal lowering: fixed-arra
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x420d39908173d748ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xafb153c2e58d8417ul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 

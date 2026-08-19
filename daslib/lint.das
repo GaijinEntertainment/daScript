@@ -584,12 +584,12 @@ class LintVisitor : AstVisitor {
     }
 
     def lint023_collect_candidate(v : VariablePtr) {
-        // by-value non-pointer `var` params only: a by-ref param propagates its writes, and a write through a pointer param's pointee marks the param's ExprVar written too, though the caller does see it
+        // a by-ref param propagates its writes; a pointer param stays a candidate - a write through its pointee (`p.x = 1`) reaches the caller, and lint023_note_use sees that as a use, not a store
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used || v.isAccessUnused) return
         let name = string(v.name)
         if ((name |> starts_with("_")) || find(name, "`") >= 0
                 || v._type == null || v._type.flags.constant
-                || v._type.flags.ref || v._type.isRefType || v._type.baseType == Type.tPointer) {
+                || v._type.flags.ref || v._type.isRefType) {
             return
         }
         lint023_candidates |> push(Lint023Candidate(v = v, stores = 0, disqualified = false))
@@ -603,11 +603,15 @@ class LintVisitor : AstVisitor {
     }
 
     def lint023_mark_store_target(lhs : ExpressionPtr) : void {
-        // `v.x = ...` on a vector param stores into the local copy just like `v = ...`; the compiler's underClone only marks a bare-var LHS
-        if (lhs == null || !(lhs is ExprSwizzle)) return
-        let sw = lhs as ExprSwizzle
-        if (sw.value != null && sw.value is ExprVar) {
-            lint023_store_nodes |> insert(intptr(sw.value))
+        // the compiler's under_clone marks a bare-var LHS of `=` and `:=` only; `<-` and a swizzle LHS (`v.x = ...` stores into the local copy just like `v = ...`) are marked here
+        if (lhs == null) return
+        if (lhs is ExprVar) {
+            lint023_store_nodes |> insert(intptr(lhs))
+        } elif (lhs is ExprSwizzle) {
+            let sw = lhs as ExprSwizzle
+            if (sw.value != null && sw.value is ExprVar) {
+                lint023_store_nodes |> insert(intptr(sw.value))
+            }
         }
     }
 
@@ -673,7 +677,7 @@ class LintVisitor : AstVisitor {
     // --- LINT024: int64/uint64 cast over a 32-bit product ---
 
     def lint024_scan(expr : ExpressionPtr; var has_product : bool&; var has_call : bool&) : void {
-        // walks the +,-,* tree under the cast: a product wraps at 32 bits before the widening, and a call among the leaves (length, a dimension getter) is the unbounded factor that makes it real - a product of plain locals is tile geometry more often than not, and stays silent
+        // a call among the leaves (length, a dimension getter) is the unbounded factor - a product of plain locals is tile geometry more often than not, and stays silent
         if (expr is ExprOp2) {
             let op2 = expr as ExprOp2
             let op = string(op2.op)

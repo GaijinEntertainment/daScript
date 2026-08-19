@@ -10,9 +10,10 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // LINT014's mirror: that rule catches a `var` nothing writes; this one catches
 // a `var` nothing reads. Only plain stores keep a candidate alive - `=`, `:=`,
 // `<-`, compound ops, a swizzle store, a statement-level ++/--. Any other
-// appearance (a read, `return`, passing on, addr-of, capture) is a use.
+// appearance (a read, `return`, passing on, addr-of, capture, a write through
+// a pointer's pointee) is a use.
 
-expect 50503:6
+expect 50503:9
 
 require daslib/lint
 
@@ -52,15 +53,31 @@ def bad_two(var a : int; var b : float) {   // LINT023 on a only - b is read
     print("{b}")
 }
 
+def bad_swizzle_opassign(var v : float3) {   // LINT023 - compound store through a swizzle
+    v.x += 1.0
+}
+
+def bad_move_lambda(var f : lambda<void>) {   // LINT023 - a move into the by-value copy
+    f <- @() {
+        print("x\n")
+    }
+}
+
+struct private Foo {
+    x : int
+}
+
+def bad_ptr_reassign(var f : Foo?) {   // LINT023 - the pointer itself is a by-value copy
+    f = null
+}
+
 // === Negatives ===
 
-// scratch parameter: written, then read
-def good_scratch(var n : int) : int {
+def good_write_then_read(var n : int) : int {
     n = n * 2
     return n
 }
 
-// the out-parameter done right
 def good_ref(url : string; var why : string&) : int {
     if (empty(url)) {
         why = "empty url"
@@ -78,7 +95,6 @@ def good_pass_mutable_ref(var n : int) {
     bump(n)
 }
 
-// address taken
 def good_addr(var n : int) {
     n = 5
     let p = unsafe(addr(n))
@@ -94,17 +110,12 @@ def good_captured(var n : int) {
     invoke(lam)
 }
 
-// the ++ value is consumed
 def good_incr_used(var n : int) : int {
     let y = n++
     return y
 }
 
-struct private Foo {
-    x : int
-}
-
-// a write through a pointer param reaches the caller's object
+// a write through a pointer param reaches the caller's object - a use, not a store
 def good_ptr(var f : Foo?) {
     f.x = 1
 }
@@ -133,7 +144,13 @@ def main() {
     bad_incr(1)
     bad_store_in_block(1)
     bad_two(1, 2.0)
-    print("{good_scratch(3)} {good_ref("", why)}\n")
+    bad_swizzle_opassign(float3(0.0))
+    let lam <- @() {
+        print("y\n")
+    }
+    bad_move_lambda(lam)
+    bad_ptr_reassign(null)
+    print("{good_write_then_read(3)} {good_ref("", why)}\n")
     good_pass_mutable_ref(1)
     good_addr(1)
     good_captured(1)

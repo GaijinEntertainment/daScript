@@ -282,8 +282,7 @@ def private takes_scratch_arg(fn : Function?) : bool {
     return false
 }
 
-// PERF032: the calls that size an @exact_size array explicitly - after any of these on the
-// receiver, a later resize in the same function grows into reserved capacity
+// scratch_resize belongs here: it scratch_reserves the exact final size before resizing
 def private is_explicit_capacity_call(n : string) : bool {
     return (n == "reserve" || n == "ensure_capacity"
             || n == "scratch_reserve" || n == "scratch_ensure_capacity" || n == "scratch_resize")
@@ -403,8 +402,7 @@ class HotBodyScan : AstVisitor {
 
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
-    // PERF032: receivers (by spelling) that got reserve/ensure_capacity earlier in this function
-    perf032_reserved : table<string>
+    perf032_reserved : table<string>     // PERF032: receivers, by spelling, reserved earlier in this function
     // variable + loop tracking
     loop_depth : int = 0
     in_closure : int = 0

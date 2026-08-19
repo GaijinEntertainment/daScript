@@ -994,10 +994,10 @@ catches a ``var`` nothing reads. Only plain stores keep a parameter reported —
 ``=``, ``:=``, ``<-``, compound assignment, a swizzle store (``v.x = 1.0``),
 a statement-level ``++``/``--``. Any other appearance is a use and silences the
 rule: a read, ``return``, passing it on (to a ``&`` slot too — the callee may
-read it first), ``addr``, a lambda capture. Pointer parameters are excluded (a
-write through the pointee marks the parameter written, and that write the
-caller does see), as are class methods and ``[extern]`` stubs, underscore-
-prefixed names and ``[unused_argument]``.
+read it first), ``addr``, a lambda capture, a write through a pointer
+parameter's pointee (``p.x = 1`` reaches the caller's object; reassigning
+``p`` itself is a store like any other). Class methods and ``[extern]`` stubs,
+underscore-prefixed names and ``[unused_argument]`` are skipped.
 
 .. das-doc: alt
 .. code-block:: das

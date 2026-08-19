@@ -6,10 +6,9 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // input-scaled buffer: one that can cross max_unreserved_size in a single grow, where an
 // unreserved resize panics. On such an array every resize/resize_no_init must follow a
 // reserve or ensure_capacity of the same receiver earlier in the function; sizing it through
-// a helper that reserves (reserve_resize and kin) is transparent. The annotation on a
-// non-array declaration is reported too.
+// a helper that reserves (reserve_resize and kin) is transparent.
 
-expect 31208:7
+expect 31208:9
 
 require daslib/perf_lint
 
@@ -20,6 +19,7 @@ struct State {
 }
 
 var @exact_size g_scale : array<int>
+var @exact_size g_not_an_array : float   // PERF032 - not an array
 
 // === Positives ===
 
@@ -51,6 +51,10 @@ def bad_decl_type() {
     print("{x}\n")
 }
 
+def bad_param_type(@exact_size n : int) {   // PERF032 - not an array
+    print("{n}\n")
+}
+
 // === Negatives ===
 
 def good_reserve_first(var st : State; n : int) {
@@ -60,6 +64,28 @@ def good_reserve_first(var st : State; n : int) {
 
 def good_ensure(var st : State; n : int) {
     st.buf |> ensure_capacity(n)
+    st.buf |> resize(n)
+}
+
+// the scratch one-shots establish capacity too
+def good_scratch_reserve(var st : State; n : int) {
+    unsafe {
+        st.buf |> scratch_reserve(n)
+    }
+    st.buf |> resize(n)
+}
+
+def good_scratch_ensure(var st : State; n : int) {
+    unsafe {
+        st.buf |> scratch_ensure_capacity(n)
+    }
+    st.buf |> resize(n)
+}
+
+def good_scratch_resize(var st : State; n : int) {
+    unsafe {
+        st.buf |> scratch_resize(n)
+    }
     st.buf |> resize(n)
 }
 
@@ -94,6 +120,11 @@ def main() {
     bad_reserve_after(st, 3)
     bad_param(st.buf, 3)
     bad_decl_type()
+    bad_param_type(1)
+    good_scratch_reserve(st, 3)
+    good_scratch_ensure(st, 3)
+    good_scratch_resize(st, 3)
+    print("{g_not_an_array}\n")
     good_reserve_first(st, 3)
     good_ensure(st, 3)
     good_plain(st, 3)

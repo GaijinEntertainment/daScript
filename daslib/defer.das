@@ -27,21 +27,21 @@ def public nada() {
     pass
 }
 
-def private defer_scope(call : Expression?; what : string) : ExprBlock? {
-    // the block whose finally receives the deferred code; null (macro error raised) when that finally is not a per-scope-exit
+// the block whose finally receives the deferred code; null (macro error raised) when that finally is not a per-scope-exit
+def private defer_scope(call : Expression?; macro_name : string) : ExprBlock? {
     var scope : ExprBlock?
     compiling_program() |> get_ast_context(call) $(valid, astc) {
         if (!valid) {
             compiling_program() |> macro_error(call.at, "can't get valid program context")
         } elif (empty(astc.scopes)) {
-            compiling_program() |> macro_error(call.at, "{what} needs to be in the scope")
+            compiling_program() |> macro_error(call.at, "{macro_name} needs to be in the scope")
         } else {
             var blk = astc.scopes[astc.scopes |> length - 1] as ExprBlock
             if (blk.blockFlags.inTheLoop) {
-                compiling_program() |> macro_error(call.at, "{what} can't be used in the loop. finally section of the loop only runs once. enclose in a bare `\{ \}` block to ensure scope")
+                compiling_program() |> macro_error(call.at, "{macro_name} can't be used in the loop. finally section of the loop only runs once. enclose in a bare `\{ \}` block to ensure scope")
             } elif (blk.blockFlags.isLambdaBlock || blk.blockFlags.isGeneratorBlock) {
                 // sticky: the lambda is lowered to a plain function on a later pass, which would clear the error and let the call land there
-                compiling_program() |> macro_sticky_error(call.at, "{what} at the top level of a lambda or generator body would become its finalizer, not a per-call cleanup. enclose in a bare `\{ \}` block, or write the finalizer as an explicit `finally`")
+                compiling_program() |> macro_sticky_error(call.at, "{macro_name} at the top level of a lambda or generator body would become its finalizer, not a per-call cleanup. enclose in a bare `\{ \}` block, or write the finalizer as an explicit `finally`")
             } else {
                 scope = blk
             }

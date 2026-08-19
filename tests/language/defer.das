@@ -27,6 +27,12 @@ def defer_check_del(var a : array<int>) : int {
     return length(a)
 }
 
+def defer_delete_check(var a : array<int>) : int {
+    a <- [for (x in range(5)); x]   // nolint:PERF030 - the parameter arrives empty; this is the fixture the defer_delete arm needs
+    defer_delete(a)
+    return length(a)
+}
+
 [sideeffects]
 def defer_check_short_pipe() {
     var x = 1
@@ -40,7 +46,6 @@ def defer_check_short_pipe() {
 }
 
 def defer_in_lambda_bare_block() : int2 {
-    // returns what each call sees after its bare block; the deferred count++ must land per call, not on delete
     var count = 0   // nolint:LINT003 - `let` makes the lambda's captured copy const, breaking count++
     var lam <- @ capture(copy(count)) () : int {
         {
@@ -68,6 +73,11 @@ def test_defer(t : T?) {
         var a : array<int>
         let len = defer_check_del(a)
         t |> equal(len, 10)
+        t |> equal(length(a), 0)
+    }
+    t |> run("defer_delete (deprecated spelling) still deletes at scope exit") @(t : T?) {
+        var a : array<int>
+        t |> equal(defer_delete_check(a), 5)
         t |> equal(length(a), 0)
     }
     t |> run("defer with short pipe syntax") @(t : T?) {
