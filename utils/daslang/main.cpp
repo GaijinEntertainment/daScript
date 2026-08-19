@@ -668,7 +668,7 @@ void print_help() {
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
-        << "    --ast-verify-batch  same verifier, sweep form: pre-infer only before pass 0 of each inference leg, post-infer only over the module being compiled\n"
+        << "    --ast-verify-batch  same checks, cheap enough to gate many files (CI): no per-pass re-walks, no cross-module re-sweeps\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
@@ -953,7 +953,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
             } else if ( cmd=="-ast-verify" || cmd=="-ast-verify-batch" ) {
-                astVerifyRequired = true;   // the verifier reads -batch itself from argv
+                astVerifyRequired = true;   // daslib/ast_verify reads --ast-verify-batch from argv itself
             } else if ( cmd=="-linear-stack-allocator") {
                 scopedStackAllocator = false;
             } else if ( cmd=="-das-profiler") {

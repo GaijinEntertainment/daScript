@@ -6372,11 +6372,8 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
-    // try infer, if failed - no macros
-    // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
-    // Fires once per inferTypesDirty pass, right after errors.clear(); pass 0 of a leg is
-    // where a macro's tree change first meets the macros, later passes see only the inferer's
-    // own edits - each macro gates the per-pass firings itself through canVisitPass.
+    // called once per inferTypesDirty pass, right after errors.clear(); each macro decides its
+    // own per-pass firings through canVisitPass
     static bool applyPreInferMacros ( Program * program, int pass ) {
         auto nErr = program->errors.size();
         auto thisModule = program->thisModule.get();

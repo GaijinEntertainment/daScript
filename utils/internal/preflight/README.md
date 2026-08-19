@@ -5,9 +5,9 @@ manual commands this tool automates live in
 [skills/internal/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/internal/preflight.md).
 
 ```bash
-# fast tier: format --verify, lint changed .das, ast-verify changed .das (parallel,
-# 300s/file - a heavy engine sweep is minutes, not seconds), clang frontend pass on
-# changed C++ (full src+tests-cpp sweep when a header changed)
+# fast tier: format --verify, lint changed .das, ast-verify changed .das (batch mode,
+# parallel, 300s/file - each item is a whole-engine compile, so a sweep-shaped diff is
+# minutes), clang frontend pass on changed C++ (full src+tests-cpp sweep when a header changed)
 daslang utils/internal/preflight/main.das
 
 # full tier: adds the untracked-files gate (working tree carries none — commit,

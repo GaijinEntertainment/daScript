@@ -17,8 +17,8 @@ typeinfo expressions.  **Pass macros** operate at a higher level: they
 receive the **entire program** and run during a specific compilation
 phase.
 
-``AstPassMacro`` is the base class for all pass macros.  It has a
-single method:
+``AstPassMacro`` is the base class for all pass macros.  It has one
+required method:
 
 ``apply(prog : ProgramPtr; mod : Module?) → bool``
    ``prog`` is the full program being compiled.

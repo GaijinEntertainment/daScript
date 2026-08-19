@@ -1437,8 +1437,8 @@ namespace das
         PassMacro ( const string na = "" ) : name(na) {}
         virtual ~PassMacro() = default;
         virtual bool apply( Program *, Module * ) { return false; }
-        // pre-infer macros only: gate before pass `pass` (0-based within one inferTypesDirty leg).
-        // Pass 0 follows a tree change by a macro; later passes see only the inferer's own edits.
+        // pre-infer macros only: gate before pass `pass` - the pass number within the current
+        // inferTypesDirty run, 0 after every (re)start
         virtual bool canVisitPass ( Program *, Module *, int /*pass*/ ) { return true; }
         string name;
     };

@@ -366,18 +366,29 @@ jobs:
         # sweep is nightly-only - so the heaviest qmacro consumer verifies on every PR
         CHANGED+=("tests/linq/test_linq_fold.das")
         # Same helper shape as the nightly tree sweep below: parallel, one process per file,
-        # a per-file timeout. Only an `AST verify` line is a failure; a compile error belongs
-        # to whatever gate owns that file; negative tests (cant_/failed_/invalid_) skip. A
-        # sweep-shaped PR can touch hundreds of engine files and each verify recompiles that
-        # engine - run serially that is hours, which is what this step once did.
+        # a per-file timeout. An `AST verify` line, a crash, or a timeout is a failure (batch
+        # mode has no pre-infer walk, so a tree a macro breaks mid-inference surfaces as a
+        # crash, not a report); a compile error belongs to whatever gate owns that file;
+        # negative tests (cant_/failed_/invalid_) skip. A sweep-shaped PR can touch hundreds
+        # of engine files and each verify recompiles that engine - run serially that is hours.
         cat > /tmp/ast_verify_changed.sh <<'EOS'
         #!/bin/bash
         f="$1"
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
-        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1 || true)
+        case "$f" in *ast-fuzz/selftest/*) exit 0 ;; esac   # deliberately broken fixtures; test_ast_fuzz.das owns them
+        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1); rc=$?
         if grep -q 'AST verify' <<< "$out"; then
           echo "ast-verify reported on $f"
           grep 'AST verify' <<< "$out" | sort -u | head -5
+          exit 1
+        fi
+        if [ "$rc" -eq 124 ]; then
+          echo "ast-verify timed out (300s) on $f"
+          exit 1
+        fi
+        if [ "$rc" -ge 128 ] || grep -q 'CRASH:' <<< "$out"; then
+          echo "ast-verify crashed (exit $rc) on $f"
+          grep -m 4 -E 'CRASH:|^\s+\[ [0-9]\]' <<< "$out"
           exit 1
         fi
         EOS
@@ -397,12 +408,10 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
     - name: "Compile tests/ with --ast-verify-batch"
-      # NIGHTLY ONLY (cron or manual dispatch), because of what it costs: 22.7 min,
-      # a third of this job, and it moved the whole PR pipeline from ~57 min to
-      # ~75 min the day it landed. The cost is structural — it launches one daslang
-      # per test file (~1487 of them at ~3.6s each) and every process re-parses
-      # daslib from scratch. dastest compiles AND RUNS the same 1703 files in a
-      # single process in 2.3 min.
+      # NIGHTLY ONLY (cron or manual dispatch), because of what it costs: the cost is
+      # structural - it launches one daslang per test file (~1500 of them) and every
+      # process re-parses daslib from scratch, tens of minutes against dastest compiling
+      # AND RUNNING the same files in a single process in a couple of minutes.
       # Nightly is the right cadence for what it catches: malformed AST out of
       # macro code, which lands in daslib/ and macro-authoring changes, not in the
       # average PR. On demand: gh workflow run extended_checks.yml
@@ -410,17 +419,27 @@ jobs:
       run: |
         set -euo pipefail
         # daslib/ast_verify reports AST shapes the compiler dereferences unguarded.
-        # A compile error is fine here (many tests assert one); only an "AST verify"
-        # line is a failure. Files dastest itself treats as expected-failures
-        # (cant_ / failed_ / invalid_) legitimately trip it, so they are skipped.
+        # A compile error is fine here (many tests assert one); an "AST verify" line,
+        # a crash, or a timeout is a failure. Files dastest itself treats as
+        # expected-failures (cant_ / failed_ / invalid_) legitimately trip it, so they are skipped.
         cat > /tmp/ast_verify_one.sh <<'EOS'
         #!/bin/bash
         f="$1"
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
-        out=$(timeout 120 "$BIN/daslang" --ast-verify-batch -compile-only "$f" 2>&1 || true)
+        case "$f" in *ast-fuzz/selftest/*) exit 0 ;; esac   # deliberately broken fixtures; test_ast_fuzz.das owns them
+        out=$(timeout 120 "$BIN/daslang" --ast-verify-batch -compile-only "$f" 2>&1); rc=$?
         if grep -q 'AST verify' <<< "$out"; then
           echo "### $f"
           grep 'AST verify' <<< "$out" | sort -u | head -5
+          exit 1
+        fi
+        if [ "$rc" -eq 124 ]; then
+          echo "### $f: timed out (120s)"
+          exit 1
+        fi
+        if [ "$rc" -ge 128 ] || grep -q 'CRASH:' <<< "$out"; then
+          echo "### $f: crashed (exit $rc)"
+          grep -m 4 -E 'CRASH:|^\s+\[ [0-9]\]' <<< "$out"
           exit 1
         fi
         EOS

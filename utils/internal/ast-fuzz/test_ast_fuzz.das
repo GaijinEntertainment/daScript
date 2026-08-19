@@ -97,9 +97,8 @@ def test_ast_verify_clean_on_valid_code(t : T?) {
     t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
 }
 
-// Batch mode keeps pass 0 of every inference leg, which is where an [infer_macro] rewrite
-// first meets the verifier - so a macro-broken tree is still reported, only the per-pass
-// re-walks are gone.
+// Batch mode keeps the post-infer walk, so a tree an [infer_macro] broke after inference is
+// still reported before lint/fold/codegen consume it.
 [test]
 def test_ast_verify_batch_still_reports_a_macro_broken_tree(t : T?) {
     var out : string
@@ -108,6 +107,27 @@ def test_ast_verify_batch_still_reports_a_macro_broken_tree(t : T?) {
     t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
     t |> success(find(out, "ExprOp2 has no source location (at is unset) in 'lost_one'") >= 0,
         "batch mode did not report the unset at\n{out}")
+}
+
+// The two modes differ exactly in the pre-infer walk. mid_pass_breaker nulls an operand between
+// two passes: plain mode's next-pass walk reports and repairs it (the compile then succeeds);
+// batch mode has no pre-infer walk, so the inferer meets the null itself - the compile dies (or,
+// for a break the inferer survives, the post-infer walk reports it). Either way it is not silent.
+[test]
+def test_ast_verify_pre_infer_walk_is_plain_mode_only(t : T?) {
+    var out : string
+    let f = "utils/internal/ast-fuzz/selftest/mid_pass.das"
+    var ec = run([BIN, "--ast-verify", f], out, 60.0)
+    t |> success(!died(ec, out), "plain mode: compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "AST verify: ExprOp2.right is null") >= 0,
+        "plain mode did not report the mid-pass null from the pre-infer walk\n{out}")
+    t |> equal(ec, 0)
+    out = ""
+    ec = run([BIN, "--ast-verify-batch", f], out, 60.0)
+    t |> success(find(out, "AST verify: ExprOp2.right is null") < 0,
+        "batch mode ran a pre-infer walk\n{out}")
+    t |> success(died(ec, out) || find(out, "AST verify (post-infer)") >= 0,
+        "batch mode let the mid-pass null through silently (exit {ec})\n{out}")
 }
 
 [test]

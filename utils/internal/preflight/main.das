@@ -577,12 +577,13 @@ struct private VerifyItem {
 
 struct private VerifyResult {
     index : int
-    findings : string   // the `AST verify` lines, "" when clean
+    findings : string   // the `AST verify` lines, or the crash/timeout line; "" when clean
 }
 
 // One process per file, `workers` in flight, `timeout` seconds each - the CI step's contract.
-// A compile error is not a failure here (that gate belongs to whoever owns the file); only an
-// `AST verify` line is.
+// A compile error is not a failure here (that gate belongs to whoever owns the file); an
+// `AST verify` line, a crash, or a timeout is (batch mode has no pre-infer walk, so a tree a
+// macro breaks mid-inference surfaces as a crash, not a report).
 def private run_verify_workers(daslang : string; files : array<string>; workers : int; timeout : float) : array<VerifyResult> {
     let n = length(files)
     var results : array<VerifyResult>
@@ -598,13 +599,22 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                             var out : string
                             let path = string(item.path)
                             let argv <- [daslang, "-dry-run", "--ast-verify-batch", path]
-                            unsafe(popen_argv(argv, timeout, $(f) {
+                            let rc = unsafe(popen_argv(argv, timeout, $(f) {
                                 if (f != null) {
                                     out := fread(f)
                                 }
                             }))
-                            let hits <- [for (line in split(out, "
+                            var hits <- [for (line in split(out, "
 ")); strip(line); where find(line, "AST verify") >= 0]
+                            if (empty(hits)) {
+                                if (rc == popen_timed_out) {
+                                    hits |> push("timed out after {int(timeout)}s")
+                                } elif (rc < 0 || rc >= 128 || find(out, "CRASH:") >= 0) {
+                                    hits |> push("crashed (exit {rc})")
+                                    hits |> push_from([for (line in split(out, "
+")); strip(line); where find(line, "CRASH:") >= 0])
+                                }
+                            }
                             outCh |> push_clone(VerifyResult(index = item.index, findings = join(hits, "
 ")))
                             outCh |> notify()
@@ -637,7 +647,9 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     var files : array<string>
     for (f in ctx.changed_das) {
         let base = base_name(f)
-        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_"))
+        // ast-fuzz/selftest holds deliberately broken fixtures; test_ast_fuzz.das owns them
+        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_")
+                || find(f, "ast-fuzz/selftest/") >= 0)
         files |> push(f)
     }
     if (empty(files)) {
@@ -645,8 +657,8 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
             detail = "no .das files changed vs {ctx.base}")
     }
     files |> push("tests/linq/test_linq_fold.das")
-    // each item is a whole-engine compile under the verifier (30-80s, hundreds of MB), so the
-    // width is physical cores halved, not hardware threads - -j caps it further, never raises it
+    // each item is a whole-engine compile under the verifier (2-3x a plain compile, hundreds of MB),
+    // so the width is physical cores halved, not hardware threads - -j caps it further, never raises it
     let heavy = max(1, get_total_hw_cores() / 2)
     let workers = compute_worker_count(length(files), ctx.jobs > 0 ? min(ctx.jobs, heavy) : heavy)
     let results <- run_verify_workers(ctx.daslang, files, workers, 300.0)
@@ -662,7 +674,7 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     }
     if (red > 0) {
         return GateResult(name = "ast-verify", status = GateStatus.Fail, seconds = seconds_since(t0),
-            detail = "{red} of {length(files)} file(s) report AST verify findings (skills/das_macros.md)", output = output)
+            detail = "{red} of {length(files)} file(s) report AST verify findings, crashed, or timed out (skills/das_macros.md)", output = output)
     }
     return GateResult(name = "ast-verify", status = GateStatus.Pass, seconds = seconds_since(t0),
         detail = "{length(files)} file(s) verify clean ({workers} workers)")

@@ -14,17 +14,21 @@ module ast_verify shared private
 //! or ``require daslib/ast_verify``, or call [[verify_module]] /
 //! [[verify_expression]] from your own macro right after building AST.
 //!
-//! ``--ast-verify-batch`` is the sweep form for many files (CI, preflight): the pre-infer
-//! walk runs before pass 0 of each inference leg only (right after a macro changed the tree),
-//! and each post-infer firing walks just the module being compiled - "valid at the end", at
-//! a fraction of the cost. Plain ``--ast-verify`` re-walks before EVERY pass and sweeps every
-//! module on every post-infer firing: use it on one file to learn WHICH pass broke the tree.
+//! Two modes. Plain ``--ast-verify`` (or the source ``require``) is the debugging tool: it
+//! re-checks before EVERY inference pass, so a break is caught on the pass right after it
+//! happens, and each post-infer firing sweeps every module. ``--ast-verify-batch`` is the CI
+//! gate: no pre-infer checks, and each post-infer firing checks the module being compiled
+//! (every other module once per process) - the tree handed to lint/fold/codegen is valid,
+//! at a fraction of the cost.
 
 require daslib/ast
 require daslib/ast_boost
 require strings
 
-let private g_batch = has_value(get_command_line_arguments(), "--ast-verify-batch")
+def private batch_mode() : bool {
+    let args <- get_command_line_arguments()
+    return has_value(args, "--ast-verify-batch")
+}
 
 def private placeholder(at : LineInfo) : ExpressionPtr {
     return new ExprConstInt(at = at, value = 0)
@@ -868,9 +872,9 @@ def public verify_module(prog : ProgramPtr; mod : Module?) : int {
 
 [pre_infer_macro]
 class AstVerifyMacro : AstPassMacro {
-    //! Runs the AST verifier over each non-builtin module. Active whenever this
-    //! module is loaded — via ``--ast-verify`` (force-include) or a source
-    //! ``require daslib/ast_verify``.
+    //! Verifies the module being compiled before every inference pass. Active whenever
+    //! this module is loaded — via ``--ast-verify`` (force-include) or a source
+    //! ``require daslib/ast_verify``; ``--ast-verify-batch`` turns these pre-infer checks off.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
@@ -878,10 +882,8 @@ class AstVerifyMacro : AstPassMacro {
         verify_module(prog, mod)
         return true
     }
-    //! Under ``--ast-verify-batch`` only pass 0 of each inference leg is verified; the
-    //! post-infer verifier still checks the finished tree.
     def override canVisitPass(prog : ProgramPtr; mod : Module?; index : int) : bool {
-        return index == 0 || !g_batch
+        return !batch_mode()
     }
 }
 
@@ -1433,11 +1435,29 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 }
 
 def public verify_program_after_infer(prog : ProgramPtr; thisMod : Module?) : int {
-    //! Verifies thisMod plus every other non-builtin module - getSideEffects recurses
-    //! into CALLED functions. program_for_each_module does NOT yield thisMod itself.
+    //! Verifies thisMod plus every other non-builtin module (a callee's tree is dereferenced
+    //! too - getSideEffects recurses into CALLED functions). program_for_each_module yields
+    //! thisMod as well, so it is walked once here and skipped in the loop.
     var total = verify_module_after_infer(prog, thisMod)
     program_for_each_module(prog) $(mod) {
-        if (!mod.moduleFlags.builtIn) {
+        if (mod != thisMod && !mod.moduleFlags.builtIn) {
+            total += verify_module_after_infer(prog, mod)
+        }
+    }
+    return total
+}
+
+// Modules the batch sweep has verified once. Under --ast-verify-batch every module compiled after
+// the force-include is verified as thisMod; the ones compiled BEFORE it (the verifier's own
+// requires) and modules read from a module cache are not - each is swept once per process.
+var private g_batch_swept : table<string>
+
+def private verify_program_after_infer_batch(prog : ProgramPtr; thisMod : Module?) : int {
+    var total = verify_module_after_infer(prog, thisMod)
+    g_batch_swept |> insert("{thisMod.name}")
+    program_for_each_module(prog) $(mod) {
+        if (mod != thisMod && !mod.moduleFlags.builtIn && !key_exists(g_batch_swept, "{mod.name}")) {
+            g_batch_swept |> insert("{mod.name}")
             total += verify_module_after_infer(prog, mod)
         }
     }
@@ -1462,14 +1482,14 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
     //! Fires before every consumer of the finished tree (each infer leg, lint, every optimizer
-    //! round), so each firing walks thisMod. The sweep of every OTHER module covers a source
-    //! ``require`` (modules required before it compiled unverified) - skipped under ``-batch``.
+    //! round) and walks the module being compiled plus every OTHER module - a source ``require``
+    //! leaves the modules required before it unverified. Batch walks each other module once.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
         }
-        if (g_batch) {
-            verify_module_after_infer(prog, mod)
+        if (batch_mode()) {
+            verify_program_after_infer_batch(prog, mod)
         } else {
             verify_program_after_infer(prog, mod)
         }

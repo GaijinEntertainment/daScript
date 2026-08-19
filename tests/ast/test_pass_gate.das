@@ -1,9 +1,7 @@
 options gen2
 
-// Compiles only if the driver honors AstPassMacro.canVisitPass: _pass_gate_helper's lint
-// verdict raises a macro_error unless (a) the ungated pre-infer probe was applied on a pass
-// past 0, (b) the pass-0-only probe fired, and (c) it was never applied outside pass 0.
-// Reaching the test body IS the assertion.
+// Reaching the test body IS the assertion: _pass_gate_helper's lint verdict fails the compile
+// unless the driver honors AstPassMacro.canVisitPass (its error text names the broken clause).
 
 module pass_gate_fixture
 

@@ -199,9 +199,9 @@ macro tooling, or the compiler's AST generation / inference (`src/ast/*.cpp`),
 the tree must still verify clean:
 
 ```bash
-# the files you changed, plus anything that requires them. -batch is the sweep form (pass 0 of
-# each inference leg + post-infer); plain --ast-verify re-walks before EVERY pass - use it on one
-# file when you need to know WHICH pass broke the tree
+# the files you changed, plus anything that requires them. -batch is the CI gate form; plain
+# --ast-verify re-checks before every inference pass - use it on ONE file to learn which pass
+# broke the tree (skills/das_macros.md)
 <daslang> --ast-verify-batch -compile-only <changed .das files>
 # broader, when you touched daslib or src/ast: only an `AST verify` line is a failure
 find daslib tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \
