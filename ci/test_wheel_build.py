@@ -119,6 +119,21 @@ class WheelBuildTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             wb.detect_platform_tag(list(wb.bundle_files(self.bundle)), "Linux", "riscv64")
 
+    def test_symlinks_stay_inside_the_bundle(self):
+        self.stage({"lib/libglfw.3.4.dylib": b"real", "daslib/x.das": b"//"})
+        outside = os.path.join(self.tmp, "outside.txt")
+        with open(outside, "wb") as f:
+            f.write(b"secret")
+        try:
+            os.symlink(os.path.join(self.bundle, "lib", "libglfw.3.4.dylib"), os.path.join(self.bundle, "lib", "libglfw.dylib"))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable on this host")
+        files = dict(wb.bundle_files(self.bundle))
+        self.assertIn(os.path.join(self.bundle, "lib", "libglfw.dylib"), files)  # in-bundle alias ships
+        os.symlink(outside, os.path.join(self.bundle, "lib", "escape.so"))
+        with self.assertRaises(SystemExit):
+            list(wb.bundle_files(self.bundle))
+
     def test_no_binaries_is_an_error_not_a_guess(self):
         self.stage({"daslib/x.das": b"//"})
         with self.assertRaises(SystemExit):

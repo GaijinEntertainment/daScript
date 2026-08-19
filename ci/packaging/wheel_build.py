@@ -71,12 +71,20 @@ def is_shipped(rel):
 
 
 def bundle_files(bundle):
+    # symlinks are stored as their target's bytes (a wheel has no symlinks; the mac bundle
+    # carries glfw's .dylib aliases) - but only when the target stays inside the bundle
+    root = os.path.realpath(bundle)
     for d, _, fs in os.walk(bundle):
         for f in fs:
             full = os.path.join(d, f)
             rel = os.path.relpath(full, bundle)
-            if is_shipped(rel):
-                yield full, rel.replace(os.sep, "/")
+            if not is_shipped(rel):
+                continue
+            if os.path.islink(full):
+                target = os.path.realpath(full)
+                if os.path.commonpath([root, target]) != root:
+                    sys.exit(f"wheel_build: {rel} is a symlink to {target}, outside the bundle")
+            yield full, rel.replace(os.sep, "/")
 
 
 # --- platform tag -------------------------------------------------------------
