@@ -101,9 +101,10 @@ COMPILE_TESTS=(
 # targets (platform-natural suffix); `dasexe` rows are the DAS_UTILS_SHIPPED_EXES
 # set from utils/CMakeLists.txt (always `.exe`), installed on single-config
 # generators — which is every generator the release bundles are cut on.
-# Presence-checked only — we don't run them with `--help` because daslang itself
-# intercepts `--help` and prints its own usage even after the `--` separator,
-# swallowing the script's CLI surface.
+# `cpp` rows are presence-checked; `dasexe` rows are also LAUNCHED (`--help`, exit 0)
+# from the bundle root: a `daslang -exe` binary resolves the runtime .so/.dylib
+# through its embedded rpath, and a bundle whose rpath points back at the build tree
+# is present-but-dead on every user's box.
 EXE_PRESENCE_TESTS=(
     "gen1_to_gen2|cpp"
     "daslang-live|cpp"
@@ -166,12 +167,21 @@ for entry in "${EXE_PRESENCE_TESTS[@]}"; do
     esac
     exe="$BUNDLE/bin/${name}${suffix}"
     printf '  %-30s ' "$name"
-    if [[ -f "$exe" ]]; then
-        echo "OK"
-        PASS=$((PASS + 1))
-    else
+    if [[ ! -f "$exe" ]]; then
         echo "MISSING ($exe)"
         FAIL=$((FAIL + 1))
+    elif [[ "$kind" == dasexe ]]; then
+        if "$exe" --help > "$LOG" 2>&1; then
+            echo "OK (launches)"
+            PASS=$((PASS + 1))
+        else
+            echo "FAIL (present, exit $? on --help)"
+            sed 's/^/      /' "$LOG" | head -5
+            FAIL=$((FAIL + 1))
+        fi
+    else
+        echo "OK"
+        PASS=$((PASS + 1))
     fi
 done
 
