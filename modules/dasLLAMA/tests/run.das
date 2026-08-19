@@ -229,7 +229,12 @@ def main() : int {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
     }
-    if (cfg.suite != "model-free" && cfg.full == !empty(cfg.arm)) {   // both set, or neither; the model-free suite has no arms to scope
+    if (cfg.suite == "model-free") {
+        if (cfg.full || !empty(cfg.arm)) {   // the per-PR gate has no arms to scope: a filter would silently shrink it
+            to_log(LOG_ERROR, "--suite model-free takes neither --arm nor --full: it is the whole per-PR gate\n")
+            return 2
+        }
+    } elif (cfg.full == !empty(cfg.arm)) {   // both set, or neither
         to_log(LOG_ERROR, "pass --arm <filter> scoped to what the change can affect (--full is disabled while the Metal build-out is in progress; large tier = DASLLAMA_PARITY_FULL=1 with --arm)\n")
         return 2
     }
