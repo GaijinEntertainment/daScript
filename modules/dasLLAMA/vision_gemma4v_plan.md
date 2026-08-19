@@ -236,6 +236,21 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   the POD layout). **No bump.** The companion provenance needs no new row either: the E2B
   mmproj rides the gemma4a `AsrModelSpec`, the cats fixture the 12B row.
 
+- P7 (the q8 lane, registered before its first run — slice G0): with the 112 block GEMMs as
+  Q8_0 (weights Q8_0 at read, activations per-row Q8 per site, the gemma4a recipe), tier-1
+  maxdiff vs the f32-twin oracle lands in **5e-3 … 3e-2** (16 layers of q8×q8 noise on
+  std-0.75 tokens; the CPU gate's exact-plane lane is untouched), the cats caption floor
+  holds, and the M1 CPU encode drops to **≤ 0.5 s** (the GEMMs from 1.8 s to ≈0.25 s; the
+  attention core, ≈0.16 s, becomes the biggest non-GEMM bucket).
+  **Scored at slice G0:** fidelity MISSED by 2× — maxdiff 3.1e-2 (96² cb) … 6.8e-2 (green
+  336²), ≈9 % of token rms on the worst sampled element (bar set at 1.2e-1·rms); the caption
+  floor held (the E2B caption is the exact-lane caption to the word, one adjective aside);
+  the encode landed at **0.43–0.47 s** (GEMMs 238 ms, attention core 163 ms — the #2 bucket as
+  predicted). The +AMX tier on the exact planes reaches the same 0.45 s with full fidelity
+  (`--accel`, which the image cell now arms) — on Apple the accelerate tier is the better
+  default candidate; the q8 lane is the x64 answer. q8 is the serving default on the CPU tier
+  (the gemma4a tower's policy) — the fidelity/speed default is flagged for Boris to overrule.
+
 ## Out of scope (this arc)
 
 E4B vision (mmproj not on this box — a 992 MB download; dump before claiming), multi-image

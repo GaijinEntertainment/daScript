@@ -20,8 +20,9 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 
 let private TIER1_ABS = 2e-4
 let private TIER1_REL = 4e-3   // × token rms (≈0.75 on E2B) - the rung gemma4uv's GPU leg holds
+let private TIER1_REL_Q8 = 1.2e-1   // the q8 serving lane: measured 3.1e-2..6.8e-2 (≈9% of rms) on these dumps - 16 blocks of q8×q8 GEMMs; the caption floor is the product gate
 
-def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind : string; w, h : int; logname : string) : bool {
+def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind : string; w, h : int; logname : string; rel : float = TIER1_REL) : bool {
     var o = OracleEncode()
     let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
@@ -39,7 +40,7 @@ def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind :
     if (int(nout) != o.npos) {
         return false
     }
-    compare_encode(t, "gemma4v tier-1 {kind} {w}x{h}", out, int(tw.proj_dim), o, TIER1_ABS, TIER1_REL)
+    compare_encode(t, "gemma4v tier-1{tw.q8 ? " q8" : ""} {kind} {w}x{h}", out, int(tw.proj_dim), o, TIER1_ABS, rel)
     return true
 }
 
@@ -50,8 +51,11 @@ def test_gemma4v_tier1(t : T?) {
         if (!model_available(tt, mm)) {
             return
         }
+        set_gemma4v_q8(false)   // the CPU gate owns the exact-plane lane; the q8 serving lane is the next test
         var tw <- load_gemma4v_tower(mm)
+        set_gemma4v_q8(true)
         var st = Gemma4vState()
+        tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.patch), 16, "patch")
         tt |> equal(int(tw.merge), 3, "pool kernel")
         tt |> equal(int(tw.n_embd), 768, "tower width")
@@ -93,7 +97,9 @@ def test_gemma4v_clamps_bind(t : T?) {
             tt |> skip("oracle dump e2b.encode.cb336.log not present/parseable - mint via gemma4-vision-oracle/mint_e2b.sh")
             return
         }
+        set_gemma4v_q8(false)   // the exact-plane lane - the knockout reads against the strict bar's context
         var inscope st <- stage_gemma4v_tower(mm)
+        set_gemma4v_q8(true)
         let d = st.t.n_embd
         let hd = d / st.t.n_head
         var armed = 0
@@ -124,6 +130,29 @@ def test_gemma4v_clamps_bind(t : T?) {
         to_log(LOG_INFO, "gemma4v clamp knockout cb 336x336: maxdiff {maxdiff} (armed tower holds < 1e-3)\n")
         tt |> success(maxdiff > 1e-3, "disarmed clamps miss the oracle by {maxdiff}")
         delete s
+        delete tw
+    }
+}
+
+// The q8 serving lane (the CPU default): the same dumps on its own scale-relative bar. The
+// exact-plane gate above is the parity rail; this one says what serving costs in fidelity.
+[test]
+def test_gemma4v_tier1_q8(t : T?) {
+    t |> run("tier-1 on the q8 block-GEMM lane (the serving default)") @(tt : T?) {
+        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(tt, mm)) {
+            return
+        }
+        tt |> success(gemma4v_q8_default(), "q8 is the serving default")
+        var tw <- load_gemma4v_tower(mm)
+        var st = Gemma4vState()
+        tt |> success(tw.q8, "q8 lane loaded")
+        tt |> success(length(tw.qblob) == tw.n_layer * tw.layer_w_stride, "qblob holds exactly the block GEMM set")
+        tt |> gate_encode(tw, st, "cb", 96, 96, "e2b.encode.cb96.log", TIER1_REL_Q8)
+        tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+        tt |> gate_encode(tw, st, "green", 336, 336, "e2b.encode.green336.log", TIER1_REL_Q8)
+        tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log", TIER1_REL_Q8)
+        delete st
         delete tw
     }
 }

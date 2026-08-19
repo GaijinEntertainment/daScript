@@ -490,13 +490,25 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
 }
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
-def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu : bool) : bool {
+def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
     // the metal arm serves the whole turn on the driver with the tripwire ARMED, so a CPU
     // fallback reds the row instead of sandbagging it
     if (gpu) {
         set_metal_mode(MetalMode.required)
     } else {
         allow_cpu_prefill()   // the CPU arm is CPU by intent — disarm the Metal-build tripwire
+    }
+    if (accel && gpu) {
+        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
+        return false
+    }
+    if (accel) {   // the +AMX tier — the tower's bf16 GEMMs are exactly the float-batch shapes it serves
+        static_if (typeinfo builtin_module_exists(das_accelerate)) {
+            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
+        } else {
+            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
+            return false
+        }
     }
     apply_box_profile_runtime()
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
@@ -523,8 +535,8 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
-            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
-                exec_fmt = model_exec_fmt(m),
+            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
+                exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",   // the tower's lane ahead of the decoder's receipt
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
                 sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
@@ -536,7 +548,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             run.tests |> insert("img:enc", BenchTest(ms = turn.enc_ms))
             run.tests |> insert("img:pp", BenchTest(tok_s = turn.pp_tok_s))
             run.tests |> insert("img:tg", BenchTest(tok_s = turn.tg_tok_s, text = turn.text))
-            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
             print("  text: {turn.text}\n")
             var cell = BenchModel(gguf = base_name(model), arch = vision_family(emb),
                                   size_bytes = int64(stat(model).size))
@@ -1330,7 +1342,7 @@ def main() : int {
             return 1
         }
         return image_cell_main(cfg.model, cfg.image_mmproj, cfg.image, cfg.image_prompt,
-                               cfg.json_path, reps, threads, gpu) ? 0 : 1
+                               cfg.json_path, reps, threads, gpu, cfg.accel) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag

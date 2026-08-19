@@ -71,6 +71,13 @@ def vision_family(e : VisionEmbedder) : string {
     return ""
 }
 
+//! The tower's precision half of an image cell's ``<tower>/<decoder>`` exec_fmt stamp (the ASR
+//! spelling): "f32" = every plane as the file has it (exact), "q8" = the Q8_0 block-GEMM lane.
+def vision_exec_fmt(e : VisionEmbedder) : string {
+    if (e.kind == VisionKind.v && e.v.q8) return "q8"
+    return "f32"
+}
+
 // what the file says it is: the gguf's clip.vision.projector_type, or a .dlim's baked family tag
 def private vision_sniff(path : string) : string {
     if (path |> ends_with(".dlim")) {
@@ -102,7 +109,7 @@ def load_vision_embedder(path : string) : VisionEmbedder {
         e.uv <- load_gemma4uv_embedder(path)
         return <- e
     }
-    if (proj == "gemma4v") {
+    if (proj == "gemma4v" || proj == "gemma4v-q8") {   // the two gemma4v image lanes share the family
         var e = VisionEmbedder(kind = VisionKind.v)
         e.v <- load_gemma4v_tower(path)
         return <- e

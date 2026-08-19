@@ -1320,6 +1320,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "gemma4v")
         remove(img)
+        set_gemma4v_q8(false)   // the exact-plane lane first; the q8 serving lane is the second half
         var inscope a <- stage_gemma4v_tower(path)
         var inscope cold <- load_gemma4v_tower(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
@@ -1355,6 +1356,21 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
             t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
             t |> success(img32 != img, "a different source keys a different image")
         }
+        // the q8 serving lane: its own tag and image; the block GEMMs live in qblob/qscales, the
+        // projection keeps the file's bf16 plane
+        set_gemma4v_q8(true)
+        let imgq = image_path_for(path, "gemma4v-q8")
+        remove(imgq)
+        var inscope aq <- stage_gemma4v_tower(path)
+        var inscope cq <- load_gemma4v_tower(path)
+        t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
+        t |> success(imgq != img, "the q8 lane keys a different image")
+        t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
+        t |> equal(count_mismatch_u16(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
+        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
+        t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the block GEMM set")
+        t |> equal(long_length(aq.wblob), aq.t.n_embd * aq.t.proj_dim, "q8 lane: the bf16 plane is exactly the projection")
     }
 }
 
