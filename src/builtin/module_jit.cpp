@@ -1974,6 +1974,12 @@ DAS_API void jit_finalize_dynamic_modules () {
     }
 }
 
+// ABI shim: -exe binaries emitted before the resolving form link this runtime dynamically
+// and still import the 3-argument name.
+DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
+    das::register_native_path(mod_name, src_path, dst_path, nullptr, nullptr);
+}
+
 // Emitted by inject_main (llvm_exe.das) for every native path the program compiled
 // against: the destination is re-rooted onto <exe_dir> / <das_root> at run time, so a
 // bundle built elsewhere finds its own modules/ instead of the build machine's.
