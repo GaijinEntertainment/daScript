@@ -695,9 +695,11 @@ def private validate_sidecar_doc(doc : JsonValue const?; submission : bool; var 
 }
 
 //! Strip what must never leave (or reach) a public store: `provenance.binary` (a full local
-//! path with the username in it) and any other path-shaped provenance value. Returns the
-//! stripped document, "" when the input does not parse. The submitting client AND the ladder
-//! service both run this — defense in depth against a client that skipped it.
+//! path with the username in it) and any other path-shaped provenance value. The box identity
+//! keys are exempt — a cpu brand string can carry a slash (`... 8700GE w/ Radeon 780M`), and
+//! a document stripped of its box is not a sidecar at all. Returns the stripped document, ""
+//! when the input does not parse. The submitting client AND the ladder service both run this
+//! — defense in depth against a client that skipped it.
 def exchange_strip_private(text : string) : string {
     var jerr = ""
     var doc = read_json(text, jerr)
@@ -710,7 +712,7 @@ def exchange_strip_private(text : string) : string {
         var drop : array<string>
         for (k, v in keys(pt), values(pt)) {
             var path_shaped = false
-            if (v != null && v.value is _string) {
+            if (v != null && v.value is _string && k != "box" && k != "applied_box") {
                 let s = v.value as _string
                 path_shaped = find(s, "/") >= 0 || find(s, "\\") >= 0
             }

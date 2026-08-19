@@ -58,6 +58,19 @@ def test_put_sidecar(t : T?) {
             tt |> success(find(stored, "\"noise\"") >= 0, "plain provenance survives")
             tt |> equal(sha256_hex(stored), put.sha, "the sha is of the stripped text")
         }
+        t |> run("a slash in the cpu brand string does not strip the box") @(tt : T?) {
+            // zen4's identity - the strip once ate it as path-shaped and the plant 400'd
+            let apu = "linux|x86_64||6.1.0-49-amd64|AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics"
+            let put = plant_sidecar(db, sidecar_doc(apu, "4", "vec16"), test_policy(), 3100l)
+            tt |> success(put.status == PutStatus.ok, "planted: {put.error}")
+            tt |> success(find(get_sidecar_doc(db, put.sha), "w/ Radeon") >= 0, "box survived the strip")
+            var ident : BoxIdentity
+            parse_box_string(apu, ident)
+            var hits <- find_sidecars(db, 4, ident)
+            tt |> equal(length(hits), 1, "indexed under its own box")
+            tt |> success(hits[0].verified && hits[0].tier == "exact", "verified, exact tier")
+            delete hits
+        }
         t |> run("an unversioned sidecar is refused") @(tt : T?) {
             var bad = %json~
             {

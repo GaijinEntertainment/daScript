@@ -325,6 +325,15 @@ def test_privacy_strip(t : T?) {
     t |> run("garbage never leaves the box") @(tt : T?) {
         tt |> equal(exchange_strip_private("not json at all"), "")
     }
+    t |> run("a slash in the box identity is not a path") @(tt : T?) {
+        // AMD APU brand strings read "... w/ Radeon ..."; stripping the box leaves no sidecar
+        let apu = "linux|x86_64||6.1.0-49-amd64|AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics"
+        let stripped = exchange_strip_private(fixture_sidecar(apu, DASLLAMA_VERSION, "vec16"))
+        tt |> success(find(stripped, apu) >= 0, "box survives")
+        var errs : array<string>
+        tt |> success(validate_sidecar_submission(stripped, errs), "still submission-grade")
+        delete errs
+    }
 }
 
 [test]
