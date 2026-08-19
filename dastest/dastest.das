@@ -379,7 +379,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
                     cop.aot = ctx.use_aot
                     cop.fail_on_no_aot = ctx.use_aot
                     cop.threadlock_context = true
-                    cop.jit_enabled = jit_enabled()
+                    cop.jit_enabled = tests_jit_enabled()
                     compile_file(file, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                         if (!ok) {
                             log::error("Failed to compile {file}\n{output}")
@@ -610,7 +610,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         let totalFiles = length(files)
         var totalThreads = test_args.isolated_mode_threads
         if (totalThreads == 0) {
-            totalThreads = (jit_enabled()
+            totalThreads = (tests_jit_enabled()
                 ? default_jit_isolated_threads(get_total_hw_threads())
                 : max(1, get_total_hw_threads() * 2))
         }
@@ -641,7 +641,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                 if (needs_quote) w |> write("\"")
             }
         }
-        let jitstr = jit_enabled() ? "-jit" : ""
+        let jitstr = tests_jit_enabled() ? "-jit" : ""
         let aotstr = is_in_aot() ? "-use-aot" : ""
         let benchstr = ctx.bench_enabled ? "--bench" : ""
         // Forward --stack-on-exception to each worker: the flag sets the test

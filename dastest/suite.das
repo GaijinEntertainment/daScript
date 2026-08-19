@@ -18,6 +18,13 @@ require log
 require testing
 require suite_result public
 
+//! JIT the tests only when the HOST was launched with -jit. Inside a standalone exe
+//! jit_enabled() is always true (the exe is a JIT product), but the exe carries none of
+//! the llvm/dasbind machinery a JIT compile needs - dastest.exe runs the interpreter.
+def public tests_jit_enabled() : bool {
+    return jit_enabled() && !is_standalone_exe()
+}
+
 var test_results : array<SuiteTestResult>
 var bench_messages : array<string>
 
@@ -177,7 +184,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 cop.stack = 1024u * 1024u
             }
             cop.threadlock_context = true
-            cop.jit_enabled = jit_enabled()
+            cop.jit_enabled = tests_jit_enabled()
             cop.debugger = ctx.debugger
             cop.keep_alive = ctx.keep_alive
             cop.disable_cse = ctx.disable_cse
@@ -185,7 +192,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.disable_temp_string_reclaim = ctx.disable_temp_string_reclaim
             cop.disable_inline = ctx.disable_inline
             cop.disable_auto_inline = ctx.disable_auto_inline
-            if (jit_enabled()) {
+            if (tests_jit_enabled()) {
                 access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
             }
             if (!ctx.cov_path |> empty()) {

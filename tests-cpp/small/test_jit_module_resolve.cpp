@@ -16,6 +16,11 @@ extern "C" {
         const char * fallback_abs_path,
         char * out_buf,
         size_t buf_size );
+    DAS_API bool jit_resolve_native_path_dst_for_test_(
+        const char * rel_pattern,
+        const char * fallback_abs,
+        char * out_buf,
+        size_t buf_size );
 }
 
 namespace {
@@ -56,6 +61,12 @@ static std::string resolve(const char * rel, const char * abs) {
     char buf[4096] = {0};
     REQUIRE(jit_resolve_dynamic_module_path_for_test_(rel, abs, buf, sizeof(buf)));
     // Normalize to forward-slash form so CHECK comparisons are host-agnostic.
+    return std::filesystem::path(buf).generic_string();
+}
+
+static std::string resolve_native(const char * rel_pattern, const char * abs) {
+    char buf[4096] = {0};
+    REQUIRE(jit_resolve_native_path_dst_for_test_(rel_pattern, abs, buf, sizeof(buf)));
     return std::filesystem::path(buf).generic_string();
 }
 
@@ -176,3 +187,72 @@ TEST_CASE("jit module resolve — Windows drive-root exe path is handled") {
     CHECK(chosen == "C:/modules/dasFoo/dasFoo.shared_module");
 }
 #endif
+
+// ---- native-path templates: the destination is a PATTERN, so the probe is its directory ----
+
+TEST_CASE("jit native path resolve — exe-relative module dir wins when present") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    g_existing.insert("/bundle/bin/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == "/bundle/bin/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — das_root when the exe dir has no modules/") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    auto dasRoot = das::getDasRoot();
+    g_existing.insert(dasRoot + "/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == dasRoot + "/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — baked absolute when nothing resolves") {
+    TestSeams seams;
+    g_exe_file = "/somewhere/dastest.exe";
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == "/build/abs/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — empty rel pattern goes straight to the absolute") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    // both bases exist as directories: without the guard the resolver would hand back the exe dir
+    g_existing.insert("/bundle/bin");
+    g_existing.insert(das::getDasRoot());
+    auto chosen = resolve_native("", "/baked/abs/{path}.das");
+    CHECK(chosen == "/baked/abs/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — exe-relative wins over das_root when both exist") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    g_existing.insert("/bundle/bin/modules/dasLLVM/daslib");
+    g_existing.insert(das::getDasRoot() + "/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == "/bundle/bin/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — empty exe_file still tries das_root") {
+    TestSeams seams;
+    g_exe_file = "";
+    auto dasRoot = das::getDasRoot();
+    g_existing.insert(dasRoot + "/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == dasRoot + "/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — the probe is the directory, not the file pattern") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    // the unexpanded pattern exists, its directory does not - a naive file probe would take it
+    g_existing.insert("/bundle/bin/modules/dasLLVM/daslib/{path}.das");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == "/build/abs/modules/dasLLVM/daslib/{path}.das");
+}

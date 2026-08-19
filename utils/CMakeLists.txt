@@ -110,13 +110,14 @@ foreach(util_path ${DAS_UTILS})
 endforeach()
 
 SET(TEST_MAIN ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
+file(GLOB DASTEST_SOURCES ${PROJECT_SOURCE_DIR}/dastest/*.das)
 
 add_custom_command(
     OUTPUT  ${UTIL_BIN_DIR}/dastest.exe
     COMMAND daslang -exe -output ${UTIL_BIN_DIR}/dastest ${TEST_MAIN}
             $<$<BOOL:${DAS_JIT_LINKER_STRING}>:-->
             ${DAS_JIT_LINKER_STRING}
-    DEPENDS ${TEST_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
+    DEPENDS ${TEST_MAIN} ${DASTEST_SOURCES} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Building dastest executable (daslang -exe)"
 )

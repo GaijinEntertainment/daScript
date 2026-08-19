@@ -137,7 +137,7 @@ if [[ -z "$CPP_SUFFIX" && -d "$BUILD_LIB" ]]; then
     mv "$BUILD_LIB" "$HIDDEN_LIB"
 fi
 restore_and_clean() {
-    rm -f "$LOG"
+    rm -f "$LOG" "$LOG.suite" "$LOG.lint"
     if [[ -n "$HIDDEN_LIB" && -d "$HIDDEN_LIB" ]]; then mv "$HIDDEN_LIB" "$BUILD_LIB"; fi
 }
 trap restore_and_clean EXIT
@@ -196,6 +196,17 @@ echo
 echo "Runtime launch:"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
+
+# Two prebuilt tools past --help. dastest.exe must compile and run a shipped suite
+# (isolated mode also spawns its own workers); lint.exe over daslib must resolve every
+# module native path - its summary line grows ", N skipped" when it cannot, so the
+# anchored grep is what rejects a skip.
+run_check "dastest.exe runs a shipped suite" bash -c \
+    "set -o pipefail; '$BUNDLE/bin/dastest${DASEXE_SUFFIX}' --test utils/common/tests --isolated-mode | tee '$LOG.suite' \
+     && grep -Eq '^[1-9][0-9]* tests, [1-9][0-9]* passed, 0 failed, 0 errors' '$LOG.suite'"
+run_check "lint.exe lints daslib, no skips" bash -c \
+    "set -o pipefail; '$BUNDLE/bin/lint${DASEXE_SUFFIX}' daslib | tee '$LOG.lint' \
+     && grep -Eq '^[0-9]+ files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
 
 # Shipped skills must not send the reader to a path the bundle does not contain.
 # This is the same class of bug as the utils/mcp/setup.das miss: the docs promised

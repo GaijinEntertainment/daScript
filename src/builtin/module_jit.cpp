@@ -1742,6 +1742,14 @@ static das::string pick_at_dir ( const std::filesystem::path & dir, const char *
     return "";
 }
 
+static das::string jit_exe_file () {
+    if ( g_jit_exe_file_for_test ) {
+        const char * s = g_jit_exe_file_for_test();
+        return s ? das::string(s) : das::string();
+    }
+    return das::getExecutableFileName();
+}
+
 // Pure resolution: pick the path to load, in priority order:
 //   1. <exe_dir>/<rel_path>   — daspkg release bundle layout (modules sit next to the exe)
 //   2. <das_root>/<rel_path>  — SDK install layout AND local dev build
@@ -1752,13 +1760,7 @@ static das::string pick_at_dir ( const std::filesystem::path & dir, const char *
 static das::string resolve_dynamic_module_path ( const char * rel_path, const char * fallback_abs_path ) {
     namespace fs = std::filesystem;
     // tier 1 — exe_dir (parent_path correctly preserves filesystem root: "/myapp" → "/", "C:\myapp.exe" → "C:\")
-    das::string exeFile;
-    if ( g_jit_exe_file_for_test ) {
-        const char * s = g_jit_exe_file_for_test();
-        if ( s ) exeFile = s;
-    } else {
-        exeFile = das::getExecutableFileName();
-    }
+    das::string exeFile = jit_exe_file();
     if ( !exeFile.empty() ) {
         fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
         if ( exeDir.empty() ) exeDir = ".";  // exe is a bare filename relative to cwd
@@ -1773,12 +1775,47 @@ static das::string resolve_dynamic_module_path ( const char * rel_path, const ch
     // tier 3 — baked absolute (legacy fallback)
     return fallback_abs_path ? fallback_abs_path : "";
 }
+
+// Same three tiers for a native-path template's destination. It may be a PATTERN
+// ("modules/dasLLVM/daslib/{path}.das"), so the probe is its directory prefix and the
+// winner is that base with the whole pattern re-rooted onto it. Empty rel_pattern (no
+// /modules/ segment at codegen) → tier 3.
+static das::string resolve_native_path_dst ( const char * rel_pattern, const char * fallback_abs ) {
+    namespace fs = std::filesystem;
+    if ( rel_pattern && *rel_pattern ) {
+        std::string rel = rel_pattern;
+        size_t firstBrace = rel.find('{');       // npos → rfind searches the whole string
+        size_t dirEnd = rel.rfind('/', firstBrace);
+        std::string dirRel = dirEnd == std::string::npos ? "" : rel.substr(0, dirEnd);
+        das::vector<fs::path> bases;
+        das::string exeFile = jit_exe_file();
+        if ( !exeFile.empty() ) {
+            fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
+            bases.push_back(exeDir.empty() ? fs::path(".") : exeDir);
+        }
+        das::string dasRoot = das::getDasRoot();
+        if ( !dasRoot.empty() ) bases.push_back(fs::path(dasRoot.c_str()));
+        for ( auto & base : bases ) {
+            fs::path dir = dirRel.empty() ? base : base / dirRel;
+            if ( jit_path_exists(dir.string().c_str()) ) {
+                return das::string((base / rel).string().c_str());
+            }
+        }
+    }
+    return fallback_abs ? fallback_abs : "";
+}
 #else
 // No file IO (DAS_NO_FILEIO): there is no filesystem to resolve a dynamic
 // module against, and a build with no fio can't dlopen one anyway. Calling
 // this is a logic error on such a platform, so abort loudly.
 static das::string resolve_dynamic_module_path ( const char *, const char * ) {
     std::abort();
+}
+// Unlike a dynamic module, a native-path entry is an inert string-table registration
+// (register_native_path is a stubbed no-op under DAS_NO_FILEIO), so a standalone exe
+// that registered one must keep starting - hand back the baked path, never abort.
+static das::string resolve_native_path_dst ( const char *, const char * fallback_abs ) {
+    return fallback_abs ? fallback_abs : "";
 }
 #endif
 
@@ -1909,6 +1946,16 @@ DAS_API bool jit_resolve_dynamic_module_path_for_test_ ( const char * rel_path,
     return true;
 }
 
+DAS_API bool jit_resolve_native_path_dst_for_test_ ( const char * rel_pattern,
+                                                    const char * fallback_abs,
+                                                    char * out_buf,
+                                                    size_t buf_size ) {
+    das::string r = resolve_native_path_dst(rel_pattern, fallback_abs);
+    if ( r.size() + 1 > buf_size ) return false;
+    memcpy(out_buf, r.c_str(), r.size() + 1);
+    return true;
+}
+
 // Resolve and load a dynamic module. Used by standalone exes (emitted by
 // inject_main in llvm_exe.das).
 DAS_API void * jit_register_dynamic_module_resolve ( const char * rel_path,
@@ -1930,7 +1977,18 @@ DAS_API void jit_finalize_dynamic_modules () {
     }
 }
 
+// ABI shim: -exe binaries emitted before the resolving form link this runtime dynamically
+// and still import the 3-argument name.
 DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
     das::register_native_path(mod_name, src_path, dst_path, nullptr, nullptr);
+}
+
+// Emitted by inject_main (llvm_exe.das) for every native path the program compiled
+// against: the destination is re-rooted onto <exe_dir> / <das_root> at run time, so a
+// bundle built elsewhere finds its own modules/ instead of the build machine's.
+DAS_API void jit_register_native_path_resolve ( const char * mod_name, const char * src_path,
+                                                const char * rel_dst, const char * fallback_abs_dst ) {
+    das::string chosen = resolve_native_path_dst(rel_dst, fallback_abs_dst);
+    das::register_native_path(mod_name, src_path, chosen.c_str(), nullptr, nullptr);
 }
 }
