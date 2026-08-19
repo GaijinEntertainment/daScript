@@ -762,7 +762,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | failed_structure_field_already_declared.das | Duplicate struct field name | **expect** `30115` |
 | failed_structure_not_found_ambiguous.das | Ambiguous struct name — same name in two modules | **expect** `30302` |
 | super.das | `super` keyword — parent constructor calls, parent method calls, 3-level hierarchy | |
-| super_finalize.das | `delete super.self` — base-class finalizer chain (class, 3-level, free struct finalizer) | |
+| super_finalize.das | `delete super.self` — base-class finalizer chain (class, 3-level, free struct finalizer); compiles under `daslib/ast_verify` so the lowered cast keeps its source locations | |
 | cant_delete_super_self.das | `delete super.self` misuse — outside finalizer, no base, wrong arg shape | **expect** `31002:6` `30305:6` `30503:6` |
 | table.das | Table tombstone handling and iteration | |
 | table_get_key.das | `get_key(table, value)` — retrieve key by iterator value for int↔float, string↔int, const table, tombstones, empty, single entry | |
