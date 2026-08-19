@@ -1,16 +1,19 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
-doc: `CLAUDE.md` (this folder's). Planned work: `../THINKING.md`.
+doc: `CLAUDE.md`. Planned work: `../THINKING.md`.
 
-**Every PR runs the model-free tests here, plus every test here the change reaches — never the
-whole directory.** A change reaches a test when it alters what code does at runtime — through
+**Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches — never
+the whole directory.** A change reaches a test when it alters what code does at runtime — through
 the test file, a shared helper, or engine code the test exercises; an identifier- or
 comment-only edit reaches none.
 
-**A test file listed in `run.das` runs only through `run.das`, scoped with `--arm` (the runner
-refuses `--full`); dastest invoked directly on such a file is a defect. Every other test in
-this folder runs under dastest.**
+**A test file that runs (or skips its model arms) with no model file present is listed in
+`run.das`'s `model-free` suite in the same change it is added.**
+
+**A test file in a `run.das` model suite (every suite but `model-free`) runs only through
+`run.das`, scoped with `--arm` (the runner refuses `--full`); dastest invoked directly on such
+a file is a defect. A `model-free` file runs through the runner or under plain dastest.**
 
 **Every test RUN runs under `-jit`** — never the interpreter, never AOT. A compile-only CI lane
 passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
@@ -27,17 +30,16 @@ is added, corrected when what it covers is renamed or re-scoped.
 **Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
 
-**Weakening `test_env_registry.das` is a defect.** It enforces the knob contract: no raw
-environment access outside `../dasllama/dasllama_env.das` (declare an `[EnvConfig]` field and
-read `g_env_*.<field>`; dynamic names go through `env_is_set` / `env_value_of`), no re-declared
-env helper, and a checked-in `../ENVIRONMENT.md` matching what the declarations render
-(regenerate with `../harness/gen_env_doc.das`).
+**Weakening `test_env_registry.das` is a defect.** It enforces the knob contract that
+`../ENVIRONMENT.md` describes.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect.
 
 **A skip gate keys on a device capability or mode predicate, never on the existence of a runtime
-artifact.** An artifact gate goes permanently false when its producer moves.
+artifact — a file a build or a previous run produced (a dump, a mint, a generated binary); a
+stocked model file is a model gate.** An artifact gate goes permanently false when its producer
+moves.
 
 **A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
 gate, not the iteration loop. Here the spelling is `model_available` (`_model_tier.das`); a
@@ -57,8 +59,8 @@ naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference id
 round-trip.**
 
 **Every test that compares generated tokens, ids, or logits logs the decoded text for BOTH
-sides as `eyeball:` lines.** A red, or a suspicious green, must be readable as text in the
-log, not only as an id or float difference.
+sides (`log_gen_texts` in `_model_tier.das`, or one line per side).** A red, or a suspicious
+green, must be readable as text in the log, not only as an id or float difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 

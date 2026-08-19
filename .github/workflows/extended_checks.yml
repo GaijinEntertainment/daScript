@@ -265,8 +265,9 @@ jobs:
         path: ${{ runner.temp }}/sccache
         key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
 
-    - name: "Install ast-grep"
-      run: npm install -g @ast-grep/cli
+    - name: "Install ast-grep and the tree-sitter CLI"
+      # tree-sitter-cli: tree-sitter-daslang/REVIEW.das regenerates the grammar and runs its corpus
+      run: npm install -g @ast-grep/cli tree-sitter-cli
 
     - name: "Run dasgen and check generated files are up to date"
       run: cmake --build ./build --config Release --target check_dasgen

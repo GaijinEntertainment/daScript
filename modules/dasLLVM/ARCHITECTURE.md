@@ -46,8 +46,11 @@ cached` line prints unconditionally beside the split announce, and per-partition
 Code that EMITS machine code — the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` —
 is IR generation, target-machine setup, the `[llvm_code]` generator bodies, and the jit call
 ABI: the generated function signatures, name scheme, prologue, and the externs the install
-phase binds. The authoritative file set is `EMITTER_FILES` in
-`tests-cpp/small/test_jit_emitter_pin.cpp` (repo root).
+phase binds. The file set that carries this surface is `EMITTER_FILES` in
+`tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); the pin test makes every text change to
+one of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owed when the
+emitted code for identical inputs can differ — a comment, a nolint, or a same-value rewrite
+inside an emitter file re-pins without a bump.
 
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
 pipeline and the DLL path's codegen-side target machine. `write_exe` and AOT-object emission

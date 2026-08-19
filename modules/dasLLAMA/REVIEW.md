@@ -5,9 +5,12 @@
 
 **`tests/`, `benchmarks/`, and `performance/` carry their own checklists, and they govern by
 KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
-module's `tests/REVIEW.md`; a bench-rig or lab change answers to `benchmarks/REVIEW.md`; an
-exchange, provenance-manifest, or measuring-rig change answers to its `performance/REVIEW.md`.
-A kind-routed file applies BOTH its checklist and this one.
+module's `tests/REVIEW.md` — and so does a new GPU kernel, a widened public signature, or a
+new family (pre-tokenizer, ASR, thinking or tool format), whose test obligations live there; a
+timing rig under `benchmarks/` or `harness/`, and any kernel A/B lab, answers to
+`benchmarks/REVIEW.md`; a rig that writes `performance/records/` or its manifests, and an
+exchange or provenance-manifest change, answers to `performance/REVIEW.md`. A kind-routed file
+applies BOTH its checklist and this one.
 Kind-routed companions sit beside this file: a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
 or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
@@ -107,8 +110,7 @@ harness and flags that produced it, on the same line.
 permuting belong to the mint. A transform on the go-live path is a defect.
 
 **A missing `.dlim` is minted first, and the model is served from what was minted.** A load
-path that falls back to reading weights out of the source file into a live carrier is a defect,
-as is one serving a carrier the mint did not produce.
+path serving a carrier the mint did not produce is a defect.
 
 **There is one way to mint, and one way to load.** A weight carrier becomes live through
 `build_image` and `parse_image` in `dasllama/dasllama_image.das`. Reading weights into a live carrier,
@@ -220,7 +222,7 @@ non-zero.
 **Tool wire text — building or parsing — is produced only in `dasllama/dasllama_tools.das`.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
-miniaudio decode module).
+miniaudio decode module).**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
 Benchmarks, harnesses, and tests decode their own fixtures.

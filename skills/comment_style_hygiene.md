@@ -87,9 +87,9 @@ group, within the cap.
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
 sits directly above the `if`, two lines at most. A hint inside the body never gets its
-own line: a note about one statement rides that statement's line (`pass` included); a
-note spanning several statements is about the branch — it belongs on the `if` line or
-in the WHY above. A self-describing predicate — a named helper, a compare against a named
+own line: a note about one statement rides that statement's line (`pass` included) — when
+that line has no room, it sits directly above the statement; a note spanning several
+statements is about the branch — it belongs on the `if` line or in the WHY above. A self-describing predicate — a named helper, a compare against a named
 constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
 narration. The comment must say something the identifiers don't.
 

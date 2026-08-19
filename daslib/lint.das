@@ -1233,8 +1233,6 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0) branch_depth--
         return <- expr
     }
-    // NOTE on lambda capture: by-copy/clone captures (the daslang default) read
-
     // --- LINT011: int-literal-to-float precision loss ---
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
         if (!noLint && genericDepth == 0 && expr.inexactFloatPromotion) {

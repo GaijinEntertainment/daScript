@@ -2825,6 +2825,29 @@ silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
 
+STYLE035 — numeric variable compared with a cast character literal
+===================================================================
+
+Character literals are ``int``. A non-``int`` numeric variable compared with a
+built-in cast of one — ``b == uint8('(')``, ``c == uint('\n')`` — pays a cast
+at every compare to work around the variable's own declaration. Declare the
+variable ``int`` and compare with the literal directly.
+
+.. das-doc: given var bytes : array<uint8>
+.. code-block:: das
+
+    // Bad
+    var b : uint8 = bytes[0]
+    if (b == uint8('(')) { print("paren\n") }
+
+    // Good
+    let c : int = int(bytes[0])
+    if (c == '(') { print("paren\n") }
+
+The rule looks through the cast to a plain variable read of the cast's type;
+fields, indexes, and call results are not reported — the fix changes the
+variable's declaration, and there is no declaration to change for those.
+
 STYLE036 — inert type contract on a cast target
 ================================================
 

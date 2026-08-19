@@ -111,10 +111,11 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 ## Model-free / no-arm tests
 
-Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
-New suite-less files register on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is
-accurate in the same change"); suite members register in their suite's arm list via `run.das`
-instead.
+Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag — and as a set
+through `run.das -- --suite model-free`, the per-PR gate (every file that runs, or skips its
+model arms, with no model present is in that list). New suite-less files register in that
+suite's list AND on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is accurate in
+the same change"); suite members register in their suite's arm list via `run.das` instead.
 Current note: `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` — model-free, expected-compile-failure: the lint's tree
@@ -188,8 +189,9 @@ agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), 
 `test_cpu_prefill_tripwire.das` — the CPU-prefill guard: an undeclared prefill trips, span
 and causal alike (the metal rail serves spans, so a CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
-cannot live in test_attn_span — that file arms it in `[init]`). Metal-capable builds only;
-no suite arm.
+cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
+runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
+only; plain dastest only.
 `test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
 `DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
 span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
