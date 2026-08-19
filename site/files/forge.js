@@ -174,7 +174,7 @@ def main() {
         btn.addEventListener('click', () => {
             const code = heroEditor ? heroEditor.getValue() : '';
             const url = '/playground/#code=' + encodeURIComponent(code);
-            window.open(url, '_blank');
+            window.open(url, '_blank', 'noopener');
         });
     }
 
