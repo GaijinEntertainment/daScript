@@ -166,6 +166,7 @@ SET(DAS_UTILS_TO_TEST
     internal/hygiene
     internal/ast-fuzz
     internal/requirefix
+    internal/test-release
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

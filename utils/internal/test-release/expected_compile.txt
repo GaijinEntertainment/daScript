@@ -1,0 +1,40 @@
+# test-release expected compile failures — a RULING per line, not a mute button.
+
+# --- ship defects awaiting repo fixes (RC2) ---
+
+# --- daspkg-package tier: compile only after `daspkg install` (planned daspkg phase) ---
+examples/benchmarks/sql/_common.das needs duckdb/postgres provider packages
+examples/benchmarks/sql/_sql_families.das needs duckdb/postgres provider packages
+examples/benchmarks/sql/array.das needs duckdb/postgres provider packages
+examples/benchmarks/sql/duckdb.das needs duckdb/postgres provider packages
+examples/benchmarks/sql/postgres.das needs duckdb/postgres provider packages
+examples/benchmarks/sql/sqlite.das needs duckdb/postgres provider packages
+examples/crash/crash_kinds.das needs its crash package installed
+examples/crash/main.das needs its crash package installed
+examples/daStrudel/sfx_lab/main.das daspkg exercise: needs the implot package
+examples/daspkg/daspkg-build-example/main.das daspkg tutorial project — resolves after its own install flow
+examples/daspkg/daspkg-example/main.das daspkg tutorial project — resolves after its own install flow
+examples/daspkg/daspkg-version-1/main.das daspkg tutorial project — resolves after its own install flow
+examples/daspkg/daspkg-version-2/main.das daspkg tutorial project — resolves after its own install flow
+examples/daspkg/packages/daspkg-example-mixed/daslib/smooth.das daspkg tutorial package internals
+examples/games/sequence/main.das needs the cards package
+
+# --- integration-scaffold tier: the tutorial has the user BUILD the native module ---
+tutorials/integration/c/03_binding_types.das requires the native scaffold the tutorial builds
+tutorials/integration/c/04_callbacks.das requires the native scaffold the tutorial builds
+tutorials/integration/c/05_unaligned_advanced.das requires the native scaffold the tutorial builds
+tutorials/integration/c/12_ecs.das requires the native scaffold the tutorial builds
+tutorials/integration/c/ecs_macro.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/03_binding_functions.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/04_binding_types.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/05_binding_enums.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/06_interop.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/07_callbacks.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/08_methods.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/09_operators_and_properties.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/10_custom_modules.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/11_context_variables.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/12_smart_pointers.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/15_custom_annotations.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/19_class_adapters.das requires the native scaffold the tutorial builds
+tutorials/integration/cpp/23_handle_registry.das requires the native scaffold the tutorial builds
