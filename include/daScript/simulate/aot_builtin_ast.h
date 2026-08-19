@@ -482,6 +482,7 @@ namespace das {
     DAS_CC_API bool addModuleStructure ( Module * module, StructurePtr & stru );
     DAS_CC_API bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr );
     DAS_CC_API void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
+    DAS_CC_API void ast_sticky_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API void ast_style_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_CC_API ExpressionPtr ast_get_const_expr ( ProgramPtr prog, ExpressionPtr expr, Context * context, LineInfoArg * lineInfo );
