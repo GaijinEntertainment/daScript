@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true
 
 require dastest/testing_boost
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

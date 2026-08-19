@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Detector harness for the Llama-3 BPE tokenizer, run against the in-repo
 // ggml-vocab-llama-bpe fixture (the exact tokenizer + .inp/.out round-trip

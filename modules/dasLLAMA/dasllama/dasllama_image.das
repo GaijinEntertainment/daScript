@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_image shared public
 options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive schema
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/apply
@@ -220,7 +222,7 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
 }
 
 //! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
-def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
+def dlim_inventory_(gguf_path : string) : array<DlimImageInfo> {
     var out : array<DlimImageInfo>
     var st : FStat
     if (!stat(gguf_path, st)) {
@@ -247,7 +249,7 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
 //! identities fold other bake contexts' backend/winner state — this save proves nothing there.
 def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8") {
     let lane = "{quant}#{tag}"
-    var inv <- dlim_inventory(source_path)
+    var inv <- dlim_inventory_(source_path)
     var removed = 0
     var freed = 0l
     for (im in inv) {
@@ -270,9 +272,9 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
 //! The dlim GC beside `gguf_path`: everything non-CURRENT goes by default — BROKEN,
 //! version-stale, AND valid other-identity siblings (old identities pile up across re-mints).
 //! ``keep_other = true`` is the opt-out for a bake deliberately carried from another box.
-def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
+def dlim_clean_(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
-    var inv <- dlim_inventory(gguf_path)
+    var inv <- dlim_inventory_(gguf_path)
     var foreign_kept = 0
     for (im in inv) {
         r.total++
@@ -1045,7 +1047,7 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     // the image's planes are packed for the load backend — activate it before any kernel runs
     // (same select the gguf loader does; the identity check below then names that backend)
-    select_matmul_backend_for_load()
+    select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
     if (read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)
             || read_u32(bp, 8l) != uint(IMAGE_PAGE)) {
@@ -1384,8 +1386,8 @@ def cache_via_image(var m; var out; img : string; tag : string = ""; quant : str
 //! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
 //! build that cannot produce an image panics rather than handing anything back.
 def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") : bool {
-    return cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
-                                                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
+    return cache_via_image_staged_hooked(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                                var w : ImgWriter; var sections : array<ImgSection>) {
         return false
     }
 }
@@ -1393,8 +1395,8 @@ def cache_via_image_staged(var st; var out; img : string; tag : string = ""; qua
 //! cache_via_image_staged with the walk's plane hook exposed plus a pre-sized `extra` for the
 //! bytes the hook streams — the streamed mints serve their big planes straight from the source
 //! mapping. True only when the FILE was written: only then may the caller reap its lane.
-def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag : string; quant : string;
-                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64; tag : string; quant : string;
+                                  plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, plane)) {

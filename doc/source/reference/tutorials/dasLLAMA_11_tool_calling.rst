@@ -82,8 +82,21 @@ The loop generalizes: parse every reply, and while it carries calls, run them
 and ``add_tool_results``; when it carries none, the content is the answer.
 Hosts that key results by call id use the named overload —
 ``add_tool_results(chat, results, names)`` — so the name-spelling families
-(harmony, gemma-4) pair results correctly even out of call order. A stateless
-server replays a past call turn with ``render_assistant_calls``.
+(harmony, gemma-4) pair results correctly even out of call order.
+
+A stateless server replays a past call turn without running the model:
+``render_assistant_calls`` appends the exact tokens that assistant turn
+prefilled — its text plus the verbatim call objects — onto a renderer chat
+(tutorial 02's ``render_assistant``, for a turn that called tools):
+
+.. das-doc: given var tr = ToolReply()
+.. code-block:: das
+
+   var replay = create_chat_renderer(m, "")
+   add_user(replay, "What is the weather in Paris right now?")
+   var call_objs <- [for (c in tr.calls); "\{\"name\":\"{c.name}\",\"arguments\":{c.args}}"]
+   var toks : array<int64>
+   render_assistant_calls(m, replay, tr.content, call_objs, toks)   // the turn, as tokens
 
 Five wire formats ride the same verbs: hermes (Qwen), Harmony (gpt-oss),
 gemma-4's bracketed DSL, Mistral's ``[TOOL_CALLS]`` arrays, and Llama-3's

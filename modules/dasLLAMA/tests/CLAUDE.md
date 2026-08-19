@@ -115,7 +115,16 @@ Suite-less files run under plain dastest (still `-jit`) — no arm, no family ta
 New suite-less files register on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is
 accurate in the same change"); suite members register in their suite's arm list via `run.das`
 instead.
-Current note: `test_think_split.das` — the reply-side reasoning matcher, model-free: every
+Current note: `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
+facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
+`failed_dasllama_lint_sidedoor.das` — model-free, expected-compile-failure: the lint's tree
+guard trips on a path-require resolving into modules/dasLLAMA, name prefix or not.
+`test_dasllama_lint_escape.das` — model-free: `options _dasllama_internal = true` admits a
+direct engine require (the lint's escape hatch).
+`test_dasllama_lint_contracts.das` — model-free: the lint's ALLOWED set (a facade-only program
+with no escape compiles; an internal require does not) via spawned compiles, and
+`load_audio_16k_mono`'s empty-on-failure contract.
+`test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs
 serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
@@ -286,9 +295,12 @@ with `-jit` — no runner, no arms, no models.
 Every `[test]` file requiring a `dasllama/*` module outside this folder, each with its reason:
 - `utils/dasllama-server/test_openai_server*.das` — require the server by bare same-dir name
   (the hyphenated directory is unreachable by path require).
-- `utils/dasllama-server/test_exchange_client.das` — requires its subject by relative path,
-  but coordinates its fixed test port with the serving-leg suites' ports in that directory
-  (see its `TEST_PORT` note).
+- `utils/dasllama-server/test_exchange_client.das` — requires `dasllama/dasllama_exchange` by
+  registered name (nothing pins it to that directory); it stays beside the server suites
+  because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).
+- `modules/dasLLVM/tests/test_grid.das`, `test_tune.das`, `test_tuned.das` — the tune
+  framework's own tests; they require `dasllama/dasllama_tune` (the tuner contract) and
+  live with dasLLVM under `modules/dasLLVM/REVIEW.md`.
 - `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` — the bench self-check, requiring
   `matmul_variants` by bare same-dir name.
 

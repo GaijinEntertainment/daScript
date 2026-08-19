@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 require daslib/module_path
 require daslib/command_line

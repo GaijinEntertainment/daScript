@@ -3,6 +3,7 @@ options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _function_length = 0        // one MSL kernel body per lab twin — barrier/register coupled, no seam
 options _cyclomatic_complexity = 0  // the lab runner is a flat shape/arm ladder
+options _dasllama_internal = true
 
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost

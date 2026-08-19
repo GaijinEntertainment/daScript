@@ -1,9 +1,11 @@
 options gen2
 options no_aot = true  // macro module — compile-time only, never AOT-compiled (like dasllama_par)
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_tune shared public
 
+require dasllama/dasllama_lint public
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost

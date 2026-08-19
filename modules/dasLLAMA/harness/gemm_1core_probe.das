@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options _jit_fast_math = true   // match the end-to-end config AND ggml's -O3 FP laxity (kernel-to-kernel fairness)
+options _dasllama_internal = true
 
 // RAW single-core kernel throughput — no threading, no pipeline. The production
 // matmul_q8q8_batch runs INLINE on the calling thread: target_chunk_work is pushed to infinity,

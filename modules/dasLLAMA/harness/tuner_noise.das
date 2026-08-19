@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 module tuner_noise shared public
 
@@ -8,6 +9,7 @@ module tuner_noise shared public
 //! dot kernel at the real round shape, compute the cv, and REFUSE to tune above the threshold.
 //! A noisy end-probe means the sidecar is not written at all.
 
+require dasllama/dasllama_lint public
 require llvm/daslib/llvm_tune
 require dasllama/dasllama_version  // DASLLAMA_VERSION — stamped into sidecar provenance (zero-require leaf)
 require tuner_phrases  // provenance phrase leaf — render-charset-pinned by test_exchange_schema

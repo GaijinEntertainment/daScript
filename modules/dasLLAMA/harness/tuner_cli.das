@@ -8,6 +8,7 @@ module tuner_cli shared public
 //! the debugging concession is `daspkg release --quick`, which accepts the existing sidecar
 //! and races nothing.
 
+require dasllama/dasllama_lint public
 require daslib/clargs
 
 [CommandLineArgs]

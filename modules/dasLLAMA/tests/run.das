@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 // The ONLY sanctioned way to run the dasLLAMA Metal suites (see modules/dasLLAMA/tests/CLAUDE.md).
 // Enforces the iteration discipline that keeps suite walls honest: --arm (filtered iteration,

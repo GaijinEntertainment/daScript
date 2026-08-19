@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 module dasllama_vulkan_dispatch shared private
 
+require dasllama/dasllama_lint public
 require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost   // make_expression_block / add_global_var / force_at

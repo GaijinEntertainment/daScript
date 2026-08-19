@@ -6,19 +6,20 @@ doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 A tune-sidecar emission change lives in the dasLLVM tune rail and answers to
 `modules/dasLLVM/REVIEW.md`.
 
-**`exchange_schema.das` is the single validator for exchange submissions — record stores and
-tune sidecars — and stays engine-free.** A second validator, or a dasLLAMA/dasLLVM require
-added to it, is a defect.
+**`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions —
+record stores and tune sidecars — and stays engine-free: no require of a module that compiles
+engine code in (a compile-time macro module is not engine code).** A second validator, or an
+engine require added to it, is a defect.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
-`exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
+`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
 it does not know, so an unvalidated field ships silently.
 
 **Weakening `modules/dasLLAMA/tests/test_exchange_schema.das` or
 `modules/dasLLAMA/tests/test_bench_records_schema.das` — both round-trip the real
 `write_bench_records` output — is a defect.**
 
-**`exchange_client.das` is the single exchange client — every HTTP call to the sidecar exchange
+**`../dasllama/dasllama_exchange.das` is the single exchange client — every HTTP call to the sidecar exchange
 (lookup, download, submit) goes through it.** A second HTTP path is a defect.
 
 **Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the

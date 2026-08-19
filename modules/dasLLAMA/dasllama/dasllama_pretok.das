@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_pretok shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_unicode
 
 // ===== BPE pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3 / _qwen2 / _qwen35) =====

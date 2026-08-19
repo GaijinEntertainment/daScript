@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_math_gen shared public
 options _function_length = 0   // kernel generator bodies are the domain shape
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails of the s16 twins

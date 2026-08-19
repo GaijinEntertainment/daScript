@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gguf shared public
 
+require dasllama/dasllama_lint public
 require daslib/array_boost
 require strings
 require math                        // sqrt/abs/clamp — the Q5_K encoder's per-sub-block fit

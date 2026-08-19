@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 //! dasLLAMA's environment knobs, declared as `[EnvConfig]` structs (daslib/clargs) — one struct
 //! per area, one field per variable, the field initializer as the default and the doc line on the
@@ -18,6 +19,7 @@ options _comment_hygiene = true
 
 module dasllama_env shared public
 
+require dasllama/dasllama_lint public
 require daslib/clargs
 require daslib/env_registry public
 require daslib/option public

@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gemm_schema shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_kqformat public   // the format taxonomy + typed stride truth these int-id forms delegate to
 
 // The one place the Q8 interleaved-weight layout is defined (gemm_generator_plan.md part 3):

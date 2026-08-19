@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 require daslib/jobque_boost
 require llvm/daslib/aarch64_neon
 require dasllama/dasllama_env

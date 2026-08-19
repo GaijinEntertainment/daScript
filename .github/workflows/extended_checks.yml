@@ -355,6 +355,9 @@ jobs:
 
     - name: "Run ast-verify on changed .das files"
       if: matrix.target == 'linux'
+      # a bare exit 143 with no finding is the runner killing the step (memory: each item is a
+      # whole-engine compile under the verifier) - the explicit deadline makes that a named failure
+      timeout-minutes: 90
       run: |
         set -eux
         BASE_REF="${{ github.event.pull_request.base.ref }}"
@@ -363,19 +366,27 @@ jobs:
         # canary: macro-PRODUCED AST is only verified where a macro expands, and the tree-wide
         # sweep is nightly-only - so the heaviest qmacro consumer verifies on every PR
         CHANGED+=("tests/linq/test_linq_fold.das")
-        rc=0
-        for f in "${CHANGED[@]}"; do
-          case "$(basename "$f")" in
-            cant_*|failed_*|invalid_*) continue ;;   # negative tests compile-fail by design
-          esac
-          # -dry-run: compile and simulate, never execute. Only an `AST verify` line is a failure;
-          # a compile error here belongs to whatever gate owns that file.
-          if $BIN/daslang -dry-run --ast-verify "$f" 2>&1 | grep -F "AST verify"; then
-            echo "ast-verify reported on $f"
-            rc=1
-          fi
-        done
-        exit $rc
+        # Same helper shape as the nightly tree sweep below: parallel, one process per file,
+        # a per-file timeout. Only an `AST verify` line is a failure; a compile error belongs
+        # to whatever gate owns that file; negative tests (cant_/failed_/invalid_) skip. A
+        # sweep-shaped PR can touch hundreds of engine files and each verify recompiles that
+        # engine - run serially that is hours, which is what this step once did.
+        cat > /tmp/ast_verify_changed.sh <<'EOS'
+        #!/bin/bash
+        f="$1"
+        case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
+        out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify "$f" 2>&1 || true)
+        if grep -q 'AST verify' <<< "$out"; then
+          echo "ast-verify reported on $f"
+          grep 'AST verify' <<< "$out" | sort -u | head -5
+          exit 1
+        fi
+        EOS
+        chmod +x /tmp/ast_verify_changed.sh
+        export BIN
+        # two in flight, not nproc: four concurrent engine compiles under the verifier exceed the
+        # runner's memory and the step dies with a bare 143
+        printf '%s\0' "${CHANGED[@]}" | xargs -0 -P 2 -n 1 /tmp/ast_verify_changed.sh
 
     - name: "Test daslang_static"
       run: |
@@ -498,6 +509,17 @@ jobs:
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_env_registry.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLVM/tests/llvm_env_registry.das
+
+    - name: "Test dasllama facade lint"
+      # The DASLLAMA001 smokes: a direct engine require kabooms (expected-compile-failure
+      # file), and the per-file options escape admits one. Model-free, sub-second.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_require.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_escape.das
+        $BIN/daslang -jit _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasLLAMA/tests/test_dasllama_lint_contracts.das
 
     - name: "Test dasweb-playground"
       # The daslang.io sample-store backend. Its suites live in-dir (a

@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 // Dump the full transcription fingerprint (per-segment t0:t1[token ids]) for one
 // (model, wav) in both q8 and fp32-pin modes — pre/post A/B rail for decode changes.

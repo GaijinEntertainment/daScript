@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 // Whisper phase-0 reuse gate: session scratch (ds.mel/win/prompt/toks) is reused across
 // transcribes — every leg on a REUSED session must fingerprint-match a fresh session on the

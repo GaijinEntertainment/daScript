@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_metal_kernels shared public
 
+require dasllama/dasllama_lint public
 require math
 require daslib/math_bits   // uint_bits_to_float in the mx4 MoE GEMV (msl_emit as_type)
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

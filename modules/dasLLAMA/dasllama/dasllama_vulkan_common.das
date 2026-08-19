@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_vulkan_common shared public
 options _cyclomatic_complexity = 0   // the init/teardown state walks are the domain shape
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -1560,7 +1562,7 @@ def find_stream_group(w0 : int64; fmt : int) : int {
 def find_stack(w0 : int64; fmt : int; who : string) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
-        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) - stale route mark, or a model swapped in without moe_gpu_drop_model()")
+        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) - stale route mark, or a model swapped in without moe_gpu_drop_model_()")
     }
     return i
 }

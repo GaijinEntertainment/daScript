@@ -1,9 +1,11 @@
 options gen2
 options no_aot = true  // macro module — compile-time only, never AOT-compiled (like jobque_boost)
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_par shared public
 
+require dasllama/dasllama_lint public
 require jobque public
 require daslib/jobque_boost public  // emitted code uses parallel_for / invoke
 require math public                 // emitted code uses min (indexed fifo arm)

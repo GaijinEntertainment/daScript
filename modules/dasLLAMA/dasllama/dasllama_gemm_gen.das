@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gemm_gen shared private
 
+require dasllama/dasllama_lint public
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_jit_common

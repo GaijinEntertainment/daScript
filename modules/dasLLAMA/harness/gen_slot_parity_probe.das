@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap = true
+options _dasllama_internal = true
 
 // Production-SLOT parity for the arm64-gen backend: portable reference vs the gen
 // backend through the real dispatch rail — pin_kernel_backend + repack_q8q8_weight (the

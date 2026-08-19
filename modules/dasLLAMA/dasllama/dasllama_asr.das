@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_asr shared public
 options _function_length = 0   // the two sniffing loaders mirror the format zoo, arm by arm
 
+require dasllama/dasllama_lint public
 require math
 require daslib/fio
 require strings

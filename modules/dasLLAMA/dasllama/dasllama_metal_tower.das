@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_metal_tower shared public
 
+require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_env
 require dasllama/dasllama_common

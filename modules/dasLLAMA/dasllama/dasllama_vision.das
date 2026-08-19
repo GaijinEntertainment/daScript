@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_vision shared public
 
+require dasllama/dasllama_lint public
 require math
 require daslib/fio
 require dasllama/dasllama_env

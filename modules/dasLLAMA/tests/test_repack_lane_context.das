@@ -1,5 +1,6 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_par
@@ -24,7 +25,7 @@ def private fill_pattern(var q : array<int8>; var s : array<float>) {
 [test]
 def test_repack_slot_is_context_proof(t : T?) {
     t |> run("gen repack slot: pool-lane bytes == main-thread bytes") @(t : T?) {
-        select_matmul_backend_for_load()
+        select_matmul_backend_for_load_()
         if (!kernel_backend_needs_repack(active_kernel_backend())) {
             t |> success(true, "active backend has no repack - nothing to prove on this box")
             return

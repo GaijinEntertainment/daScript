@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_sampling shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // eval_embd_: the embedding-input forward the generator drives
 require dasllama/dasllama_math   // softmax/softcap on the logits row

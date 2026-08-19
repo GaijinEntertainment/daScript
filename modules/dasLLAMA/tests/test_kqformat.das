@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 // Pins the K-quant format taxonomy (dasllama_kqformat): enum int values, the stride truth
 // against LITERAL byte counts (not read back through the table), the predicates, and the

@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 expect 20800   // the lens refuses this fixture BY DESIGN — see test_metal_role_infer.das
 

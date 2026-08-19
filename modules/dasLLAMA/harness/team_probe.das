@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap = true
+options _dasllama_internal = true
 
 // team_probe — the dispatch-overhaul constants probe (gemm_generator_plan.md, dispatch arc).
 // Three measurements, all under -jit, sweeping T EXTERNALLY via DAS_JOBQUE_THREADS:

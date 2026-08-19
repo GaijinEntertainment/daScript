@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_ple shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_moe   // moe_select/moe_experts_apply — gemma4's router and expert dispatch
 require dasllama/dasllama_blocks   // the gemma4 MoE prefill shares the dense/grouped block helpers

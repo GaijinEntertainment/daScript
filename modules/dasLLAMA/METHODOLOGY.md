@@ -122,7 +122,7 @@ ratios are derived when the site renders, never stored. The store lives at
 `performance/records/<box>.json`; `performance/profile_common.das` is its authoritative reader
 and writer (`BenchRun`, `read_bench_records` / `write_bench_records`), so every tool that
 touches it goes through the same schema. Documents arriving from outside — community
-submissions to the ladder service — are gated by `performance/exchange_schema.das`, an
+submissions to the ladder service — are gated by `dasllama/dasllama_exchange_schema.das`, an
 engine-free validator of the same record shape plus the tune-sidecar form;
 `tests/test_exchange_schema.das` keeps it pinned to what the writers emit.
 

@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // each test frees its model/scheduler before the next loads
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_scheduler   // the scheduler under test

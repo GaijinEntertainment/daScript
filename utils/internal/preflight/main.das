@@ -23,6 +23,7 @@ require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
 require strings
+require math
 require ../../common/parallel_workers.das
 require ../../common/git_signature.das
 require ../../../dastest/worker_policy.das
@@ -567,6 +568,106 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         detail = "{length(files)} file(s) clean on all three rails (host, linux-mirror, exe)")
 }
 
+// ===== ast-verify on changed .das (mirrors extended_checks "Run ast-verify on changed .das files") =====
+
+struct private VerifyItem {
+    index : int
+    path : string
+}
+
+struct private VerifyResult {
+    index : int
+    findings : string   // the `AST verify` lines, "" when clean
+}
+
+// One process per file, `workers` in flight, `timeout` seconds each - the CI step's contract.
+// A compile error is not a failure here (that gate belongs to whoever owns the file); only an
+// `AST verify` line is.
+def private run_verify_workers(daslang : string; files : array<string>; workers : int; timeout : float) : array<VerifyResult> {
+    let n = length(files)
+    var results : array<VerifyResult>
+    results |> resize(n)
+    return <- results if (n == 0)
+    let nw = clamp(workers, 1, n)
+    with_channel(n) $(inCh) {
+        with_channel(n) $(outCh) {
+            with_job_status(nw) $(done) {
+                for (_t in range(nw)) {
+                    new_thread <| @ {
+                        for_each_clone(inCh) $(item : VerifyItem#) {
+                            var out : string
+                            let path = string(item.path)
+                            let argv <- [daslang, "-dry-run", "--ast-verify", path]
+                            unsafe(popen_argv(argv, timeout, $(f) {
+                                if (f != null) {
+                                    out := fread(f)
+                                }
+                            }))
+                            let hits <- [for (line in split(out, "
+")); strip(line); where find(line, "AST verify") >= 0]
+                            outCh |> push_clone(VerifyResult(index = item.index, findings = join(hits, "
+")))
+                            outCh |> notify()
+                        }
+                        inCh |> release()
+                        outCh |> release()
+                        done |> notify_and_release()
+                    }
+                }
+                for (i in range(n)) {
+                    inCh |> push_clone(VerifyItem(index = i, path = files[i]))
+                    inCh |> notify()
+                }
+                for (r in each_clone(outCh, type<VerifyResult>)) {
+                    if (r.index >= 0 && r.index < n) {
+                        results[r.index].index = r.index
+                        results[r.index].findings := r.findings
+                    }
+                }
+                done |> join()
+            }
+        }
+    }
+    return <- results
+}
+
+def gate_ast_verify(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    // the CI step's set: changed .das minus the negative fixtures, plus the qmacro canary
+    var files : array<string>
+    for (f in ctx.changed_das) {
+        let base = base_name(f)
+        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_"))
+        files |> push(f)
+    }
+    if (empty(files)) {
+        return GateResult(name = "ast-verify", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no .das files changed vs {ctx.base}")
+    }
+    files |> push("tests/linq/test_linq_fold.das")
+    // each item is a whole-engine compile under the verifier (30-80s, hundreds of MB), so the
+    // width is physical cores halved, not hardware threads - -j caps it further, never raises it
+    let heavy = max(1, get_total_hw_cores() / 2)
+    let workers = compute_worker_count(length(files), ctx.jobs > 0 ? min(ctx.jobs, heavy) : heavy)
+    let results <- run_verify_workers(ctx.daslang, files, workers, 300.0)
+    var red = 0
+    let output = build_string() $(w) {
+        for (i in range(length(files))) {
+            continue if (empty(results[i].findings))
+            red ++
+            w |> write("=== {files[i]} ===
+{results[i].findings}
+")
+        }
+    }
+    if (red > 0) {
+        return GateResult(name = "ast-verify", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "{red} of {length(files)} file(s) report AST verify findings (skills/das_macros.md)", output = output)
+    }
+    return GateResult(name = "ast-verify", status = GateStatus.Pass, seconds = seconds_since(t0),
+        detail = "{length(files)} file(s) verify clean ({workers} workers)")
+}
+
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp) && ctx.changed_hdr == 0) {
@@ -1104,6 +1205,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
+        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify on changed .das (parallel, 300s/file; mirrors CI) - only an AST verify line fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
@@ -1263,6 +1365,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_lint(ctx)
             } elif (info.name == "hash-refs") {
                 r <- gate_hash_refs()
+            } elif (info.name == "ast-verify") {
+                r <- gate_ast_verify(ctx)
             } elif (info.name == "cpp-syntax") {
                 r <- gate_cpp_syntax(ctx)
             } elif (info.name == "dasgen") {

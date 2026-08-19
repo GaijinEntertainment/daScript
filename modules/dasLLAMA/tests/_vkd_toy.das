@@ -1,7 +1,9 @@
 options gen2
+options _dasllama_internal = true
 
 module _vkd_toy shared public
 
+require dasllama/dasllama_lint public
 require spirv/spirv_shader
 require vulkan
 require vulkan/vulkan_boost

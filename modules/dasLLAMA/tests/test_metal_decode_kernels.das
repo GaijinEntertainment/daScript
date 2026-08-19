@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget
 options indenting = 4
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode kernel set (Apple builds)

@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap   // explicit deletes below — the model frees before the test exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
@@ -54,7 +55,7 @@ def private same_ids(a, b : array<int64>; a0, n : int) : bool {
 
 struct private SwapResult {
     armed0 : bool       // the resident driver armed at load (false = skip the rest, no device)
-    dropped_off : bool  // moe_gpu_drop_model deactivated it
+    dropped_off : bool  // moe_gpu_drop_model_ deactivated it
     rearm_on : bool     // re-arm re-activated it
     a_par : bool        // hydrate + drop + CPU continuation stayed on the control trajectory
     b_par : bool        // post-re-arm fresh trajectory matches token-for-token
@@ -68,8 +69,8 @@ def private slot_swap_cycle(path : string) : SwapResult {
     var r = SwapResult()
     var want = GpuTierWant()
     want.auto_tier = true
-    set_gpu_tier_want(want)
-    moe_gpu_tier_arm()
+    set_gpu_tier_want_(want)
+    moe_gpu_tier_arm_()
     with_job_que() {
         setup_dasllama_jobque_()
         var tr <- load_model_(path, QuantMode.q8)
@@ -84,8 +85,8 @@ def private slot_swap_cycle(path : string) : SwapResult {
             var sa = make_run_state(tr.config)
             var a1 : array<int64>
             run_ids(tr, sa, plen, 16l, a1)
-            moe_gpu_hydrate_session(tr, sa)
-            moe_gpu_drop_model()
+            moe_gpu_hydrate_session_(tr, sa)
+            moe_gpu_drop_model_()
             r.dropped_off = !moe_gpu_resident_active()
             var pos = plen + 16l
             var a2 : array<int64>
@@ -98,8 +99,8 @@ def private slot_swap_cycle(path : string) : SwapResult {
             r.a_par = same_ids(ctrl, a1, 0, 16) && same_ids(ctrl, a2, 16, 16)
             // B: re-arm (the switch-in path) + a fresh trajectory
             let t0 = ref_time_ticks()
-            set_gpu_tier_want(want)
-            moe_gpu_tier_arm()
+            set_gpu_tier_want_(want)
+            moe_gpu_tier_arm_()
             moe_gpu_upload_resident(tr)
             r.rearm_us = int64(get_time_usec(t0))
             r.rearm_on = moe_gpu_resident_active()
@@ -108,7 +109,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
             run_ids(tr, sb, plen, 32l, b)
             r.b_par = same_ids(ctrl, b, 0, 32)
             // D: a second full drop/re-arm cycle (registry regrowth smoke)
-            moe_gpu_drop_model()
+            moe_gpu_drop_model_()
             moe_gpu_upload_resident(tr)
             var sd = make_run_state(tr.config)
             var d : array<int64>
@@ -125,8 +126,8 @@ def private slot_swap_cycle(path : string) : SwapResult {
             delete d
         }
         // leave the device bare + the process-global want clear for later tests in the sweep
-        moe_gpu_drop_model()
-        set_gpu_tier_want(GpuTierWant())
+        moe_gpu_drop_model_()
+        set_gpu_tier_want_(GpuTierWant())
         delete tr
     }
     return r

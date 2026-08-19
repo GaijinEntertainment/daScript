@@ -1,10 +1,12 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_canary shared public
 options _cyclomatic_complexity = 0   // model forward/serialize walks mirror the model schema
 options _function_length = 0   // same
 
+require dasllama/dasllama_lint public
 require math
 require daslib/fio
 require strings
@@ -410,7 +412,7 @@ def private cn_repack(var st : CanaryStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private cn_repack_all(var st : CanaryStaging) {
-    if (!select_matmul_backend_for_load()) {
+    if (!select_matmul_backend_for_load_()) {
         return
     }
     let d = st.e.d_model

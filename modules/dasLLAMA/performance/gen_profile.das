@@ -2,6 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); the profile is a speed measurement
 options _function_length = 0   // legacy profiler main; superseded by gen_bench_records
+options _dasllama_internal = true
 
 // The das-side half of the profiling suite: for each tier-selected model it measures prefill (one
 // batched forward_prefill) and emission (a greedy decode loop) tok/s under the tuned per-box runtime,

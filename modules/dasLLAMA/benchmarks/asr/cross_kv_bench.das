@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Isolated whisper cross-attention K/V scatter bench (whisper_cross_kv, dasllama_whisper):
 // after each layer's ck/cv GEMM the token-major [ta][d] projection is scattered head-major —

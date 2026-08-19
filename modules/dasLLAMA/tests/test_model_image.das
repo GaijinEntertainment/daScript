@@ -2,6 +2,7 @@ options gen2
 options persistent_heap   // + explicit deletes: each arm frees its model before the next loads
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _function_length = 0   // test bodies enumerate the fixture arms
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama            // the facade: load_model's image cache is the surface under test

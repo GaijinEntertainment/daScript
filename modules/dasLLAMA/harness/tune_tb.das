@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Per-box TB (token-block) measurement harness for the repack-tier batched Q8·Q8 GEMM
 // (arm64-gen / x64-gen). TB is a RUNTIME knob (set_q8_token_block) read by the repack
@@ -172,7 +173,7 @@ def main {
     }
     with_job_que() {
         setup_dasllama_jobque_()
-        let need_repack = select_matmul_backend_for_load()
+        let need_repack = select_matmul_backend_for_load_()
         print("active backend: {active_kernel_backend()} (needs_repack={need_repack})\n")
         let repack_backend = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"
         if (active_kernel_backend() != repack_backend) {

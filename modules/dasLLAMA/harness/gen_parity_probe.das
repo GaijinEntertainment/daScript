@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options _jit_fast_math = true   // match gemm_1core_probe / the end-to-end config
+options _dasllama_internal = true
 
 // M2/M4 parity gate (gemm_generator_plan.md): the [llvm_code]-generated tile (q8q8_tile_gen,
 // whatever perm is stamped — fallback or manifest) vs the hand laneq semantics. The oracle is

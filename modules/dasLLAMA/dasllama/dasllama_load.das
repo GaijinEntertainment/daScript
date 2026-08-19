@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_load shared public
 
@@ -9,6 +10,7 @@ module dasllama_load shared public
 // It requires dasllama_common back for Model/Session, so the transformer umbrella requires it and
 // breaks the cycle, exactly like the GPU residency rail and the Metal drivers.
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gguf
@@ -605,7 +607,7 @@ var private g_stream_plane_total : table<string; int64>
 def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
     // metal_blob first, and short-circuiting: the blob flavor is device-layout bytes, so a CPU
     // repack has no place in it and the backend must not even be selected for one
-    if (t.metal_blob || t.quant != QuantMode.q8 || !select_matmul_backend_for_load()) {
+    if (t.metal_blob || t.quant != QuantMode.q8 || !select_matmul_backend_for_load_()) {
         return
     }
     invoke(g_stream_collect_q8, t, regs)
@@ -2169,7 +2171,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         ts_stage = ref_time_ticks()
         // arm64: switch to the laneq backend and repack the just-loaded Q8 weights into its interleaved
         // layout. Returns false off-ARM (portable stays, weights stay row-major).
-        if (mode == QuantMode.q8 && select_matmul_backend_for_load()) {
+        if (mode == QuantMode.q8 && select_matmul_backend_for_load_()) {
             if (g_fill_plan_mode) {
                 // streaming: the q-halves are not materialized — the fill applies the SAME
                 // regions per job. Set the marks the eager walkers would (the meta serializes
@@ -2232,7 +2234,7 @@ def quantize_weights(var t : Model) {
     t.qscales <- qt.scales
     t.quant = QuantMode.q8
     // same backend-for-load select + in-place repack as the load_gguf Q8 path (no-op off-ARM)
-    if (select_matmul_backend_for_load()) {
+    if (select_matmul_backend_for_load_()) {
         layout_repack_q8(t)
     }
     if (g_wscale_f16) {

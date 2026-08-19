@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_audio_io shared public
 
+require dasllama/dasllama_lint public
 require audio   // miniaudio: decode any audio container to PCM
 
 //! Decode any format miniaudio handles (wav / mp3 / flac / ogg …) to 16 kHz mono f32 PCM —

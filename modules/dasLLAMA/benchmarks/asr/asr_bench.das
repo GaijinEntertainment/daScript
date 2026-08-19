@@ -1,8 +1,8 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 require dasllama/dasllama
-require audio
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -54,33 +54,6 @@ struct BenchArgs {
     help : bool
 }
 
-// Decode any audio file miniaudio understands to 16 kHz mono f32 (transcribe.das rail).
-def load_audio_16k_mono(path : string) : array<float> {
-    var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))
-    if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
-        panic("cannot open audio file '{path}'")
-    }
-    var out : array<float>
-    let chunk = 65536
-    var buf : array<float>
-    buf |> resize(chunk)
-    while (true) {
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(buf[0])), uint64(chunk)))
-        break if (got <= 0)
-        out |> reserve(length(out) + got)
-        for (i in range(got)) {
-            out |> push(buf[i])
-        }
-        break if (got < chunk)
-    }
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
-    return <- out
-}
-
 [export]
 def main() : int {
     var r <- parse_args(type<BenchArgs>)
@@ -126,12 +99,18 @@ def main() : int {
     let load_ms = double(get_time_usec(t_load)) / 1000.0lf
     print("LOAD\t{model_name}\t{load_ms}\n")
 
+    var rc = 0
     with_job_que() {
         // pooled forks + team dispatch + spin window — without it every kernel dispatch pays
         // the ~10us/job fifo fork/join (2-7x on the jfk encoder stages)
         setup_dasllama_jobque()
         for (path in cfg.wav) {
             var samples <- load_audio_16k_mono(path)
+            if (empty(samples)) {
+                print("error: could not decode {path}\n")
+                rc = 1   // a measurement tool: a bad fixture is a failed run, never a 0.0 row
+                continue
+            }
             let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
             let wav_name = base_name(path)
             var last_text = ""
@@ -149,5 +128,5 @@ def main() : int {
             delete samples
         }
     }
-    return 0
+    return rc
 }

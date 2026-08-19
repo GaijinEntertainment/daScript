@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Isolated sustained-write probe: fill ONE buffer, write it N times, report the rolling rate.
 // Nothing else — no model, no JIT, no tune, no transcode. The point is to watch a consumer SSD's

@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_common shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_version public  // DASLLAMA_VERSION — re-exported so the facade chain carries the module's release counter
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
@@ -1257,7 +1259,7 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "gemv_lane_cap") $(v) { set_gemv_lane_cap(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
-    apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
     apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
     // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
@@ -1342,7 +1344,7 @@ def public get_kq_q51_native() : bool {
 
 def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     // the one sanctioned backend-select side effect — the identity itself is a pure formatter
-    select_matmul_backend_for_load()
+    select_matmul_backend_for_load_()
     c.backend = dlim_backend_name()   // the cross-box bake's target alias when one is armed
     c.q8_mr = active_q8_layout_mr()
     c.q8_wbias = active_q8_wbias()

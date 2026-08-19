@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_tools shared public
 
+require dasllama/dasllama_lint public
 require daslib/json_boost   // tool defs arrive as OpenAI JSON; non-JSON wire args normalize to JSON text
 require daslib/strings_boost
 require strings

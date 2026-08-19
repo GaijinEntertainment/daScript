@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gemma4uv shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio
 require strings
 require daslib/apply

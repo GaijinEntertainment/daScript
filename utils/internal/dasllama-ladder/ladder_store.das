@@ -3,7 +3,7 @@ options indenting = 4
 
 module ladder_store public
 
-require ../../../modules/dasLLAMA/performance/exchange_schema.das public   // BoxIdentity/SidecarInfo are store API types
+require dasllama/dasllama_exchange_schema public   // BoxIdentity/SidecarInfo are store API types
 require daslib/sql
 require sqlite/sqlite_migrate public
 require daslib/sql_linq
@@ -14,7 +14,7 @@ require strings
 
 //! The ladder store: schema, migrations, and every policy decision (size caps, rate
 //! ceiling, source stamping, the sidecar lookup ladder). Zero HTTP — the server module
-//! translates transport to these calls and nothing else. Engine-free like exchange_schema.
+//! translates transport to these calls and nothing else. Engine-free like dasllama_exchange_schema.
 
 let RATE_WINDOW_SECONDS = 3600l
 
@@ -66,7 +66,7 @@ struct Run {
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
-//! lifted by exchange_schema's parse_sidecar_info and drive the lookup ladder.
+//! lifted by dasllama_exchange_schema's parse_sidecar_info and drive the lookup ladder.
 [sql_table(name = "sidecars"),
  sql_index(fields = ("DasllamaVersion", "Box")),
  sql_index(fields = ("DasllamaVersion", "Platform", "Arch", "Cpu"))]

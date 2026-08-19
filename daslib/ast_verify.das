@@ -1036,6 +1036,12 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         return !st.flags.isTemplate
     }
 
+    // a template structure is never inferred, only its instances are: its method fields keep their
+    // pre-infer `auto` results (no type, no location) by design, so the post-infer walk skips it
+    def override canVisitStructure(st : Structure?) : bool {
+        return !st.flags.isTemplate
+    }
+
     // Inference is done, so an operand with no type never got one, and lint / folding / codegen all
     // dereference it unguarded. An empty `what` names it after the node, only if it reports.
     def need_typed(var slot : ExpressionPtr; what : string; at : LineInfo) : void {

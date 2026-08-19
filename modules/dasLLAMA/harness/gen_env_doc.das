@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 // Writes modules/dasLLAMA/ENVIRONMENT.md from the [EnvConfig] declarations in dasllama_env. The
 // doc is generated so it cannot drift from the code: tests/test_env_registry.das re-renders and

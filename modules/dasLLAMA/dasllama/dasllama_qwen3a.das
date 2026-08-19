@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_qwen3a shared public
 options _function_length = 0   // model forward/serialize walks mirror the model schema
 
+require dasllama/dasllama_lint public
 require math
 require daslib/fio
 require strings
@@ -331,7 +333,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     delete cblob
     cblob <- nf
     t.cq8 = true
-    if (!select_matmul_backend_for_load()) {
+    if (!select_matmul_backend_for_load_()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     tw_repack(qblob, qscales, t.cout_w_off, feat, d)

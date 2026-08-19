@@ -278,6 +278,8 @@ with ``-jit``::
    tutorials/dasLLAMA_11_tool_calling.rst
    tutorials/dasLLAMA_12_voice_activity.rst
    tutorials/dasLLAMA_13_serving.rst
+   tutorials/dasLLAMA_14_vision_chat.rst
+   tutorials/dasLLAMA_15_prefix_cache.rst
 
 .. _tutorials_dasopenai:
 

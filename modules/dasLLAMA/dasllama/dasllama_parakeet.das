@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_parakeet shared public
 options _function_length = 0   // model forward/serialize walks mirror the model schema
 
+require dasllama/dasllama_lint public
 require math
 require daslib/fio
 require strings
@@ -277,7 +279,7 @@ def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private pk_repack_all(var st : ParakeetStaging) {
-    if (!select_matmul_backend_for_load()) {
+    if (!select_matmul_backend_for_load_()) {
         return
     }
     let d = st.e.n_state

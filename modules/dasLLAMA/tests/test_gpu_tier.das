@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 // The device-cooperation seam (dasllama_gpu_tier) tested as a CONTRACT, model-free and
 // device-free: uninstalled slots decline (never panic on the probe surface), installed das-side
@@ -79,7 +80,7 @@ def test_gpu_tier_contract(t : T?) {
         var wq : array<uint8>
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 256l, 1l, 4), -1l)
-        t |> success(!moe_gpu_tier_arm(), "tier must start unarmed")
+        t |> success(!moe_gpu_tier_arm_(), "tier must start unarmed")
         t |> success(!moe_gpu_backend_registered(), "no backend registered at start")
         delete wq
         delete ws
@@ -113,11 +114,11 @@ def test_gpu_tier_contract(t : T?) {
     }
     t |> run("want state round-trips through the accessors") @(t : T?) {
         // env-backed: DASLLAMA_GPU* may be exported (the vulkan census boxes); assert only the
-        // DELTA our set_gpu_tier_want introduces, and restore to the ambient answer
+        // DELTA our set_gpu_tier_want_ introduces, and restore to the ambient answer
         let ambient_any = gpu_want_arms_tier()
         let want = GpuTierWant(moe_layers = 3l, moe_stream = 2l, vram_mb = 1234l,
                                dn = true, attn = true, heat = 5l, qkv = true)
-        set_gpu_tier_want(want)
+        set_gpu_tier_want_(want)
         t |> equal(gpu_want_moe_layers(), 3l)
         t |> equal(gpu_want_moe_stream(), 2l)
         t |> equal(gpu_want_vram_mb(), 1234l)
@@ -129,18 +130,18 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(gpu_want_arms_tier(), "arms-tier reflects the set state")
         // membership witness: ONE rail alone must flip the predicate (the aggregate case
         // above cannot see a dropped member)
-        set_gpu_tier_want(GpuTierWant(qkv = true))
+        set_gpu_tier_want_(GpuTierWant(qkv = true))
         t |> success(gpu_want_arms_tier(), "a single rail flips arms-tier")
-        set_gpu_tier_want(GpuTierWant())
+        set_gpu_tier_want_(GpuTierWant())
         t |> success(gpu_want_arms_tier() == ambient_any, "arms-tier resets to the ambient env state")
         warn_gpu_backend_absent()   // the no-backend-registered path must not crash whatever the env says
     }
     t |> run("arm gate reflects the registered hook; reset to unarmed") @(t : T?) {
         set_moe_gpu_arm("testtier", @@arm_on)
-        t |> success(moe_gpu_tier_arm(), "armed through the double")
+        t |> success(moe_gpu_tier_arm_(), "armed through the double")
         t |> success(moe_gpu_backend_registered(), "registration witness follows the arm hook")
         set_moe_gpu_arm("", @@arm_off)
-        t |> success(!moe_gpu_tier_arm(), "reset to unarmed for the rest of the process")
+        t |> success(!moe_gpu_tier_arm_(), "reset to unarmed for the rest of the process")
         t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
     }
 }

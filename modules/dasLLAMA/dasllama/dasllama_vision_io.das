@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_vision_io shared public
 
+require dasllama/dasllama_lint public
 require stbimage
 require daslib/safe_addr
 require dasllama/dasllama_vision

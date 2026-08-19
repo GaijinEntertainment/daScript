@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
 
 // Streaming-iterator gate: feed a wav through vad_iter_feed in odd-sized chunks (exercising the
 // pending buffer) and print `EVT<TAB>start|end<TAB>sample` per boundary — diff against silero's

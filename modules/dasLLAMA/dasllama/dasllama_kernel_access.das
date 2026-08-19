@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 module dasllama_kernel_access shared public
 
+require dasllama/dasllama_lint public
 require daslib/ast
 require daslib/ast_boost
 require daslib/rtti

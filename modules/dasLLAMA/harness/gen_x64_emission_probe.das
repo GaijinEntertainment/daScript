@@ -1,5 +1,6 @@
 options gen2
 options no_aot = true
+options _dasllama_internal = true
 
 // The x64 emission-only probe (gemm_generator_plan.md slice F): a minimal -jit program whose
 // only job is to make every [tune] grid clone `used` (via the variants registries), so a

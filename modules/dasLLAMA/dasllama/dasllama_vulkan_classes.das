@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 module dasllama_vulkan_classes shared public
 
+require dasllama/dasllama_lint public
 require spirv/spirv_shader
 require vulkan
 require vulkan/vulkan_boost

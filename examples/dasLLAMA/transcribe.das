@@ -3,7 +3,6 @@ options fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); test
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama         // the facade: load_asr_model / caps / create_session / transcribe
-require audio                     // miniaudio decode (any format) resampled to 16 kHz mono
 require daslib/jobque_boost
 require strings
 require math
@@ -15,38 +14,6 @@ require math
 //
 //   bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin> <audio-file>
 //                    [--lang <code>] [--translate] [--no-timestamps]
-
-// Decode any audio file miniaudio understands (WAV/MP3/FLAC/Vorbis) to 16 kHz mono f32 —
-// the decoder converts rate/channels on the fly (same rail as audio_chat.das).
-def load_audio_16k_mono(path : string) : array<float> {
-    var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))
-    if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
-        panic("cannot open audio file '{path}'")
-    }
-    var out : array<float>
-    let chunk = 65536
-    var buf : array<float>
-    buf |> resize(chunk)
-    while (true) {
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(buf[0])), uint64(chunk)))
-        if (got <= 0) {
-            break
-        }
-        out |> reserve(length(out) + got)
-        for (i in range(got)) {
-            out |> push(buf[i])
-        }
-        if (got < chunk) {
-            break
-        }
-    }
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
-    return <- out
-}
 
 def pad2(v : int64) => v < 10l ? "0{v}" : "{v}"
 
@@ -106,6 +73,10 @@ def main {
     let c <- caps(w)
     print("model: {length(c.languages)} language(s), translate {c.translate ? "yes" : "no"}, {c.timestamps} timestamps\n")
     let samples <- load_audio_16k_mono(audio_path)
+    if (empty(samples)) {
+        print("could not decode audio: {audio_path}\n")
+        return
+    }
     print("audio: {length(samples)} samples ({float(length(samples)) / float(int(AUDIO_SAMPLE_RATE))} s)\n")
 
     with_job_que() {

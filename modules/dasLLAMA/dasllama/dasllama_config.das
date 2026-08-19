@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 //! The explicit .dlim bake configuration: every input that changes image BYTES, in one struct —
 //! built at load time from the live box, suppliable to the converter as JSON, embedded in the
@@ -10,6 +11,7 @@ options _comment_hygiene = true
 
 module dasllama_config shared public
 
+require dasllama/dasllama_lint public
 require strings
 require daslib/utf8_utils
 

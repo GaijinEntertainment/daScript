@@ -1,8 +1,10 @@
 options gen2
 options _comment_hygiene = true
+options _dasllama_internal = true
 
 module dasllama_gpu_tier shared public
 
+require dasllama/dasllama_lint public
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
@@ -596,7 +598,7 @@ def public set_moe_gpu_drop_model_hook(f : MoeGpuDropModelFn) {
 
 //! Destroy every model-owned device object the tier holds (stacks, arenas, the resident
 //! driver, all lazy dispatch state); device-lifetime state survives and rebuilds lazily.
-//! Callers use dasllama_common's ``moe_gpu_drop_model``, which also resets the marks.
+//! Callers use dasllama_common's ``moe_gpu_drop_model_``, which also resets the marks.
 def public moe_gpu_drop_model_state() {
     invoke(g_moe_gpu_drop_model)
 }
@@ -656,7 +658,7 @@ def public matmul_moe_gpu_ffn_join(var gout : array<float>) {
 
 //! Programmatic GPU tier request — the config-file mirror of the ``DASLLAMA_GPU_*`` env vars
 //! (an env var present in the environment overrides its field). Set BEFORE ``load_model``,
-//! then call ``moe_gpu_tier_arm`` so a backend can install its hooks.
+//! then call ``moe_gpu_tier_arm_`` so a backend can install its hooks.
 struct GpuTierWant {
     auto_tier : bool     //!< request the measured-best rail set; individual knobs below still override
     moe_layers : int64   //!< resident expert-stack layers K, offloaded from the end (auto: -1 = fill the budget)
@@ -688,7 +690,7 @@ var g_moe_gpu_device_report = @@moe_gpu_no_device
 var g_moe_gpu_budget_report = @@moe_gpu_no_budget
 var g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes
 
-def public set_gpu_tier_want(want : GpuTierWant) {
+def set_gpu_tier_want_(want : GpuTierWant) {
     g_gpu_want = want
 }
 
@@ -807,7 +809,7 @@ def public warn_gpu_backend_absent {
 
 //! (Re-)arm the GPU tier from the current want. False = no GPU backend in this build,
 //! nothing requested, or the device probe failed.
-def public moe_gpu_tier_arm : bool {
+def moe_gpu_tier_arm_() : bool {
     return invoke(g_moe_gpu_arm)
 }
 
@@ -830,7 +832,7 @@ def public set_moe_gpu_budget_hooks(budget : function<() : int64>; plane : funct
 }
 
 //! Device-local bytes the armed tier may spend on resident weights (0 = no tier).
-def public moe_gpu_weight_budget() : int64 => invoke(g_moe_gpu_budget_report)
+def moe_gpu_weight_budget_() : int64 => invoke(g_moe_gpu_budget_report)
 
 def private moe_gpu_no_binding_cap : int64 => 0l
 var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
@@ -966,7 +968,7 @@ struct GpuTierStatus {
     vram_bytes : int64        //!< resident weight bytes on the device
 }
 
-def public gpu_tier_status : GpuTierStatus {
+def gpu_tier_status_() : GpuTierStatus {
     if (!g_moe_gpu_installed) {
         return GpuTierStatus(reason = "no GPU tier installed")
     }

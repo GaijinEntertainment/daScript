@@ -2,6 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _cyclomatic_complexity = 0   // CLI dispatch; absorbed into lcpp_bench by the single-rig consolidation
 options _function_length = 0   // same
+options _dasllama_internal = true   // the engine's own bake tool: its bake-side requires below are its charter
 
 // dasllama-convert — turn a GGUF into a prepared .dlim image, offline.
 //
@@ -22,15 +23,13 @@ options _function_length = 0   // same
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
 // without a profiler.
 
-require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration
-require dasllama/dasllama_math          // apply_box_profile_runtime + select_matmul_backend_for_load
-require dasllama/dasllama_image         // the .dlim rail itself
-require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim
-require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
-require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
-require dasllama/dasllama_gguf          // GGUFMeta — the streaming block's mapping handle
-require dasllama/dasllama_asr           // the ASR family loaders — their wraps bake the family images
-require dasllama/dasllama_audio         // load_audio_tower — the qwen2a/ultravox/voxtral mmproj family
+require dasllama/dasllama               // the facade: arch registry, ASR/audio loaders, config, the runtime knobs
+require dasllama/dasllama_image         // the .dlim MINT rail itself — bake-side, deliberately not facade
+require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim — bake-side, deliberately not facade
+require dasllama/dasllama_layout        // convert_model_to_metal_blob — bake-side, deliberately not facade
+require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately not facade
+require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, deliberately not facade
+require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -155,7 +154,7 @@ def private list_images(cfg : ConvertArgs) : int {
         return 2
     }
     if (!cfg.clean) {
-        var inv <- dlim_inventory(cfg.model)
+        var inv <- dlim_inventory_(cfg.model)
         for (im in inv) {
             let idnote = empty(im.identity) ? "" : "  {im.identity}"
             to_log(LOG_INFO, "dasllama-convert: {im.file}\n")
@@ -166,7 +165,7 @@ def private list_images(cfg : ConvertArgs) : int {
         return 0
     }
     if (!cfg.apply) {
-        var inv <- dlim_inventory(cfg.model)
+        var inv <- dlim_inventory_(cfg.model)
         for (im in inv) {
             if (im.verdict != "CURRENT" && !(cfg.keep_other && im.verdict == "OTHER")) {
                 to_log(LOG_INFO, "dasllama-convert: would remove {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
@@ -174,7 +173,7 @@ def private list_images(cfg : ConvertArgs) : int {
         }
         delete inv
     }
-    let r = dlim_clean(cfg.model, cfg.apply, keep_other = cfg.keep_other)
+    let r = dlim_clean_(cfg.model, cfg.apply, keep_other = cfg.keep_other)
     if (cfg.apply) {
         to_log(LOG_INFO, "dasllama-convert: removed {r.removed} of {r.stale} stale image(s), reclaimed {r.freed >> 20l} MB\n")
         if (!st.is_dir) {

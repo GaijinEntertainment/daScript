@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
+options _dasllama_internal = true
 
 // Shared foundation for the dasLLAMA profiling suite: the ASR catalog (the text model table lives
 // in model_specs.das, re-exported here), the small/large tier gate, the per-box platform block, and
@@ -9,6 +10,7 @@ options indenting = 4
 
 module profile_common shared public
 
+require dasllama/dasllama_lint public
 require daslib/fio public
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require strings public

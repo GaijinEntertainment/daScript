@@ -1,4 +1,5 @@
 options gen2
+options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_tokenizer

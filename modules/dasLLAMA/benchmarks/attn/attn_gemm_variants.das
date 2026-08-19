@@ -2,6 +2,7 @@ options gen2
 
 module attn_gemm_variants shared public
 
+require dasllama/dasllama_lint public
 require daslib/jobque_boost
 require math   // mad (fused multiply-add) in the tiled kernel
 

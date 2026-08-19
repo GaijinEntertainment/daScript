@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options _dasllama_internal = true
 
 expect 30838   // the "4l" grid token falls to the name path and is an unresolved variable BY DESIGN
 

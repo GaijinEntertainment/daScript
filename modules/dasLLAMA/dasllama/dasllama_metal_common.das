@@ -1,9 +1,11 @@
 options gen2
 options _comment_hygiene = true
 options _metal_manual_dispatch = true   // PERMANENT opt-out: this module IS the capture rail (kn_dispatch / graph replay dispatch here)
+options _dasllama_internal = true
 
 module dasllama_metal_common shared public
 
+require dasllama/dasllama_lint public
 require math
 require strings
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

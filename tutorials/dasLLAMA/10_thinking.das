@@ -12,6 +12,7 @@ require strings
 //   - Hybrid thinking models: the reply carries a reasoning span before the answer
 //   - split_reasoning — split a complete reply into (reasoning, content)
 //   - Streaming the split live: make_think_stream + think_feed / think_finish
+//   - think_drain — the same splitter over a reply already in hand
 //   - set_thinking(false) — answer directly; effective_stop_ids for schedulers
 //
 // Prerequisites: tutorial 02; a thinking-family GGUF (Qwen3-0.6B-Q8_0 works:
@@ -115,6 +116,17 @@ def section_streamed_split(m : Model) {
         print("\n(no content half: the reply ended inside its think block)")
     }
     print("\n\n")
+
+    // think_drain is the buffered twin: the reply is already whole, so one call
+    // runs feed + finish + the strip rule. A server's non-streaming route uses
+    // this — same splitter, no loop.
+    add_user(chat, "What is 2 + 2? One sentence.")
+    var ts2 = make_think_stream(chat)
+    let full = respond(m, chat, SamplingParams()) $(_piece) {
+        return true   // capture only; the drain below does the splitting
+    }
+    let sp = think_drain(ts2, full)
+    print("think_drain: {length(sp.reasoning)} chars of reasoning, answer: {sp.content}\n\n")
 }
 
 // ──────────────────────────────────────────────────────────────────────────
