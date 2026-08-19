@@ -326,8 +326,78 @@ jobs:
           for d in *.deb; do
             (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
           done
+      - name: "Set up Python for the wheel"
+        if: matrix.cmake_preset == 'Release'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: "Build pip wheel"
+        # the pip-installable form of the bundle (ci/packaging/README.md): a stdlib repack
+        # whose platform tag is read off the binaries; one wheel per bundle, also a release asset
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
+          python ci/packaging/wheel_build.py ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
+          cd artifacts
+          for w in *.whl; do
+            (sha256sum "$w" 2>/dev/null || shasum -a 256 "$w") > "$w.sha256"
+          done
+      - name: "Smoke-test pip wheel"
+        # pip must accept the derived tag on the very runner that built the bundle, the
+        # console shims must exec the bundled tools, and the import surface must resolve
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
+          python -m venv wheel_venv
+          if [ -d wheel_venv/Scripts ]; then VB=wheel_venv/Scripts; else VB=wheel_venv/bin; fi
+          "$VB/python" -m pip install --disable-pip-version-check artifacts/*.whl
+          "$VB/daslang" --version
+          "$VB/dastest" --help > /dev/null
+          "$VB/lint" --help > /dev/null
+          "$VB/das-fmt" --help > /dev/null
+          "$VB/python" -c "import daslang; print(daslang.__version__, daslang.tool_path('daslang'))"
+      - name: "Upload wheel for the PyPI publish job"
+        if: matrix.cmake_preset == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.release_target }}-${{ matrix.release_arch }}
+          path: artifacts/*.whl
+          if-no-files-found: error
       - name: "Upload release assets"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber
+
+  ###########################################################
+  publish_pypi:
+    ###########################################################
+    # Trusted publishing (OIDC) - no token secret: the PyPI project and its TestPyPI twin
+    # register this repo + workflow + environment as their publisher. RC tags publish to
+    # TestPyPI, real releases to PyPI; a dispatch run never publishes (same gate as
+    # "Upload release assets"), and a red bundle cell publishes nothing (needs: build).
+    needs: build
+    if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ contains(github.event.release.tag_name, 'RC') && 'testpypi' || 'pypi' }}
+      url: ${{ contains(github.event.release.tag_name, 'RC') && 'https://test.pypi.org/p/daslang' || 'https://pypi.org/p/daslang' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: "Collect the wheels"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - name: "List"
+        run: ls -la dist
+      - name: "Publish"
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ contains(github.event.release.tag_name, 'RC') && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          skip-existing: true
