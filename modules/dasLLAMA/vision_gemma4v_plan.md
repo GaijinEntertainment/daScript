@@ -223,6 +223,13 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   the splice, span and decoder are v1's, the E2B decoder already renders the markers.
 - P6 (rail): the gemma4v dlim stages in one pass under the 1 GiB cap at ≈ 0.35 GB and maps in
   0 ms; IMAGE_VERSION 10 invalidates nothing but the two vision tags.
+  **Scored at slice E:** 352 MB written in 58 ms, mapped in 0 ms (both held). The version
+  half was wrong-headed: `IMAGE_VERSION` is global — a bump invalidates EVERY .dlim on every
+  box, not "the two vision tags" — and the rule ("bump on a change to the layout OR to what a
+  loader puts in an image") does not fire here: gemma4v images are new files under a new tag,
+  the gemma4uv and gemma4a loaders put exactly what they did before (the `Clamp` hoist kept
+  the POD layout). **No bump.** The companion provenance needs no new row either: the E2B
+  mmproj rides the gemma4a `AsrModelSpec`, the cats fixture the 12B row.
 
 ## Out of scope (this arc)
 

@@ -13,6 +13,7 @@ require dasllama/dasllama_plane   // PlaneF — the served side of the round-tri
 require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the off-rail truth read
 require dasllama/dasllama_gemma4a // Gemma4aStaging/stage_gemma4a_encoder — same, for the gemma4a arm
 require dasllama/dasllama_gemma4uv // Gemma4uvStaging/stage_gemma4uv_embedder — same, for the vision arm
+require dasllama/dasllama_gemma4v // Gemma4vStaging/stage_gemma4v_tower — the gemma4v (E-series ViT) arm
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
@@ -1298,6 +1299,58 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
             var inscope a32 <- stage_gemma4uv_embedder(f32path)
             var inscope c32 <- load_gemma4uv_embedder(f32path)
             t |> success(!c32.patch_bf16 && !c32.proj_bf16, "an all-F32 mmproj mints no bf16 plane")
+            t |> equal(long_length(a32.wblob), 0l, "the all-fp32 source leaves wblob empty")
+            t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
+            t |> success(img32 != img, "a different source keys a different image")
+        }
+    }
+}
+
+[test]
+def test_gemma4v_tower_image_roundtrip(t : T?) {
+    t |> run("gemma4v tower: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
+        if (!family_on(t, "gemma") || !arm_on(t, "gemma4v")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "gemma4v")
+        remove(img)
+        var inscope a <- stage_gemma4v_tower(path)
+        var inscope cold <- load_gemma4v_tower(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        // the E-series "BF16" mmproj: F32 patch conv, BF16 block GEMMs and projection
+        t |> success(!cold.patch_bf16 && cold.blk_bf16 && cold.proj_bf16, "plane split follows the file: f32 conv, bf16 GEMMs")
+        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        var inscope b <- load_gemma4v_tower(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.n_embd, a.t.n_embd)
+        t |> equal(b.n_layer, a.t.n_layer)
+        t |> equal(b.proj_dim, a.t.proj_dim)
+        t |> equal(b.pos_entries, a.t.pos_entries)
+        t |> equal(b.layer_f, a.t.layer_f)
+        t |> equal(b.layer_f_stride, a.t.layer_f_stride)
+        t |> equal(b.layer_w, a.t.layer_w)
+        t |> equal(b.layer_w_stride, a.t.layer_w_stride)
+        t |> equal(b.proj_clamp, a.t.proj_clamp)
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob (f32: conv, pos tables, norms, clamp table) element-exact")
+        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
+        // the bf16 plane holds the file's OWN halfwords: the 16 blocks' GEMMs + the projection
+        t |> equal(long_length(a.wblob), a.t.n_layer * a.t.layer_w_stride + a.t.n_embd * a.t.proj_dim,
+                   "the bf16 plane is exactly the GEMM set ({length(a.wblob)} halfwords)")
+        // the f32-widened twin (the oracle's mmproj) is a different lane and a different image
+        let f32path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-F32.gguf")
+        if (stat(f32path).is_valid) {
+            let img32 = image_path_for(f32path, "gemma4v")
+            remove(img32)
+            var inscope a32 <- stage_gemma4v_tower(f32path)
+            var inscope c32 <- load_gemma4v_tower(f32path)
+            t |> success(!c32.patch_bf16 && !c32.blk_bf16 && !c32.proj_bf16, "an all-F32 mmproj mints no bf16 plane")
             t |> equal(long_length(a32.wblob), 0l, "the all-fp32 source leaves wblob empty")
             t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
             t |> success(img32 != img, "a different source keys a different image")

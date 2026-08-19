@@ -73,7 +73,7 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal mtower`; `gemma4uv-metal` is the GPU tower
+canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v mtower`; `gemma4uv-metal` is the GPU tower
 driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (`--arm
 gemma4uv` selects it too — arm filters match by substring); `mtower` is the whisper-class
 tower-blocks gate, Apple builds only — whisper tiny + large-v3-turbo transcript-exact and
