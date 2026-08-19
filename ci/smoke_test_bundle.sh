@@ -101,10 +101,11 @@ COMPILE_TESTS=(
 # targets (platform-natural suffix); `dasexe` rows are the DAS_UTILS_SHIPPED_EXES
 # set from utils/CMakeLists.txt (always `.exe`), installed on single-config
 # generators — which is every generator the release bundles are cut on.
-# Presence-checked only — we don't run them with `--help` because daslang itself
-# intercepts `--help` and prints its own usage even after the `--` separator,
-# swallowing the script's CLI surface.
-EXE_PRESENCE_TESTS=(
+# `cpp` rows are presence-checked; `dasexe` rows are also launched (`--help`, exit 0):
+# a `daslang -exe` binary resolves the runtime .so/.dylib through its embedded rpath,
+# and a bundle whose rpath points back at the build tree is present-but-dead on every
+# user's box.
+SHIPPED_EXE_TESTS=(
     "gen1_to_gen2|cpp"
     "daslang-live|cpp"
     "benchctl|dasexe"
@@ -124,7 +125,22 @@ EXE_PRESENCE_TESTS=(
 PASS=0
 FAIL=0
 LOG="$(mktemp)"
-trap 'rm -f "$LOG"' EXIT
+
+# The build tree's lib/ (CMAKE_LIBRARY_OUTPUT_DIRECTORY, beside ci/) is also on every
+# dasexe's rpath, so on the runner that built the bundle a build-tree rpath resolves
+# and the launch check would pass without the bundle-relative entry. Hide it for the
+# run; Windows has no rpath and locks open DLL dirs, so only POSIX.
+BUILD_LIB="$(cd "$CI_DIR/.." && pwd -P)/lib"
+HIDDEN_LIB=""
+if [[ -z "$CPP_SUFFIX" && -d "$BUILD_LIB" ]]; then
+    HIDDEN_LIB="$BUILD_LIB.smokehidden"
+    mv "$BUILD_LIB" "$HIDDEN_LIB"
+fi
+restore_and_clean() {
+    rm -f "$LOG"
+    if [[ -n "$HIDDEN_LIB" && -d "$HIDDEN_LIB" ]]; then mv "$HIDDEN_LIB" "$BUILD_LIB"; fi
+}
+trap restore_and_clean EXIT
 
 run_check() {
     local label="$1"; shift
@@ -155,8 +171,8 @@ for entry in "${COMPILE_TESTS[@]}"; do
 done
 
 echo
-echo "Prebuilt exe presence (bin/):"
-for entry in "${EXE_PRESENCE_TESTS[@]}"; do
+echo "Prebuilt exes (bin/) - presence, dasexe rows also launched:"
+for entry in "${SHIPPED_EXE_TESTS[@]}"; do
     name="${entry%%|*}"
     kind="${entry#*|}"
     case "$kind" in
@@ -165,13 +181,14 @@ for entry in "${EXE_PRESENCE_TESTS[@]}"; do
         *)      echo "ERROR: unknown kind '$kind' for $name" >&2; FAIL=$((FAIL + 1)); continue ;;
     esac
     exe="$BUNDLE/bin/${name}${suffix}"
-    printf '  %-30s ' "$name"
-    if [[ -f "$exe" ]]; then
-        echo "OK"
-        PASS=$((PASS + 1))
-    else
-        echo "MISSING ($exe)"
+    if [[ ! -f "$exe" ]]; then
+        printf '  %-30s MISSING (%s)\n' "$name" "$exe"
         FAIL=$((FAIL + 1))
+    elif [[ "$kind" == dasexe ]]; then
+        run_check "$name (launch)" "$exe" --help
+    else
+        printf '  %-30s OK\n' "$name"
+        PASS=$((PASS + 1))
     fi
 done
 
