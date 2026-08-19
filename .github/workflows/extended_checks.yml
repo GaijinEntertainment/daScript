@@ -438,6 +438,12 @@ jobs:
         set -eux
         python3 ci/test_check_shipped_skills.py
 
+    - name: "Test pip wheel repack (python)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        python3 ci/test_wheel_build.py
+
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'
       run: |

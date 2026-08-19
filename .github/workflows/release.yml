@@ -326,8 +326,109 @@ jobs:
           for d in *.deb; do
             (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
           done
+      - name: "Set up Python for the wheel"
+        if: matrix.cmake_preset == 'Release'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: "Build pip wheel"
+        # the pip-installable form of the bundle - ci/packaging/README.md; also a release asset
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
+          python ci/packaging/wheel_build.py ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
+          cd artifacts
+          for w in *.whl; do
+            (sha256sum "$w" 2>/dev/null || shasum -a 256 "$w") > "$w.sha256"
+          done
+      - name: "Smoke-test pip wheel"
+        # pip on the runner that derived the tag is the first judge of that tag
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
+          python -m venv wheel_venv
+          if [ -d wheel_venv/Scripts ]; then VB=wheel_venv/Scripts; else VB=wheel_venv/bin; fi
+          "$VB/python" -m pip install --disable-pip-version-check artifacts/*.whl
+          "$VB/daslang" --version
+          for shim in benchctl dascov das-fmt daspkg dastest detect-dupe lint; do
+            "$VB/$shim" --help > /dev/null
+          done
+          printf '[export]\ndef main() {\n    return 3\n}\n' > wheel_rc3.das
+          rc=0; "$VB/daslang" wheel_rc3.das || rc=$?
+          [ "$rc" -eq 3 ] || { echo "shim lost the exit code: got $rc, want 3"; exit 1; }
+          "$VB/python" -c "import daslang; print(daslang.__version__, daslang.tool_path('daslang'))"
+      - name: "Upload wheel for the PyPI publish job"
+        if: matrix.cmake_preset == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.release_target }}-${{ matrix.release_arch }}
+          path: artifacts/*.whl
+          if-no-files-found: error
       - name: "Upload release assets"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber
+
+  ###########################################################
+  pypi_route:
+    ###########################################################
+    # Where a wheel set may go is decided by the tag's SHAPE, once, in bash: exactly
+    # v<major>.<minor>.<patch> is a release and goes to PyPI; every other tag (-RC1, -rc2,
+    # -beta, anything) is a prerelease and goes to TestPyPI. Both PyPI environments key on
+    # this job's outputs, so the same string drives the environment gate and the upload URL.
+    needs: build
+    if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.route.outputs.environment }}
+      repository_url: ${{ steps.route.outputs.repository_url }}
+      project_url: ${{ steps.route.outputs.project_url }}
+    steps:
+      - id: route
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          if [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "environment=pypi" >> "$GITHUB_OUTPUT"
+            echo "repository_url=https://upload.pypi.org/legacy/" >> "$GITHUB_OUTPUT"
+            echo "project_url=https://pypi.org/p/daslang" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=testpypi" >> "$GITHUB_OUTPUT"
+            echo "repository_url=https://test.pypi.org/legacy/" >> "$GITHUB_OUTPUT"
+            echo "project_url=https://test.pypi.org/p/daslang" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag $TAG -> $(grep environment= "$GITHUB_OUTPUT" | tail -1)"
+
+  ###########################################################
+  publish_pypi:
+    ###########################################################
+    # Trusted publishing (OIDC), no token secret: the PyPI project and its TestPyPI twin
+    # register this repo + workflow + environment as their publisher.
+    # Publish gate mirrors "Upload release assets" above.
+    needs: [build, pypi_route]
+    if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.pypi_route.outputs.environment }}
+      url: ${{ needs.pypi_route.outputs.project_url }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: "Collect the wheels"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - name: "List the collected wheels"
+        run: ls -la dist
+      - name: "Publish"
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ needs.pypi_route.outputs.repository_url }}
+          skip-existing: true
