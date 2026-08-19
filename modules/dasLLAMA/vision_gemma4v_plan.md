@@ -191,8 +191,9 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   `model_specs` companion row, ENVIRONMENT/README/ARCHITECTURE touch.
 - **F. Measure**: `lcpp_bench --image` E2B cell, PERF_LEDGER entry, the q8/Metal decision
   written down with the number.
-- **G. (gated on F)** the Metal tower leg via the `register_gemma4v_gpu` hook — only if the
-  encode is a real share of the turn; **H.** the bug-fix round + docs.
+- **G. (gated on F — F said yes)** the Metal tower leg via the `register_gemma4v_gpu` hook;
+  **G0 (F demanded it)** the q8 CPU lane first — the gemma4a/parakeet recipe (Q8_0 GEMM planes
+  + per-row requant), its own tier-1 gate on a relative bar; **H.** the bug-fix round + docs.
 
 ## Predictions (registered before slice A; score at each slice)
 
@@ -207,6 +208,10 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   **0.9 … 1.8 s** (≈420 GFLOP: 16 blocks of GEMMs ≈ 350 + attention ≈ 67) — the image side
   becomes **≥ 12 %** of the turn that was 0.7 % for uv. This is the number that decides the
   Metal leg; I predict it says yes.
+  **Scored at slice F:** `img:enc` 1.93 s (just above the band — the bf16 per-row dot path
+  runs ≈92 GMAC/s, not the ≈200 the band assumed), **≈61 % of the turn** (pp 337 tok/s, tg
+  42 tok/s on the CPU tier). Yes, loudly: the Metal leg is on, AND the q8 CPU lane the
+  out-of-scope list held back "unless slice F demands it" is demanded (PERF_LEDGER entry).
 - P3 (clamps bind): at least one block's input or output clamp is ACTIVE on the `cb 336`
   fixture — disabling all clamps moves tier-1 by **> 1e-3** (the bounds ±6…±90 sit where
   activations live). Negative control in das, not in mtmd.

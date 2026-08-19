@@ -12,6 +12,23 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **gemma4v ViT tower (E-series): the CPU encode is MOST of the image turn — the q8 lane and
+  the Metal leg are both owed (measured 2026-08-19, M1 Max, the gemma4v arc's slice F).** The
+  tower is 16 blocks × 7 GEMMs (112 bf16 GEMMs, ≈151 MMAC per patch) over 1170 patches for a
+  640×480 photo (→ 130 soft tokens). The image cell (`lcpp_bench --image`, gemma-4-E2B Q8_0
+  off the image rail, debug-jit): **`img:enc` 1.93 s**, `img:pp` 337 tok/s over the 155-token
+  spliced prompt (0.46 s), `img:tg` 42 tok/s — the encode is **≈61 % of a 32-token turn** on the
+  CPU tier, against 0.7 % for gemma4uv. Why: the 177 GMAC run through `matmul_bf16_batch`'s
+  per-row `dot_bf16` loop (≈92 GMAC/s aggregate, ~10× under the q8×q8 prefill kernels); the
+  accelerate tier (`--accel`) did not move it (1.93 s → 1.93 s — the bf16 override is not
+  engaging for these shapes, a separate finding). Prediction P2 (0.9–1.8 s, ≥12 % of the
+  turn): the share held by a wide margin, the absolute landed just above the band. **Ruled:**
+  the q8 tower lane (the gemma4a / parakeet recipe — Q8_0 GEMM planes + per-row requant,
+  `tower_quantize`) is no longer declined for this tower, and the Metal leg
+  (`register_gemma4v_gpu`) is on; each lands with its own parity gate. The E2B decoder's own
+  Metal prefill is declined in `required` mode on this tree ("layers") independent of the
+  image span — the gemma4v Metal leg would be the only GPU piece of an E2B image turn until
+  that is served.
 - **gemma4uv vision embedder: no quantized lane; the dlim rail is owed anyway (measured
   2026-08-14, M1 Max, the vision arc's slice G).** The embedder is two GEMMs (6912→3840 patch
   projection, 3840×3840 output projection). In a product-shaped turn — gemma-4-12B Q4_K_M
