@@ -8,8 +8,13 @@
 #   caddy                      splice caddy.snippet into the dasllama.io vhost, validate, reload
 #   install <sha> <tarball>    per-release: unpack, carry operator files, flip current, restart, health
 #   open-submit | close-submit flip the public-submission gate (loopback admin call)
-#   status                     systemd active-state + /api health (the gate state is not
-#                              remotely queryable; it is in the service's startup banner/log)
+#   sidecars                   list stored sidecars + the gate state (loopback admin listing)
+#   promote <sha> | demote <sha>  flip a sidecar's verified flag
+#   plant <sidecar.json>       import an official sidecar (stored verified; re-plant promotes)
+#   status                     systemd active-state + /api health + the submit-gate state
+#
+# The curl verbs need no root — they talk to the loopback admin surface — but they live here
+# so the operator has ONE tool; the browser twin is /admin/ over `ssh -L 8201:127.0.0.1:8201`.
 #
 # The bundle comes from the builder box (zen4), from the arc worktree there:
 #   cd ~/daScript-dasweb && git pull --ff-only origin <branch>
@@ -28,7 +33,7 @@ UNIT=/etc/systemd/system/dasllama-ladder.service
 CADDYFILE=/etc/caddy/Caddyfile
 RESTIC_ENV=/etc/restic/env
 
-verb="${1:?usage: dasllama-deploy.sh provision|caddy|install <sha> <tarball>|open-submit|close-submit|status}"
+verb="${1:?usage: dasllama-deploy.sh provision|caddy|install <sha> <tarball>|open-submit|close-submit|sidecars|promote <sha>|demote <sha>|plant <file>|status}"
 
 provision() {
     # Dedicated service user isolates the public-upload process from the playground's dasweb.
@@ -166,15 +171,40 @@ submit_toggle() {
     curl -sf -X POST "http://127.0.0.1:$PORT/admin/submit" -d "{\"open\":$1}" && echo
 }
 
+set_verified() {
+    # $1 = sha, $2 = true|false. Match the server's is_valid_sha exactly (64 LOWERCASE hex) so a
+    # bad paste fails HERE with a clear message, not as a silent curl -sf 400 from the server.
+    case "$1" in *[!0-9a-f]*|"") echo "bad sha '$1' (expected 64 lowercase hex)"; exit 2;; esac
+    [ ${#1} -eq 64 ] || { echo "bad sha '$1' (expected 64 chars, got ${#1})"; exit 2; }
+    curl -sf -X POST "http://127.0.0.1:$PORT/admin/sidecar/verify" -d "{\"sha\":\"$1\",\"verified\":$2}" && echo
+}
+
 case "$verb" in
     provision) provision ;;
     caddy) caddy_apply ;;
     install) shift; install_release "$@" ;;
     open-submit) submit_toggle true ;;
     close-submit) submit_toggle false ;;
+    sidecars)
+        curl -sf "http://127.0.0.1:$PORT/admin/sidecars" && echo
+        ;;
+    promote) shift; set_verified "${1:?promote <sha>}" true ;;
+    demote) shift; set_verified "${1:?demote <sha>}" false ;;
+    plant)
+        shift; F="${1:?plant <sidecar.json>}"
+        [ -f "$F" ] || { echo "no file at '$F'"; exit 2; }
+        curl -sf -X POST "http://127.0.0.1:$PORT/admin/import-sidecar" --data-binary @"$F" && echo
+        ;;
     status)
         systemctl is-active dasllama-ladder || true
         curl -sf "http://127.0.0.1:$PORT/api/versions" >/dev/null 2>&1 && echo "api: ok" || echo "api: DOWN"
+        # advisory: parses the pretty-printed admin JSON; reads "unknown" if the format drifts
+        gate=$(curl -sf "http://127.0.0.1:$PORT/admin/sidecars" 2>/dev/null | grep -o '"submit_open" : [a-z]*' | grep -o '[a-z]*$' || true)
+        case "$gate" in
+            true) echo "submit: open" ;;
+            false) echo "submit: closed" ;;
+            *) echo "submit: unknown" ;;
+        esac
         ;;
     *) echo "unknown verb: $verb"; exit 2 ;;
 esac

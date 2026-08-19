@@ -149,6 +149,9 @@ def test_sidecar_routes(t : T?) {
                 tt |> equal(int(resp.status_code), 400)
                 tt |> success(!empty(json_of(resp)?["error"] ?? ""), "error named")
             }
+            POST("{base_url}/api/submit/sidecar", "") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "an empty body is a named refusal, not a bare 200")
+            }
         }
     }
 }
@@ -254,6 +257,222 @@ def test_policy_status_mapping(t : T?) {
 }
 
 [test]
+def test_admin_sidecar_curation(t : T?) {
+    // gate CLOSED throughout: the operator surface is independent of public submissions
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        let doc = sidecar_doc(BOX_A, "4", "vec8_u8")
+        let sha = sha256_hex(doc)
+        t |> run("plant stores verified while the board is closed") @(tt : T?) {
+            POST("{base_url}/admin/import-sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                tt |> equal(js?["sha"] ?? "", sha)
+                tt |> success(js?["created"] ?? false, "first plant creates")
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                var js = json_of(resp)
+                tt |> equal(length(js?["sidecars"] as _array), 1)
+                tt |> success(js?["sidecars"]?[0]?["verified"] ?? false, "verified on the public listing")
+            }
+        }
+        t |> run("the admin listing carries gate state and moderation columns") @(tt : T?) {
+            GET("{base_url}/admin/sidecars") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var js = json_of(resp)
+                tt |> success(!(js?["submit_open"] ?? true), "gate reads closed")
+                tt |> equal(length(js?["sidecars"] as _array), 1)
+                tt |> equal(js?["sidecars"]?[0]?["client_ip"] ?? "", "importer")
+            }
+        }
+        t |> run("verify demotes and promotes by sha") @(tt : T?) {
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"{sha}\",\"verified\":false}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                tt |> success(!(json_of(resp)?["sidecars"]?[0]?["verified"] ?? true), "demoted")
+            }
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"{sha}\",\"verified\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                tt |> success(json_of(resp)?["sidecars"]?[0]?["verified"] ?? false, "promoted back")
+            }
+        }
+        t |> run("an absent verified key demotes (fail-safe, like the gate's open key)") @(tt : T?) {
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"{sha}\"}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                tt |> success(!(json_of(resp)?["sidecars"]?[0]?["verified"] ?? true), "no key never promotes")
+            }
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"{sha}\",\"verified\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 200, "restored for the arms below")
+            }
+        }
+        t |> run("delete removes the sidecar and its receipt") @(tt : T?) {
+            POST("{base_url}/admin/sidecar/delete", "\{\"sha\":\"{sha}\"}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/sidecar/{sha}") $(resp) {
+                tt |> equal(int(resp.status_code), 404, "document gone")
+            }
+            POST("{base_url}/admin/sidecar/delete", "\{\"sha\":\"{sha}\"}") $(resp) {
+                tt |> equal(int(resp.status_code), 404, "second delete finds nothing")
+            }
+        }
+    }
+}
+
+[test]
+def test_admin_transport_rejections(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        t |> run("malformed, unknown, and empty inputs are named refusals") @(tt : T?) {
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"nothex\",\"verified\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "malformed sha")
+            }
+            POST("{base_url}/admin/sidecar/verify", "\{\"sha\":\"{sha256_hex("absent")}\",\"verified\":true}") $(resp) {
+                tt |> equal(int(resp.status_code), 404, "unknown sha")
+            }
+            POST("{base_url}/admin/sidecar/verify", "") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "empty body refused, not silently accepted")
+            }
+            POST("{base_url}/admin/sidecar/delete", "\{\"sha\":\"nothex\"}") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "delete rejects a malformed sha")
+            }
+            POST("{base_url}/admin/import-sidecar", "not json") $(resp) {
+                tt |> equal(int(resp.status_code), 400)
+                tt |> success(!empty(json_of(resp)?["error"] ?? ""), "plant names its error over HTTP")
+            }
+        }
+    }
+}
+
+[test]
+def test_admin_origin_gate_and_page(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        // 404 from the store is the pass signal - a request the gate blocks answers 403
+        let absent = sha256_hex("absent")
+        t |> run("every admin route refuses a cross-site Origin") @(tt : T?) {
+            // every operator POST, including the two my rename moved off the peer-only gate
+            // (import-official, shutdown) - a cross-origin shutdown must be REFUSED, so the
+            // server survives the arm
+            for (path in ["/admin/sidecar/verify", "/admin/sidecar/delete", "/admin/import-sidecar",
+                          "/admin/submit", "/admin/import-official", "/shutdown"]) {
+                with_http_request() $(var req) {
+                    req.method = http_method.POST
+                    req.url := "{base_url}{path}"
+                    set_header(req, "Origin", "http://evil.example")
+                    req.body := "\{\"sha\":\"{absent}\",\"verified\":true}"
+                    request(req) $(resp) {
+                        tt |> equal(int(resp.status_code), 403, "cross-site POST refused")
+                    }
+                }
+            }
+            for (path in ["/admin/", "/admin/sidecars"]) {
+                with_http_request() $(var req) {
+                    req.method = http_method.GET
+                    req.url := "{base_url}{path}"
+                    set_header(req, "Origin", "http://evil.example")
+                    request(req) $(resp) {
+                        tt |> equal(int(resp.status_code), 403, "cross-site GET refused")
+                    }
+                }
+            }
+            // Origin: null (sandboxed iframe) has no scheme separator - must still fail closed
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/admin/sidecar/verify"
+                set_header(req, "Origin", "null")
+                req.body := "\{\"sha\":\"{absent}\",\"verified\":true}"
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 403, "Origin null refused")
+                }
+            }
+            // DNS rebinding: peer is loopback (the tunnel) and Origin == Host, both attacker-owned.
+            // Sent header-less so same-origin passes and ONLY the loopback-Host check can refuse it
+            // - if this 404'd the host guard would be doing nothing (and libhv would be ignoring the
+            // spoofed Host); a 403 proves the guard fires.
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/admin/sidecar/verify"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"sha\":\"{absent}\",\"verified\":true}"
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 403, "rebound non-loopback Host refused")
+                }
+            }
+        }
+        t |> run("a same-origin request passes the gate") @(tt : T?) {
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/admin/sidecar/verify"
+                set_header(req, "Origin", "http://127.0.0.1:{TEST_PORT}")
+                req.body := "\{\"sha\":\"{absent}\",\"verified\":true}"
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 404, "reached the store")
+                    tt |> success(find(string(resp.body), "unknown sidecar") >= 0, "the store's own 404, not the catch-all's")
+                }
+            }
+        }
+        t |> run("the IPv4-mapped IPv6 loopback Host is accepted (peer/host allowlists agree)") @(tt : T?) {
+            // header-less, so only is_loopback_host decides: a 404 means it passed the gate
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/admin/sidecar/verify"
+                set_header(req, "Host", "[::ffff:127.0.0.1]:{TEST_PORT}")
+                req.body := "\{\"sha\":\"{absent}\",\"verified\":true}"
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 404, "mapped loopback Host reaches the store")
+                }
+            }
+        }
+    }
+}
+
+[test]
+def test_admin_page_serves(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        t |> run("the operator page serves on the loopback surface") @(tt : T?) {
+            GET("{base_url}/admin/") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> success(find(string(resp.body), "dasllama-ladder admin") >= 0, "the page arrived")
+            }
+            GET("{base_url}/admin") $(resp) {
+                tt |> equal(int(resp.status_code), 200, "the no-slash spelling serves it too")
+            }
+        }
+    }
+}
+
+[test]
+def test_admin_plant_promotes_community(t : T?) {
+    // gate OPEN: a community upload is the same content a later plant promotes
+    with_ladder_server(default_policy()) $(base_url) {
+        let doc = sidecar_doc(BOX_B, "4", "vec8_u8")
+        t |> run("planting a community upload promotes it in place") @(tt : T?) {
+            POST("{base_url}/api/submit/sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                tt |> success(!(json_of(resp)?["sidecars"]?[0]?["verified"] ?? true), "community entry is unverified")
+            }
+            POST("{base_url}/admin/import-sidecar", doc) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> success(!(json_of(resp)?["created"] ?? true), "dedup hit, not a second row")
+            }
+            GET("{base_url}/api/sidecars") $(resp) {
+                var js = json_of(resp)
+                tt |> equal(length(js?["sidecars"] as _array), 1, "still one row")
+                tt |> success(js?["sidecars"]?[0]?["verified"] ?? false, "now verified")
+            }
+            GET("{base_url}/admin/sidecars") $(resp) {
+                tt |> success(json_of(resp)?["submit_open"] ?? false, "the admin listing reads the gate open too")
+            }
+        }
+    }
+}
+
+[test]
 def test_submit_gate(t : T?) {
     // default policy = submit CLOSED: the read board serves, writes are refused until opened, and
     // the loopback admin flip is reversible (the test-window switch)
@@ -293,7 +512,7 @@ def test_submit_gate(t : T?) {
             }
             // garbage must resolve to closed: read_json -> null -> ?? false. (A non-loopback
             // caller is also refused, but every in-process peer is 127.0.0.1 so that path
-            // can't be exercised here — it is covered by is_loopback_caller's exact-match.)
+            // can't be exercised here — it is covered by is_operator_caller's exact-match.)
             POST("{base_url}/admin/submit", "not json at all") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
                 var js = json_of(resp)

@@ -310,6 +310,67 @@ def test_official_import(t : T?) {
 }
 
 [test]
+def test_plant_sidecar(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("a planted sidecar stores verified with the importer stamp") @(tt : T?) {
+            let doc = sidecar_doc(BOX_A, "4", "vec8_u8")
+            let put = plant_sidecar(db, doc, test_policy(), 1000l)
+            tt |> success(put.status == PutStatus.ok, "stored")
+            tt |> success(put.created, "created")
+            tt |> equal(get_sidecar_doc(db, put.sha), doc)
+            tt |> equal(get_submission_doc(db, 1), doc, "the receipt row landed")
+            let rows <- admin_list_sidecars(db)
+            tt |> equal(length(rows), 1)
+            tt |> success(rows[0].verified, "verified from birth")
+            tt |> equal(rows[0].client_ip, "importer")
+            tt |> equal(rows[0].box, BOX_A)
+            tt |> equal(rows[0].dasllama_version, 4)
+            let hits <- find_sidecars(db, 4, ident_a())
+            tt |> equal(length(hits), 1)
+            tt |> success(hits[0].verified, "a planted row serves on the lookup ladder")
+        }
+        t |> run("re-planting an existing sha promotes it") @(tt : T?) {
+            // a community upload of the SAME content enters unverified; the re-plant flips it
+            let doc = sidecar_doc(BOX_B, "4", "vec8_u8")
+            let community = put_sidecar(db, doc, "10.0.0.9", test_policy(), 2000l)
+            tt |> success(community.status == PutStatus.ok && community.created, "community stored")
+            let put = plant_sidecar(db, doc, test_policy(), 2001l)
+            tt |> success(put.status == PutStatus.ok && !put.created, "dedup hit")
+            let rows <- admin_list_sidecars(db)
+            tt |> equal(length(rows), 2)
+            tt |> equal(rows[0].sha, put.sha, "newest first — the 2000l insert leads the 1000l plant")
+            tt |> success(rows[0].verified, "the existing row is now verified")
+        }
+        t |> run("a plant of a non-strip-invariant doc still dedups its community twin") @(tt : T?) {
+            // the community path hashes the STRIPPED text; plant must hash the same text
+            var jerr = ""
+            var jdoc = read_json(sidecar_doc(BOX_C, "4", "vec8_u8"), jerr)
+            var prov = jdoc?["provenance"]
+            update(prov, "binary", JV("/Users/someone/bin/daslang"))
+            let dirty = write_json(jdoc)
+            delete_json(jdoc)
+            let community = put_sidecar(db, dirty, "10.0.0.10", test_policy(), 2100l)
+            tt |> success(community.status == PutStatus.ok && community.created, "dirty community upload stored")
+            let put = plant_sidecar(db, dirty, test_policy(), 2101l)
+            tt |> success(put.status == PutStatus.ok && !put.created, "plant hashed the stripped text - dedup, not a second row")
+            tt |> equal(put.sha, community.sha)
+        }
+        t |> run("plant validates and bounds like any import") @(tt : T?) {
+            let none = plant_sidecar(db, "", test_policy(), 3000l)
+            tt |> success(none.status == PutStatus.empty_doc, "empty doc refused at the store gate")
+            let bad = plant_sidecar(db, "not json", test_policy(), 3001l)
+            tt |> success(bad.status == PutStatus.invalid, "garbage refused")
+            tt |> success(!empty(bad.error), "error named")
+            let stale = plant_sidecar(db, sidecar_doc(BOX_C, "0", "vec8"), test_policy(), 3002l)
+            tt |> success(stale.status == PutStatus.invalid, "unstamped sidecar refused - it could never be served")
+            let tiny = LadderPolicy(max_sidecar_bytes = 64)
+            let huge = plant_sidecar(db, sidecar_doc(BOX_C, "4", "vec8"), tiny, 3003l)
+            tt |> success(huge.status == PutStatus.too_large, "size cap holds")
+        }
+    }
+}
+
+[test]
 def test_list_versions(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         var pol = test_policy()
