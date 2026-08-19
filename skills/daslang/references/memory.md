@@ -153,9 +153,11 @@ def work() {
 }
 ```
 
-`defer` is **rejected** directly inside a loop body (`error[50503]`) because a loop's `finally` runs
-once, not once per iteration — wrap the body in a bare block if you need it there. `var inscope` has
-no such restriction: the loop body is its own scope, so it releases every iteration.
+`defer` is **rejected** (`error[50503]`) directly inside a loop body — a loop's `finally` runs once,
+not once per iteration — and at the top level of a lambda or generator body, where the body's
+`finally` is the lambda's finalizer and would run on `delete`, not per call. Wrap the statements in
+a bare `{ }` block to get a per-iteration / per-call scope. `var inscope` has no loop restriction:
+the loop body is its own scope, so it releases every iteration.
 (`defer_delete` is deprecated; use `var inscope`.)
 
 **A `defer()` at the top level of a lambda body never fires per call** — it lands in the lambda's

@@ -26,3 +26,10 @@ Example:
     // start
     // middle
     // cleanup runs last
+
+Two placements are compile errors, because the enclosing ``finally`` would not run
+once per scope exit: directly in a loop body (the loop's ``finally`` runs once, after
+the loop), and at the top level of a lambda or generator body (that ``finally`` is the
+lambda's finalizer and runs on ``delete``, not per call). Enclose the ``defer`` in a
+bare ``{ }`` block to give it a per-iteration or per-call scope; to run code on
+``delete``, write the lambda's ``finally`` explicitly.

@@ -609,7 +609,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | coroutines.das | Typed coroutines — count_up, count_down, yield, co_continue | |
 | cpp_layout.das | `[cpp_layout]` struct annotation — sizeof, offsetof, pod=false | |
 | das_string.das | `das_string` type — assign, peek, string conversion, interpolation | |
-| defer.das | Defer execution order, defer_delete, short pipe syntax | |
+| defer.das | Defer execution order, defer_delete, short pipe syntax, bare-block defer inside a lambda | |
 | default_method_arguments.das | Default argument values in abstract/override methods | |
 | deref_ptr_fun.das | `deref(getPtr())` — function pointer dereference | |
 | dim.das | Fixed-size 2D arrays — indexing, pointer arithmetic, string representation | |
@@ -627,6 +627,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | failed_block.das | Block variable initialization failures | **expect** `30108` `30113` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
+| failed_defer_in_lambda.das | `defer` at the top level of a lambda or generator body is rejected — it would become the finalizer, not a per-call cleanup | **expect** `50503:2` |
 | failed_recursive_default.das | A struct method whose default argument calls itself — the recursive named call can't resolve and the auto return type can't be inferred through the recursion | **expect** `30161` `30237` `30341` `30344` `30805` |
 | failed_table_lookup_collision.das | Table lookup collision lint — same table indexed twice in one expression | **expect** `40216:7` |
 | finally.das | `finally` blocks — exceptions, loops, nested, return | |

@@ -39,6 +39,24 @@ def defer_check_short_pipe() {
     assert(x == 1)
 }
 
+def defer_in_lambda_bare_block() : int2 {
+    // returns what each call sees after its bare block; the deferred count++ must land per call, not on delete
+    var count = 0   // nolint:LINT003 - `let` makes the lambda's captured copy const, breaking count++
+    var lam <- @ capture(copy(count)) () : int {
+        {
+            defer() {
+                count++
+            }
+            count += 10
+        }
+        return count
+    }
+    let first = invoke(lam)
+    let second = invoke(lam)
+    unsafe { delete lam; }
+    return int2(first, second)
+}
+
 [test]
 def test_defer(t : T?) {
     t |> run("defer execution order") @(t : T?) {
@@ -55,5 +73,8 @@ def test_defer(t : T?) {
     t |> run("defer with short pipe syntax") @(t : T?) {
         defer_check_short_pipe()
         t |> success(true)
+    }
+    t |> run("defer in a bare block inside a lambda fires per call, not on delete") @(t : T?) {
+        t |> equal(defer_in_lambda_bare_block(), int2(11, 22))
     }
 }
