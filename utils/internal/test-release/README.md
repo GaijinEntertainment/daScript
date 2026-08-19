@@ -8,9 +8,11 @@ passes.
 ## The per-RC process
 
 1. Download the platform bundle from the release tag; extract to a CLEAN directory
-   (never over a previous install — a mixed tree tests nothing):
-   `tar -xf daslang-bundle-<os>-<arch>.zip -C <dir> --strip-components=1`
-2. From the repo root: `bin/daslang utils/internal/test-release/main.das -- --bundle <dir>`
+   (never over a previous install — a mixed tree tests nothing), short on Windows
+   (`C:\dl` — deep paths hit MAX_PATH in the network rows):
+   `unzip -q daslang-bundle-<os>-<arch>.zip -d <dir>` (Windows: `Expand-Archive`); the zip
+   carries a top-level `daslang_bundle/`, which is the root the next step points at.
+2. From the repo root: `bin/daslang utils/internal/test-release/main.das -- --bundle <dir>/daslang_bundle`
    (all phases; `--phase compile|utils` for one; `--network` adds the daspkg rows, which
    install into the bundle's example dirs — a scratch extract, never the one you keep).
 3. Triage the report: `UNEXPECTED` and `TIMEOUT` lines are the audit's yield — each is a

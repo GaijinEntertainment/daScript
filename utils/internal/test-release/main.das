@@ -171,12 +171,13 @@ def run_parent(cfg : Config) : int {
         to_log(LOG_ERROR, "test-release: --phase must be compile, utils, or all\n")
         return 2
     }
+    // compile first: the utils phase (with --network) installs into the example dirs
     var rc = 0
-    if (cfg.phase != "compile") {
-        rc = max(rc, run_utils_phase(cfg, bundle))
-    }
     if (cfg.phase != "utils") {
         rc = max(rc, run_compile_phase(cfg, bundle))
+    }
+    if (cfg.phase != "compile") {
+        rc = max(rc, run_utils_phase(cfg, bundle))
     }
     return rc
 }
