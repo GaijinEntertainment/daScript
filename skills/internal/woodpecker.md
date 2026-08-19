@@ -5,26 +5,36 @@ dimension of `skills/internal/make_pr.md` and `skills/internal/review_round.md`.
 
 The woodpecker is one round of the Codex CLI's native reviewer over a pinned commit. It
 reads with different eyes than the in-house agents, so its value is exactly the findings
-our own audits cannot predict. It is also unbounded — any real code reviews non-empty
-forever — so the damper below is part of the design, not a cost saving.
+our own audits cannot predict. It is also unbounded — on real code the finding stream
+never runs dry — so the damper below is part of the design, not a cost-saving measure.
 
 ## Invocation
 
 ```bash
 # a branch against its base (the normal PR shape)
-codex exec --sandbox read-only -o <report.md> review --base master
+codex exec --sandbox read-only -o <report.md> review --base origin/master
 # one commit
 codex exec --sandbox read-only -o <report.md> review --commit <sha>
 ```
 
 - Global flags go BEFORE the `review` subcommand. `--base` / `--commit` exclude a custom
   prompt — a custom prompt runs the generic agent, not the native reviewer; prefer native.
+- The base is `origin/master`, never local `master` — the checklist rebases branches onto
+  `origin/master` and leaves local `master` stale, so a stale base sweeps unrelated
+  upstream commits into the review.
+- Write the report outside the repo (the session scratchpad) or under `logs/`
+  (gitignored) — a bare in-tree filename is exactly the untracked debris the preflight
+  gate rejects.
 - Run it in a tree checked out at the tip you want reviewed, and record that sha with the
   report — findings are claims about exact bytes, and re-reviews only mean anything
-  against a pinned commit.
-- A round runs tens of minutes (~25 measured 2026-08): launch it in a background Bash at
-  the start of the caller's round — the review round or the `make_pr` checklist pass —
-  and harvest at its end; never sit idle waiting on it.
+  against a pinned commit. The recorded sha does not freeze what codex reads: the tree
+  must not change until harvest — launch after the last mutating step, or give the run
+  its own worktree at that sha.
+- No `codex` on PATH? The round is skipped, and the PR body says so — the gate is the
+  disclosure, never a silent pass.
+- A round runs tens of minutes (~25 measured 2026-08): run it in a background Bash and
+  keep working; never sit idle waiting on it. Launch and harvest points are the
+  caller's (see the damper).
 
 ## The findings loop
 

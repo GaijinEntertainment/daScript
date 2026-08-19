@@ -83,8 +83,9 @@ Every arc gets a round of the external codex reviewer
 (`skills/internal/woodpecker.md`), trivial or not: launch it in a background Bash once
 the branch reaches its final shape, keep working the checklist, harvest and verify its
 findings before step 6. Non-trivial arcs get a second round on the fixed tip by
-default; the skill carries the damper (when further rounds are earned) and the
-verify-before-believing loop.
+default; the skill carries the damper (when further rounds are earned), the
+verify-before-believing loop, and the no-codex-on-PATH fallback (skip + disclose in
+the PR body).
 
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
