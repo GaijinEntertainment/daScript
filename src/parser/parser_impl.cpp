@@ -1092,6 +1092,9 @@ namespace das {
                     } else {
                         pVar->type->removeConstant = true;
                     }
+                    if ( decl->annotation ) {
+                        pVar->annotation = *decl->annotation;
+                    }
                     pLet->variables.push_back(pVar);
                 } else {
                     das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,

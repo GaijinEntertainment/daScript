@@ -136,7 +136,7 @@ def test_control_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU com
         t |> success(fapprox(oracle.out3[0], 26.0), "float branch anchor (k=0 -> 26.0)")
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

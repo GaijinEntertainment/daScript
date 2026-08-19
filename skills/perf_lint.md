@@ -86,6 +86,29 @@ The name is the property, not the lint: a reuse promise is exactly the precondit
 would need to keep capacity across a shrink, skip the zero-fill, or hoist a loop-invariant
 sizing out. None of that is implemented yet.
 
+### `@exact_size` — declaring an input-scaled buffer
+
+The sibling contract for buffers whose size follows the input (a clip's frames, an image's
+pixels, a vocabulary) — the class that crosses `max_unreserved_size` in a single grow and panics
+only when a big enough input arrives. Same placement rules as `@scratch` (field, global, local,
+by-ref parameter; after `var`); the two stack: `@scratch @exact_size buf : array<float>`. On an
+`@exact_size` array every `resize`/`resize_no_init` must follow a `reserve` or `ensure_capacity`
+of the same receiver earlier in the same function (PERF032); a helper that reserves internally is
+transparent, and a by-ref helper marks its own parameter so the `resize` inside is held to it:
+
+```das
+struct EncoderState {
+    @exact_size x : array<float>     // [T x d]: T is the clip length
+}
+def reserve_resize(@exact_size var a : array<numT>; n : int64) {
+    a |> reserve(n)
+    a |> resize(n)
+}
+```
+
+Not a runtime flag: the annotation changes nothing about how the array grows — it makes the
+reserve-first spelling a checked contract at every site that touches the buffer.
+
 ### Escape hatches, in order of preference
 
 1. `[cold_path]` on the callee — the honest fix when the leg genuinely runs once (lazy init, PSO

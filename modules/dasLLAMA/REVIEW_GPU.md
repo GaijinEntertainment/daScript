@@ -70,12 +70,18 @@ not carry does not exist.
 **A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its size
 is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized wrong.
 
-**A change to `dasllama_metal_decode.das`, `dasllama_metal_prefill.das`,
-`dasllama_gpu_resident.das`, `dasllama_vulkan_decode.das`, or `dasllama_vulkan_prefill.das`
-ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one kq model, with `--kv`
-matching the armed mirror codec.** The Metal arm is `--ngl`; the vulkan arm is
-`DASLLAMA_GPU=1`, never `--ngl`, and its driver declines codec-mismatched sessions silently,
-so that log must show `resident driver armed`.
+**A change to a GPU decode or prefill driver — `dasllama/dasllama_metal_decode.das`,
+`dasllama/dasllama_metal_prefill.das`, `dasllama/dasllama_vulkan_decode.das`,
+`dasllama/dasllama_vulkan_prefill.das`, or the resident rail in
+`dasllama/dasllama_gpu_resident.das` (`resident_upload`, `resident_plan`, and the decode,
+batch-decode and prefill overrides it registers) — ships with `harness/parity.das` GPU-vs-CPU
+runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** The Metal arm is
+`--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
+codec-mismatched sessions silently, so that log must show `resident driver armed`.
+
+**A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
+ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
+model.** Parity runs never reach it.
 
 **A change to `dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
 `mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.

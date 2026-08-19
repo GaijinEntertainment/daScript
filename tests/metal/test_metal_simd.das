@@ -11,7 +11,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require metal/msl_shader
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let N = 256             // exact grid: 4 threadgroups of 64
 let TPG = 64u
@@ -71,7 +71,7 @@ def test_simd_gpu_vs_reported_membership(t : T?) { // nolint:STYLE038 - linear G
                 vs[k] = uint(k) * 2246822519u + 777u
                 fvs[k] = float(k % 17) * 0.25 + 0.5
             }
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

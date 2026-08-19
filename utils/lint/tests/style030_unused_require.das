@@ -19,6 +19,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 expect 31209:1
 
 require daslib/style_lint       // [lint_macro] module — pass-macro guard must NOT flag it
+require daslib/ast_verify       // [pre_infer_macro]/[post_infer_macro]/[post_compile_macro] module — the pass-macro guard covers those lists too, must NOT flag it
 require _style030_unused        // genuinely unused source module (FIRES)
 require _style029_direct        // used directly — must NOT fire
 require _style030_finalize_only // lifecycle-hook-only module ([finalize]) — must NOT fire

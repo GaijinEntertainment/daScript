@@ -3010,7 +3010,7 @@ class public LlvmJitVisitor : AstVisitor {
             } else {
                 // Create a mask value: (sizeof(element_type) * 8) - 1
                 verify(isNumeric(opType))
-                right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64((opType.sizeOf * 8) - 1), 0), "")
+                right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64((opType.sizeOf * 8) - 1), 0), "")   // nolint:LINT024 - sizeOf <= 8, the product cannot wrap; an emitter edit costs a codegen-version bump for nothing
                 right = build_broadcast_vector(g_builder, shiftType, right)
             }
         }

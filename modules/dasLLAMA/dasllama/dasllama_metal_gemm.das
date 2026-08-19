@@ -294,7 +294,7 @@ def private metal_gemm_init : bool {
     }
     g_dev = metal_create_system_default_device()
     if (g_dev == null) {
-        to_log(LOG_WARNING, "dasLLAMA metal: no Metal device — batch pin falls back to the portable CPU kernel\n")
+        to_log(LOG_WARNING, "dasLLAMA metal: no Metal device - batch pin falls back to the portable CPU kernel\n")
         g_failed = true
         return false
     }
@@ -305,7 +305,7 @@ def private metal_gemm_init : bool {
         g_pso64 = pipeline_from_source(g_dev, metal_q8_gemm64_msl, metal_q8_gemm64_msl_entry, metal_q8_gemm64_msl_fastmath, err)
     }
     if (g_pso == null || g_pso64 == null) {
-        to_log(LOG_ERROR, "dasLLAMA metal: kernel compile failed — {err}\n")
+        to_log(LOG_ERROR, "dasLLAMA metal: kernel compile failed - {err}\n")
         if (g_pso != null) {
             metal_release(g_pso)
             g_pso = null
@@ -392,7 +392,7 @@ def metal_q8q8_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp :
         }
         g_dispatches++
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal: dispatch failed ({err}) — falling back to the portable CPU kernel\n")
+        to_log(LOG_ERROR, "dasLLAMA metal: dispatch failed ({err}) - falling back to the portable CPU kernel\n")
         g_fallbacks++
         let cpu = kernel_backend_batch_fn("portable")
         invoke(cpu, yp, wp, sp, xqp, xsp, n, d, ntok)
@@ -423,12 +423,12 @@ def private metal_backend_available : bool {
 
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private metal_no_gemv(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    panic("dasLLAMA metal backend is batch-only — pin it via DASLLAMA_PIN_BATCH_BACKEND=metal, never as the whole backend")
+    panic("dasLLAMA metal backend is batch-only - pin it via DASLLAMA_PIN_BATCH_BACKEND=metal, never as the whole backend")
 }
 
 [unused_argument(y0p, y1p, y2p, wp, sp, woff0, woff1, woff2, xqp, xsp, n, d0, d1, d2)]
 def private metal_no_group3(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?; woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    panic("dasLLAMA metal backend is batch-only — pin it via DASLLAMA_PIN_BATCH_BACKEND=metal, never as the whole backend")
+    panic("dasLLAMA metal backend is batch-only - pin it via DASLLAMA_PIN_BATCH_BACKEND=metal, never as the whole backend")
 }
 
 [unused_argument(wp, sp, n, d)]

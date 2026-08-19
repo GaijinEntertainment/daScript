@@ -727,6 +727,36 @@ type, which keeps a same-named user overload silent, along with the
 fixed-array ``length`` generic in ``daslib/builtin.das`` that genuinely has no
 ``long_`` twin.
 
+LINT024 — 64-bit cast over a 32-bit product
+============================================
+
+``int64(w * h * 3)`` computes the product in 32 bits and widens the wrapped
+result: the overflow happened inside the parentheses, and the cast that looks
+like it buys 64-bit range buys nothing. LINT017's sibling — there the inner
+*call* clamps at 2\ :sup:`31`, here the inner *arithmetic* wraps. Widen a
+factor first, so the multiply itself runs in 64 bits.
+
+.. das-doc: given var pixels : array<uint8>
+.. das-doc: alt
+.. code-block:: das
+
+    // Bad — an int product wraps past ~46k x 46k before int64 sees it
+    let bytes = int64(length(pixels) * 3)
+
+    // Good — the multiply is 64-bit from the first factor
+    let bytes = long_length(pixels) * 3l
+
+Fires on ``int64(...)`` / ``uint64(...)`` whose operand is a ``+``/``-``/``*``
+tree containing a product, whose type is still 32-bit, **and one of whose
+leaves is a call** — ``length(a)``, a dimension getter, the unbounded factor
+that makes the wrap real. So ``int64(length(a) * 4 + pad)`` fires (the product
+wraps under the sum) while ``int64(w * h * 3)`` over plain locals does not: a
+product of locals is kernel tile geometry far more often than a byte count
+(the in-tree sweep found 81 of those against 2 real ones), and the rule keeps
+its signal by staying silent there — widen those by hand where they are byte
+counts. ``int64(a + b)`` has no product and is not this rule's shape; an
+operand that is already 64-bit is silent.
+
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 
@@ -947,6 +977,54 @@ plain compile sets ``options auto_inline_functions = false``.
 
 ``// nolint:LINT022`` on the declaration line is the answer for a symbol kept
 on purpose — a debug helper behind a commented-out call, say.
+
+LINT023 — mutable (``var``) by-value argument is written but never read
+=======================================================================
+
+A by-value parameter — ``int``, ``float``, ``bool``, ``string``, a vector, any
+type that is not a struct, array, table or reference — is a local copy. A write
+the body never reads back is therefore unobservable: the caller cannot see it,
+and nothing inside used it. This is the out-parameter that never reaches its
+caller (``var why : string`` assigned on the error path, ``why`` still empty at
+the call site). Declare it ``T&`` if it is an out-parameter; otherwise the write
+is dead.
+
+The rule is LINT014's mirror: LINT014 catches a ``var`` nothing writes, this
+catches a ``var`` nothing reads. Only plain stores keep a parameter reported —
+``=``, ``:=``, ``<-``, compound assignment, a swizzle store (``v.x = 1.0``),
+a statement-level ``++``/``--``. Any other appearance is a use and silences the
+rule: a read, ``return``, passing it on (to a ``&`` slot too — the callee may
+read it first), ``addr``, a lambda capture, a write through a pointer
+parameter's pointee (``p.x = 1`` reaches the caller's object; reassigning
+``p`` itself is a store like any other). Class methods and ``[extern]`` stubs,
+underscore-prefixed names and ``[unused_argument]`` are skipped.
+
+.. das-doc: alt
+.. code-block:: das
+
+    // Bad — the caller's `why` never changes
+    def parse(text : string; var why : string) : int {     // LINT023 on why
+        if (empty(text)) {
+            why = "empty input"
+            return -1
+        }
+        return length(text)
+    }
+
+    // Good
+    def parse(text : string; var why : string&) : int {
+        if (empty(text)) {
+            why = "empty input"
+            return -1
+        }
+        return length(text)
+    }
+
+    // Not flagged — a scratch parameter is written and then read
+    def twice(var n : int) : int {
+        n = n * 2
+        return n
+    }
 
 .. _perf_lint:
 
@@ -1467,6 +1545,54 @@ A view receiver never fires: the byte-view forms take their length from the
 view, so there is nothing to re-scan.
 PERF031 is on everywhere, this repo included: the byte-view sweep rewrote the
 in-tree hits onto ``peek_data`` views.
+
+PERF032 — ``@exact_size`` array grown without explicit capacity
+================================================================
+
+``@exact_size`` on an array declaration — a struct field, a global, a local
+(``var @exact_size buf : array<float>``), or a by-ref parameter — declares an
+input-scaled buffer: one whose size follows the input (a clip's frames, an
+image's pixels, a model's vocabulary) and can cross ``max_unreserved_size`` in
+a single grow. An unreserved ``resize`` rounds capacity up to the next power
+of two, and past ``max_unreserved_size`` it panics — exactly when a big enough
+input arrives, the shape that never shows in small-fixture tests. The annotation is a lint contract, not a runtime flag: on
+an ``@exact_size`` array every ``resize`` / ``resize_no_init`` must follow a
+``reserve`` or ``ensure_capacity`` of the same receiver **earlier in the same
+function** (the scratch one-shots count too). Sizing it through a helper that
+reserves internally is transparent — the call is not a ``resize`` — and a
+helper that takes the buffer by reference marks its own parameter
+``@exact_size`` so the ``resize`` inside is held to the same contract.
+``@exact_size`` on anything that is not an array is reported.
+
+.. das-doc: alt
+.. code-block:: das
+
+    struct EncoderState {
+        @exact_size x : array<float>     // [T x d]: T is the clip length
+    }
+
+    // Bad — 27 minutes of audio put x past the guard: panic
+    def make_state_bad(var s : EncoderState; tt, d : int64) {
+        s.x |> resize(tt * d)                 // PERF032
+    }
+
+    // Good — sized exactly, in one grow
+    def make_state(var s : EncoderState; tt, d : int64) {
+        s.x |> reserve(tt * d)
+        s.x |> resize(tt * d)
+    }
+
+    // Good — a reserving helper; its own parameter carries the contract
+    def reserve_resize(@exact_size var a : array<float>&; n : int64) {
+        a |> reserve(n)
+        a |> resize(n)
+    }
+
+The order matters — a ``reserve`` after the ``resize`` does not count. The
+receiver is matched by spelling within the function (``s.x`` and ``s.x``), so
+a reserve reached through a different alias is not seen; ``// nolint:PERF032``
+with the reason is the answer when the capacity is provably established
+elsewhere.
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
@@ -2698,6 +2824,29 @@ Pointer targets only: a pointer→integer pun such as
 silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
+
+STYLE035 — numeric variable compared with a cast character literal
+===================================================================
+
+Character literals are ``int``. A non-``int`` numeric variable compared with a
+built-in cast of one — ``b == uint8('(')``, ``c == uint('\n')`` — pays a cast
+at every compare to work around the variable's own declaration. Declare the
+variable ``int`` and compare with the literal directly.
+
+.. das-doc: given var bytes : array<uint8>
+.. code-block:: das
+
+    // Bad
+    var b : uint8 = bytes[0]
+    if (b == uint8('(')) { print("paren\n") }
+
+    // Good
+    let c : int = int(bytes[0])
+    if (c == '(') { print("paren\n") }
+
+The rule looks through the cast to a plain variable read of the cast's type;
+fields, indexes, and call results are not reported — the fix changes the
+variable's declaration, and there is no declaration to change for those.
 
 STYLE036 — inert type contract on a cast target
 ================================================

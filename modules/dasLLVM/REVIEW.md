@@ -7,25 +7,18 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
-- **Work added to or moved within the JIT pipeline — `run_jit`, `run_split_codegen`
-  (`daslib/llvm_jit_run.das`), or an artifact emitter (`daslib/llvm_jit_common.das`) —
-  runs inside a timed phase of the `LLVM JIT time:` breakdown** (phase inventory:
-  `ARCHITECTURE.md` §1). Option resolution before the first timer and log lines are not
-  pipeline work.
+- **Work added to, or moved within, what `run_jit` (`daslib/llvm_jit_run.das`) executes — its
+  own body or any callee — is covered by a printed `LLVM JIT time:` number: its own line, or a
+  phase's number that covers it while that phase's line still prints** (phase inventory:
+  `ARCHITECTURE.md` §1). Option resolution before the first timer, and log lines, are not work.
 
-- **Work added to or split out of a timed phase prints its own `LLVM JIT time:` number, or
-  the phase's number covers it and the phase's line still prints.**
-
-- **A change to code that EMITS machine code — any file in
-  `tests-cpp/small/test_jit_emitter_pin.cpp`'s `EMITTER_FILES` set (repo root) — bumps
-  `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`). A change that only SELECTS
-  among existing generators' `[llvm_code]` arguments — the `[tune]` stamping — needs no
-  bump: stamped arguments fold into the cache keys per function. What counts as emitting is
-  `ARCHITECTURE.md` §1.2.
-
-- **Weakening `tests-cpp/small/test_jit_emitter_pin.cpp` (repo root) is a defect** — it is
-  what enforces the bump trigger: a change to an `EMITTER_FILES` file bumps
-  `LLVM_JIT_CODEGEN_VERSION`.
+- **A change that can alter the machine code emitted for identical inputs bumps
+  `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`; what counts as emitting:
+  `ARCHITECTURE.md` §1.2). An edit inside an `EMITTER_FILES` file
+  (`tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) that provably emits identical code —
+  a comment, a nolint, a same-value rewrite — re-pins `LLVM_JIT_EMITTER_HASH` only. A change
+  that only SELECTS among existing generators' `[llvm_code]` arguments — the `[tune]`
+  stamping — needs neither: stamped arguments fold into the cache keys per function.
 
 - **A new environment or config input to the cache key folds inside `jit_env_salt`
   (`daslib/llvm_jit_run.das`), never directly into either cache key — the DLL key or the

@@ -26,7 +26,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | all (default all; all excludes image-vulkan)"
+    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all (default all; all excludes image-vulkan and model-free)"
     suite : string = "all"
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
@@ -45,7 +45,7 @@ struct RunArgs {
     help : bool
 }
 
-def private suite_files(name : string) : array<string> {
+def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat suite table, one file per line
     if (name == "decode") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das" ]
     } elif (name == "prefill") {
@@ -66,6 +66,68 @@ def private suite_files(name : string) : array<string> {
         return <- [ "modules/dasLLAMA/tests/test_model_image_vulkan.das" ]
     } elif (name == "coverage") {
         return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
+    } elif (name == "model-free") {
+        // every suite-less test that runs (or skips its model arms) with no model file present:
+        // the per-PR gate. A new such file registers here in the same change. Not here:
+        // test_cpu_prefill_tripwire (it asserts the guard the runner's DASLLAMA_CPU_PREFILL=1
+        // disarms - plain dastest only).
+        return <- [
+                    "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
+                    "modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das",
+                    "modules/dasLLAMA/tests/test_accel_backend.das",
+                    "modules/dasLLAMA/tests/test_affinity_predicates.das",
+                    "modules/dasLLAMA/tests/test_arch_registry.das",
+                    "modules/dasLLAMA/tests/test_asr_verbs.das",
+                    "modules/dasLLAMA/tests/test_attn_span.das",
+                    "modules/dasLLAMA/tests/test_audio.das",
+                    "modules/dasLLAMA/tests/test_batch_grid.das",
+                    "modules/dasLLAMA/tests/test_bench_records_schema.das",
+                    "modules/dasLLAMA/tests/test_box_profile.das",
+                    "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
+                    "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",
+                    "modules/dasLLAMA/tests/test_deltanet.das",
+                    "modules/dasLLAMA/tests/test_dispatch_shaping.das",
+                    "modules/dasLLAMA/tests/test_env_registry.das",
+                    "modules/dasLLAMA/tests/test_exchange_schema.das",
+                    "modules/dasLLAMA/tests/test_flash.das",
+                    "modules/dasLLAMA/tests/test_forward.das",
+                    "modules/dasLLAMA/tests/test_gguf_quant.das",
+                    "modules/dasLLAMA/tests/test_groupn.das",
+                    "modules/dasLLAMA/tests/test_kernel_backend.das",
+                    "modules/dasLLAMA/tests/test_kgroup_repack.das",
+                    "modules/dasLLAMA/tests/test_kqformat.das",
+                    "modules/dasLLAMA/tests/test_kv_prefix.das",
+                    "modules/dasLLAMA/tests/test_matmul.das",
+                    "modules/dasLLAMA/tests/test_matmul_batch.das",
+                    "modules/dasLLAMA/tests/test_metal_gemm.das",
+                    "modules/dasLLAMA/tests/test_metal_role_infer.das",
+                    "modules/dasLLAMA/tests/test_model_specs.das",
+                    "modules/dasLLAMA/tests/test_mxfp4.das",
+                    "modules/dasLLAMA/tests/test_par_indexed.das",
+                    "modules/dasLLAMA/tests/test_parity.das",
+                    "modules/dasLLAMA/tests/test_parity_cache.das",
+                    "modules/dasLLAMA/tests/test_parity_pregate.das",
+                    "modules/dasLLAMA/tests/test_plane.das",
+                    "modules/dasLLAMA/tests/test_prefill.das",
+                    "modules/dasLLAMA/tests/test_program_roots.das",
+                    "modules/dasLLAMA/tests/test_quant.das",
+                    "modules/dasLLAMA/tests/test_repack.das",
+                    "modules/dasLLAMA/tests/test_repack_lane_context.das",
+                    "modules/dasLLAMA/tests/test_rmsnorm.das",
+                    "modules/dasLLAMA/tests/test_rope.das",
+                    "modules/dasLLAMA/tests/test_run_summary.das",
+                    "modules/dasLLAMA/tests/test_scheduler.das",
+                    "modules/dasLLAMA/tests/test_silu.das",
+                    "modules/dasLLAMA/tests/test_sizing_helpers.das",
+                    "modules/dasLLAMA/tests/test_softmax.das",
+                    "modules/dasLLAMA/tests/test_think_split.das",
+                    "modules/dasLLAMA/tests/test_tok_seed.das",
+                    "modules/dasLLAMA/tests/test_tool_formats.das",
+                    "modules/dasLLAMA/tests/test_unicode.das",
+                    "modules/dasLLAMA/tests/test_vision.das",
+                    "modules/dasLLAMA/tests/test_vulkan_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tier.das",
+                    "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
@@ -167,7 +229,12 @@ def main() : int {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
     }
-    if (cfg.full == !empty(cfg.arm)) {   // both set, or neither
+    if (cfg.suite == "model-free") {
+        if (cfg.full || !empty(cfg.arm)) {   // the per-PR gate has no arms to scope: a filter would silently shrink it
+            to_log(LOG_ERROR, "--suite model-free takes neither --arm nor --full: it is the whole per-PR gate\n")
+            return 2
+        }
+    } elif (cfg.full == !empty(cfg.arm)) {   // both set, or neither
         to_log(LOG_ERROR, "pass --arm <filter> scoped to what the change can affect (--full is disabled while the Metal build-out is in progress; large tier = DASLLAMA_PARITY_FULL=1 with --arm)\n")
         return 2
     }
@@ -177,7 +244,7 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | all)\n")
         return 2
     }
     var tmp = g_env_test.tmpdir

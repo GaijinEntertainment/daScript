@@ -9,7 +9,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require metal/msl_shader
-require _metal_common  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 
 let N = 64
 let TPG = 32u
@@ -28,7 +28,7 @@ class IncKernel {
 def test_host_plumbing(t : T?) {
     t |> run("pipeline cache + buffer pool + multi-dispatch encoder") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; plumbing checks skipped\n")
                     return
@@ -64,7 +64,7 @@ def test_host_plumbing(t : T?) {
                 var queue = metal_new_command_queue(dev)
                 var derr : string
                 var gpu_ms = 0.0lf
-                let ran = with_compute_encoder_timed(queue, derr, gpu_ms) <| $(enc : MetalComputeEncoder?) {
+                let ran = with_compute_encoder_timed(queue, derr, gpu_ms) $(enc : MetalComputeEncoder?) {
                     metal_set_pipeline(enc, pso1)
                     metal_set_buffer(enc, ba, 0ul, 0)
                     metal_dispatch_threadgroups(enc, uint3(uint(N) / TPG, 1u, 1u), uint3(TPG, 1u, 1u))

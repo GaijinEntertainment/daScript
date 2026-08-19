@@ -118,7 +118,7 @@ def bnns_phase {
         let hxp = addr<uint16 const?>(hx[0])
         var yp = addr(y[0])
         if (accel_bnns_hgemm_nt(1, 1, 1, hxp, 1, hwp, 1, yp, 1) != 0) {
-            print("bnns unavailable on this OS — phase skipped\n")
+            print("bnns unavailable on this OS - phase skipped\n")
             return
         }
         var acc = 0.0

@@ -77,7 +77,9 @@ let CANARY_SECTIONS : array<CanarySection> <- [
     CanarySection(name = "multi-dimensional fixed arrays",
         snippet = "def can_fixed_arrays() \{\n    var grid : int[3][4]\n    grid[0][1] = 5\n    var row : CanRow\n    row[2] = 1.5f\n    print(\"\{grid[0][1]\} \{row[2]\}\\n\")\n\}"),
     CanarySection(name = "numeric literal zoo",
-        snippet = "def can_numbers() \{\n    let h = 0x3F\n    let u = 1ul\n    let d = 1.5lf\n    let hf = 1.5h\n    let ch = '('\n    print(\"\{h\} \{u\} \{d\} \{float(hf)\} \{ch\}\\n\")\n\}")
+        snippet = "def can_numbers() \{\n    let h = 0x3F\n    let u = 1ul\n    let d = 1.5lf\n    let hf = 1.5h\n    let ch = '('\n    print(\"\{h\} \{u\} \{d\} \{float(hf)\} \{ch\}\\n\")\n\}"),
+    CanarySection(name = "local variable @annotation",
+        snippet = "def can_local_annotation() \{\n    var @exact_size buf : array<int>\n    let @exact_size @other = 3 two = 2\n    buf |> reserve(two)\n    buf |> resize(two)\n    print(\"\{length(buf)\}\\n\")\n\}")
 ]
 
 def private build_canary_source(var marker_rows : array<int>) : string {

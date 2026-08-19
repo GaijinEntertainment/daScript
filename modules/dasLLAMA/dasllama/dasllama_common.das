@@ -887,8 +887,8 @@ struct Model {
     // trimmed-flavor embedding planes (P3): the emb/cls tensor's rows kept CPU-readable after
     // the big weight families drop. q8: mblob-style 34B interleaved blocks (embs empty);
     // kq: the region's quant + scale planes copied verbatim (repack layout preserved, rebased to 0).
-    embq : array<uint8>
-    embs : array<uint8>
+    @exact_size embq : array<uint8>
+    @exact_size embs : array<uint8>
     // prepared-model image backing (dasllama_image): when set, every locked array field above
     // is a borrowed VIEW into this image (zero-copy) and the finalizer below releases it.
     // Both fields are skipped by the image save/load field walk.
@@ -1698,8 +1698,8 @@ struct Session {
     @scratch moe_ghb2 : array<float>     // bucket up outputs (same shape)
     @scratch moe_hq : array<int8>        // bucket hidden requant quants (npos x max(n_ff_exp, n_ff_shexp))
     @scratch moe_hs : array<float>       // bucket hidden requant scales (same / 32)
-    @scratch moe_gout : array<float>     // bucket (then shared-expert) down-projection output (npos x dim)
-    @scratch moe_eout : array<float>     // routed expert outputs parked by (position, slot) (npos x k x dim)
+    @scratch @exact_size moe_gout : array<float>     // bucket (then shared-expert) down-projection output (npos x dim)
+    @scratch @exact_size moe_eout : array<float>     // routed expert outputs parked by (position, slot) (npos x k x dim)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
@@ -1715,8 +1715,8 @@ struct Session {
     // qwen35 deltanet recurrent state (persists across tokens; zeroed at position 0) + scratch.
     // Empty unless config.recr_mask != 0. State is forward-only — dn_pos guards against rewind.
     dn_pos : int64                 // the next position the deltanet stack expects
-    dn_conv_state : array<float>   // per recurrent layer: (d_conv-1) history taps per channel, channel-major
-    dn_state : array<float>        // per recurrent layer: S — dt_rank heads x (d_state x d_state) f32
+    @exact_size dn_conv_state : array<float>   // per recurrent layer: (d_conv-1) history taps per channel, channel-major
+    @exact_size dn_state : array<float>        // per recurrent layer: S — dt_rank heads x (d_state x d_state) f32
     dn_conv_prefix : array<int64>  // per-layer element offsets into the two above; -1 = attention layer
     dn_state_prefix : array<int64>
     dn_qkv : array<float>          // fused [q;k;v] projection out (conv_dim)

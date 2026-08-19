@@ -7,7 +7,8 @@ to verify one-arm fixes. They are enforcement, not advice.
 ## Run suites ONLY through the runner
 
 ```
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|prefill|matrix|all] [--family llama]
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate, no --arm
 ```
 
 Never invoke `dastest/dastest.das --test modules/dasLLAMA/tests/...` directly for the metal suites.
@@ -111,10 +112,12 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 ## Model-free / no-arm tests
 
-Suite-less files run under plain dastest (still `-jit`) — no arm, no family tag, no runner.
-New suite-less files register on this note (REVIEW: "A suite-less file's `CLAUDE.md` entry is
-accurate in the same change"); suite members register in their suite's arm list via `run.das`
-instead.
+A model-free file — one whose cells run, or skip their model arms, with no model present and
+with CPU prefill declared (`DASLLAMA_CPU_PREFILL=1`, which the runner sets for every child) —
+runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
+the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
+the per-file map. A file in a model suite (every suite but `model-free`) is listed in its
+suite's arm list in `run.das` instead.
 Current note: `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` — model-free, expected-compile-failure: the lint's tree
@@ -188,8 +191,9 @@ agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), 
 `test_cpu_prefill_tripwire.das` — the CPU-prefill guard: an undeclared prefill trips, span
 and causal alike (the metal rail serves spans, so a CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
-cannot live in test_attn_span — that file arms it in `[init]`). Metal-capable builds only;
-no suite arm.
+cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
+runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
+only; plain dastest only.
 `test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
 `DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
 span length from the geometry) and the greedy caption, logged in full. NOT token-parity with

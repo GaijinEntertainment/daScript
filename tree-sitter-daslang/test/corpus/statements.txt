@@ -196,6 +196,42 @@ def test() {
             function: (identifier)))))))
 
 ================================================================================
+Variable declaration with metadata annotations
+================================================================================
+
+def test() {
+  var @exact_size buf : array<int>
+  let @tag = "x" @other n = 3
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (metadata_argument_list
+          (annotation_argument
+            name: (identifier)))
+        (variable_binding
+          name: (identifier)
+          type: (array_type
+            (basic_type))))
+      (variable_declaration_statement
+        (metadata_argument_list
+          (annotation_argument
+            name: (identifier)
+            value: (string_literal))
+          (annotation_argument
+            name: (identifier)))
+        (variable_binding
+          name: (identifier)
+          value: (integer_literal))))))
+
+================================================================================
 For loop with bracketed annotations
 ================================================================================
 

@@ -2927,6 +2927,7 @@ namespace das {
                         reportAstChanged();
                         auto selfVar = new ExprVar(expr->at, "self");
                         auto castT = new TypeDecl(baseStruct);
+                        castT->at = expr->at;
                         auto castExpr = new ExprCast(expr->at, selfVar, castT);
                         auto newDel = new ExprDelete(expr->at, castExpr);
                         newDel->alwaysSafe = true;
@@ -2955,6 +2956,7 @@ namespace das {
                             reportAstChanged();
                             auto selfVar = new ExprVar(expr->at, "self");
                             auto castT = new TypeDecl(baseStruct);
+                            castT->at = expr->at;
                             auto castExpr = new ExprCast(expr->at, selfVar, castT);
                             auto newDel = new ExprDelete(expr->at, castExpr);
                             newDel->alwaysSafe = true;

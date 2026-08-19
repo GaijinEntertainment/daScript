@@ -452,23 +452,18 @@
     fixtures for GLM-4.5-Air, Phi-3.5, Mistral-Medium-3.5 and Gemma-4-31B that do not exist
     in the tree — the generation arc starts by reconciling those rows (re-mint or re-word).
 
-35. **`@exact_size` allocation-mode annotation (2026-08-18, OWN PR + design discussion).**
-    Five max_unreserved_size strikes in one day, four modules, all input-scaled buffers
-    grown by bare resize. Per-site reserves fix instances; the mechanism fix is a
-    declaration-site annotation flipping the array to EXACT growth (no pow2) — bare
-    `resize(need)` becomes the correct spelling on annotated arrays and the guard's hazard
-    is structurally absent. Machinery precedent: the scratch-flag arc (#3745) — flags-union
-    bit + resize-arm predicate + daslib surface. The guard panic gains a fourth exit
-    ("mark the destination @exact_size"). Caveat at the definition: exact mode in an append
-    loop is quadratic — open-ended accumulation keeps ensure_capacity. The repo-wide
-    unreserved-grow LINT stays unbundled behind this discussion — the shape defines the
-    defect in dasLLAMA, not across the general codebase.
+35. **`@exact_size` — DONE as a lint contract, not a runtime mode (2026-08-18).** The
+    declaration-site annotation landed on variables, fields and by-ref parameters (locals gained
+    `@` metadata grammar for it); it changes nothing at runtime — PERF032 holds every
+    `resize`/`resize_no_init` on an annotated array to a `reserve`/`ensure_capacity` earlier in
+    the same function, helpers like `reserve_resize`/`grow_resize`/`zeroed_resize` staying
+    transparent. Annotated: the deltanet state pair, `moe_gout`/`moe_eout`, every T-scaled
+    `EncoderState` buffer, `VisionImage.rgb`, the k6 scale-split staging local, the ASR requant
+    helper parameters, and `embq`/`embs`. The runtime exact-growth mode was judged not doable
+    (an argument passed by reference, a copy-initialized variable — the flag has no home).
 
-36. **The vulkan bake-trim embedding planes carry the same bare-grow shape (2026-08-18).**
-    `dasllama_gpu_resident.das` (the cls_q8/cls_kq trim arms) resizes `embq`/`embs` to
-    vocab-scaled sizes without reserve — ~600 MB+ at the 27B's 248k vocab. Off the Metal
-    rail (untripped today), but zen2's first big-model vulkan bake will strike it. Fix with
-    the reserve idiom or under #35.
+36. **DONE (2026-08-18) under #35:** the vulkan bake-trim `embq`/`embs` bare resizes in
+    `dasllama_gpu_resident.das` were the first PERF032 hits — now `reserve_resize`.
 
 37. **The Mistral-7B-v0.3 parity fixture is red on clean master (2026-08-18).** Verified by a
     detached-master run (54 tests, that one red); the arm now runs as

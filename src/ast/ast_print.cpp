@@ -624,6 +624,7 @@ namespace das {
             if ( printVarAccess && var->access_pass ) ss << "/*pass*/";
             if ( printVarAccess && var->access_get ) ss << "/*get*/";
             if ( printVarAccess && var->access_info_pass_mutable ) ss << "/*pass_mut*/";
+            outputVariableAnnotation(var->annotation);
             ss << var->name;
             if ( !var->aka.empty() ) ss << " aka " << var->aka;
             if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";

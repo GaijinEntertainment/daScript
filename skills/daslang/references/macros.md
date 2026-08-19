@@ -281,6 +281,11 @@ class Foo {
 }
 ```
 
+The same `@name` metadata goes on variables — after `let`/`var` (and `inscope`), before the
+name: `var @exact_size buf : array<float>`, `let @tag = "x" n = 3`, and on parameters
+`def f(@scratch var a : array<int>&)`. It surfaces as `Variable.annotation` in macros and lints;
+no runtime effect (probe-verified 2026-08-18).
+
 Visibility is never an annotation: write `def private helper`, `struct private Foo`,
 `enum private E`.
 

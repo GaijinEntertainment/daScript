@@ -176,8 +176,11 @@ diagnostic in any tier.
 | `dst := src` / `push_clone(src)` on a plain `string` | `dst = src` / `push(src)`; cross-context copy = `clone_string(src)` | LINT016: the clone spelling copies only the pointer |
 | `int64(length(x))` / `uint64(capacity(x))` (also `count`, `find_index`, `fread`, `fwrite`) | `long_length(x)` / `long_capacity(x)` / … | LINT017: the inner call returns `int` — 2^31 is hit before the cast |
 | `memcpy(d, s, int(n))` / `arr \|> resize(int(n64))` with a 64-bit `n` | `memcpy(d, s, n)` / `resize(n64)` — the 64-bit overloads exist | LINT018 |
+| `int64(length(a) * 4)` — a 32-bit product with a call among the factors | `long_length(a) * 4l` — the product wrapped before the cast | LINT024 |
 | `range(int(n64))` / `urange(uint(u64))` | `range64(n64)` / `urange64(u64)` | LINT020. Vector components and `string` index stay 32-bit |
 | a 64-bit local whose every use sits under `int(...)` | narrow once at the declaration, or lift the sinks to 64-bit | LINT021 |
+| `def f(var why : string)` written on a path but never read | `var why : string&` — a by-value copy's write never reaches the caller | LINT023 |
+| bare `resize(need)` on an input-scaled buffer (frames, pixels, vocab) | declare it `@exact_size`; then `reserve`/`ensure_capacity` before every `resize` (or size it through `reserve_resize`-style helpers) | PERF032 — the annotation is a lint contract; the guard panics only when the big input arrives |
 | `-const` `-&` `-[]` `-#` `==const` `==&` on a **concrete** cast target | drop the contract | STYLE036: substitution contracts act only while a generic binds — inert on concrete targets |
 | `slice(s, i, j)` / `chop(s, i, n)` in a loop over an outer string | `peek_data(s) $(d)` and slice the view | PERF031: each call re-strlens the whole source — O(n²); every haystack op has a byte-view twin |
 

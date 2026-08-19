@@ -98,7 +98,7 @@ def test_math_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU compar
         t |> equal(oracle.ic[0], min(9, -3) + max(-9, -3) + float_bits_to_int(-4.0))
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
-            with_metal_device() <| $(dev : MetalDevice?) {
+            with_metal_device() $(dev : MetalDevice?) {
                 if (dev == null) {
                     feint("no Metal device on this box; GPU compare skipped\n")
                     return

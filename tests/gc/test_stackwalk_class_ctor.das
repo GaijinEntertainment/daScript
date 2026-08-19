@@ -44,7 +44,7 @@ class Base {
 class Derived : Base {}
 
 [test]
-def test_stackwalk_class_ctor(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
+def test_stackwalk_class_ctor(t : T?) {
     t |> run("wrapper-frame self is live while the user ctor runs") @(t : T?) {
         var w = new CollectingWalker()
         var tk = new Talker(w)
