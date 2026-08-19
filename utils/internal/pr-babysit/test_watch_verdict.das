@@ -23,10 +23,11 @@ def test_watch_verdict(t : T?) {
         t |> equal(watch_verdict(0, 9, false, 0), WatchVerdict.keep_polling)
     }
     t |> run("check lines classify by bucket; pass and skip are neither") @(t : T?) {
-        let r <- classify_checks(["fail build_linux", "pending docs", "pass lint", "skipping macos", "fail extended checks"])
-        t |> equal(length(r.fails), 2)
+        let r <- classify_checks(["fail build_linux", "pending docs", "pass lint", "skipping macos", "fail extended checks", "cancel build_eastl (pc)"])
+        t |> equal(length(r.fails), 3)
         t |> equal(r.fails[0], "build_linux")
         t |> equal(r.fails[1], "extended checks")
+        t |> equal(r.fails[2], "build_eastl (pc)")   // a cancelled lane is red, not done
         t |> equal(r.pending, 1)
         let none <- classify_checks([])
         t |> equal(length(none.fails), 0)

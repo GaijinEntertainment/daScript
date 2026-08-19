@@ -21,12 +21,15 @@ def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : b
     return WatchVerdict.keep_polling
 }
 
-// "<bucket> <name>" check lines -> failing names + pending count; other buckets pass or skip
+// "<bucket> <name>" check lines -> failing names + pending count; other buckets pass or skip.
+// A cancelled lane is red until it is re-run - between a cancel and a rerun it must not read as "nothing pending"
 def public classify_checks(checks : array<string>) : tuple<fails : array<string>; pending : int> {
     var r : tuple<fails : array<string>; pending : int>
     for (c in checks) {
         if (c |> starts_with("fail ")) {
             r.fails |> push(slice(c, 5))
+        } elif (c |> starts_with("cancel ")) {
+            r.fails |> push(slice(c, 7))
         } elif (c |> starts_with("pending ")) {
             r.pending++
         }
