@@ -192,6 +192,13 @@ maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed 
 staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
 without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare both vision tier-1 tests use.
+`test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
+Model shells — short plane trips per format arm, full plane passes, non-PLE exempt.
+`test_ple_modes.das` — suite-less, model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
+token table's pinned-plane rail across serving modes — fp32 keeps the Q8_0 table on a
+dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
+wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
+plus one fp32 and one q4 greedy chat turn each (the q4 load panicked outright before the rail).
 `test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama_tower.das`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.

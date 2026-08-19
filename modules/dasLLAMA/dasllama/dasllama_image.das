@@ -717,6 +717,7 @@ def count_meta_fields(var t) : int {
 //! the same `_::` reason as serialize_image_meta.
 def image_post_load(var t : Model) {
     rebind_arch_blocks(t, t.arch)
+    ple_check_table(t, "prepared image")
 }
 
 // ===== save =====

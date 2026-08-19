@@ -39,9 +39,13 @@ model — decode, prefill, chat, the vision and audio splices — across the ser
 ## Slices
 
 - **A. The CPU PLE rail**: table pinned to its disk-format plane under fp32/q4; the q4
-  guard + its fixture deleted; `ple_gather_row` untouched. Tests: an fp32 E2B forward
-  (greedy reply coherent; PLE gather rows bit-match a direct dequant probe; RSS asserts no
-  table expansion), a q4 forward smoke, negative controls (mutate the table routing → red).
+  guard deleted (it had no fixture); `ple_gather_row` untouched; a go-live tripwire
+  (`ple_check_table`) at both carrier seams — gguf load and image parse — so a stale
+  pre-rail image fails AT LOAD, named, instead of OOB mid-forward. Tests
+  (`tests/test_ple_modes.das`): an fp32 E2B forward (greedy reply coherent; PLE gather rows
+  bit-match a direct dequant probe; plane-length asserts prove no table expansion — exact
+  where RSS is noisy), the kq-table pin under fp32 (Q4_K_M), a q4 forward smoke, negative
+  controls (mutate the table routing → red).
 - **B. The Metal hetero-hidden fix**: prefill + single-stream decode take per-layer hidden;
   support-matrix cells move E2B from `layers` to served (and pin the reasons that remain);
   `harness/parity.das --ngl` GPU-vs-CPU on E2B Q8_0 AND E2B Q4_K_M (the kq arm), per the
