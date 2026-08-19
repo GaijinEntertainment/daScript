@@ -1523,9 +1523,9 @@ PERF032 — ``@exact_size`` array grown without explicit capacity
 (``var @exact_size buf : array<float>``), or a by-ref parameter — declares an
 input-scaled buffer: one whose size follows the input (a clip's frames, an
 image's pixels, a model's vocabulary) and can cross ``max_unreserved_size`` in
-a single grow. A bare ``resize`` doubles capacity on the way up and trips the
-guard exactly when a big enough input arrives — the shape that never shows in
-small-fixture tests. The annotation is a lint contract, not a runtime flag: on
+a single grow. An unreserved ``resize`` rounds capacity up to the next power
+of two, and past ``max_unreserved_size`` it panics — exactly when a big enough
+input arrives, the shape that never shows in small-fixture tests. The annotation is a lint contract, not a runtime flag: on
 an ``@exact_size`` array every ``resize`` / ``resize_no_init`` must follow a
 ``reserve`` or ``ensure_capacity`` of the same receiver **earlier in the same
 function** (the scratch one-shots count too). Sizing it through a helper that
@@ -1541,7 +1541,7 @@ helper that takes the buffer by reference marks its own parameter
         @exact_size x : array<float>     // [T x d]: T is the clip length
     }
 
-    // Bad — 27 minutes of audio grow x by doubling into the guard
+    // Bad — 27 minutes of audio put x past the guard: panic
     def make_state_bad(var s : EncoderState; tt, d : int64) {
         s.x |> resize(tt * d)                 // PERF032
     }

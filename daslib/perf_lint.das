@@ -2074,7 +2074,7 @@ class PerfLintVisitor : AstVisitor {
     def check_perf032_declaration(td : TypeDeclPtr; annotations : AnnotationArgumentList; at : LineInfo) : void {
         if (td == null || !has_annotation(annotations, "exact_size")) return
         if (td.baseType != Type.tArray) {
-            perf_warning("PERF032: @exact_size on a {describe(td, false, false, false)} - the annotation is an array contract (every resize must follow a reserve/ensure_capacity); drop it here", at)
+            perf_warning("PERF032: @exact_size does not apply to `{describe(td, false, false, false)}` - the annotation is an array contract (every resize must follow a reserve/ensure_capacity)", at)
         }
     }
 
@@ -2087,7 +2087,7 @@ class PerfLintVisitor : AstVisitor {
             perf032_reserved |> insert(describe(dest))
         } elif ((origin == "resize" || origin == "resize_no_init") && is_annotated_dest(dest, "exact_size")) {
             if (!key_exists(perf032_reserved, describe(dest))) {
-                perf_warning("PERF032: {origin} on the @exact_size array `{describe(dest)}` with no reserve/ensure_capacity on it earlier in this function - an input-scaled buffer grows by doubling into the max_unreserved_size guard; reserve(need) or ensure_capacity(need) it first, or size it through a helper that does", expr.at)
+                perf_warning("PERF032: {origin} on the @exact_size array `{describe(dest)}` with no reserve/ensure_capacity earlier in this function - an unreserved resize rounds capacity up to the next power of two, and past max_unreserved_size it panics, only when the big input arrives; reserve(need) or ensure_capacity(need) first, or size it through a helper that does", expr.at)
             }
         }
     }

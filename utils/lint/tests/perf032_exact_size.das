@@ -3,8 +3,8 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // PERF032: an @exact_size array grown by resize without explicit capacity
 //
 // @exact_size on an array declaration (field, global, local, by-ref parameter) declares an
-// input-scaled buffer: one that can cross max_unreserved_size in a single grow, where a bare
-// resize doubles into the guard. On such an array every resize/resize_no_init must follow a
+// input-scaled buffer: one that can cross max_unreserved_size in a single grow, where an
+// unreserved resize panics. On such an array every resize/resize_no_init must follow a
 // reserve or ensure_capacity of the same receiver earlier in the function; sizing it through
 // a helper that reserves (reserve_resize and kin) is transparent. The annotation on a
 // non-array declaration is reported too.
