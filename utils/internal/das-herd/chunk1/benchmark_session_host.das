@@ -68,7 +68,7 @@ def private percentile_us(var values : array<int64>; numerator : int) : int64 {
     return values[index]
 }
 
-def private read_file(path : string; var error : string) : string {
+def private read_file(path : string; var error : string&) : string {
     var file = fopen(path, "rb")
     if (file == null) {
         error = "could not read {path}"

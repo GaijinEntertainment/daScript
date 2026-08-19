@@ -1533,7 +1533,7 @@ def public watcher_machine_output_text(session_id : string;
     return watcher_strip_terminal_controls(string(session.raw_history))
 }
 
-def public watcher_terminal_text(session_id : string; var scrollback_rows : int) : string {
+def public watcher_terminal_text(session_id : string; var scrollback_rows : int&) : string {
     scrollback_rows = 0
     let index = watcher_find_session(session_id)
     if (index < 0 || g_sessions[index] == null) return ""

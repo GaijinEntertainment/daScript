@@ -150,11 +150,21 @@ def private lint022_is_skipped(fn : Function?; mod : Module?) : bool {
         || fn.at.fileInfo == null || fn._module != mod)
 }
 
+struct private Lint023Candidate {
+    v : Variable const?
+    stores : int
+    disqualified : bool
+}
+
 class LintVisitor : AstVisitor {
     // LINT014 is decided after the body: a `var` argument that is returned needs its mutability
     // for the move (a non-copyable result cannot move from a const argument). Arguments are
     // collected before the body, so a `return <arg>` just removes its candidate
     lint014_candidates : array<Variable const?>
+    // LINT023 (LINT014's mirror) is decided after the body too: by-value `var` arguments are
+    // collected before it; every appearance that is not a plain store disqualifies
+    lint023_candidates : array<Lint023Candidate>
+    lint023_store_nodes : table<uint64>     // ExprVar nodes pre-marked as store targets (swizzle LHS, statement-level ++/--)
     //! AST visitor that performs lint checks.
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
@@ -379,6 +389,16 @@ class LintVisitor : AstVisitor {
             }
         }
         lint014_candidates |> clear()
+        // LINT023 — report by-value var arguments whose only uses were stores
+        if (!noLint && genericDepth == 0) {
+            for (c in lint023_candidates) {
+                if (!c.disqualified && c.stores > 0) {
+                    lint_error("LINT023: mutable by-value argument {c.v.name}: {describe(c.v._type, false, false, false)} is written but never read - the caller never sees a write to a by-value copy; declare it `{describe(c.v._type, false, false, false)}&` if it is an out-parameter, otherwise the write is dead", c.v.at)
+                }
+            }
+        }
+        lint023_candidates |> clear()
+        lint023_store_nodes |> clear()
         // LINT010 — emit final dead-store warnings for any still-pending stores
         if (!noLint && genericDepth == 0) {
             for (e in ds_entries) {
@@ -422,6 +442,16 @@ class LintVisitor : AstVisitor {
             lint021_closure_depth--
         }
         return <- blk
+    }
+    def override preVisitExprBlockExpression(_blk : ExprBlock?; expr : ExpressionPtr) : void {
+        // a statement-level `n++` / `--n` stores into n and discards the value; anywhere else the same operator is a read
+        if (noLint || genericDepth > 0 || !(expr is ExprOp1)) return
+        let op1 = expr as ExprOp1
+        if (op1.op == "++" || op1.op == "--" || op1.op == "+++" || op1.op == "---") {
+            if (op1.subexpr != null && op1.subexpr is ExprVar) {
+                lint023_store_nodes |> insert(intptr(op1.subexpr))
+            }
+        }
     }
     def override visitExprBlockExpression(_blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
         // Flag if a prior direct-child of THIS block already terminated control flow.
@@ -553,6 +583,44 @@ class LintVisitor : AstVisitor {
         lint014_candidates |> push(v)
     }
 
+    def lint023_collect_candidate(v : VariablePtr) {
+        // by-value non-pointer `var` params only: a by-ref param propagates its writes, and a write through a pointer param's pointee marks the param's ExprVar written too, though the caller does see it
+        if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used || v.isAccessUnused) return
+        let name = string(v.name)
+        if ((name |> starts_with("_")) || find(name, "`") >= 0
+                || v._type == null || v._type.flags.constant
+                || v._type.flags.ref || v._type.isRefType || v._type.baseType == Type.tPointer) {
+            return
+        }
+        lint023_candidates |> push(Lint023Candidate(v = v, stores = 0, disqualified = false))
+    }
+
+    def lint023_find(v : Variable const?) : int {
+        for (i in range(length(lint023_candidates))) {
+            if (lint023_candidates[i].v == v) return i
+        }
+        return -1
+    }
+
+    def lint023_mark_store_target(lhs : ExpressionPtr) : void {
+        // `v.x = ...` on a vector param stores into the local copy just like `v = ...`; the compiler's underClone only marks a bare-var LHS
+        if (lhs == null || !(lhs is ExprSwizzle)) return
+        let sw = lhs as ExprSwizzle
+        if (sw.value != null && sw.value is ExprVar) {
+            lint023_store_nodes |> insert(intptr(sw.value))
+        }
+    }
+
+    def lint023_note_use(expr : ExprVar?) : void {
+        let ci = lint023_find(expr.variable)
+        if (ci < 0 || lint023_candidates[ci].disqualified) return
+        if (expr.varFlags.under_clone || key_exists(lint023_store_nodes, intptr(expr))) {
+            lint023_candidates[ci].stores++
+        } else {
+            lint023_candidates[ci].disqualified = true
+        }
+    }
+
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; _lastArg : bool) : void {
         if (lint022_generic_sweep) {
             lint022_refs |> note_type_names(arg._type, 0)
@@ -564,6 +632,7 @@ class LintVisitor : AstVisitor {
         }
         validate_argument(arg, "LINT012", "function argument")
         validate_unwritten_var_argument(fun, arg)
+        lint023_collect_candidate(arg)
     }
 
     def override preVisitExprBlockArgument(_blk : ExprBlock?; arg : VariablePtr; _lastArg : bool) : void {
@@ -933,6 +1002,9 @@ class LintVisitor : AstVisitor {
         lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         let op = string(expr.op)
+        if (length(op) >= 2 && op |> ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">=") {
+            lint023_mark_store_target(expr.left)
+        }
         if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
             lint_error("LINT006: division by zero ({op})", expr.at)
             return
@@ -1035,6 +1107,7 @@ class LintVisitor : AstVisitor {
             lint022_refs.names |> insert("{expr.name}")
         }
         if (noLint || genericDepth > 0) return
+        lint023_note_use(expr)
         // LINT021 — classify this use of a tracked 64-bit local
         let ci = lint021_find(expr.variable)
         if (ci >= 0 && !lint021_candidates[ci].disqualified) {
@@ -1073,6 +1146,15 @@ class LintVisitor : AstVisitor {
         ds_entries[i].pending_pure = rhs != null && rhs.flags.noSideEffects
     }
 
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        lint023_mark_store_target(expr.left)
+    }
+    def override preVisitExprClone(expr : ExprClone?) : void {
+        lint023_mark_store_target(expr.left)
+    }
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        lint023_mark_store_target(expr.left)
+    }
     def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         check_string_clone_assign(expr)
         ds_handle_store(expr.left, expr.right, expr)

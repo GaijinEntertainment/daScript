@@ -948,6 +948,54 @@ plain compile sets ``options auto_inline_functions = false``.
 ``// nolint:LINT022`` on the declaration line is the answer for a symbol kept
 on purpose — a debug helper behind a commented-out call, say.
 
+LINT023 — mutable (``var``) by-value argument is written but never read
+=======================================================================
+
+A by-value parameter — ``int``, ``float``, ``bool``, ``string``, a vector, any
+type that is not a struct, array, table or reference — is a local copy. A write
+the body never reads back is therefore unobservable: the caller cannot see it,
+and nothing inside used it. This is the out-parameter that never reaches its
+caller (``var why : string`` assigned on the error path, ``why`` still empty at
+the call site). Declare it ``T&`` if it is an out-parameter; otherwise the write
+is dead.
+
+The rule is LINT014's mirror: LINT014 catches a ``var`` nothing writes, this
+catches a ``var`` nothing reads. Only plain stores keep a parameter reported —
+``=``, ``:=``, ``<-``, compound assignment, a swizzle store (``v.x = 1.0``),
+a statement-level ``++``/``--``. Any other appearance is a use and silences the
+rule: a read, ``return``, passing it on (to a ``&`` slot too — the callee may
+read it first), ``addr``, a lambda capture. Pointer parameters are excluded (a
+write through the pointee marks the parameter written, and that write the
+caller does see), as are class methods and ``[extern]`` stubs, underscore-
+prefixed names and ``[unused_argument]``.
+
+.. das-doc: alt
+.. code-block:: das
+
+    // Bad — the caller's `why` never changes
+    def parse(text : string; var why : string) : int {     // LINT023 on why
+        if (empty(text)) {
+            why = "empty input"
+            return -1
+        }
+        return length(text)
+    }
+
+    // Good
+    def parse(text : string; var why : string&) : int {
+        if (empty(text)) {
+            why = "empty input"
+            return -1
+        }
+        return length(text)
+    }
+
+    // Not flagged — a scratch parameter is written and then read
+    def twice(var n : int) : int {
+        n = n * 2
+        return n
+    }
+
 .. _perf_lint:
 
 -----------------
