@@ -23,6 +23,7 @@ require dasllama/dasllama_transformer public   // the engine + arch registry; ev
 require dasllama/dasllama_image   // the prepared-image cache: load_model maps it when present
 require dasllama/dasllama_prefix public        // page-granular prefix cache over the paged pool
 require dasllama/dasllama_chat public          // layer 2: chat sessions over the same engine
+require dasllama/dasllama_tower public         // shared encoder-tower pieces (row math, activations, prof rail)
 require dasllama/dasllama_audio public         // audio tower (mel frontend + whisper encoder + projectors)
 require dasllama/dasllama_vision public        // image preprocessing rail (geometry, letterbox, normalize)
 require dasllama/dasllama_vision_embedder public   // the vision embedder of whatever family (gemma4uv / gemma4v) — image soft tokens

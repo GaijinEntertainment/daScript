@@ -9,6 +9,7 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_math
 require audio
 require daslib/jobque_boost

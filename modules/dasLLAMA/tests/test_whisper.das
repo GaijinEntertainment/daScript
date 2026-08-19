@@ -10,6 +10,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_whisper
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // setup_dasllama_jobque_

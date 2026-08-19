@@ -313,23 +313,29 @@ Family behavior is distributed by `Config` flag, not dispatched by name — an `
 on a shared path is the anti-pattern. Only a genuinely new dataflow earns its own block pointer.
 `register_arch` MOVES the descriptor, so an alias must clone the template first (§3).
 
-### 1.7 Audio and ASR
+### 1.7 Encoder towers, audio, and ASR
 
 - **`dasllama_asr_types.das`** — the ASR floor: the capability/segment/timestamp types every
   family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
   `asr_ctx_guard`). Family modules require this instead of each other — a shape needed by two
   families moves up here, never sideways.
-- **`dasllama_audio.das`** — the shared encoder tower: mel front-end, encoder blocks, and the
-  tower pieces every audio AND vision tower composes (`Clamp`/`clamp_rows`, the row norms,
-  `attention_bidir`, `rope_neox_2d_rows`, `im2col_rgb_patches`, `avg_pool2d_rows`, the f16-table
-  activations). The one home: a family file that re-implements one of these is a defect.
+- **`dasllama_tower.das`** — the family-neutral encoder-tower home, composed by every audio AND
+  vision tower: the oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu),
+  the LayerNorm/RMS row forms, bias and residual row adds, the
+  `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
+  `im2col_rgb_patches`, `rope_neox_2d_rows`, `avg_pool2d_rows`, blocked `attention_bidir`, and
+  the encode-stage prof rail. The one home: a family file that re-implements one of these is a
+  defect, and nothing here names a family type.
+- **`dasllama_audio.das`** — the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
+  flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
+  whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
 - **`dasllama_audio_io.das`** — decode-any-format → 16 kHz mono f32 PCM. The only file that talks to
   miniaudio.
 - **`dasllama_asr.das`** — the ASR facade: capability declaration, timestamp granularity, the
   backend-neutral entry points.
 - **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /
   **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** — one file per model family, each owning its
-  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_audio`, not
+  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_tower`, not
   sideways between families.
 - **`dasllama_vad.das`** — Silero-VAD weights and per-stream state.
 
@@ -344,7 +350,7 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
   im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
   projector family, following the audio tower pattern; shared pieces move up into
-  `dasllama_audio.das` (the encoder-tower home), never sideways.
+  `dasllama_tower.das` (the encoder-tower home), never sideways.
   A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
   embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
   follows its source tensor, per tensor, never a per-file verdict.
@@ -352,7 +358,7 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   planes as the file has them, the clamp sidecars as a blob table) and the 16-block pre-norm RMS
   forward — clamped GEMMs, per-head q/k RMS, two-axis NEOX rope, weightless V RMS, unscaled
   bidirectional attention, GEGLU-quick — then the 3×3 pool, RMS and projection. Composes the
-  `dasllama_audio.das` tower pieces; owns only its layout and the block loop.
+  `dasllama_tower.das` tower pieces; owns only its layout and the block loop.
 - **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a

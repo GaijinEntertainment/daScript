@@ -1,7 +1,8 @@
 # dasLLAMA vision and media rules
 
 **Routed from `REVIEW.md`: a diff touching the vision rail, a media splice, a media-carrying
-scheduler path, `dasllama/dasllama_vision_embedder.das`, or a vision family file — one
+scheduler path, `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (with
+`REVIEW_AUDIO.md` — the shared encoder-tower home serves both), or a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — applies this list
 with the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
 `ARCHITECTURE.md`.
@@ -15,7 +16,7 @@ tutorials); a family name at a seam is a defect.
 **A vision tower's clamp bounds come from the file's sidecar scalars (`read_clamp`), never a
 literal** — the mtmd ±FLT_MAX default applies only where the scalars are absent.
 
-**A tower piece two tower families both need lives in `dasllama/dasllama_audio.das`** (the
+**A tower piece two tower families both need lives in `dasllama/dasllama_tower.das`** (the
 encoder-tower home — its inventory is `ARCHITECTURE.md` §1.7); a family file that re-implements
 one is a defect.
 

@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_audio   // the shared encoder-tower pieces under test
+require dasllama/dasllama_tower   // the shared encoder-tower pieces under test
 require dasllama/dasllama_math    // setup_dasllama_jobque_
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's table source
 require dasllama/dasllama_plane

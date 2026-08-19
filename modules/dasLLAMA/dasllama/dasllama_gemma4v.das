@@ -15,7 +15,7 @@ require dasllama/dasllama_convert   // quantize_q8_0_into / requant_rows_q8
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete a tower
-require dasllama/dasllama_audio   // the shared encoder-tower pieces: clamp, row norms, attention, 2-axis rope, im2col, pool
+require dasllama/dasllama_tower   // the shared encoder-tower pieces: clamp, row norms, attention, 2-axis rope, im2col, pool
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the per-axis rope tables
 require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + normalize ahead of the tower
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads

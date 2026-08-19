@@ -13,7 +13,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // apply_box_profile_runtime for the embedder-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete an embedder
-require dasllama/dasllama_audio
+require dasllama/dasllama_tower   // layernorm rows, mm_plane_b, im2col, bias rows
 require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + normalize ahead of the encoder
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
 require math

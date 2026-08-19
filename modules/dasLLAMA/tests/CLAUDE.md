@@ -192,7 +192,7 @@ maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed 
 staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
 without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare both vision tier-1 tests use.
-`test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama_audio.das`
+`test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama_tower.das`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by

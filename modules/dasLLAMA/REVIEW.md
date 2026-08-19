@@ -13,7 +13,8 @@ answers to `performance/REVIEW.md`. A kind-routed file applies BOTH its checklis
 
 **Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
-or media change `REVIEW_VISION.md`. A change to what the tune sidecar emits, wherever it
+or media change `REVIEW_VISION.md`; a `dasllama/dasllama_tower.das` change — the shared
+encoder-tower home — applies both. A change to what the tune sidecar emits, wherever it
 lands, answers to `modules/dasLLVM/REVIEW.md`. Every file under `modules/dasLLAMA/` that the
 routing above does not claim is reviewed against the rules below.
 
@@ -212,6 +213,11 @@ lens/dispatch macro file.
 **A family quirk lands in the family file — or, when it is platform-specific, in that
 platform's backend file; a piece two families need moves UP into the concern's shared file
 (its own file when none exists)** — never sideways into a sibling.
+
+**Nothing in `dasllama/dasllama_tower.das` — the shared encoder-tower home — names a family: no
+signature there takes a type `dasllama/dasllama_audio.das` or a family file declares, and it
+requires neither.** The file every tower composes must serve every tower; a helper shaped for
+one lands in that tower's own file.
 
 **A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
 tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never

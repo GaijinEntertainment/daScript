@@ -4,6 +4,7 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_math
 require dasllama/dasllama_common   // forward_profile_reset/report — the decoder-engine buckets
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec_step — the all-Metal probe arm
