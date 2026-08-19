@@ -1811,8 +1811,11 @@ static das::string resolve_native_path_dst ( const char * rel_pattern, const cha
 static das::string resolve_dynamic_module_path ( const char *, const char * ) {
     std::abort();
 }
-static das::string resolve_native_path_dst ( const char *, const char * ) {
-    std::abort();
+// Unlike a dynamic module, a native-path entry is an inert string-table registration
+// (register_native_path is a stubbed no-op under DAS_NO_FILEIO), so a standalone exe
+// that registered one must keep starting - hand back the baked path, never abort.
+static das::string resolve_native_path_dst ( const char *, const char * fallback_abs ) {
+    return fallback_abs ? fallback_abs : "";
 }
 #endif
 
