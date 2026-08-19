@@ -13,8 +13,8 @@ Modules compile in `require` order. Per module — any phase that reports errors
 2. **Apply** — `apply` on every function / structure / enumeration annotation.
 3. **Infer** — repeats until stable. Each pass runs `[pre_infer_macro]` first, then type
    inference (during which `transform`, call macros, variant macros, for-loop macros and type
-   macros fire), then `[dirty_infer_macro]`; `[infer_macro]` runs between passes and returning
-   `true` restarts inference.
+   macros fire), then `[dirty_infer_macro]`. Once the passes settle with no errors,
+   `[infer_macro]` runs; returning `true` starts a fresh run of passes, numbered from 0 again.
 4. **Finish** — `finish` hooks. Fully typed; no more edits.
 5. **Lint** — `lint` / `verifyCall` hooks, `[lint_macro]` / `[global_lint_macro]`. Read-only.
 6. **Optimize** — repeats: built-in optimization plus `[optimization_macro]`.

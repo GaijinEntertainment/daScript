@@ -843,7 +843,8 @@ Without it, a macro that leaves a variable untyped crashes:
 
     CRASH: SIGSEGV (Segmentation fault) (signal 11) at address 0x30
 
-With it, the same program reports and keeps compiling:
+With it, the same program reports the node, repairs it so the scan can go on and
+every finding is printed, and fails the compile:
 
 .. code-block:: text
 

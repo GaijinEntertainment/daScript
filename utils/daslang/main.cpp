@@ -426,7 +426,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     }
     if ( astVerifyRequired ) {
         // force-include the AST verifier the same way -jit/-debugger pull in their
-        // daslib support; its [pre_infer_macro] then runs over the program's modules.
+        // daslib support; its pre/post-infer macros then run over the program's modules
+        // (--ast-verify-batch keeps only the post-infer one, read from argv by the module).
         access->addExtraModule("ast_verify", getDasRoot() + "/daslib/ast_verify.das");
     }
     if ( useAot ) {
@@ -668,7 +669,7 @@ void print_help() {
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
-        << "    --ast-verify-batch  same checks, cheap enough to gate many files (CI): no per-pass re-walks, no cross-module re-sweeps\n"
+        << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"

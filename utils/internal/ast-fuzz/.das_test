@@ -1,0 +1,15 @@
+options gen2
+options indenting = 4
+
+require daslib/rtti
+
+// dastest folder filter: selftest/ holds the verifier's deliberately malformed fixtures - each
+// one either fails to compile (an AST verify report is a sticky compile error) or crashes the
+// compiler outright when no verifier is loaded. test_ast_fuzz.das runs them in subprocesses.
+[export, pinvoke]
+def can_visit_folder(folder_name : string; var result : bool?) {
+    if (folder_name == "selftest") {
+        *result = false
+        return
+    }
+}

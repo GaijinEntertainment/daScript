@@ -228,6 +228,6 @@ and fails on any report, crash, or timeout.
 3. every unguarded child deref in the visitor has a repair (the gate above)
 4. the driver generates, compiles and classifies
 5. `--ast-verify-batch` still reports a tree broken after inference, is silent
-   on valid code, and runs no pre-infer walk (`mid_pass.das`: plain mode
+   on valid code, and runs no pre-infer walk (`_mid_pass.das`: plain mode
    reports the mid-pass null and repairs it; batch mode dies or reports it
    post-infer, never silently)

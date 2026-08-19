@@ -15,19 +15,27 @@ module ast_verify shared private
 //! [[verify_expression]] from your own macro right after building AST.
 //!
 //! Two modes. Plain ``--ast-verify`` (or the source ``require``) is the debugging tool: it
-//! re-checks before EVERY inference pass, so a break is caught on the pass right after it
-//! happens, and each post-infer firing sweeps every module. ``--ast-verify-batch`` is the CI
-//! gate: no pre-infer checks, and each post-infer firing checks the module being compiled
-//! (every other module once per process) - the tree handed to lint/fold/codegen is valid,
-//! at a fraction of the cost.
+//! re-checks before EVERY inference pass, so a break is caught - and repaired in place - on the
+//! pass right after it happens, and each post-infer firing sweeps every module.
+//! ``--ast-verify-batch`` is the CI gate: no pre-infer checks (a tree a macro breaks
+//! mid-inference crashes the compiler instead of being repaired - the gates count that as red),
+//! and each post-infer firing checks only the module being compiled: the tree handed to
+//! lint/fold/codegen is valid, at a fraction of the cost. Under the CLI force-include every
+//! module is compiled with the verifier loaded, so each is still checked once; a module read from
+//! a module cache, or required before a source ``require daslib/ast_verify``, is not.
 
 require daslib/ast
 require daslib/ast_boost
 require strings
 
 def private batch_mode() : bool {
+    // daslang's own flags only: a script that owns a --ast-verify-batch after `--` must not flip the verifier
     let args <- get_command_line_arguments()
-    return has_value(args, "--ast-verify-batch")
+    for (arg in args) {
+        return false if (arg == "--")
+        return true if (arg == "--ast-verify-batch")
+    }
+    return false
 }
 
 def private placeholder(at : LineInfo) : ExpressionPtr {
@@ -197,7 +205,8 @@ class private AstVerifyVisitor : AstVisitor {
         // a detached synthetic tree has no location in it at all - do not trail an empty " at "
         let loc = describe(at)
         to_log(LOG_ERROR, empty(loc) ? "AST verify: {msg}\n" : "AST verify: {msg} at {loc}\n")
-        compiling_program() |> macro_error(at, "AST verify: {msg}")
+        // sticky: the node is repaired so the walk goes on, and every infer pass clears plain errors
+        compiling_program() |> macro_sticky_error(at, "AST verify: {msg}")
     }
 
     def track_node(node : void?; what : string; at : LineInfo) : bool {
@@ -1447,23 +1456,6 @@ def public verify_program_after_infer(prog : ProgramPtr; thisMod : Module?) : in
     return total
 }
 
-// Modules the batch sweep has verified once. Under --ast-verify-batch every module compiled after
-// the force-include is verified as thisMod; the ones compiled BEFORE it (the verifier's own
-// requires) and modules read from a module cache are not - each is swept once per process.
-var private g_batch_swept : table<string>
-
-def private verify_program_after_infer_batch(prog : ProgramPtr; thisMod : Module?) : int {
-    var total = verify_module_after_infer(prog, thisMod)
-    g_batch_swept |> insert("{thisMod.name}")
-    program_for_each_module(prog) $(mod) {
-        if (mod != thisMod && !mod.moduleFlags.builtIn && !key_exists(g_batch_swept, "{mod.name}")) {
-            g_batch_swept |> insert("{mod.name}")
-            total += verify_module_after_infer(prog, mod)
-        }
-    }
-    return total
-}
-
 def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module is ready for codegen, returning the violation count.
     //! Separate from [[verify_module]]: a half-inferred tree legitimately violates
@@ -1481,15 +1473,15 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
-    //! Fires before every consumer of the finished tree (each infer leg, lint, every optimizer
-    //! round) and walks the module being compiled plus every OTHER module - a source ``require``
-    //! leaves the modules required before it unverified. Batch walks each other module once.
+    //! Fires before every consumer of the finished tree (after each inference run, lint, every
+    //! optimizer round). Plain mode also sweeps every OTHER module (a source ``require`` parses the
+    //! ones before it unverified); the CLI force-include precedes every module, so batch walks thisMod only.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
         }
         if (batch_mode()) {
-            verify_program_after_infer_batch(prog, mod)
+            verify_module_after_infer(prog, mod)
         } else {
             verify_program_after_infer(prog, mod)
         }

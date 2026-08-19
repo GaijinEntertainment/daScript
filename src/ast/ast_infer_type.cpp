@@ -6373,9 +6373,11 @@ namespace das {
     }
 
     // called once per inferTypesDirty pass, right after errors.clear(); each macro decides its
-    // own per-pass firings through canVisitPass
-    static bool applyPreInferMacros ( Program * program, int pass ) {
-        auto nErr = program->errors.size();
+    // own per-pass firings through canVisitPass. A report that must survive the per-pass
+    // errors.clear() is the macro's job (macro_sticky_error) - the loop never stops for one,
+    // stopping it would skip the infer-macro rounds and relocate/POD, and the pass would still
+    // clear the plain error
+    static void applyPreInferMacros ( Program * program, int pass ) {
         auto thisModule = program->thisModule.get();
         // program->library, not Module::foreach: the latter walks every module in the
         // process, so a nested compile would run macros from an unrelated program
@@ -6387,8 +6389,6 @@ namespace das {
             }
             return true;
         }, "*");
-        // the next pass clears program->errors, so a violation has to stop the loop
-        return program->errors.size() == nErr;
     }
 
     void inferTypes(Program * program, TextWriter &logs, ModuleGroup &libGroup) {
@@ -6522,9 +6522,7 @@ namespace das {
             program->inferPassesUsed++;   // count each body invocation; avoids undercount when loop breaks early (pass is 0-based)
             program->failToCompile = false;
             program->errors.clear();
-            if (!applyPreInferMacros(program, pass)) {
-                break;
-            }
+            applyPreInferMacros(program, pass);
             InferTypes context(program, &logs);
             context.verbose = verbose || logInferPasses;
             program->visit(context);

@@ -12,8 +12,8 @@ the moment a macro misbehaves. Which entry point depends on how much of the tree
 
 | Call | Use when |
 |---|---|
-| `daslang --ast-verify file.das` | first move on any unexplained crash — checks the module being compiled before each infer pass and halts at the first pass that finds damage, so the failure is pinned to the pass that broke the tree (`options log_infer_passes` shows which). `require daslib/ast_verify` pins that in the source; `verify_module(prog, mod)` runs it at the end of your `apply()` |
-| `daslang --ast-verify-batch file.das` | the CI gate form (preflight, many files): no pre-infer checks, and post-infer only the module being compiled plus each other module once per process. A tree a macro breaks mid-inference then surfaces as a compiler crash, which the gates count as red |
+| `daslang --ast-verify file.das` | first move on any unexplained crash — checks the module being compiled before each infer pass, so a break is reported on the pass right after it happens (`options log_infer_passes` shows the pass), repaired so the scan finishes, and the compile fails with every finding printed; after inference it sweeps every module on each firing. `require daslib/ast_verify` pins the same per-pass check in the source; `verify_module(prog, mod)` runs it at the end of your `apply()` |
+| `daslang --ast-verify-batch file.das` | the cheap form for gating many files (CI): no pre-infer checks, and post-infer only the module being compiled. A tree a macro breaks mid-inference then surfaces as a compiler crash, which the gates count as red |
 | `verify_expression(expr)` | you BUILD and RETURN a subtree — call / for-loop / variant / reader macros run inside inference, where the module-level form cannot see your result yet |
 | `verify_function(fn)` | you BUILD a function — `add_function` mangles the signature immediately, so a malformed result or argument type crashes there, before any pass could run |
 

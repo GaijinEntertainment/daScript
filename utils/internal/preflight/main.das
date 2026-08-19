@@ -604,15 +604,21 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                                     out := fread(f)
                                 }
                             }))
-                            var hits <- [for (line in split(out, "
-")); strip(line); where find(line, "AST verify") >= 0]
+                            let lines <- [for (line in split(out, "
+")); strip(line)]
+                            var hits <- [for (line in lines); line; where find(line, "AST verify") >= 0]
                             if (empty(hits)) {
+                                // popen_argv: POSIX signal death = the raw signal number (2..31), Windows = a negative
+                                // NTSTATUS; daslang itself only exits 0/1/255. No CRASH: banner = nothing ran the handler
+                                // (an OOM or external kill), which is still not a pass
+                                let crash_lines <- [for (line in lines); line; where find(line, "CRASH:") >= 0]
                                 if (rc == popen_timed_out) {
                                     hits |> push("timed out after {int(timeout)}s")
-                                } elif (rc < 0 || rc >= 128 || find(out, "CRASH:") >= 0) {
+                                } elif (!empty(crash_lines)) {
                                     hits |> push("crashed (exit {rc})")
-                                    hits |> push_from([for (line in split(out, "
-")); strip(line); where find(line, "CRASH:") >= 0])
+                                    hits |> push_from(crash_lines)
+                                } elif (rc < 0 || rc >= 128 || (rc >= 2 && rc <= 31)) {
+                                    hits |> push("killed (exit {rc}), no crash report - the runner, an external kill, or a stack overflow off the main thread")
                                 }
                             }
                             outCh |> push_clone(VerifyResult(index = item.index, findings = join(hits, "
@@ -1217,7 +1223,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
         GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
-        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - only an AST verify line fails"),
+        GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),

@@ -2,7 +2,7 @@ options gen2
 options no_aot
 
 // Fixtures for the canVisitPass driver contract. The pre-infer probes only RECORD what they
-// saw (a macro_error raised mid-inference is wiped by the reporting re-leg's errors.clear());
+// saw (a plain macro_error raised mid-inference is wiped by the next pass's errors.clear());
 // the lint macro judges once the fixture module is compiled.
 
 module _pass_gate_helper shared private
@@ -69,10 +69,10 @@ class PassGateVerdict : AstPassMacro {
             return true
         }
         if (g_open_max_index < 1) {
-            macro_error(prog, LineInfo(), "always-yes pre-infer macro never ran past pass 0 (max index {g_open_max_index})")
+            macro_error(prog, LineInfo(), "always-yes pre-infer macro never ran past pass 0 (max index {g_open_max_index}): the driver stopped firing per pass, or the fixture converged in one pass and needs a second")
         }
         if (g_plain_fired < 2) {
-            macro_error(prog, LineInfo(), "pre-infer macro without canVisitPass fired {g_plain_fired} time(s), expected every pass")
+            macro_error(prog, LineInfo(), "pre-infer macro without canVisitPass fired {g_plain_fired} time(s), expected once per pass (>= 2)")
         }
         if (g_zero_fired == 0) {
             macro_error(prog, LineInfo(), "gated pre-infer macro never fired on pass 0")

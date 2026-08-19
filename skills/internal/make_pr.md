@@ -203,13 +203,14 @@ the tree must still verify clean:
 # --ast-verify re-checks before every inference pass - use it on ONE file to learn which pass
 # broke the tree (skills/das_macros.md)
 <daslang> --ast-verify-batch -compile-only <changed .das files>
-# broader, when you touched daslib or src/ast: only an `AST verify` line is a failure
+# broader, when you touched daslib or src/ast: an `AST verify` line or a crash is a failure; a
+# compile error is not (many tests assert one)
 find daslib tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \
   | xargs -0 -P8 -n1 <daslang> --ast-verify-batch -compile-only
 ```
 
-Expect **zero** `AST verify` lines — the tree is clean tree-wide, so any report is
-a bug in whatever built the node, not a pre-existing wart. The two invariants (a
+Expect **zero** `AST verify` lines and no crash — the tree is clean tree-wide, so a report
+or a crash is a bug in whatever built the node, not a pre-existing wart. The two invariants (a
 node carries the location of the construct it stands for; a node has exactly one
 parent) and the repair tools are in `skills/das_macros.md`. The full nightly sweep
 is not a PR gate (`skills/internal/preflight.md`), which is exactly why this local run
@@ -277,7 +278,7 @@ Skip for changes that can't alter what external/module-gated code sees (tests-on
 
 ## 3. Build and run AOT tests
 
-**IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files. **Kill BY PATH, never by image name**: `taskkill /IM daslang.exe` murders every daslang on the box, including the dasHerd watcher that owns other sessions' PTYs (observed 2026-07-29: silent exit 1, no log — this exact ritual from a sibling session was the likely killer).
+**IMPORTANT:** Kill the MCP server and any running daslang processes first — they lock build output files. **Kill BY PATH, never by image name**: `taskkill /IM daslang.exe` murders every daslang on the box, including the dasHerd watcher that owns other sessions' PTYs — which then die with a silent exit 1 and no log.
 
 ```powershell
 # Kill ONLY processes running from THIS tree (adjust the path to your worktree)
@@ -528,7 +529,7 @@ created it.
 | REVIEW audit | step-0a walk (runs each discovered checklist's `REVIEW.das` gate first; red gate = exit 1, fix before agents; `--list-only` to relist) → one `review-md-auditor` per discovered checklist | Binding rules; gate red is fail-fix; checklist defects fixed in the same batch |
 | TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
-| AST verify | `<daslang> --ast-verify-batch -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines. A report is a bug in the node's builder — see `skills/das_macros.md` |
+| AST verify | `<daslang> --ast-verify-batch -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines and no crash. A report or a crash is a bug in the node's builder — plain `--ast-verify` on that one file names the pass (`skills/das_macros.md`) |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | JIT smoke | `daslang.exe -jit <test>.das 2>&1 \| grep -iE "verifier\|Both operands"` | Empty output = pass. Windows `clang-cl` link fail is local-only, ignore |
