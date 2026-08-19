@@ -180,7 +180,8 @@ the implementation.
 
 ## Shape
 
-**A flag set-then-returned is a return in disguise** *(lintable — STYLE041)*.
+**A flag set-then-returned is a return in disguise** *(partly lintable — STYLE041; a set
+that keeps looping and the walk-abort-in-callback form stay the reviewer's)*.
 A bool initialized false, set on failure paths, then immediately
 consumed by a single `if (flag) return/error` — collapse to a direct return at each
 set site. The flag form often keeps looping after the answer is known and reports
