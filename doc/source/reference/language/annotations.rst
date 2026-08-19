@@ -680,3 +680,23 @@ field's ``VarInfo`` carries ``annotation_argument_count`` and ``get_annotation_a
 under ``options rtti``. A bare ``@big`` is a ``bool`` argument set to ``true``; ``@min = 13``
 carries the value.
 
+The same ``@`` metadata goes on variables — globals, locals and function parameters — written
+after ``let``/``var`` (and after ``inscope``), before the name:
+
+.. das-doc: given struct Row { a : int }
+.. code-block:: das
+
+    var @exact_size g_frames : array<float>
+
+    def sized(@exact_size var out : array<float>&; n : int) {
+        var @exact_size local : array<Row>
+        let @debug_name = "count" @important total = n
+        out |> reserve(n)
+        out |> resize(n)
+        print("{total} {length(local)}\n")
+    }
+
+Variable metadata reaches macros and lints through ``Variable.annotation`` on the AST; it has no
+runtime effect of its own. ``@exact_size`` is the lint contract PERF032 checks
+(:ref:`lint <perf_lint>`); ``@scratch`` is read by the hot-path rules.
+

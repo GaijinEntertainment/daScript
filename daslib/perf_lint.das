@@ -212,9 +212,6 @@ def private is_container_sizing(n : string) : bool {
             || n == "push_clone_from" || n == "insert" || n == "erase" || n == "pop")
 }
 
-// True when `expr` reaches a declaration marked @scratch — a struct field or a module global
-// (`var @scratch g : array<T>`, the clear()-recycled capture-rail shape) — walking through
-// indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
 def private perf030_needs_release(td : TypeDeclPtr) : bool {
     // heap-owning shapes: containers, lambdas, and composites carrying one transitively
     if (td == null) return false
@@ -236,48 +233,60 @@ def private perf030_needs_release(td : TypeDeclPtr) : bool {
     return false
 }
 
-def private has_scratch_annotation(annotations) : bool {
+def private has_annotation(annotations; name : string) : bool {
     for (a in annotations) {
-        if (a.name == "scratch") return true
+        if (a.name == name) return true
     }
     return false
 }
 
-def private is_scratch_dest(var expr : Expression?) : bool {
+// True when `expr` reaches a declaration carrying the named annotation — a struct field, a
+// module global or local (`var @scratch g : array<T>`), or a by-ref parameter — walking through
+// indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
+def private is_annotated_dest(var expr : Expression?; name : string) : bool {
     return false if (expr == null)
     if (expr is ExprField) {
         var f = expr as ExprField
         var fd = f.field
-        if (fd != null && has_scratch_annotation(fd.annotation)) return true
-        return is_scratch_dest(f.value)
+        if (fd != null && has_annotation(fd.annotation, name)) return true
+        return is_annotated_dest(f.value, name)
     }
     if (expr is ExprVar) {
         var v = (expr as ExprVar).variable
         if (v != null) {
-            if (has_scratch_annotation(v.annotation)) return true
-            // a ref binding (`var lst & = pool.free_bufs[b]`) carries its destination's scratch-ness
+            if (has_annotation(v.annotation, name)) return true
+            // a ref binding (`var lst & = pool.free_bufs[b]`) carries its destination's annotation
             if (v._type != null && v._type.flags.ref && v.init != null) {
-                return is_scratch_dest(v.init)
+                return is_annotated_dest(v.init, name)
             }
         }
         return false
     }
-    if (expr is ExprRef2Value) return is_scratch_dest((expr as ExprRef2Value.subexpr))
-    if (expr is ExprAt) return is_scratch_dest((expr as ExprAt.subexpr))
-    if (expr is ExprSafeAt) return is_scratch_dest((expr as ExprSafeAt.subexpr))
-    if (expr is ExprCast) return is_scratch_dest((expr as ExprCast.subexpr))
+    if (expr is ExprRef2Value) return is_annotated_dest((expr as ExprRef2Value.subexpr), name)
+    if (expr is ExprAt) return is_annotated_dest((expr as ExprAt.subexpr), name)
+    if (expr is ExprSafeAt) return is_annotated_dest((expr as ExprSafeAt.subexpr), name)
+    if (expr is ExprCast) return is_annotated_dest((expr as ExprCast.subexpr), name)
     return false
+}
+
+def private is_scratch_dest(var expr : Expression?) : bool {
+    return is_annotated_dest(expr, "scratch")
 }
 
 // a helper sizing a caller's reused buffer marks the PARAMETER (destination arrives by ref)
 def private takes_scratch_arg(fn : Function?) : bool {
     return false if (fn == null)
     for (arg in fn.arguments) {
-        for (a in arg.annotation) {
-            if (a.name == "scratch") return true
-        }
+        if (has_annotation(arg.annotation, "scratch")) return true
     }
     return false
+}
+
+// PERF032: the calls that size an @exact_size array explicitly - after any of these on the
+// receiver, a later resize in the same function grows into reserved capacity
+def private is_explicit_capacity_call(n : string) : bool {
+    return (n == "reserve" || n == "ensure_capacity"
+            || n == "scratch_reserve" || n == "scratch_ensure_capacity" || n == "scratch_resize")
 }
 
 def private is_env_builtin(n : string) : bool {
@@ -394,6 +403,8 @@ class HotBodyScan : AstVisitor {
 
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
+    // PERF032: receivers (by spelling) that got reserve/ensure_capacity earlier in this function
+    perf032_reserved : table<string>
     // variable + loop tracking
     loop_depth : int = 0
     in_closure : int = 0
@@ -892,6 +903,10 @@ class PerfLintVisitor : AstVisitor {
         perf024_skip_iptr = 0ul
         // PERF030: release credit is per-function - another function's delete may run later or never
         perf030_released |> clear
+        perf032_reserved |> clear
+        for (arg in fn.arguments) {
+            check_perf032_declaration(arg._type, arg.annotation, arg.at)
+        }
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
@@ -1008,7 +1023,16 @@ class PerfLintVisitor : AstVisitor {
 
     // --- variable declaration tracking ---
 
+    def override preVisitGlobalLetVariable(v : VariablePtr; _last : bool) : void {
+        check_perf032_declaration(v._type, v.annotation, v.at)
+    }
+
+    def override preVisitStructureField(_st : StructurePtr; decl : FieldDeclaration; _last : bool) : void {
+        check_perf032_declaration(decl._type, decl.annotation, decl.at)
+    }
+
     def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
+        check_perf032_declaration(v._type, v.annotation, v.at)
         if (in_deferred == 0) {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth, depth31 = p31_loop_depth, is_iter = false))
         }
@@ -2045,12 +2069,36 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
+    // --- PERF032: @exact_size array grown without explicit capacity ---
+
+    def check_perf032_declaration(td : TypeDeclPtr; annotations : AnnotationArgumentList; at : LineInfo) : void {
+        if (td == null || !has_annotation(annotations, "exact_size")) return
+        if (td.baseType != Type.tArray) {
+            perf_warning("PERF032: @exact_size on a {describe(td, false, false, false)} - the annotation is an array contract (every resize must follow a reserve/ensure_capacity); drop it here", at)
+        }
+    }
+
+    def check_perf032_sizing_call(var expr : ExprCall?) : void {
+        if (empty(expr.arguments)) return
+        var dest = expr.arguments[0]
+        if (dest._type == null || dest._type.baseType != Type.tArray) return
+        let origin = string(expr.func.fromGeneric != null ? expr.func.fromGeneric.name : expr.func.name)
+        if (is_explicit_capacity_call(origin)) {
+            perf032_reserved |> insert(describe(dest))
+        } elif ((origin == "resize" || origin == "resize_no_init") && is_annotated_dest(dest, "exact_size")) {
+            if (!key_exists(perf032_reserved, describe(dest))) {
+                perf_warning("PERF032: {origin} on the @exact_size array `{describe(dest)}` with no reserve/ensure_capacity on it earlier in this function - an input-scaled buffer grows by doubling into the max_unreserved_size guard; reserve(need) or ensure_capacity(need) it first, or size it through a helper that does", expr.at)
+            }
+        }
+    }
+
     // --- PERF002 + PERF003: character_at (counter-based) ---
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
         if (expr.func == null) return
         // PERF020: redundant same-type cast — fires anywhere, including in closures
         check_perf020_redundant_cast(expr)
+        check_perf032_sizing_call(expr)
         // PERF023: track splice-wrapper depth. apply_qrules emits `add_ptr_ref(...)` around every `$e(...)` tag; matching the function NAME is sufficient because the templates_boost wrapper is the only producer of that name and it sits at every $e splice site post-expansion. Must fire BEFORE the in_closure gate — the rules block is itself a closure.
         if (expr.name == "add_ptr_ref" && !empty(perf023_candidates)) {
             perf023_splice_depth++

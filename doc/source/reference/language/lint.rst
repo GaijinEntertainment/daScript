@@ -1516,6 +1516,54 @@ view, so there is nothing to re-scan.
 PERF031 is on everywhere, this repo included: the byte-view sweep rewrote the
 in-tree hits onto ``peek_data`` views.
 
+PERF032 — ``@exact_size`` array grown without explicit capacity
+================================================================
+
+``@exact_size`` on an array declaration — a struct field, a global, a local
+(``var @exact_size buf : array<float>``), or a by-ref parameter — declares an
+input-scaled buffer: one whose size follows the input (a clip's frames, an
+image's pixels, a model's vocabulary) and can cross ``max_unreserved_size`` in
+a single grow. A bare ``resize`` doubles capacity on the way up and trips the
+guard exactly when a big enough input arrives — the shape that never shows in
+small-fixture tests. The annotation is a lint contract, not a runtime flag: on
+an ``@exact_size`` array every ``resize`` / ``resize_no_init`` must follow a
+``reserve`` or ``ensure_capacity`` of the same receiver **earlier in the same
+function** (the scratch one-shots count too). Sizing it through a helper that
+reserves internally is transparent — the call is not a ``resize`` — and a
+helper that takes the buffer by reference marks its own parameter
+``@exact_size`` so the ``resize`` inside is held to the same contract.
+``@exact_size`` on anything that is not an array is reported.
+
+.. das-doc: alt
+.. code-block:: das
+
+    struct EncoderState {
+        @exact_size x : array<float>     // [T x d]: T is the clip length
+    }
+
+    // Bad — 27 minutes of audio grow x by doubling into the guard
+    def make_state_bad(var s : EncoderState; tt, d : int64) {
+        s.x |> resize(tt * d)                 // PERF032
+    }
+
+    // Good — sized exactly, in one grow
+    def make_state(var s : EncoderState; tt, d : int64) {
+        s.x |> reserve(tt * d)
+        s.x |> resize(tt * d)
+    }
+
+    // Good — a reserving helper; its own parameter carries the contract
+    def reserve_resize(@exact_size var a : array<float>&; n : int64) {
+        a |> reserve(n)
+        a |> resize(n)
+    }
+
+The order matters — a ``reserve`` after the ``resize`` does not count. The
+receiver is matched by spelling within the function (``s.x`` and ``s.x``), so
+a reserve reached through a different alias is not seen; ``// nolint:PERF032``
+with the reason is the answer when the capacity is provably established
+elsewhere.
+
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
 

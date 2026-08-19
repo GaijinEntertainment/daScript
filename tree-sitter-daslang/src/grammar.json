@@ -3507,6 +3507,18 @@
               "type": "SEQ",
               "members": [
                 {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "metadata_argument_list"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
                   "type": "SYMBOL",
                   "name": "variable_binding"
                 },

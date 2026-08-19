@@ -1399,24 +1399,24 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
 
 //! Encoder scratch, sized once per tower and reused across chunks/calls.
 struct EncoderState {
-    x1 : array<float>    // conv1 im2col [T_in × 3·n_mel]
-    y1 : array<float>    // conv1 out [T_in × d]
-    x2 : array<float>    // conv2 im2col [T × 3·d]
-    x : array<float>     // residual stream [T × d]
-    xb : array<float>    // norm output [T × d]
-    xb2 : array<float>   // attn/ffn projection out [T × d]
-    qq : array<float>    // q token-major [T × d]
-    kk : array<float>    // k token-major [T × d]
-    vv : array<float>    // v token-major [T × d]
-    hp : array<float>    // per-head packs q,kT,v,out: 4 × [T × d]
-    @scratch att : array<float>   // per-slot blocked scores [get_dispatch_slot_bound() × ATTN_ENC_QB × T]
-    h : array<float>     // ffn hidden [T × ff]
-    pooled : array<float>// [T/2 × d]
+    @exact_size x1 : array<float>    // conv1 im2col [T_in × 3·n_mel]
+    @exact_size y1 : array<float>    // conv1 out [T_in × d]
+    @exact_size x2 : array<float>    // conv2 im2col [T × 3·d]
+    @exact_size x : array<float>     // residual stream [T × d]
+    @exact_size xb : array<float>    // norm output [T × d]
+    @exact_size xb2 : array<float>   // attn/ffn projection out [T × d]
+    @exact_size qq : array<float>    // q token-major [T × d]
+    @exact_size kk : array<float>    // k token-major [T × d]
+    @exact_size vv : array<float>    // v token-major [T × d]
+    @exact_size hp : array<float>    // per-head packs q,kT,v,out: 4 × [T × d]
+    @scratch @exact_size att : array<float>   // per-slot blocked scores [get_dispatch_slot_bound() × ATTN_ENC_QB × T]
+    @exact_size h : array<float>     // ffn hidden [T × ff]
+    @exact_size pooled : array<float>// [T/2 × d]
     @scratch ph : array<float>    // projector hidden [rows × mm1_out] (ultravox/voxtral)
     pg : array<float>    // ultravox swiglu output [rows × mm1_out/2]
     @scratch out : array<float>   // projected soft tokens [tokens_per_chunk × proj_dim]
-    xqi : array<int8>    // q8 requant image [T × max(3d, ff)] (empty on fp32 towers)
-    xsi : array<float>   // per-32-block scales for xqi
+    @exact_size xqi : array<int8>    // q8 requant image [T × max(3d, ff)] (empty on fp32 towers)
+    @exact_size xsi : array<float>   // per-32-block scales for xqi
 }
 
 let ATTN_ENC_QB = 128l  // query rows per attention score block (15 MB att scratch at T=1500)

@@ -1913,7 +1913,8 @@ tuple_expansion_variable_declaration
     ;
 
 expression_let
-    :   kwd_let optional_in_scope let_variable_declaration[decl] {
+    :   kwd_let optional_in_scope optional_field_annotation[ann] let_variable_declaration[decl] {
+        $decl->annotation = $ann;
         $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
     |   kwd_let optional_in_scope tuple_expansion_variable_declaration[decl] {

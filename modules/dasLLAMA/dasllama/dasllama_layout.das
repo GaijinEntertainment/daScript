@@ -174,7 +174,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     }
     // k6: the GPU split form — [nsb x 16B sub-scale strips][nsb x f16 d halfwords]
     if (!empty(t.k6s)) {
-        var k6c : array<uint8>
+        var @exact_size k6c : array<uint8>
         let nsb = long_length(t.k6s) / K6_SSB
         k6c |> reserve_resize(nsb * K6_SSB)   // a 27B-class q6 region is a ~120 MB strip — one grow
         unsafe {

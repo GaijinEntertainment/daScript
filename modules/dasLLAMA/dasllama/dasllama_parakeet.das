@@ -404,7 +404,7 @@ def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : 
     pk_mm(m, y, woff, x, xq, xs, n, d, npos)
 }
 
-def private pk_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
+def private pk_requant(x : array<float>; n, npos : int64; @scratch @exact_size var xq : array<int8>; @scratch @exact_size var xs : array<float>) {
     let need = npos * n
     pk_ensure(xq, need)
     pk_ensure(xs, need / 32l)

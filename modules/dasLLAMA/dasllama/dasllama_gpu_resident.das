@@ -242,7 +242,7 @@ def trim_model_planes(var t : Model) : bool {
     if (t.cls_q8) {
         // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
         let nb = vocab * dim / 32l
-        t.embq |> resize(nb * 34l)
+        t.embq |> reserve_resize(nb * 34l)   // vocab-scaled: ~600 MB at a 248k-vocab 27B, one grow
         unsafe {
             for (b in range64(nb)) {
                 let off = t.emb_q8_off + b * 32l
@@ -259,23 +259,23 @@ def trim_model_planes(var t : Model) : bool {
         let sb0 = t.wcls_off / 256l
         unsafe {
             if (t.emb_fmt == KqFmt.k4) {
-                t.embq |> resize(nsb * K4_QSB)
-                t.embs |> resize(nsb * K4_SSB)
+                t.embq |> reserve_resize(nsb * K4_QSB)
+                t.embs |> reserve_resize(nsb * K4_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k4q[sb0 * K4_QSB]), nsb * K4_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k4s[sb0 * K4_SSB]), nsb * K4_SSB)
             } elif (t.emb_fmt == KqFmt.k5) {
-                t.embq |> resize(nsb * K5_QSB)
-                t.embs |> resize(nsb * K5_SSB)
+                t.embq |> reserve_resize(nsb * K5_QSB)
+                t.embs |> reserve_resize(nsb * K5_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k5q[sb0 * K5_QSB]), nsb * K5_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k5s[sb0 * K5_SSB]), nsb * K5_SSB)
             } elif (t.emb_fmt == KqFmt.k6) {
-                t.embq |> resize(nsb * K6_QSB)
-                t.embs |> resize(nsb * K6_SSB)
+                t.embq |> reserve_resize(nsb * K6_QSB)
+                t.embs |> reserve_resize(nsb * K6_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k6q[sb0 * K6_QSB]), nsb * K6_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k6s[sb0 * K6_SSB]), nsb * K6_SSB)
             } elif (t.emb_fmt == KqFmt.q40) {
-                t.embq |> resize(nsb * Q40_QSB)
-                t.embs |> resize(nsb * Q40_SSB)
+                t.embq |> reserve_resize(nsb * Q40_QSB)
+                t.embs |> reserve_resize(nsb * Q40_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
             } else {

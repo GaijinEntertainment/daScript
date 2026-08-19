@@ -4376,6 +4376,10 @@
       "required": false,
       "types": [
         {
+          "type": "metadata_argument_list",
+          "named": true
+        },
+        {
           "type": "tuple_expansion_binding",
           "named": true
         },

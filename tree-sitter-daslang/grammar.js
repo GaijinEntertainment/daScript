@@ -626,7 +626,7 @@ module.exports = grammar({
       choice('let', 'var'),
       optional('inscope'),
       choice(
-        seq($.variable_binding, $._semicolon),
+        seq(optional($.metadata_argument_list), $.variable_binding, $._semicolon),
         seq('{', repeat($.variable_binding), '}'),
         seq($.tuple_expansion_binding, $._semicolon),
       ),

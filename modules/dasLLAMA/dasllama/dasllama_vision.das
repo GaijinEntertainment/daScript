@@ -18,7 +18,7 @@ require dasllama/dasllama_env
 struct public VisionImage {
     width : int
     height : int
-    rgb : array<uint8>   // interleaved RGB, row-major
+    @exact_size rgb : array<uint8>   // interleaved RGB, row-major
 }
 
 //! The target canvas under dynamic resolution: sides round to the nearest `align` multiple,
