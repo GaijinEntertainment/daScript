@@ -77,6 +77,16 @@ cluster (by directory or language), reports merged. The run is mandatory; the fi
 are not a gate — fix each or consciously decline it (unlike lint, which blocks). Same
 registry caveat as above.
 
+### 0a3. Woodpecker — the external reviewer
+
+Every arc gets a round of the external codex reviewer
+(`skills/internal/woodpecker.md`), trivial or not: launch it in a background Bash once
+the branch reaches its final shape, keep working the checklist, harvest and verify its
+findings before step 6. Non-trivial arcs get a second round on the fixed tip by
+default; the skill carries the damper (when further rounds are earned), the
+verify-before-believing loop, and the no-codex-on-PATH fallback (skip + disclose in
+the PR body).
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:
@@ -528,6 +538,7 @@ created it.
 | Untracked files | preflight `untracked` gate (`git ls-files --others --exclude-standard`) | Empty at PR time — commit, delete, or ignore each (`.gitignore` pattern / `.git/info/exclude` for box-local) |
 | REVIEW audit | step-0a walk (runs each discovered checklist's `REVIEW.das` gate first; red gate = exit 1, fix before agents; `--list-only` to relist) → one `review-md-auditor` per discovered checklist | Binding rules; gate red is fail-fix; checklist defects fixed in the same batch |
 | TDD audit | one `tdd-auditor` on the whole diff (`skills/tdd_audit.md`) | UNTESTED branch → write the test in the same change; UNPROVEN → run the named gate or state the claim in the PR; RETUNED/WEAKENED test edit → restore the expectation/instrument or state the reason |
+| Woodpecker | external codex round (`skills/internal/woodpecker.md`), background Bash at final branch shape | Every PR; non-trivial arcs re-round on the fixed tip (damper in the skill); verify each finding, harvest before step 6 |
 | Lint | `utils/lint/main.das --quiet` on `git diff --name-only origin/master..HEAD -- '*.das'` | **Zero warnings.** Fix or `// nolint:CODE` every one — CI exits 2 on any warning |
 | AST verify | `<daslang> --ast-verify-batch -compile-only <changed .das>` when the diff touches macros or `src/ast` | **Zero** `AST verify` lines and no crash. A report or a crash is a bug in the node's builder — plain `--ast-verify` on that one file names the pass (`skills/das_macros.md`) |
 | Workaround audit | `git diff origin/master..HEAD` — read every changed file | Smell (redundant step / synthetic≠real / special-case / copied-hack) → surface fix-vs-workaround and **ask**; never ship a buried workaround |
