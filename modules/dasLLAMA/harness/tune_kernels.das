@@ -628,7 +628,6 @@ def private run_validation(benches : array<tuple<string; function<() : string>>>
     }
     tune_provenance_note("validation_max_drift_pct", "{g_validate_drift:0.2f}")
     tune_provenance_note("validation", "ok")
-    tune_provenance_note("validation_demoted", "{g_validate_demoted}")
     tune_progress_note(g_validate_demoted == 0
         ? "validation: every winner held its margin\n"
         : "validation: {g_validate_demoted} winner(s) lost their margin in the re-race - demoted to the fallback\n")
@@ -2405,6 +2404,8 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         return 1
     }
     demote_below_floor()
+    // stamped AFTER the closing-floor pass - a demotion there must reach the count too
+    tune_provenance_note("validation_demoted", "{g_validate_demoted}")
     delete benches
 
     // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the

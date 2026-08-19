@@ -1845,6 +1845,24 @@ def test_cmd_release_pure_daslang(t : T?) {
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }
+    t |> run("paranoid with quick warns and releases (no refusal)") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_pq"
+        let out_dir = "{get_das_root()}/_test_release_pq_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"smokepq\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+        let rc = cmd_release(tmp_root, out_dir, true, true)
+        tt |> equal(0, rc, "the pair is a warning, not a refusal")
+        tt |> success(fexist(bundle_exe_path(out_dir, "smokepq")), "exe shipped")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
 }
 
 [test]
