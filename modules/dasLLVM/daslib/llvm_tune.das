@@ -712,7 +712,7 @@ def tune_noise_threshold_overridden() : bool {
     return g_noise_thr > 0.0lf
 }
 
-    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to tune through a failing noise gate anyway.
+    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to mint through the busy-box refusal anyway.
     //! The tuner that honors it must stamp the sidecar `noise: overridden` — the escape leaves
     //! a mark, so a later regression hunt can see the mint was taken on a loud box.
 def tune_noise_override() : bool {

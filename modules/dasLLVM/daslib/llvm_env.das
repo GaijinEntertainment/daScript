@@ -59,7 +59,7 @@ struct public TuneEnv {
     @clarg_doc = "The noise probe's note threshold in percent (a louder probe stamps the mint noisy; refusal sits at max(10, this)) - a calibration lever. Garbage or <= 0 reads as unset."
     tune_noise_cv : float = 0.0
 
-    @clarg_doc = "Mint through a refusal at either gate - a failing noise probe or a failing validation verdict. The sidecar is stamped overridden, so the escape always leaves a mark."
+    @clarg_doc = "Mint through the busy-box refusal (a probe cv past the hard ceiling). The sidecar is stamped noise overridden, so the escape always leaves a mark. Validation never refuses - a winner that does not hold is demoted per kernel."
     tune_noise_override : bool = false
 
     @clarg_default_doc = "normal"
