@@ -59,10 +59,18 @@ model — decode, prefill, chat, the vision and audio splices — across the ser
   single-stream decode loop, and a short counting continuation survives a width mis-bind
   token-for-token. Negative controls: planar-stride poison → index panic; decode width poison →
   forced-step cell 39/34 vs bar 8; prefill width poison → cont cell 50/51 vs bar 8.
-- **C. The matrix sweep**: one pass over the model's surface — decode/prefill/chat ×
-  (fp32, q8, q4) on CPU; +AMX row; Metal q8 decode+prefill; the vision and audio splices on
-  each tier they serve. Record-grade numbers for changed cells only (the released exe).
-  Anything red stops the arc (no known-interim write-offs).
+- **C. The matrix sweep — DONE**: CPU fp32/q8/q4 chat turns + gather bit-match (slice A's
+  gates); Metal q8 decode+prefill (slice B's rows + parity); vision splice green
+  (`test_vision_chat` E2B caption through the gemma4v tower); audio splice green (the gemma4a
+  oracle cells in the model-free pass). Board: E2B is NOT an official model (E4B is the
+  E-series board row, uniform widths, unchanged) — no board cell changed, nothing minted.
+  P4 settled by hand on the released exe (`dasllama-bench -m gemma-4-E2B-it-Q8_0.gguf
+  -p 512 -n 128 -r 5 -t 8 --ngl 99`, fresh paranoid tune sha=99524cbf2): tg128
+  95.6 ± 1.0 tok/s, pp512 1948 ± 5 tok/s — ~2.3× the CPU's ~42, just above the predicted
+  1.4–2.2× band. Landed along the way: the image-rail PLE tripwire moved to the after-borrows
+  seam in `load_model_image` (`image_post_load` runs while every plane is still empty — the
+  first released-exe run false-panicked on its own fresh mint), with the `gemma4e` image-suite
+  arm as its gate. Open question for Boris: should E2B become an official board model?
 
 ## Predictions (registered before any code)
 

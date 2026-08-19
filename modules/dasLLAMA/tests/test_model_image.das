@@ -628,6 +628,56 @@ def test_metal_flavor_image(tst : T?) {
     }
 }
 
+[test]
+def test_gemma4e_flavor_image(tst : T?) {
+    tst |> run("E2B q8: the metal-flavor image serves the PLE table (mint + map, the go-live tripwire seam)") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma4e") || !arm_on(t, "gemma4e")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            if (!has_decode_override("metal")) {
+                t |> skip("metal overrides not registered")
+                return
+            }
+            let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            // cold metal mint: the freshly baked blob image must clear the PLE go-live tripwire
+            // (ple_check_table once ran BEFORE the plane borrows and false-panicked on every
+            // fresh mint) and then serve — a blob model cannot silently CPU-serve
+            let prior_backend = active_kernel_backend()
+            pin_kernel_backend("portable")   // BEFORE image_path_for — the identity carries the pin
+            set_metal_mode(MetalMode.when_available)
+            let img_m = image_path_for(path, METAL_IMAGE_TAG)
+            remove(img_m)
+            var tm <- load_model(path, QuantMode.q8)
+            tm.config.seq_len = min(tm.config.seq_len, 512l)
+            t |> success(tm.metal_blob, "metal-mode load is blob-form")
+            t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
+            var prompt <- counting_ids(tm)
+            var g_mint <- gen_ids(tm, prompt, 8)
+            t |> success(length(g_mint) > length(prompt), "mint-backed blob model serves a continuation")
+            delete tm
+            // warm map: the tripwire's after-borrows seam again, now off the mapped planes
+            var tw <- load_model(path, QuantMode.q8)
+            tw.config.seq_len = min(tw.config.seq_len, 512l)
+            t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
+            var g_map <- gen_ids(tw, prompt, 8)
+            t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
+            delete tw
+            set_metal_mode(MetalMode.off)
+            delete g_mint
+            delete g_map
+            delete prompt
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+        }
+    }
+}
+
 // The blob plane exists on two rails: the in-RAM transform builds it, the image writer derives it
 // band by band from the planar planes so a cold metal mint never holds a second copy. They must
 // agree byte for byte — this is the only thing keeping the cheap rail honest.

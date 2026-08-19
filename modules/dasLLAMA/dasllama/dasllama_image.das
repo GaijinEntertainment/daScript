@@ -717,7 +717,6 @@ def count_meta_fields(var t) : int {
 //! the same `_::` reason as serialize_image_meta.
 def image_post_load(var t : Model) {
     rebind_arch_blocks(t, t.arch)
-    ple_check_table(t, "prepared image")
 }
 
 // ===== save =====
@@ -1477,7 +1476,9 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
         return false
     }
     // AFTER the plane borrows (image_post_load runs before them, when every array is still
-    // empty): the GPU MoE tier gathers from the PREPARED planes, so the mapped rail serves it too
+    // empty): the PLE-table tripwire needs the bound planes, and the GPU MoE tier gathers
+    // from the PREPARED planes, so the mapped rail serves it too
+    ple_check_table(t, "prepared image '{path}'")
     moe_gpu_upload_resident(t)
     return true
 }
