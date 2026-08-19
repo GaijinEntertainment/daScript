@@ -1279,23 +1279,18 @@ extern "C" {
             #endif
         #elif defined(__APPLE__)
             const auto linkerParam = isShared ? "-shared " : "";
-            // @executable_path and @executable_path/../lib → a relocated bundle finds the
-            // dylibs beside the exe or in the sibling lib/ (the installed layout is bin/ + lib/);
-            // build-tree path last → dev workflow keeps working without copying dylibs.
-            // The embedded `\" \"` splits the format-string's outer quotes so the linker
-            // sees distinct -Wl,-rpath flags, not one with embedded spaces.
+            // installed layout is bin/ + lib/, hence the two @executable_path rpaths; the
+            // build-tree path is last so the dev workflow works without copying dylibs.
+            // The embedded `\" \"` splits the format-string's quotes into separate -Wl,-rpath args.
             const auto rpath = "-Wl,-rpath,@executable_path\" \"-Wl,-rpath,@executable_path/../lib\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             cmd = compilerLibrary.empty()
                 ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"), linker.c_str(), linkerParam, rpath.c_str(), libraryName, runtimeLibrary.c_str(), objFilePath, extra)
                 : fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" \"{}\" {} 2>&1"), linker.c_str(), linkerParam, rpath.c_str(), libraryName, runtimeLibrary.c_str(), compilerLibrary.c_str(), objFilePath, extra);
         #else
             const auto linkerParam = isShared ? "-shared" : "";
-            // $ORIGIN and $ORIGIN/../lib → a relocated bundle finds the .so beside the exe
-            // or in the sibling lib/ (the installed layout is bin/ + lib/); build-tree path
-            // last → dev workflow keeps working without copying.
-            // \$ escapes the dollar so popen's shell passes $ORIGIN to ld unexpanded.
-            // The embedded `\" \"` splits the format-string's outer quotes so the linker
-            // sees distinct -Wl,-rpath flags, not one with embedded spaces.
+            // installed layout is bin/ + lib/, hence the two $ORIGIN rpaths; the build-tree
+            // path is last so the dev workflow works without copying. \$ keeps popen's shell
+            // from expanding $ORIGIN; the embedded `\" \"` yields separate -Wl,-rpath args.
             const auto rpath = "-Wl,-rpath,\\$ORIGIN\" \"-Wl,-rpath,\\$ORIGIN/../lib\" \"-Wl,-rpath," + get_prefix(runtimeLibrary);
             cmd = compilerLibrary.empty()
                 ? fmt::format(FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" {} 2>&1"),
