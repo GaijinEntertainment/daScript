@@ -1742,13 +1742,6 @@ static das::string pick_at_dir ( const std::filesystem::path & dir, const char *
     return "";
 }
 
-// Pure resolution: pick the path to load, in priority order:
-//   1. <exe_dir>/<rel_path>   — daspkg release bundle layout (modules sit next to the exe)
-//   2. <das_root>/<rel_path>  — SDK install layout AND local dev build
-//   3. <fallback_abs_path>    — baked-at-codegen absolute path (legacy / paths without /modules/ segment)
-//
-// Tiers 1+2 are skipped when rel_path is empty/null. Returns the chosen path;
-// tier 3 is unconditional, so the result is never empty when fallback is set.
 static das::string jit_exe_file () {
     if ( g_jit_exe_file_for_test ) {
         const char * s = g_jit_exe_file_for_test();
@@ -1757,6 +1750,13 @@ static das::string jit_exe_file () {
     return das::getExecutableFileName();
 }
 
+// Pure resolution: pick the path to load, in priority order:
+//   1. <exe_dir>/<rel_path>   — daspkg release bundle layout (modules sit next to the exe)
+//   2. <das_root>/<rel_path>  — SDK install layout AND local dev build
+//   3. <fallback_abs_path>    — baked-at-codegen absolute path (legacy / paths without /modules/ segment)
+//
+// Tiers 1+2 are skipped when rel_path is empty/null. Returns the chosen path;
+// tier 3 is unconditional, so the result is never empty when fallback is set.
 static das::string resolve_dynamic_module_path ( const char * rel_path, const char * fallback_abs_path ) {
     namespace fs = std::filesystem;
     // tier 1 — exe_dir (parent_path correctly preserves filesystem root: "/myapp" → "/", "C:\myapp.exe" → "C:\")
@@ -1776,17 +1776,17 @@ static das::string resolve_dynamic_module_path ( const char * rel_path, const ch
     return fallback_abs_path ? fallback_abs_path : "";
 }
 
-// Same three tiers for a native-path template's destination. It is a PATTERN
-// ("modules/dasLLVM/daslib/{path}.das"), so the probe is its directory prefix — up to
-// the last separator before the first '{' — and the winner is that base with the whole
-// pattern re-rooted onto it. Empty rel_pattern (no /modules/ segment at codegen) → tier 3.
+// Same three tiers for a native-path template's destination. It may be a PATTERN
+// ("modules/dasLLVM/daslib/{path}.das"), so the probe is its directory prefix and the
+// winner is that base with the whole pattern re-rooted onto it. Empty rel_pattern (no
+// /modules/ segment at codegen) → tier 3.
 static das::string resolve_native_path_dst ( const char * rel_pattern, const char * fallback_abs ) {
     namespace fs = std::filesystem;
     if ( rel_pattern && *rel_pattern ) {
         std::string rel = rel_pattern;
-        size_t brace = rel.find('{');
-        size_t cut = rel.rfind('/', brace == std::string::npos ? std::string::npos : brace);
-        std::string dirRel = cut == std::string::npos ? "" : rel.substr(0, cut);
+        size_t firstBrace = rel.find('{');       // npos → rfind searches the whole string
+        size_t dirEnd = rel.rfind('/', firstBrace);
+        std::string dirRel = dirEnd == std::string::npos ? "" : rel.substr(0, dirEnd);
         das::vector<fs::path> bases;
         das::string exeFile = jit_exe_file();
         if ( !exeFile.empty() ) {
@@ -1972,10 +1972,6 @@ DAS_API void jit_finalize_dynamic_modules () {
     if ( int failed = das::report_pending_dynamic_modules() ) {
         DAS_FATAL_ERROR("%d dynamic module(s) failed to load (see above).\n", failed);
     }
-}
-
-DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
-    das::register_native_path(mod_name, src_path, dst_path, nullptr, nullptr);
 }
 
 // Emitted by inject_main (llvm_exe.das) for every native path the program compiled

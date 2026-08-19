@@ -220,16 +220,37 @@ TEST_CASE("jit native path resolve — baked absolute when nothing resolves") {
 TEST_CASE("jit native path resolve — empty rel pattern goes straight to the absolute") {
     TestSeams seams;
     g_exe_file = "/bundle/bin/dastest.exe";
-    g_existing.insert("/bundle/bin/modules");
+    // both bases exist as directories: without the guard the resolver would hand back the exe dir
+    g_existing.insert("/bundle/bin");
+    g_existing.insert(das::getDasRoot());
     auto chosen = resolve_native("", "/baked/abs/{path}.das");
     CHECK(chosen == "/baked/abs/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — exe-relative wins over das_root when both exist") {
+    TestSeams seams;
+    g_exe_file = "/bundle/bin/dastest.exe";
+    g_existing.insert("/bundle/bin/modules/dasLLVM/daslib");
+    g_existing.insert(das::getDasRoot() + "/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == "/bundle/bin/modules/dasLLVM/daslib/{path}.das");
+}
+
+TEST_CASE("jit native path resolve — empty exe_file still tries das_root") {
+    TestSeams seams;
+    g_exe_file = "";
+    auto dasRoot = das::getDasRoot();
+    g_existing.insert(dasRoot + "/modules/dasLLVM/daslib");
+    auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
+                                 "/build/abs/modules/dasLLVM/daslib/{path}.das");
+    CHECK(chosen == dasRoot + "/modules/dasLLVM/daslib/{path}.das");
 }
 
 TEST_CASE("jit native path resolve — the probe is the directory, not the file pattern") {
     TestSeams seams;
     g_exe_file = "/bundle/bin/dastest.exe";
-    // only the exact (unexpanded) pattern path is marked existing - a naive file probe would
-    // accept it; the directory prefix is absent, so the resolver must fall through
+    // the unexpanded pattern exists, its directory does not - a naive file probe would take it
     g_existing.insert("/bundle/bin/modules/dasLLVM/daslib/{path}.das");
     auto chosen = resolve_native("modules/dasLLVM/daslib/{path}.das",
                                  "/build/abs/modules/dasLLVM/daslib/{path}.das");

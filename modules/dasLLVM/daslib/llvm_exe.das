@@ -593,7 +593,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    // native paths re-root at run time like dynamic modules (exe_dir, das_root, baked absolute)
+    // native paths re-root at run time like dynamic modules; counterpart emission site: inject_main
     let reg_native_path_type = LLVMFunctionType(t.t_void,
         fixed_array<LLVMTypeRef>(t.LLVMVoidPtrType(), t.LLVMVoidPtrType(), t.LLVMVoidPtrType(), t.LLVMVoidPtrType())
     )
@@ -1047,9 +1047,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // for `daspkg release` to ship dylibs + traverse dep packages.
     write_release_deps(prog)
 
-    // Register native paths (das include paths) that were loaded during compilation. The
-    // destination re-roots at run time like dynamic modules: <exe_dir>/<rel>, <das_root>/<rel>,
-    // then the baked absolute - a bundle built on another machine finds its own modules/.
+    // Register native paths (das include paths) loaded during compilation; jit_register_native_path_resolve
+    // (module_jit.cpp) re-roots the destination at run time. Counterpart emission site: collect_external_functions.
     let reg_native_path_type = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(
             types.LLVMVoidPtrType(), // const char * mod_name
