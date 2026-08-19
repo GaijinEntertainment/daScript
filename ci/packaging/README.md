@@ -25,12 +25,11 @@ publishes itself.
    repo is a later tier.
 6. **pip** (automatic): `wheel_build.py` repacks each bundle into a platform wheel
    (`daslang-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
-   and the `publish_pypi` job uploads the set through trusted publishing — RC tags to
-   TestPyPI, real releases to PyPI. The wheel is the toolchain (bin, daslib, modules,
-   dastest, utils, skills, tutorial sources) without the C++ embedding payload, the
-   examples tree, or the tutorial media, so every platform stays under PyPI's 100 MB
-   per-file cap; the platform tag is read off the binaries (highest GLIBC symbol /
-   Mach-O minos), never assumed. Users: `pip install daslang` (RC:
+   and the `publish_pypi` job uploads the set through trusted publishing — a plain
+   `vX.Y.Z` tag to PyPI, any other tag (RC, beta, …) to TestPyPI. The wheel is the toolchain minus the C++ embedding
+   payload and the media trees, to stay under PyPI's 100 MB per-file cap — exact set:
+   `EXCLUDE_*` in `wheel_build.py`; the platform tag is read off the binaries (highest
+   GLIBC symbol / Mach-O minos), never assumed. Users: `pip install daslang` (RC:
    `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`), then `daslang`,
    `dastest`, `lint`, `daspkg`, … are on PATH and `python -m daslang file.das` works.
    Fixture tests: `python3 ci/test_wheel_build.py`.

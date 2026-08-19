@@ -3,15 +3,13 @@
 
 Usage: wheel_build.py <bundle_dir> <tag_or_version> <out_dir> [--platform-tag TAG]
 
-The wheel is a repack, not a compile: the bundle tree lands under the `daslang`
-package as `daslang/_sdk/`, and console_scripts shims exec the binaries there.
-The C++ embedding payload (`include/`, static libs, cmake/pkgconfig files), the
-examples tree and the tutorial media assets are left out so every platform stays
-under PyPI's 100 MB per-file cap; those live in the release zip.
-
-The platform tag is derived from the binaries, never assumed: the highest GLIBC_x.y
-any ELF in the bundle references (linux), the highest minos any Mach-O carries
-(macOS), the machine word on Windows. Stdlib only — runs on every release runner.
+- a repack, not a compile: the bundle tree lands under daslang/_sdk/, console_scripts
+  shims exec the binaries there
+- payload: the toolchain minus what EXCLUDE_* below names - keeps every wheel under
+  PyPI's 100 MB per-file cap; the release zip carries the rest
+- platform tag derived from the binaries (highest GLIBC symbol / Mach-O minos), never
+  assumed
+- stdlib only: runs on every release runner
 """
 import argparse
 import base64
@@ -42,23 +40,23 @@ EXCLUDE_LIB_EXT = (".a", ".lib")
 KEEP_LIB_PREFIX = "libDaScriptDyn"
 
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)  # reproducible: no mtimes in the archive
+MAX_WHEEL_MB = 100  # PyPI's per-file limit
 
 
 def pep440(raw):
-    """v0.6.4-RC1 -> 0.6.4rc1, v0.6.4 -> 0.6.4, 0.0.0-dev -> 0.0.0.dev0."""
+    """v0.6.4-RC1 -> 0.6.4rc1, v0.6.4 -> 0.6.4, 0.0.0-dev -> 0.0.0.dev0 (the release
+    pattern is plain + RC + dev; anything else is a wheel_build error, not a guess)."""
     v = raw[1:] if raw.startswith(("v", "V")) else raw
-    m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:[-.]?(?:(rc|beta|alpha|b|a)(\d+)|(dev)\d*))?", v, re.I)
+    m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-rc(\d+)|(-dev)\d*)?", v, re.I)
     if not m:
         sys.exit(f"wheel_build: cannot map tag {raw!r} to a PEP 440 version")
-    base, pre, num, dev = m.groups()
-    if dev:
-        return base + ".dev0"
-    if pre:
-        return base + {"rc": "rc", "beta": "b", "b": "b", "alpha": "a", "a": "a"}[pre.lower()] + num
-    return base
+    base, rc, dev = m.groups()
+    if rc:
+        return base + "rc" + rc
+    return base + ".dev0" if dev else base
 
 
-def wants(rel):
+def is_shipped(rel):
     parts = rel.replace(os.sep, "/").split("/")
     if parts[0] in EXCLUDE_TOP:
         return False
@@ -77,11 +75,16 @@ def bundle_files(bundle):
         for f in fs:
             full = os.path.join(d, f)
             rel = os.path.relpath(full, bundle)
-            if wants(rel):
+            if is_shipped(rel):
                 yield full, rel.replace(os.sep, "/")
 
 
 # --- platform tag -------------------------------------------------------------
+
+MH_MAGIC_64 = 0xFEEDFACF
+LC_VERSION_MIN_MACOSX = 0x24
+LC_BUILD_VERSION = 0x32
+
 
 def read_bytes(path):
     with open(path, "rb") as f:
@@ -101,43 +104,49 @@ def elf_glibc_max(path):
 
 def macho_minos(path):
     data = read_bytes(path)
-    if len(data) < 32 or struct.unpack("<I", data[:4])[0] != 0xFEEDFACF:
+    if len(data) < 32 or struct.unpack("<I", data[:4])[0] != MH_MAGIC_64:
         return None
     ncmds = struct.unpack("<I", data[16:20])[0]
     off, best = 32, None
     for _ in range(ncmds):
         cmd, size = struct.unpack("<II", data[off:off + 8])
-        if cmd == 0x32:  # LC_BUILD_VERSION: platform, minos, sdk
+        if cmd == LC_BUILD_VERSION:  # platform, minos, sdk
             mo = struct.unpack("<I", data[off + 12:off + 16])[0]
             best = (mo >> 16, (mo >> 8) & 0xFF)
-        elif cmd == 0x24:  # LC_VERSION_MIN_MACOSX
+        elif cmd == LC_VERSION_MIN_MACOSX:
             mo = struct.unpack("<I", data[off + 8:off + 12])[0]
             best = (mo >> 16, (mo >> 8) & 0xFF)
         off += size
     return best
 
 
+def arch_word(machine, table):
+    if machine not in table:
+        sys.exit(f"wheel_build: no wheel arch for machine {machine!r} (known: {sorted(table)}); pass --platform-tag")
+    return table[machine]
+
+
 def detect_platform_tag(files, system=None, machine=None):
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
     if system == "Windows":
-        return {"amd64": "win_amd64", "x86_64": "win_amd64", "arm64": "win_arm64"}[machine]
-    probes = (macho_minos if system == "Darwin" else elf_glibc_max)
+        return "win_" + arch_word(machine, {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64"})
+    probe = macho_minos if system == "Darwin" else elf_glibc_max
     best = None
     for full, rel in files:
         if not (rel.startswith("bin/") or rel.startswith("lib/")):
             continue
-        v = probes(full)
+        v = probe(full)
         if v and (best is None or v > best):
             best = v
     if best is None:
         sys.exit("wheel_build: no binaries found under bin/ or lib/ to derive a platform tag from")
     if system == "Darwin":
         major, minor = best
-        minor = 0 if major >= 11 else minor
+        minor = 0 if major >= 11 else minor  # macOS 11+ wheel tags pin the minor to 0
         arch = "arm64" if machine in ("arm64", "aarch64") else "x86_64"
         return f"macosx_{major}_{minor}_{arch}"
-    arch = {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}[machine]
+    arch = arch_word(machine, {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"})
     return f"manylinux_{best[0]}_{best[1]}_{arch}"
 
 
@@ -176,9 +185,9 @@ import sys
 from . import tool_path
 
 
-def run(name, argv=None):
+def run(name):
     exe = tool_path(name)
-    args = [exe] + list(sys.argv[1:] if argv is None else argv)
+    args = [exe] + sys.argv[1:]
     if os.name == "nt":  # no execv semantics on Windows: spawn, forward the exit code
         try:
             raise SystemExit(subprocess.call(args))
@@ -279,6 +288,10 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None):
     bundle = os.path.abspath(bundle)
     version = pep440(tag)
     files = sorted(bundle_files(bundle), key=lambda x: x[1])
+    present = {rel for _, rel in files}
+    missing = [t for t in TOOLS if not ({f"bin/{t}", f"bin/{t}.exe"} & present)]
+    if missing:
+        sys.exit(f"wheel_build: bundle has no binary for console_scripts {missing} - every entry point must resolve")
     plat = platform_tag or detect_platform_tag(files, system, machine)
     dist_info = f"{PACKAGE}-{version}.dist-info"
     wheel_name = f"{PACKAGE}-{version}-py3-none-{plat}.whl"
@@ -296,9 +309,8 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None):
     w.add_bytes(f"{PACKAGE}/_cli.py", render_cli().encode())
     w.add_bytes(f"{PACKAGE}/__main__.py", MAIN_PY.encode())
     for full, rel in files:
-        # everything directly under bin/ is a program; pip restores the mode bits from
-        # the archive, and a bundle staged on a modeless filesystem must not lose them
-        w.add_file(f"{PACKAGE}/_sdk/{rel}", full, executable=rel.startswith("bin/") and rel.count("/") == 1)
+        # pip restores mode bits from the archive - a bundle staged on a modeless filesystem must not lose them
+        w.add_file(f"{PACKAGE}/_sdk/{rel}", full, executable=rel.startswith("bin/"))
     w.add_file(f"{dist_info}/LICENSE", license_path)
     w.add_bytes(f"{dist_info}/METADATA", render_metadata(version, readme).encode())
     w.add_bytes(f"{dist_info}/WHEEL",
@@ -308,8 +320,8 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None):
     w.finish(dist_info)
     size_mb = os.path.getsize(out) / 2**20
     print(f"built: {out} ({len(files)} SDK files, {size_mb:.1f} MB, tag py3-none-{plat})")
-    if size_mb > 100:
-        sys.exit("wheel_build: over PyPI's 100 MB per-file limit — trim EXCLUDE_* or request a size raise")
+    if size_mb > MAX_WHEEL_MB:
+        sys.exit(f"wheel_build: {out} is {size_mb:.1f} MB, over PyPI's {MAX_WHEEL_MB} MB per-file limit - trim EXCLUDE_* or request a size raise")
     return out
 
 

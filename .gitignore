@@ -70,7 +70,6 @@ utils/internal/ast-fuzz/_ast_synth_all.das
 # record_* drivers; the MP4 deliverables are staged here from the docs-assets
 # GitHub release by utils/internal/docs-assets/fetch — neither is tracked.
 doc/source/_static/tutorials/
-doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
 doc/source/_build/
 
@@ -183,5 +182,7 @@ ZEN2.md
 # local playground rig scratch (web/serve_playground.py)
 web/_serve/
 web/build_pt/_deps/freetype_src-build/include/freetype/config/ftoption.h
-utils/watchdog/__pycache__/watchdog.cpython-313.pyc
 modules/dasLLAMA/benchmarks/modules/.daspkg.log
+
+# python bytecode, anywhere
+__pycache__/
