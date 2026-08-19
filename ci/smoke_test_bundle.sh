@@ -197,6 +197,19 @@ echo "Runtime launch:"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
 
+# The prebuilt tools resolve their module native paths at run time; a tool that carries
+# the build machine's paths instead launches (--help above) and then cannot compile a
+# single script. dastest pulls just_in_time -> llvm/daslib on every test, so one shipped
+# suite through bin/dastest.exe is the probe; lint over daslib must not skip a file for
+# the same reason (its SKIP line blames missing daspkg deps, which is not the cause).
+run_check "dastest.exe runs a shipped suite" bash -c \
+    "'$BUNDLE/bin/dastest${DASEXE_SUFFIX}' --test utils/common/tests | tee '$LOG.suite' \
+     && grep -Eq '^[1-9][0-9]* tests, [1-9][0-9]* passed, 0 failed, 0 errors' '$LOG.suite'"
+run_check "lint.exe lints daslib, no skips" bash -c \
+    "'$BUNDLE/bin/lint${DASEXE_SUFFIX}' daslib | tee '$LOG.lint' \
+     && grep -Eq '^[0-9]+ files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
+rm -f "$LOG.suite" "$LOG.lint"
+
 # Shipped skills must not send the reader to a path the bundle does not contain.
 # This is the same class of bug as the utils/mcp/setup.das miss: the docs promised
 # something the install rules never delivered. Here the right answer is the reverse
