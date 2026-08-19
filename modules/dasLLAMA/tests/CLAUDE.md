@@ -112,7 +112,7 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 ## Model-free / no-arm tests
 
-A model-free file — one whose cells run, or skip their model arms, with no model present and
+A model-free file — one with at least one cell that runs, not skips, with no model present and
 with CPU prefill declared (`DASLLAMA_CPU_PREFILL=1`, which the runner sets for every child) —
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
 the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
@@ -204,9 +204,11 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
 runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
 only; plain dastest only.
-`test_vision_chat.das` — the image chat turn end to end (12B + mmproj + the cats fixture, so
-`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice (marker ids, media-first,
-span length from the geometry) and the greedy caption, logged in full. NOT token-parity with
+`test_vision_chat.das` — the image chat turn end to end, two families: the 12B gemma4uv pair
+(the cats fixture, so `DASLLAMA_PARITY_FULL=1`) and the E2B gemma4v pair (E2B Q8 decoder +
+bf16 mmproj — small tier, runs without the flag): the prompt stream shape around the splice
+(marker ids, media-first, span length from the geometry) and the greedy caption, logged in
+full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
 arm defaults to instruct, and freeform token-parity cells are banned (see below). On Apple
 builds the turn also carries the tower legs: the default caption's image encode must show an

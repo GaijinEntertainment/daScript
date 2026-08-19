@@ -513,6 +513,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!gpu) {   // a CPU/accel row means CPU: the default-on tower driver would silently GPU-serve the encode
             set_metal_tower(false)
+            print("lcpp_bench --image: CPU row - DASLLAMA_METAL_TOWER=0 pinned (the encode runs on the CPU)\n")
         }
     }
     apply_box_profile_runtime()
@@ -541,7 +542,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
             var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
-                exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",   // the tower's lane ahead of the decoder's receipt
+                exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
                 sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),

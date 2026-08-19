@@ -138,24 +138,6 @@ def finalize(var s : Gemma4uvState) {
     delete s.x2
 }
 
-def private uv_ensure(@scratch var a : array<float>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
-    }
-}
-
-def private uv_expect(m : GGUFMeta; name : string; want : int64) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("dasLLAMA gemma4uv: mmproj is missing tensor '{name}'")
-    }
-    let n = m.tensors[ti].n_elem
-    if (n != want) {
-        panic("dasLLAMA gemma4uv: tensor '{name}' has {n} elements, expected {want}")
-    }
-}
-
 //! Read the embedder's ten tensors off an mmproj gguf into owned staging arrays — the
 //! mint side of the image rail, and the only path that touches the source file. The two GEMM
 //! weights go to `wblob` verbatim when the file holds them as BF16, to `blob` when it holds fp32.
@@ -190,20 +172,20 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         st.e.pos_entries = m.tensors[pos_ti].n_elem / (2l * st.e.n_embd)
         let d = st.e.n_embd
         let pd = st.e.patch_dim
-        uv_expect(m, "v.patch_embd.weight", pd * d)
-        uv_expect(m, "v.patch_embd.bias", d)
-        uv_expect(m, "v.patch_norm.1.weight", pd)
-        uv_expect(m, "v.patch_norm.1.bias", pd)
-        uv_expect(m, "v.patch_norm.2.weight", d)
-        uv_expect(m, "v.patch_norm.2.bias", d)
-        uv_expect(m, "v.patch_norm.3.weight", d)
-        uv_expect(m, "v.patch_norm.3.bias", d)
-        uv_expect(m, "mm.input_projection.weight", d * st.e.proj_dim)
+        gguf_expect_elems(m, "v.patch_embd.weight", pd * d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_embd.bias", d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.1.weight", pd, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.1.bias", pd, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.2.weight", d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.2.bias", d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.3.weight", d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "v.patch_norm.3.bias", d, "dasLLAMA gemma4uv")
+        gguf_expect_elems(m, "mm.input_projection.weight", d * st.e.proj_dim, "dasLLAMA gemma4uv")
         st.e.patch_bf16 = gguf_tensor_type(m, "v.patch_embd.weight") == GGML_TYPE_BF16
         st.e.proj_bf16 = gguf_tensor_type(m, "mm.input_projection.weight") == GGML_TYPE_BF16
         var off = 0l
         var woff = 0l
-        st.e.patch_w = uv_gemm_off(st.e.patch_bf16, off, woff, pd * d)
+        st.e.patch_w = take_cursor(st.e.patch_bf16, off, woff, pd * d)
         st.e.patch_b = off; off += d
         st.e.ln1_w = off; off += pd
         st.e.ln1_b = off; off += pd
@@ -212,7 +194,7 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         st.e.ln3_w = off; off += d
         st.e.ln3_b = off; off += d
         st.e.pos_w = off; off += 2l * st.e.pos_entries * d
-        st.e.proj_w = uv_gemm_off(st.e.proj_bf16, off, woff, d * st.e.proj_dim)
+        st.e.proj_w = take_cursor(st.e.proj_bf16, off, woff, d * st.e.proj_dim)
         st.blob |> reserve_resize(off)
         st.wblob |> reserve_resize(woff)
         uv_read_gemm(m, bytes, "v.patch_embd.weight", st, st.e.patch_bf16, st.e.patch_w, pd * d)
@@ -228,19 +210,6 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
     }
     fclose(f)
     return <- st
-}
-
-// GEMM offsets ride the halfword cursor on a bf16 load, the fp32 cursor otherwise — the field then
-// indexes whichever plane the mm route reads
-def private uv_gemm_off(bf16 : bool; var o : int64&; var wo : int64&; size : int64) : int64 {
-    if (bf16) {
-        let at = wo
-        wo += size
-        return at
-    }
-    let at = o
-    o += size
-    return at
 }
 
 // GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
@@ -307,18 +276,6 @@ def private uv_check_planes(t : Gemma4uvEmbedder; src : string) {
     }
 }
 
-// One GEMM, on whichever plane this embedder's offsets index. Both arms are the same arithmetic:
-// dot_bf16's widen is an exact high-half shift, so the bf16 arm reads half the bytes for the
-// identical result.
-def private uv_gemm(var y : array<float>; t : Gemma4uvEmbedder; bf16 : bool; off : int64;
-                    x : array<float>; n, d, npos : int64) {
-    if (bf16) {
-        mm_bf16_b(y, t.wblob, off, x, n, d, npos)
-    } else {
-        mm_blob_b(y, t.blob, off, x, n, d, npos)
-    }
-}
-
 // ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
 // cannot be required from here). It consumes the im2col rows (s.x0) and fills `out` (already
 // sized); false = declined, the CPU chain below stays the correct fallback.
@@ -347,15 +304,15 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     let n_cols = w / t.patch
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     if (g_uv_gpu_set) {
-        uv_ensure(out, npos * t.proj_dim)
+        ensure_length(out, npos * t.proj_dim)
         if (invoke(g_uv_gpu, t, s, npos, n_cols, out)) {
             return npos
         }
     }
-    uv_ensure(s.x1, npos * d)
-    uv_ensure(s.x2, npos * d)
+    ensure_length(s.x1, npos * d)
+    ensure_length(s.x2, npos * d)
     layernorm_batch(s.x0, s.x0, t.blob, t.ln1_w, t.ln1_b, t.patch_dim, npos, GEMMA4UV_LN_EPS)
-    uv_gemm(s.x1, t, t.patch_bf16, t.patch_w, s.x0, t.patch_dim, d, npos)
+    mm_plane_b(s.x1, t.patch_bf16, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     add_bias_rows(s.x1, t.blob, t.patch_b, d, npos)
     layernorm_batch(s.x2, s.x1, t.blob, t.ln2_w, t.ln2_b, d, npos, GEMMA4UV_LN_EPS)
     unsafe {
@@ -373,8 +330,8 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     layernorm_batch(s.x1, s.x2, t.blob, t.ln3_w, t.ln3_b, d, npos, GEMMA4UV_LN_EPS)
     // Gemma4UnifiedMultimodalEmbedder: weightless rms(meta eps) → square projection
     rms_rows_weightless(s.x1, d, npos, t.rms_eps)
-    uv_ensure(out, npos * t.proj_dim)
-    uv_gemm(out, t, t.proj_bf16, t.proj_w, s.x1, d, t.proj_dim, npos)
+    ensure_length(out, npos * t.proj_dim)
+    mm_plane_b(out, t.proj_bf16, t.wblob, t.blob, t.proj_w, s.x1, d, t.proj_dim, npos)
     return npos
 }
 

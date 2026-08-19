@@ -973,6 +973,18 @@ def mm_bf16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<flo
     matmul_bf16_batch(y, blob, woff, x, n, d, npos)
 }
 
+//! One GEMM on whichever plane a per-tensor flag picked at load: the bf16 halfword plane when
+//! ``bf16``, the fp32 plane otherwise — the same arithmetic both ways (dot_bf16's widen is an
+//! exact high-half shift), so a mixed-type mmproj serves each tensor as the file holds it.
+def mm_plane_b(var y : array<float>; bf16 : bool; wblob : PlaneU16; blob : PlaneF; off : int64;
+               x : array<float>; n, d, npos : int64) {
+    if (bf16) {
+        mm_bf16_b(y, wblob, off, x, n, d, npos)
+    } else {
+        mm_blob_b(y, blob, off, x, n, d, npos)
+    }
+}
+
 // ===== shared encoder-tower pieces (the gemma4a audio and gemma4v vision towers both build on
 // these; one home — a family module never re-implements a shape found here) =====
 
@@ -1150,8 +1162,8 @@ def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
                       cos_x, sin_x, cos_y, sin_y : array<float>) {
     if (npos <= 0l) return
     let d = n_head * hs
-    let half = hs / 2l      // one axis's rotary width
-    let q = half / 2l       // that axis's table row width (cos or sin)
+    let half = hs / 2l          // one axis's rotary width
+    let pairs = half / 2l       // its rotated pairs = one table row (cos or sin)
     unsafe {
         var vp = addr(v[0])
         let cx = addr<float const?>(cos_x[0])
@@ -1161,8 +1173,8 @@ def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
         maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 4l, 0)) $(rb, re) {
             unsafe {
                 for (r in range64(int64(rb), int64(re))) {
-                    rope_scaled_neox_tab_part(vp + r * d, hs, half, d, cx + r * q, sx + r * q)
-                    rope_scaled_neox_tab_part(vp + r * d + half, hs, half, d, cy + r * q, sy + r * q)
+                    rope_scaled_neox_tab_part(vp + r * d, hs, half, d, cx + r * pairs, sx + r * pairs)
+                    rope_scaled_neox_tab_part(vp + r * d + half, hs, half, d, cy + r * pairs, sy + r * pairs)
                 }
             }
         }
@@ -1697,7 +1709,6 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     return <- s
 }
 
-// the audio tower's attention: 1/√hs scaled, the shared bidirectional core over its state
 def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     let hs = t.d_model / t.n_head
     attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, tt, t.d_model, t.n_head, 1.0 / sqrt(float(hs)))
@@ -1711,7 +1722,7 @@ def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; @scratch 
     let hs = d / n_head
     let nqb = int((tt + ATTN_ENC_QB - 1l) / ATTN_ENC_QB)
     let nu = int(n_head) * nqb
-    // que-less-creation guard: the state may have been sized under a smaller slot bound
+    // que-less-creation guard: `att` may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
     if (long_length(att) < attNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
         att |> reserve(attNeed)

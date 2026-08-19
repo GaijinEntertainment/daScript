@@ -495,10 +495,12 @@ def private geglu_gate(t : T?; dev, queue; total : int) {
 // ===== the gemma4v tower primitives =====
 
 // clamp: dst = clamp(src, lo, hi) with the bounds read off a clamp record in a blob-shaped buffer
-// (`side` picks the input or output pair); exact vs the CPU clamp, the pad sentinel untouched;
-// run into a separate destination and in place.
+// (`side` picks the input or output pair); exact vs the CPU clamp, the pad sentinel untouched.
+let private CLAMP_IN = 0    // the record's input pair (imin, imax)
+let private CLAMP_OUT = 1   // its output pair (omin, omax)
+
 def private clamp_gate(t : T?; dev, queue; total : int; side : int; inplace : bool) {
-    let tag = "clamp total={total} side={side} inplace={inplace}"
+    let tag = "clamp total={total} {side == CLAMP_IN ? "in" : "out"} inplace={inplace}"
     var err : string
     var pso = pipeline_from_source(dev, metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -510,8 +512,8 @@ def private clamp_gate(t : T?; dev, queue; total : int; side : int; inplace : bo
     }
     // a record like the tower's: imin imax omin omax active, sitting past some junk floats
     let rec <- [0.0, 0.0, 0.0, -6.0, 5.0, -2.5, 9.25, 1.0]
-    let lo = side == 0 ? rec[3] : rec[5]
-    let hi = side == 0 ? rec[4] : rec[6]
+    let lo = side == CLAMP_IN ? rec[3] : rec[5]
+    let hi = side == CLAMP_IN ? rec[4] : rec[6]
     var want : array<float>
     want |> resize(total + 16)
     for (i in range(total + 16)) {
@@ -598,7 +600,7 @@ def private geglu_quick_gate(t : T?; dev, queue; ff, rows : int) {
 // kernel reads the four tables packed per row as [cx|sx|cy|sy]); approx bar (fma ordering).
 def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
     let d = n_head * hs
-    let q = hs / 4
+    let pairs = hs / 4   // rotated pairs per axis, one packed table row
     let tag = "rope2d npos={npos} heads={n_head} hs={hs}"
     var err : string
     var pso = pipeline_from_source(dev, metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, err)
@@ -624,30 +626,28 @@ def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
     var want := x
     rope_neox_2d_rows(want, int64(npos), int64(n_head), int64(hs), cx, sx, cy, sy)
     var tabs : array<float>
-    tabs |> resize(npos * 4 * q)
+    tabs |> resize(npos * 4 * pairs)
     for (r in range(npos)) {
-        for (j in range(q)) {
-            tabs[r * 4 * q + j] = cx[r * q + j]
-            tabs[r * 4 * q + q + j] = sx[r * q + j]
-            tabs[r * 4 * q + 2 * q + j] = cy[r * q + j]
-            tabs[r * 4 * q + 3 * q + j] = sy[r * q + j]
+        for (j in range(pairs)) {
+            tabs[r * 4 * pairs + j] = cx[r * pairs + j]
+            tabs[r * 4 * pairs + pairs + j] = sx[r * pairs + j]
+            tabs[r * 4 * pairs + 2 * pairs + j] = cy[r * pairs + j]
+            tabs[r * 4 * pairs + 3 * pairs + j] = sy[r * pairs + j]
         }
     }
-    let total = npos * n_head * q
+    let total = npos * n_head * pairs
     var bx = buf_upload(dev, x)
     var btabs = buf_upload(dev, tabs)
     var bd = buf_u32(dev, uint(d))
-    var bhs = buf_u32(dev, uint(hs))
-    var bq = buf_u32(dev, uint(q))
+    var bpairs = buf_u32(dev, uint(pairs))
     var btot = buf_u32(dev, uint(total))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, btabs, 0ul, 1)
         metal_set_buffer(enc, bd, 0ul, 2)
-        metal_set_buffer(enc, bhs, 0ul, 3)
-        metal_set_buffer(enc, bq, 0ul, 4)
-        metal_set_buffer(enc, btot, 0ul, 5)
+        metal_set_buffer(enc, bpairs, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
         metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -657,8 +657,7 @@ def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
     metal_release(bx)
     metal_release(btabs)
     metal_release(bd)
-    metal_release(bhs)
-    metal_release(bq)
+    metal_release(bpairs)
     metal_release(btot)
     metal_release(pso)
     delete x
@@ -1683,8 +1682,8 @@ def test_metal_misc_kernels(t : T?) {
                 rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
-                clamp_gate(t, dev, queue, 1000, 0, false)      // the input pair, separate dst, %64 tail
-                clamp_gate(t, dev, queue, 1000, 1, true)       // the output pair, in place
+                clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
+                clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place
                 geglu_quick_gate(t, dev, queue, 3072, 3)       // the E2B ffn width
                 geglu_quick_gate(t, dev, queue, 100, 1)        // %64 tail
                 rope2d_gate(t, dev, queue, 36, 12, 64)         // the E2B 96x96 grid shape (6x6 patches)

@@ -67,7 +67,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
     } elif (name == "coverage") {
         return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "model-free") {
-        // every suite-less test that runs (or skips its model arms) with no model file present:
+        // every suite-less test with at least one cell that RUNS (not skips) with no model file present:
         // the per-PR gate. A new such file registers here in the same change. Not here:
         // test_cpu_prefill_tripwire (it asserts the guard the runner's DASLLAMA_CPU_PREFILL=1
         // disarms - plain dastest only).
@@ -126,6 +126,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
+                    "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]

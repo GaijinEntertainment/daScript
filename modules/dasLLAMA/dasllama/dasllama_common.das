@@ -1111,6 +1111,16 @@ def grow_resize(@scratch var a : array<auto(numT)>; n : int | int64) {
     a |> resize(n)
 }
 
+// Grow-only sizing for reused scratch: the length becomes at least n (exact reserve first, so the
+// grow never trips max_unreserved_size) and never shrinks — a buffer sized once per tower keeps
+// serving smaller calls with no realloc; the grown tail is zeroed. The family towers' scratch shape.
+def ensure_length(@scratch var a : array<auto(numT)>; n : int64) {
+    if (long_length(a) < n) {
+        a |> reserve(n)
+        a |> resize(n)
+    }
+}
+
 def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
     for (i in range64(n)) {
         dst[doff + i] = src[soff + i]

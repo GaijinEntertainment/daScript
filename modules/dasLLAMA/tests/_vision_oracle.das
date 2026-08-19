@@ -1,7 +1,7 @@
-// Shared tier-1 vision oracle pieces for the gemma4uv / gemma4v encoder tests: the per-token
-// line parser for llama-mtmd-debug's MTMD_DEBUG_EMBEDDINGS block, the exact-value fixture
-// generators (float-for-float from mtmd-debug.cpp), and the per-token compare that logs the
-// maxdiff and judges it against an absolute + scale-relative bar.
+// Shared tier-1 vision oracle pieces for the gemma4uv / gemma4v encoder tests:
+//   - the per-token line parser for llama-mtmd-debug's MTMD_DEBUG_EMBEDDINGS block
+//   - the exact-value fixture generators (float-for-float from mtmd-debug.cpp)
+//   - the per-token compare, logging the maxdiff against an absolute + scale-relative bar
 
 options gen2
 options _dasllama_internal = true
@@ -92,9 +92,8 @@ def make_planes(kind : string; w, h : int) : array<float> {
 }
 
 
-//! The per-token compare: mean and v0..v3 of every token against the dump, on the bar
-//! ``abs_tol + rel_tol * token_rms``. Logs the maxdiff (and the worst excess past the bar) under
-//! ``label``; a failure names the token and the got/want pairs. Returns the maxdiff.
+// the per-token compare: mean and v0..v3 of every token against the dump, on the bar
+// abs_tol + rel_tol * token_rms (token_rms = sqrt(mean(out[p]^2)) per token); logs the maxdiff under tag
 def compare_encode(t : T?; tag : string; out : array<float>; d : int; o : OracleEncode; abs_tol, rel_tol : float) : float {
     var maxdiff = 0.0
     var max_tok = -1

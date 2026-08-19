@@ -12,9 +12,10 @@ require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
 
-// Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload):
-// pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff here isolates the
-// embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
+// Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
+// minted from the f32-widened 12B mmproj twin; the embedder has no attention, so the flash-attn
+// setting does not enter): pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff
+// here isolates the embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
 // (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips.
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
@@ -43,9 +44,7 @@ def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
     }
     let d = int(emb.proj_dim)
     if (gpu_ladder) {
-        let maxdiff = compare_encode(t, "gemma4uv tier-1 GPU {kind} {w}x{h}", out, d, o, TIER1_TOL, 4e-3)
-        let rung = maxdiff <= TIER1_TOL ? "held the strict CPU 2e-4" : "on the scale-relative rung"
-        to_log(LOG_INFO, "gemma4uv tier-1 GPU {kind} {w}x{h}: {rung}\n")
+        compare_encode(t, "gemma4uv tier-1 GPU {kind} {w}x{h}", out, d, o, TIER1_TOL, 4e-3)
         return true
     }
     compare_encode(t, "gemma4uv tier-1 {kind} {w}x{h}", out, d, o, TIER1_TOL, 0.0)

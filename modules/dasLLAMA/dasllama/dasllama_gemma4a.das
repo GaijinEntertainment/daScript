@@ -251,13 +251,6 @@ struct Gemma4aState {
     poss : array<float>
 }
 
-def private g4a_ensure(@scratch var a : array<float>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
-    }
-}
-
 // ===== loader =====
 
 //! HTK triangular mel filterbank ``[n_mel][n_bins]`` (fmin=0, fmax=sr/2, no area normalization) —
@@ -333,19 +326,6 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     var built = Gemma4aEncoder()
     cache_via_image_staged(st, built, "", tag)
     return <- built
-}
-
-// GEMM offsets ride the q cursor on a q8 load, the blob cursor otherwise — the field then
-// indexes whichever plane the mm route reads
-def private g4a_gemm_off(q8 : bool; var o : int64&; var qo : int64&; size : int64) : int64 {
-    if (q8) {
-        let at = qo
-        qo += size
-        return at
-    }
-    let at = o
-    o += size
-    return at
 }
 
 // GEMM read: a q8 load transcodes from the file straight into qblob/qscales (the fp32 blob
@@ -463,33 +443,33 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         st.e.c1_w = o; o += st.e.sub_ch1 * st.e.sub_ch0 * 9l
         st.e.norm1_w = o; o += st.e.sub_ch1
         let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)          // 32 × 32 = 1024
-        st.e.inproj_w = g4a_gemm_off(q8, o, qo, d * feat)
-        st.e.outproj_w = g4a_gemm_off(q8, o, qo, st.e.proj_dim * d)
+        st.e.inproj_w = take_cursor(q8, o, qo, d * feat)
+        st.e.outproj_w = take_cursor(q8, o, qo, st.e.proj_dim * d)
         st.e.outproj_b = o; o += st.e.proj_dim
-        st.e.mmproj_w = g4a_gemm_off(q8, o, qo, st.e.proj_dim * st.e.proj_dim)
+        st.e.mmproj_w = take_cursor(q8, o, qo, st.e.proj_dim * st.e.proj_dim)
         st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
             lo.ff_norm = o; o += d
-            lo.ff_up = g4a_gemm_off(q8, o, qo, ff * d)
-            lo.ff_down = g4a_gemm_off(q8, o, qo, d * ff)
+            lo.ff_up = take_cursor(q8, o, qo, ff * d)
+            lo.ff_down = take_cursor(q8, o, qo, d * ff)
             lo.ff_post_norm = o; o += d
             lo.attn_pre_norm = o; o += d
-            lo.q = g4a_gemm_off(q8, o, qo, d * d)
-            lo.k = g4a_gemm_off(q8, o, qo, d * d)
-            lo.v = g4a_gemm_off(q8, o, qo, d * d)
-            lo.o = g4a_gemm_off(q8, o, qo, d * d)
+            lo.q = take_cursor(q8, o, qo, d * d)
+            lo.k = take_cursor(q8, o, qo, d * d)
+            lo.v = take_cursor(q8, o, qo, d * d)
+            lo.o = take_cursor(q8, o, qo, d * d)
             lo.per_dim_scale = o; o += st.e.d_head
-            lo.attn_k_rel = g4a_gemm_off(q8, o, qo, d * d)
+            lo.attn_k_rel = take_cursor(q8, o, qo, d * d)
             lo.attn_post_norm = o; o += d
             lo.norm_conv = o; o += d
-            lo.conv_pw1 = g4a_gemm_off(q8, o, qo, 2l * d * d)
+            lo.conv_pw1 = take_cursor(q8, o, qo, 2l * d * d)
             lo.conv_dw = o; o += 5l * d
             lo.conv_norm = o; o += d
-            lo.conv_pw2 = g4a_gemm_off(q8, o, qo, d * d)
+            lo.conv_pw2 = take_cursor(q8, o, qo, d * d)
             lo.ff_norm_1 = o; o += d
-            lo.ff_up_1 = g4a_gemm_off(q8, o, qo, ff * d)
-            lo.ff_down_1 = g4a_gemm_off(q8, o, qo, d * ff)
+            lo.ff_up_1 = take_cursor(q8, o, qo, ff * d)
+            lo.ff_down_1 = take_cursor(q8, o, qo, d * ff)
             lo.ff_post_norm_1 = o; o += d
             lo.ln2 = o; o += d
             st.layers[l] = lo
@@ -621,7 +601,7 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
     let n_padded_needed = (pt_frames - 1l) * G4A_HOP + G4A_N_FFT
     let total_pad = max(n_padded_needed - len, pad_left)
     let n_padded = total_pad + len
-    g4a_ensure(st.padded, n_padded)
+    ensure_length(st.padded, n_padded)
     for (i in range64(n_padded)) {
         st.padded[i] = 0.0
     }
@@ -632,10 +612,10 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
     let n_full = (n_padded - G4A_N_FFT) / G4A_HOP + 1l
     st.n_len = min(n_full, pt_frames)
     let n_len = st.n_len
-    g4a_ensure(st.mel, n_len * n_mel)
+    ensure_length(st.mel, n_len * n_mel)
 
     // windowed frames -> DFT (twiddle gemm) -> magnitude -> mel -> natural log
-    g4a_ensure(st.xw, n_len * G4A_N_FFT)
+    ensure_length(st.xw, n_len * G4A_N_FFT)
     for (i in range64(n_len * G4A_N_FFT)) {
         st.xw[i] = 0.0
     }
@@ -646,11 +626,11 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
             st.xw[i * G4A_N_FFT + j] = enc.hann[j] * st.padded[base + j]
         }
     }
-    g4a_ensure(st.reim, n_len * n_bins * 2l)
+    ensure_length(st.reim, n_len * n_bins * 2l)
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(enc.twiddles, 0l),
              n_len, G4A_N_FFT, n_bins * 2l)
 
-    g4a_ensure(st.power, n_bins)
+    ensure_length(st.power, n_bins)
     for (i in range64(n_len)) {
         for (k in range64(n_bins)) {
             let re = st.reim[i * n_bins * 2l + k * 2l]
@@ -677,7 +657,7 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
     let oh = (ih - 1l) / 2l + 1l
     let kdim = cin * 9l
     let rows = oh * ow
-    g4a_ensure(st.col, rows * kdim)
+    ensure_length(st.col, rows * kdim)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
             let r = (oy * ow + ox) * kdim
@@ -694,7 +674,7 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
             }
         }
     }
-    g4a_ensure(out, rows * cout)
+    ensure_length(out, rows * cout)
     mm_blob_b(out, enc.blob, w_off, st.col, kdim, cout, rows)
     // LayerNorm over the cout channels per spatial row (mean/var, biased), weight only, then ReLU
     let eps = enc.eps
@@ -720,7 +700,6 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
 
 // ===== encoder helpers =====
 
-// clamp x[0..n) in place to [imin, imax]
 // mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
 def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : array<float>;
                    xq : array<int8>; xs : array<float>; n, d, npos : int64) {
@@ -766,7 +745,7 @@ def private g4a_requant_rpe(enc : Gemma4aEncoder; var st : Gemma4aState; d : int
     if (!enc.q8) {
         return
     }
-    g4a_ensure(st.posf, (G4A_PAST + 1l) * d)
+    ensure_length(st.posf, (G4A_PAST + 1l) * d)
     unsafe {
         let pp = plane_at(enc.pos_emb, 0l)
         var fp = addr(st.posf[0])
@@ -784,7 +763,7 @@ def private g4a_mm_clamped(enc : Gemma4aEncoder; var st : Gemma4aState; var y : 
         g4a_mm_rq(enc, st, y, w_off, x, n, d, npos)
         return
     }
-    g4a_ensure(st.xc, n * npos)
+    ensure_length(st.xc, n * npos)
     clamp_rows(st.xc, x, n * npos, c.imin, c.imax)
     g4a_mm_rq(enc, st, y, w_off, st.xc, n, d, npos)
     clamp_rows(y, y, d * npos, c.omin, c.omax)
@@ -841,21 +820,21 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let feat = w2 * enc.sub_ch1     // 32 × 32 = 1024; y1 rows are already [freq·32 + channel]
 
     // input projection: feat -> d_model
-    g4a_ensure(st.x, npos * d)
+    ensure_length(st.x, npos * d)
     g4a_mm_rq(enc, st, st.x, enc.inproj_w, st.y1, feat, d, npos)
     asr_prof_add("g4a.enc.front", tprof)
 
-    g4a_ensure(st.xb, npos * d)
-    g4a_ensure(st.xc, max(2l * d, ff) * npos)
-    g4a_ensure(st.h, npos * ff)
-    g4a_ensure(st.glu, npos * d)
-    g4a_ensure(st.cvd, npos * d)
-    g4a_ensure(st.qq, npos * d)
-    g4a_ensure(st.kk, npos * d)
-    g4a_ensure(st.vv, npos * d)
-    g4a_ensure(st.ao, npos * d)
-    g4a_ensure(st.prpe, (G4A_PAST + 1l) * d)
-    g4a_ensure(st.sc, G4A_PAST + 1l)
+    ensure_length(st.xb, npos * d)
+    ensure_length(st.xc, max(2l * d, ff) * npos)
+    ensure_length(st.h, npos * ff)
+    ensure_length(st.glu, npos * d)
+    ensure_length(st.cvd, npos * d)
+    ensure_length(st.qq, npos * d)
+    ensure_length(st.kk, npos * d)
+    ensure_length(st.vv, npos * d)
+    ensure_length(st.ao, npos * d)
+    ensure_length(st.prpe, (G4A_PAST + 1l) * d)
+    ensure_length(st.sc, G4A_PAST + 1l)
 
     let q_scale = (1.0 / sqrt(float(dh))) / log(2.0)
     let k_scale = log(1.0 + exp(1.0)) / log(2.0)
@@ -968,8 +947,8 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 
     // output projection -> RMSNorm (weightless) -> mm input projection
     tprof = ref_time_ticks()
-    g4a_ensure(st.tmp, npos * enc.proj_dim)
-    g4a_ensure(st.out, npos * enc.proj_dim)
+    ensure_length(st.tmp, npos * enc.proj_dim)
+    ensure_length(st.out, npos * enc.proj_dim)
     g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, enc.proj_dim, npos)
     add_bias_rows(st.tmp, enc.blob, enc.outproj_b, enc.proj_dim, npos)
     unsafe {

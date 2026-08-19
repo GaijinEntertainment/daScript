@@ -505,6 +505,33 @@ def gguf_int_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
 }
 
 //! Index of tensor `name` in m.tensors, or -1 if absent.
+//! Panic by name unless tensor ``name`` exists with exactly ``want`` elements — the loaders'
+//! shape gate; ``who`` prefixes the message ("dasLLAMA gemma4v").
+def gguf_expect_elems(m : GGUFMeta; name : string; want : int64; who : string) {
+    let ti = gguf_find_tensor(m, name)
+    if (ti < 0) {
+        panic("{who}: mmproj is missing tensor '{name}'")
+    }
+    let n = m.tensors[ti].n_elem
+    if (n != want) {
+        panic("{who}: tensor '{name}' has {n} elements, expected {want}")
+    }
+}
+
+//! Take ``size`` elements off one of two layout cursors — ``alt`` when ``use_alt``, ``o``
+//! otherwise — and return the offset taken: the per-GEMM plane pick at layout time (a bf16
+//! tensor rides the halfword cursor, a q8 one the quant cursor, an f32 one the blob cursor).
+def take_cursor(use_alt : bool; var o : int64&; var alt : int64&; size : int64) : int64 {
+    if (use_alt) {
+        let at = alt
+        alt += size
+        return at
+    }
+    let at = o
+    o += size
+    return at
+}
+
 def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     for (i in range(length(m.tensors))) {
         if (m.tensors[i].name == name) {

@@ -17,9 +17,12 @@ are twins, whatever the axis (single/batch, format, single-pass/chunked); they s
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
 copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
 
-**Every weight, bias, or lookup-table field on a `[metal_dispatch]` / `[vk_dispatch]` kernel
-class declares `@role = "weight"` explicitly.** An un-roled weight-shaped field is a defect even
-when the kernel compiles and passes parity.
+**Every field on a `[metal_dispatch]` / `[vk_dispatch]` kernel class backed by load-once memory —
+a model plane, or an `upload_region` upload never written after arming — declares
+`@role = "weight"` explicitly; per-encode data (a pooled buffer the host refills each encode)
+stays `read` / `readwrite`.** An un-roled load-once field is a defect even when the kernel
+compiles and passes parity; a `weight` role on per-encode data is one too (it drops the hazard
+staging).
 
 **A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
 carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
@@ -29,9 +32,10 @@ a format or twin pick, a default-filling wrapper, or a composite over generated 
 **A kernel is dispatched only through its `enc_*` builder** — a hand-rolled bind list in
 `dasllama/` or `performance/` is a defect.
 
-**No value reaches an encoder twice DEVICE-side.** A scalar uniform buffer passed alongside the
-identical value as a parameter is a defect, as is a kargs field the fields beside it determine;
-a builder parameter the `grid=`/`tg=` spec consumes host-side never arrives at the device.
+**No value reaches an encoder twice DEVICE-side.** A scalar the kernel receives twice — as a
+uniform buffer and as a kargs field — or that the other bound scalars determine, is a defect;
+a `params=` value the `grid=`/`tg=` spec consumes host-side never reaches the device and does
+not count.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
@@ -60,9 +64,10 @@ per driver.** A string-typed metal decline is a defect.
 **Decline counting lives in `dasllama/dasllama_metal_common.das`.** A counter beside the
 decline site is a defect.
 
-**A diff that changes how Metal and Vulkan differ — adding or removing an asymmetry — lands its
-`ARCHITECTURE.md` §1.5 edit in the same change.** §1.5 is the closed list; an asymmetry it does
-not carry does not exist.
+**A diff that adds or removes a Metal-only or Vulkan-only hook, role, or served path lands its
+`ARCHITECTURE.md` §1.5 edit in the same change — including when §1.5 already carries that class
+of asymmetry, and including §1.5's per-driver lists of registered hooks and borrowed kernels.**
+§1.5 is the closed list; an asymmetry it does not carry does not exist.
 
 **A Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
 `vk_drop_model_state`.** A hand-written pipeline build anywhere else in the engine is a defect.
@@ -79,11 +84,16 @@ runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** 
 `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships runs of the GPU
+oracle-parity gates of the towers it serves (`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`)
+plus a `tests/test_model_image.das` run with the `mtower` arm** — those GPU-vs-CPU cells, with
+the driver's encode counter proving it engaged, are that driver's parity instrument.
+
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 model.** Parity runs never reach it.
 
-**A change to `dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
+**A change to `dasllama/dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
 `mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.
 
 **A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs is stamped

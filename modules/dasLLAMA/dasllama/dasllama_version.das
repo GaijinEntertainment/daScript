@@ -9,4 +9,4 @@ require dasllama/dasllama_lint public
 //! dasLLAMA's release counter — decoupled from the daslang version and LLVM_JIT_CODEGEN_VERSION.
 //! ANY kernel work bumps it (REVIEW.md): equal versions mean an equal kernel roster, and the
 //! sidecar exchange keys validity on (version, box). Bench records and sidecar provenance carry it.
-let DASLLAMA_VERSION = 4
+let DASLLAMA_VERSION = 5   // v5: the gemma4v ViT tower (three Metal kernels, the shared tower clamp/attention cores)

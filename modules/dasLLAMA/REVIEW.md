@@ -82,16 +82,17 @@ ships the same before/after rows or a statement that the bytes are unchanged.**
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
 `tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.**
 
-**An override announces itself where it changes the outcome.** An override is a gate escape,
-policy override, or threshold recalibration. Where one changes what a run measures, mints, or
-emits, a printed line names it by env spelling; set-but-inert stays silent, per-site repeats are
-fine. Adding one, or giving one a new effect, without the announce is a defect.
+**An override announces itself where it changes the outcome.** An override is anything that
+moves a gate, policy, or threshold off its default — an env knob or its programmatic setter.
+Where one changes what a run measures, mints, or emits, a printed line names it by the env
+spelling; set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
+effect, without the announce is a defect.
 
-**Record-grade model timing — a self-measured time entering `performance/records/<box>.json`
-or `PERF_LEDGER.md` — comes only from the rigs `PROFILE.md` documents:
-`performance/gen_profile.das` and `performance/gen_bench_records.das`, both spawning
-`benchmarks/lcpp_bench.das`.** Any other producer, new or edited, is a defect. A tutorial's
-printed wall-clock is teaching output, feeding no board.
+**A self-measured model time entering `performance/records/<box>.json` or `PERF_LEDGER.md` comes
+from the released `lcpp_bench` exe — `benchmarks/lcpp_bench.das` built by `daspkg release`,
+spawned by `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md`
+section says so — never from the `-jit` script** (a `--for-debug-purposes` row is a debug
+instrument). A tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -102,8 +103,9 @@ reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cel
 quant mode and stamps box and engine provenance, so a number can never silently describe a
 format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
 delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
-A **stage-level figure** — a speedup of one engine stage, not a served turn — names the
-harness and flags that produced it, on the same line.
+
+**A stage-level figure — a speedup of one engine stage, not a served turn — names the harness
+and flags that produced it in the same sentence.**
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -120,8 +122,9 @@ per format, or per backend, is a defect even where its output is identical.
 out and writes each plane as it is produced. Keeping the source model resident to write from is
 a defect, and a mint that is slower in exchange for a lower peak is correct.
 
-**A carrier mint stages (`cache_via_image_staged`) only while its source file is under 1 GiB;
-at or past the line it streams like a decoder.**
+**A staged carrier mint (`cache_via_image_staged`) either refuses a source file at or past
+1 GiB, naming that file in the refusal, or streams it like a decoder** — the staged form holds
+source and image at once, and that doubled peak is what the line caps.
 
 **A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the
 box profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A

@@ -30,6 +30,7 @@ require math
 // mtmd hardcodes both in the projector's hparams — neither is in the gguf
 let GEMMA4V_ROPE_THETA = 100.0
 let private GEMMA4V_MERGE_DEFAULT = 3l
+let private GEMMA4V_STAGE_CAP = 1073741824ul   // the staged-mint line: a carrier source at or past 1 GiB streams instead
 
 // per-block GEMM order — the clamp table and the block GEMM plane stride follow it (public: the
 // Metal tower driver walks the same layout)
@@ -213,7 +214,7 @@ def private register_gemma4v_image_tags {
     register_image_family_tag(GEMMA4V_TAG_Q8)
 }
 
-// ===== the GPU blocks hook (registered by dasllama_metal_tower at [init]; requires-back). It takes
+// the GPU blocks hook (registered by dasllama_metal_tower at [init]; requires-back). It takes
 // s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false =
 // declined, the CPU loop is the fallback. `serves` = would the driver serve (the lane policy asks)
 typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>
@@ -228,63 +229,50 @@ def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn) {
     g_g4v_gpu_set = true
 }
 
-// The lane policy: q8 is the CPU serving default; a GPU blocks driver that will serve wants the
-// file's planes (it declines q8), so its presence + knob flips the default to the exact lane.
-// A pin (set_gemma4v_q8) overrides either way — the parity rails and the q8 gate pin explicitly.
-var private g_g4v_q8_pin = -1   // -1 unset, 0 exact planes, 1 q8
+// The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
+// armed accelerate float-batch tier both want the file's planes (the driver declines q8, the tier
+// serves float planes only) and flip the default to the exact lane; else q8. A pin overrides.
+enum private G4vLane {
+    unset    // the policy decides
+    exact    // the file's planes
+    q8
+}
+var private g_g4v_q8_pin = G4vLane.unset
 
 def private g4v_serve_q8() : bool {
-    if (g_g4v_q8_pin >= 0) {
-        return g_g4v_q8_pin == 1
+    if (g_g4v_q8_pin != G4vLane.unset) {
+        return g_g4v_q8_pin == G4vLane.q8
     }
-    return !(g_g4v_gpu_set && invoke(g_g4v_gpu_serves))
+    return !((g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) || float_batch_override_active())
 }
 
 //! Pin the gemma4v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs the file's own planes (the parity rail, and what the Metal tower serves). Each lane is its
 //! own prepared image. ``reset_gemma4v_q8`` returns to the policy default.
 def set_gemma4v_q8(on : bool) {
-    g_g4v_q8_pin = on ? 1 : 0
+    g_g4v_q8_pin = on ? G4vLane.q8 : G4vLane.exact
 }
 
 def reset_gemma4v_q8() {
-    g_g4v_q8_pin = -1
+    g_g4v_q8_pin = G4vLane.unset
 }
 
-//! The lane the next load takes under the current pin/policy (true = q8).
-def gemma4v_q8_default() : bool => g4v_serve_q8()
+//! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
+def gemma4v_serves_q8() : bool => g4v_serve_q8()
 
 def private g4v_tag() : string => g4v_serve_q8() ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG
 
-def private g4v_ensure(@scratch var a : array<float>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
+// the lane changes what a load mints and serves, so the load says which and why, by knob spelling
+def private g4v_announce_lane() {
+    var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
+    if (g_g4v_q8_pin != G4vLane.unset) {
+        why = "pinned"
+    } elif (g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) {
+        why = "DASLLAMA_METAL_TOWER on: the Metal tower serves the file's planes"
+    } elif (float_batch_override_active()) {
+        why = "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
     }
-}
-
-def private g4v_expect(m : GGUFMeta; name : string; want : int64) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("dasLLAMA gemma4v: mmproj is missing tensor '{name}'")
-    }
-    let n = m.tensors[ti].n_elem
-    if (n != want) {
-        panic("dasLLAMA gemma4v: tensor '{name}' has {n} elements, expected {want}")
-    }
-}
-
-// GEMM offsets ride the halfword cursor on a bf16 load, the fp32 cursor otherwise — the field then
-// indexes whichever plane the mm route reads
-def private g4v_gemm_off(bf16 : bool; var o : int64&; var wo : int64&; size : int64) : int64 {
-    if (bf16) {
-        let at = wo
-        wo += size
-        return at
-    }
-    let at = o
-    o += size
-    return at
+    to_log(LOG_INFO, "dasLLAMA gemma4v: block GEMM lane {g4v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
 }
 
 // GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
@@ -317,29 +305,37 @@ def private g4v_clamp_at(t : Gemma4vTower; off : int64) : Clamp {
     return c
 }
 
+// the block GEMM tensors in GEMMA4V_GEMM_* order (q k v o gate up down) — every per-GEMM list
+// (sizes, widths, clamp records) follows this order
 let private G4V_BLK_GEMM_NAMES <- [ "attn_q", "attn_k", "attn_v", "attn_out", "ffn_gate", "ffn_up", "ffn_down" ]
+
+// the block GEMM element counts in GEMMA4V_GEMM_* order — the staged layout and the served
+// offsets both size from this one list
+def private g4v_gemm_sizes(d, ff : int64) : array<int64> {
+    return <- [ d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d ]
+}
 
 // every tensor the forward reads, by name and element count, before any layout is committed
 def private g4v_verify_tensors(m : GGUFMeta; t : Gemma4vTower; gemm_sizes : array<int64>) {
     let d = t.n_embd
     let hd = d / t.n_head
-    g4v_expect(m, "v.patch_embd.weight", t.patch_dim * d)
-    g4v_expect(m, "mm.input_projection.weight", d * t.proj_dim)
+    gguf_expect_elems(m, "v.patch_embd.weight", t.patch_dim * d, "dasLLAMA gemma4v")
+    gguf_expect_elems(m, "mm.input_projection.weight", d * t.proj_dim, "dasLLAMA gemma4v")
     if (t.has_std) {
-        g4v_expect(m, "v.std_bias", d)
-        g4v_expect(m, "v.std_scale", d)
+        gguf_expect_elems(m, "v.std_bias", d, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "v.std_scale", d, "dasLLAMA gemma4v")
     }
     for (l in range64(t.n_layer)) {
         let p = "v.blk.{l}"
-        g4v_expect(m, "{p}.ln1.weight", d)
-        g4v_expect(m, "{p}.ln2.weight", d)
-        g4v_expect(m, "{p}.attn_post_norm.weight", d)
-        g4v_expect(m, "{p}.ffn_post_norm.weight", d)
-        g4v_expect(m, "{p}.attn_q_norm.weight", hd)
-        g4v_expect(m, "{p}.attn_k_norm.weight", hd)
+        gguf_expect_elems(m, "{p}.ln1.weight", d, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "{p}.ln2.weight", d, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "{p}.attn_post_norm.weight", d, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "{p}.ffn_post_norm.weight", d, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "{p}.attn_q_norm.weight", hd, "dasLLAMA gemma4v")
+        gguf_expect_elems(m, "{p}.attn_k_norm.weight", hd, "dasLLAMA gemma4v")
         for (g in range64(GEMMA4V_GEMMS)) {
             let name = "{p}.{G4V_BLK_GEMM_NAMES[g]}.weight"
-            g4v_expect(m, name, gemm_sizes[g])
+            gguf_expect_elems(m, name, gemm_sizes[g], "dasLLAMA gemma4v")
             if ((gguf_tensor_type(m, name) == GGML_TYPE_BF16) != t.blk_bf16) {
                 panic("dasLLAMA gemma4v: '{name}' is not the same element type as v.blk.0.attn_q.weight - mixed block GEMM types are not supported")
             }
@@ -353,13 +349,13 @@ def private g4v_layout(var t : Gemma4vTower; var off : int64&; var woff : int64&
     let d = t.n_embd
     let ff = t.n_ff
     let hd = d / t.n_head
-    t.patch_w = g4v_gemm_off(t.patch_bf16, off, woff, t.patch_dim * d)
+    t.patch_w = take_cursor(t.patch_bf16, off, woff, t.patch_dim * d)
     t.pos_w = off; off += 2l * t.pos_entries * d
     if (t.has_std) {
         t.std_bias = off; off += d
         t.std_scale = off; off += d
     }
-    t.proj_w = g4v_gemm_off(t.proj_bf16, off, woff, d * t.proj_dim)
+    t.proj_w = take_cursor(t.proj_bf16, off, woff, d * t.proj_dim)
     t.proj_clamp = off; off += GEMMA4V_CLAMP_F
     t.layer_f_stride = 4l * d + 2l * hd + GEMMA4V_GEMMS * GEMMA4V_CLAMP_F
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
@@ -368,7 +364,7 @@ def private g4v_layout(var t : Gemma4vTower; var off : int64&; var woff : int64&
         t.layer_w = qo
         qo += t.n_layer * t.layer_w_stride
     } else {
-        t.layer_w = g4v_gemm_off(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
+        t.layer_w = take_cursor(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
     }
 }
 
@@ -425,9 +421,9 @@ def private g4v_read_gemm_q8(m : GGUFMeta; b : array<uint8> | #; name : string; 
     quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, wo, wo / 32l)
 }
 
-// repack every block GEMM region for the active backend's q8q8 kernels (n = the region's input
-// width — per-row alignment, not just n_elem, keeps blocks from straddling rows); without a
-// selected backend matmul_q8q8_batch reads the flat Q8_0 image as-is
+// repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the
+// region's input width), not just n_elem, keeps blocks from straddling rows; without a selected
+// backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private g4v_repack_all(var st : Gemma4vStaging; gemm_sizes : array<int64>) {
     if (!st.t.q8 || !select_matmul_backend_for_load_()) {
         return
@@ -453,6 +449,11 @@ def stage_gemma4v_tower(path : string) : Gemma4vStaging {
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
+    }
+    // the staged mint holds source + image at once; past the line a carrier streams like a decoder,
+    // and this tower has no streamed mint — the shipped vision mmprojs sit under it (E2B bf16 0.99 GB)
+    if (stat(path).size >= GEMMA4V_STAGE_CAP) {
+        panic("dasLLAMA gemma4v: '{path}' is {stat(path).size / 1048576ul} MB - at or past the 1 GiB staged-mint line; serve the bf16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
@@ -489,7 +490,7 @@ def stage_gemma4v_tower(path : string) : Gemma4vStaging {
         st.t.proj_bf16 = gguf_tensor_type(m, "mm.input_projection.weight") == GGML_TYPE_BF16
         st.t.blk_bf16 = gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_BF16
         st.t.has_std = gguf_find_tensor(m, "v.std_bias") >= 0 && gguf_find_tensor(m, "v.std_scale") >= 0
-        let gemm_sizes <- [ d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d ]
+        let gemm_sizes <- g4v_gemm_sizes(d, ff)
         g4v_verify_tensors(m, st.t, gemm_sizes)
         var off = 0l
         var woff = 0l
@@ -511,9 +512,9 @@ def stage_gemma4v_tower(path : string) : Gemma4vStaging {
 //! source mmproj first. Panics on any other projector.
 def load_gemma4v_tower(path : string) : Gemma4vTower {
     var tag = g4v_tag()
+    // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
+    // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
     if (path |> ends_with(".dlim")) {
-        // named directly — no mmproj to regenerate from, so a wrong identity panics; the lane is
-        // the file's (its baked tag), not the knob's: a served tower reads its q8 flag from the meta
         let baked = image_family_tag(path)
         if (baked == GEMMA4V_TAG || baked == GEMMA4V_TAG_Q8) {
             tag = baked
@@ -528,6 +529,7 @@ def load_gemma4v_tower(path : string) : Gemma4vTower {
         g4v_check_planes(t, path)
         return <- t
     }
+    g4v_announce_lane()
     if (g_env_engine.image) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let img = image_path_for(path, tag)
@@ -573,18 +575,6 @@ def private g4v_check_planes(t : Gemma4vTower; src : string) {
     }
 }
 
-// One GEMM, on whichever plane the tower's offsets index. Both arms are the same arithmetic:
-// dot_bf16's widen is an exact high-half shift, so the bf16 arm reads half the bytes for the
-// identical result.
-def private g4v_gemm(var y : array<float>; t : Gemma4vTower; bf16 : bool; off : int64;
-                     x : array<float>; n, d, npos : int64) {
-    if (bf16) {
-        mm_bf16_b(y, t.wblob, off, x, n, d, npos)
-    } else {
-        mm_blob_b(y, t.blob, off, x, n, d, npos)
-    }
-}
-
 // the q8 route: per-site requant of the (clamped) input, then the q8q8 batch kernel
 def private g4v_gemm_q8(var y : array<float>; t : Gemma4vTower; var s : Gemma4vState; off : int64;
                         x : array<float>; n, d, npos : int64) {
@@ -607,16 +597,16 @@ def private g4v_gemm_clamped(var y : array<float>; t : Gemma4vTower; var s : Gem
         if (q8) {
             g4v_gemm_q8(y, t, s, off, x, n, d, npos)
         } else {
-            g4v_gemm(y, t, bf16, off, x, n, d, npos)
+            mm_plane_b(y, bf16, t.wblob, t.blob, off, x, n, d, npos)
         }
         return
     }
-    g4v_ensure(s.xc, n * npos)
+    ensure_length(s.xc, n * npos)
     clamp_rows(s.xc, x, n * npos, c.imin, c.imax)
     if (q8) {
         g4v_gemm_q8(y, t, s, off, s.xc, n, d, npos)
     } else {
-        g4v_gemm(y, t, bf16, off, s.xc, n, d, npos)
+        mm_plane_b(y, bf16, t.wblob, t.blob, off, s.xc, n, d, npos)
     }
     clamp_rows(y, y, d * npos, c.omin, c.omax)
 }
@@ -669,12 +659,12 @@ def gemma4v_block_offs(t : Gemma4vTower; l : int64) : Gemma4vBlockOffs {
         q_norm = fo + 4l * d, k_norm = fo + 4l * d + hd)
     let clamps = fo + 4l * d + 2l * hd
     let wo = t.layer_w + l * t.layer_w_stride
-    let sizes = fixed_array<int64>(d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d)
+    let sizes <- g4v_gemm_sizes(d, ff)
     var at = wo
-    for (g in range(7)) {
+    for (g in range64(GEMMA4V_GEMMS)) {
         o.w[g] = at
         at += sizes[g]
-        o.clamp[g] = clamps + int64(g) * GEMMA4V_CLAMP_F
+        o.clamp[g] = clamps + g * GEMMA4V_CLAMP_F
     }
     return o
 }
@@ -685,31 +675,18 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     let ff = t.n_ff
     let hd = d / t.n_head
     let o = gemma4v_block_offs(t, l)
-    let ln1 = o.ln1
-    let ln2 = o.ln2
-    let attn_post = o.attn_post
-    let ffn_post = o.ffn_post
-    let q_norm = o.q_norm
-    let k_norm = o.k_norm
-    let w_q = o.w[GEMMA4V_GEMM_Q]
-    let w_k = o.w[GEMMA4V_GEMM_K]
-    let w_v = o.w[GEMMA4V_GEMM_V]
-    let w_o = o.w[GEMMA4V_GEMM_O]
-    let w_gate = o.w[GEMMA4V_GEMM_GATE]
-    let w_up = o.w[GEMMA4V_GEMM_UP]
-    let w_down = o.w[GEMMA4V_GEMM_DOWN]
     // attention (the g4v.* buckets feed asr_prof_report - the encode split, the gemma4a shape)
     var tp = ref_time_ticks()
-    rms_rows(s.xb, s.x, t.blob, ln1, d, npos, t.eps)
+    rms_rows(s.xb, s.x, t.blob, o.ln1, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, w_q, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q]), t.q8)
-    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, w_k, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K]), t.q8)
-    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, w_v, s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_V]), t.q8)
+    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_Q], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q]), t.q8)
+    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_K], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K]), t.q8)
+    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_V], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_V]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
-    rms_rows(s.qq, s.qq, t.blob, q_norm, hd, npos * t.n_head, t.eps)
-    rms_rows(s.kk, s.kk, t.blob, k_norm, hd, npos * t.n_head, t.eps)
+    rms_rows(s.qq, s.qq, t.blob, o.q_norm, hd, npos * t.n_head, t.eps)
+    rms_rows(s.kk, s.kk, t.blob, o.k_norm, hd, npos * t.n_head, t.eps)
     rms_rows_weightless(s.vv, hd, npos * t.n_head, t.eps)
     rope_neox_2d_rows(s.qq, npos, t.n_head, hd, s.cos_x, s.sin_x, s.cos_y, s.sin_y)
     rope_neox_2d_rows(s.kk, npos, t.n_head, hd, s.cos_x, s.sin_x, s.cos_y, s.sin_y)
@@ -718,26 +695,26 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0)   // kq_scale = 1: the ViT attends unscaled
     asr_prof_add("g4v.attn_core", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_o, s.xb2, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_O]), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_O], s.xb2, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_O]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
-    rms_rows(s.xb, s.xb, t.blob, attn_post, d, npos, t.eps)
+    rms_rows(s.xb, s.xb, t.blob, o.attn_post, d, npos, t.eps)
     add_inplace_rows(s.x, s.xb, npos * d)
     // ffn
-    rms_rows(s.xb, s.x, t.blob, ln2, d, npos, t.eps)
+    rms_rows(s.xb, s.x, t.blob, o.ln2, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, w_gate, s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_GATE]), t.q8)
-    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, w_up, s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_UP]), t.q8)
+    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_GATE], s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_GATE]), t.q8)
+    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_UP], s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_UP]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
     geglu_quick_lut_rows(s.hg, s.hg, s.hu, ff, npos)
     asr_prof_add("g4v.geglu", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, w_down, s.hg, ff, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN]), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_DOWN], s.hg, ff, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
-    rms_rows(s.xb, s.xb, t.blob, ffn_post, d, npos, t.eps)
+    rms_rows(s.xb, s.xb, t.blob, o.ffn_post, d, npos, t.eps)
     add_inplace_rows(s.x, s.xb, npos * d)
     asr_prof_add("g4v.norm", tp)
 }
@@ -754,15 +731,15 @@ def private g4v_stem(t : Gemma4vTower; var s : Gemma4vState; planes : array<floa
             xp[i] = xp[i] * 2.0 - 1.0
         }
     }
-    g4v_ensure(s.x, npos * d)
-    g4v_ensure(s.xb, npos * d)
-    g4v_ensure(s.xb2, npos * d)
-    g4v_ensure(s.qq, npos * d)
-    g4v_ensure(s.kk, npos * d)
-    g4v_ensure(s.vv, npos * d)
-    g4v_ensure(s.hg, npos * t.n_ff)
-    g4v_ensure(s.hu, npos * t.n_ff)
-    g4v_gemm(s.x, t, t.patch_bf16, t.patch_w, s.x0, t.patch_dim, d, npos)
+    ensure_length(s.x, npos * d)
+    ensure_length(s.xb, npos * d)
+    ensure_length(s.xb2, npos * d)
+    ensure_length(s.qq, npos * d)
+    ensure_length(s.kk, npos * d)
+    ensure_length(s.vv, npos * d)
+    ensure_length(s.hg, npos * t.n_ff)
+    ensure_length(s.hu, npos * t.n_ff)
+    mm_plane_b(s.x, t.patch_bf16, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     unsafe {
         var xp = addr(s.x[0])
         let tbl = plane_at(t.blob, t.pos_w)
@@ -801,7 +778,7 @@ def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : in
         }
     }
     rms_rows_weightless(s.pooled, d, nout, t.eps)
-    g4v_ensure(out, nout * t.proj_dim)
+    ensure_length(out, nout * t.proj_dim)
     g4v_gemm_clamped(out, t, s, t.proj_bf16, t.proj_w, s.pooled, d, t.proj_dim, nout, g4v_clamp_at(t, t.proj_clamp))
     return nout
 }

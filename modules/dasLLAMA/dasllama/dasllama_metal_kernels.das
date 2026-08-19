@@ -4268,18 +4268,9 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
-    if (g_pso_clamp != null) {
-        metal_release(g_pso_clamp)
-        g_pso_clamp = null
-    }
-    if (g_pso_rope2d != null) {
-        metal_release(g_pso_rope2d)
-        g_pso_rope2d = null
-    }
-    if (g_pso_geglu_quick != null) {
-        metal_release(g_pso_geglu_quick)
-        g_pso_geglu_quick = null
-    }
+    release_pso(g_pso_clamp)
+    release_pso(g_pso_rope2d)
+    release_pso(g_pso_geglu_quick)
     release_pso(g_pso_cross_kx)
     release_pso(g_pso_cross_vx)
     release_pso(g_pso_cross_vx_h)
@@ -4766,15 +4757,14 @@ class MetalClamp {
 
 // The gemma4v two-axis NEOX rope over token-major rows [npos x n_head*hs]: each head's first hs/2
 // dims rotate by the row's x table, the second hs/2 by its y table — `tabs` packs the CPU's four
-// tables per row as [cx q | sx q | cy q | sy q] (q = hs/4), one thread per (row, head, j).
+// tables per row as [cx | sx | cy | sy], `pairs` (= hs/4) wide each; one thread per (row, head, j).
 [metal_dispatch(name = "enc_rope2d", pso = "g_pso_rope2d", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalRope2D {
     @ssbo @binding = 0 @role = "readwrite" x : array<float>     // [npos x d]
     @ssbo @binding = 1 @role = "read" tabs : array<float>       // [npos x 4q]
     @uniform @binding = 2 d : uint
-    @uniform @binding = 3 hs : uint
-    @uniform @binding = 4 q : uint
-    @uniform @binding = 5 total : uint   // npos * (d/hs) * q
+    @uniform @binding = 3 pairs : uint   // rotated pairs per axis, one table row; the head is 4 of them
+    @uniform @binding = 4 total : uint   // npos * n_head * pairs
 
     [metal_kernel(name="metal_rope2d_msl")]
     def metal_rope2d {
@@ -4782,25 +4772,26 @@ class MetalRope2D {
         if (gid >= total) {
             return
         }
+        let hs = 4u * pairs
         let n_head = d / hs
-        let r = gid / (n_head * q)
-        let rem = gid % (n_head * q)
-        let h = rem / q
-        let j = rem % q
+        let r = gid / (n_head * pairs)
+        let rem = gid % (n_head * pairs)
+        let h = rem / pairs
+        let j = rem % pairs
         let base = r * d + h * hs
-        let tb = r * 4u * q
+        let tb = r * 4u * pairs
         let cx = tabs[tb + j]
-        let sx = tabs[tb + q + j]
-        let cy = tabs[tb + 2u * q + j]
-        let sy = tabs[tb + 3u * q + j]
+        let sx = tabs[tb + pairs + j]
+        let cy = tabs[tb + 2u * pairs + j]
+        let sy = tabs[tb + 3u * pairs + j]
         let x0 = x[base + j]
-        let x1 = x[base + j + q]
+        let x1 = x[base + j + pairs]
         x[base + j] = x0 * cx - x1 * sx
-        x[base + j + q] = x0 * sx + x1 * cx
-        let y0 = x[base + 2u * q + j]
-        let y1 = x[base + 3u * q + j]
-        x[base + 2u * q + j] = y0 * cy - y1 * sy
-        x[base + 3u * q + j] = y0 * sy + y1 * cy
+        x[base + j + pairs] = x0 * sx + x1 * cx
+        let y0 = x[base + 2u * pairs + j]
+        let y1 = x[base + 3u * pairs + j]
+        x[base + 2u * pairs + j] = y0 * cy - y1 * sy
+        x[base + 3u * pairs + j] = y0 * sy + y1 * cy
     }
 }
 

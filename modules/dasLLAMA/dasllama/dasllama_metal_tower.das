@@ -324,14 +324,14 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     }
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
-    let q4 = hs / 4l
+    let pairs = hs / 4l   // rotated pairs per rope axis = one packed table row
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
     var bwblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped)
     let bytes_row = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
-    let bytes_tabs = uint64(npos * 4l * q4 * 4l)
+    let bytes_tabs = uint64(npos * 4l * pairs * 4l)
     var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
@@ -354,23 +354,23 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
         // the rope tables, packed per row as [cx q | sx q | cy q | sy q] — the CPU's bits
         var tp = reinterpret<float?>(metal_buffer_contents(btabs))
         for (r in range64(npos)) {
-            let rb = r * 4l * q4
-            for (j in range64(q4)) {
-                tp[rb + j] = s.cos_x[r * q4 + j]
-                tp[rb + q4 + j] = s.sin_x[r * q4 + j]
-                tp[rb + 2l * q4 + j] = s.cos_y[r * q4 + j]
-                tp[rb + 3l * q4 + j] = s.sin_y[r * q4 + j]
+            let rb = r * 4l * pairs
+            for (j in range64(pairs)) {
+                tp[rb + j] = s.cos_x[r * pairs + j]
+                tp[rb + pairs + j] = s.sin_x[r * pairs + j]
+                tp[rb + 2l * pairs + j] = s.cos_y[r * pairs + j]
+                tp[rb + 3l * pairs + j] = s.sin_y[r * pairs + j]
             }
         }
     }
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
     var u_hs = uniform_u32(uint(hs))
-    var u_q4 = uniform_u32(uint(q4))
+    var u_pairs = uniform_u32(uint(pairs))
     var u_eps = uniform_f32(t.eps)
     var u_totd = uniform_u32(uint(npos * d))
     var u_totff = uniform_u32(uint(npos * ff))
-    var u_totrope = uniform_u32(uint(npos * t.n_head * q4))
+    var u_totrope = uniform_u32(uint(npos * t.n_head * pairs))
     var u_in = uniform_u32(0u)    // the clamp record's input pair
     var u_out = uniform_u32(1u)   // its output pair
     var ka = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
@@ -380,13 +380,6 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (l in range64(t.n_layer)) {
             let o = gemma4v_block_offs(t, l)
-            let w_q = o.w[GEMMA4V_GEMM_Q]
-            let w_k = o.w[GEMMA4V_GEMM_K]
-            let w_v = o.w[GEMMA4V_GEMM_V]
-            let w_o = o.w[GEMMA4V_GEMM_O]
-            let w_gate = o.w[GEMMA4V_GEMM_GATE]
-            let w_up = o.w[GEMMA4V_GEMM_UP]
-            let w_down = o.w[GEMMA4V_GEMM_DOWN]
             let cb_q = uint64(o.clamp[GEMMA4V_GEMM_Q] * 4l)
             let cb_k = uint64(o.clamp[GEMMA4V_GEMM_K] * 4l)
             let cb_v = uint64(o.clamp[GEMMA4V_GEMM_V] * 4l)
@@ -403,39 +396,39 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
             // each of q/k/v clamps its own copy of the normed input into bxb2 (the bounds differ per GEMM)
             pf_enc_rms(enc, bx, 0ul, bw_ln1, bxb, u_d, u_eps, npos)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_q, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_q * 2l), bxb2, bq, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_Q] * 2l), bxb2, bq, u_d, u_d, mp, d)
             enc_clamp(enc, bq, 0ul, bq, 0ul, bblob, cb_q, u_out, u_totd, npos * d)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_k, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_k * 2l), bxb2, bk, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_K] * 2l), bxb2, bk, u_d, u_d, mp, d)
             enc_clamp(enc, bk, 0ul, bk, 0ul, bblob, cb_k, u_out, u_totd, npos * d)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_v, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_v * 2l), bxb2, bv, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_V] * 2l), bxb2, bv, u_d, u_d, mp, d)
             enc_clamp(enc, bv, 0ul, bv, 0ul, bblob, cb_v, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bq, 0ul, bw_qn, bq, u_hs, u_eps, npos * t.n_head)
             pf_enc_rms(enc, bk, 0ul, bw_kn, bk, u_hs, u_eps, npos * t.n_head)
             pf_enc_rms(enc, bv, 0ul, g_tw_ones, bv, u_hs, u_eps, npos * t.n_head)
-            enc_rope2d(enc, bq, btabs, u_d, u_hs, u_q4, u_totrope, npos * t.n_head * q4)
-            enc_rope2d(enc, bk, btabs, u_d, u_hs, u_q4, u_totrope, npos * t.n_head * q4)
+            enc_rope2d(enc, bq, btabs, u_d, u_pairs, u_totrope, npos * t.n_head * pairs)
+            enc_rope2d(enc, bk, btabs, u_d, u_pairs, u_totrope, npos * t.n_head * pairs)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_softmax(enc, batt, ka, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bxb2, ka, mp, t.n_head, hs)
             // o-proj (clamped both sides) → post-norm in place → residual
             enc_clamp(enc, bxb2, 0ul, bxb2, 0ul, bblob, cb_o, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_o * 2l), bxb2, bxb, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_O] * 2l), bxb2, bxb, u_d, u_d, mp, d)
             enc_clamp(enc, bxb, 0ul, bxb, 0ul, bblob, cb_o, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bxb, 0ul, bw_ap, bxb, u_d, u_eps, npos)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             // ffn: rms → gate / up (each its own input clamp) → GEGLU-quick → down → post-norm → residual
             pf_enc_rms(enc, bx, 0ul, bw_ln2, bxb, u_d, u_eps, npos)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_gate, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_gate * 2l), bxb2, bhg, u_d, u_ff, mp, ff)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_GATE] * 2l), bxb2, bhg, u_d, u_ff, mp, ff)
             enc_clamp(enc, bhg, 0ul, bhg, 0ul, bblob, cb_gate, u_out, u_totff, npos * ff)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_up, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_up * 2l), bxb2, bhu, u_d, u_ff, mp, ff)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_UP] * 2l), bxb2, bhu, u_d, u_ff, mp, ff)
             enc_clamp(enc, bhu, 0ul, bhu, 0ul, bblob, cb_up, u_out, u_totff, npos * ff)
             enc_geglu_quick(enc, bhg, 0ul, bhu, 0ul, u_totff, npos * ff)
             enc_clamp(enc, bhg, 0ul, bhg, 0ul, bblob, cb_down, u_in, u_totff, npos * ff)
-            pf_enc_bf16_mm(enc, bwblob, uint64(w_down * 2l), bhg, bxb, u_ff, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_DOWN] * 2l), bhg, bxb, u_ff, u_d, mp, d)
             enc_clamp(enc, bxb, 0ul, bxb, 0ul, bblob, cb_down, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bxb, 0ul, bw_fp, bxb, u_d, u_eps, npos)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
@@ -466,7 +459,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_ff, 4ul)
     pool_release(g_upool, u_hs, 4ul)
-    pool_release(g_upool, u_q4, 4ul)
+    pool_release(g_upool, u_pairs, 4ul)
     pool_release(g_upool, u_eps, 4ul)
     pool_release(g_upool, u_totd, 4ul)
     pool_release(g_upool, u_totff, 4ul)

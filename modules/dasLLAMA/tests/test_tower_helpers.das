@@ -50,6 +50,28 @@ def test_clamp_rows(t : T?) {
 }
 
 [test]
+def test_empty_inputs(t : T?) {
+    t |> run("every row helper is a no-op on zero rows / zero elements") @(t : T?) {
+        var a : array<float>
+        var b : array<float>
+        var w <- [1.0]
+        var wp = PlaneF()
+        unsafe {
+            wp.p = addr(w[0])
+            wp.n = 1l
+        }
+        clamp_rows(a, b, 0l, -1.0, 1.0)
+        rms_rows(a, b, wp, 0l, 4l, 0l, 1e-6)
+        rms_rows_weightless(a, 4l, 0l, 1e-6)
+        geglu_quick_lut_rows(a, b, b, 4l, 0l)
+        rope_neox_2d_rows(a, 0l, 2l, 8l, b, b, b, b)
+        t |> equal(int(avg_pool2d_rows(a, b, 2l, 2l, 4l, 3l)), 0, "a grid smaller than the kernel pools to zero rows")
+        t |> success(empty(a), "nothing was grown or written")
+        wp.p = null
+    }
+}
+
+[test]
 def test_rms_rows(t : T?) {
     t |> run("weighted rms per row against the formula; heads = rows of head width") @(t : T?) {
         // two tokens of two 4-wide heads = four rows of 4 under the per-head form
@@ -75,7 +97,6 @@ def test_rms_rows(t : T?) {
             }
         }
         t |> success(maxdiff < 1e-6, "rms_rows maxdiff {maxdiff}")
-        // in place, same result
         rms_rows(x, x, wp, 0l, 4l, 4l, 1e-6)
         var inplace_diff = 0.0
         for (i in range(16)) {
@@ -147,12 +168,10 @@ def test_im2col_rgb_patches(t : T?) {
         let npos = im2col_rgb_patches(planes, w, h, 2l, x0)
         t |> equal(int(npos), 2, "two patches")
         t |> equal(length(x0), 2 * 12, "rows of 3*p^2 = 12")
-        // patch 1 (px = 2), channel 2, ky = 1, kx = 0 -> pixel (2, 1, 2) = 212, at row offset c·4 + ky·2 + kx = 10
-        t |> success(x0[12 + 10] == 212.0, "patch 1 c2 ky1 kx0 = {x0[12 + 10]}")
-        // patch 0, channel 0, ky 0, kx 1 -> pixel (1, 0, 0) = 100 at offset 1
-        t |> success(x0[1] == 100.0, "patch 0 c0 ky0 kx1 = {x0[1]}")
-        // patch 0, channel 1, ky 1, kx 1 -> pixel (1, 1, 1) = 111 at offset 4 + 2 + 1
-        t |> success(x0[7] == 111.0, "patch 0 c1 ky1 kx1 = {x0[7]}")
+        // row offset = c*p*p + ky*p + kx; pixel value = x*100 + y*10 + c
+        t |> success(x0[12 + 2 * 4 + 1 * 2 + 0] == 212.0, "patch 1 c2 ky1 kx0 = pixel (2,1,2)")
+        t |> success(x0[0 * 4 + 0 * 2 + 1] == 100.0, "patch 0 c0 ky0 kx1 = pixel (1,0,0)")
+        t |> success(x0[1 * 4 + 1 * 2 + 1] == 111.0, "patch 0 c1 ky1 kx1 = pixel (1,1,1)")
     }
 }
 
@@ -197,9 +216,8 @@ def test_rope_neox_2d_rows(t : T?) {
             }
         }
         t |> success(maxdiff < 1e-5, "2-axis NEOX maxdiff {maxdiff}")
-        // pos_y = 0 on row 1 leaves its second halves untouched while pos_x = 3 moves the first
         t |> success(v[int(d + 4)] == ref[int(d + 4)] && v[int(d + 12)] == ref[int(d + 12)], "row 1 y-halves identity at pos 0")
-        t |> success(v[int(d)] != ref[int(d)], "row 1 x-half rotated")
+        t |> success(v[int(d)] != ref[int(d)], "row 1 x-half rotated at pos 3")
     }
 }
 
@@ -225,7 +243,7 @@ def test_avg_pool2d_rows(t : T?) {
     }
 }
 
-// naive double-precision bidirectional attention, one head at a time
+// the oracle stays naive on purpose: no blocking, no packing - nothing the kernel does
 def private attention_ref(qq, kk, vv : array<float>; tt, d, n_head : int64; scale : float) : array<float> {
     let hs = d / n_head
     var out : array<float>

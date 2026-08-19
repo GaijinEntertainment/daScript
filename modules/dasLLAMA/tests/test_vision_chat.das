@@ -149,6 +149,16 @@ def test_vision_chat_e2b(t : T?) {
         allow_cpu_prefill()
         with_job_que() {
             setup_dasllama_jobque_()
+            // a carrier with no vision arm is refused at create, by name
+            var no_arm_tripped = false
+            try {
+                var none = VisionEmbedder()
+                var bad <- create_chat_(m, none, "", 8l)
+                delete bad
+            } recover {
+                no_arm_tripped = true
+            }
+            tt |> success(no_arm_tripped, "create_chat_ refuses an embedder with no vision arm")
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "gemma4v", "the E2B mmproj sniffs as gemma4v")
             tt |> equal(vision_align(emb), 48l, "48 px per soft token (patch 16 x merge 3)")
