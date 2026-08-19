@@ -103,7 +103,7 @@
         // interpreter now hosts them in the playground. A plain (non-wasm64-only) sample
         // defaults to its id; a wasm64-only card with no slug has no playground link.
         var pgSlug = ex.playgroundSlug || (ex.wasm64Only ? null : ex.id);
-        ex.playgroundUrl = pgSlug ? ('playground/index.html?example=' + pgSlug) : null;
+        ex.playgroundUrl = pgSlug ? ('/playground/?example=' + pgSlug) : null;
     });
 
     // ─── wasm64 (memory64) feature detection ────────────────────────────

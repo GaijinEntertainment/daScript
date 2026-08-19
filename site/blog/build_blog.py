@@ -238,11 +238,13 @@ def make_md():
 
 # ─── Page rendering ──────────────────────────────────────────────────
 
-def render_template(tpl: str, root: str, title: str, body: str, description: str = '') -> str:
+def render_template(tpl: str, root: str, title: str, body: str,
+                    canonical: str, description: str = '') -> str:
     return (tpl
         .replace('{{root}}', root)
         .replace('{{title}}', html.escape(title))
         .replace('{{description}}', html.escape(description or title))
+        .replace('{{canonical}}', html.escape(canonical, quote=True))
         .replace('{{body}}', body))
 
 
@@ -506,6 +508,7 @@ def main():
         next_ = posts[i + 1] if i + 1 < len(posts) else None
         body = render_post(p, prev_, next_, md, posts_by_slug)
         html_out = render_template(tpl, root='../', title=p.title, body=body,
+                                   canonical=f'{args.site_url}/blog/{p.slug}.html',
                                    description=(p.excerpt_md[:160] if p.excerpt_md else p.title))
         (out / 'blog' / f'{p.slug}.html').write_text(html_out, encoding='utf-8')
 
@@ -513,6 +516,7 @@ def main():
     index_body = render_index(posts, md)
     (out / 'blog' / 'index.html').write_text(
         render_template(tpl, root='../', title='Blog', body=index_body,
+                        canonical=f'{args.site_url}/blog/',
                         description='Daslang blog — design notes, refactor stories, releases.'),
         encoding='utf-8')
 
@@ -529,6 +533,7 @@ def main():
             if n.has_body:
                 body = render_news_page(n, md)
                 html_out = render_template(tpl, root='../', title=n.title, body=body,
+                                           canonical=f'{args.site_url}/news/{n.slug}.html',
                                            description=n.title)
                 (out / 'news' / f'{n.slug}.html').write_text(html_out, encoding='utf-8')
 
@@ -537,6 +542,7 @@ def main():
     (out / 'changelist.html').write_text(
         render_template(tpl, root='', title='Change list',
                         body=changelist_body,
+                        canonical=f'{args.site_url}/changelist.html',
                         description='Releases, tooling, and ecosystem updates.'),
         encoding='utf-8')
 
