@@ -59,8 +59,7 @@ jobs:
           | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm.gpg
         echo 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' \
           | sudo tee /etc/apt/sources.list.d/llvm.list
-        sudo apt-get update -y
-        sudo apt-get install --no-install-recommends -y \
+        sudo bash ci/apt_install.sh --no-install-recommends \
           mesa-common-dev \
           libglu1-mesa-dev \
           libgl1-mesa-dev \

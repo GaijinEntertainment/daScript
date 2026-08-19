@@ -36,8 +36,7 @@ jobs:
       - name: "Install: Required Dev Packages"
         run: |
           set -eux
-          sudo apt-get update -y
-          sudo apt-get install --no-install-recommends -y \
+          sudo bash ci/apt_install.sh --no-install-recommends \
             libatomic-ops-dev \
             libglu1-mesa-dev \
             mesa-common-dev \

@@ -98,8 +98,7 @@ jobs:
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           linux64)
             echo "MARCH=64" >> $GITHUB_ENV
-            sudo apt-get update -y
-            sudo apt-get install --no-install-recommends -y \
+            sudo bash ci/apt_install.sh --no-install-recommends \
               libatomic-ops-dev \
               libglu1-mesa-dev \
               freeglut3-dev \
@@ -196,10 +195,9 @@ jobs:
     - name: "Install: graphics dev libs"
       run: |
         set -eux
-        sudo apt-get update -y
         # OpenGL + GLFW headers needed by dasGlfw (enabled by default in host
         # cmake). Same set as extended_checks.yml.
-        sudo apt-get install --no-install-recommends -y \
+        sudo bash ci/apt_install.sh --no-install-recommends \
           mesa-common-dev libglu1-mesa-dev libgl1-mesa-dev libglfw3-dev \
           libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
 
