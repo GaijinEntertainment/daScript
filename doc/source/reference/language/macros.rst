@@ -855,8 +855,8 @@ required children, null elements inside child lists, statements in positions
 where a value is required, malformed types such as an array with no element type,
 and declaration types on function results, arguments and structure fields.
 
-The command-line flag checks every module before each inference pass. When
-writing a macro, the inline forms see more:
+The command-line flag checks the module being compiled before each inference
+pass. When writing a macro, the inline forms see more:
 
 ``verify_module(prog, mod)``
     at the end of ``apply()``, once the tree is installed in the module.

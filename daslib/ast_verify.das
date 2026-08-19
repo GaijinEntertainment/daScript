@@ -6,8 +6,9 @@ module ast_verify shared private
 
 //! AST invariant verifier.
 //!
-//! Reports a clean ``macro_error`` when an AST violates a structural invariant the
-//! compiler relies on, instead of letting it segfault several passes later::
+//! Reports a clean sticky compile error when an AST violates a structural invariant the
+//! compiler relies on, instead of letting it segfault several passes later - the node is
+//! repaired in place so every finding prints, and the compile fails::
 //!
 //!     daslang --ast-verify foo.das
 //!
@@ -21,8 +22,10 @@ module ast_verify shared private
 //! mid-inference crashes the compiler instead of being repaired - the gates count that as red),
 //! and each post-infer firing checks only the module being compiled: the tree handed to
 //! lint/fold/codegen is valid, at a fraction of the cost. Under the CLI force-include every
-//! module is compiled with the verifier loaded, so each is still checked once; a module read from
-//! a module cache, or required before a source ``require daslib/ast_verify``, is not.
+//! non-builtin module compiles after the verifier registered, so each is still checked once as
+//! the module being compiled (the verifier's own requires are promoted builtin - neither mode
+//! walks those); a module read from a module cache, or required before a source
+//! ``require daslib/ast_verify``, is not.
 
 require daslib/ast
 require daslib/ast_boost
@@ -864,7 +867,7 @@ class private AstVerifyVisitor : AstVisitor {
 }
 
 def public verify_module(prog : ProgramPtr; mod : Module?) : int {
-    //! Verifies one module in place, emitting a ``macro_error`` per violation and
+    //! Verifies one module in place, emitting a sticky compile error per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building
     //! AST — the repo's ast-fuzz suite README covers when each entry point applies.
     var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? true)
@@ -1474,8 +1477,8 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
     //! Fires before every consumer of the finished tree (after each inference run, lint, every
-    //! optimizer round). Plain mode also sweeps every OTHER module (a source ``require`` parses the
-    //! ones before it unverified); the CLI force-include precedes every module, so batch walks thisMod only.
+    //! optimizer round). Plain mode also sweeps every OTHER non-builtin module (a source ``require``
+    //! parses the ones before it unverified); under the CLI force-include each was verified as thisMod.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true

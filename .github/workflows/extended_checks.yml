@@ -377,6 +377,12 @@ jobs:
         case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
         case "$f" in *ast-fuzz/selftest/*) exit 0 ;; esac   # deliberately broken fixtures; test_ast_fuzz.das owns them
         out=$(timeout 300 "$BIN/daslang" -dry-run --ast-verify-batch "$f" 2>&1); rc=$?
+        if grep -q 'error\[20510\]' <<< "$out"; then
+          # the verifier's own require closure (daslib/ast, ast_boost, ...) cannot be a main file
+          # under the force-include - say so instead of counting a non-run as clean
+          echo "ast-verify: $f is in the verifier's own require closure - not verifiable via --ast-verify (error 20510)"
+          exit 0
+        fi
         if grep -q 'AST verify' <<< "$out"; then
           echo "ast-verify reported on $f"
           grep 'AST verify' <<< "$out" | sort -u | head -5

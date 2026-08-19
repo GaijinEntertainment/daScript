@@ -112,10 +112,10 @@ Three ways in:
 
 - **CLI:** `daslang --ast-verify foo.das` force-includes the module (the way
   `-jit` pulls in its daslib support). `--ast-verify-batch` is the CI gate form:
-  no pre-infer checks, post-infer over the module being compiled (plus each
-  other module once per process) — the finished tree is checked, at a fraction
-  of the cost; a tree a macro breaks mid-inference then crashes the compiler
-  instead of being reported, so the CI/preflight gates count a crash as red.
+  no pre-infer checks, post-infer over the module being compiled only — the
+  finished tree is checked, at a fraction of the cost; a tree a macro breaks
+  mid-inference then crashes the compiler instead of being reported, so the
+  CI/preflight gates count a crash as red. Either mode: a report fails the compile.
 - **Source:** `require daslib/ast_verify`.
 - **Inline:** call `verify_module` / `verify_program` at the end of your own
   macro's `apply()`, right after building AST. `verify_expression` is for macros

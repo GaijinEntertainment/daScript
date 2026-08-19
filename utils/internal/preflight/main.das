@@ -578,6 +578,7 @@ struct private VerifyItem {
 struct private VerifyResult {
     index : int
     findings : string   // the `AST verify` lines, or the crash/timeout line; "" when clean
+    unverifiable : bool // error 20510: the file is in the verifier's own require closure - never compiled under it
 }
 
 // One process per file, `workers` in flight, `timeout` seconds each - the CI step's contract.
@@ -607,7 +608,8 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                             let lines <- [for (line in split(out, "
 ")); strip(line)]
                             var hits <- [for (line in lines); line; where find(line, "AST verify") >= 0]
-                            if (empty(hits)) {
+                            let unverifiable = find(out, "error[20510]") >= 0
+                            if (empty(hits) && !unverifiable) {
                                 // popen_argv: POSIX signal death = the raw signal number (2..31), Windows = a negative
                                 // NTSTATUS; daslang itself only exits 0/1/255. No CRASH: banner = nothing ran the handler
                                 // (an OOM or external kill), which is still not a pass
@@ -622,7 +624,7 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                                 }
                             }
                             outCh |> push_clone(VerifyResult(index = item.index, findings = join(hits, "
-")))
+"), unverifiable = unverifiable))
                             outCh |> notify()
                         }
                         inCh |> release()
@@ -638,6 +640,7 @@ def private run_verify_workers(daslang : string; files : array<string>; workers 
                     if (r.index >= 0 && r.index < n) {
                         results[r.index].index = r.index
                         results[r.index].findings := r.findings
+                        results[r.index].unverifiable = r.unverifiable
                     }
                 }
                 done |> join()
@@ -669,8 +672,15 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     let workers = compute_worker_count(length(files), ctx.jobs > 0 ? min(ctx.jobs, heavy) : heavy)
     let results <- run_verify_workers(ctx.daslang, files, workers, 300.0)
     var red = 0
+    var unverifiable = 0
     let output = build_string() $(w) {
         for (i in range(length(files))) {
+            if (results[i].unverifiable) {
+                unverifiable ++
+                w |> write("--- {files[i]}: in the verifier's own require closure - not verifiable via --ast-verify (error 20510)
+")
+                continue
+            }
             continue if (empty(results[i].findings))
             red ++
             w |> write("=== {files[i]} ===
@@ -683,7 +693,9 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
             detail = "{red} of {length(files)} file(s) report AST verify findings, crashed, or timed out (skills/das_macros.md)", output = output)
     }
     return GateResult(name = "ast-verify", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = "{length(files)} file(s) verify clean ({workers} workers)")
+        detail = unverifiable == 0 ? "{length(files)} file(s) verify clean ({workers} workers)"
+            : "{length(files) - unverifiable} file(s) verify clean, {unverifiable} not verifiable (the verifier's own require closure; see output) ({workers} workers)",
+        output = output)
 }
 
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
