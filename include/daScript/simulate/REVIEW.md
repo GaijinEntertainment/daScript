@@ -6,8 +6,9 @@
 - **No new code that runs once per evaluated expression, anywhere under this folder — a
   `SimNode::eval*` method, any helper such a method calls per evaluation (a table lookup,
   a `SimPolicy` op, a hash), the dispatchers `Context::callOrFastcall` /
-  `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`), or an `aot.h` function or
-  template that generated code executes per evaluated expression. Code that runs once per
+  `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or
+  template under this folder (`aot.h`, `aot_builtin_*.h`) that generated code executes per
+  evaluated expression. Code that runs once per
   capacity change rather than once per evaluated expression is not in scope. A hot-path
   addition is a defect.** A load, branch, or counter on that path taxes every program on every
   evaluated expression; a correctness-required addition is ledgered under

@@ -86,12 +86,15 @@ group, within the cap.
 
 **Branch hints ride the branch line.** A few words on the `if` identifying what lands
 in the branch (`// retries exhausted upstream, not here`). A WHY the line can't hold
-sits directly above the `if`, two lines at most. A hint inside the body never gets its
-own line: a note about one statement rides that statement's line (`pass` included) — when
-that line has no room, it sits directly above the statement; a note spanning several
-statements is about the branch — it belongs on the `if` line or in the WHY above. A self-describing predicate — a named helper, a compare against a named
-constant — gets nothing: restating `fn.neverInline` as "explicit opt-out" is
-narration. The comment must say something the identifiers don't.
+sits directly above the `if`, two lines at most. A self-describing predicate — a named
+helper, a compare against a named constant — gets nothing: restating `fn.neverInline`
+as "explicit opt-out" is narration. The comment must say something the identifiers
+don't.
+
+**A hint inside a branch body rides its statement's line.** A note about one statement
+sits on that statement's line (`pass` included); when that line has no room, directly
+above that statement. A note spanning several statements is about the branch — it goes
+on the `if` line or in the WHY above it.
 
 **No incident citations.** The banned form is a citation of an event that can only be
 verified outside the code — a PR or issue number, a date pinning when something broke or

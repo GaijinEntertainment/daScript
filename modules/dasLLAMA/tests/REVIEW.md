@@ -12,8 +12,8 @@ comment-only edit reaches none.
 `run.das`'s `model-free` suite in the same change it is added.**
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
-`run.das`, scoped with `--arm` (the runner refuses `--full`); dastest invoked directly on such
-a file is a defect. A `model-free` file runs through the runner or under plain dastest.**
+`run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
+through the runner or under plain dastest.**
 
 **Every test RUN runs under `-jit`** — never the interpreter, never AOT. A compile-only CI lane
 passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
@@ -24,8 +24,9 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A test file in this folder is registered in no `CMakeLists.txt`.**
 
-**A suite-less file's `CLAUDE.md` entry is accurate in the same change** — added when the file
-is added, corrected when what it covers is renamed or re-scoped.
+**A test file in no `run.das` model suite (every suite but `model-free`) has an accurate
+`CLAUDE.md` entry in the same change** — added when the file is added, corrected when what it
+covers is renamed or re-scoped.
 
 **Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
@@ -36,10 +37,10 @@ is added, corrected when what it covers is renamed or re-scoped.
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect.
 
-**A skip gate keys on a device capability or mode predicate, never on the existence of a runtime
-artifact — a file a build or a previous run produced (a dump, a mint, a generated binary); a
-stocked model file is a model gate.** An artifact gate goes permanently false when its producer
-moves.
+**A skip gate keys on a device capability, a run-mode knob's value, or a stocked model file (a
+model gate) — never on the existence of a runtime artifact: a file a build or a previous run
+produced (a dump, a mint, a generated binary).** An artifact gate goes permanently false when
+its producer moves.
 
 **A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
 gate, not the iteration loop. Here the spelling is `model_available` (`_model_tier.das`); a

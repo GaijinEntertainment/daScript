@@ -11,7 +11,7 @@ and how to search them.
 | Type inference | `src/ast/ast_infer_type.cpp` + `include/daScript/ast/ast_infer_type.h` |
 | Builtin runtime functions | `src/builtin/module_builtin_runtime.cpp` |
 | Error codes (10005–50640) | `include/daScript/ast/compilation_errors.h` |
-| Lexer / parser | `src/parser/ds2_lexer.lpp` / `src/parser/ds2_parser.ypp` (grammar truth). New surface syntax lands with the matching `tree-sitter-daslang/grammar.js` rule (regenerated; the editor and MCP tools parse with THAT grammar, not bison), its `test/corpus` case, and a section in `modules/dasImgui/tests/test_grammar_canary.das` |
+| Lexer / parser | `src/parser/ds2_lexer.lpp` / `src/parser/ds2_parser.ypp` (grammar truth) |
 | Operator-name validation | `isValidBuiltinName(name, canPunkt)` in `src/ast/ast_module.cpp` — characters only, no whitelist |
 | `TextPrinter` in anger | `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`), `include/daScript/ast/ast_handle.h` (`dumpHandleLeaks<T>`) |
 

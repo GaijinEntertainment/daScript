@@ -7,11 +7,11 @@ require dastest/review_gate
 
 // The mechanical half of tree-sitter-daslang/REVIEW.md (contract: REVIEW_COMMON.md at the repo
 // root). Run from the repo root: bin/daslang tree-sitter-daslang/REVIEW.das - exit 0 clean, 1 with
-// findings. Regenerates the grammar in a scratch copy and diffs the tracked artifacts byte for
-// byte, then runs the corpus; both need the tree-sitter CLI on PATH (`npm i -g tree-sitter-cli`).
+// findings. Regenerates the grammar in a scratch copy and diffs the four tracked artifacts byte
+// for byte, then runs the corpus; both need the tree-sitter CLI on PATH (`npm i -g tree-sitter-cli`).
 
 let FOLDER = "tree-sitter-daslang"
-let GENERATED <- [ "src/parser.c", "src/grammar.json", "src/node-types.json" ]
+let GENERATED <- [ "src/parser.c", "src/grammar.json", "src/node-types.json", "src/tree_sitter/parser.h" ]
 
 def private shell(cmd : string) : tuple<rc : int; out : string> {
     var output : string
