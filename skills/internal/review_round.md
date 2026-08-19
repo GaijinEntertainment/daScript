@@ -48,6 +48,13 @@ the surfacer decides WHAT to find.
 
 ## Phase 2 — surfacing (parallel agents)
 
+Before the spawn message, launch the woodpecker (`skills/internal/woodpecker.md`) in a
+background Bash — one round of the external codex reviewer over the arc, pinned at the
+tip sha (on an uncommitted-work round the working tree stays outside its view — it
+reviews the committed arc only). It outlives the surfacers, so launch it first and
+harvest when they return. Its P-ranked findings enter Phase 3 as hypotheses like any
+surfacer's; the damper in the skill decides whether any later round re-arms it.
+
 Spawn in ONE message, all read-only, model `opus`:
 
 - **One surfacer per dimension.** Prompt = the dimension name + the grounding's hotspot notes
@@ -124,7 +131,7 @@ good enough, not clean.
 
 - Every agent is read-only — no Edit/Write; report-only.
 - Spawn independent agents in a single message so they run in parallel; the prover waits for
-  all surfacers.
+  all surfacers and for the woodpecker harvest.
 - Agent definitions snapshot at session start — a freshly edited `.claude/agents/*.md` is live
   NEXT session, not this one.
 - Grounding, dimensions, and finding lists travel in agent prompts and results — keep each

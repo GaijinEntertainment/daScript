@@ -112,6 +112,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/memory_leak_detection.md` | Any leak report at exit — master index of the six leak-detection mechanisms and which to reach for |
 | `skills/internal/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
 | `skills/internal/review_round.md` | Running the multi-agent deep review of a branch/diff (the pre-PR round, or any "review this") |
+| `skills/internal/woodpecker.md` | Running the external codex reviewer on a branch/diff — every `make_pr` arc gets a round, non-trivial arcs more; the damper, the verify-before-believing loop |
 | `skills/review_md.md` | Creating or editing any module `REVIEW.md`, or reviewing a diff to one — the opening contract, the template, the followability finding classes |
 | `skills/tdd_audit.md` | Auditing any diff for test coverage — the branch-test rule: every new/changed reachable branch has a test that fails without it |
 | `skills/internal/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane — maps every PR-triggered CI lane to its exact local mirror command (or an honest "not mirrorable") |
