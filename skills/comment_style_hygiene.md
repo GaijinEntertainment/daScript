@@ -47,9 +47,9 @@ of lines its text would occupy re-wrapped at the width the file's other comments
 count those against the cap. das lint STYLE014 enforces the physical line count under
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is
 the reviewer's. The cap covers per-symbol and in-body comments; the file header — the
-block before the first SYMBOL declaration (prologue lines — `options`, `module`, `require`,
-imports — are not declarations), STYLE014's boundary — is governed by the map rule
-below. Over the cap, a comment stands only when its content alone shows why — an
+block before the first SYMBOL declaration, which is STYLE014's boundary — is governed by
+the map rule below. Prologue lines (`options`, `module`, `require`, imports) are not
+declarations; the header sits after them. Over the cap, a comment stands only when its content alone shows why — an
 injectivity argument, a wire-format contract, a miscompile it prevents; the test is
 that a cold reader never asks "why is this comment so long?". Anything else over the
 cap gets interrogated: does the detail belong at the use site, in the file-header map

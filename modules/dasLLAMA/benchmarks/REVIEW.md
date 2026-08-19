@@ -11,8 +11,8 @@ cell that picks a kernel tier by flag is not an A/B lab.
 the baseline arm** — the production kernel every variant is measured against; an arm reported
 as evidence without that compare is a defect.
 
-**A timing-only arm says so in its report line, and its number never becomes adoption
-evidence.**
+**An A/B arm that skips the bit-identical compare — a timing-only arm — says so in its report
+line, and its number never becomes adoption evidence.**
 
 **A kernel A/B lab's numbers stay out of `../performance/records/<box>.json` and
 `../PERF_LEDGER.md`.**

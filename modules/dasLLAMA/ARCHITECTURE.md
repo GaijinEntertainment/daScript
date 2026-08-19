@@ -355,8 +355,9 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   `dasllama_audio.das` tower pieces; owns only its layout and the block loop.
 - **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
-  (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. The only file
-  outside a family's own that names a family type.
+  (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
+  family's own file, a family type is named only here, in `dasllama_metal_tower.das`'s family
+  hooks, and in that family's tests.
 
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated

@@ -1,10 +1,10 @@
 # dasLLAMA audio and ASR rules
 
-**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
-`dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`, `dasllama/dasllama_vad.das`, or an ASR family file —
-one `dasllama/dasllama_<family>.das` holding a single speech model family — applies this list with
-the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
-`ARCHITECTURE.md`.
+**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_asr.das`,
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
+`dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das` holding
+a single speech model family — applies this list with the master's.** `REVIEW_COMMON.md` (repo
+root) binds this file too. Architecture doc: `ARCHITECTURE.md`.
 
 **A verb arm in `dasllama/dasllama_asr.das` is one forwarding call.** A new family touches the facade
 only at the union field, the finalize line, the `AsrKind` value, and the one-line arms; a

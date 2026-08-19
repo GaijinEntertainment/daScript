@@ -2,28 +2,26 @@
 
 **Routed from `REVIEW.md`: a diff touching the vision rail, a media splice, a media-carrying
 scheduler path, `dasllama/dasllama_vision_embedder.das`, or a vision family file — one
-`dasllama/dasllama_<family>.das` holding a single vision projector family
-(`dasllama/dasllama_gemma4uv.das`, `dasllama/dasllama_gemma4v.das`) — applies this list with the
-master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
+`dasllama/dasllama_<family>.das` holding a single vision projector family — applies this list
+with the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
 `ARCHITECTURE.md`.
 
 **A type or loader a single vision family owns (its embedder or tower, its state, its staging)
 is named outside its own file only in `dasllama/dasllama_vision_embedder.das`, in
-`dasllama/dasllama_metal_tower.das`'s family hooks, and in that family's own tests.** The `VisionEmbedder` union carries it
-through every other seam (chat, server, bench, facade, tutorials); a family name at a seam is a
-defect.
+`dasllama/dasllama_metal_tower.das`'s family hooks, and in that family's own tests.** The
+`VisionEmbedder` union carries it through every other seam (chat, server, bench, facade,
+tutorials); a family name at a seam is a defect.
 
 **A vision tower's clamp bounds come from the file's sidecar scalars (`read_clamp`), never a
 literal** — the mtmd ±FLT_MAX default applies only where the scalars are absent.
 
-**A shape shared by two tower families lives in `dasllama/dasllama_audio.das`** (the
-encoder-tower home — its list is `ARCHITECTURE.md` §1.7); a family file that re-implements one is
-a defect.
+**A tower piece two tower families both need lives in `dasllama/dasllama_audio.das`** (the
+encoder-tower home — its inventory is `ARCHITECTURE.md` §1.7); a family file that re-implements
+one is a defect.
 
 **A test that reads a vision encode oracle dump names the minting arm in its header — the
 backend, the flash-attention setting, and the mmproj precision the dump came from.** The mint
-doctrine itself (CPU, `-fa off`, the f32-widened mmproj twin — the only true-f32 reference arm)
-is `ARCHITECTURE.md` §1.7b's oracle-provenance paragraph.
+doctrine itself is `ARCHITECTURE.md` §1.7b's oracle-provenance paragraph.
 
 **A new media kind adds its marker pair to the chat template, never a second renderer.** A
 family whose template or vocab lacks the pair has no arm for that media kind — `create_chat_`
