@@ -326,38 +326,39 @@ def test_privacy_strip(t : T?) {
         tt |> equal(exchange_strip_private("not json at all"), "")
     }
     t |> run("a slash in the box identity is not a path") @(tt : T?) {
-        // AMD APU brand strings read "... w/ Radeon ..."; stripping the box leaves no sidecar
-        let apu = "linux|x86_64||6.1.0-49-amd64|AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics"
-        let stripped = exchange_strip_private(fixture_sidecar(apu, DASLLAMA_VERSION, "vec16"))
-        tt |> success(find(stripped, apu) >= 0, "box survives")
+        let apu_box = "linux|x86_64||6.1.0-49-amd64|AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics"
+        let stripped = exchange_strip_private(fixture_sidecar(apu_box, DASLLAMA_VERSION, "vec16"))
+        tt |> success(find(stripped, apu_box) >= 0, "box survives")
         var errs : array<string>
-        tt |> success(validate_sidecar_submission(stripped, errs), "still submission-grade")
+        tt |> success(validate_sidecar_submission(stripped, errs), "box intact, so the doc is still submission-grade")
         delete errs
     }
     t |> run("a path smuggled into the identity keys is still stripped") @(tt : T?) {
-        // the identity keys are not exempt - a five-field box ending in a path, or an
-        // applied_box (never structurally validated), must not reach the public store
         let smuggled = exchange_strip_private(fixture_sidecar("linux|x86_64||6.1|/home/alice/tool", DASLLAMA_VERSION, "vec16"))
         tt |> success(find(smuggled, "alice") < 0, "path-shaped box is gone")
         var errs : array<string>
         tt |> success(!validate_sidecar_submission(smuggled, errs), "and the document is refused")
         delete errs
+        // applied_box is never structurally validated - a path there must still not reach the public store
         var doc = JV((
             kernels = (dot = "vec16"),
             provenance = (
                 box = tune_box_identity(),
                 applied_box = "darwin|arm64|Mac|25F84|C:\\Users\\bob",
+                trailing = "Graphics/",
                 dasllama_version = "{DASLLAMA_VERSION}")))
         let text = write_json(doc)
         delete_json(doc)
-        tt |> success(find(exchange_strip_private(text), "bob") < 0, "path-shaped applied_box is gone")
+        let cleaned = exchange_strip_private(text)
+        tt |> success(find(cleaned, "bob") < 0, "path-shaped applied_box is gone")
+        tt |> success(find(cleaned, "trailing") < 0, "a trailing slash is a path")
         // an absolute path is a path even when every component starts with a space
-        var abs = JV((
+        var abs_doc = JV((
             kernels = (dot = "vec16"),
             provenance = (box = tune_box_identity(), leak = "/ Users/ alice", home = "~/ alice",
                 dasllama_version = "{DASLLAMA_VERSION}")))
-        let abs_text = write_json(abs)
-        delete_json(abs)
+        let abs_text = write_json(abs_doc)
+        delete_json(abs_doc)
         tt |> success(find(exchange_strip_private(abs_text), "alice") < 0, "leading-slash and tilde values are gone")
     }
 }

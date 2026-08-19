@@ -694,10 +694,8 @@ def private validate_sidecar_doc(doc : JsonValue const?; submission : bool; var 
     return empty(errors)
 }
 
-// Any backslash, a leading `/` or `~` (an absolute path — the username-carrying shape), or a
-// slash glued to what follows (`bin/daslang`, `C:/x`, a trailing `/`). A slash followed by a
-// space inside prose is not a path: AMD APU brand strings read `... 8700GE w/ Radeon 780M
-// Graphics`, and that string is the box identity itself.
+// A slash followed by a space is prose, not a path: AMD APU brand strings read
+// `... 8700GE w/ Radeon 780M Graphics`, and that string is the box identity itself.
 def private path_shaped(s : string) : bool {
     var shaped = s |> starts_with("/") || s |> starts_with("~")
     peek_data(s) $(arr) {
@@ -706,6 +704,7 @@ def private path_shaped(s : string) : bool {
             let c = int(arr[i])
             if (c == '\\' || (c == '/' && (i + 1 >= n || int(arr[i + 1]) != ' '))) {
                 shaped = true
+                break
             }
         }
     }
@@ -727,8 +726,8 @@ def exchange_strip_private(text : string) : string {
         var pt & = unsafe(prov.value as _object)
         var drop : array<string>
         for (k, v in keys(pt), values(pt)) {
-            let shaped = v != null && v.value is _string && path_shaped(v.value as _string)
-            if (k == "binary" || shaped) {
+            let is_path = v != null && v.value is _string && path_shaped(v.value as _string)
+            if (k == "binary" || is_path) {
                 drop |> push("{k}")   // clone — k aliases the key the erase below frees
             }
         }
