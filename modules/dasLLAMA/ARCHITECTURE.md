@@ -218,6 +218,10 @@ that a question answered for one backend has an obvious address in the other. Th
   boxes the tower serves its q8 lane). Likewise the non-causal media span: Metal serves it through
   `AttnArgs.uend`; the Vulkan resident prefill declines it (`followup_general.md` #23's
   remaining half).
+- **Per-layer FFN widths (MatFormer E-series, at most two — `ffn_second_hidden`) serve on Metal
+  only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
+  keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
+  E-series never reaches its width question.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class — "the builder needs the driver module" is never a placement reason. Prefill's

@@ -46,10 +46,19 @@ model — decode, prefill, chat, the vision and audio splices — across the ser
   bit-match a direct dequant probe; plane-length asserts prove no table expansion — exact
   where RSS is noisy), the kq-table pin under fp32 (Q4_K_M), a q4 forward smoke, negative
   controls (mutate the table routing → red).
-- **B. The Metal hetero-hidden fix**: prefill + single-stream decode take per-layer hidden;
-  support-matrix cells move E2B from `layers` to served (and pin the reasons that remain);
-  `harness/parity.das --ngl` GPU-vs-CPU on E2B Q8_0 AND E2B Q4_K_M (the kq arm), per the
-  REVIEW_GPU driver rule.
+- **B. The Metal hetero-hidden fix — DONE**: prefill + single-stream decode bind per-layer
+  hidden (two uniform slots, `ffn_second_hidden` ≤ 2 widths, scratch to the max; batch/verify
+  keep the layer-0 hoist behind their uniformity decline). Support-matrix rows: E2B Q8_0 + the
+  Q4_K_M kq carrier (small tier, always on) + the E4B control (PARITY_FULL). `parity.das --ngl`
+  E2B Q8_0 = 40/40 token-exact vs CPU; the kq leg coherent (freeform near-tie divergence — the
+  forced-feed cells are that carrier's parity instrument, per the tests doctrine).
+  Landed along the way: `ple_gather_row` is now metal-blob-aware (the blob transform compacts
+  k4/k5 scale strips to 16B and splits k6 — the planar strides read garbage; embed_row's cls_kq
+  arm was already blob-aware, the PLE gather predated the pattern), and the row gained a
+  single-stream forced-step logits cell — the B=2 verify-rail cont cell is blind to the
+  single-stream decode loop, and a short counting continuation survives a width mis-bind
+  token-for-token. Negative controls: planar-stride poison → index panic; decode width poison →
+  forced-step cell 39/34 vs bar 8; prefill width poison → cont cell 50/51 vs bar 8.
 - **C. The matrix sweep**: one pass over the model's surface — decode/prefill/chat ×
   (fp32, q8, q4) on CPU; +AMX row; Metal q8 decode+prefill; the vision and audio splices on
   each tier they serve. Record-grade numbers for changed cells only (the released exe).

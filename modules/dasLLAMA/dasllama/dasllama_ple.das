@@ -54,14 +54,21 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
         dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
         return
     }
+    // metal-blob carriers compact k4/k5 scale strips to 16B and split k6 (embed_row's strides)
+    let ssb45 = t.metal_blob ? 16l : K4_SSB
+    let k6d0 = t.metal_blob ? (long_length(t.k6s) / K6_SSB) * 16l : 0l
     for (blk in range64(all / 256l)) {
         let sb = (eloff + blk * 256l) / 256l
         if (t.ple_emb_fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * K4_SSB, dst, doff + blk * 256l)
+            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * ssb45, dst, doff + blk * 256l)
         } elif (t.ple_emb_fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * K5_SSB, dst, doff + blk * 256l)
+            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * ssb45, dst, doff + blk * 256l)
         } elif (t.ple_emb_fmt == KqFmt.k6) {
-            dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
+            if (t.metal_blob) {
+                dequant_k6_plane_superblock_at(t.k6q, sb * K6_QSB, t.k6s, sb * 16l, k6d0 + sb * 2l, dst, doff + blk * 256l)
+            } else {
+                dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
+            }
         } elif (t.ple_emb_fmt == KqFmt.q40) {
             dequant_q40_plane_superblock(t.q40q, sb * Q40_QSB, t.q40s, sb * Q40_SSB, dst, doff + blk * 256l)
         } else {

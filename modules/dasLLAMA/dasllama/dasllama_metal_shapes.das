@@ -350,7 +350,24 @@ let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm |
 // ple (E-series) has no batch arm either — batched steps decline `feature` and fall back per-row
 let BATCH_NEEDS_OK = DECODE_NEEDS_OK & ~MetalNeed.ple   // clear ple explicitly (XOR would re-add it if DECODE ever drops it)
 
-def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false) : MetalDecodeDecline {
+//! The second distinct per-layer FFN width (MatFormer E-series: a prefix at one width, the rest
+//! at another). 0 = uniform; -1 = more than two widths — no served form.
+def ffn_second_hidden(t : Model) : int64 {
+    let h0 = layer_hidden(t, 0l)
+    var h1 = 0l
+    for (l in range64(t.config.n_layers)) {
+        let hl = layer_hidden(t, l)
+        if (hl != h0) {
+            if (h1 != 0l && hl != h1) {
+                return -1l
+            }
+            h1 = hl
+        }
+    }
+    return h1
+}
+
+def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false; allow_hetero_hidden : bool = false) : MetalDecodeDecline {
     if (t.quant != QuantMode.q8) {
         return MetalDecodeDecline.quant_mode
     }
@@ -373,17 +390,20 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
     }
     let c = t.config
     let hidden = layer_hidden(t, 0l)
+    // MatFormer E-series: at most TWO per-layer FFN widths serve, and only where the loop binds
+    // the width per layer — the single-stream driver, dense trunks, no MTP (verify/warm hoist)
+    let h1 = ffn_second_hidden(t)
+    if (h1 != 0l && (h1 < 0l || !allow_hetero_hidden || !t.blocks.ffn_is_dense || c.n_layer_nextn > 0l)) {
+        return MetalDecodeDecline.layers
+    }
     // sliding masking lives on the CHUNKED path only — window >= 128 (the single-form depth ceiling's clamp max) guarantees the single form never sees a masked row; decline tighter
-    if (((c.dim % 32l) != 0l || (hidden % 32l) != 0l) ||
+    if (((c.dim % 32l) != 0l || (hidden % 32l) != 0l || (h1 > 0l && (h1 % 32l) != 0l)) ||
             (c.sliding_window > 0l && c.sliding_window < 128l)) {
         return MetalDecodeDecline.shape
     }
     // per-CLASS: whole simdgroups; red[16] + the epl <= 16 q-register hoist cap the threadgroup width at 512 (gemma4's global class)
     for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {   // no KV, no attention tensors — only the FFN uniformity applies
-            if (layer_hidden(t, l) != hidden) {
-                return MetalDecodeDecline.layers
-            }
+        if (layer_is_recurrent(c, l)) {   // no KV, no attention tensors — the width pair above covers the FFN
             continue
         }
         let hs_l = layer_head_size(c, l)
@@ -391,7 +411,7 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
             return MetalDecodeDecline.shape
         }
         // E-series KV sharing: only the single-stream driver has the Q-only arm (allow_kv_share)
-        if ((t.kv_src[l] != l && !(allow_kv_share && kv_share_ok(t, l))) || layer_hidden(t, l) != hidden) {
+        if (t.kv_src[l] != l && !(allow_kv_share && kv_share_ok(t, l))) {
             return MetalDecodeDecline.layers
         }
         // a missing attn_v (V = the pre-norm K projection) serves — raw copy without v_norm; both encoded (the CPU mm_qkv shapes)
@@ -408,7 +428,7 @@ def private metal_model_servable_impl(t : Model) : bool {
     if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
         return false
     }
-    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true) == MetalDecodeDecline.none
+    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true) == MetalDecodeDecline.none
 }
 
 [init]
