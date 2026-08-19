@@ -670,6 +670,42 @@ class LintVisitor : AstVisitor {
         lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at)
     }
 
+    // --- LINT024: int64/uint64 cast over a 32-bit product ---
+
+    def lint024_scan(expr : ExpressionPtr; var has_product : bool&; var has_call : bool&) : void {
+        // walks the +,-,* tree under the cast: a product wraps at 32 bits before the widening, and a call among the leaves (length, a dimension getter) is the unbounded factor that makes it real - a product of plain locals is tile geometry more often than not, and stays silent
+        if (expr is ExprOp2) {
+            let op2 = expr as ExprOp2
+            let op = string(op2.op)
+            if (op == "*") {
+                has_product = true
+            }
+            if (op == "*" || op == "+" || op == "-") {
+                lint024_scan(op2.left, has_product, has_call)
+                lint024_scan(op2.right, has_product, has_call)
+                return
+            }
+        }
+        if (expr is ExprCall) {
+            has_call = true
+        }
+    }
+
+    def check_lint024_widened_product(expr : ExprCall?) : void {
+        if (noLint || genericDepth > 0
+            || (expr.name != "int64" && expr.name != "uint64")
+            || length(expr.arguments) != 1) return
+        let inner = expr.arguments[0]
+        if (inner._type == null || !(inner is ExprOp2)) return
+        let bt = inner._type.baseType
+        if (bt != Type.tInt && bt != Type.tUInt) return
+        var has_product = false
+        var has_call = false
+        lint024_scan(inner, has_product, has_call)
+        if (!has_product || !has_call) return
+        lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen a factor instead: {expr.name}(a) * b", expr.at)
+    }
+
     // --- LINT018: narrowing the size/position argument of a call that has a 64-bit overload ---
 
     def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
@@ -782,6 +818,7 @@ class LintVisitor : AstVisitor {
         lint022_note(expr.func, "{expr.name}")
         check_string_push_clone(expr)
         check_lint017_long_cast(expr)
+        check_lint024_widened_product(expr)
         check_lint018_mem_size_narrowing(expr)
         check_lint020_range_narrowing(expr)
     }

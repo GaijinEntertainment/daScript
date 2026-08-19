@@ -727,6 +727,36 @@ type, which keeps a same-named user overload silent, along with the
 fixed-array ``length`` generic in ``daslib/builtin.das`` that genuinely has no
 ``long_`` twin.
 
+LINT024 — 64-bit cast over a 32-bit product
+============================================
+
+``int64(w * h * 3)`` computes the product in 32 bits and widens the wrapped
+result: the overflow happened inside the parentheses, and the cast that looks
+like it buys 64-bit range buys nothing. LINT017's sibling — there the inner
+*call* clamps at 2\ :sup:`31`, here the inner *arithmetic* wraps. Widen a
+factor first, so the multiply itself runs in 64 bits.
+
+.. das-doc: given var pixels : array<uint8>
+.. das-doc: alt
+.. code-block:: das
+
+    // Bad — an int product wraps past ~46k x 46k before int64 sees it
+    let bytes = int64(length(pixels) * 3)
+
+    // Good — the multiply is 64-bit from the first factor
+    let bytes = long_length(pixels) * 3l
+
+Fires on ``int64(...)`` / ``uint64(...)`` whose operand is a ``+``/``-``/``*``
+tree containing a product, whose type is still 32-bit, **and one of whose
+leaves is a call** — ``length(a)``, a dimension getter, the unbounded factor
+that makes the wrap real. So ``int64(length(a) * 4 + pad)`` fires (the product
+wraps under the sum) while ``int64(w * h * 3)`` over plain locals does not: a
+product of locals is kernel tile geometry far more often than a byte count
+(the in-tree sweep found 81 of those against 2 real ones), and the rule keeps
+its signal by staying silent there — widen those by hand where they are byte
+counts. ``int64(a + b)`` has no product and is not this rule's shape; an
+operand that is already 64-bit is silent.
+
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 
