@@ -16,10 +16,12 @@ its expected S-expression (`tree-sitter parse <file>` prints the tree to copy fr
 `modules/dasImgui/tests/test_grammar_canary.das` is the drift canary — one tricky construct per
 section, each capped by a marker function; a tree-sitter error region swallows every construct
 after it, so a missing marker fold names the section that broke; `test_batch.sh` parses every
-`.das` under `tutorials/ tests/ examples/ benchmarks/` and reports files with error nodes. New
-syntax lands in the corpus (pins the tree) and the canary (pins that the editor still sees the
-file after it). `REVIEW.das` beside this file regenerates the grammar in a scratch copy, diffs the
-four artifacts, and runs the corpus (needs `tree-sitter-cli` on PATH; CI installs it).
+`.das` under `tutorials/ tests/ examples/ benchmarks/` and reports files with error nodes. The
+corpus pins the tree; the canary pins that the editor still sees the file after it. `REVIEW.das`
+beside this file regenerates the grammar in a scratch copy, diffs the four artifacts, and runs
+the corpus (needs the tree-sitter CLI at the version that generated `src/` — a different
+generator rewrites `parser.c` and `parser.h`, so the byte-diff goes red on version skew; the
+pinned version is the CI workflow's install step).
 
 `zed-daslang/` is the Zed extension: it pins this grammar by git `rev` in `extension.toml` and
 Zed builds it from GitHub at that rev, so a grammar change reaches Zed only when the rev is
