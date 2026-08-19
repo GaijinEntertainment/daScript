@@ -9,13 +9,15 @@
 #
 # Usage: sudo bash ci/apt_install.sh [apt-get install flags] package...
 #   e.g. sudo bash ci/apt_install.sh --no-install-recommends libglfw3-dev libx11-dev
-set -u
+set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
-    if [ -f "$f" ]; then
-        sed -i -e 's|http://azure\.archive\.ubuntu\.com|http://archive.ubuntu.com|g' \
-               -e 's|http://azure\.ports\.ubuntu\.com|http://ports.ubuntu.com|g' "$f"
+    if [ -w "$f" ]; then
+        sed -i -e 's|\(https\?\)://azure\.archive\.ubuntu\.com|\1://archive.ubuntu.com|g' \
+               -e 's|\(https\?\)://azure\.ports\.ubuntu\.com|\1://ports.ubuntu.com|g' "$f"
+    elif [ -f "$f" ]; then
+        echo "apt_install: $f not writable (not root?) - mirror left as is" >&2
     fi
 done
 
