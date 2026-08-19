@@ -1,0 +1,5 @@
+# test-release expected utils failures — a RULING per line, not a mute button.
+
+# --- ship defects awaiting repo fixes (RC2) ---
+dastest.exe/common-suite SHIP-DEFECT(#3781): -exe tools carry build-machine native paths; dastest.exe cannot compile a test
+lint.exe/daslib SHIP-DEFECT(#3781): same defect - lint.exe skips daslib/just_in_time.das

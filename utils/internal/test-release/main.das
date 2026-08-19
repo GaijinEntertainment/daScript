@@ -1,16 +1,19 @@
 options gen2
 
 require strings
+require math
 require daslib/strings_boost
 require daslib/fio
 require daslib/clargs
 require ../../common/parallel_workers.das
 require classify
+require utils_phase
 
 // The release-audit batch runner: points at an EXTRACTED release bundle and proves it
 // sane with the bundle's own binary — no repo, no build tree. Phase `compile` is the
 // floor: every example/tutorial .das in the bundle compiles (-compile-only, per-file
-// timeout). The process doc is README.md here.
+// timeout). Phase `utils` exercises every shipped tool from the bundle (utils_phase.das).
+// The process doc is README.md here.
 
 [CommandLineArgs]
 struct Config {
@@ -25,6 +28,18 @@ struct Config {
 
     @clarg_doc = "Expected-failures list (default: expected_compile.txt beside the tool)"
     expected : string
+
+    @clarg_doc = "Which phases to run: compile, utils, or all"
+    phase : string = "all"
+
+    @clarg_doc = "utils phase: also run the network rows (daspkg installs; mutates the bundle's example dirs)"
+    network : bool
+
+    @clarg_doc = "utils phase: run only rows whose name contains this"
+    only : string
+
+    @clarg_doc = "utils phase expected-failures list (default: expected_utils.txt beside the tool)"
+    expected_utils : string
 
     @clarg_doc = "Internal: run as a chunk worker over this paths file"
     paths_from : string
@@ -130,12 +145,49 @@ def run_worker(cfg : Config) : int {
     return 0
 }
 
+def run_utils_phase(cfg : Config; bundle : string) : int {
+    // internal tool: runs from the repo root (README), so the default list is repo-relative
+    var inscope expected <- load_expected(!empty(cfg.expected_utils) ? cfg.expected_utils : "utils/internal/test-release/expected_utils.txt")
+    to_log(LOG_INFO, "test-release utils: {cfg.network ? "network rows on" : "network rows off"}, {length(expected)} expected failures on file\n")
+    let daslang = bundle_binary(bundle)
+    if (cfg.network && get_platform_name() == "windows" && length(bundle) > 60) {
+        to_log(LOG_WARNING, "test-release: bundle path is {length(bundle)} chars - git clones and native package builds under it can hit MAX_PATH; extract to a short path (e.g. C:/dl) for the network rows
+")
+    }
+    if (!chdir(bundle)) {
+        to_log(LOG_ERROR, "test-release: cannot chdir to {bundle}\n")
+        return 2
+    }
+    var inscope verdicts <- run_utils_checks(bundle, daslang, cfg.network, cfg.only)
+    var inscope report <- summarize(verdicts, expected)
+    for (ln in report.lines) {
+        print("{ln}\n")
+    }
+    print("test-release utils: {report.ok_count} ok, {report.expected_count} expected-fail, {report.unexpected_count} UNEXPECTED, {report.stale_count} stale-expected, {report.timeout_count} timeout\n")
+    return report.unexpected_count + report.timeout_count + report.stale_count > 0 ? 1 : 0
+}
+
 def run_parent(cfg : Config) : int {
     let bundle = get_full_file_name(cfg.bundle)
     if (empty(bundle_binary(bundle))) {
         to_log(LOG_ERROR, "test-release: no daslang binary under {cfg.bundle}/bin\n")
         return 2
     }
+    if (cfg.phase != "compile" && cfg.phase != "utils" && cfg.phase != "all") {
+        to_log(LOG_ERROR, "test-release: --phase must be compile, utils, or all\n")
+        return 2
+    }
+    var rc = 0
+    if (cfg.phase != "compile") {
+        rc = max(rc, run_utils_phase(cfg, bundle))
+    }
+    if (cfg.phase != "utils") {
+        rc = max(rc, run_compile_phase(cfg, bundle))
+    }
+    return rc
+}
+
+def run_compile_phase(cfg : Config; bundle : string) : int {
     var inscope targets <- collect_targets(bundle)
     if (empty(targets)) {
         to_log(LOG_ERROR, "test-release: no example/tutorial .das found under {bundle}\n")
