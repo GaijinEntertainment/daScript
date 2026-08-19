@@ -30,8 +30,7 @@ jobs:
         # VK_DRIVER_FILES path disables default ICD discovery entirely ->
         # ERROR_INCOMPATIBLE_DRIVER). Export the found path for later steps.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers libvulkan1 vulkan-tools
+          sudo bash ci/apt_install.sh mesa-vulkan-drivers libvulkan1 vulkan-tools
           LVP=$(find /usr -iname 'lvp_icd*.json' 2>/dev/null | head -1)
           if [ -n "$LVP" ]; then
             echo "lavapipe ICD: $LVP"

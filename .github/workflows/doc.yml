@@ -43,8 +43,7 @@ jobs:
     # imgui2rst can load the imgui modules and generate the GUI stdlib pages.
     - name: "Install GL + X11 dev libraries"
       run: |
-        sudo apt-get update
-        sudo apt-get install --no-install-recommends -y \
+        sudo bash ci/apt_install.sh --no-install-recommends \
           mesa-common-dev libglu1-mesa-dev libgl1-mesa-dev libglfw3-dev \
           libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
 

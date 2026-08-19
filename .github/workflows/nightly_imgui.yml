@@ -64,8 +64,7 @@ jobs:
       - name: "Install system dependencies (Linux)"
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo bash ci/apt_install.sh \
             libglfw3-dev \
             libfreetype6-dev \
             mesa-common-dev \

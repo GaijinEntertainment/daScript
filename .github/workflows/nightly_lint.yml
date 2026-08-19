@@ -45,8 +45,7 @@ jobs:
 
       - name: "Install system dependencies"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo bash ci/apt_install.sh \
             libglfw3-dev \
             libfreetype6-dev \
             mesa-common-dev \

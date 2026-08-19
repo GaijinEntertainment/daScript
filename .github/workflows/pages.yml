@@ -44,7 +44,6 @@ jobs:
     # find_package(OpenGL REQUIRED) needs the GL + X11 dev headers.
     - name: "Install OpenGL + libc++ dev libraries"
       run: |
-        sudo apt-get update
         # libc++ so the wasm cross-compile host can be built with the SAME C++
         # stdlib as the emscripten target (see the host build step below).
         # NO libglfw3 here: the runtime glfw for cache-hit runs is the
@@ -55,7 +54,7 @@ jobs:
         # dlopen fails quietly and das2rst dies on `Unable to initialize some
         # modules: imgui_app`. Version skew is worse than absence — absence
         # at least fails loudly.
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
+        sudo bash ci/apt_install.sh libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
 
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
