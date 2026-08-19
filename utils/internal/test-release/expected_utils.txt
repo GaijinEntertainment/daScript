@@ -1,5 +1,7 @@
 # test-release expected utils failures — a RULING per line, not a mute button.
+# `<row name> <reason>`; SHIP-DEFECT(...) reasons must disappear when the fix lands.
 
-# --- ship defects awaiting repo fixes (RC2) ---
-dastest.exe/common-suite SHIP-DEFECT(#3781): -exe tools carry build-machine native paths; dastest.exe cannot compile a test
-lint.exe/daslib SHIP-DEFECT(#3781): same defect - lint.exe skips daslib/just_in_time.das
+# --- ship defects awaiting repo fixes ---
+# (none on file: RC1's -exe native-path defect is fixed on master by #3781; a bundle cut
+#  before it still fails dastest.exe/common-suite and lint.exe/daslib — that is the audit
+#  doing its job against an old bundle, not a ruling to record)
