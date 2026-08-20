@@ -21,8 +21,7 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or a path that
 splices a stream carrying decoded media into a prompt or schedules such a stream, applies
-`REVIEW_VISION.md`. A
-`dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+`REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
 emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
@@ -79,13 +78,14 @@ reaches it: the contracts arm down the call graph, so an interior function carri
 its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
 encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
 
-**A new function that a kernel dispatch reaches, or that drives a step, carries its
-annotation itself; a rename is not new** (annotations follow the name in the same change).
+**A new function that no annotated entry reaches but the runtime enters — a step driver, or
+a backend entry called from dispatch or harness paths — carries its annotation itself; a
+rename is not new** (annotations follow the name in the same change).
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
-`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows for the affected
-backend** — the instrument is the scaling ratio across the size ladder, and superlinear is a
-defect.
+`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows
+(`benchmarks/lcpp_bench.das`) for the affected backend** — the instrument is the scaling
+ratio across the size ladder, and superlinear is a defect.
 
 **A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
@@ -94,8 +94,8 @@ defect.
 **An override announces itself where it changes the outcome.** An override is anything that
 moves a gate, policy, or threshold off its default — an env knob or its programmatic setter.
 Where one changes an observable outcome of the run — what it measures, writes, reads, or
-mints — a printed line names it by the env spelling; set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
-effect, without the announce is a defect.
+mints — a printed line names it by the env spelling; set-but-inert stays silent, per-site
+repeats are fine. Adding one, or giving one a new effect, without the announce is a defect.
 
 **A self-measured model time entering `performance/records/<box>.json` or `PERF_LEDGER.md` comes
 from the released `lcpp_bench` exe — `benchmarks/lcpp_bench.das` built by `daspkg release`,
@@ -175,9 +175,9 @@ scheduler, and the exchange pair.
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
 owns, or a consumer `ARCHITECTURE.md` §1 names as ruled.** Any other file carrying it is a
 defect — a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
-A `require ... public` that re-exports an engine module OUT of an escaped file is the same
-defect wearing a different line, unless the re-export itself is part of the consumer's ruled
-charter in `ARCHITECTURE.md` §1.
+A `require ... public` that re-exports an engine module OUT of an escaped file, beyond what
+that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect wearing a
+different line.
 
 **Weakening `REVIEW.das` (beside this file) — the gate that fails when a `def` of
 `dasllama/dasllama.das` appears in no `tutorials/dasLLAMA/*.das` (repo root) or in no

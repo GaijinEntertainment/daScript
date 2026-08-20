@@ -3,20 +3,18 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
-A tune-sidecar emission change lives in the dasLLVM tune rail and answers to
-`modules/dasLLVM/REVIEW.md`.
-
 **`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions —
-record stores and tune sidecars — and stays engine-free: no require of a module that compiles
-engine code in (a compile-time macro module is not engine code).** A second validator, or an
-engine require added to it, is a defect.
+record stores and tune sidecars.** A second validator is a defect. The engine-free half (no
+`dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
+that gate is a defect.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
 it does not know, so an unvalidated field ships silently.
 
 **`../dasllama/dasllama_exchange.das` is the single exchange client — every HTTP call to the sidecar exchange
-(lookup, download, submit) goes through it.** A second HTTP path is a defect.
+(lookup, download, submit) goes through it.** A second HTTP path is a defect; the mechanical
+half (no second `dashv` requirer under the module) is `REVIEW.das`'s to enforce.
 
 **Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
 submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
@@ -36,12 +34,13 @@ two: it recomputes from them on every call and stores no `url`/`bytes`/`sha256` 
 
 **A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
 row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) —
-directly or through a single named accessor in `model_specs.das` — as `url` + `bytes` +
-`sha256`, or a `recipe` a reader can run.**
+directly, or through one named accessor call: a function in `model_specs.das` whose body
+carries the `url` + `bytes` + `sha256` itself (one hop — an accessor forwarding to another
+accessor, or an unnamed table lookup, does not count) — or a `recipe` a reader can run.**
 
-**A companion artifact (an mmproj, an image fixture) rides the `companions` of exactly ONE
-row — the row that pins its carrier.** A companion several rows consume is referenced from
-the other rows by name, never pinned twice.
+**A companion artifact (an mmproj, an image fixture) rides the `companions` of the row that
+pins its carrier.** A companion several rows consume is referenced from the other rows by
+name — uniqueness itself is `test_model_specs.das`'s to enforce.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
@@ -59,6 +58,6 @@ resolve of the pinned revision's size and content sha against the row's canonica
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
-names** — `noise` `ok`, `validation` `ok`, the current `dasllama_version`, and every `race`
-entry's `winner` equal to that family's `kernels` value; a partial or hand-edited copy is a
-defect.
+names, at the current `dasllama_version` — never a hand-edited copy.** `REVIEW.das` (beside
+this file) machine-checks the age-independent half (`noise` `ok`, `validation` `ok`, every
+`race` winner equal to its `kernels` value); weakening that gate is a defect.

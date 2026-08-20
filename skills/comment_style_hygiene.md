@@ -25,31 +25,32 @@ fixes.
 - **The audit is not a gate.** Style review runs on every PR; findings persuade, lint
   compels. Fix or consciously decline — there is no re-run-until-clean loop.
 
-Rules marked *(lintable)* are mechanical enough for a lint to enforce; das already has
-some (noted), C++ and JS have none — there the rule is the reviewer's.
+Rules marked *(lintable)* are mechanical enough for a lint to enforce; where a rule notes
+an existing lint, the lint compels — an unnoted rule is the reviewer's.
 
 ## Comments
 
-**.das: ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept
+**.das outside teaching code: ABSOLUTELY NO comments that are not documentation or lint
+suppression.** The kept
 set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` /
-`@nolint` suppressions
-carrying their one-line why, `//fmt:` formatter directives, and the file's leading header
-block (which may sit below the `options` / `module` / `require` preamble). Everything else —
-narration, banners, section dividers, commented-out code — does not exist. The MCP
-`format_file` tool applies this file-wide by default, fail-closed (a strip must compile or
-the file is restored). A `//` comment is therefore EPHEMERAL: anything worth preserving
-becomes code (a name, a `//!` doc, an assert) or lands in an `.md` beside the code.
-Teaching code is the one exception: in tutorials and examples the
-prose IS the deliverable — format those with `keep_comments='true'`; comments that add
-nothing to their line still go.
+`@nolint` suppressions carrying their one-line why, `//fmt:` formatter directives, and the
+file's leading header block (which may sit below the `options` / `module` / `require`
+preamble). Everything else — narration, banners, section dividers, commented-out code —
+does not exist. The MCP `format_file` tool applies this file-wide by default, fail-closed
+(a strip must compile or the file is restored). A `//` comment outside the kept set is
+therefore EPHEMERAL: anything worth preserving becomes code (a name, a `//!` doc, an
+assert) or lands in an `.md` beside the code. In tutorials and examples the prose IS the
+deliverable — format those with `keep_comments='true'`; comments that add nothing to their
+line still go.
 
-**Other languages:** the test for every comment — does it add information the reader would
-otherwise have to go look for? 1–2 lines is the default, not a limit — a longer comment may
-be earned when the WHY is genuinely load-bearing and has no better home; if a reader would
-ask "why is this long?", that is the finding. When in doubt delete. No banners or preambles,
-no public-style docs on private symbols, no incident citations (PR numbers, dates, "used to
-crash" — name the failure mode in present tense at the code that guards it). The message is
-the comment: a site with a good error string needs no comment restating it.
+**Other languages:** the test for every comment is deletion — remove it and re-read; if the
+WHY goes dark, it was load-bearing, restore it, otherwise it was noise. 1–2 lines is the
+default, not a limit — a longer comment may be earned when the WHY is genuinely load-bearing
+and has no better home; if a reader would ask "why is this long?", that is the finding. No
+decorated banner blocks (rules of dashes or asterisks, boxed headers) and no up-front
+preamble essays, no public-style docs on private symbols, no incident citations (PR numbers,
+dates, "used to crash" — name the failure mode in present tense at the code that guards it).
+The message is the comment: a site with a good error string needs no comment restating it.
 
 ## Names
 
@@ -110,7 +111,5 @@ on "optional" members usually die with it.
 
 **Class bodies are dense** *(lintable)*. No blank lines between data members — blank
 separation is for top-level declarations; inline member-function bodies separate
-normally. Section-marker comments may subdivide a large class.
-
-**When in doubt: delete.** If reading the code plus the public doc-comments doesn't
-make the WHY clear, the comment was load-bearing. Otherwise it was noise.
+normally. A one-line section marker may subdivide a large class body in languages whose
+comments survive; in `.das` the kept set governs — no divider survives the formatter.

@@ -120,7 +120,7 @@ is real signal).
 | `cluster.das` | Exact-bucket clustering + fuzzy all-pairs with length gate |
 | `report.das` | JSON + stdout summary writer |
 | `main.das` | CLI (`daslib/clargs`), file scan, compile-and-collect orchestration |
-| `pipeline.das` | `compile_and_collect` / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite. `apply_pattern_filter` drops records matched by `patterns.das` |
+| `pipeline.das` | `compile_and_collect` / `compile_and_collect_ex` (the missing-prerequisite skip out-param) / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite. `apply_pattern_filter` drops records matched by `patterns.das` |
 | `patterns.das` | Pattern matchers — `classify(name, canonical) → PatternHit`. Default-skipped shapes (visitor methods, dispatchers, emitters); override via `--keep <name>` |
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das` | Hand-crafted fixture for smoke-testing the visitor end-to-end |

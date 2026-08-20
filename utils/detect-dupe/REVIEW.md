@@ -3,5 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**detect-dupe ships as a prebuilt exe: it stays in `DAS_UTILS` and `DAS_UTILS_SHIPPED_EXES`
-(`utils/CMakeLists.txt`)** — dropping either entry breaks the release bundle.
+**Decision record: detect-dupe's `DAS_UTILS_SHIPPED_EXES` membership is deliberate** — it
+ships as a prebuilt exe. `utils/REVIEW.das` machine-checks the membership itself; a diff
+removing the entry records the removal decision here, per `utils/REVIEW.md`.
