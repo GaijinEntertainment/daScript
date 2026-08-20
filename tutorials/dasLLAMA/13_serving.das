@@ -187,6 +187,11 @@ def sequential_round(m : Model) : int64 {
 // this order exists to prevent.
 
 def section_gpu_slots(m : Model) {
+    // step zero, before any want: which backends can this box serve on at all?
+    // kernel_backend_available runs the backend's own witness (the vulkan one
+    // enumerates devices once and caches) - a defaults-first host picks its
+    // backend from these two facts instead of making the user configure one
+    print("backends here: metal={kernel_backend_available("metal")}, vulkan={kernel_backend_available("vulkan")}\n")
     set_gpu_tier_want(GpuTierWant(auto_tier = true))
     let armed = moe_gpu_tier_arm()
     let tier = gpu_tier_status()

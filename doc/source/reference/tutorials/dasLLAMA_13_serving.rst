@@ -112,19 +112,24 @@ multi-model host runs a small dance around every load and switch — on a
 CPU-only box each step is a cheap no-op that reports ``"cpu"``, so the code
 runs anywhere.
 
-Before a load we request a tier: ``set_gpu_tier_want`` records the request
-(the programmatic form of the core ``DASLLAMA_GPU_*`` knobs; a zero want
-keeps the load off the device), ``moe_gpu_tier_arm`` arms it so a backend can
-install its hooks, ``moe_gpu_weight_budget`` says how many bytes of weights
-the armed backend will hold resident, and ``gpu_tier_status`` is the running
-snapshot a status page reads. After the load, ``gpu_slot_capture`` moves the
-arm outcome into a ``GpuModelMarks`` holder (``gpu_model_marks_init`` makes
-an empty one) and classifies it: ``"cpu"``, ``"gpu:rails"``, or
-``"gpu:resident"``:
+Step zero, before any want: ``kernel_backend_available`` answers "can this
+box serve on that backend at all?" by running the backend's own witness (the
+vulkan one enumerates devices once and caches its verdict) — a defaults-first
+host picks its backend from these facts instead of making the user configure
+one. Then before a load we request a tier: ``set_gpu_tier_want`` records the
+request (the programmatic form of the core ``DASLLAMA_GPU_*`` knobs; a zero
+want keeps the load off the device), ``moe_gpu_tier_arm`` arms it so a
+backend can install its hooks, ``moe_gpu_weight_budget`` says how many bytes
+of weights the armed backend will hold resident, and ``gpu_tier_status`` is
+the running snapshot a status page reads. After the load,
+``gpu_slot_capture`` moves the arm outcome into a ``GpuModelMarks`` holder
+(``gpu_model_marks_init`` makes an empty one) and classifies it: ``"cpu"``,
+``"gpu:rails"``, or ``"gpu:resident"``:
 
 .. das-doc: given var s = Session()
 .. code-block:: das
 
+   print("vulkan here: {kernel_backend_available("vulkan")}\n")
    set_gpu_tier_want(GpuTierWant(auto_tier = true))
    let armed = moe_gpu_tier_arm()
    print("budget {moe_gpu_weight_budget()} bytes on '{gpu_tier_status().device}'\n")
