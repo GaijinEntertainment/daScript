@@ -76,6 +76,15 @@ model** — the page writes the config and restarts (exit 4, the watchdog contra
 into serving it. The same catalog stays available on a serving server for pulling more
 models.
 
+Catalog entries carry their **towers**: a vision-capable row offers its pinned mmproj
+(download → **enable vision** → restart wires `image_mmproj`), and a **dictation** strip
+under the table offers the ASR tower (parakeet v3; wires the `asr` key the same way) —
+`POST /catalog/download` takes `{"name", "tower": "vision"}` or `{"tower": "asr"}` on the
+same one-at-a-time rail. Setup-mode **serve this model** wires any tower already on disk
+automatically. Each row also wears a **fit badge** (fits gpu / fits / tight / too big) from
+the box facts the `/catalog` document carries (`box.ram_gb`, and the armed tier's weight
+budget as `box.vram_mb`); the advertised working set is a hint, not a load gate.
+
 Several models serve LIVE from one process via a `[[models]]` roster instead of the flat `model`
 key — requests route on their `"model"` field (absent → the default entry). Execution is
 serialized (one scheduler steps at a time), switches are fast, and every cache level survives a
@@ -173,7 +182,7 @@ Windows locks the DLLs.
 | `POST` | `/v1/audio/translations` | Speech→English text (needs `--asr`) |
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, ≤120 s, needs the in-repo `silero_vad.bin`) |
 | `GET`  | `/catalog` | The curated model list with local presence + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
-| `POST` | `/catalog/download` | `{"name": <entry>}` — start one catalog download (409 while one runs or the file exists; sha-verified, never waived) |
+| `POST` | `/catalog/download` | `{"name": <entry>}` — start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower (409 while one runs or the file exists; sha-verified, never waived) |
 | `GET`  | `/v1/stats` | Scheduler counters (`gen_tokens`, `prefill_tokens`, TTFT last/avg, …) plus `model`/`active_model`/`ctx`/`uptime_s`/`draining` identity fields, memory footprint (`weights_bytes`, `kv_bytes`, das heaps, `gpu_vram_bytes`/`gpu_budget_bytes`), a `hardware` line (CPU · lanes · GPU), `asr_workers`, `asr_ready`, `asr_active`, `asr_pending`, and `models[]` — one entry per slot: `is_active`, `holds_gpu`, requested `backend` vs `backend_effective` (`cpu`/`gpu:rails`/`gpu:resident`), per-slot cache counters, `last_used_s`, switch count/avg ms |
 | `GET`  | `/v1/streams` | Per-stream poll surface: `model` (the slot it runs on), state (`queued`/`prefilling`/`decoding`/`finished`), token counts, TTFT, and capped text tails (prompt head + generated tail); finished streams linger ~10 s flagged `finished`. Plus `cache`: the prefix-cache donation chains (tokens, live pages, hits, age, preview) and `asr`: recent ASR jobs (state, audio s, wall ms, RTF) |
 | `GET`  | `/config` | Effective config with per-key source (`default`/`cli`/`toml`), the `[[models]]` roster, model files beside the served one, active rail (gguf vs prepared `.dlim`), GPU tier status (`supported` + `reason` when the loaded model can't ride it) |
@@ -198,8 +207,13 @@ match downloads and applies instead of racing ~20 minutes; unverified NEVER auto
 offer on the control page and the watchdog balloon; `always` shares it automatically), and
 `exchange_url` (baked default `https://dasllama.io`). `DASLLAMA_EXCHANGE_URL` /
 `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot watchdog relaunches. Lookup
-failure is never fatal — the boot falls through to the local tuner. The `gpu` key (`off | metal | metal-required | vulkan`) is the first-class
-backend selector; `gpu = vulkan` arms the MoE tier in its blessed shape — expert stacks sized
+failure is never fatal — the boot falls through to the local tuner. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
+backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
+`auto`** — the boot probes the box and serves on the best detected backend (the Metal rails
+where the box has them, else the Vulkan tier when a device answers, else the CPU), logging
+one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out. Per-model
+support is unchanged — a model the armed tier cannot serve falls back to the CPU with the
+reason on the control page. `gpu = vulkan` arms the MoE tier in its blessed shape — expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
 the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override
