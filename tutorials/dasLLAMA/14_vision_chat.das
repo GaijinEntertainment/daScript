@@ -19,13 +19,13 @@ require strings
 // A vision chat model pairs a normal text decoder with an image encoder: the
 // encoder turns pixels into "soft tokens" — embedding rows the decoder reads
 // inline with text, one row per image patch group. The supported families are
-// gemma-4 dense (the gemma4uv embedder) and gemma-4 E-series (the gemma4v ViT
-// tower) — each a decoder GGUF + its vision mmproj GGUF; the loader sniffs which,
-// and the chat template frames the image span, so the calls below stay
-// family-agnostic.
+// gemma-4 dense (the gemma4uv embedder), gemma-4 E-series (the gemma4v ViT
+// tower), and gemma-3 (the gemma3v SigLIP tower) — each a decoder GGUF + its
+// vision mmproj GGUF; the loader sniffs which, and the chat template frames the
+// image span, so the calls below stay family-agnostic.
 //
-// Prerequisites: a gemma-4 decoder GGUF + its vision mmproj GGUF + an image
-// file (PNG/JPG/BMP — anything stbimage decodes).
+// Prerequisites: a gemma-4 or gemma-3 decoder GGUF + its vision mmproj GGUF +
+// an image file (PNG/JPG/BMP — anything stbimage decodes).
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/14_vision_chat.das -- <decoder.gguf> <mmproj.gguf> <image> [prompt]
 

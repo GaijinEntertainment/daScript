@@ -13,7 +13,8 @@ Tutorial 08 gave a conversation ears. This one gives it eyes. A vision chat
 model pairs a normal text decoder with an image encoder: the encoder turns
 pixels into **soft tokens** — embedding rows the decoder reads inline with
 text, one row per group of image patches. The supported families are gemma-4
-dense (the gemma4uv embedder) and gemma-4 E-series (the gemma4v ViT tower),
+dense (the gemma4uv embedder), gemma-4 E-series (the gemma4v ViT tower), and
+gemma-3 (the gemma3v SigLIP tower),
 each shipped as a decoder GGUF plus its vision multimodal projector (mmproj)
 GGUF; the loader sniffs which family an mmproj is.
 
