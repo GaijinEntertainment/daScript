@@ -107,7 +107,8 @@ instrument). A tutorial's printed wall-clock is teaching output, feeding no boar
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
-`PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts.
+`PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts; a new
+family inside an existing cell owes a recorded row on at least one box.
 
 **A timing figure describing served output — tok/s, latency, a model-level comparison — that
 reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cell states its

@@ -344,11 +344,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 4372812000l, sha256 = "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6"),
         ModelSpec(file = "Mistral-7B-Instruct-v0.3-Q8_0.gguf", display = "Mistral-7B",
             parity <- ev_mistral7b()),
-        // this row owns the carrier's provenance (the official invariant pins it here); the
-        // audio-chat mmproj companion stays on its asr_catalog spec
+        // this row owns the carrier's provenance and its mmproj companion (a companion rides
+        // the row that pins its carrier); the asr_catalog spec keeps only the pairing
         ModelSpec(file = "gemma-4-E2B-it-Q8_0.gguf", display = "gemma-4-E2B", official = true,
             url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
             bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-BF16.gguf",
+                    bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")],
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
