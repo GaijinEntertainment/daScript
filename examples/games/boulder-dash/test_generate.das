@@ -67,3 +67,31 @@ def test_many_seeds_sane(t : T?) {
         t |> success(c.diamonds_need <= cave_count_diamonds(c))
     }
 }
+
+def survives_idle(c0 : Cave; ticks : int) : bool {
+    var c <- cave_from_ascii(cave_to_ascii(c0))
+    find_rockford(c)
+    for (_ in range(ticks)) {
+        cave_tick(c)
+        if (!c.alive) {
+            return false
+        }
+    }
+    return true
+}
+
+[test]
+def test_spawn_not_sucker(t : T?) {
+    t |> run("seed 1984 cave 3 survives idle") <| @(t : T?) {
+        let c <- generate_cave(1984, 2)
+        t |> success(survives_idle(c, 24), "no crush/chase in first 3s")
+    }
+    t |> run("early caves across seeds") <| @(t : T?) {
+        for (s in range(12)) {
+            for (idx in range(5)) {
+                let c <- generate_cave(2000 + s * 17, idx)
+                t |> success(survives_idle(c, 24), "seed {s} cave {idx + 1}")
+            }
+        }
+    }
+}

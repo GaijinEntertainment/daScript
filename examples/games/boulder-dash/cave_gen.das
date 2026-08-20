@@ -87,7 +87,7 @@ def place_player_pocket(var c : Cave; var rng : int4&) {
 
 def place_insect_pocket(var c : Cave; var rng : int4&; fly : bool) {
     let x = rand_span(rng, 2, c.cols - 3)
-    let y = rand_span(rng, 2, c.rows - 3)
+    let y = rand_span(rng, 2, max(4, c.rows - 10))
     fill_rect(c, x, y, 2, 2, Tile.empty)
     let t = fly ? Tile.firefly_u : Tile.butterfly_u
     cave_set(c, x, y, t)
@@ -208,6 +208,66 @@ def paint_interior(var c : Cave; var rng : int4&; cave_index : int) {
     }
     force_diamonds(c)
     steel_border(c)
+    harden_spawn(c)
+    steel_border(c)
+}
+
+def harden_spawn(var c : Cave) {
+    find_rockford(c)
+    let p = c.rockford
+    return if (p.x < 0)
+    for (dx in range(-1, 2)) {
+        for (dy in range(-6, -1)) {
+            let x = p.x + dx
+            let y = p.y + dy
+            if (!in_bounds(c, x, y)) {
+                continue
+            }
+            let t = cave_at(c, x, y)
+            if (t == Tile.steel || t == Tile.exit_closed || t == Tile.exit_open) {
+                continue
+            }
+            if (is_fallable(t) || t == Tile.empty) {
+                cave_set(c, x, y, Tile.dirt)
+            }
+        }
+    }
+    for (dx in range(-1, 2)) {
+        for (dy in range(-1, 2)) {
+            if (dx == 0 && dy == 0) {
+                continue
+            }
+            let x = p.x + dx
+            let y = p.y + dy
+            if (!in_bounds(c, x, y)) {
+                continue
+            }
+            let t = cave_at(c, x, y)
+            if (t != Tile.steel && t != Tile.exit_closed && t != Tile.exit_open) {
+                cave_set(c, x, y, Tile.empty)
+            }
+        }
+    }
+    cave_set(c, p.x, p.y, Tile.player)
+    for (y in range(c.rows)) {
+        for (x in range(c.cols)) {
+            if (is_insect(cave_at(c, x, y)) && max(abs(x - p.x), abs(y - p.y)) <= 8) {
+                cave_set(c, x, y, Tile.empty)
+            }
+        }
+    }
+}
+
+def player_survives_idle(c0 : Cave; ticks : int) : bool {
+    var c <- cave_from_ascii(cave_to_ascii(c0))
+    find_rockford(c)
+    for (_ in range(ticks)) {
+        cave_tick(c)
+        if (!c.alive) {
+            return false
+        }
+    }
+    return true
 }
 
 def cave_is_sane(c : Cave) : bool {
@@ -215,10 +275,10 @@ def cave_is_sane(c : Cave) : bool {
         return false
     }
     let exits = cave_count(c, Tile.exit_closed) + cave_count(c, Tile.exit_open)
-    if (exits < 1) {
+    if (exits < 1 || cave_count_diamonds(c) < 1) {
         return false
     }
-    return cave_count_diamonds(c) >= 1
+    return player_survives_idle(c, 24)
 }
 
 def finish_cave(var c : Cave; rng : int4; cave_index : int) {

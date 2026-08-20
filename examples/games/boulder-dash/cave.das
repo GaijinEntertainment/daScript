@@ -613,8 +613,22 @@ def process_player(var c : Cave; x, y : int) {
     try_step(c, x, y, nx, ny, d)
 }
 
+def insect_hits_blast(c : Cave; x, y : int) : bool {
+    for (d in range(4)) {
+        let n = cave_at(c, x + DIR_X[d], y + DIR_Y[d])
+        if (n == Tile.amoeba || n == Tile.boulder_fall || n == Tile.diamond_fall) {
+            return true
+        }
+    }
+    return false
+}
+
 def process_insect(var c : Cave; x, y : int) {
     let t = cave_at(c, x, y)
+    if (insect_hits_blast(c, x, y)) {
+        explode_at(c, x, y, is_butterfly(t))
+        return
+    }
     let fly = is_firefly(t)
     let heading = insect_dir(t)
     let turns = fly ? FLY_TURN : BUTTER_TURN

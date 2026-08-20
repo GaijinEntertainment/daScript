@@ -285,6 +285,20 @@ def test_explosion_firefly_and_butterfly(t : T?) {
         t |> equal(cave_at(c, 2, 3), Tile.diamond)
         t |> equal(cave_at(c, 0, 0), Tile.steel)
     }
+    t |> run("butterfly walks into falling boulder -> diamonds") <| @(t : T?) {
+        var c <- cave_from_ascii("XXXXX\nXA!#X\nXXXXX")
+        cave_tick(c)
+        t |> success(c.exploded, "walk-in blast")
+        tick_n(c, 3)
+        t |> success(cave_count_diamonds(c) >= 1, "left diamonds")
+    }
+    t |> run("amoeba touching butterfly -> diamonds") <| @(t : T?) {
+        var c <- cave_from_ascii("XXXXX\nX...X\nX.AaX\nX...X\nXXXXX")
+        cave_tick(c)
+        t |> success(c.exploded)
+        tick_n(c, 3)
+        t |> success(cave_count_diamonds(c) >= 1)
+    }
 }
 
 [test]
