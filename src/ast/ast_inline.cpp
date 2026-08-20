@@ -1176,6 +1176,32 @@ namespace das {
             return gc_local<TypeDecl>(c);
         }
 
+        // an ExprVar on a refType parameter leaves type->ref unset (implicit ref via
+        // isRefType), and casts copy that flag - so a cast/reinterpret chain rooted in
+        // a parameter reads flag-false yet names caller storage
+        // a cast reinterprets its subexpression's storage without creating any of its own,
+        // so what the argument IS is always the thing under the casts
+        Expression * peelCasts ( Expression * e ) {
+            while ( e && e->rtti_isCast() ) e = static_cast<ExprCast *>(e)->subexpr;
+            return e;
+        }
+
+        bool rootsInVar ( Expression * e ) {
+            auto root = peelCasts(e);
+            return root && root->rtti_isVar();
+        }
+
+        // shapes that always produce a fresh value, never a view of caller storage. a
+        // ref-returning call types ref=true and binds a reference before reaching here; the
+        // ternary derives from ExprCallFunc yet SELECTS an arm, so it yields a view
+        bool isProvenRvalue ( Expression * e ) {
+            e = peelCasts(e);
+            if ( !e || e->rtti_isOp3() ) return false;
+            return e->rtti_isCallFunc() || e->rtti_isInvoke()
+                || e->rtti_isMakeStruct() || e->rtti_isMakeArray() || e->rtti_isMakeTuple()
+                || e->rtti_isMakeVariant();
+        }
+
         // a by-value temp is a local, and infer rejects a local of a type that cannot be
         // one (31020/30199) - refusing keeps the call a call, instead of erroring on a generated name
         bool tempTypeIsLocal ( Expression * init, bool ref, bool callerIsGenerator ) {
@@ -2168,10 +2194,14 @@ namespace das {
                         } else {
                             if ( !makeArgTemp(arg->clone(), false, false, true) ) return false;
                         }
-                    } else if ( arg->type && arg->type->ref ) {  // lvalue chain: bind a reference once, like the call did
+                    } else if ( arg->type && (arg->type->ref || rootsInVar(argLeaf)) ) {  // lvalue chain: bind a reference once, like the call did
                         auto init = arg->clone();
                         init->alwaysSafe = true;            // generated binding to real storage
                         if ( !makeArgTemp(init, !varParam, true, false) ) return false;
+                    } else if ( varParam && !isProvenRvalue(argLeaf) ) {
+                        siteFail(site, "can't inline " + subjName + ": argument '" + param->name
+                            + "' may alias caller storage the callee writes", callLike->at);
+                        return false;
                     } else {
                         // rvalue into a ref param: materialize. a block holder must be var -
                         // const would propagate into the invoke, rejecting the block's own var params
