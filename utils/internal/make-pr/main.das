@@ -194,9 +194,13 @@ def private gate_jit_smoke(daslang : string) : bool {
     }
     for (test in ["tests/jit_tests/array.das", "tests/decs/test_bulk_create.das"]) {
         var out = ""
-        run([daslang, "-jit", test], out, 600.0)
+        let rc = run([daslang, "-jit", test], out, 600.0)
         if (find(to_lower(out), "verifier") >= 0 || find(out, "Both operands") >= 0) {
             to_log(LOG_ERROR, "jit-smoke: verifier error in {test}\n{out}\n")
+            return false
+        }
+        if (rc != 0 && find(out, "not executable") < 0) {
+            to_log(LOG_ERROR, "jit-smoke: {test} exited {rc} - a crashed or failed run is red (only the local clang-cl 'program not executable' link-discovery failure is ignored)\n{out}\n")
             return false
         }
     }

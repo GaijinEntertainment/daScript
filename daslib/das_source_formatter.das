@@ -1230,20 +1230,28 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
     var pendingNewLines = 0
     var in_header = true
     var seen_code = false
+    var seen_any = false
     for (t in ctx.tokens) {
         var newLines = pendingNewLines + t.newLines
         if (pendingNewLines > 0 && t.newLines > 0) {
             newLines = max(pendingNewLines, t.newLines)
         }
-        if (t.tokenType == TokenType.COMMENT && !in_header && !is_kept_comment(t.str)) {
-            pendingNewLines = newLines
-            continue
+        if (t.tokenType == TokenType.COMMENT && !is_kept_comment(t.str)) {
+            let trailing = seen_any && t.newLines == 0
+            if (!in_header || trailing) {
+                seen_any = true
+                pendingNewLines = newLines
+                continue
+            }
         }
         if (t.tokenType != TokenType.COMMENT && !empty(t.str)) {
             if (t.newLines > 0 || !seen_code) {
                 in_header = in_header && (t.str == "options" || t.str == "module" || t.str == "require")
             }
             seen_code = true
+        }
+        if (!empty(t.str)) {
+            seen_any = true
         }
         var out = t
         out.newLines = newLines

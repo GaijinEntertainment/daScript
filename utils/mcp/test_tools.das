@@ -653,9 +653,10 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(out, "narration survives ignore") >= 0, "ignore-file blocks the strip")
     }
     t |> run("header under options survives; a stripped banner leaves no blank-line scar") <| @(t : T?) {
-        let src = "options gen2\n\n// header under options stays\n\nrequire strings\n\ndef a() \{\n    return\n\}\n\n\n// banner dies\n\n\ndef b() \{\n    return\n\}\n"
+        let src = "options gen2\n\n// header under options stays\n\nrequire strings // trailing narration dies\n\ndef a() \{\n    return\n\}\n\n\n// banner dies\n\n\ndef b() \{\n    return\n\}\n"
         let out = format_source_string(src, true)
         t |> success(find(out, "header under options stays") >= 0, "header kept below the options line")
+        t |> success(find(out, "trailing narration") < 0, "trailing narration on a require line is not header")
         t |> success(find(out, "banner") < 0, "banner stripped")
         t |> success(find(out, "\n\n\n\n") < 0, "no 3+ blank run at the strip site")
     }
