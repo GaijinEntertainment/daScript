@@ -3,34 +3,30 @@
 ## File layout
 
 ```das
-options gen2                            // compilation options
-module physics shared public            // module declaration - libraries only
-require math                            // imports
+options gen2
+module physics shared public            // libraries only
+require math
 require daslib/strings_boost
 
-struct Body { pos, vel : float3 }       // types
-let GRAVITY = float3(0.0, -9.8, 0.0)    // globals
-typedef Bodies = array<Body>            // aliases
+struct Body { pos, vel : float3 }
+let GRAVITY = float3(0.0, -9.8, 0.0)
+typedef Bodies = array<Body>
 
-def step(var b : Body; dt : float) {    // functions
+def step(var b : Body; dt : float) {
     b.pos += b.vel * dt
 }
 
 [export]
-def main { print("ok\n") }              // entry point
+def main { print("ok\n") }
 ```
 
-The only enforced ordering is that `module` precedes any type declaration; `options` / `module` /
-`require` may otherwise interleave. A file with no `module` line is a program (entry point) and
-takes its module name from the file stem — the same format serves both roles.
+The only enforced ordering is `module` before any type declaration; `options` / `module` /
+`require` otherwise interleave. A file with no `module` line is a program, named by its file stem.
 
-`[export]` marks a function the host can call by name; `[init]` runs at context init and
+`[export]` makes a function callable from the host by name; `[init]` runs at context init and
 `[finalize]` at shutdown (both take no arguments, return nothing). `main` is a convention, not a
-keyword.
-
-`main` returns `void` by default. Declare it `def main() : int` and the returned value becomes the
-process exit code — the way a command-line tool reports failure to whatever launched it. Do not
-reach for `panic` to force a non-zero exit. (probe-verified 2026-08-16)
+keyword, and returns `void` unless declared `def main() : int` — then the return value is the
+process exit code (do not use `panic` to force one). (probe-verified 2026-08-16)
 
 ## Module declaration
 
@@ -38,25 +34,21 @@ reach for `panic` to force a non-zero exit. (probe-verified 2026-08-16)
 module physics shared public !inscope
 ```
 
-Modifiers are positional and must appear in this order — `module physics public shared` is a
-syntax error.
+Modifiers are positional in that order; `module physics public shared` is a syntax error.
 
 | Modifier | Meaning |
 |---|---|
-| `shared` | Compile once per environment and share across contexts, instead of recompiling per context. |
+| `shared` | Compile once per environment and share across contexts, not once per context. |
 | `public` / `private` | Default visibility of everything in the file. Omitted means the environment default (normally public). |
 | `!inscope` | Visible to every module in the program, with no `require`. |
 
-`!inscope` loads nothing by itself — something still has to pull the module in. Once loaded, its
-public symbols resolve unqualified everywhere, even from files that reach it only through someone
-else's non-`public` require.
-
-Module-level `private` hides everything from direct requirers — right for a module whose value is
-its side effects (macro registration), wrong for one whose functions others call.
+`!inscope` loads nothing by itself — something must still pull the module in; after that its public
+symbols resolve unqualified everywhere, even from files that reach it only through someone else's
+non-`public` require.
 
 ## Visibility
 
-Visibility is a **prefix keyword**, not an annotation. There is no `[private]`.
+Visibility is a **prefix keyword**, not an annotation; there is no `[private]`.
 
 ```das
 module toolkit shared private        // everything below defaults to private
@@ -75,7 +67,7 @@ def private helper : int { return 0 }
 ```
 
 `shared` on a global shares the value across cloned contexts. Calling a private symbol from
-another module is an error naming the candidate plus `function is private to module <name>`.
+another module errors with the candidate plus `function is private to module <name>`.
 
 ## require
 
@@ -90,24 +82,20 @@ require dastest/testing_boost public  // re-export to whoever requires me
 require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is available
 ```
 
-- **Path form needs the `.das`.** A require is a literal path only when it starts with `./`,
-  `../`, or `%/` **and** ends in `.das` (or `.das_project`); everything else resolves as a module
-  name.
-- **A file's `module` name must match its file stem** (`wrong module name 'x'; did you mean 'y'?`);
-  a file with no `module` line takes the stem. So one file required through several paths dedupes
-  to one module.
+- **Path form needs the `.das`:** a require is a literal path only when it starts with `./`, `../`,
+  or `%/` **and** ends in `.das` (or `.das_project`); anything else resolves as a module name.
+- **A file's `module` name must match its file stem** (`wrong module name 'x'; did you mean 'y'?`),
+  so one file required through several paths dedupes to one module.
 - **`public` re-exports**; without it a require is visible only inside the requiring file.
-- **`as` binds a local qualifier**, to disambiguate same-named modules. Under the default
-  (no-project) resolver it takes effect for the *path* forms; otherwise the host project's
-  resolver decides.
-- **A require path is made of plain identifiers** — `NAME` tokens joined by `/ . % ..`. So
-  `require ../my-tools/x.das` parses as `../my` and fails, and a directory named after a keyword
-  (`shared`, `block`, `where`, ...) is unreachable. Use a same-directory bare require instead.
+- **`as` binds a local qualifier** for same-named modules. Under the default (no-project) resolver
+  it takes effect for the *path* forms; otherwise the host project's resolver decides.
+- **A require path is `NAME` tokens joined by `/ . % ..`** — so `require ../my-tools/x.das` parses
+  as `../my` and fails, and a directory named after a keyword (`shared`, `block`, `where`, ...) is
+  unreachable; use a same-directory bare require instead.
 - **`?guard` skips silently** when the guard module is unavailable — no dependency, no error, even
   if the target does not exist; with the guard present a missing target errors normally. A guard
   containing `/` is satisfied when that path resolves, a plain-name guard when that module is
-  registered. Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }` so optional
-  symbols are referenced only when present.
+  registered. Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }`.
 
 ## Qualified calls
 
@@ -118,17 +106,13 @@ let b = math::sin(0.0)      // explicit
 
 An implicit call matching in two modules is an ambiguity error, not a silent pick.
 
-`_::name` resolves in the **calling** module, so the caller's overloads are visible — that is what
-makes library generics extensible (a generic is instanced into the caller's module), and why `:=`
-and `delete` lower to `_::clone` and `_::finalize`. `__::name` means the current module **only**;
-inside an instanced generic that is still the *caller's* module, so it cannot pin a call to the
-defining module.
+`_::name` resolves in the **calling** module, `__::name` in the current module only. Full table and
+the generic-instancing consequences: generics.md.
 
 ### with (module ...)
 
 `with (module physics) { ... }` opens a compile-time **resolution scope**: names inside resolve as
-if the code were written in that module — its *private* symbols included, plus everything it
-requires.
+if written in that module — its *private* symbols included, plus everything it requires.
 
 ```das
 require physics                     // it must already be loaded
@@ -142,13 +126,13 @@ with (module physics) {
 - The module has to be required — an unloaded name is `error[30298] with module 'x' is not found`.
 - The enclosing module's own symbols are **not** visible inside: a bare call to one reports
   `module is not visible directly from physics`. Reach them with `_::`.
-- Locals stay lexical and win over anything the target module offers.
+- Locals stay lexical and win over the target module's names.
 - Nested forms do not combine — the innermost wins outright.
-- It is erased after inference; there is no runtime cost, and no value is bound.
+- Erased after inference: no runtime cost, no value bound.
 
 A host can set `options with_module_is_unsafe = true` (or a `.das_project` `with_module_unsafe()`
-rule) to make user-written ones require an `unsafe` wrap (`error[31037]`); forms the inliner
-generates are exempt. (probe-verified 2026-08-16)
+rule) to make user-written ones require an `unsafe` wrap (`error[31037]`); inliner-generated forms
+are exempt. (probe-verified 2026-08-16)
 
 ## options
 
@@ -160,26 +144,24 @@ options profiler                        // bare name == `= true`
 ```
 
 Values are `bool`, `int`, or `string`. An unrecognized name is `error[50100] invalid option 'x'`,
-and a wrong value type is reported too — except that names starting with `_` are never validated,
-the escape hatch for a project's own flags. Modules may register their own option names.
+and a wrong value type is reported too; names starting with `_` are never validated. Modules may
+register their own names.
 
-**Scope — the part people get wrong:**
+**Scope:**
 
-- **Compile-time options apply to the declaring file and nothing else.**
+- **Compile-time options apply to the declaring file and nothing else** —
   `options no_unused_function_arguments = true` in a library flags that library only.
 - **Context options are read from the entry program only.** `stack`, `heap_size_hint`, `gc`,
-  `persistent_heap`, `rtti` configure the context the host simulates, which comes from the file
-  the host compiles. A library **cannot** raise them for its users: a module declaring
-  `options stack = 262144` still overflows at the 16 KB default when driven by a program that
-  does not declare it — and the failure surfaces *inside* the library, looking like a library bug.
-- **One context option does unify upward: `threadlock_context`.** It is OR-ed across every module
-  parsed, so a library that needs the context mutex gets it regardless of what the program
-  declares. No other context option behaves this way.
+  `persistent_heap`, `rtti` configure the context the host simulates. A library **cannot** raise
+  them for its users: a module declaring `options stack = 262144` still overflows at the 16 KB
+  default under a program that does not declare it, and the failure surfaces *inside* the library.
+- **`threadlock_context` alone unifies upward:** OR-ed across every module parsed, so a library
+  needing the context mutex gets it regardless of the program.
 
 | Option | Type | Default | Notes |
 |---|---|---|---|
-| `gen2` | bool | **true** | gen2 is the default parser; `options gen2 = false` opts back to legacy syntax. |
-| `stack` | int | 16384 | Context stack, bytes; `0` = per-context stack. Entry program only. |
+| `gen2` | bool | **true** | `options gen2 = false` opts back to legacy syntax. |
+| `stack` | int | 16384 | Context stack, bytes; `0` = per-context stack. |
 | `heap_size_hint` / `string_heap_size_hint` | int | 65536 | Initial heap sizes (`*_size_limit` default `0` = unlimited). |
 | `gc` / `persistent_heap` | bool | false | Garbage collection; never-releasing heap (they pair). |
 | `rtti` | bool | false | Extended runtime type info; needed by `daslib/rtti` and reflection. |
@@ -197,18 +179,18 @@ Diagnostic dumps (`log`, `log_infer_passes`, `log_compile_time`, ...) are all bo
 
 `builtin` is always in scope with no `require`: `print`, `assert`/`verify`, `panic`, `invoke`,
 `clone`, all container operations, `length`/`empty` on strings, and `to_log(LOG_INFO, msg)` —
-level-tagged output (`LOG_WARNING`, `LOG_ERROR`, …) that a host can filter, unlike `print`.
-Everything else is a require.
+level-tagged output (`LOG_WARNING`, `LOG_ERROR`, …) a host can filter, unlike `print`. Everything
+else is a require.
 
 | Module | Contents |
 |---|---|
 | `math` | Trig, `sqrt`/`pow`/`exp`/`log`, `abs`, `min`/`max`/`clamp`/`saturate`, `lerp`, rounding, `PI`, vector and matrix math. |
-| `strings` | `find`, `slice`, `replace`, `strip`, `to_upper`/`to_lower`, `starts_with`/`ends_with`, `to_int`/`to_float`, `character_at`, `peek_data`/`modify_data`, `build_string`. Depth, including the byte-view twin of every haystack operation and the cost model that makes it matter: strings.md. |
+| `strings` | `find`, `slice`, `replace`, `strip`, `to_upper`/`to_lower`, `starts_with`/`ends_with`, `to_int`/`to_float`, `character_at`, `peek_data`/`modify_data`, `build_string`. Byte-view twins and the cost model that makes them matter: strings.md. |
 | `jobque` | Job queue, threads, channels, lock boxes, atomics. |
 | `fio_core`, `rtti_core`, `ast_core`, `network_core` | Low-level C++ layers; require the wrapper instead — `daslib/fio`, `daslib/rtti`, `daslib/ast`, `daslib/network`. Bare `require rtti` / `require ast` do **not** resolve. |
 
-Which built-in modules exist depends on how the host embedded daslang; guard anything non-core
-with `require ?mod ...` plus `typeinfo builtin_module_exists`.
+Which built-in modules exist depends on how the host embedded daslang — guard anything non-core
+with `require ?mod ...`.
 
 ## Container operations
 
@@ -237,8 +219,8 @@ let sub <- a[1..3]                 // subarray via a range index
 | `find_index` / `find_index_if` / `has_value` | Search; the `find_*` pair returns `-1` when absent. |
 | `sort` / `subarray` / `to_array` / `to_array_move` / `swap` | Order, convert, exchange. |
 
-`length` returns `int` and panics past 2^31 rather than wrapping — use `long_length` for 64-bit
-sizes. Non-copyable element types need `push_clone` or `emplace`, never `push`.
+`length` returns `int` and panics past 2^31 rather than wrapping. Non-copyable element types need
+`push_clone` or `emplace`, never `push`.
 
 ### Table
 
@@ -265,19 +247,18 @@ var squares <- { for (x in range(5)); x => x * x }
 
 Two traps:
 
-- **`tab[key]` inserts a default entry when the key is missing.** For a pure read use
-  `tab?[key] ?? fallback`. Indexing a non-`var` table is a compile error outright, since the
-  insert needs mutability. Under `default_init_containers` the inserted slot gets `default<V>` —
-  but only for a *reading* index; a direct store (`tab[k] = v`, `<- v`, `:= v`) and
-  `addr(tab[k])` keep the raw zeroed slot, since the value is about to be written anyway.
-- **Never index the same table twice in one expression.** `tab[a] = tab[b]` is rejected
-  (`table_lookup_collision`): a rehash from one lookup invalidates the other's reference. Two
-  *different* tables in one expression are fine.
+- **`tab[key]` inserts a default entry when the key is missing** — read with `tab?[key] ?? fallback`.
+  Indexing a non-`var` table is a compile error outright. Under `default_init_containers` the
+  inserted slot gets `default<V>`, but only for a *reading* index; a direct store (`tab[k] = v`,
+  `<- v`, `:= v`) and `addr(tab[k])` keep the raw zeroed slot.
+- **Never index the same table twice in one expression:** `tab[a] = tab[b]` is rejected
+  (`table_lookup_collision`) — a rehash from one lookup invalidates the other's reference. Two
+  *different* tables are fine.
 
 ## daslib
 
-Pure-daslang modules, required by path: `require daslib/<name>`. Several follow a base + `_boost`
-pattern, where `_boost` re-exports its base and adds macro sugar.
+Pure-daslang modules, required by path: `require daslib/<name>`. A `_boost` module re-exports its
+base and adds macro sugar.
 
 | Module | What it gives you |
 |---|---|
@@ -301,17 +282,13 @@ pattern, where `_boost` re-exports its base and adds macro sugar.
 | `archive`, `clargs`, `logger`, `profiler_boost`, `debug` | Binary serialization, argument parsing, structured logging, profiling, debug/DAP server. |
 | `math_boost`, `random`, `math_bits` | `AABB`/`Ray`/`Plane`, RNG, bit twiddling. |
 | `lint`, `perf_lint`, `style_lint` | Extra lint passes, opt-in per file. |
-| `shader_lingua_franca` | Operator rail for porting GLSL: closed `+` / `-` and ordering compares over the int16 lattice family, `half4(half2, half2)`, `unpackHalf2x16`. GLSL has arithmetic there that core daslang deliberately does not, so a port lowers to the same native 16-bit ops instead of widening around the gap. The operators exist only where this module is required. |
-| `sql_linq` (+ `sql_boost`, `sql_migrate`) | LINQ-to-SQL against a provider module (SQLite, DuckDB, PostgreSQL): `[sql_table]` declarations, `_sql(...)` queries, transactions, migrations. Details in the `sql` skill. |
-| `pugixml/PUGIXML_boost` | XML over the `dasPUGIXML` module (not daslib): RAII parsing, builder, XPath, struct round-trip. Details in the `xml` skill. |
-
-**Preference order for transforms:** comprehension first
-(`[for (x in src); f(x); where p(x)]` and its table form), `daslib/linq` when the chain is long
-enough that a comprehension stops reading well, `daslib/functional` only in code already using it.
+| `shader_lingua_franca` | Operator rail for porting GLSL: closed `+` / `-` and ordering compares over the int16 lattice family, `half4(half2, half2)`, `unpackHalf2x16`. The operators exist only where this module is required. |
+| `sql_linq` (+ `sql_boost`, `sql_migrate`) | LINQ-to-SQL against a provider module (SQLite, DuckDB, PostgreSQL): `[sql_table]` declarations, `_sql(...)` queries, transactions, migrations. |
+| `pugixml/PUGIXML_boost` | XML over the `dasPUGIXML` module (not daslib): RAII parsing, builder, XPath, struct round-trip. |
 
 ## dastest
 
-`dastest` ships with daslang distributions and is the test framework daslang itself uses.
+`dastest` ships with daslang distributions.
 
 ```das
 options gen2
@@ -325,4 +302,4 @@ def sum_works(t : T?) {
 ```
 
 `[test]` functions take a single `T?` asserter; `equal(a, b)`, `success(cond)` and `failure(msg)`
-record results. The `dastest` driver discovers and runs them.
+record results, and the `dastest` driver discovers and runs them.

@@ -1,9 +1,7 @@
 # Structs and Classes
 
-**Structs** are pure data: no built-in method dispatch, value semantics, stack- or
-heap-allocatable. **Classes** are structs plus a generated vtable of function-pointer fields:
-virtual/abstract methods, initializers, finalizers. Both support single inheritance and both are
-first-class values. All examples are gen2, the default parser.
+**Structs** are pure data with value semantics. **Classes** add a generated vtable of
+function-pointer fields: virtual/abstract methods, initializers, finalizers. All examples are gen2.
 
 ## Struct declaration
 
@@ -13,11 +11,10 @@ struct Foo {
     xf : float
 }
 
-struct private Hidden { a : int }   // visibility is a prefix keyword, not an annotation
+struct private Hidden { a : int }   // prefix keyword, not an annotation; default = module publicity
 ```
 
-Without a modifier a struct inherits its module's publicity. Field types are inferred from
-initializers: `struct Foo { x = 1; y = 2.0 }` gives `int` and `float`.
+Field types infer from initializers: `struct Foo { x = 1; y = 2.0 }` gives `int` and `float`.
 
 ## Struct initialization
 
@@ -25,7 +22,7 @@ A function whose name matches the struct is its initializer; the compiler genera
 
 | Form | Meaning |
 |---|---|
-| `var b : Bar` | uninitialized declaration, zero-filled. Legal **only** if no field has an initializer |
+| `var b : Bar` | uninitialized declaration, zero-filled |
 | `Foo()` | run the initializer: every field gets its declared initializer, or zero |
 | `Foo(x = 13)` | name only what changes; the rest keep their declared initializers |
 | `unsafe(Foo(uninitialized x = 13))` | skip default-init of unnamed fields — hence `unsafe` |
@@ -33,28 +30,17 @@ A function whose name matches the struct is its initializer; the compiler genera
 | `Foo(a <- expr)` | move-init one field (zeroes the source) |
 | `Foo(a := expr)` | clone-init one field (source survives) |
 
-```das
-struct Foo { x : int = 1; y : float = 2.0 }
+**Zero-init trap.** Any field initializer — `x, y : int = 0` counts — makes a bare `var f : Foo`
+`error[31016]: Uninitialized variable f is unsafe`; write `var f = Foo()`.
+`[safe_when_uninitialized]` on the struct allows it, but zero-fills instead of applying the
+initializers.
 
-let fInit = Foo()                               // x = 1,  y = 2.0
-let fPost = Foo(x = 13)                         // x = 13, y = 2.0
-let fUninit = unsafe(Foo(uninitialized x = 13)) // x = 13, y is garbage
-```
+One level down: a field whose *type* is unsafe-when-uninitialized and has no initializer is
+`error[31030]: Uninitialized field a is unsafe` at the struct declaration, silenced by
+`@safe_when_uninitialized value : T` on that field — typical for a generic payload that may not be
+default-constructible. (probe-verified 2026-08-16)
 
-**The zero-init trap.** As soon as any field carries an initializer, a bare `var f : Foo` is
-rejected with `error[31016]: Uninitialized variable f is unsafe`. Write `var f = Foo()` instead.
-Note that `x, y : int = 0` *does* count as field initializers. `[safe_when_uninitialized]` on the
-struct permits the bare declaration but does **not** apply the initializers — it zero-fills.
-
-The same rule applies one level down, with its own code and its own annotation: a field whose
-*type* is unsafe-when-uninitialized and that carries no initializer is `error[31030]: Uninitialized
-field a is unsafe` at the struct declaration, and `@safe_when_uninitialized value : T` on that
-field silences it. The two are independent — the field annotation makes the struct declarable, the
-struct annotation makes a bare `var` of it declarable. The field form is the usual answer for a
-generic payload that may or may not be default-constructible. (probe-verified 2026-08-16)
-
-**Clone initializer** — an initializer taking a pointer to an existing instance, so that
-`new Foo(a)` deep-copies `a`:
+**Clone initializer** — takes a pointer to an existing instance, so `new Foo(a)` deep-copies `a`:
 
 ```das
 def Foo(p : Foo?) {
@@ -63,14 +49,13 @@ def Foo(p : Foo?) {
 }
 ```
 
-For an array of structs, a plain array literal of initializer calls is the normal form:
-`var fs <- [Foo(x = 11, y = 22.0), Foo(x = 33)]`. The older
-`array struct<Foo>((x = 11, y = 22.0), (x = 33))` shorthand (bare field tuples, declared
-initializers applied to the rest) still works.
+Arrays of structs: `var fs <- [Foo(x = 11, y = 22.0), Foo(x = 33)]`. The older
+`array struct<Foo>((x = 11, y = 22.0), (x = 33))` (bare field tuples, declared initializers filling
+the rest) still works.
 
 ## Methods on structs
 
-Structs deliberately have no member functions. Four idioms replace them:
+Structs have no member functions; four idioms replace them:
 
 **1. Free function + pipe** — zero overhead, statically resolved.
 
@@ -84,12 +69,12 @@ p |> setXY(10, 11)          // sugar for setXY(p, 10, 11)
 let n = p.length2()         // dot works on struct values too: length2(p)
 ```
 
-`with (expr) { ... }` opens the fields of any struct expression (including a temporary) as bare
-names; writes go back through the reference. There is no `with (var x = expr)` binding form.
+`with (expr)` accepts any struct expression, temporaries included; writes go back through the
+reference. There is no `with (var x = expr)` binding form.
 
-**2. Function-pointer field** — this is what "virtual" means for a struct: an indirect call through
-a data member, overridable per derived type. **3. An inline `def` in the struct body** is exactly
-sugar for it — same field, same standalone function, body wrapped in `with (self)`.
+**2. Function-pointer field** — an indirect call through a data member, overridable per derived
+type: this is what "virtual" means for a struct. **3. An inline `def`** is exactly sugar for it,
+body wrapped in `with (self)`.
 
 ```das
 struct Vfoo { x, y : int = 0; set = @@setV }     // @@ makes a function pointer
@@ -105,7 +90,7 @@ invoke(i.setXY, i, 5, 6)
 ```
 
 **4. `[class_method]` from `daslib/class_boost`** — a direct (non-virtual, no function-pointer
-field) method: the macro prepends a `self` argument and wraps the body in `with (self)`.
+field) method: prepends a `self` argument and wraps the body in `with (self)`.
 
 ```das
 require daslib/class_boost
@@ -117,21 +102,18 @@ struct Counter {
     [class_method]
     def static const get_value : int { return value }   // const self: cannot write fields
 }
-
-var c = Counter()
-c.increment(10)
 ```
 
-Use `[explicit_const_class_method]` when you need both a const and a non-const overload of one name
-(typical for `foreach` or `operator []`).
+`[explicit_const_class_method]` when one name needs both a const and a non-const overload (typical
+for `foreach` or `operator []`).
 
 Call forms for idioms 3 and 4: `obj.m(...)`, `ptr->m(...)`, and `` Type`m(obj, ...) ``. **`|>` does
-not work** for either — the generated function is named `` Type`m ``, so pipe cannot find it.
+not work** for either — the generated function is named `` Type`m ``.
 
 ## Struct inheritance
 
-Single inheritance with `:`. The base's members are copied into the derived struct first, so a
-derived struct is layout-compatible with its base.
+Single inheritance with `:`; base members are copied in first, so a derived struct is
+layout-compatible with its base.
 
 ```das
 struct Base {
@@ -148,17 +130,14 @@ def whichTag(var b : Base) : int => b->tag()
 whichTag(Kid())     // 2 — dispatch goes through the function-pointer field
 ```
 
-Three things can be overridden, each with its own spelling:
-
-| What | Spelling |
+| What can be overridden | Spelling |
 |---|---|
 | inline method | `def override tag : int { ... }` |
 | function-pointer field | `override set = cast<auto>(@@Kid_setXY)` (cast needed: `self` type changed) |
 | plain data field's initializer | `override typeTag : uint64 = hash("Kid")` |
 
-Casting toward the base is safe; casting toward the derived type is not. `upcast` is named for the
-direction in daslang's type lattice — in C++/Java terms it is a *downcast*, so guard it with a
-discriminator field when the dynamic type is not statically known.
+`upcast` is C++/Java's *downcast* — guard it with a discriminator field when the dynamic type is
+not statically known.
 
 ```das
 cast<Base>(k).x = 5                 // safe, always valid
@@ -177,8 +156,7 @@ def operator delete(var self : Bar) {
 }
 ```
 
-Structs do **not** chain automatically: a derived finalizer that omits `delete super.self` silently
-skips its ancestors' finalizers.
+Structs do **not** chain: omitting `delete super.self` silently skips ancestor finalizers.
 
 ## Classes
 
@@ -206,35 +184,31 @@ class Circle : Shape {
 }
 ```
 
-`self` is an implicit pointer inside every method and the body is wrapped in `with (self)`, so
-fields and sibling methods are reachable without a prefix.
+`self` is an implicit pointer in every method; the body is wrapped in `with (self)`.
 
-**Method modifiers** appear in a fixed order after `def`:
-
+**Method modifiers**, in fixed order:
 `def [public|private] [static] [override|sealed] [const] name(args) : Ret { ... }`
 
-`override` and `sealed` are alternatives, never both — `sealed` already implies overriding, so
-`def sealed override` is a syntax error. Abstract methods have their own form:
+`sealed` already implies overriding, so `def sealed override` is a syntax error. Abstract form:
 `def [public|private] abstract [const] name : Ret`. `class sealed Unit : Circle` bans further
 inheritance (`error[20701]`); `def sealed area : float` overrides and bans further overriding
 (`error[20107]`).
 
 | Call form | Notes |
 |---|---|
-| `p.method(a)` | dot, on a value or a pointer |
-| `p->method(a)` | arrow, identical to dot on a pointer |
+| `p.method(a)` / `p->method(a)` | identical on a pointer; dot also works on a value |
 | `` Type`method(*p, a) `` | explicit, non-virtual — calls that exact class's version |
 | `p \|> method(a)` | **does not work** — there is no free function named `method` |
 
 **`const` methods** take `self` as const: they may not write fields, and may not call non-const
-methods (that would pass `Shape const` where `Shape` is expected — `error[30187]`).
+methods (`error[30187]`).
 
-**Local class instances are unsafe** — `var f = Foo()` gives `error[31017]: local class requires
-unsafe`. Allocate with `new Foo()`; use `unsafe { var f = Foo() }` only when a stack instance is
-genuinely wanted. `delete` on a class pointer also requires `unsafe` (`error[31009]`).
+**Local class instances are unsafe** — `var f = Foo()` is `error[31017]: local class requires
+unsafe`; allocate with `new Foo()`, or wrap in `unsafe { }` when a stack instance is genuinely
+wanted. `delete` on a class pointer also requires `unsafe` (`error[31009]`).
 
-**Visibility** — `private` fields and `def private` methods are reachable only from inside the
-class; touching one from outside is `error[30900]`.
+`private` fields and `def private` methods are class-internal; touching one from outside is
+`error[30900]`.
 
 ### Constructors and `super`
 
@@ -244,12 +218,11 @@ virtual dispatch. Both rewrite to the backtick form (`` Base`Base(self) ``,
 ancestor that does, matching by argument types.
 
 A derived constructor whose parent has a user constructor must call `super(...)` **exactly once on
-every control-flow path** — zero calls, two calls, or a call inside a loop are all compile errors
-(`error[30308]`). Two synthesis rules follow, and the second is a trap:
+every control-flow path** — zero, two, or a call inside a loop are all `error[30308]`.
 
 - A derived class with **no** constructor of its own gets a synthesized one that chains `super()`,
   so `new NoCtor()` runs the parent's constructor body.
-- A class **with** a user constructor still keeps the generated named-field initializer. So
+- A class **with** a user constructor still keeps the generated named-field initializer, so
   `new WithCtor(z = 9)` performs plain field-init and **does not run** the user constructor or the
   parent's — leaving parent fields at zero. Use `new WithCtor(3)` when you want the constructor.
 
@@ -267,7 +240,7 @@ class Mid : Base {
 }
 ```
 
-- A class with no finalizer of its own inherits chaining automatically — no forwarding boilerplate.
+- A class with no finalizer of its own inherits chaining automatically.
 - When an ancestor has a user finalizer, a derived finalizer must call `delete super.self` exactly
   once per path (same zero/two/loop errors as `super(...)`). A hand-written
   `delete cast<Ancestor>(self)` that skips the immediate parent does not count.
@@ -277,8 +250,8 @@ class Mid : Base {
 
 ### Operators as methods
 
-Any overloadable operator can be a class method, declared with the usual modifiers — including
-computed properties, whose read and write halves are separate methods:
+Any overloadable operator can be a class method with the usual modifiers, computed properties
+included:
 
 ```das
 def const operator . len { return length(dir) }                 // read:  v.len
@@ -288,9 +261,8 @@ def const operator + (other : Vec) : Vec? { return new Vec(dir + other.dir) }
 
 ## Runtime type checks: `is`, `as`, `?as`
 
-Class RTTI is **opt-in**. Require `daslib/dynamic_cast_rtti`, or `is`/`as`/`?as` on a class pointer
-fails to compile with `error[30190]: is Dog only allowed for variants` — not, as older docs claim,
-a silent compile-time-only check.
+Class RTTI is **opt-in**: without `require daslib/dynamic_cast_rtti`, `is`/`as`/`?as` on a class
+pointer fails to compile with `error[30190]: is Dog only allowed for variants`.
 
 ```das
 require daslib/dynamic_cast_rtti
@@ -302,15 +274,15 @@ var d = a as Dog            // forced cast: panics if the type is wrong
 var c = a ?as Cat           // safe cast: null if the type is wrong
 ```
 
-Use `?as` when the dynamic type is uncertain, `as` when a mismatch is a bug. This differs from
-`is`/`as` on *handled* (C++-bound) types, where the check is exact-type and ignores C++ inheritance.
+This differs from `is`/`as` on *handled* (C++-bound) types, where the check is exact-type and
+ignores C++ inheritance.
 
 ## Interfaces
 
-`daslib/interfaces` gives polymorphism without a shared base class. Mark the interface (methods
-only, no data fields) `[interface]` and each implementor `[implements(IName)]`; implementations are
-named `` IName`method ``. Missing methods are a compile error. Interface inheritance
-(`[interface] class IChild : IParent`) and non-abstract default methods are both supported.
+`daslib/interfaces` gives polymorphism without a shared base class: an `[interface]` class holds
+methods only, no data fields, and every `[implements(IName)]` class must define all of them —
+missing ones are a compile error. Interface inheritance (`[interface] class IChild : IParent`) and
+non-abstract default methods are both supported.
 
 ```das
 require daslib/interfaces
@@ -333,11 +305,11 @@ s->get`IDrawable()->draw()  // the explicit getter the macro generates
 
 ## Class templates
 
-`class template` / `struct template` carrying `[template_structure(Params...)]` from
-`daslib/typemacro_boost` is a parameterized blueprint, never instantiated directly; `$Name<Args>`
-is a type macro that clones it per argument list (`typedef IntBox = $TBox<int>`). The template must
-live in a **required module** — the type macro is registered by that module's macro pass, so
-`$TBox<int>` in the file that declares `TBox` fails with `error[30821]: can't find typeMacro TBox`.
+A `class template` / `struct template` carrying `[template_structure(Params...)]` from
+`daslib/typemacro_boost` is a blueprint, never instantiated directly; `$Name<Args>` is a type macro
+cloning it per argument list (`typedef IntBox = $TBox<int>`). It must live in a **required
+module** — the type macro is registered by that module's macro pass, so `$TBox<int>` in the file
+declaring `TBox` fails with `error[30821]: can't find typeMacro TBox`.
 
 C++-bound handle types (not daslang classes) expose `using()`, which constructs the handle on the
 stack and finalizes it at block exit: `using() $(var s : das_string) { s := "hello" }`.
