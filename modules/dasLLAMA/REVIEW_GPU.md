@@ -86,8 +86,9 @@ runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** 
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
 **A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of the GPU
-oracle-parity gate of every tower family its change can reach, plus a `tests/test_model_image.das`
-run with the `mtower` arm** — those GPU-vs-CPU cells, with
+oracle-parity gate of every tower family its change can reach — the families are the hooks
+`ARCHITECTURE.md` §1.5's tower row names, and that row is the closed list — plus a
+`tests/test_model_image.das` run with the `mtower` arm** — those GPU-vs-CPU cells, with
 the driver's encode counter proving it engaged, are that driver's parity instrument.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)

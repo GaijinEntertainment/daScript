@@ -9,8 +9,9 @@ the test file, a shared helper, or engine code the test exercises; an identifier
 comment-only edit reaches none.
 
 **A test file with at least one cell that RUNS (not skips) with no model file present is listed
-in `run.das`'s `model-free` suite in the same change it is added; a file whose every cell is
-model-gated is not listed there.**
+in `run.das`'s `model-free` suite in the same change it is added. A file whose every cell is
+model-gated joins that list too when its cells skip honestly without their models** — the
+per-PR gate then runs them wherever the models are stocked.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
@@ -36,7 +37,9 @@ covers is renamed or re-scoped.
 `../ENVIRONMENT.md` describes.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
-model gate; a test that silently vanishes on one platform is a defect.
+model gate; a test that silently vanishes on one platform is a defect, and so is a
+zero-assertion pass — a cell whose whole body is platform-gated prints a skip or feint on the
+platforms where that body compiles out.
 
 **A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
 the models (a model file, an mmproj, an oracle dump — a model gate) — never on the existence of

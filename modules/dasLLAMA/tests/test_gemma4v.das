@@ -158,6 +158,8 @@ def test_gemma4v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
+        } else {
+            tt |> feint("das_metal is not built on this platform - the GPU rung is Apple-only")
         }
     }
 }

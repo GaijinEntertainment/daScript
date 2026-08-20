@@ -676,6 +676,8 @@ def test_gemma4e_flavor_image(tst : T?) {
             delete prompt
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
+        } else {
+            t |> feint("das_metal is not built on this platform - the metal-flavor image is Apple-only")
         }
     }
 }

@@ -13,6 +13,13 @@ is named outside its own file only in `dasllama/dasllama_vision_embedder.das`, i
 `VisionEmbedder` union carries it through every other seam (chat, server, bench, facade,
 tutorials); a family name at a seam is a defect.
 
+**A GEMM in a vision family file goes through a `*_gemm`/`*_mm` wrapper, `mm_plane_b`, or
+`mm_blob_b`.** A hand-written dot-product loop beside them is a defect.
+
+**Every function that runs per encode — in `dasllama/dasllama_tower.das` or a vision family file —
+takes `@scratch` on its reused buffers and `[cold_path]` on its debug and profiling legs**; a
+nolint where either fits is a defect.
+
 **A vision tower's clamp bounds come from the file's sidecar scalars (`read_clamp`), never a
 literal** — the mtmd ±FLT_MAX default applies only where the scalars are absent.
 
