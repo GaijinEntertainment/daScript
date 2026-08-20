@@ -6,7 +6,7 @@ require daslib/json_boost
 
 struct FormatResult {
     file : string
-    status : string  // "formatted" | "already_formatted" | "reverted" | "error"
+    status : string
     message : string
 }
 

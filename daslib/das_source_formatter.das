@@ -15,11 +15,7 @@ require math
 require daslib/defer
 
 
-// !is and !as are deliberately NOT templates: template matching has no word boundary, so
-// they would steal the prefix of `!is_unary`-style unary-not expressions. They format fine
-// as `!` + keyword. `!?as` IS a template - `!?as<letter>` cannot appear in valid source, and
-// without it the `?` gets spaced apart (`! ?as`), breaking the token
-let sorted_tokens_source <- fixed_array("<<<=", ">>>=", "!?as",
+let greedy_match_safe_tokens <- fixed_array("<<<=", ">>>=", "!?as",
     "<<=", ">>=", "&&=", "||=", "^^=", "<<<", ">>>", "!?.", "!?[", "!??",
     "::", "+=", "-=", "/=", "*=", "%=", "|=", "&=", "^=", "<<", ">>", "++", "--", "<=", ">=", "==",
     "!=", "->", "<-", "??", "?.", "?[", "<|", "|>", ":=", "=>", "@@", "&&", "||", "^^",
@@ -83,27 +79,27 @@ struct FormatterCtx {
     tokenTemplates : array<TokenTemplate>
     tokens : array<Token>
     formatterTokens : array<FormatterToken>
-    pos : int            // current char pos
-    c : int              // current char
-    data : array<uint8>  // file data as array of uints
+    pos : int
+    c : int
+    data : array<uint8>
     eof : bool
     haveUtf8Bom : bool
-    newLineCounter : int // new lines before current token
-    spaceCounter : int   // space characters before current token
-    srcLine : int        // current line in source
-    curColumn : int      // current column in source
-    curLineIndex : int   // index of the beginning of new line in data[]
+    newLineCounter : int
+    spaceCounter : int
+    srcLine : int
+    curColumn : int
+    curLineIndex : int
     debugMode : bool = false
-    indenting : int = 0  // convert tab to N spaces
+    indenting : int = 0
     insideOptions : bool = false
-    crCount : int = 0    // CR \r
-    lfCount : int = 0    // LF \n
+    crCount : int = 0
+    lfCount : int = 0
 }
 
 def initialize_token_templates(var ctx : FormatterCtx) {
     if (!empty(ctx.tokenTemplates)) return
-    ctx.tokenTemplates |> resize(length(sorted_tokens_source))
-    for (s, tt in sorted_tokens_source, ctx.tokenTemplates) {
+    ctx.tokenTemplates |> resize(length(greedy_match_safe_tokens))
+    for (s, tt in greedy_match_safe_tokens, ctx.tokenTemplates) {
         tt.str = s
         tt.codes <- [for (c in s); uint8(c)]
         tt.firstChar = int(tt.codes[0])
@@ -239,7 +235,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
     let from = ctx.pos
     let fromColumn = ctx.curColumn
 
-    // keywords and identifiers
     if (is_alpha(ctx.c) || ctx.c == '_' || ctx.c == '`') {
         while (!ctx.eof && (is_alpha(ctx.c) || is_number(ctx.c) || ctx.c == '_' || ctx.c == '`')) {
             ctx |> next_char()
@@ -248,7 +243,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         return
     }
 
-    // numbers
     if (is_number(ctx.c) || (ctx.c == '.' && is_number(int(ctx.data[ctx.pos + 1])))) {
         while (!ctx.eof && (is_number(ctx.c) || is_alpha(ctx.c) || ctx.c == '.' ||
                 ((ctx.c == '-' || ctx.c == '+') && (int(ctx.data[ctx.pos - 1]) == 'e' || int(ctx.data[ctx.pos - 1]) == 'E')))) {
@@ -258,8 +252,7 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         return
     }
 
-    // characters and strings
-    if (ctx.c == '"' || ctx.c == int(0x27)) {// TODO: fix ' symbol
+    if (ctx.c == '"' || ctx.c == int(0x27)) {
         let savedLine = ctx.newLineCounter;
         let savedSpace = ctx.spaceCounter;
         let openChar = ctx.c;
@@ -286,7 +279,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         return
     }
 
-    // single line comment
     if (ctx.c == '/' && int(ctx.data[ctx.pos + 1]) == '/') {
         let savedLine = ctx.newLineCounter
         let savedSpace = ctx.spaceCounter
@@ -297,7 +289,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         return
     }
 
-    // multi-line comment
     if (ctx.c == '/' && int(ctx.data[ctx.pos + 1]) == '*') {
         let savedLine = ctx.newLineCounter
         let savedSpace = ctx.spaceCounter
@@ -324,7 +315,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         return
     }
 
-    // symbolic tokens
     for (tt in ctx.tokenTemplates) {
         if (ctx.c == tt.firstChar) {
             var match = true
@@ -344,7 +334,6 @@ def parse_token(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat t
         }
     }
 
-    // other symbols
     ctx |> next_char()
     ctx |> push_token(from, ctx.pos, ctx.spaceCounter, ctx.newLineCounter, ctx.srcLine, fromColumn, TokenType.UNKNOWN)
     return
@@ -464,7 +453,7 @@ def find_pair_angle(ctx : FormatterCtx; from_index : int) : int {
 }
 
 
-def mark_range_as_type(var ctx : FormatterCtx; from, to : int) {// [from..to)
+def mark_range_as_type(var ctx : FormatterCtx; from, to : int) {
     for (i in range(from, to)) {
         if (ctx.tokens[i].tokenType != TokenType.COMMENT) {
             ctx.tokens[i].isInType = true
@@ -482,11 +471,9 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
             pos++;
         }
     } else {
-        // '$' prefix of the $name(args) / $name<types>(args) type-macro form
         if (ctx |> eq(pos, "$") && pos + 1 < length(ctx.tokens) && ctx.tokens[pos + 1].tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
             pos++
         }
-        // 'ident :: ident ...'
         while (pos < length(ctx.tokens)) {
             if (ctx |> new_line_before(pos)) break;
             if (ctx |> eq(pos, "::") || ctx.tokens[pos].tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
@@ -496,7 +483,6 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
             }
         }
 
-        // template <...>
         if (ctx |> eq(pos, "<")) {
             pos = ctx |> find_pair_angle(pos)
             pos++
@@ -511,18 +497,16 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
     var start = i;
     while (pos < length(ctx.tokens)) {
         if (ctx |> eq(pos, "-", "==") && ctx |> eq(pos + 1, "const", "&", "#", "?")) {
-            pos++ // skip -
+            pos++
         } elif (ctx |> eq(pos, "const", "&", "#", "?") || ctx |> eq(pos, "implicit", "explicit")) {
-            // do nothing
         } elif (ctx |> eq(pos, "[")) {
-            // ignore [expr] in T[expr]
             mark_range_as_type(ctx, start, pos)
             pos = ctx |> find_pair_square(pos + 1)
             start = pos + 1
         } else {
             break
         }
-        pos++ // next token
+        pos++
     }
     mark_range_as_type(ctx, start, pos)
 
@@ -563,6 +547,7 @@ def search_token_in_line(ctx : FormatterCtx; from_index : int; str : string cons
 
 
 def process_formatter_tokens(var ctx : FormatterCtx) {
+    ctx.formatterTokens |> clear()
     let formatterTokenPrefix = "//fmt:"
     let formatterTokenPrefixSize = formatterTokenPrefix |> length()
     for (i in range(0, length(ctx.tokens))) {
@@ -587,7 +572,6 @@ def have_formatter_token(ctx : FormatterCtx; command : string) {
 }
 
 
-// marks the type tokens after the `:` (or `=` for a typedef) that opens line `j`
 def private mark_type_after_separator(var ctx : FormatterCtx; i, j : int) : void {
     let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
     if (colonPos > 0) {
@@ -596,7 +580,6 @@ def private mark_type_after_separator(var ctx : FormatterCtx; i, j : int) : void
 }
 
 def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 — flat per-token-kind context classifier; splitting would hide the shape
-    // don't format  require / expect / label
     for (i in range(0, length(ctx.tokens) - 1)) {
         if (ctx |> new_line_before(i) && (ctx |> eq(i, "require") || ctx |> eq(i, "expect") || ctx |> eq(i, "label") || ctx |> eq(i, "include"))) {
             for (j in range(i + 1, length(ctx.tokens))) {
@@ -606,7 +589,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // reader macro: %name~ ... %% (visit / module-level suffix) and %name! ... %% (inline suffix).
     for (i in range(0, length(ctx.tokens) - 4)) {
         if (ctx |> eq(i, "%") && ctx.tokens[i + 1].tokenType == TokenType.KEYWORD_OR_IDENTIFIER
                 && (ctx |> eq(i + 2, "~") || ctx |> eq(i + 2, "!"))) {
@@ -617,7 +599,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // var / const declaration
     for (i in range(0, length(ctx.tokens) - 3)) {
         if (ctx |> new_line_before(i) && (ctx |> eq(i, "let") || ctx |> eq(i, "var"))) {
             let assignPos0 = ctx |> search_token_in_line(i, "=")
@@ -633,7 +614,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // type in angle brackets
     for (i in range(0, length(ctx.tokens) - 3)) {
         if (ctx.tokens[i].tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
             if (type_after_keyword |> find_index(ctx.tokens[i].str) >= 0 ||
@@ -644,7 +624,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // type macros  $t(identifier)
     for (i in range(0, length(ctx.tokens) - 3)) {
         if (ctx |> eq(i, "$") && ctx |> eq(i + 1, "t") && ctx |> eq(i + 2, "(")) {
             let endParams = ctx |> find_pair_paren(i + 2);
@@ -659,14 +638,12 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // array, table type
     for (i in range(0, length(ctx.tokens) - 3)) {
         if ((ctx |> eq(i, "[") && ctx |> eq(i + 1, "[", "\{")) || (ctx |> eq(i, "\{") && ctx |> eq(i + 1, "\{"))) {
             ctx |> mark_tokens_as_type(i + 2);
         }
     }
 
-    // struct / class / variant or multiline variables
     for (i in range(0, length(ctx.tokens) - 3)) {
         if (ctx |> new_line_before(i)) {
             var skip = 0
@@ -692,7 +669,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // oneline typedefs
     for (i in range(0, length(ctx.tokens) - 3)) {
         if (ctx |> new_line_before(i) && (ctx |> eq(i, "typedef") && !ctx |> new_line_before(i + 1))) {
             for (j in range(i + 1, length(ctx.tokens) - 3)) {
@@ -702,7 +678,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // functions
     for (i in range(0, length(ctx.tokens) - 3)) {
         var pos = -1
         var need_in_func_param = true
@@ -711,7 +686,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         } elif (ctx |> eq(i, "$",  "@", "@@") && ctx |> eq(i + 1, "(", "[")) {
             pos = i
         } elif (ctx |> eq(i, "@@") && ctx |> eq(i + 1, "<")) {
-            // handle func_addr_expr with type : @@ < (a1: int, ...) : T > func_name
             need_in_func_param = false
             pos = i + 1
         }
@@ -726,13 +700,13 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
             pos = ctx |> search_token_in_line(pos, "(") - 1;
         }
 
-        if (ctx |> eq(pos + 1, "[")) {// skip [...]
+        if (ctx |> eq(pos + 1, "[")) {
             pos = ctx |> find_pair_square(pos + 1);
         }
 
-        if (ctx |> eq(pos + 1, ":")) {// def [const | private | public] name:
+        if (ctx |> eq(pos + 1, ":")) {
             ctx |> mark_tokens_as_type(i + 2)
-        } elif (ctx |> eq(pos + 1, "(")) {// def [const | private | public] name(
+        } elif (ctx |> eq(pos + 1, "(")) {
             let beginParams = pos + 1;
             ctx.tokens[beginParams].dontAddSpacesAround = true;
             let endParams = ctx |> find_pair_paren(pos + 1);
@@ -753,7 +727,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    // annotations
     for (i in range(0, length(ctx.tokens) - 1)) {
         if (ctx |> eq(i, "[") && !eq(ctx, i + 1, "[") && !eq(ctx, i + 1, "\{")) {
             for (j in range(i + 1, length(ctx.tokens))) {
@@ -765,7 +738,7 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
     }
 
-    let macroEscapes <- { /*ident*/"i", /*value*/"v", /*expr*/"e", /*call*/"c", /*type*/"t", /*field*/"f", /*block*/"b", /*array*/"a" }
+    let macroEscapes <- {"i", "v", "e", "c", "t", "f", "b", "a" }
     for (i in range(1, length(ctx.tokens))) {
         if (!new_line_before(ctx, i) && ctx |> eq(i - 1, "$") && key_exists(macroEscapes, ctx.tokens[i].str)) {
             ctx.tokens[i - 1].dontAddSpacesAround = true
@@ -775,7 +748,6 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
 
 
 def fmt_function_arguments(var ctx : FormatterCtx) {
-    // function arguments
     var lastNewLineToken = 0
     var i = 0
     let n = length(ctx.tokens) - 3
@@ -1051,7 +1023,6 @@ def fmt_space_after_keyword(var ctx : FormatterCtx) {
                 ctx |> add_space_before(i + 1)
             }
         }
-        // add space only after 'return <expr>' expression
         if (ctx.tokens[i].str == "return" && !empty(ctx.tokens[i + 1].str)) {
             if (!new_line_before(ctx, i + 1)) {
                 ctx |> add_space_before(i + 1)
@@ -1101,7 +1072,6 @@ def fmt_remove_space_before_as(var ctx : FormatterCtx) {
 
 
 def fmt_remove_space_before_end_of_object(var ctx : FormatterCtx) {
-    // HACK: [[array<InspectorDesc>__remove_this_space__]]
     for (i in range(1, length(ctx.tokens) - 2)) {
         if (!new_line_before(ctx, i) && ctx |> eq(i, "]") && ctx |> eq(i + 1, "]") && (!ctx |> eq(i - 1, "]"))) {
             ctx |> remove_space_before(i);
@@ -1111,7 +1081,6 @@ def fmt_remove_space_before_end_of_object(var ctx : FormatterCtx) {
 
 
 def fmt_remove_space_before_object_type(var ctx : FormatterCtx) {
-    // HACK: [[__remove_this_space__array<InspectorDesc>]]
     for (i in range(2, length(ctx.tokens) - 1)) {
         if (!new_line_before(ctx, i) && ctx |> eq(i - 2, "[") && ctx |> eq(i - 1, "[") && ctx.tokens[i].tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
             ctx |> remove_space_before(i);
@@ -1121,7 +1090,6 @@ def fmt_remove_space_before_object_type(var ctx : FormatterCtx) {
 
 
 def fmt_remove_space_before_array_of_type(var ctx : FormatterCtx) {
-    // HACK: array<InspectorDesc>__remove_this_space__[16]
     for (i in range(1, length(ctx.tokens) - 2)) {
         if (!new_line_before(ctx, i) && ctx |> eq(i - 1, ">") && ctx.tokens[i - 1].isInType && ctx |> eq(i, "[")) {
             ctx |> remove_space_before(i);
@@ -1188,7 +1156,6 @@ def do_format_parsed(var ctx : FormatterCtx) {
     if (ctx |> have_formatter_token("ignore-file")) return
 
     ctx |> mark_token_context()
-    //ctx |> debug_print_tokens()
     ctx |> fmt_spaces_around_operators()
     ctx |> fmt_function_call_param_paren_call()
     ctx |> fmt_space_after_comma()
@@ -1265,7 +1232,7 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
     for (t in ctx.tokens) {
         var eff = carry + t.newLines
         if (carry > 0 && t.newLines > 0) {
-            eff--                       // the dropped comment's own line collapses
+            eff--
         }
         if (t.tokenType == TokenType.COMMENT && !in_header && !is_kept_comment(t.str)) {
             carry = eff
@@ -1290,7 +1257,8 @@ def public format_source(file_data : array<uint8> const& implicit; strip_comment
     ctx.data := file_data
     ctx.data |> push(uint8(0))
     ctx |> parse_all_tokens()
-    if (strip_comments) {
+    ctx |> process_formatter_tokens()
+    if (strip_comments && !(ctx |> have_formatter_token("ignore-file"))) {
         ctx |> strip_comment_tokens()
     }
     ctx |> do_format_parsed()

@@ -28,8 +28,6 @@ require tools/judge_duplicates public
 require tools/find_dupe public
 require tools/live public
 
-// The full daslang compiler-backed tool set: compile/lint/AOT/introspection,
-// dupe detection, and the live-reload control surface.
 def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool-registration table, one emplace per tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
