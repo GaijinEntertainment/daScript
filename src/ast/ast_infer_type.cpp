@@ -6136,6 +6136,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto ecast = new ExprCast(expr->at, expr->clone(), new TypeDecl(*expr->aliasSubstitution));
+            if ( !ecast->castType->at.fileInfo ) ecast->castType->at = expr->at;
             ecast->reinterpret = true;
             ecast->alwaysSafe = true;
             expr->aliasSubstitution = nullptr;
@@ -6156,7 +6157,6 @@ namespace das {
                     } else {
                         auto mks = new ExprMakeStruct(expr->at);
                         mks->makeType = new TypeDecl(*aliasT);
-                    if ( !mks->makeType->at.fileInfo ) mks->makeType->at = expr->at;
                         if ( !mks->makeType->at.fileInfo ) mks->makeType->at = expr->at;
                         return mks;
                     }
@@ -6180,6 +6180,8 @@ namespace das {
                     }
                     reportAstChanged();
                     auto ecast = new ExprCast(expr->at, expr->arguments[0]->clone(), new TypeDecl(*aliasT));
+                    if ( !ecast->castType->at.fileInfo ) ecast->castType->at = expr->at;
+                    if ( ecast->castType->firstType && !ecast->castType->firstType->at.fileInfo ) ecast->castType->firstType->at = expr->at;
                     ecast->reinterpret = true;
                     ecast->alwaysSafe = true;
                     return ecast;
