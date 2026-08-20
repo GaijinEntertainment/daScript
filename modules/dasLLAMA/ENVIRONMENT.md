@@ -67,7 +67,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_LOGITS` | flag | on | Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on. |
 | `DASLLAMA_METAL_ATTN` | flag | on | ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |
-| `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver — the gemma4uv chain, the gemma4v ViT block loop (its exact-plane lane), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
+| `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver — the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
 | `DASLLAMA_METAL_WDEC` | flag | on | Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder. |
 | `DASLLAMA_METAL_WDEC_STEP` | flag | on | Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail — the per-dispatch latency floor beats them. |
 | `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |

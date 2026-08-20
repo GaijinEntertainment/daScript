@@ -199,9 +199,12 @@ with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs 
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896² (learned position table), so
 the five fixtures vary content, not geometry; exact lane on the 2e-4 + 4e-3·token-rms bar, the
-q8 serving lane on its measured 2.5e-1·rms bar (27 blocks; the ffn_down GEMM stays f32 — its
-4304-wide rows don't divide into Q8_0 blocks), plus the fixed-canvas panic gate and the carrier
-sniff/exec_fmt cells. Skips honestly without the mmproj or dumps.
+q8 serving lane on its measured 3.2e-1·rms bar (27 blocks, ffn served at the layout's padded
+4352 width so every GEMM quantizes), plus the fixed-canvas panic gate and the carrier
+sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
+gates two fixtures through the Metal block loop on its measured 4e-2·rms bar — engage proven
+per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
+restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare all vision tier-1 tests use.
 `test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed

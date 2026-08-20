@@ -42,7 +42,10 @@ struct Gemma3vTower {
     n_embd : int64       // 1152 — the tower width
     n_layer : int64      // 27
     n_head : int64       // 16 (head width 72)
-    n_ff : int64         // 4304
+    n_ff : int64         // 4304 — the FILE's ffn width (tensor sizes and bias reads use it)
+    ff_pad : int64       // n_ff rounded up to 64 (4352) — the SERVED ffn width: the up GEMM pads
+    // zero weight rows + zero bias, the down GEMM zero columns, so the padded forward is
+    // bit-identical; %64 serves the Metal mulmm tiles, %32 lets the down GEMM quantize
     proj_dim : int64     // mm.input_projection output width — the soft-token width (decoder width)
     patch : int64        // 14 px
     patch_dim : int64    // patch² × 3 — the im2col row (588)
@@ -65,10 +68,6 @@ struct Gemma3vTower {
     layer_f_stride : int64
     layer_w : int64      // per-block GEMM region base (qblob when q8, else blob); stride layer_w_stride
     layer_w_stride : int64
-    // q8 lane only: the ffn_down GEMM stays f32 in blob — its input width is n_ff (4304), not a
-    // multiple of the 32-element Q8_0 block, so its rows cannot quantize without straddling
-    layer_wd : int64
-    layer_wd_stride : int64
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
@@ -116,9 +115,9 @@ def finalize(var s : Gemma3vState) {
     delete s.xsi
 }
 
-// the tripwire: serialize_image_meta(Gemma3vTower) covers 24 fields; image_map + image_bytes
+// the tripwire: serialize_image_meta(Gemma3vTower) covers 23 fields; image_map + image_bytes
 // are deliberate skips (the three planes are sections, not meta).
-let private GEMMA3V_META_FIELDS = 24 + 2
+let private GEMMA3V_META_FIELDS = 23 + 2
 
 // every meta-carried Gemma3vTower field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma3vTower) {
@@ -127,6 +126,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma3vTower) {
     arch |> serialize_raw(t.n_layer)
     arch |> serialize_raw(t.n_head)
     arch |> serialize_raw(t.n_ff)
+    arch |> serialize_raw(t.ff_pad)
     arch |> serialize_raw(t.proj_dim)
     arch |> serialize_raw(t.patch)
     arch |> serialize_raw(t.patch_dim)
@@ -145,8 +145,6 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma3vTower) {
     arch |> serialize_raw(t.layer_f_stride)
     arch |> serialize_raw(t.layer_w)
     arch |> serialize_raw(t.layer_w_stride)
-    arch |> serialize_raw(t.layer_wd)
-    arch |> serialize_raw(t.layer_wd_stride)
 }
 
 [unused_argument(t)]
@@ -188,9 +186,24 @@ def private register_gemma3v_image_tags {
     register_image_family_tag(GEMMA3V_TAG_Q8)
 }
 
-// The lane policy follows the fastest GEMM path on the box: the armed accelerate float-batch tier
-// wants float planes and flips the default to the exact lane; else q8. A pin overrides. (No Metal
-// tower driver serves this family yet — when one does, its serves() joins this policy.)
+// the GPU blocks hook (registered by dasllama_metal_tower at [init]; requires-back). It takes
+// s.x after the stem, runs every block, leaves the result in s.x; false = declined, the CPU
+// loop is the fallback. `serves` = would the driver serve (the lane policy asks)
+typedef Gemma3vGpuBlocksFn = function<(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool>
+typedef Gemma3vGpuServesFn = function<() : bool>
+var private g_g3v_gpu : Gemma3vGpuBlocksFn
+var private g_g3v_gpu_serves : Gemma3vGpuServesFn
+var private g_g3v_gpu_set = false
+
+def register_gemma3v_gpu(fn : Gemma3vGpuBlocksFn; serves : Gemma3vGpuServesFn) {
+    g_g3v_gpu = fn
+    g_g3v_gpu_serves = serves
+    g_g3v_gpu_set = true
+}
+
+// The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
+// armed accelerate float-batch tier both want f32 planes (the driver declines q8) and flip the
+// default to the exact lane; else q8. A pin overrides.
 enum private G3vLane {
     unset    // the policy decides
     exact    // f32 planes
@@ -202,7 +215,7 @@ def private g3v_serve_q8() : bool {
     if (g_g3v_q8_pin != G3vLane.unset) {
         return g_g3v_q8_pin == G3vLane.q8
     }
-    return !float_batch_override_active()
+    return !((g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) || float_batch_override_active())
 }
 
 //! Pin the gemma3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
@@ -223,9 +236,11 @@ def private g3v_tag() : string => g3v_serve_q8() ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g3v_announce_lane() {
-    var why = "the CPU default (no accelerate tier)"
+    var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
     if (g_g3v_q8_pin != G3vLane.unset) {
         why = "pinned"
+    } elif (g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) {
+        why = "DASLLAMA_METAL_TOWER on: the Metal tower serves f32 planes"
     } elif (float_batch_override_active()) {
         why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
     }
@@ -240,15 +255,17 @@ def private g3v_gemm_names(swapped : bool) : array<string> {
                 swapped ? "ffn_down" : "ffn_up", swapped ? "ffn_up" : "ffn_down" ]
 }
 
-// the block GEMM element counts in GEMMA3V_GEMM_* order
-def private g3v_gemm_sizes(d, ff : int64) : array<int64> {
-    return <- [ d * d, d * d, d * d, d * d, d * ff, ff * d ]
+// the SERVED block GEMM element counts in GEMMA3V_GEMM_* order (the FFN pair at ff_pad; the
+// file's tensors are n_ff-sized and the stage read zero-pads them into these regions)
+def private g3v_gemm_sizes(d, fp : int64) : array<int64> {
+    return <- [ d * d, d * d, d * d, d * d, d * fp, fp * d ]
 }
 
-// every tensor the forward reads, by name and element count, before any layout is committed
-def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<string>; gemm_sizes : array<int64>) {
+// every tensor the forward reads, by name and FILE element count, before any layout is committed
+def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<string>) {
     let d = t.n_embd
     let ff = t.n_ff
+    let file_sizes <- [ d * d, d * d, d * d, d * d, d * ff, ff * d ]
     let n_side = t.image_px / t.patch
     gguf_expect_elems(m, "v.patch_embd.weight", t.patch_dim * d, "dasLLAMA gemma3v")
     gguf_expect_elems(m, "v.patch_embd.bias", d, "dasLLAMA gemma3v")
@@ -265,7 +282,7 @@ def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<str
         gguf_expect_elems(m, "{p}.ln2.weight", d, "dasLLAMA gemma3v")
         gguf_expect_elems(m, "{p}.ln2.bias", d, "dasLLAMA gemma3v")
         for (g in range64(GEMMA3V_GEMMS)) {
-            gguf_expect_elems(m, "{p}.{names[g]}.weight", gemm_sizes[g], "dasLLAMA gemma3v")
+            gguf_expect_elems(m, "{p}.{names[g]}.weight", file_sizes[g], "dasLLAMA gemma3v")
             gguf_expect_elems(m, "{p}.{names[g]}.bias", bias_sizes[g], "dasLLAMA gemma3v")
         }
     }
@@ -274,7 +291,6 @@ def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<str
 // the plane layout: fp32 cursor `off` (blob), q8 cursor `qo` (qblob; scales at qo/32)
 def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) {
     let d = t.n_embd
-    let ff = t.n_ff
     let n_side = t.image_px / t.patch
     t.patch_w = off; off += t.patch_dim * d
     t.patch_b = off; off += d
@@ -283,22 +299,15 @@ def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) 
     t.post_ln_b = off; off += d
     t.soft_norm_w = off; off += d
     t.proj_w = off; off += d * t.proj_dim
-    t.layer_f_stride = 9l * d + ff   // ln1 w/b, ln2 w/b, q/k/v/o bias, down bias [d each]; up bias [ff]
+    t.layer_f_stride = 9l * d + t.ff_pad   // ln1 w/b, ln2 w/b, q/k/v/o bias, down bias [d each]; up bias [ff_pad]
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
+    t.layer_w_stride = 4l * d * d + 2l * d * t.ff_pad
     if (t.q8) {
-        // q/k/v/o/up quantize (input width d, 32-divisible); down stays f32 (input width ff is not)
-        t.layer_w_stride = 4l * d * d + d * ff
         t.layer_w = qo
         qo += t.n_layer * t.layer_w_stride
-        t.layer_wd_stride = ff * d
-        t.layer_wd = off
-        off += t.n_layer * t.layer_wd_stride
     } else {
-        t.layer_w_stride = 4l * d * d + 2l * d * ff
         t.layer_w = off
         off += t.n_layer * t.layer_w_stride
-        t.layer_wd = 0l
-        t.layer_wd_stride = 0l
     }
 }
 
@@ -317,14 +326,84 @@ def private g3v_read_gemm_q8(m : GGUFMeta; b : array<uint8> | #; name : string; 
     quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, wo, wo / 32l)
 }
 
+def private g3v_zero_span(var a : array<float>; at, n : int64) {
+    unsafe {
+        var p = addr(a[at])
+        for (i in range64(n)) {
+            p[i] = 0.0
+        }
+    }
+}
+
+// stage the up GEMM into its padded region: the file's [ff × d] rows land first, then ff_pad−ff
+// zero weight rows — the pad outputs are exactly zero
+def private g3v_stage_up(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
+                         @scratch var wscratch : array<float>; wo : int64) {
+    let d = st.t.n_embd
+    let file_n = st.t.n_ff * d
+    let served = st.t.ff_pad * d
+    if (st.t.q8) {
+        if (long_length(wscratch) < served) {
+            wscratch |> reserve(served)
+            wscratch |> resize(served)
+        }
+        gguf_read_tensor_f32(m, b, name, wscratch, 0l, file_n)
+        g3v_zero_span(wscratch, file_n, served - file_n)
+        quantize_q8_0_into(wscratch, served, st.qblob, st.qscales, wo, wo / 32l)
+    } else {
+        gguf_read_tensor_f32(m, b, name, st.blob, wo, file_n)
+        g3v_zero_span(st.blob, wo + file_n, served - file_n)
+    }
+}
+
+// stage the down GEMM into its padded region: each of the file's d rows ([ff] wide) expands to
+// [ff_pad] with zero tail columns — the pads multiply the up GEMM's zero pad outputs
+def private g3v_stage_down(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
+                           @scratch var wscratch : array<float>; @scratch var rowscratch : array<float>; wo : int64) {
+    let d = st.t.n_embd
+    let ff = st.t.n_ff
+    let fp = st.t.ff_pad
+    let served = d * fp
+    if (long_length(rowscratch) < d * ff) {
+        rowscratch |> reserve(d * ff)
+        rowscratch |> resize(d * ff)
+    }
+    gguf_read_tensor_f32(m, b, name, rowscratch, 0l, d * ff)
+    if (st.t.q8) {
+        if (long_length(wscratch) < served) {
+            wscratch |> reserve(served)
+            wscratch |> resize(served)
+        }
+        g3v_expand_rows(wscratch, 0l, rowscratch, d, ff, fp)
+        quantize_q8_0_into(wscratch, served, st.qblob, st.qscales, wo, wo / 32l)
+    } else {
+        g3v_expand_rows(st.blob, wo, rowscratch, d, ff, fp)
+    }
+}
+
+def private g3v_expand_rows(var dst : array<float>; at : int64; src : array<float>; rows, ff, fp : int64) {
+    unsafe {
+        var dp = addr(dst[at])
+        let sp = addr(src[0])
+        for (r in range64(rows)) {
+            memcpy(dp + r * fp, sp + r * ff, ff * 4l)
+            for (i in range64(ff, fp)) {
+                dp[r * fp + i] = 0.0
+            }
+        }
+    }
+}
+
 // the reads, in layout order — the per-block f32 region is ln1 w/b ln2 w/b, then the six GEMM
 // biases in GEMMA3V_GEMM_* order; the GEMM region follows the same order
 def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gemma3vStaging;
                             names : array<string>; gemm_sizes : array<int64>) {
     let d = st.t.n_embd
     let ff = st.t.n_ff
+    let fp = st.t.ff_pad
     let n_side = st.t.image_px / st.t.patch
-    var wscratch : array<float>   // the q8 transcode's f32 staging, one GEMM at a time
+    var wscratch : array<float>   // the padded-GEMM f32 staging, one GEMM at a time
+    var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.t.patch_b, d)
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, n_side * n_side * d)
@@ -342,18 +421,24 @@ def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
         gguf_read_tensor_f32(m, bytes, "{p}.ln2.bias", st.blob, fo, d); fo += d
         var wo = st.t.layer_w + l * st.t.layer_w_stride
         for (g in range64(GEMMA3V_GEMMS)) {
-            if (st.t.q8 && g == GEMMA3V_GEMM_DOWN) {
-                gguf_read_tensor_f32(m, bytes, "{p}.{names[g]}.weight", st.blob,
-                    st.t.layer_wd + l * st.t.layer_wd_stride, gemm_sizes[g])
+            let wname = "{p}.{names[g]}.weight"
+            if (g == GEMMA3V_GEMM_UP) {
+                g3v_stage_up(m, bytes, wname, st, wscratch, wo)
+            } elif (g == GEMMA3V_GEMM_DOWN) {
+                g3v_stage_down(m, bytes, wname, st, wscratch, rowscratch, wo)
             } elif (st.t.q8) {
-                g3v_read_gemm_q8(m, bytes, "{p}.{names[g]}.weight", st, wscratch, wo, gemm_sizes[g])
-                wo += gemm_sizes[g]
+                g3v_read_gemm_q8(m, bytes, wname, st, wscratch, wo, gemm_sizes[g])
             } else {
-                gguf_read_tensor_f32(m, bytes, "{p}.{names[g]}.weight", st.blob, wo, gemm_sizes[g])
-                wo += gemm_sizes[g]
+                gguf_read_tensor_f32(m, bytes, wname, st.blob, wo, gemm_sizes[g])
             }
+            wo += gemm_sizes[g]
             gguf_read_tensor_f32(m, bytes, "{p}.{names[g]}.bias", st.blob, fo, bias_sizes[g])
-            fo += bias_sizes[g]
+            if (g == GEMMA3V_GEMM_UP) {
+                g3v_zero_span(st.blob, fo + ff, fp - ff)   // the padded up bias: zero tail
+                fo += fp
+            } else {
+                fo += bias_sizes[g]
+            }
         }
     }
 }
@@ -385,10 +470,11 @@ def private g3v_repack_all(var st : Gemma3vStaging; gemm_sizes : array<int64>) {
         return
     }
     let d = st.t.n_embd
+    let widths <- [ d, d, d, d, d, st.t.ff_pad ]   // q k v o up down: the input width of each
     for (l in range64(st.t.n_layer)) {
         var wo = st.t.layer_w + l * st.t.layer_w_stride
-        for (g in range64(GEMMA3V_GEMMS - 1l)) {   // q k v o up: every quantized GEMM's input width is d
-            repack_q8q8_weight(st.qblob, st.qscales, wo, d, gemm_sizes[g] / d)
+        for (g in range64(GEMMA3V_GEMMS)) {
+            repack_q8q8_weight(st.qblob, st.qscales, wo, widths[g], gemm_sizes[g] / widths[g])
             wo += gemm_sizes[g]
         }
     }
@@ -441,8 +527,9 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         }
         let swapped = !empty(m.tensors[dn].dims) && m.tensors[dn].dims[0] == d
         let names <- g3v_gemm_names(swapped)
-        let gemm_sizes <- g3v_gemm_sizes(d, st.t.n_ff)
-        g3v_verify_tensors(m, st.t, names, gemm_sizes)
+        st.t.ff_pad = (st.t.n_ff + 63l) / 64l * 64l
+        let gemm_sizes <- g3v_gemm_sizes(d, st.t.ff_pad)
+        g3v_verify_tensors(m, st.t, names)
         var off = 0l
         var qo = 0l
         g3v_layout(st.t, off, qo)
@@ -543,20 +630,15 @@ struct Gemma3vBlockOffs {
 
 def gemma3v_block_offs(t : Gemma3vTower; l : int64) : Gemma3vBlockOffs {
     let d = t.n_embd
-    let ff = t.n_ff
     let fo = t.layer_f + l * t.layer_f_stride
     var o = Gemma3vBlockOffs(ln1_w = fo, ln1_b = fo + d, ln2_w = fo + 2l * d, ln2_b = fo + 3l * d)
-    let bias_sizes <- [ d, d, d, d, ff, d ]
-    let sizes <- g3v_gemm_sizes(d, ff)
+    let bias_sizes <- [ d, d, d, d, t.ff_pad, d ]
+    let sizes <- g3v_gemm_sizes(d, t.ff_pad)
     var bo = fo + 4l * d
     var at = t.layer_w + l * t.layer_w_stride
     for (g in range64(GEMMA3V_GEMMS)) {
-        if (t.q8 && g == GEMMA3V_GEMM_DOWN) {
-            o.w[g] = t.layer_wd + l * t.layer_wd_stride
-        } else {
-            o.w[g] = at
-            at += sizes[g]
-        }
+        o.w[g] = at
+        at += sizes[g]
         o.b[g] = bo
         bo += bias_sizes[g]
     }
@@ -566,7 +648,7 @@ def gemma3v_block_offs(t : Gemma3vTower; l : int64) : Gemma3vBlockOffs {
 // one pre-norm block over the residual stream s.x (npos rows)
 def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     let d = t.n_embd
-    let ff = t.n_ff
+    let ff = t.ff_pad   // the served ffn width — the pad lanes are zero by construction
     let hd = d / t.n_head
     let o = gemma3v_block_offs(t, l)
     // attention (the g3v.* buckets feed asr_prof_report - the encode split)
@@ -596,7 +678,7 @@ def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     gelu_tanh_lut_batch(s.h, ff, npos)
     asr_prof_add("g3v.gelu", tp)
     tp = ref_time_ticks()
-    g3v_gemm_biased(s.xb, t, s, o.w[GEMMA3V_GEMM_DOWN], o.b[GEMMA3V_GEMM_DOWN], s.h, ff, d, npos, false)
+    g3v_gemm_biased(s.xb, t, s, o.w[GEMMA3V_GEMM_DOWN], o.b[GEMMA3V_GEMM_DOWN], s.h, ff, d, npos, t.q8)
     add_inplace_rows(s.x, s.xb, npos * d)
     asr_prof_add("g3v.ffn_mm", tp)
 }
@@ -613,7 +695,7 @@ def private g3v_stem(t : Gemma3vTower; var s : Gemma3vState; planes : array<floa
     ensure_length(s.qq, npos * d)
     ensure_length(s.kk, npos * d)
     ensure_length(s.vv, npos * d)
-    ensure_length(s.h, npos * t.n_ff)
+    ensure_length(s.h, npos * t.ff_pad)
     mm_blob_b(s.x, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     add_bias_rows(s.x, t.blob, t.patch_b, d, npos)
     unsafe {
@@ -655,8 +737,14 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
     var tp = ref_time_ticks()
     let npos = g3v_stem(t, s, planes, w, h)
     asr_prof_add("g3v.stem", tp)
-    for (l in range64(t.n_layer)) {
-        g3v_block(t, s, l, npos)
+    var gpu_served = false
+    if (g_g3v_gpu_set) {
+        gpu_served = invoke(g_g3v_gpu, t, s, npos)
+    }
+    if (!gpu_served) {
+        for (l in range64(t.n_layer)) {
+            g3v_block(t, s, l, npos)
+        }
     }
     tp = ref_time_ticks()
     let nout = g3v_tail(t, s, t.image_px / t.patch, out)

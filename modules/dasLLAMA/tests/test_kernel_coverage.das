@@ -16,6 +16,7 @@ require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
 require dasllama/dasllama_gemma4v   // the cov_tower ViT row
+require dasllama/dasllama_gemma3v   // the cov_tower SigLIP row (the head-restride kernel)
 require dasllama/dasllama_qwen3a    // the cov_tower conv2d carrier
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
@@ -176,6 +177,34 @@ def private census_zoo(t : T?) {
     cov_tower(t)
 }
 
+// the gemma3v row of cov_tower: the fixed 896 canvas through the gemma-3-4b SigLIP tower on the
+// f32 planes — covers the head-restride kernel around the borrowed attention trio
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_gemma3v(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let vpath = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
+        if (model_available(t, vpath)) {
+            set_gemma3v_q8(false)   // the driver serves f32 planes (the lane policy picks this with the tower on; pinned for the census)
+            var inscope tw <- load_gemma3v_tower(vpath)
+            reset_gemma3v_q8()
+            var st = Gemma3vState()
+            var planes : array<float>
+            planes |> reserve_resize(896l * 896l * 3l)
+            for (i in range64(896l * 896l * 3l)) {
+                planes[i] = sin(float(i) * 0.017) * 0.5 + 0.5
+            }
+            var out : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                gemma3v_encode(tw, st, planes, 896l, 896l, out)
+            }
+            delete out
+            delete planes
+            delete st
+        }
+    }
+}
+
 // the gemma4v row of cov_tower: a 96x96 canvas through the E2B ViT tower on the file's planes
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_gemma4v(t : T?) {
@@ -267,6 +296,16 @@ def private cov_tower(t : T?) {
             delete qcs
             delete qenc
         }
+        cov_tower_gemma4uv(t)
+        cov_tower_gemma4v(t)
+        cov_tower_gemma3v(t)
+    }
+}
+
+// the gemma4uv row of cov_tower: a small canvas through the 12B dense embedder chain
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_gemma4uv(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
         let mpath = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
         if (model_available(t, mpath)) {
             var inscope emb <- load_gemma4uv_embedder(mpath)
@@ -285,7 +324,6 @@ def private cov_tower(t : T?) {
             delete planes
             delete st
         }
-        cov_tower_gemma4v(t)
     }
 }
 

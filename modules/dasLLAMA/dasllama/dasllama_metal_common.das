@@ -171,6 +171,7 @@ var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
 var g_pso_clamp : MetalComputePipeline?        // gemma4v: the ClippableLinear clamp
 var g_pso_rope2d : MetalComputePipeline?       // gemma4v: the two-axis NEOX rope
+var g_pso_head_restride : MetalComputePipeline?   // gemma3v: head-width repack around the attention tiles
 var g_pso_geglu_quick : MetalComputePipeline?  // gemma4v: GEGLU-quick, f16-table form
 var g_pso_f32mm : MetalComputePipeline?
 var g_pso_cross_kx : MetalComputePipeline?   // whisper cross-KV: K transpose+prescale shuffle

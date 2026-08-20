@@ -11,6 +11,7 @@ require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
+require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
 
 // Tier-1 gemma3v (SigLIP) tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened gemma-3-4b mmproj, CPU, --no-mmproj-offload, -fa off.
@@ -19,7 +20,8 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 
 let private TIER1_ABS = 2e-4
 let private TIER1_REL = 4e-3   // × token rms - f32 planes vs the f32 oracle: summation order only
-let private TIER1_REL_Q8 = 2.5e-1   // the q8 serving lane: measured 0.19-0.21 x rms on these dumps - 27 blocks of q8×q8 GEMMs (deeper + higher-variance than gemma4v's 16); the caption floor is the product gate
+let private TIER1_REL_GPU = 4e-2   // the Metal leg: measured 6.9e-3..2.3e-2 x rms on these dumps - the f32 mulmm stages f16 tiles over 27 high-variance LN blocks
+let private TIER1_REL_Q8 = 3.2e-1   // the q8 serving lane: measured 0.22-0.25 x rms on these dumps - 27 blocks of q8×q8 GEMMs incl. the padded down (deeper + higher-variance than gemma4v's 16); the caption floor is the product gate
 
 def private gate_encode(t : T?; tw : Gemma3vTower; var st : Gemma3vState; kind : string; logname : string; rel : float = TIER1_REL) : bool {
     var o = OracleEncode()
@@ -54,6 +56,9 @@ def test_gemma3v_tier1(t : T?) {
         set_gemma3v_q8(false)   // the exact-plane (f32-widened) lane; the q8 serving lane is its own test
         var tw <- load_gemma3v_tower(mm)
         reset_gemma3v_q8()
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain; the GPU rung is its own test below
+        }
         var st = Gemma3vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.patch), 14, "patch")
@@ -83,8 +88,50 @@ def test_gemma3v_tier1(t : T?) {
             tripped = true
         }
         tt |> success(tripped, "a non-896 canvas panics at the fixed-canvas gate")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete st
         delete tw
+    }
+}
+
+// The GPU rung: the same dumps through the Metal tower's block loop (the f32 mulmm stages f16
+// tiles, and the 72-wide heads restride to 128 around the attention trio).
+[test]
+def test_gemma3v_tier1_gpu(t : T?) {
+    t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
+            if (!model_available(tt, mm)) {
+                return
+            }
+            var tw <- load_gemma3v_tower(mm)   // metal armed: the policy default is the exact lane
+            var st = Gemma3vState()
+            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            let fixtures = [(kind = "cb", log = "g3.encode.cb896.log"),
+                            (kind = "green", log = "g3.encode.green896.log")]
+            for (fx in fixtures) {
+                let s0 = metal_tower_stats()
+                let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_GPU)
+                if (ran) {
+                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind}: GPU-served (encodes delta)")
+                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind}: every block ran on the driver (blocks delta)")
+                }
+            }
+            // the knob-off leg: the same tower, the CPU chain, no dispatch
+            set_metal_tower(false)
+            let sc0 = metal_tower_stats()
+            tt |> gate_encode(tw, st, "cb", "g3.encode.cb896.log")
+            let sc1 = metal_tower_stats()
+            tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
+            tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
+            set_metal_tower(true)
+            delete st
+            delete tw
+        } else {
+            feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
+        }
     }
 }
 
