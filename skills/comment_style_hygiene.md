@@ -32,7 +32,8 @@ some (noted), C++ and JS have none — there the rule is the reviewer's.
 
 **.das: ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept
 set is exactly: `//!` docs on public API, `// nolint:CODE` / `@nolint` suppressions
-carrying their one-line why, and the file's leading header block. Everything else —
+carrying their one-line why, `//fmt:` formatter directives, and the file's leading header
+block (which may sit below the `options` / `module` / `require` preamble). Everything else —
 narration, banners, section dividers, commented-out code — does not exist. The MCP
 `format_file` tool applies this file-wide by default, fail-closed (a strip must compile or
 the file is restored). Teaching code is the one exception: in tutorials and examples the

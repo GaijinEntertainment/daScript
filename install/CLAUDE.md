@@ -183,7 +183,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/…)
 
 **`print` is fine for application scripts.** In library and tool code prefer `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` — same stdout, but level-tagged and filterable.
 
-**Comment hygiene (.das): ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, and a file's leading header block. Everything else — narration, banners, section dividers, commented-out code — does not exist; the MCP `format_file` tool applies this file-wide by default, fail-closed. Teaching code (tutorials, examples) is the one exception: prose carrying the lesson stays — format those with `keep_comments='true'`.
+**Comment hygiene (.das): ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter directives, and a file's leading header block. Everything else — narration, banners, section dividers, commented-out code — does not exist; the MCP `format_file` tool applies this file-wide by default, fail-closed. Teaching code (tutorials, examples) is the one exception: prose carrying the lesson stays — format those with `keep_comments='true'`.
 
 ## SDK Directory Layout
 
