@@ -88,6 +88,7 @@ def private plane_fp(wp : uint16 const?; total : int64) : uint64 {
 [cold_path]   // first touch of a plane: convert + insert, once per (plane, content)
 def private f16_plane_mint(key : uint64; wp : uint16 const?; total : int64; fpv : uint64) : uint16 const? {
     var pl = BnnsF16Plane(total = total, fp = fpv)
+    pl.data |> reserve(total)   // exact final size: a bare resize past max_unreserved_size panics
     pl.data |> resize(total)
     unsafe {
         var hp = addr(pl.data[0])
@@ -123,6 +124,15 @@ def private f16_plane_ptr(wp : uint16 const?; total : int64) : uint16 const? {
         return hit
     }
     return f16_plane_mint(key, wp, total, fpv)
+}
+
+// once per larger shape: delete + exact reserve skips the realloc's old-block copy (contents are
+// fully rewritten by every caller) and keeps an over-guard grow from tripping max_unreserved_size
+[cold_path]
+def private scratch_regrow(@scratch var a : array<auto(numT)>; need : int64) {
+    delete a
+    a |> reserve(need)
+    a |> resize(need)
 }
 
 // f16-lane strip count: 0 = the shared accel_strips default. The BNNS f16 kernel saturates the
@@ -162,6 +172,7 @@ var private g_f32hw_planes : table<uint64; BnnsF16Plane>
 [cold_path]   // first touch of an fp32 plane: saturating convert + insert, once per (plane, content)
 def private f16_plane_from_f32_mint(key : uint64; wp : float const?; total : int64; fpv : uint64) : uint16 const? {
     var pl = BnnsF16Plane(total = total, fp = fpv)
+    pl.data |> reserve(total)   // exact final size: a bare resize past max_unreserved_size panics
     pl.data |> resize(total)
     unsafe {
         var hp = addr(pl.data[0])
@@ -202,7 +213,7 @@ def private f16_plane_from_f32(wp : float const?; total : int64) : uint16 const?
 def private accel_f16_serve(var yp : float?; hwp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     let xcnt = ntok * n
     if (long_length(g_hx_scratch) < xcnt) {
-        g_hx_scratch |> resize(xcnt)
+        g_hx_scratch |> scratch_regrow(xcnt)
     }
     unsafe {
         var hxp = addr(g_hx_scratch[0])
@@ -274,7 +285,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
     let total = d * n
     if (long_length(g_wf32_scratch) < total) {
-        g_wf32_scratch |> resize(total)
+        g_wf32_scratch |> scratch_regrow(total)
     }
     unsafe {
         var sp = addr(g_wf32_scratch[0])

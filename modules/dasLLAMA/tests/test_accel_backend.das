@@ -151,6 +151,37 @@ def test_accel_float_batch(t : T?) {
             t |> run("fp32 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
                 check_fp32(t, NTOK, false, true)
             }
+            t |> run("bf16 widen scratch clears the unreserved-size guard (E4B PLE-projection class)") @(t : T?) {
+                // the widen scratch is d*n floats: past max_unreserved_size (64 MiB) a bare
+                // resize panics - E4B's native-bf16 PLE projection region (27.5M elements)
+                // tripped exactly this; E2B's 15.7M squeaked under
+                let bd = 4200l
+                let bn = 4096l
+                var w : array<float>
+                w |> reserve(bd * bn)
+                w |> resize(bd * bn)
+                fill01(w, 3u)
+                var wbf : array<uint16>
+                wbf |> reserve(bd * bn)
+                wbf |> resize(bd * bn)
+                for (dst, src in wbf, w) {
+                    dst = uint16(uint(float_bits_to_int(src)) >> 16u)
+                }
+                delete w
+                var x : array<float>
+                x |> resize(NTOK * int(bn))
+                fill01(x, 7u)
+                var yref : array<float>
+                yref |> resize(NTOK * int(bd))
+                var yacc : array<float>
+                yacc |> resize(NTOK * int(bd))
+                clear_float_batch_override()
+                matmul_bf16_batch(yref, wbf, 0l, x, bn, bd, int64(NTOK))
+                t_accel_enable()
+                matmul_bf16_batch(yacc, wbf, 0l, x, bn, bd, int64(NTOK))
+                t_accel_disable()
+                t |> success(max_rel_err(yref, yacc) < 1e-4)
+            }
             t |> run("strips override serves correctly, incl. rows < strips") @(t : T?) {
                 dasllama_accelerate_set_strips(8l)
                 check_fp32(t, NTOK, false)
