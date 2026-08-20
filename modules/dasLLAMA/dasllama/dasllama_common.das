@@ -4450,6 +4450,11 @@ def gemma_chat(var ct : ChatTemplate) {
     ct.add_bos = true   // BOS = <bos>
     ct.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
     ct.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
+    // gemma3 vision (mtmd: <start_of_image> ... 256 embeddings ... <end_of_image>). Declared on
+    // the SHARED shape because template detection cannot tell gemma3 from gemma2; a text-only
+    // vocab lacks the markers and the chat layer's image_vocab_ok gate refuses the pair there.
+    ct.image_pre.parts <- [chat_special("<start_of_image>")]
+    ct.image_post.parts <- [chat_special("<end_of_image>")]
     ct.stop <- ["<end_of_turn>", "<eos>"]
 }
 

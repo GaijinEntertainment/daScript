@@ -363,6 +363,14 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   forward — clamped GEMMs, per-head q/k RMS, two-axis NEOX rope, weightless V RMS, unscaled
   bidirectional attention, GEGLU-quick — then the 3×3 pool, RMS and projection. Composes the
   `dasllama_tower.das` tower pieces; owns only its layout and the block loop.
+- **`dasllama_gemma3v.das`** — the gemma3 SigLIP tower (gemma-3 4B/12B/27B): mmproj load (the
+  file's f16 planes widen exactly to f32; the q8 lane transcodes all block GEMMs except
+  ffn_down, whose 4304-wide rows don't divide into Q8_0 blocks) and the 27-block pre-norm
+  LayerNorm forward — biased GEMMs, learned position add, scaled bidirectional attention,
+  GELU-tanh — then post-LN, the 4×4 pool, weighted RMS and projection. The canvas is FIXED at
+  896² (the learned table covers exactly that grid), and the family's image_mean/std (0.5) is
+  PREPROCESSING, not graph — `encode_image_` scales, `gemma3v_encode` takes planes raw like the
+  mtmd fixtures do. Composes `dasllama_tower.das`; owns only its layout and the block loop.
 - **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
@@ -372,8 +380,9 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
 (their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
-live beside them in `gemma4-vision-oracle/`, whose `mint.sh` (gemma4uv) and `mint_e2b.sh`
-(gemma4v) record the exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
+live beside them in `gemma4-vision-oracle/` and `gemma3-vision-oracle/`, whose `mint.sh`
+(gemma4uv), `mint_e2b.sh` / `mint_e4b.sh` (gemma4v) and `mint_gemma3.sh` (gemma3v) record the
+exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
 dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
 CPU, `-fa off`, from the f32-widened mmproj twin — the only true-f32 reference arm (the
 reference's Metal "f32" GEMM stages half operands, its flash-attention path casts K/V to f16,

@@ -195,8 +195,15 @@ maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed 
 staging planes must miss the oracle — the sidecar scalars are load-bearing); plus the E4B rung —
 the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
 with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+`test_gemma3v.das` — the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
+`-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
+(`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896² (learned position table), so
+the five fixtures vary content, not geometry; exact lane on the 2e-4 + 4e-3·token-rms bar, the
+q8 serving lane on its measured 2.5e-1·rms bar (27 blocks; the ffn_down GEMM stays f32 — its
+4304-wide rows don't divide into Q8_0 blocks), plus the fixed-canvas panic gate and the carrier
+sniff/exec_fmt cells. Skips honestly without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
-per-token compare both vision tier-1 tests use.
+per-token compare all vision tier-1 tests use.
 `test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
 family tag, the none-carrier refusals, and the `.dlim` route — over constructed carriers.
 `test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
