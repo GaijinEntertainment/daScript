@@ -5484,7 +5484,7 @@
         "box":"m1",
         "threads":8,
         "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path /private/tmp/claude-501/-Users-borisbatkin-Work-daScript/a9f45303-28da-454c-b9a9-6e2708d69785/scratchpad/g3v_cell_row.json",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -5498,18 +5498,18 @@
         },
         "tests":{
           "img:enc":{
-            "ms":11622.582
+            "ms":11616.031999999999
           },
           "img:pp":{
-            "tok_s":275.22191004005566
+            "tok_s":275.36694130722037
           },
           "img:tg":{
-            "tok_s":26.170111884925401,
+            "tok_s":26.042823593572631,
             "text":"The picture shows two tabby cats lounging on a pink cushion with television remotes nearby."
           }
         },
         "workload":"image-chat",
-        "sha":"2a1f4674c",
+        "sha":"8b9825490",
         "version":"0.6.4",
         "dasllama_version":6,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
