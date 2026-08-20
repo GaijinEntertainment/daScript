@@ -361,6 +361,11 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_exchange_client.das` — the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).
+- `tests/` — the control page itself, under real Playwright (Node + chromium): badge states,
+  models panel, streams/history, chat wire + SSE rendering, config editor, exchange section,
+  the confirm-gated controls. Model-free — the page runs against JSON/SSE fixtures captured
+  from a real server (`tests/fixtures/README.md` is the regeneration rail). Run with
+  `npm ci && npx playwright test` in `tests/`; CI: `.github/workflows/dasllama-server-e2e.yml`.
 
 ```sh
 bin/daslang -jit dastest/dastest.das -- --test utils/dasllama-server/test_openai_server.das

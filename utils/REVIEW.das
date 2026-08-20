@@ -72,7 +72,7 @@ def private walk_files(root : string; var out : array<string>) {
         return if (!st.is_valid)
         if (st.is_dir) {
             // build/output trash present on a working tree but never committed
-            return if (name == "node_modules" || name == "out" || name == "__pycache__" || name == "_build" || name == ".git")
+            return if (name == "node_modules" || name == "out" || name == "__pycache__" || name == "_build" || name == ".git" || name == "playwright-report" || name == "test-results")
             walk_files(p, out)
         } else {
             out |> push(to_generic_path(p))

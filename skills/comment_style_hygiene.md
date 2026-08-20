@@ -49,7 +49,9 @@ count those against the cap. das lint STYLE014 enforces the physical line count 
 the reviewer's. The cap covers per-symbol and in-body comments; the file header — the
 block before the first SYMBOL declaration, which is STYLE014's boundary — is governed by
 the map rule below. Prologue lines (`options`, `module`, `require`, imports) are not
-declarations; the header sits after them. Over the cap, a comment stands only when its content alone shows why — an
+declarations; the header sits after them. In a file with no symbol declarations at all
+(YAML, TOML, JSON-with-comments), the leading comment block is the header and everything
+after the first data key is body. Over the cap, a comment stands only when its content alone shows why — an
 injectivity argument, a wire-format contract, a miscompile it prevents; the test is
 that a cold reader never asks "why is this comment so long?". Anything else over the
 cap gets interrogated: does the detail belong at the use site, in the file-header map
@@ -76,8 +78,9 @@ one-line WHY, write a plain comment. The bar for any comment on a private symbol
 maintainer reading the symbol alone would be surprised without it.
 
 **The body of a private function caps comments at ONE line** — a `def private`, a C++
-static or anonymous-namespace helper, a non-exported JS function (das: STYLE015, same
-gating as STYLE014). A second line stands only when its content alone shows why — the
+static or anonymous-namespace helper, a NAMED non-exported JS function (das: STYLE015,
+same gating as STYLE014). An anonymous body handed to a framework (a test callback, a
+route handler) takes the ordinary 1–2-preferred / 3-cap instead. A second line stands only when its content alone shows why — the
 same bar as *Short or absent* above; three or more never. Body-only: a comment
 *attached to* a private symbol takes the ordinary cap plus the bar in
 *Private symbols don't get public-style docs* above.
