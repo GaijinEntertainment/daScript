@@ -1194,11 +1194,8 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large,
-            // this spec owns the carrier's provenance; the text-LLM row for the same file in
-            // [[model_specs]] is the profile facet only
-            prov = ProvEntry(name = "gemma-4-E2B-it-Q8_0.gguf", root = "llm",
-                url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
-                bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a"),
+            // the carrier's provenance lives on its official [[model_specs]] row (the provenance
+            // view forbids duplicate names); this spec keeps the audio-chat mmproj companion
             companions <- [ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
                 url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-BF16.gguf",
                 bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")]),
