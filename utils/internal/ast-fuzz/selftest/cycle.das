@@ -4,6 +4,6 @@ require cycle_breaker
 
 [export]
 def main {
-    var x = 1 // nolint:LINT003
+    var x = 1
     print("{x + x}\n")
 }

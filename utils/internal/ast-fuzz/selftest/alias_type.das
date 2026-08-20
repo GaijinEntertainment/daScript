@@ -1,5 +1,5 @@
 options gen2
-// lint-skip-file: alias_type_breaker corrupts the AST and verify_module reports 50503 by design
+// lint-skip-file: alias_type_breaker verifies a deliberately aliased throwaway expression - verify_expression reports 50503 by design
 
 require alias_type_breaker
 
