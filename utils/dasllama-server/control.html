@@ -2477,6 +2477,27 @@ function rosterRowFor(path) {
     return path ? roster.findIndex(r => r.path === path) : -1;
 }
 
+// a saved tower wire is one restart from live — offer that restart right in the note
+// instead of leaving the user to find the button in § 09
+function wiredNote(text) {
+    const note = $("cat-note");
+    note.textContent = text + " ";
+    const b = miniButton("restart now", async () => {
+        b.disabled = true;
+        try {
+            await fetch("/restart", { method: "POST" });
+            note.textContent = "restarting — the page reloads when it is back";
+            restartingSince = performance.now();
+            setBadge("warn", "restarting");
+            waitForRestart();
+        } catch (_e) {
+            note.textContent = "restart request failed";
+            b.disabled = false;
+        }
+    });
+    note.append(b);
+}
+
 // the vision-tower control for a downloaded entry: download, then enable, then wired
 function visionControl(e, dl) {
     if (!e.vision_file) return null;
@@ -2498,7 +2519,12 @@ function visionControl(e, dl) {
         const b = miniButton("enable vision", async () => {
             roster[i].image_mmproj = e.vision_path;
             renderRoster();
-            if (await saveConfig()) $("cat-note").textContent = "vision tower wired for " + e.display + " — restart to apply";
+            if (await saveConfig()) {
+                const asr = catState && catState.asr;
+                const asrHint = (asr && !(asr.present && fieldEnabled("asr")))
+                    ? " · dictation (below) can ride the same restart" : "";
+                wiredNote("vision tower wired for " + e.display + asrHint + " —");
+            }
         });
         b.title = "wire the downloaded tower into this model's config";
         return b;
@@ -2542,7 +2568,7 @@ function renderAsrOffer(doc, dl) {
             asrEl.disabled = false;
             asrEl.closest(".field").classList.remove("off");
             asrEl.value = asr.path;
-            if (await saveConfig()) $("cat-note").textContent = "dictation wired (parakeet v3) — restart to apply";
+            if (await saveConfig()) wiredNote("dictation wired (parakeet v3) —");
         });
         strip.append(b, label);
         return;

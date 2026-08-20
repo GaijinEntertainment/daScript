@@ -617,7 +617,7 @@ def private consume_pending_(var c : ChatSession) {
 //! whole prompt holding tokens only, no cache memory. Do not eval/respond on it.
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
-    c.enable_thinking = c.tmpl.think_default   // the family's default (gemma-4 E-series: off)
+    c.enable_thinking = c.tmpl.think_default   // the family's default (instruct = the opt-out)
     c.think_vocab = think_vocab_ok(model, c.tmpl)
     c.gate_ok = gate_vocab_ok(model, c.tmpl)
     if (!tool_vocab_ok(model, c.tmpl)) {

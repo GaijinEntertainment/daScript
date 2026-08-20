@@ -3584,6 +3584,10 @@ class OpenAiServer : HvWebServer {
             // the control page ships beside the server sources; libhv sets text/html from the extension
             return resp |> SERVE_FILE(path_join(get_this_module_dir(), "control.html"))
         }
+        GET("/favicon.ico") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            // the tray mark doubles as the tab icon (every page load 404ed here otherwise)
+            return resp |> SERVE_FILE(path_join(get_this_module_dir(), "tray.ico"))
+        }
         GET("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_config_get(resp)
         }

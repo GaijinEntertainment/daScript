@@ -42,10 +42,10 @@ def register_arch_gemma4() {
     d.chat.system.parts <- [chat_special("<|turn>"), chat_text("system\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.user.parts <- [chat_special("<|turn>"), chat_text("user\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.assistant_open.parts <- [chat_special("<|turn>"), chat_text("model\n"), chat_special("<|channel>"), chat_text("thought\n"), chat_special("<channel|>")]
-    // thinking is opt-in for the E-series: the <|think|> gate opens the system turn and the bare
-    // assistant header lets the model emit its own `thought` channel; the reply matcher accepts the
-    // asymmetric bracket pair (opener's trailing \n optional)
-    d.chat.think_default = false
+    // thinking ON by default: the family is thinking-trained - the instruct prefill just strips
+    // the wrapper while the model still answers in thinking prose, burning the reply budget
+    // (observed live, E2B); instruct stays the opt-out. Mechanics: THINKING.md
+    d.chat.think_default = true
     d.chat.think_gate.parts <- [chat_special("<|think|>")]
     d.chat.assistant_open_think.parts <- [chat_special("<|turn>"), chat_text("model\n")]
     // gemma4uv vision: the image soft-token span markers, media-first before the user text

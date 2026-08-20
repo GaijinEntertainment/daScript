@@ -48,7 +48,7 @@ test('a running vision-tower download renders its progress on the row', async ({
     await expect(page.locator('#cat-body button', { hasText: 'download' }).first()).toBeDisabled();
 });
 
-test('a present tower on a served model offers enable-vision, which wires the roster and saves', async ({ page }) => {
+test('a present tower on a served model offers enable-vision, which wires, saves, and offers the restart', async ({ page }) => {
     const { posts } = await openControl(page, {
         config: servingE2B(),
         catalog: withVisionPresent(fx('catalog_idle')),
@@ -56,8 +56,13 @@ test('a present tower on a served model offers enable-vision, which wires the ro
     const row = page.locator('#cat-body tr', { hasText: 'Gemma 4 E2B' });
     await row.locator('button', { hasText: 'enable vision' }).click();
     await expect(page.locator('#cat-note')).toContainText('vision tower wired');
+    await expect(page.locator('#cat-note')).toContainText('dictation (below) can ride the same restart');
     const body = lastJson(posts.filter(p => p.path === '/config'));
     expect(body.models[0].image_mmproj).toBe(E2B_TOWER_PATH);
+    // the note OFFERS the restart — clicking it drains + relaunches without a trip to § 09
+    await page.locator('#cat-note button', { hasText: 'restart now' }).click();
+    await expect(page.locator('#badge')).toHaveText(/restarting/);
+    expect(posts.some(p => p.path === '/restart')).toBe(true);
 });
 
 test('a wired tower renders the vision check chip instead of a button', async ({ page }) => {

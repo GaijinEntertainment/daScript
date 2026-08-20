@@ -234,12 +234,12 @@ def test_split_partial_marker_holdback(t : T?) {
 
 [test]
 def test_split_gemma4(t : T?) {
-    t |> run("gemma4 template declares the asymmetric pair, thinking off by default") @(t : T?) {
+    t |> run("gemma4 template declares the asymmetric pair, thinking on by default") @(t : T?) {
         var ct <- arch_chat("gemma4")
         t |> success(ct.think_mode == ThinkMode.asymmetric, "mode")
         t |> equal(ct.think_open, "<|channel>thought")
         t |> equal(ct.think_close, "<channel|>")
-        t |> success(!ct.think_default, "E-series thinking is opt-in")
+        t |> success(ct.think_default, "thinking-trained family - instruct is the opt-out")
         t |> success(!empty(ct.think_gate.parts), "the <|think|> system gate is declared")
         t |> success(!empty(ct.assistant_open_think.parts), "the bare thinking-ON opener is declared")
         delete ct

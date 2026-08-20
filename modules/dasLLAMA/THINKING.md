@@ -12,8 +12,10 @@ family-blind.
 
 **Prompt side:**
 
-1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss think unless told
-   otherwise; gemma-4 E-series is instruct unless asked. `create_chat_renderer_` seeds the
+1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss/gemma-4 think
+   unless told otherwise (gemma-4 is thinking-trained: the instruct prefill does not stop the
+   model from answering in thinking prose, it just strips the wrapper and burns the reply
+   budget — instruct is the opt-out). `create_chat_renderer_` seeds the
    session's `enable_thinking` from it; the server's `enable_thinking` request field (either
    spelling: top-level or `chat_template_kwargs`) is tri-state — ABSENT leaves the family
    default in force, a present bool overrides.
