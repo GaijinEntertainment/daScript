@@ -46,6 +46,8 @@ def test_tune_cv_pct(t : T?) {
 
 [test]
 def test_tune_noise_env(t : T?) {
+    // one protocol: the paranoid argument is ignored
+    t |> equal(tune_noise_threshold_pct(false), tune_noise_threshold_pct(true))
     // the env half loads at context init; the setters are the in-process override rail
     // (they also arm DAS_TUNE_* for tuner children)
     tune_set_noise_cv(3.5)

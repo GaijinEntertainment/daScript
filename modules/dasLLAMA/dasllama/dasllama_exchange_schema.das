@@ -635,7 +635,13 @@ def private validate_race(doc : JsonValue const?; var errors : array<string>) {
         if (!empty(fb) && !ident_ok(fb)) {
             err(errors, "{fp}.fallback", "not an identifier")
         }
+        // the winner the validation re-race demoted (its seat went back to the fallback)
+        let dm = chk_str(fam, "demoted", false, MAX_SHORT, fp, errors)
+        if (!empty(dm) && !ident_ok(dm)) {
+            err(errors, "{fp}.demoted", "not an identifier")
+        }
         chk_num(fam, "floor_pct", false, 0.0lf, 1000000.0lf, fp, errors)
+        chk_num(fam, "margin_pct", false, -1000000.0lf, 1000000.0lf, fp, errors)
         let rows = jget(fam, "rows")
         if (rows == null) {
             continue

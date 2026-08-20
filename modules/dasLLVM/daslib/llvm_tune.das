@@ -687,15 +687,15 @@ def tune_validate_verdict(rows : array<TuneValidateRow>) : string {
 var private g_noise_thr = -1.0lf
 var private g_noise_ovr = -1
 
-    //! The probe-cv ceiling (percent) above which a tuner must refuse to race: winners picked
-    //! in louder noise are noise. `DAS_TUNE_NOISE_CV` overrides (calibration; garbage ignored),
-    //! else 2% normal / 1% paranoid — confirmed empirically on the quiet boxes during rollout.
-def tune_noise_threshold_pct(paranoid : bool) : double {
+    //! The probe-cv note threshold (percent): above it a tuner stamps the mint `noise: noisy`
+    //! and races on margins; refusal is the harness's hard ceiling, far above. `DAS_TUNE_NOISE_CV`
+    //! overrides (calibration; garbage ignored), else 2%; `paranoid` is ignored.
+def tune_noise_threshold_pct(_paranoid : bool) : double {
     if (g_noise_thr < 0.0lf) {
         let v = g_env_tune.tune_noise_cv
         g_noise_thr = v > 0.0f ? double(v) : 0.0lf
     }
-    return g_noise_thr > 0.0lf ? g_noise_thr : (paranoid ? 1.0lf : 2.0lf)
+    return g_noise_thr > 0.0lf ? g_noise_thr : 2.0lf
 }
 
     //! Recalibrate the noise gate in-process (the env loads once at context init, so a
@@ -712,7 +712,7 @@ def tune_noise_threshold_overridden() : bool {
     return g_noise_thr > 0.0lf
 }
 
-    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to tune through a failing noise gate anyway.
+    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to mint through the busy-box refusal anyway.
     //! The tuner that honors it must stamp the sidecar `noise: overridden` — the escape leaves
     //! a mark, so a later regression hunt can see the mint was taken on a loud box.
 def tune_noise_override() : bool {

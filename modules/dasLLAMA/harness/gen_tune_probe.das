@@ -47,16 +47,93 @@ require daslib/json_boost   // JV over tuples — the per-variant race rows
 require daslib/fio   // fread/fopen — the probe's transcript capture
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
-require tuner_cli              // --tune-paranoid, shared with tune_kernels
 require tuner_noise            // the noise gate, shared with tune_kernels
 require math
 require strings
 require dasllama/dasllama_env
 
-// This half is a flat best-of-N; paranoid triples the round count. The confirm pass is never
-// cut: it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
-let ROUNDS_FULL = 6
-var ROUNDS = ROUNDS_FULL
+// This half is best-of-N per family, screened: every perm races SCREEN_ROUNDS, then only the
+// perms within GEN_KEEP of the leader's best tile time continue. The confirm pass is never cut:
+// it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
+let SCREEN_ROUNDS = 2
+let ROUNDS = 8
+let GEN_KEEP = 1.20lf
+let GEN_MARGIN_PCT = 3.0lf   // a new crown must beat the incumbent's best by this (or the probe floor, if higher)
+
+// the sticky margin as a factor: 3% or the highest probe cv seen so far - a noisier run
+// demands a wider win to move a seat
+def private gen_margin() : double {
+    return 1.0lf + max(GEN_MARGIN_PCT, noise_floor_pct()) / 100.0lf
+}
+
+require tuner_cli              // the shared tuner CLI
+
+// the screen verdict for one family: after SCREEN_ROUNDS, keep[i] = perm i's best tile time is
+// within GEN_KEEP of the family leader (best[] is min-over-rounds so far)
+def private gen_screen(r : int; best : array<double>; var keep : array<bool>) {
+    return if (r != SCREEN_ROUNDS)
+    var leader = 1.0e30lf
+    for (b in best) {
+        leader = min(leader, b)
+    }
+    for (b, k in best, keep) {
+        k = b <= leader * GEN_KEEP
+    }
+}
+
+// one round's progress step for a screened family race: the phase and how many perms still run
+def private gen_round_step(r : int; keep : array<bool>) {
+    var live = 0
+    for (k in keep) {
+        live += k ? 1 : 0
+    }
+    tune_progress_kernel_step(r + 1, r < SCREEN_ROUNDS ? "screening" : "best-of", live)
+}
+
+// the previous sidecar's seat for `entry`, read raw (a stale sidecar still names the seats) —
+// a re-mint's crown only moves when it beats the incumbent by gen_margin()
+var private g_incumbent : table<string; string>
+var private g_incumbent_loaded = false
+
+def private gen_incumbent(entry : string) : string {
+    if (!g_incumbent_loaded) {
+        g_incumbent_loaded = true
+        let text = fread(tune_manifest_path())
+        if (!empty(text)) {
+            var jerr = ""
+            var doc = read_json(text, jerr)
+            if (doc != null && doc is _object) {
+                var ks = doc?["kernels"]
+                if (ks != null && ks is _object) {
+                    for (k, v in keys(ks as _object), values(ks as _object)) {
+                        if (v != null && v is _string) {
+                            g_incumbent[k] = clone_string(v as _string)
+                        }
+                    }
+                }
+            }
+            delete_json(doc)
+        }
+    }
+    return g_incumbent?[entry] ?? ""
+}
+
+// the sticky seat: winner index unless the incumbent (by name) is raced, passed, and the winner
+// does not beat its best by the margin. `times` is the metric that DECIDED the seat - the tile
+// bench for a cross-tile move, the hot decode bench between rows sharing the winner's tile key
+// (their tile times are near-identical by construction, so tile times cannot compare them)
+def private gen_sticky(entry : string; names : array<string>; times : array<double>; winner : int) : int {
+    let inc = gen_incumbent(entry)
+    return winner if (empty(inc) || inc == names[winner])
+    let m = gen_margin()
+    for (i, nm in count(), names) {
+        if (nm == inc && times[i] < 1.0e29lf && times[winner] * m > times[i]) {
+            tune_detail("{entry}: {names[winner]} does not beat the incumbent {inc} by x{m:0.3f} - the seat stays\n")
+            return i
+        }
+    }
+    return winner
+}
 
 struct Fixture {
     n, d, ntok, nb : int64
@@ -840,6 +917,18 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         }
         delete sq; delete ss; delete hq; delete hs
     }
+    // the sticky seat, by the recorded times: the incumbent keeps the crown inside the margin
+    if (!empty(best)) {
+        let inc = gen_incumbent("q51q8_tile_gen")
+        if (!empty(inc) && inc != best && key_exists(rows_out, inc)) {
+            var irow = rows_out[inc]
+            let it : double = irow?["streamed_us"] ?? -1.0lf
+            if (it > 0.0lf && double(bestDt) * gen_margin() > it) {
+                tune_detail("q51q8_tile_gen: {best} does not beat the incumbent {inc} by x{gen_margin():0.3f} - the seat stays\n")
+                best = inc
+            }
+        }
+    }
     delete sfx
     delete hfx
     delete tvs
@@ -872,7 +961,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -951,9 +1040,16 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         hbest[i] = 1.0e30lf
     }
     let HOT_REPS = 16
-    for (r in range(ROUNDS)) {   // interleaved best-of within the family
-        tune_progress_kernel_step(r + 1, "best-of", length(tvs))
+    var keep : array<bool>
+    keep |> resize(nv)
+    for (i in range(nv)) {
+        keep[i] = true
+    }
+    for (r in range(ROUNDS)) {   // interleaved best-of within the family, screened (twin: the q8q8 loop in tune_mode_run)
+        gen_screen(r, best, keep)
+        gen_round_step(r, keep)
         for (vi in range(nv)) {
+            continue if (!keep[vi])
             let mi = kq_mr_index(kmrs, vmr[vi])
             let t0 = ref_time_ticks()
             run_kq_tile(tvs[vi]._1, kbfx, bbuf[mi].q, bbuf[mi].s, vmr[vi], ky)
@@ -989,7 +1085,11 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         rows_out[tvs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
         tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
+    var tnames <- [for (t in tvs); t._0]
+    winner = gen_sticky(fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen", tnames, best, winner)
+    delete tnames
     let wname = tvs[winner]._0
+    delete keep
     delete ky
     delete kyg
     delete kyh
@@ -1542,9 +1642,16 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     // the hot shape runs HOT_REPS back-to-back per timing sample: 1MB of weights stays
     // cache-resident, so the sample measures compute, not the first-touch stream
     let HOT_REPS = 16
-    for (r in range(ROUNDS)) {   // interleaved best-of: variant order inside each round
-        tune_progress_kernel_step(r + 1, "best-of", length(vs))
+    var keep : array<bool>
+    keep |> resize(nv)
+    for (i in range(nv)) {
+        keep[i] = true
+    }
+    for (r in range(ROUNDS)) {   // interleaved best-of, screened (twin: the kq family loop)
+        gen_screen(r, best, keep)
+        gen_round_step(r, keep)
         for (vi in range(nv)) {
+            continue if (!keep[vi])
             let t0 = ref_time_ticks()
             run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
             let us = double(get_time_usec(t0))
@@ -1594,6 +1701,14 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     if (merged != winner) {
         tune_detail("tile winner {vs[winner]._0} + hot decode winner within '{wkey}' -> {vs[merged]._0}\n")
     }
+    // stickiness on the metric that decided each half: an incumbent in the winner's own tile
+    // family raced the HOT bench for the seat, a cross-tile incumbent raced the tile bench
+    var vnames <- [for (v in vs); v._0]
+    let q8inc = gen_incumbent("q8q8_tile_gen")
+    let incSameTile = !empty(q8inc) && tile_key(q8inc) == wkey
+    merged = gen_sticky("q8q8_tile_gen", vnames, incSameTile ? hbest : best, merged)
+    delete vnames
+    delete keep
     // the kq families tune separately — one manifest entry per format, tile-best wins (the
     // gemv is nrsplit-independent, so same-mr rows share its plane and kernel shape). No
     // child-process confirm gate here: the kq stamp only moves the kq planes' interleave,
@@ -1707,8 +1822,7 @@ def main : int {
         return 1
     }
     if (tuner_paranoid_requested()) {
-        ROUNDS = ROUNDS_FULL * 3
-        noise_set_paranoid(true)
+        tune_detail("gen tuner: --tune-paranoid is retired - one screened best-of protocol; running it\n")
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips

@@ -56,7 +56,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
-| `--paranoid` | During `release`, tune with the paranoid budget: 3x the rounds and a 1% noise-gate ceiling. There is no fast race mode — a cheap race measures nothing |
+| `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
 | `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints — an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
 
 ## Global modules

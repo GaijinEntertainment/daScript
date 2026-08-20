@@ -194,7 +194,7 @@ def test_parse_args(t : T?) {   // nolint:STYLE038 — a flat case table: one ar
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.command_arg |> is_none)
     }
-    t |> run("release with paranoid tuning") @(t : T?) {
+    t |> run("release accepts --paranoid (compat, no budget change)") @(t : T?) {
         var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--paranoid"])
         t |> success(r |> is_ok, "parse succeeds")
         let parsed <- r |> move_unwrap
@@ -1842,6 +1842,24 @@ def test_cmd_release_pure_daslang(t : T?) {
         tt |> success(find(manifest, "config.toml") < 0,
             "user-owned starter config is omitted from release manifest")
 
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("paranoid with quick warns and releases (no refusal)") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_pq"
+        let out_dir = "{get_das_root()}/_test_release_pq_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"smokepq\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+        let rc = cmd_release(tmp_root, out_dir, true, true)
+        tt |> equal(0, rc, "the pair is a warning, not a refusal")
+        tt |> success(fexist(bundle_exe_path(out_dir, "smokepq")), "exe shipped")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }

@@ -325,6 +325,34 @@ def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-ar
         }
         %%
         t |> success(!validate_sidecar(write_json(badsha), errors), "non-identifier engine_sha")
+        errors |> clear()
+        // the race row's demotion fields: an identifier and a number, or the row is refused
+        var good_race = %json~
+        {
+            "kernels" : { "dot" : "vec8_u2" },
+            "provenance" : { "box" : "a|b|c|d|e", "engine_sha" : "x" },
+            "race" : { "dot" : { "winner" : "vec8_u2", "fallback" : "vec8_u2", "margin_pct" : 0.0, "demoted" : "vec16", "rows" : { "vec16" : { "med_us" : 100 } } } }
+        }
+        %%
+        t |> success(validate_sidecar(write_json(good_race), errors), "a demoted race row validates: {join(errors, "; ")}")
+        errors |> clear()
+        var bad_demoted = %json~
+        {
+            "kernels" : { "dot" : "vec8_u2" },
+            "provenance" : { "box" : "a|b|c|d|e", "engine_sha" : "x" },
+            "race" : { "dot" : { "winner" : "vec8_u2", "demoted" : "<b>x</b>", "rows" : { "vec16" : { "med_us" : 100 } } } }
+        }
+        %%
+        t |> success(!validate_sidecar(write_json(bad_demoted), errors), "non-identifier demoted")
+        errors |> clear()
+        var bad_margin = %json~
+        {
+            "kernels" : { "dot" : "vec8_u2" },
+            "provenance" : { "box" : "a|b|c|d|e", "engine_sha" : "x" },
+            "race" : { "dot" : { "winner" : "vec8_u2", "margin_pct" : "lots", "rows" : { "vec16" : { "med_us" : 100 } } } }
+        }
+        %%
+        t |> success(!validate_sidecar(write_json(bad_margin), errors), "non-numeric margin_pct")
         delete errors
     }
 }

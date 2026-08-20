@@ -51,7 +51,7 @@ sidecar beside it — which is also the exe's provenance: the tune gate checks t
 because `tune_status()` is empty by design in a standalone exe (the winners are compiled in, so the
 policy rail never runs). A missing exe — or one older than ANY dasLLAMA source it bakes — is a hard
 stop with the build line printed; the rig never rebuilds silently, because that would put minutes of
-hidden work inside a measurement run. Measured: `--paranoid` 886 s from cold, `--quick` 85 s.
+hidden work inside a measurement run. Measured (old paranoid protocol): 886 s from cold, `--quick` 85 s.
 
 **Do NOT set `DAS_TUNE_MANIFEST` for these rigs.** The exe carries its own winners, and the rig
 actively clears an inherited value. Pointing it at a shared box manifest re-opens exactly what the
@@ -208,14 +208,15 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --tok -m <model.g
 
 Every measurement above runs under a sidecar GENERATION, and the rails enforce it:
 
-- **Session start / external-box profiling:** mint PARANOID as part of building the exe —
-  `daspkg release ... --paranoid`. Release ALWAYS mints; the noise gates refuse a loud box
-  (nonzero, nothing written), validation re-races the winners, the previous sidecar snapshots
-  to `.bak` with a printed DIFF, and every mint archives to `~/.tune-history/<box>/`.
+- **Session start / external-box profiling:** mint as part of building the exe —
+  `daspkg release ...`. Release ALWAYS mints; the noise probes stamp the box's cv (only a
+  busy box refuses), validation re-races every changed kernel against its fallback and
+  demotes a winner that lost its margin, the previous sidecar snapshots to `.bak` with a
+  printed DIFF, and every mint archives to `~/.tune-history/<box>/`.
 - **Iteration rebuilds within a session:** `daspkg release ... --quick` — the ONLY path that
   inherits, and only a complete fresh sidecar (incomplete or stale still mints). Forgetting
   `--quick` costs one normal re-mint, never correctness.
-- **Collect and oracle are different scenarios.** Publishing (rig 3) wants a fresh paranoid
+- **Collect and oracle are different scenarios.** Publishing (rig 3) wants a fresh
   generation; the oracle (rig 2) verifies against the STORED rows' generation — rows carry
   `tune_sha`, a mismatch is `INCOMPARABLE` by default (`--oracle-allow-crossgen` forces,
   legacy rows warn), and each generation's full doc sits beside the store as

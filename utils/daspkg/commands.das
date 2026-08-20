@@ -66,7 +66,7 @@ struct DaspkgArgs {
     out : string = "."
 
     @clarg_name = "paranoid"
-    @clarg_doc = "During `release`, tune with the paranoid budget (3x rounds, 1% noise gate)"
+    @clarg_doc = "Accepted for compatibility: the tuner runs one margin-decided protocol; this flag no longer changes the budget"
     paranoid : bool
 
     @clarg_name = "quick"
@@ -2104,8 +2104,7 @@ def private release_note_ship_manifest(manifest : string; var ship_manifest : st
 def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
-        to_log(LOG_ERROR, "release: --paranoid and --quick contradict — pick one\n")
-        return 1
+        to_log(LOG_WARNING, "release: --paranoid no longer changes the tuner's budget; --quick wins\n")
     }
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
