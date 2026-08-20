@@ -5,11 +5,12 @@
 
 **`tests/`, `benchmarks/`, and `performance/` carry their own checklists, and they govern by
 KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
-module's `tests/REVIEW.md` — and every `dasllama/` change opens `tests/REVIEW.md` for the test
-obligation it names; a timing rig — a script whose output is a measured wall or rate — and any
+module's `tests/REVIEW.md`; a timing rig — a script whose output is a measured wall or rate — and any
 kernel A/B lab, wherever the diff puts them, answer to `benchmarks/REVIEW.md`; a change to what
 enters `performance/records/` or its manifests, and an exchange or provenance-manifest change,
 answers to `performance/REVIEW.md`.
+
+**Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
 **Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
@@ -95,8 +96,8 @@ ships the same before/after rows or a statement that the bytes are unchanged.**
 
 **An override announces itself where it changes the outcome.** An override is anything that
 moves a gate, policy, or threshold off its default — an env knob or its programmatic setter.
-Where one changes what a run measures, mints, or emits, a printed line names it by the env
-spelling; set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
+Where one changes an observable outcome of the run — what it measures, writes, reads, or
+mints — a printed line names it by the env spelling; set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
 effect, without the announce is a defect.
 
 **A self-measured model time entering `performance/records/<box>.json` or `PERF_LEDGER.md` comes

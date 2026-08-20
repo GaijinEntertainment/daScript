@@ -12,6 +12,7 @@ require daslib/toml             // write_toml: POST /config persists the authori
 require dasllama/dasllama_exchange   // the /exchange surface + submit rails
 require llvm/daslib/llvm_tune   // tune_manifest_path — the /exchange apply target
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
+require model_catalog           // the curated list + the /catalog download rail
 require daslib/jobque_boost
 require daslib/rtti             // this_context().last_exception inside ASR worker recovery
 require daslib/strings_boost    // join()
@@ -113,7 +114,7 @@ def private total_queued : int64 {
 // "{other}-asr" stays a 404 instead of silently serving.
 def private slot_index(model_field : string) : int {
     if (empty(model_field)) {
-        return g_default_slot
+        return empty(g_slots) ? -1 : g_default_slot
     }
     for (i in range(length(g_slots))) {
         if (g_slots[i].name == model_field
@@ -348,9 +349,25 @@ var private g_config_surface_json = ""   // main's pre-serialized {config, sourc
 var private g_config_save_path = ""
 var private g_config_model_path = ""
 
+var private g_catalog_dir = ""
+var private g_setup_mode = false
+
+//! Setup mode: no model is loaded; the page serves the catalog/config/recovery surface and
+//! every inference route 404s. Entered when no model is configured, or every configured
+//! path fails its file check.
+def set_setup_mode(on : bool) {
+    g_setup_mode = on
+}
+
+//! Register the resolved models dir (call before run_server) — the /catalog routes serve from it.
+def set_catalog_dir(dir : string) {
+    g_catalog_dir = dir
+}
+
 //! Register the ``/config`` surface (call before run_server): the launcher's pre-serialized
 //! effective-config object, the path ``POST /config`` saves to, and the served model file
 //! (its directory feeds the model picker).
+
 def set_config_surface(surface_json : string; save_path : string; model_path : string) {
     g_config_surface_json = surface_json
     g_config_save_path = save_path
@@ -737,6 +754,32 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     to_log(LOG_INFO, "dasllama-server: bake started ({g_bake_model}, {flavor})\n")
     return resp |> JSON("\{\"ok\":true,\"state\":\"running\",\"model\":{json_str(g_bake_model)},\"flavor\":{json_str(flavor)}}", http_status.ACCEPTED)
+}
+
+def private handle_catalog_download(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    var jerr = ""
+    var js = read_json(string(req.body), jerr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    let want = js?["name"] ?? ""
+    if (empty(want)) {
+        let why = empty(jerr) ? "" : " ({jerr})"
+        return resp |> JSON(error_body("body must name a catalog entry: \{\"name\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    for (e in model_catalog()) {
+        if (e.name == want) {
+            let refusal = catalog_download_start(g_catalog_dir, e)
+            if (!empty(refusal)) {
+                return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
+            }
+            to_log(LOG_INFO, "dasllama-server: catalog download started: {e.name} ({e.bytes >> 20l} MB into {g_catalog_dir})\n")
+            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(e.name)},\"bytes\":{e.bytes}}", http_status.ACCEPTED)
+        }
+    }
+    return resp |> JSON(error_body("unknown catalog entry '{want}'", "invalid_request_error"), http_status.NOT_FOUND)
 }
 
 def private handle_bake_get(var resp : HttpResponse?) : http_status {
@@ -1506,7 +1549,7 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     let want_model = js?["model"] ?? ""
     let mi = slot_index(want_model)
     if (mi < 0) {
-        return resp_error(resp, http_status.NOT_FOUND, "model '{want_model}' not found — GET /v1/models lists the served ids")
+        return resp_error(resp, http_status.NOT_FOUND, "model '{want_model}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}")
     }
     g_cur = mi
     install_slot_marks(mi)   // this handler evals IN-handler — the embed forward needs ITS marks
@@ -1571,7 +1614,7 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
     let mi = slot_index(want)
     if (mi < 0) {
         return resp |> JSON(
-            error_body("model '{want}' not found — GET /v1/models lists the served ids", "model_not_found"),
+            error_body("model '{want}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}", "model_not_found"),
             http_status.NOT_FOUND)
     }
     if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_vision_wires)) {
@@ -1599,7 +1642,7 @@ def private resolve_stream_slot(srv : WebSocketServer; var writer : HttpResponse
     let mi = slot_index(want)
     if (mi < 0) {
         respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
-                error_body("model '{want}' not found — GET /v1/models lists the served ids", "model_not_found"))
+                error_body("model '{want}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}", "model_not_found"))
         return false
     }
     g_cur = mi
@@ -2358,6 +2401,12 @@ struct private OaiStatsResponse {
 }
 
 def private handle_stats(var resp : HttpResponse?) : http_status {
+    if (empty(g_slots)) {
+        // setup mode: the minimum shape control.html's apply() reads (it gates on `setup`)
+        return resp |> JSON(
+            "\{\"setup\":true,\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"vision\":false,\"models\":[]}",
+            http_status.OK)
+    }
     // budget only when the device already EXISTS (tier.device is "" until first upload creates
     // it) — the budget hook device-inits on first call, and `supported` can read true while the
     // tier is merely armed, so it must not gate this
@@ -2541,7 +2590,7 @@ let private CONFIG_KEY_KINDS <- {
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
-    "mtp" => "b", "lcpp_bin" => "s", "image_mmproj" => "s", "models" => "a",
+    "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
 }
 
@@ -2704,24 +2753,34 @@ def private kind_name(kind : string) : string {
 
 // GET /config: the launcher-registered surface (effective values + per-key provenance) plus
 // live status — model files beside the served one, the active rail, and the GPU tier badge.
+// ggufs only: a .dlim is a baked ARTIFACT of a gguf (the bake panel owns them) - one in
+// the model picker sets a model path that cannot be served
+def private push_picker_ggufs(scan_dir : string; var entries : array<JsonValue?>&) {
+    if (empty(scan_dir)) {
+        return
+    }
+    dir(scan_dir) $(fname) {
+        if (ends_with(to_lower(fname), ".gguf")) {
+            let full = path_join(scan_dir, fname)
+            let st = stat(full)
+            entries |> push(JV((name = fname, size = int64(st.size), kind = "gguf", path = full)))
+        }
+    }
+}
+
 def private handle_config_get(var resp : HttpResponse?) : http_status {
     var entries : array<JsonValue?>
     let mdir = dir_name(g_config_model_path)
-    if (!empty(mdir)) {
-        dir(mdir) $(fname) {
-            let lower = to_lower(fname)
-            if (ends_with(lower, ".gguf") || ends_with(lower, ".dlim")) {
-                let st = stat(path_join(mdir, fname))
-                entries |> push(JV((name = fname, size = int64(st.size),
-                    kind = ends_with(lower, ".dlim") ? "dlim" : "gguf")))
-            }
-        }
+    push_picker_ggufs(mdir, entries)
+    if (g_catalog_dir != mdir) {
+        // catalog downloads stay reachable from the picker when the served model lives elsewhere
+        push_picker_ggufs(g_catalog_dir, entries)
     }
     let tier = gpu_tier_status()
     var extras <- {
         "model_files" => JV(entries),
         "active_model" => JV(base_name(g_config_model_path)),
-        "dlim_rail" => JV(g_slots[g_default_slot].model.image_map != null),
+        "dlim_rail" => JV(!empty(g_slots) && g_slots[g_default_slot].model.image_map != null),
         "metal" => JV("{get_metal_mode()}"),
         "gpu" => JV((
             backend = tier.backend, supported = tier.supported, reason = tier.reason,
@@ -3498,6 +3557,13 @@ class OpenAiServer : HvWebServer {
             if (!is_loopback_req(req)) return deny_operator(resp)
             return handle_bake_start(req, resp)
         }
+        GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> JSON(catalog_state_json(g_catalog_dir))
+        }
+        POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            if (!is_loopback_req(req)) return deny_operator(resp)
+            return handle_catalog_download(req, resp)
+        }
         GET("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_bake_get(resp)
         }
@@ -3560,6 +3626,42 @@ var private g_mtp_spec_changed = false
 //! slot, < 0 = unbounded). ``page_rows`` = 0 restores flat preallocated sessions (each the full
 //! ``--ctx`` slab). ``kv_dtype`` picks the KV-cache codec for every stream (pool-wide when paged;
 //! see ``KVDtype`` — ``tq4`` needs a power-of-two head_size).
+// created here, torn down together by shutdown_server's channel_remove block
+def private init_worker_rails {
+    g_bench_events = unsafe(channel_create())
+    g_bench_state = "idle"
+    g_bench_result_json = ""
+    g_bake_events = unsafe(channel_create())
+    g_bake_state = "idle"
+    g_bake_result_json = ""
+    catalog_events_init()
+    start_asr_worker_threads()
+    start_vision_worker()
+}
+
+// one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
+def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : bool) {
+    for (s in g_slots) {
+        let s_streams = s.opts.streams >= 0l ? s.opts.streams : max_streams
+        let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : chunk_tokens
+        let s_pages = s.opts.page_rows != -2l ? s.opts.page_rows : page_rows
+        var pfx = s.opts.prefix != -2l ? s.opts.prefix : prefix_groups
+        if (s_pages > 0l && pfx == 0l) {   // auto: retain up to one full context per stream slot
+            pfx = s_streams * ((s.model.config.seq_len + s_pages - 1l) / s_pages)
+        }
+        if (pfx < 0l) {
+            pfx = 0l   // explicit unbounded
+        }
+        let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : kv_dtype
+        var spec = s.opts.mtp >= 0 ? s.opts.mtp != 0 : mtp
+        if (spec && s.model.config.n_layer_nextn <= 0l) {
+            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
+            spec = false
+        }
+        s.sched <- create_scheduler(s.model, s_streams, max_queue, s_chunk, s_pages, pfx, s_kv, spec)
+    }
+}
+
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : bool = false) : bool {
@@ -3581,45 +3683,24 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_asr_events = unsafe(channel_create())
     g_vision_jobs = unsafe(channel_create())
     g_vision_events = unsafe(channel_create())
-    g_bench_events = unsafe(channel_create())
-    g_bench_state = "idle"
-    g_bench_result_json = ""
-    g_bake_events = unsafe(channel_create())
-    g_bake_state = "idle"
-    g_bake_result_json = ""
-    start_asr_worker_threads()
-    start_vision_worker()
-    if (empty(g_slots)) {
+    init_worker_rails()
+    if (empty(g_slots) && !g_setup_mode) {
         to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first)\n")
         return false
     }
-    // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
-    for (s in g_slots) {
-        let s_streams = s.opts.streams >= 0l ? s.opts.streams : max_streams
-        let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : chunk_tokens
-        let s_pages = s.opts.page_rows != -2l ? s.opts.page_rows : page_rows
-        var pfx = s.opts.prefix != -2l ? s.opts.prefix : prefix_groups
-        if (s_pages > 0l && pfx == 0l) {   // auto: retain up to one full context per stream slot
-            pfx = s_streams * ((s.model.config.seq_len + s_pages - 1l) / s_pages)
-        }
-        if (pfx < 0l) {
-            pfx = 0l   // explicit unbounded
-        }
-        let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : kv_dtype
-        var spec = s.opts.mtp >= 0 ? s.opts.mtp != 0 : mtp
-        if (spec && s.model.config.n_layer_nextn <= 0l) {
-            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
-            spec = false
-        }
-        s.sched <- create_scheduler(s.model, s_streams, max_queue, s_chunk, s_pages, pfx, s_kv, spec)
+    if (empty(g_slots)) {
+        to_log(LOG_INFO, "dasllama-server: setup mode - serving the catalog/config page only\n")
     }
+    init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype, mtp)
     g_active = g_default_slot
     g_cur = g_default_slot
     g_prev_mtp_spec = get_mtp_spec()
     g_mtp_spec_changed = true
     // engine gate: prefills maintain the draft head's KV (chunked included); follows the stepped
     // slot on switch (update_server); restored at exit
-    set_mtp_spec(g_slots[g_active].sched.mtp)
+    if (!empty(g_slots)) {
+        set_mtp_spec(g_slots[g_active].sched.mtp)
+    }
     // the single shared KV mirror + chunked multi-stream prefill don't mix: a second stream's
     // resident prefill would strand the first's device-only KV. The batch-decode override (which
     // resyncs host<->mirror per step) stays on; per-slot mirrors re-enable device prefill here.
@@ -3665,6 +3746,7 @@ def update_server() : bool {
     drain_vision_events(g_server.server)
     drain_bench_events()
     drain_bake_events()
+    catalog_download_tick()
     reap_disconnected(g_server.server)
     // serialized multi-model stepping: ONE scheduler step per tick, slots with work interleave
     // round-robin. Every step runs under ITS model's routing marks; the GPU tier follows a
@@ -3757,6 +3839,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_vision_events = null
     g_bench_events = null
     g_bake_events = null
+    catalog_events_shutdown()
     unsafe {
         if (asr_jobs != null) {
             asr_jobs |> channel_remove

@@ -25,6 +25,7 @@ const GET_MAP = {
     '/exchange/matches': 'matches',
     '/bench': 'bench',
     '/v1/images': 'images',
+    '/catalog': 'catalog',
 };
 
 async function mockServer(page, opts = {}) {
@@ -38,6 +39,7 @@ async function mockServer(page, opts = {}) {
         matches: opts.matches ?? { reachable: false },
         bench: opts.bench ?? fx('bench_idle'),
         images: opts.images ?? fx('images'),
+        catalog: opts.catalog ?? fx('catalog_idle'),
         // POST pathname -> {status, json}; the chat route instead streams `sse`
         // back verbatim as text/event-stream.
         responses: opts.responses ?? {},

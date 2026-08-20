@@ -280,7 +280,16 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="swstrip" id="sw-strip" style="display:none"></div>
     </div>
 
-    <div class="sec"><span>§ 03</span><span class="rule"></span><span>streams</span>
+    <div class="sec"><span>§ 03</span><span class="rule"></span><span>model catalog</span></div>
+    <div class="panel">
+        <div class="ctl-note" id="cat-note" style="margin-bottom:8px">curated, sha-pinned downloads — one at a time, resume on retry</div>
+        <table class="ctable" id="cat-table">
+            <thead><tr><th>model</th><th></th><th>size</th><th>ctx</th><th>needs</th><th></th></tr></thead>
+            <tbody id="cat-body"><tr><td colspan="6" class="ctl-note">loading the catalog…</td></tr></tbody>
+        </table>
+    </div>
+
+    <div class="sec"><span>§ 04</span><span class="rule"></span><span>streams</span>
         <span class="spacer"></span>
         <button class="mini" id="b-demo" type="button" title="staged ramp 1→2→4→8 concurrent chats from this page — watch the swimlane fill and tok/s stair-step">run demo load</button>
         <button class="mini" id="b-live" type="button">live</button>
@@ -289,7 +298,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     <div id="cards" class="cards"><div class="ctl-note" id="cards-empty">no active streams — POST a chat completion and watch it flow</div></div>
     <div id="history" class="cards" style="display:none"><div class="ctl-note">nothing finished yet</div></div>
 
-    <div class="sec"><span>§ 04</span><span class="rule"></span><span>prefix cache</span></div>
+    <div class="sec"><span>§ 05</span><span class="rule"></span><span>prefix cache</span></div>
     <div class="panel">
         <table class="ctable" id="ctable">
             <thead><tr><th>cached conversation</th><th>tok</th><th>pages</th><th>hits</th><th>age</th><th>idle</th></tr></thead>
@@ -297,7 +306,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </table>
     </div>
 
-    <div class="sec"><span>§ 05</span><span class="rule"></span><span>chat</span></div>
+    <div class="sec"><span>§ 06</span><span class="rule"></span><span>chat</span></div>
     <div class="panel">
         <div class="chat-log" id="chat-log"><div class="ctl-note">talk to the served model — the conversation lives in this page only</div></div>
         <div class="img-strip" id="img-strip" style="display:none"></div>
@@ -315,7 +324,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     </div>
 
     <div class="asr-only" id="asr-section" style="display:none">
-        <div class="sec"><span>§ 06</span><span class="rule"></span><span>asr studio</span></div>
+        <div class="sec"><span>§ 07</span><span class="rule"></span><span>asr studio</span></div>
         <div class="panel">
             <div class="controls" style="margin-bottom:10px">
                 <button id="a-rec" type="button">● record</button>
@@ -339,10 +348,10 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec"><span>§ 07</span><span class="rule"></span><span>config</span></div>
+    <div class="sec"><span>§ 08</span><span class="rule"></span><span>config</span></div>
     <div class="panel cfg" id="cfg">…</div>
 
-    <div class="sec"><span>§ 08</span><span class="rule"></span><span>config editor</span></div>
+    <div class="sec"><span>§ 09</span><span class="rule"></span><span>config editor</span></div>
     <div class="panel">
         <div class="gpu-line" id="gpu-line" style="display:none"></div>
         <table class="ctable roster" id="roster">
@@ -363,14 +372,14 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="cfg-file" id="cfg-file"></div>
     </div>
 
-    <div class="sec"><span>§ 09</span><span class="rule"></span><span>controls</span></div>
+    <div class="sec"><span>§ 10</span><span class="rule"></span><span>controls</span></div>
     <div class="panel controls">
         <button id="b-gc" type="button">collect garbage</button>
         <button id="b-drain" class="danger" type="button">drain + shutdown</button>
         <span class="ctl-note" id="ctl-note">gc runs at the next lifecycle safe point · shutdown drains accepted work, then exits</span>
     </div>
 
-    <div class="sec"><span>§ 10</span><span class="rule"></span><span>benchmark</span></div>
+    <div class="sec"><span>§ 11</span><span class="rule"></span><span>benchmark</span></div>
     <div class="panel">
         <div class="controls" style="margin-bottom:10px">
             <button id="b-bench" type="button">run llama.cpp A/B</button>
@@ -388,7 +397,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
     </div>
 
-    <div class="sec" id="exchange"><span>§ 11</span><span class="rule"></span><span>sidecar exchange</span></div>
+    <div class="sec" id="exchange"><span>§ 12</span><span class="rule"></span><span>sidecar exchange</span></div>
     <div class="panel">
         <div class="cfg-file" id="ex-current">loading…</div>
         <div class="controls" style="margin:10px 0">
@@ -405,7 +414,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     </div>
 
     <footer class="reveal">
-        <div class="sec"><span>§ 12</span><span class="rule"></span><span>how this works</span></div>
+        <div class="sec"><span>§ 13</span><span class="rule"></span><span>how this works</span></div>
         <p>
             Everything above — the tokenizer, every matmul kernel, the continuous-batching
             scheduler, the paged KV cache, this HTTP server — is written in
@@ -435,6 +444,7 @@ const tps = [], pf = [];           // rolling series
 let last = null, lastT = 0, failures = 0;
 let restartingSince = 0;           // set when THIS page initiated a restart — keeps the badge honest
                                    // through the relaunch blackout (big models load for minutes)
+let setupMode = null;              // tri-state so the first poll always applies the setup gating
 
 function fmt(n) {
     if (n >= 1e9) return (n / 1e9).toFixed(1) + "b";
@@ -451,9 +461,24 @@ function push(arr, v) { arr.push(v); if (arr.length > HIST) arr.shift(); }
 function setBadge(cls, text) { const b = $("badge"); b.className = "badge " + cls; b.textContent = text; }
 
 function apply(s) {
-    $("model").textContent = s.model + " · ctx " + fmt(s.ctx);
+    $("model").textContent = s.setup ? "no model loaded" : s.model + " \u00b7 ctx " + fmt(s.ctx);
     $("uptime").textContent = fmtUptime(s.uptime_s);
-    setBadge(s.draining ? "warn" : "ok", s.draining ? "draining" : "serving");
+    setBadge(s.setup ? "warn" : (s.draining ? "warn" : "ok"),
+             s.setup ? "setup \u2014 pick a model" : (s.draining ? "draining" : "serving"));
+    const nowSetup = !!s.setup;   // absent in serving-mode stats - normalize before the change test
+    if (nowSetup !== setupMode) {
+        setupMode = nowSetup;
+        $("b-send").disabled = setupMode;
+        $("chat-text").placeholder = setupMode
+            ? "no model loaded \u2014 download one from the catalog above"
+            : "message the model \u2014 Enter sends, Shift+Enter for a newline";
+        if (!catFailed) {
+            $("cat-note").textContent = setupMode
+                ? "no model loaded \u2014 download one, then serve it from here (the recommended default is marked)"
+                : "curated, sha-pinned downloads \u2014 one at a time, resume on retry";
+        }
+        loadCatalog();   // serve buttons key on setupMode - re-render rows drawn before it resolved
+    }
     const now = performance.now();
     let rate = 0, pfRate = 0;
     if (last !== null && now > lastT) {
@@ -1533,6 +1558,7 @@ const FIELDS = [
     { k: "image_mmproj", t: "path", wide: true },
     { k: "asr_workers", t: "int" },
     { k: "lcpp_bin", t: "path", wide: true },
+    { k: "models_dir", t: "path", wide: true },
 ];
 let cfgSurface = null;
 let savedSnapshot = "";   // JSON of the last rendered/saved form — restart guards against unsaved edits
@@ -1601,14 +1627,14 @@ function renderForm(surface, status) {
             $("f-gpu_attn").checked = true;
         }
     });
-    // model picker: same-directory gguf/dlim files feed the roster's path inputs
+    // model picker: gguf files beside the served model and in the catalog dir feed the roster
     const dl = $("model-files");
     dl.textContent = "";
     const anchor = String(cfg.model || (roster[0] && roster[0].path) || "");
     const dir = anchor.replace(/[^/\\]*$/, "");
     for (const mf of (status.model_files || [])) {
         const opt = document.createElement("option");
-        opt.value = dir + mf.name;
+        opt.value = mf.path || dir + mf.name;   // catalog-dir entries live outside the served model's dir
         opt.label = mf.kind + " · " + (mf.size / 1e9).toFixed(2) + " GB";
         dl.append(opt);
     }
@@ -2252,9 +2278,126 @@ $("ex-always").addEventListener("change", async () => {
     renderExchange();
 });
 
+// ===== § 03 model catalog =====
+let catPolling = false;
+let catFailed = false;
+
+function fmtGB(b) { return (b / 1e9).toFixed(1) + " GB"; }
+
+function renderCatalog(doc) {
+    const body = $("cat-body");
+    body.textContent = "";
+    const dl = doc.download || { state: "idle" };
+    for (const e of doc.entries) {
+        const tr = document.createElement("tr");
+        const name = document.createElement("td");
+        name.className = "pv";
+        name.textContent = e.display + (e.is_default ? " \u2605" : "");
+        name.title = e.file;
+        const note = document.createElement("td");
+        note.textContent = e.note;
+        const size = document.createElement("td");
+        size.textContent = fmtGB(e.bytes);
+        const ctx = document.createElement("td");
+        ctx.textContent = fmt(e.ctx);
+        const needs = document.createElement("td");
+        needs.textContent = "~" + e.vram_hint_gb.toFixed(0) + " GB";
+        const act = document.createElement("td");
+        if (e.present) {
+            const ok = document.createElement("span");
+            ok.className = "chip";
+            ok.textContent = "downloaded";
+            ok.title = e.path;
+            act.append(ok);
+            if (setupMode) {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.className = "mini";
+                b.style.marginLeft = "8px";
+                b.textContent = "serve this model";
+                b.addEventListener("click", () => serveDownloaded(e));
+                act.append(b);
+            }
+        } else if (dl.state === "downloading" && dl.name === e.name) {
+            const pct = dl.total > 0 ? (100 * dl.got / dl.total).toFixed(0) : "0";
+            act.textContent = "downloading \u2014 " + pct + "% of " + fmtGB(dl.total);
+        } else if (dl.state === "verifying" && dl.name === e.name) {
+            act.textContent = "verifying sha256\u2026";
+        } else {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "mini";
+            b.textContent = "download";
+            b.disabled = dl.state === "downloading" || dl.state === "verifying";
+            b.addEventListener("click", () => startCatalogDownload(e.name));
+            act.append(b);
+        }
+        tr.append(name, note, size, ctx, needs, act);
+        body.append(tr);
+    }
+    if (dl.state === "failed" && dl.error) {
+        $("cat-note").textContent = "download failed: " + dl.error;
+    }
+}
+
+async function loadCatalog() {
+    try {
+        const r = await fetch("/catalog", { cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        const doc = await r.json();
+        renderCatalog(doc);
+        const st = (doc.download || {}).state;
+        if ((st === "downloading" || st === "verifying") && !catPolling) {
+            catPolling = true;
+            setTimeout(async () => { catPolling = false; await loadCatalog(); }, 2000);
+        }
+        if (st === "done") loadConfig();   // the finished file joins the model_files picker
+    } catch (_e) {
+        catFailed = true;
+        $("cat-note").textContent = "could not load /catalog";
+    }
+}
+
+async function startCatalogDownload(name) {
+    try {
+        const r = await fetch("/catalog/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) {
+            $("cat-note").textContent = "refused: " + (j && j.error ? j.error.message : r.status);
+            return;
+        }
+        loadCatalog();
+    } catch (_e) {
+        $("cat-note").textContent = "download request failed";
+    }
+}
+
+// setup mode's exit: point the config at the downloaded file, save, restart into serving
+async function serveDownloaded(e) {
+    roster = [{ name: "", path: e.path, backend: "auto", ctx: "", quant: "", kv_dtype: "",
+                streams: "", chunk: "", page_rows: "", prefix: "", mtp: "", image_mmproj: "",
+                def: true, adv: false }];
+    renderRoster();
+    if (!(await saveConfig())) return;   // cat-note keeps quiet: cfg-note already says why
+    try {
+        await fetch("/restart", { method: "POST" });
+        $("cat-note").textContent = "restarting into " + e.display + " \u2014 the page reloads when it is serving";
+        restartingSince = performance.now();
+        setBadge("warn", "restarting");
+        waitForRestart();
+    } catch (_e) {
+        $("cat-note").textContent = "restart request failed";
+    }
+}
+
 poll();
 loadExchange().then(loadConfig);
 refreshImages();
+loadCatalog();
 </script>
 </body>
 </html>

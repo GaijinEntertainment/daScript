@@ -147,7 +147,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. |
+| `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. dasllama-server's model catalog downloads here too when set. |
 | `DASLLAMA_CONFIRM_MODEL` | path | auto-resolved from the models dir | Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir — the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all. |
 | `DASLLAMA_BATCH_CHUNKS` | text | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
 | `DASLLAMA_BATCH_GRID_2D` | number | unset | Use the 2D batch grid in the parity probe. |
@@ -247,6 +247,7 @@ Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends 
 |---|---|---|---|
 | `HF_HOME` | path | ~/.cache/huggingface | Hugging Face hub root; fetch_models --convert resolves checkpoint blobs under <HF_HOME>/hub. Falls back to HOME's default cache location when unset. |
 | `HOME` | path | unset | Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset. |
+| `USERPROFILE` | path | unset | Ambient platform variable (Windows twin of HOME); read only to derive dasllama-server's default models dir. |
 | `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/internal/environment_variables.md. |
 | `DAS_JOBQUE_AFFINITY` | number | 2 on darwin (engine [init]), else 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask — on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |

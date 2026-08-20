@@ -42,6 +42,7 @@ Run under `-jit` — interpreted inference is far too slow. Flags:
 | `--prefix` | — | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | — | — | Flat preallocated KV sessions — disables paged serving and the prefix cache |
 | `--mtp` | — | — | MTP/NextN self-speculative decode for greedy requests (`temperature: 0`, no repetition penalty) — needs a model with an in-file NextN head (the `-MTP-` GGUFs). Output-invariant; up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--models-dir` | — | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
 | `--help` | `-?` | — | Show help and exit |
 
 A config file replaces long command lines; keys are the long flag names with underscores.
@@ -60,6 +61,20 @@ threads = 16       # matmul dispatch lane cap; -1 = all cores
 team_dispatch = "hybrid" # LLM team dispatch + independent inline ASR caller threads
 asr_workers = 2    # two independent transcription requests; each worker owns an ASR model
 ```
+
+## Setup mode and the model catalog
+
+A start with **no model at all** (no `--model`, no config, or every configured path missing)
+does not exit — it boots into **setup mode**: the port opens, the control page serves, every
+inference route answers with a clean error, and the page leads with the **model catalog**
+(§ 03) — a curated, sha-pinned list of current models (`model_catalog.das`; commit-pinned
+HF URLs, canonical sha256, one download at a time, `curl -C -` resume). A finished download
+is verified against its pinned sha before it is renamed into `models_dir` (default
+`~/.dasllama/models`; the `models_dir` config key or `DASLLAMA_MODELS_DIR` move it) with the
+house `.sha` sidecar beside it. In setup mode a downloaded entry offers **serve this
+model** — the page writes the config and restarts (exit 4, the watchdog contract) straight
+into serving it. The same catalog stays available on a serving server for pulling more
+models.
 
 Several models serve LIVE from one process via a `[[models]]` roster instead of the flat `model`
 key — requests route on their `"model"` field (absent → the default entry). Execution is
@@ -157,6 +172,8 @@ Windows locks the DLLs.
 | `POST` | `/v1/audio/transcriptions` | Speech→text (multipart upload; needs `--asr`). `response_format=verbose_json` adds timed segments |
 | `POST` | `/v1/audio/translations` | Speech→English text (needs `--asr`) |
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, ≤120 s, needs the in-repo `silero_vad.bin`) |
+| `GET`  | `/catalog` | The curated model list with local presence + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
+| `POST` | `/catalog/download` | `{"name": <entry>}` — start one catalog download (409 while one runs or the file exists; sha-verified, never waived) |
 | `GET`  | `/v1/stats` | Scheduler counters (`gen_tokens`, `prefill_tokens`, TTFT last/avg, …) plus `model`/`active_model`/`ctx`/`uptime_s`/`draining` identity fields, memory footprint (`weights_bytes`, `kv_bytes`, das heaps, `gpu_vram_bytes`/`gpu_budget_bytes`), a `hardware` line (CPU · lanes · GPU), `asr_workers`, `asr_ready`, `asr_active`, `asr_pending`, and `models[]` — one entry per slot: `is_active`, `holds_gpu`, requested `backend` vs `backend_effective` (`cpu`/`gpu:rails`/`gpu:resident`), per-slot cache counters, `last_used_s`, switch count/avg ms |
 | `GET`  | `/v1/streams` | Per-stream poll surface: `model` (the slot it runs on), state (`queued`/`prefilling`/`decoding`/`finished`), token counts, TTFT, and capped text tails (prompt head + generated tail); finished streams linger ~10 s flagged `finished`. Plus `cache`: the prefix-cache donation chains (tokens, live pages, hits, age, preview) and `asr`: recent ASR jobs (state, audio s, wall ms, RTF) |
 | `GET`  | `/config` | Effective config with per-key source (`default`/`cli`/`toml`), the `[[models]]` roster, model files beside the served one, active rail (gguf vs prepared `.dlim`), GPU tier status (`supported` + `reason` when the loaded model can't ride it) |
@@ -361,6 +378,11 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_exchange_client.das` — the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).
+- `test_model_catalog.das` — model-free: catalog-table invariants (pinned URLs, unique ids,
+  one default), the models-dir precedence, presence detection, download-start refusals.
+- `test_setup_mode.das` — model-free, runs end to end even interpreted (setup mode never
+  infers): a slotless boot serves setup stats and the catalog while every inference route
+  fails closed.
 - `tests/` — the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, config editor, exchange section,
   the confirm-gated controls. Model-free — the page runs against JSON/SSE fixtures captured

@@ -70,8 +70,9 @@ header-only: a comment whose lines are one-fact-each, sitting above a list-shape
 declaration, is a map too — capped by the list it describes, not by the prose cap.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
-for tooling-visible public API — a symbol a consumer outside the owning tree can require,
-or one a doc generator reads. A symbol exported only for its sibling tests (a `_`-prefixed
+for tooling-visible public API — `public`/exported is the test, not who ships it: a symbol
+another module requires (a module required only by files in its own directory is still
+public to them), or one a doc generator reads. A symbol exported only for its sibling tests (a `_`-prefixed
 test-support module beside them) takes the private-symbol bar. On a private symbol
 a docstring restates the name to a reader who already has it; if there is a genuine
 one-line WHY, write a plain comment. The bar for any comment on a private symbol: a

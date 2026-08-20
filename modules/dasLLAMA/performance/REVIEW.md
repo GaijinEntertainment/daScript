@@ -40,7 +40,7 @@ provenance, or parity fixtures is a defect** — a new list is written as a view
 
 **A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
 row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) — `url` +
-`bytes` + `sha256`, or a `recipe` — and a companion artifact (an mmproj, an image fixture)
+`bytes` + `sha256`, or a `recipe` a reader can run — and a companion artifact (an mmproj, an image fixture)
 rides the `companions` of the row that pins its carrier.**
 Weakening `../tests/test_model_specs.das`'s provenance invariants is a defect.
 
