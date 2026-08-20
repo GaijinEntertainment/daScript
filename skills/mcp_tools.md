@@ -18,7 +18,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `program_log` | Running with `options log` to see full post-compilation program text |
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
-| `format_file` | Running the formatter script manually; supports comma-separated list or glob, returns JSON array of results |
+| `format_file` | Running the formatter script manually; supports comma-separated list or glob, returns JSON array of results. By default ALSO strips comments file-wide (keeps the leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions; fail-closed — a strip must pass compile_check or the file is restored); `keep_comments='true'` is the format-only escape hatch for tutorials/examples |
 | `convert_to_gen2` | Running the `gen1_to_gen2` converter manually to convert gen1→gen2 syntax |
 | `goto_definition` | Manually tracing symbol definitions across files |
 | `type_of` | Manually inspecting expression types |

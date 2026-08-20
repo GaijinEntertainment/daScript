@@ -2,7 +2,7 @@
 
 After creating or modifying any `.das` file that is part of the project (daslib modules, tutorials, tests, etc.), run the source formatter on it. Do NOT format temporary/scratch files that will be deleted.
 
-**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly)
+**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). By default it ALSO strips comments file-wide — kept set: leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions; fail-closed (a strip must pass compile_check or the file is restored). For tutorials and examples, where prose carries the lesson, pass `keep_comments='true'`.
 
 **CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 

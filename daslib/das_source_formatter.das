@@ -1178,6 +1178,11 @@ def fmt_destructure_space(var ctx : FormatterCtx) {
 
 def do_format(var ctx : FormatterCtx) {
     ctx |> parse_all_tokens()
+    ctx |> do_format_parsed()
+}
+
+
+def do_format_parsed(var ctx : FormatterCtx) {
     ctx |> process_formatter_tokens()
 
     if (ctx |> have_formatter_token("ignore-file")) return
@@ -1237,4 +1242,66 @@ def public format_source(file_data : array<uint8> const& implicit) : string {
     //! Formats daslang source code given as a byte array and returns the formatted result.
     var inscope ctx : FormatterCtx
     return ctx |> format_source(file_data)
+}
+
+
+def private is_kept_comment(s : string) : bool {
+    if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))) {
+        return true
+    }
+    if (!(s |> starts_with("//"))) {
+        return false
+    }
+    let rest = strip_left(s |> chop(2, length(s) - 2))
+    return (rest |> starts_with("nolint:")) || (rest |> starts_with("@nolint"))
+}
+
+
+def private strip_comment_tokens(var ctx : FormatterCtx) {
+    var kept : array<Token>
+    kept |> reserve(length(ctx.tokens))
+    var carry = 0
+    var in_header = true
+    for (t in ctx.tokens) {
+        var eff = carry + t.newLines
+        if (carry > 0 && t.newLines > 0) {
+            eff--                       // the dropped comment's own line collapses
+        }
+        if (t.tokenType == TokenType.COMMENT && !in_header && !is_kept_comment(t.str)) {
+            carry = eff
+            continue
+        }
+        if (t.tokenType != TokenType.COMMENT && !empty(t.str)) {
+            in_header = false
+        }
+        var c = t
+        c.newLines = eff
+        carry = 0
+        kept |> push(c)
+    }
+    ctx.tokens <- kept
+}
+
+
+def public format_source(file_data : array<uint8> const& implicit; strip_comments : bool) : string {
+    //! Formats daslang source; with ``strip_comments`` also removes every comment except the
+    //! leading header block, `//!` docs, `//fmt:` directives, and `nolint` suppressions.
+    var inscope ctx : FormatterCtx
+    ctx.data := file_data
+    ctx.data |> push(uint8(0))
+    ctx |> parse_all_tokens()
+    if (strip_comments) {
+        ctx |> strip_comment_tokens()
+    }
+    ctx |> do_format_parsed()
+    return generate_source(ctx)
+}
+
+
+def public format_source_string(file_data : string const& implicit; strip_comments : bool) : string {
+    //! String-input variant of the comment-stripping ``format_source``.
+    var bytes <- [for (c in file_data); uint8(c)]
+    return format_source(bytes, strip_comments)
+} finally {
+    delete bytes
 }

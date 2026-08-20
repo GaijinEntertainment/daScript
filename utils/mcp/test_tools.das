@@ -13,6 +13,7 @@ require tools/list_types public
 require tools/run_script public
 require tools/run_test public
 require tools/format_file public
+require daslib/das_source_formatter
 require tools/ast_dump public
 require tools/list_modules public
 require tools/find_symbol public
@@ -659,6 +660,79 @@ def test_format_file_batches(t : T?) {
         t |> equal(st_missing, "error")
         t |> success(find(msg_missing, "Cannot open file") >= 0, "missing file reports open error")
         unsafe { delete parsed; }
+    }
+}
+
+// ── format_file comment stripping ────────────────────────────────────
+
+[test]
+def test_format_strip_comments_source(t0 : T?) {
+    t0 |> run("keeps header, docs, fmt directives, nolint; strips the rest") <| @(t : T?) {
+        let src = fread(fixture_path("_fixture_comments.das"))
+        t |> success(!empty(src), "fixture readable")
+        let stripped = format_source_string(src, true)
+        t |> success(find(stripped, "// header block stays") >= 0, "header block kept")
+        t |> success(find(stripped, "//! doc comment survives") >= 0, "doc comment kept")
+        t |> success(find(stripped, "nolint:STYLE005") >= 0, "nolint suppression kept with its why")
+        t |> success(find(stripped, "@nolint") >= 0, "@nolint form kept")
+        t |> success(find(stripped, "narration") < 0, "narration stripped")
+        t |> success(find(stripped, "trailing dies") < 0, "trailing comment stripped")
+        t |> success(find(stripped, "block dies") < 0, "block comment stripped")
+        t |> success(find(stripped, "let z = x + y") >= 0, "multi-line inline comment joins its expression")
+    }
+    t0 |> run("keep_comments path leaves every comment in place") <| @(t : T?) {
+        let src = fread(fixture_path("_fixture_comments.das"))
+        let formatted = format_source_string(src, false)
+        t |> success(find(formatted, "narration dies") >= 0, "narration kept when not stripping")
+        t |> success(find(formatted, "block dies") >= 0, "block comment kept when not stripping")
+    }
+}
+
+[test]
+def test_format_file_strips_by_default(t0 : T?) {
+    t0 |> run("fail-closed: file is stripped or byte-identical after the call") <| @(t : T?) {
+        var terr : string
+        let dir = create_temp_directory("mcp_strip_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "victim.das")
+        let original = fread(fixture_path("_fixture_comments.das"))
+        t |> success(fwrite(dst, original), "fixture copied")
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_format_file(dst), text, is_error)
+        t |> success(ok, "parse result JSON")
+        let after = fread(dst)
+        // popen capture (the strip's compile verify) is broken under dastest on Windows,
+        // which legitimately reverts — the invariant is stripped-or-restored, never mangled
+        if (find(text, "comments stripped") >= 0) {
+            t |> success(find(after, "narration") < 0, "comments removed on disk")
+            t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
+        } else {
+            t |> equal(after, original, "non-stripped outcome restores the original bytes")
+        }
+        remove(dst)
+        rmdir(dir)
+    }
+    t0 |> run("keep_comments='true' formats without touching comments") <| @(t : T?) {
+        var terr : string
+        let dir = create_temp_directory("mcp_keep_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "victim.das")
+        fwrite(dst, fread(fixture_path("_fixture_comments.das")))
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst, true), text, is_error)
+        t |> success(!is_error, "keep_comments run should not error")
+        let after = fread(dst)
+        t |> success(find(after, "narration dies") >= 0, "comments intact on disk")
+        remove(dst)
+        rmdir(dir)
     }
 }
 

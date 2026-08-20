@@ -192,13 +192,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 
 **Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
-**Comment hygiene.** Comments are 1–2 lines max. Strict rules:
-
-1. **No banner comments above a documented function.** When a function carries `//!` inside its body, drop the `// ===== name — desc =====` block above. The banner duplicates the doc.
-2. **No multi-paragraph architectural prose at the head of a section.** Don't write 10–30 line preambles explaining design decisions, surface examples, NULL handling, panic semantics, etc. above `// Section name`. Code reads well; design docs carry the WHY. If a reader genuinely needs that context, it goes in those docs, not the source.
-3. **Private functions and types don't get public-style docs.** `//!` / `//!<` is for tooling-visible public API. On `def private`, `struct private`, `enum private`, `variant private`, drop the docstring entirely — the symbol isn't exported, so no doc generator ever sees it, and the docstring just restates the function name / field name to a reader who already has them. If a function or field genuinely needs a 1-line WHY (non-obvious invariant, surprising behavior), write a plain `// ...` line, not `//!`. The bar for keeping any comment on a private symbol is "a maintainer reading the symbol alone would be surprised."
-4. **What stays:** terse 2-line section dividers (`// ===== Section name =====`), `//!` docstrings on PUBLIC functions/types (visible to tooling), and inline `//` comments that flag a non-obvious WHY at the *exact* line — a workaround for a specific bug, a subtle invariant, behavior that would surprise a reader. Don't restate what the code says.
-5. **When in doubt:** delete. If reading the code + the relevant docstring(s) doesn't make the WHY clear, the comment was load-bearing. Otherwise it was noise.
+**Comment hygiene (.das): ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, and a file's leading header block. Everything else — narration, banners, section dividers, commented-out code — does not exist; the MCP `format_file` tool applies this file-wide by default, fail-closed. Teaching code (tutorials, examples) is the one exception: prose carrying the lesson stays — format those with `keep_comments='true'`.
 
 ## SDK Directory Layout
 

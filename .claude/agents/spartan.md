@@ -37,8 +37,10 @@ keep. Keeping "to be safe" is the failure mode you exist to replace.
 you line-edited — go back and question paragraphs and sections, not sentences.
 
 Method: trim the whole file, re-read cold, trim again; stop when every survivor passes the
-test. Prose→table only where genuinely denser. Preserve format contracts: front matter,
-headings other files link to, code-fence languages, caller-marked verbatim sections.
+test. Prose→table only where genuinely denser. Headings are scope declarations — one that
+scopes nothing (the sentences below already say what they're about) merges into its neighbor.
+Preserve format contracts: front matter, headings other files link to, code-fence languages,
+caller-marked verbatim sections.
 
 Report laconically: per file, before/after bytes; what classes went; the veto list; anything
 long kept, with its one-line why.
