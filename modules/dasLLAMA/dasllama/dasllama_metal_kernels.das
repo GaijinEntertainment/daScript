@@ -3585,6 +3585,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
     g_pso_clamp = compile_pso(metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, ok)
     g_pso_rope2d = compile_pso(metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, ok)
+    g_pso_head_restride = compile_pso(metal_head_restride_msl, metal_head_restride_msl_entry, metal_head_restride_msl_fastmath, ok)
     g_pso_geglu_quick = compile_pso(MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, ok)
     g_pso_cross_kx = compile_pso(metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, ok)
     g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
@@ -4270,6 +4271,7 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     }
     release_pso(g_pso_clamp)
     release_pso(g_pso_rope2d)
+    release_pso(g_pso_head_restride)
     release_pso(g_pso_geglu_quick)
     release_pso(g_pso_cross_kx)
     release_pso(g_pso_cross_vx)
@@ -4752,6 +4754,29 @@ class MetalClamp {
         let lo = bounds[side * 2u]
         let hi = bounds[side * 2u + 1u]
         dst[gid] = min(max(src[gid], lo), hi)   // nolint:STYLE019 — the MSL subset has no clamp lowering
+    }
+}
+
+// Head restride (gemma3v): repack token-major rows [npos x n_head*hs_src] to [npos x n_head*hs_dst],
+// zero-filling dst lanes past hs_src — pads Q/K/V to the attention tile head width (72 -> 128) and
+// compacts the AV output back; zero pads keep both directions exact.
+[metal_dispatch(name = "enc_head_restride", pso = "g_pso_head_restride", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalHeadRestride {
+    @ssbo @binding = 0 @role = "read" src : array<float>
+    @ssbo @binding = 1 @role = "write" dst : array<float>
+    @uniform @binding = 2 hs_src : uint
+    @uniform @binding = 3 hs_dst : uint
+    @uniform @binding = 4 total : uint   // npos * n_head * hs_dst
+
+    [metal_kernel(name="metal_head_restride_msl")]
+    def metal_head_restride {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let lane = gid % hs_dst
+        let hp = gid / hs_dst
+        dst[gid] = lane < hs_src ? src[hp * hs_src + lane] : 0.0
     }
 }
 

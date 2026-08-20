@@ -30,6 +30,14 @@ let IMAGE_OPEN = 255999l
 let IMAGE_CLOSE = 258882l
 // 640x480 letterboxes to 624x480 = 13x10 superpatches (mtmd oracle: image_tokens->nx = 130)
 let CATS_ROWS = 130l
+let MM_G3 = "mmproj-gemma-3-4b-it-F16.gguf"   // the gemma3 SigLIP pair
+let DEC_G3 = "gemma-3-4b-it-Q8_0.gguf"
+let MM_G3_12B = "mmproj-gemma-3-12b-it-F16.gguf"   // the same tower at projection width 3840
+let DEC_G3_12B = "gemma-3-12b-it-Q4_K_M.gguf"      // large tier: DASLLAMA_PARITY_FULL gates it
+// gemma3 vocab: <start_of_image> / <end_of_image>; the fixed 896² canvas always yields 256 rows
+let G3_IMAGE_OPEN = 255999l
+let G3_IMAGE_CLOSE = 256000l
+let G3_ROWS = 256l
 
 [test]
 def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn story: shape → caption → tower legs
@@ -178,6 +186,96 @@ def test_vision_chat_e2b(t : T?) {
                 return true
             }
             to_log(LOG_INFO, "vision caption (E2B/gemma4v): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            delete chat
+        }
+        delete m
+    }
+}
+
+// The same turn through the gemma3 SigLIP tower: a THIRD family through the same splice rail —
+// its markers come from the gemma3 arch and its span is the fixed 256 (896² canvas).
+[test]
+def test_vision_chat_gemma3(t : T?) {
+    t |> run("the gemma-3-4b image turn through the gemma3v tower: stream shape, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_G3)
+        let dec = path_join(models_dir(), DEC_G3)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "gemma3v", "the gemma-3 mmproj sniffs as gemma3v")
+            tt |> equal(vision_align(emb), 56l, "56 px per soft token (patch 14 x merge 4)")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, G3_ROWS, "the fixed canvas always splices 256 rows")
+            var head : array<int64>
+            var tail : array<int64>
+            render_prompt_image(m, chat, head, tail)
+            tt |> success(!empty(head) && !empty(tail), "both spans render")
+            tt |> equal(head[long_length(head) - 1l], G3_IMAGE_OPEN, "head ends with <start_of_image>")
+            tt |> equal(tail[0], G3_IMAGE_CLOSE, "tail starts with <end_of_image>")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (gemma-3-4b/gemma3v): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            delete chat
+        }
+        delete m
+    }
+}
+
+// The 12B gemma3 pair: the SAME SigLIP tower at projection width 3840 — the one dimension the
+// family varies per decoder; large tier, so DASLLAMA_PARITY_FULL gates it.
+[test]
+def test_vision_chat_gemma3_12b(t : T?) {
+    t |> run("the gemma-3-12b image turn: the widened projection, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_G3_12B)
+        let dec = path_join(models_dir(), DEC_G3_12B)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec)   // the Q4_K_M file picks its serving mode like the gemma-4 12B turn
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "gemma3v", "the 12B mmproj sniffs as gemma3v")
+            tt |> equal(vision_proj_dim(emb), 3840l, "projection width matches the 12B decoder")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, G3_ROWS, "the fixed canvas always splices 256 rows")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (gemma-3-12b/gemma3v): {replace(reply, "\n", "\\n")}\n")
             let low = to_lower(reply)
             tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")

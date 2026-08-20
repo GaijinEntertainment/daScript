@@ -73,7 +73,7 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma4e mtower`; `gemma4e` is the E2B metal-blob
+canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm — the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
 map must both clear it; `gemma4uv-metal` is the GPU tower
@@ -188,13 +188,25 @@ On Apple builds the CPU gate pins the tower knob off, and a second test gates th
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3·token-rms) — exceeding it
 is a red, the bar each fixture actually held is logged either way, and engage is proven per
 fixture by the encodes counter.
-`test_gemma4v.das` — the gemma4v ViT tower (E-series; E2B mmproj) tier-1 parity vs the
-`-p encode` dumps minted on the f32-widened E2B mmproj, CPU, `-fa off` (`mint_e2b.sh`): eight
+`test_gemma4v.das` — the gemma4v ViT tower (E-series) tier-1 parity vs the `-p encode` dumps
+minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`): eight E2B
 fixtures (96² cb through 672×336) on the scale-relative bar 2e-4 + 4e-3·token-rms, the measured
 maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
-staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
-without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
-per-token compare both vision tier-1 tests use.
+staging planes must miss the oracle — the sidecar scalars are load-bearing); plus the E4B rung —
+the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
+with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+`test_gemma3v.das` — the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
+`-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
+(`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896² (learned position table), so
+the five fixtures vary content, not geometry; exact lane on the 2e-4 + 4e-3·token-rms bar, the
+q8 serving lane on its measured 3.2e-1·rms bar (27 blocks, ffn served at the layout's padded
+4352 width so every GEMM quantizes), plus the fixed-canvas panic gate and the carrier
+sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
+gates two fixtures through the Metal block loop on its measured 4e-2·rms bar — engage proven
+per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
+restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
+`_vision_oracle.das` is the shared dump parser / fixture generator /
+per-token compare all vision tier-1 tests use.
 `test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
 family tag, the none-carrier refusals, and the `.dlim` route — over constructed carriers.
 `test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
@@ -217,9 +229,11 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
 runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
 only; plain dastest only.
-`test_vision_chat.das` — the image chat turn end to end, two families: the 12B gemma4uv pair
-(the cats fixture, so `DASLLAMA_PARITY_FULL=1`) and the E2B gemma4v pair (E2B Q8 decoder +
-bf16 mmproj — small tier, runs without the flag): the prompt stream shape around the splice
+`test_vision_chat.das` — the image chat turn end to end, three families / four legs: the 12B
+gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B gemma4v pair (E2B Q8
+decoder + bf16 mmproj — small tier, runs without the flag), the gemma-3-4b gemma3v pair (small
+tier), and the gemma-3-12b pair (the same SigLIP tower at projection 3840 — large tier,
+`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice
 (marker ids, media-first, span length from the geometry) and the greedy caption, logged in
 full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
@@ -241,8 +255,8 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 
 ## Metal fixtures — driver knobs and the two-model pattern
 
-**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
-that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after.** The
+(REVIEW: "A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob
+OFF for that leg and restores it after.") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode — either way the cell stops measuring what
 its name says.

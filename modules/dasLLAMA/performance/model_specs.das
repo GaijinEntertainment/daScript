@@ -312,6 +312,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
             bytes = 3106738272l, sha256 = "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8"),
         ModelSpec(file = "gemma-3-4b-it-Q8_0.gguf", display = "gemma-3-4B",
+            // the vision mmproj rides as a companion: the gemma3v tower tests and the image chat
+            // load it beside this decoder (the tower itself is size-invariant; 4B is the tested pair)
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-3-4b-it-F16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    bytes = 851251104l, sha256 = "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb")],
             parity <- ev_gemma3_4b()),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q8_0.gguf", display = "Qwen3-4B",
             parity <- ev_qwen_count()),
@@ -338,9 +344,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 4372812000l, sha256 = "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6"),
         ModelSpec(file = "Mistral-7B-Instruct-v0.3-Q8_0.gguf", display = "Mistral-7B",
             parity <- ev_mistral7b()),
-        // provenance for this carrier rides its asr_catalog spec (the audio-chat pairing owns
-        // the mmproj companion); this row is the text-LLM profile + parity facet
-        ModelSpec(file = "gemma-4-E2B-it-Q8_0.gguf", display = "gemma-4-E2B",
+        // this row owns the carrier's provenance and its mmproj companion (a companion rides
+        // the row that pins its carrier); the asr_catalog spec keeps only the pairing
+        ModelSpec(file = "gemma-4-E2B-it-Q8_0.gguf", display = "gemma-4-E2B", official = true,
+            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
+            bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-BF16.gguf",
+                    bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")],
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
@@ -349,6 +361,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // weights + a sigmoid-gated shared expert; QKV bias, NEOX rope); the fixture runs
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
+        // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
+        // projection 3840; test_vision_chat's PARITY_FULL leg is its coverage)
+        ModelSpec(file = "gemma-3-12b-it-Q4_K_M.gguf",
+            url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
+            bytes = 7300574976l, sha256 = "7bb69bff3f48a7b642355d64a90e481182a7794707b3133890646b1efa778ff5",
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-3-12b-it-F16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    bytes = 854200224l, sha256 = "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5")]),
         ModelSpec(file = "gemma-4-12B-it-Q4_K_M.gguf", official = true,
             url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
@@ -365,6 +386,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-E4B-it-Q8_0.gguf", display = "gemma-4-E4B", official = true,
             url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
             bytes = 8031242688l, sha256 = "34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-4-E4B-it-BF16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/mmproj-gemma-4-E4B-it-BF16.gguf",
+                    bytes = 991552256l, sha256 = "f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f")],
             // PLE (per-layer embeddings) + cross-layer KV sharing over the last 18 layers;
             // dense, so the full 40 hold (verified 40/40 vs simple_ids on the window-engaged
             // 1..320 counting prompt)

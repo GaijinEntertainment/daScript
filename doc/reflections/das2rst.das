@@ -373,7 +373,7 @@ def document_module_dasllama(_root : string) {
         dasllama_type_stanza(f, "struct-dasllama_vision-VisionImage", "VisionImage",
             "A decoded RGB8 image: ``width``, ``height``, and the pixel bytes in ``rgb``. Produced by ``load_image_rgb`` (the optional ``dasllama_vision_io`` companion) or built directly; ``add_user_image`` / ``encode_image`` letterbox and normalize it to the model's geometry.")
         dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionEmbedder", "VisionEmbedder",
-            "A loaded vision embedder of whatever family the mmproj GGUF turned out to be (gemma4uv — the gemma-4 dense embedder; gemma4v — the gemma-4 E-series ViT tower), as produced by ``load_vision_embedder``, which sniffs the family. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``vision_proj_dim`` must match the decoder's embedding width (checked at create).")
+            "A loaded vision embedder of whatever family the mmproj GGUF turned out to be (gemma4uv — the gemma-4 dense embedder; gemma4v — the gemma-4 E-series ViT tower; gemma3v — the gemma-3 SigLIP tower), as produced by ``load_vision_embedder``, which sniffs the family. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``vision_proj_dim`` must match the decoder's embedding width (checked at create).")
         dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionState", "VisionState",
             "Caller-owned scratch for the embedder forward of whichever family is carried: the buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
         dasllama_type_stanza(f, "struct-dasllama_image-DlimImageInfo", "DlimImageInfo",

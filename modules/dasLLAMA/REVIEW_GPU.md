@@ -17,12 +17,12 @@ are twins, whatever the axis (single/batch, format, single-pass/chunked); they s
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
 copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
 
-**Every field on a `[metal_dispatch]` / `[vk_dispatch]` kernel class backed by load-once memory —
-a model plane, or an `upload_region` upload never written after arming — declares
-`@role = "weight"` explicitly; per-encode data (a pooled buffer the host refills each encode)
-stays `read` / `readwrite`.** An un-roled load-once field is a defect even when the kernel
-compiles and passes parity; a `weight` role on per-encode data is one too (it drops the hazard
-staging).
+**A `[metal_dispatch]` / `[vk_dispatch]` field carries `@role = "weight"` exactly when its
+memory is load-once — a model plane, or an `upload_region` upload never written after
+arming.** A load-once field with no `@role` is a defect even when the kernel compiles and
+passes parity; `weight` on per-encode data — a pooled buffer the host refills each encode —
+is one too, it drops the hazard staging. A per-encode field either omits `@role` or names the
+access its body performs.
 
 **A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
 carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
@@ -85,11 +85,18 @@ runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** 
 `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of the GPU
-oracle-parity gate of every tower family its change can reach — the families are the hooks
-`ARCHITECTURE.md` §1.5's tower row names, and that row is the closed list — plus a
-`tests/test_model_image.das` run with the `mtower` arm** — those GPU-vs-CPU cells, with
-the driver's encode counter proving it engaged, are that driver's parity instrument.
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of
+`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das` — the
+per-family GPU oracle gates — for every family the changed code is reachable from, and of all
+three when the change touches state or setup the whole driver shares rather than one family's
+path — any module-level `g_tw_*` variable in that file, `metal_tower_init`, or
+`dasllama_metal_tower_register`.** A new tower family adds its gate file to this list in the
+same change.
+
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a
+`tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
+count rising across the run** — those GPU-vs-CPU cells are that driver's parity instrument for
+the families no per-family gate file covers.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq

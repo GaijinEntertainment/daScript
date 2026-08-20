@@ -12,6 +12,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_gemma4v   // Gemma4vTower/Gemma4vState — the ViT block loop
+require dasllama/dasllama_gemma3v   // Gemma3vTower/Gemma3vState — the SigLIP block loop
 require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-class block loop
 require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require metal/das_metal_boost
@@ -470,7 +471,134 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     return true
 }
 
-def private metal_gemma4v_serves() : bool => g_tw_env_tower
+def private metal_tower_serves() : bool => g_tw_env_tower
+
+// The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
+// scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
+// scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. Stem/tail stay CPU; q8 declines.
+[hot_path]
+def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (t.q8) {
+        return tw_decline(MetalTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let hs = d / t.n_head
+    let ff = t.ff_pad
+    let hs_pad = hs <= 64l ? 64l : 128l
+    if (d % 64l != 0l || ff % 64l != 0l || hs > 128l) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
+        return tw_decline(MetalTowerDecline.device)
+    }
+    let mp = (npos + 31l) / 32l * 32l
+    let nk64 = (npos + 63l) / 64l * 64l
+    let dp = t.n_head * hs_pad   // the padded attention width
+    let mapped = t.image_map != null
+    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
+    let bytes_row = uint64(mp * d * 4l)
+    let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_h = uint64(mp * ff * 4l)
+    let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
+    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
+    var bq = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    unsafe {
+        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
+        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var zp = reinterpret<float?>(p + npos * d * 4l)
+            for (i in range64((mp - npos) * d)) {
+                zp[i] = 0.0
+            }
+        }
+    }
+    var u_d = uniform_u32(uint(d))
+    var u_ff = uniform_u32(uint(ff))
+    var u_hs = uniform_u32(uint(hs))
+    var u_hsp = uniform_u32(uint(hs_pad))
+    var u_eps = uniform_f32(t.eps)
+    var u_totd = uniform_u32(uint(npos * d))
+    var u_totff = uniform_u32(uint(npos * ff))
+    var u_totp = uniform_u32(uint(npos * t.n_head * hs_pad))   // restride total, pad direction
+    var u_totc = uniform_u32(uint(npos * t.n_head * hs))       // restride total, compact direction
+    var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
+        npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
+        qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        for (l in range64(t.n_layer)) {
+            let o = gemma3v_block_offs(t, l)
+            enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_Q] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
+            enc_head_restride(enc, braw, bq, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_K] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_K] * 4l), u_d, u_totd, npos * d)
+            enc_head_restride(enc, braw, bk, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_V] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_V] * 4l), u_d, u_totd, npos * d)
+            enc_head_restride(enc, braw, bv, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
+            enc_softmax(enc, batt, ka, null, npos, t.n_head)
+            enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
+            enc_head_restride(enc, bo_p, bxb2, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_O] * 4l), u_d, u_totd, npos * d)
+            enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
+            enc_ln(enc, bx, bblob, uint64(o.ln2_w * 4l), bblob, uint64(o.ln2_b * 4l), bxb, u_d, u_eps, npos)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_UP] * 4l), bxb, bh, 0ul, u_d, u_ff, mp, ff)
+            enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_UP] * 4l), u_ff, u_totff, npos * ff)
+            enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
+            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_DOWN] * 4l), bh, bxb2, 0ul, u_ff, u_d, mp, d)
+            enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_DOWN] * 4l), u_d, u_totd, npos * d)
+            enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
+        }
+    }
+    var served = false
+    if (ran) {
+        unsafe {
+            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        }
+        g_tower_encodes++
+        g_tower_rows += npos
+        g_tower_blocks += t.n_layer
+        served = true
+    }
+    pool_release(g_tw_pool, bx, bytes_row)
+    pool_release(g_tw_pool, bxb, bytes_row)
+    pool_release(g_tw_pool, bxb2, bytes_row)
+    pool_release(g_tw_pool, braw, bytes_row)
+    pool_release(g_tw_pool, bq, bytes_rowp)
+    pool_release(g_tw_pool, bk, bytes_rowp)
+    pool_release(g_tw_pool, bv, bytes_rowp)
+    pool_release(g_tw_pool, bo_p, bytes_rowp)
+    pool_release(g_tw_pool, bh, bytes_h)
+    pool_release(g_tw_pool, batt, bytes_att)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_ff, 4ul)
+    pool_release(g_upool, u_hs, 4ul)
+    pool_release(g_upool, u_hsp, 4ul)
+    pool_release(g_upool, u_eps, 4ul)
+    pool_release(g_upool, u_totd, 4ul)
+    pool_release(g_upool, u_totff, 4ul)
+    pool_release(g_upool, u_totp, 4ul)
+    pool_release(g_upool, u_totc, 4ul)
+    if (!served) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
 
 // The whisper conv frontend for one mel chunk: im2col + conv GEMMs + bias + GELU + pos-add,
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
@@ -752,7 +880,8 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
 def dasllama_metal_tower_register {
     g_tw_env_tower = g_env_metal.tower
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
-    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_gemma4v_serves)
+    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
+    register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)

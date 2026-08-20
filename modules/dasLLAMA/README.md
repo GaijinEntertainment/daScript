@@ -64,10 +64,11 @@ bin/daslang -jit examples/dasLLAMA/dictate.das -- <asr-model.bin>
 - **Audio-in chat (omni)**: Qwen2-Audio, Qwen2.5-Omni, Qwen3-Omni-30B-A3B, Ultravox v0.5,
   Voxtral-Mini-3B, Gemma-4 E-series audio.
 - **Image-in chat**: Gemma-4 dense via its `gemma4uv` vision mmproj (12B is the tested
-  pair) and Gemma-4 E-series via its `gemma4v` ViT mmproj (E2B is the tested pair) — the
-  family is sniffed from the mmproj; dynamic resolution, one image per turn. On Apple builds
-  the embedder / ViT tower and the image span serve on Metal by default; elsewhere the ViT
-  tower serves a q8 lane on the CPU (the +AMX float tier takes the file's planes). Library API
+  pair) and Gemma-4 E-series via its `gemma4v` ViT mmproj (E2B is the tested pair), both at
+  dynamic resolution; and Gemma-3 via its `gemma3v` SigLIP mmproj (4B and 12B are the tested
+  pairs; fixed 896² canvas) — the family is sniffed from the mmproj; one image per turn. On
+  Apple builds the embedder / vision towers and the image span serve on Metal by default;
+  elsewhere a tower serves its q8 lane on the CPU (the +AMX float tier takes exact planes). Library API
   (`create_chat(model, embedder)` + `add_user_image`), `ask --image`, and the OpenAI server:
   `image_url` data-URI parts under `--image-mmproj`, encoded off the tick thread.
 - **Speech-to-text**: the whole Whisper family (tiny → large-v3-turbo, stock whisper.cpp bins),
@@ -375,10 +376,11 @@ So there's no ambiguity about what will fail:
 - **Grouped expert routing** (DeepSeek-V3 `expert_group_count` > 1) panics honestly at load —
   the one MoE routing shape still missing. (The DeepSeek-style `exp_probs_b` selection bias
   itself ships, via glm4moe.)
-- **MLA** (DeepSeek-style low-rank-compressed KV), **Mamba/SSM** proper, and **vision**
-  multimodal input are not implemented. The hybrid recurrent+attention shape IS shipped
-  (Gated-DeltaNet: qwen35 / qwen35moe / qwen3next), and so is audio-in — vision is what stays
-  out of scope on the omni models.
+- **MLA** (DeepSeek-style low-rank-compressed KV) and **Mamba/SSM** proper are not
+  implemented. The hybrid recurrent+attention shape IS shipped (Gated-DeltaNet: qwen35 /
+  qwen35moe / qwen3next), and so are audio-in and vision-in (gemma-4 12B `gemma4uv`, E-series
+  `gemma4v`, gemma-3 `gemma3v`) — vision on the OTHER multimodal families (Qwen-VL/Omni,
+  pixtral) is what stays out of scope.
 - **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q4_K / Q5_K / Q6_K** — no IQ
   quants; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects

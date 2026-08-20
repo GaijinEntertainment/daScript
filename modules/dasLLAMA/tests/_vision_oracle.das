@@ -98,10 +98,15 @@ def compare_encode(t : T?; tag : string; out : array<float>; d : int; o : Oracle
     var maxdiff = 0.0
     var max_tok = -1
     var max_excess = 0.0
+    var nonfinite = 0
     for (p in range(o.npos)) {
         var mean = 0.0
         var sq = 0.0
         for (i in range(d)) {
+            // NaN compares false against every bar, so a poisoned encode would PASS silently
+            if (!is_finite(out[p * d + i])) {
+                nonfinite++
+            }
             mean += out[p * d + i]
             sq += out[p * d + i] * out[p * d + i]
         }
@@ -119,6 +124,9 @@ def compare_encode(t : T?; tag : string; out : array<float>; d : int; o : Oracle
         }
     }
     to_log(LOG_INFO, "{tag}: {o.npos} tokens, maxdiff {maxdiff} at tok {max_tok} (bar {abs_tol} + {rel_tol} x rms)\n")
+    if (nonfinite > 0) {
+        t |> failure("{tag}: {nonfinite} non-finite output element(s) - the encode is poisoned, no bar applies")
+    }
     if (max_excess > 0.0) {
         t |> failure("{tag}: worst diff exceeds {abs_tol} + {rel_tol}*rms by {max_excess} (maxdiff {maxdiff} at tok {max_tok}) - got ({out[max_tok * d]}, {out[max_tok * d + 1]}, ...) want ({o.v0[max_tok]}, {o.v1[max_tok]}, ...)")
     }

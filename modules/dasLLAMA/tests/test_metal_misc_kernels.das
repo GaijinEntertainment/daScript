@@ -596,6 +596,59 @@ def private geglu_quick_gate(t : T?; dev, queue; ff, rows : int) {
     delete want
 }
 
+// head restride (gemma3v): token-major rows repack [npos x n_head*hs_src] -> [npos x n_head*hs_dst]
+// with dst lanes past hs_src zeroed; exact both directions, the pad sentinel untouched.
+def private head_restride_gate(t : T?; dev, queue; npos, n_head, hs_src, hs_dst : int) {
+    let total = npos * n_head * hs_dst
+    let tag = "head_restride npos={npos} heads={n_head} {hs_src}->{hs_dst}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_head_restride_msl, metal_head_restride_msl_entry, metal_head_restride_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var src : array<float>
+    src |> resize(npos * n_head * hs_src)
+    for (i in range(length(src))) {
+        src[i] = 0.31 * float(i % 89) - 13.0
+    }
+    var want : array<float>
+    want |> resize(total + 16)
+    for (i in range(total + 16)) {
+        if (i >= total) {
+            want[i] = -1000.0   // the pad sentinel
+        } else {
+            let lane = i % hs_dst
+            let hp = i / hs_dst
+            want[i] = lane < hs_src ? src[hp * hs_src + lane] : 0.0
+        }
+    }
+    var bs = buf_upload(dev, src)
+    var bd = buf_fill(dev, total + 16, -1000.0)
+    var bsrc_hs = buf_u32(dev, uint(hs_src))
+    var bdst_hs = buf_u32(dev, uint(hs_dst))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bs, 0ul, 0)
+        metal_set_buffer(enc, bd, 0ul, 1)
+        metal_set_buffer(enc, bsrc_hs, 0ul, 2)
+        metal_set_buffer(enc, bdst_hs, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bd, want, tag), 0)
+    }
+    metal_release(bs)
+    metal_release(bd)
+    metal_release(bsrc_hs)
+    metal_release(bdst_hs)
+    metal_release(btot)
+    metal_release(pso)
+    delete src
+    delete want
+}
+
 // two-axis NEOX rope over token-major rows vs the CPU rope_neox_2d_rows on the same tables (the
 // kernel reads the four tables packed per row as [cx|sx|cy|sy]); approx bar (fma ordering).
 def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
@@ -1688,6 +1741,9 @@ def test_metal_misc_kernels(t : T?) {
                 geglu_quick_gate(t, dev, queue, 100, 1)        // %64 tail
                 rope2d_gate(t, dev, queue, 36, 12, 64)         // the E2B 96x96 grid shape (6x6 patches)
                 rope2d_gate(t, dev, queue, 5, 2, 8)            // tiny: one head pair, q = 2
+                head_restride_gate(t, dev, queue, 7, 16, 72, 128)   // the gemma3v pad direction
+                head_restride_gate(t, dev, queue, 7, 16, 128, 72)   // and the compact
+                head_restride_gate(t, dev, queue, 3, 2, 5, 5)       // identity at an odd width, %64 tail
                 cross_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
                 cross_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
                 cross_vx_gate(t, dev, queue, 96, 128, 2, 0, 96, false)     // the cross_kv shape (t0=0, tstride=ta)

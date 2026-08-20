@@ -7,10 +7,16 @@
 the page shows.** A command, flag, or output line invented for illustration is a defect; if
 the implementation does not exist yet, the page does not show the command.
 
-**A command line `files/dasllama.js` renders from `files/dasllama/bench_records.json` — a
-receipt — is the exact argv the harness ran, never hand-edited.** A receipt is per run, not
-per row: when one harness run produced several rows, every one of those rows shows that
-run's receipt line.
+**A receipt — the command line `files/dasllama.js` renders from
+`files/dasllama/bench_records.json` — is the exact argv the harness ran, never hand-edited.**
+A receipt is per run, not per row: when one harness run produced several rows (one `cmd` +
+`date` run object in `modules/dasLLAMA/performance/records/<box>.json`), every one of those
+rows shows that run's receipt line.
+
+**`files/dasllama/bench_records.json` is generator output: `modules/dasLLAMA/performance/gen_site_records.das`
+merges every `modules/dasLLAMA/performance/records/<box>.json` and applies
+`records/annotations.json`, so re-running the generator leaves the file byte-identical.** A
+diff where it does not is a hand edit and a defect.
 
 **Every code sample shown on a page compiles and runs with the current toolchain.** daslang
 samples are gen2 and compile with the current binary; no pseudo-code presented as code.

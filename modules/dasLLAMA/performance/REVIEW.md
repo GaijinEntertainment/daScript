@@ -38,10 +38,10 @@ fails is a defect.
 provenance, or parity fixtures is a defect** — a new list is written as a view over those two
 (`llm_catalog`, `official_catalog`, `models_provenance` are such views).
 
-**A model file this repo fetches, converts, or publishes a public benchmark-board number for
-carries its provenance on its own row in `model_specs()` (`model_specs.das`) or
-`asr_catalog()` (`profile_common.das`) — `url` + `bytes` + `sha256`, or a `recipe` — and a
-companion artifact (an mmproj, an image fixture) rides its owning row's `companions`.**
+**A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
+row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) — `url` +
+`bytes` + `sha256`, or a `recipe` — and a companion artifact (an mmproj, an image fixture)
+rides the `companions` of the row that pins its carrier.**
 Weakening `../tests/test_model_specs.das`'s provenance invariants is a defect.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
@@ -50,7 +50,8 @@ added to it is a defect.
 **A change to a provenance field on a model row (`url`, `bytes`, `sha256`, `recipe`, a
 `companions` entry in `model_specs.das` or `profile_common.das`), or to `fetch_models.das`
 other than its comments, records its gate run in the PR description: `fetch_models.das --`
-ends `0 failed`.**
+ends `0 pending, 0 failed`** (an absent pinned entry counts `pending`, not `failed` — `0 failed`
+alone passes on a box that holds none of the changed pins).
 
 **An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.

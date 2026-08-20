@@ -1188,20 +1188,14 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
         // tokens against the 8192 decoder window — a single-window architectural limit
         // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
+        // the E2B carrier's provenance AND its mmproj companion live on its official
+        // [[model_specs]] row — a companion rides the row that pins its carrier
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
             // mtmd's CPU Conformer encode runs near xRT 1 — same per-rep budget cap as omni's
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
-            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large,
-            // this spec owns the carrier's provenance; the text-LLM row for the same file in
-            // [[model_specs]] is the profile facet only
-            prov = ProvEntry(name = "gemma-4-E2B-it-Q8_0.gguf", root = "llm",
-                url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
-                bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a"),
-            companions <- [ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
-                url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-BF16.gguf",
-                bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")]),
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
             // mtmd's CPU-only AuT encode runs near xRT 1 (and far worse on zen2) — the long

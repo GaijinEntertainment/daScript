@@ -27,7 +27,7 @@ def private configure_gemma3(var c : Config) {
 def register_arch_gemma3() {
     var d = ArchDesc(name = "gemma3", configure = @@configure_gemma3)
     d.blocks = std_blocks()
-    gemma_chat(d.chat)
+    gemma_chat(d.chat)   // incl. the image span markers — template detection routes gemma3 ggufs to the shared gemma turn shape
     d.lcaps.system_prompt = false   // no system role — the chat layer folds it into the first user turn
     register_arch("gemma3", d)
 }
