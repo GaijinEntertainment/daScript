@@ -90,7 +90,7 @@ def test_ffn_second_hidden(t : T?) {
             t |> success(decode_shape_decline(m, DECODE_NEEDS_OK, true, true, false) != MetalDecodeDecline.none,
                 "hetero widths decline when the caller cannot bind per layer")
         } else {
-            t |> feint("das_metal is not built on this platform - the width classifier is Metal-side")
+            feint("das_metal is not built on this platform - the width classifier is Metal-side\n")
         }
     }
 }

@@ -1009,7 +1009,7 @@ def private qwen2moe_row(t : T?; path : string) {
     }
 }
 
-[unused_argument(t, path)]   // off-Apple the gated body is empty
+[unused_argument(t, path, tag, hetero_hidden, tokexact)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode +
